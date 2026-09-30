@@ -12,6 +12,7 @@ jest.mock('@bifold/react-native-attestation', () => ({
 
 import { JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
 
+import { contentHashBase64 } from '../../../src/hardware-signing/binding'
 import { verifyVrcHardwareEvidence } from '../../../src/modules/vrc/services/BiometricSignatureVerifier'
 import { buildVrcCredential } from '../../../src/modules/vrc/vrc-manager'
 
@@ -24,15 +25,21 @@ const agentForPeer = (counterpartyRceVersion: number) =>
     },
   }) as never
 
-const evidence = {
+const evidenceFor = (signedContentHash: string) => ({
   id: 'urn:uuid:e1',
   type: ['BiometricAttestation', 'HardwareKeyAttestation'],
   created: '2026-09-30T10:00:00Z',
   authenticationMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
-  hardwareBinding: { keyStorage: 'SecureEnclave', platform: 'ios', keyType: 'EC-P256', algorithm: 'ECDSA-SHA256', publicKey: 'BAAA' },
+  hardwareBinding: {
+    keyStorage: 'SecureEnclave',
+    platform: 'ios',
+    keyType: 'EC-P256',
+    algorithm: 'ECDSA-SHA256',
+    publicKey: 'BAAA',
+  },
   attestation: { format: 'apple-appattest-v1', certificateChain: ['a', 'b'] },
-  signature: { value: 'MEUC', algorithm: 'ECDSA-SHA256', signedContentHash: 'abc' },
-}
+  signature: { value: 'MEUC', algorithm: 'ECDSA-SHA256', signedContentHash },
+})
 
 describe('hardware-signed bytes survive the Credo round trip (issuerScope included)', () => {
   test.each([3, 5])('RCE v%i: verifier reconstructs exactly the bytes that were hardware-signed', async (v) => {
@@ -47,9 +54,11 @@ describe('hardware-signed bytes survive the Credo round trip (issuerScope includ
     expect(credential.issuerScope).toBe('pairwise')
     const signedBytes = JSON.stringify(credential) // what requestBiometricWithHardwareSigning signs
 
+    // A genuine signer embeds SHA-256 of the bytes it signed; the verifier's Stage 1 gate
+    // rejects anything else before native is called.
     const withEvidenceAndProof = {
       ...credential,
-      evidence: [evidence],
+      evidence: [evidenceFor(contentHashBase64(signedBytes))],
       proof: {
         type: 'DataIntegrityProof',
         cryptosuite: 'eddsa-rdfc-2022',
@@ -66,7 +75,10 @@ describe('hardware-signed bytes survive the Credo round trip (issuerScope includ
 
     await verifyVrcHardwareEvidence(roundTripped as never)
     expect(mockVerifyHardwareEvidence).toHaveBeenCalledTimes(1)
-    const passedContent = mockVerifyHardwareEvidence.mock.calls[0].find((a) => typeof a === 'string' && a.includes('issuerScope'))
+    const passedContent = mockVerifyHardwareEvidence.mock.calls[0].find(
+      (a) => typeof a === 'string' && a.includes('issuerScope')
+    )
     expect(passedContent).toBe(signedBytes)
+    expect(mockVerifyHardwareEvidence.mock.calls[0][5]).toBe(contentHashBase64(signedBytes))
   })
 })
