@@ -209,6 +209,13 @@ jobs:
           out=$(docker compose run --rm --no-deps --entrypoint mediator-account mediator 2>&1 || true)
           echo "$out"
           printf '%s' "$out" | grep -q 'usage: mediator-account'
+          # Not an open relay: a stranger's authcrypted forward, naming a
+          # third party as the next hop and posted with no token, is refused.
+          docker compose run --rm -T --no-deps --entrypoint mediator-account mediator \
+            --profile /run/secrets/mediator/admin-monitor.json \
+            --check-relay did:web:relay-check.invalid \
+            --inbound http://mediator:7037/mediator/v1/inbound
+          docker compose logs mediator 2>&1 | grep -E 'send_forwarded|refused|relay' | tail -n 5 || true
           docker compose down
 
       - name: Save the image

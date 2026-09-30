@@ -23,17 +23,33 @@
 #        in, and only the admin creates accounts. The gateway's account is
 #        created once with mediator-account (HANDOVER.md §8), with its own
 #        rights; nobody else has one.
-#      - global_acl_default = "DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED" is
-#        what every DID without an account gets:
+#      - global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,
+#        RECEIVE_FORWARDED,MODE_EXPLICIT_DENY" is what every DID without an
+#        account gets, and what the accounts the mediator creates by itself
+#        start with (the root admin at startup, server.rs
+#        seed_privileged_accounts; an agent the first time it is a next hop):
 #          SEND_MESSAGES     agents on other mediators may have wake-ups
 #                            delivered to the gateway (their relayed envelope
 #                            is a direct delivery, checked against the
 #                            sender's rights, inbound.rs:1190-1204);
-#          RECEIVE_FORWARDED an agent may be the next hop of the gateway's
-#                            reply (routing.rs, the next-hop account);
+#          RECEIVE_FORWARDED
+#          + MODE_EXPLICIT_DENY  an agent may be the next hop of the gateway's
+#                            reply: its auto-created account must accept a
+#                            forward, and not start with a closed access list
+#                            (both were refused in the lab without them);
+#          LOCAL
+#          + RECEIVE_MESSAGES  the admin's own account has an inbox, so it can
+#                            open its live connection and receive replies
+#                            (mediator-account needs both);
 #          no SEND_FORWARDED nobody but the gateway may have a forward relayed
 #                            onward, so the mediator is not an open relay
 #                            (routing.rs resolve_forward_sender).
+#        LOCAL and RECEIVE_MESSAGES give nobody else anything: without an
+#        account nobody can log in to collect.
+#        A consequence: agents' mediators must relay in upstream's default
+#        blind mode (the inner envelope verbatim, a direct delivery here). A
+#        rewrapped or double forward names a sender that needs SEND_FORWARDED,
+#        and is refused.
 #      Narrowing it further cuts agents on other mediators off (HANDOVER.md §3).
 #
 #      Lab-only override, to run it open as the lab mediator does: set
@@ -73,7 +89,7 @@ database_timeout = "2"
 
 [security]
 mediator_acl_mode = "explicit_allow"
-global_acl_default = "DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED"
+global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,MODE_EXPLICIT_DENY"
 local_direct_delivery_allowed = "true"
 local_direct_delivery_allow_anon = "false"
 # TLS ends at Caddy.
