@@ -1284,6 +1284,7 @@
     "IntroBody": "Para convidar você para {{community}}, o admin precisa da sua identidade para essa comunidade. Seu agente a cria agora — você confirma com o rosto ou a digital — e depois você a envia ao admin.",
     "Continue": "Continuar",
     "Preparing": "Preparando sua identidade…",
+    "PreparingSlow": "Isso pode levar um ou dois minutos.",
     "ConfirmTitle": "Criar sua identidade",
     "ConfirmBody": "Seu agente cria sua identidade para {{community}} — a que o admin vai convidar.",
     "ShareStepTitle": "Envie isto ao admin da comunidade",
