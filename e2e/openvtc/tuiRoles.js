@@ -16,7 +16,7 @@
 // a 177a218 binary). Where a string is the same in both, one citation (ed13d29)
 // stands; 177a218's line is given alongside when it moved.
 
-import { selectedLine, walkTo } from './listWalk.js';
+import { rowSelected, selectedLine, walkTo } from './listWalk.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -151,7 +151,10 @@ export async function issueTicket(tui) {
   const code = issued[1];
   // The link shown is the SELECTED ticket's (vetting_panel.rs:1665-1686); with
   // older tickets out, select this one by its code before reading the link.
-  const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen());
+  // With enough tickets out (25 on 2026-09-29) the list fills the pane and the
+  // "Read aloud" detail is below it, off screen; the ▸ on the ticket's row is
+  // then the only sign it is selected.
+  const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen()) || rowSelected(tui.screen(), code);
   // The tickets view grows by one every run; its position is the ticket read aloud.
   await walkTo(tui, selected, { pace: 600, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
   if (!selected()) throw tui.failure('vetter.ticketSelect', new Date(), `could not select ticket ${code} on the Tickets view`);
@@ -185,7 +188,12 @@ export function scrapeTicketUri(screen) {
 export function panelRows(screen) {
   return screen.split('\n').map((l) => {
     const a = l.indexOf('║');
-    const b = l.lastIndexOf('║');
+    // A list longer than the panel draws its scrollbar on the right border:
+    // the thumb (█) replaces that row's ║. Without this the row fell through
+    // to the menu-column parser and read as a menu item (226 gate, P2: "16
+    // personas" read as "* Communities" once the applicant had 16 personas).
+    let b = l.lastIndexOf('║');
+    if (a >= 0 && b <= a) b = l.lastIndexOf('█');
     return (a >= 0 && b > a ? l.slice(a + 1, b) : l.replace(/^.*?│/, '').replace(/│.*$/, '')).trim();
   });
 }
@@ -532,7 +540,11 @@ export async function openApplications(tui) {
   await tui.waitFor(/ Applications \(\d+\) /, { step: 'applicant.vettingPage', source: 'ui/pages/main/components/vetting_panel.rs:165-175' });
   // The tabs are marked by colour only; the desk is recognised by its views line (:1425-1445).
   if (/Requests \(\d+\)\s+Tickets \(\d+\)/.test(tui.screen())) await tui.pressEach(['Tab'], 800);
-  await tui.waitFor(/n: new {2}f: face {2}r: ask a vetter|You are not applying to any community\.|You have no persona yet\./, {
+  // The key-hint line sits under the list and the selected application's
+  // details (vetting_panel.rs:999), so a profile holding many applications
+  // pushes it off the bottom of the screen. The selected application's
+  // "Joining as" line (:820) shows the tab just as well.
+  await tui.waitFor(/n: new {2}f: face {2}r: ask a vetter|You are not applying to any community\.|You have no persona yet\.|║Joining as {2,}did:/, {
     step: 'applicant.applications',
     source: src(tui, 'ui/pages/main/components/vetting_panel.rs:932, :773, :763', 'ui/pages/main/components/vetting_panel.rs:605, :467'),
   });

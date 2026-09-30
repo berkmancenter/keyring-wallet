@@ -154,6 +154,13 @@ require('@formatjs/intl-relativetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/polyfill')
 require('@formatjs/intl-datetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/add-all-tz')
+// The polyfill formats in UTC until told the phone's zone (IN-58): tell it now
+// and whenever the app comes back to the foreground.
+require('./src/utils/deviceTimeZone').followDeviceTimeZone(
+  Intl,
+  () => require('react-native-localize').getTimeZone(),
+  require('react-native').AppState
+)
 require('reflect-metadata')
 
 // Buffer polyfill

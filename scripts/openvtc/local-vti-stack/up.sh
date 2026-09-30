@@ -21,7 +21,7 @@ TDK_SRC="${TDK_SRC:-$HOME/Documents/affinidi-tdk-rs}"               # mediator
 
 VTA_BIN="$VTI_SRC/target/debug/vta"
 VTC_BIN="$VTI_SRC/target/debug/vtc"
-PNM_BIN="$VTI_SRC/target/debug/pnm"
+PNM_BIN="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"   # signed, stable (sign-lab-tool.sh)
 MEDIATOR_BIN="$TDK_SRC/target/debug/mediator"
 MEDIATOR_SETUP_BIN="$TDK_SRC/target/debug/mediator-setup"
 WEBVH_BIN="$WEBVH_SRC/target/debug/did-hosting-daemon"

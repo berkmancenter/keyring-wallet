@@ -9,7 +9,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # pnm through the slug's lock, so this never drops a gate's pnm call (one slug =
 # one admin DID = one mediator socket; see ../pnm-locked).
-export PNM_BIN="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+export PNM_BIN="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"   # signed, stable (sign-lab-tool.sh)
 PNM="$HERE/../pnm-locked"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fails=0
@@ -20,8 +20,21 @@ vta() { # slug expect_host(yes|no)
   local slug="$1" want="$2"
   echo "== VTA $slug"
   local h; h=$("$PNM" --vta "$slug" health 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
-  local x; x=$(grep -c "✗" <<<"$h")
-  [ "$x" -eq 0 ] && ok "pnm health all ✓ ($(grep -c '✓' <<<"$h") checks)" || bad "pnm health: $x ✗ — $(grep '✗' <<<"$h" | head -2 | tr -s ' ')"
+  # pnm from VTI main prints a JSON report ({"checks":[{section,name,ok}],"healthy"}); count
+  # the checks themselves, so an empty or unreadable report fails instead of passing.
+  local r; r=$(python3 -c '
+import json,sys
+t=sys.stdin.read(); i=t.find("{\n")
+try: d=json.loads(t[i:]) if i>=0 else None
+except Exception: d=None
+if not d or not d.get("checks"): print("unreadable"); sys.exit()
+bad=[c["section"]+"/"+c["name"] for c in d["checks"] if not c.get("ok")]
+print(("ok %d" % len(d["checks"])) if d.get("healthy") and not bad else "bad "+" ".join(bad or ["healthy=false"]))' <<<"$h")
+  local ver; ver=$(grep -m1 -oE "Version +[0-9.]+" <<<"$h" | awk '{print $2}')
+  case "$r" in
+    ok*) ok "pnm health: ${r#ok } checks ok, healthy (VTA ${ver:-?})" ;;
+    *) bad "pnm health: ${r} — $(tr -s ' ' <<<"$h" | tail -3 | tr '\n' ' ' | cut -c1-160)" ;;
+  esac
   local s; s=$("$PNM" --vta "$slug" did-mgmt servers list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -oE "WebVH Servers \([0-9]+\)" | grep -oE "[0-9]+")
   s="${s:-0}"
   if [ "$want" = yes ]; then [ "$s" -ge 1 ] && ok "DID host registered ($s)" || bad "no DID host registered"
@@ -47,14 +60,12 @@ vtc() { # name base did
   fi
 }
 
-vta farm-runner yes
-vta farm-runner-prague yes
-vta farm-runner-uiux yes
-vta farm-runner-openvtc yes
-vtc keyring-test-vtc https://vtc-keyring-test.ic3.dev \
-  did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc
-vta farm-runner-nohost no
-# Added when it exists: vtc keyring-vetting-vtc <base> <did>
-
+# The Farm was wiped and rebuilt on 2026-09-29/30: these are the farm2-* runners.
+vta farm2-runner-prague yes
+vta farm2-runner-uiux yes
+vta farm2-runner-openvtc yes
+# keyring-test-vtc and farm-runner-nohost did not survive the reset. Added back when recreated:
+#   vtc keyring-test-vtc <base> <did>
+#   vta <nohost slug> no
 echo; [ "$fails" -eq 0 ] && echo "farm-health: all good" || echo "farm-health: $fails problem(s)"
 exit "$fails"

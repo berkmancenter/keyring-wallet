@@ -10,6 +10,11 @@ export function selectedLine(screen) {
   return screen.split('\n').find((l) => l.includes('▸'))?.trim();
 }
 
+/** Whether the row carrying the ▸ cursor names `text` (a ticket code, say). */
+export function rowSelected(screen, text) {
+  return screen.split('\n').some((l) => l.includes('▸') && l.includes(text));
+}
+
 /**
  * Press each of `keys` in turn (default Down, then Up) until `isWanted(screen)`.
  * Each key is pressed until the selection comes back to a row already seen

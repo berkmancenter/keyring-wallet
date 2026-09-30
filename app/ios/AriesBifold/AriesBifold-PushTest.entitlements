@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The push-test variant only (scripts/push-test/build-ios.sh,
+  docs/plans/push-notifications-plan.md §6). Its App ID,
+  asml.bkc.harvard.wallet.pushtest, and its development profile grant push and
+  nothing else, so this file asks for push alone: no associated domains and no
+  App Attest, which the release app's entitlements carry. A push-test build
+  therefore falls back to a plain exchange where the release app would attest.
+-->
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

@@ -15,12 +15,12 @@
 # exec and released by the kernel when pnm exits, however it exits: there is no
 # stale lock to clean up. Different slugs never wait for each other.
 #
-#   PNM_BIN        pnm binary (default ~/Documents/vti-main/target/debug/pnm)
+#   PNM_BIN        pnm binary (default ~/vti-stack/bin/pnm, the signed build; see sign-lab-tool.sh)
 #   PNM_LOCK_DIR   lock directory (default ~/.keyring-pnm-locks)
 #   PNM_LOCK_WAIT  seconds to wait for the lock before giving up (default 300;
 #                  giving up exits 75, before pnm runs)
 set -uo pipefail
-PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+PNM="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"
 if [ "${1:-}" != --vta ] || [ -z "${2:-}" ]; then
   echo "pnm-locked: the first arguments must be --vta <slug>" >&2
   exit 2

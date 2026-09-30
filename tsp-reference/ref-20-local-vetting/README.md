@@ -29,10 +29,18 @@ its vetting criterion, and says exactly what is missing.
 
 ## The two scripts
 
-- **`vtc-admin.mjs`** — the community-admin REST surface: `/v1/auth/challenge`
-  → an `eddsa-jcs-2022`-signed `auth/authenticate/0.1` → bearer, then
-  endorsement-type registration, the accepts criterion, the manifest, and
-  vetter grants. Every route carries its per-route `Trust-Task` header.
+- **`vtc-admin.mjs`** — the community administrator, as the VTC's own admin
+  console drives it. Since VTI #1824/#1827/#1834 the administrator's verbs
+  (invitations, members, join requests and decisions, the manifest,
+  endorsement types, vetter grants, policies) are **signed Trust Task
+  documents** posted to `POST /v1/trust-tasks`: issued by the admin DID,
+  addressed to the community DID, `eddsa-jcs-2022` for `authentication`, no
+  sign-in. The REST routes VTI main keeps (whoami, the accepts criteria, the
+  vetter grant listing and resend, endorsements and their revocation,
+  branding) still go `/v1/auth/challenge` → signed `auth/authenticate/0.1` →
+  bearer, with the route's `Trust-Task` header where it has one. The file's
+  header lists every command and which door it uses; `node --test` checks
+  each document against its published schema and verifies its proof.
 - **`join.mjs`** — the applicant: `connectVtaViaMediator` from
   `@openvtc/vti-didcomm-js`, then `manifest/0.2`, `submit/0.2`, `status/0.1`.
 

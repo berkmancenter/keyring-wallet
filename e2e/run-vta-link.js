@@ -62,14 +62,19 @@ const PAGE_DIR = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-pa
 // 8191: the runners' page (bob). 8190 is the page for a person's own agent.
 const ENROL_PORT = process.env.ENROL_PORT || "8191";
 const ENROL_URL = process.env.ENROL_URL || `http://localhost:${ENROL_PORT}`;
-const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
+// The signed build at its stable path (scripts/openvtc/sign-lab-tool.sh).
+const PNM = process.env.PNM_BIN || path.join(os.homedir(), "vti-stack/bin/pnm");
 // The runners' own lab agent. Never "alice": that is the agent a person's
 // TestFlight install is linked to, and runs against it show up on their phone.
 const VTA_SLUG = process.env.RUNNER_VTA || process.env.VTA_SLUG || "bob";
 if (VTA_SLUG === "alice" && process.env.ALLOW_ALICE !== "1") {
   throw new Error('refusing to run against "alice" (a person\'s TestFlight agent); use the runner VTA, bob');
 }
-const PNM_HOME = process.env.PNM_HOME || path.join(os.homedir(), `vti-stack/pnm-${VTA_SLUG}`);
+// Passed through only when set: pnm since VTI main reads PNM_HOME as its config
+// and session home, so a default here (an empty ~/vti-stack/pnm-<slug>) made it
+// answer "VTA not found in config" / "Not authenticated". pnm 0.19.0 ignored it.
+const PNM_HOME = process.env.PNM_HOME || undefined;
+const pnmHomeEnv = PNM_HOME ? { PNM_HOME } : {};
 // What the offer tells the phone to call: localhost for a simulator (or an
 // emulator behind adb reverse); an https tunnel for a real device.
 const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
@@ -778,7 +783,7 @@ async function ensurePage() {
       ENROL_PORT,
       ENROL_PUBLIC_URL,
       PNM_BIN: PNM,
-      PNM_HOME,
+      ...pnmHomeEnv,
       VTA_SLUG,
       ENROL_VTA_DID: runnerVtaDid(),
       ENROL_LABEL: `Keyring lab runner (${VTA_SLUG})`,
@@ -819,7 +824,7 @@ async function waitForState(n, wanted, ms = 60000) {
 
 function aclDids() {
   const out = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list"], {
-    env: { ...process.env, PNM_HOME },
+    env: { ...process.env, ...pnmHomeEnv },
     encoding: "utf8",
   });
   return out.replace(/\x1b\[[0-9;]*m/g, "");
@@ -851,7 +856,7 @@ function keepForNextStep({ before, tempDid }) {
     writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, before: [...before], at: new Date().toISOString() }, null, 2));
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid);
     console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
-    for (const e of mine) console.log(`  PNM_HOME=${PNM_HOME} ${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
+    for (const e of mine) console.log(`  ${PNM_HOME ? `PNM_HOME=${PNM_HOME} ` : ''}${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
   } catch (e) {
     console.log(`[acl] could not record this run's keys: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
   }
