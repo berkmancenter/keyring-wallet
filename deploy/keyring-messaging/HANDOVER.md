@@ -42,11 +42,18 @@ Secrets are not in it; each one says where it comes from.
 >   gateway. The reply was relayed back, and the agent logged it as
 >   provisioned 4.7 seconds after the set-wake. So that service's mediator
 >   relays to a mediator it has never seen and accepts relays back (§3).
+> - **A phone woken through the bundled mediator, with the visible alert
+>   (2026-09-30).** On an iPhone 11 (iOS, Apple's development channel), the
+>   agent's wake went through the bundled mediator to the gateway and on to
+>   Apple:
+>   - with the app in the background, the banner "Something is waiting for you
+>     in Keyring." showed 6.5 s after the request. Do Not Disturb had hidden
+>     it until it was turned off;
+>   - with the app force-quit, the banner showed 11.4 s after the request;
+>   - tapping the banner opens the app, but not yet on the waiting request.
+>     That is an app-side fix, not the gateway's.
 >
 > **Not yet proven**
-> - **A wake to a phone through the bundled mediator, with the visible
->   alert.** It uses the same path as the provisions above, but hasn't run.
->   Next: the iPhone test again.
 > - A real Android phone. The gateway loads the Google key at startup, but no
 >   notification has been sent through Google yet.
 > - Apple's production channel, used by App Store and TestFlight builds.
@@ -1237,10 +1244,9 @@ The project decides when, and sends you the steps for that mediator.
 
 ## 14. Known gaps
 
-- **No phone has been woken through the bundled mediator yet.** Provisions
-  from agents on other mediators, the lab's and the OpenVTC hosted
-  service's, cross it both ways, and a wake takes the same path (STATUS box).
-  The iPhone test through it is next.
+- **Tapping the notification doesn't open the waiting request yet.** On the
+  iPhone 11 test (2026-09-30) the tap opened the app on another tab. This is
+  an app-side fix, not a gateway one; it doesn't change what you deploy.
 - **The agents' mediator must relay.** The production agents' mediator needs
   the settings in §3's table. The project checks its configuration once it is
   known.
