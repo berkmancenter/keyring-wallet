@@ -120,7 +120,7 @@ export function extractCredentials(text, source) {
   if (trimmed.startsWith("{") && !trimmed.includes(MARKER)) {
     try {
       const credential = JSON.parse(trimmed);
-      const side = (/-(INVITER|RECEIVER)-/.exec(source) || [])[1] || "unknown";
+      const side = (/-(INVITER|RECEIVER|ISSUER)-/.exec(source) || [])[1] || "unknown";
       return [{ source, line: 1, side, exchange: "", record: "", status: "ok", credential }];
     } catch (e) {
       return [{ source, line: 1, side: "unknown", exchange: "", record: "", status: "unparsable", error: e.message }];

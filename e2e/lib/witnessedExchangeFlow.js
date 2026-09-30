@@ -15,6 +15,7 @@ import { execSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
+import { enforceCredentialCheck, filterKeepingContinuations, saveIssuedCredentialFiles, saveReactNativeJsLines } from "./vrcCapture.js";
 import { ensureAppium, stopAppium, screenshot, dumpSource, sleep } from "./driver.js";
 import {
   acceptInvitationViaPaste,
@@ -204,20 +205,24 @@ async function reportLocalityOutcome(driver, timeout = 60000) {
 }
 
 export function dumpAndroidWitnessLogs(udids) {
+  const checkFiles = [];
   for (const udid of udids) {
     try {
       mkdirSync("artifacts", { recursive: true });
-      const raw = execSync(`adb -s ${udid} logcat -d`, { maxBuffer: 64 * 1024 * 1024 }).toString();
-      const lines = raw
-        .split("\n")
-        .filter((l) =>
-          /VRC:|VRC Flow|Attestation|BiometricSignature|Witness|VWC|proofType|cryptosuite|TrustTasks|didn't complete|delivery after acceptance failed/i.test(
-            l
-          )
-        );
+      const raw = execSync(`adb -s ${udid} logcat -d -v threadtime`, { maxBuffer: 64 * 1024 * 1024 }).toString();
+      const lines = filterKeepingContinuations(
+        raw,
+        /VRC:|VRC Flow|Attestation|BiometricSignature|Witness|VWC|proofType|cryptosuite|TrustTasks|didn't complete|delivery after acceptance failed/i
+      );
       const file = `artifacts/witnessed-logcat-${udid}-${Date.now()}.txt`;
       writeFileSync(file, lines.join("\n"));
+      checkFiles.push(file);
       console.log(`[e2e] android (${udid}) witnessed log lines saved: ${file} (${lines.length} lines)`);
+      console.log(`[e2e] android (${udid}) ReactNativeJS lines saved: ${saveReactNativeJsLines(udid, raw)}`);
+      for (const f of saveIssuedCredentialFiles(udid, lines.join("\n"))) {
+        console.log(`[e2e] issued credential dump: ${f}`);
+        checkFiles.push(f);
+      }
       // Surface any DI proof lines for the VWC/VRC
       for (const l of lines) {
         if (/proofType=DataIntegrityProof|cryptosuite/i.test(l)) {
@@ -228,6 +233,8 @@ export function dumpAndroidWitnessLogs(udids) {
       console.warn(`[e2e] logcat capture failed for ${udid} (non-fatal): ${e.message}`);
     }
   }
+  // These runs exist to issue a VRC: no credential captured is a failure.
+  if (checkFiles.length) enforceCredentialCheck(checkFiles);
 }
 
 /**

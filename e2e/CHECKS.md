@@ -17,13 +17,50 @@ node check-vrc-credentials.mjs --self-test                   # synthetic fixture
 
 Exit code: 0 with no FAIL, 1 on any FAIL, 2 on a usage error.
 
+Package scripts (from `e2e/`; the root forwarders are `yarn e2e:vrc:check`,
+`e2e:vrc:check:strict`, `e2e:vrc:check:self-test`, and take the same extra
+arguments):
+
+| Script | Runs |
+|---|---|
+| `check:vrc` | the checker with its defaults (newest run, `--expect v5`) |
+| `check:vrc:witnessed` | `--expect v5 --require-storage StrongBox,TEE,SecureEnclave`: what a real-device run should satisfy. Hardware-verify failures stay WARN |
+| `check:vrc:strict` | the same plus `--strict-markers`: a `✗ Native verification failed` line FAILs. Opt-in: real phones currently fail verification on an expired Google attestation root |
+| `check:vrc:self-test` | `--self-test`, offline |
+
+The real-device runners call the checker themselves when they finish
+(`enforceCredentialCheck` in `lib/vrcCapture.js`, at the end of
+`dumpAndroidWitnessLogs` and of the attestation runner's dump): a run that
+issued no capturable VRC, or one with the wrong shape, exits 1 even though the
+UI flow passed. `E2E_VRC_CHECK=off` skips it, `E2E_VRC_EXPECT=v5|legacy|any`,
+`E2E_VRC_ALLOW_NO_EVIDENCE=1` and `E2E_VRC_STRICT_MARKERS=1` tune it. On a run
+that has already failed, an empty capture is reported but not added as a
+second failure.
+
+### Requiring a verification pass (`E2E_REQUIRE_HW_VERIFIED=1`)
+
+`assertSecureExchangeBadge` (the plain real-device exchange) accepts a missing
+Secure Exchange badge when Android's log shows a verification was merely
+attempted (an aging attestation root, say). With `E2E_REQUIRE_HW_VERIFIED=1`
+the receiving wallet's log must also carry an actual pass,
+`[HW:Verify] ✓ Native verification passed [...]` (or the `[VRC:Verify]`
+equivalent) — an attempt line or a `✗ Native verification failed` line fails
+the run with a message naming the missing marker. Default behaviour is
+unchanged; on iOS the log is not readable here, so the check is skipped with a
+warning.
+
 ## Inputs
 
-The wallet logs each completed credential exchange as one line,
+The wallet logs each issued VRC as one line, on the DIDComm credential-exchange
+path when an exchange reaches `done` and, between v4+ peers, on the Trust Task
+path: `side=ISSUER` when the VRC is sent and `side=RECEIVER` when it is stored
+(`ceremony.ts`). Before 2026-09-30 only the first path logged it, and the
+Trust Task path is the one real-device runs take, so nothing was captured. Each
+line is
 `[VRC:IssuedCredentialJSON] side=… exchange=… record=… {json}`, with
 certificate chains already replaced by `<PEM #n: N chars>` and any string over
 500 characters by `<omitted N chars>` (`slimCredentialForLog` in
-`vrc-manager.ts`). The checker takes these from:
+`vrc-credential-log.ts`). The checker takes these from:
 
 - `witnessed-logcat-<udid>-*.txt` and `attestation-logcat-<udid>-*.txt` (the
   runners' filtered logcat dumps; the `VRC:` filter keeps the marker line),
