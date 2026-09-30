@@ -147,32 +147,39 @@ design.</li>
 Apple's development (sandbox) channel.</li>
 <li>The gateway image: CI builds it for amd64 and arm64 and passes upstream's
 own test suite with our patch applied.</li>
+<li><strong>The bundled mediator, closed, in our lab (2026-09-30)</strong>, using this
+package's CI images, today's VTI (main <code>32ddd2f2</code>) and the lab's Affinidi
+mediator (v0.33.1 + 3):
+<ul>
+<li>CI builds it for amd64 and arm64 and boots it with Redis;</li>
+<li>an unknown DID's login is refused (<code>403</code>);</li>
+<li><code>mediator-account</code> registers the gateway, and the gateway logs in;</li>
+<li>an agent homed on <em>another</em> mediator reaches the gateway through it, and
+the reply gets back. Both mediators logged the relay hop each way. The
+agent collected the gateway's reply to its signed <code>push/provision</code> 3.1
+seconds after the request that triggered it;</li>
+<li>it refuses to relay a stranger's forward. <code>mediator-account --check-relay</code> sent a throwaway DID's authcrypted forward naming a third
+party, with no login, through the public hostname. The mediator answered
+<code>403 e.p.authorization.send_forwarded</code>. CI repeats this check on every
+image build;</li>
+<li><code>mediator-account</code> logs in with the admin identity exactly as
+<code>mediator-setup</code> writes it (the signing key only).</li>
+</ul>
+</li>
 </ul>
 <p><strong>Not yet proven</strong></p>
 <ul>
-<li>
-<p><strong>The bundled mediator.</strong> The iPhone test ran through our lab's mediator:
-the same Affinidi release, but open, where the package's is closed (§7).
-The package's own mediator is set up but untested:</p>
-<ul>
-<li>that CI builds and boots it is not yet confirmed;</li>
-<li>that a wake-up from an agent on another mediator arrives through it,
-with its closed settings;</li>
-<li>that it refuses to relay a stranger's message onward to a third party.</li>
-</ul>
-<p>We prove all three in our lab before you deploy.</p>
-</li>
-<li>
-<p>A real Android phone. The gateway loads the Google key at startup, but no
-notification has been sent through Google yet.</p>
-</li>
-<li>
-<p>Apple's production channel, used by App Store and TestFlight builds.</p>
-</li>
-<li>
-<p>Running on a real server, with public HTTPS, a public hostname and a
-persistent volume.</p>
-</li>
+<li><strong>A wake to a phone through the bundled mediator.</strong> It uses the same path
+as the provision above, but hasn't run. Next: the iPhone test again.</li>
+<li><strong>That an agent on a hosted service's mediator can reach it.</strong> The agent
+in our lab uses our lab's mediator, which relays to other mediators. The
+production agents' mediator must allow the same (§3), and hasn't been
+tested yet.</li>
+<li>A real Android phone. The gateway loads the Google key at startup, but no
+notification has been sent through Google yet.</li>
+<li>Apple's production channel, used by App Store and TestFlight builds.</li>
+<li>Running on a real server, with public HTTPS, a public hostname and a
+persistent volume.</li>
 </ul>
 <p><strong>Open decisions</strong> (§3)</p>
 <ul>
@@ -180,6 +187,11 @@ persistent volume.</p>
 <li>Which VTA issues the gateway's identity, and which DID host publishes it.</li>
 <li>Whether the production agents' mediator relays to other mediators (§3).</li>
 </ul>
+<p><strong>How this package reaches your deployment:</strong> your repository pins it by
+commit (<code>package_ref</code>). It first pins the tip of this package's branch as
+proven in the lab. Once the app release now in test (227) is merged, the
+package merges into the wallet repository's <code>main</code>. A one-line bump then
+moves <code>package_ref</code> to that merge commit and <code>package_branch</code> to <code>main</code>.</p>
 <p><strong>The production test in §10 is what turns it production-ready.</strong></p>
 </blockquote>
 <h2 id="1-what-the-gateway-is-and-the-terms-used-here" tabindex="-1">1. What the gateway is, and the terms used here</h2>
@@ -477,16 +489,14 @@ relayed to the agent's mediator's <code>/inbound</code>.</li>
 <td>It delivers the reply to the agent's inbox, and lets the gateway's DID (which has no account there) send</td>
 </tr>
 <tr>
-<td><code>processors.forwarding.relay_mode</code> equal to ours (<code>blind</code>)</td>
-<td>Both ends must use the same relay format</td>
+<td><code>processors.forwarding.relay_mode</code> equal to ours (<code>blind</code>), and agents sending a single forward (the VTA's default)</td>
+<td>The relayed envelope must reach the bundled mediator as a direct delivery to the gateway. A rewrapped or double forward names a sender that would need <code>SEND_FORWARDED</code> there, and is refused (§7)</td>
 </tr>
 </tbody>
 </table></div>
 <p>On the bundled mediator the matching settings are already in
 <code>mediator/mediator.toml</code>. Remote agents have no account there, so their rights
-come from its default for strangers,
-<code>global_acl_default = &quot;DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED&quot;</code> (§7).
-Narrowing it further cuts them off.</p>
+come from its default for strangers (§7). Narrowing it further cuts them off.</p>
 <p class="done"><strong>You're done with this section when</strong> you have, in writing:</p>
 <ul>
 <li>the issuing VTA and its admin;</li>
@@ -913,13 +923,19 @@ environment.</p>
 (<code>mediator_acl_mode = &quot;explicit_allow&quot;</code>). The mediator's admin creates it
 once with <code>mediator-account</code> (§8 part B).</li>
 <li><strong>Everyone else gets a narrow default</strong>
-(<code>global_acl_default = &quot;DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED&quot;</code>):
+(<code>global_acl_default = &quot;DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,MODE_EXPLICIT_DENY&quot;</code>).
+It is also what the accounts the mediator creates by itself start with:
+the admin's, and an agent's when it becomes the next hop of a reply.
 <ul>
-<li>an agent's mediator may relay a wake-up in, on
-<code>/mediator/v1/inbound</code>, for delivery to the gateway;</li>
-<li>an agent may receive the gateway's reply;</li>
-<li>nobody but the gateway may have a message relayed onward, so the
-mediator can't be used as an open relay.</li>
+<li>An agent's mediator may relay a wake-up in, on <code>/mediator/v1/inbound</code>,
+for delivery to the gateway (<code>SEND_MESSAGES</code>).</li>
+<li>An agent may receive the gateway's reply, and its account starts open
+(<code>RECEIVE_FORWARDED</code>, <code>MODE_EXPLICIT_DENY</code>).</li>
+<li>The admin has an inbox, so <code>mediator-account</code> can log in and receive
+replies (<code>LOCAL</code>, <code>RECEIVE_MESSAGES</code>). Without an account nobody can log
+in to use those.</li>
+<li><strong>No <code>SEND_FORWARDED</code>:</strong> nobody but the gateway may have a message
+relayed onward, so the mediator can't be used as an open relay.</li>
 </ul>
 </li>
 <li><strong>The login endpoint is fenced too.</strong> Caddy refuses
@@ -1129,7 +1145,8 @@ cargo build --package pnm-cli --release     # → target/release/pnm
   --var URL=&lt;the mediator's DID&gt; \
   --var SERVICE_TSP='{&quot;id&quot;:&quot;{DID}#tsp&quot;,&quot;type&quot;:&quot;TSPTransport&quot;,&quot;serviceEndpoint&quot;:&quot;&lt;the mediator's DID&gt;&quot;}' \
   --var WEBVH_SERVER=&lt;the DID host's id&gt; \
-  --context-hint push-gateway
+  --context-hint push-gateway \
+  --out request.json
 </code></pre>
 <ul>
 <li><code>URL</code> is the <strong>mediator's DID</strong>, because the gateway is reached through it.</li>
@@ -1190,6 +1207,9 @@ its account hash, and the account's rights. Those are <code>local</code>,
 <code>sendMessages</code>, <code>receiveMessages</code>, <code>sendForwarded</code> and <code>receiveForwarded</code>, all
 <code>true</code>, and <code>accessListMode: explicitDeny</code>. Running it again sets the same
 rights, so it is safe to repeat.</p>
+<p>The admin identity <code>mediator-setup</code> wrote holds only the admin's signing key.
+Logging in also needs the key-agreement key its <code>did:key</code> derives from it, so
+the tool derives that itself; nothing to do.</p>
 <p>It runs inside the stack, so it reaches the mediator's login through the
 network alias. Caddy and the mediator must be running (Part A).</p>
 <p><strong>Step 5, install (you).</strong></p>
@@ -1363,6 +1383,15 @@ out;</li>
 <li><code>Secret backend is file://</code>: the keys are files in <code>secrets/mediator/</code>,
 owner-only (§9).</li>
 </ul>
+<p>Then check that the mediator is not an open relay. This sends a
+throwaway stranger's forward, naming a third party, with no login:</p>
+<pre><code class="language-sh">sudo docker compose run --rm -T --no-deps --entrypoint mediator-account mediator \
+  --profile /run/secrets/mediator/admin-monitor.json \
+  --check-relay did:web:relay-check.invalid \
+  --inbound https://mediator.example.org/mediator/v1/inbound
+</code></pre>
+<p>Expected: <code>PASS: the mediator refused it.</code> (exit 0). <code>FAIL</code> (exit 2) means
+it relayed a stranger's message: stop, and tell us.</p>
 </li>
 <li>
 <p>Send us the gateway's URL, the gateway's DID and the mediator's DID. <strong>The production test</strong>, which we
