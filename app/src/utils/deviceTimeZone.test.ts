@@ -59,8 +59,15 @@ describe('with the polyfill the app loads, forced as a phone gets it', () => {
   require('@formatjs/intl-datetimeformat/polyfill-force')
   require('@formatjs/intl-datetimeformat/locale-data/en')
   require('@formatjs/intl-datetimeformat/add-all-tz')
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { localDateTime } = require('../../../bifold/packages/core/src/modules/trust-tasks/screens/localTime')
+  // As bifold's localTime.localDateTime formats: Date#toLocaleString, which the polyfill patches.
+  const localDateTime = (iso: string) =>
+    new Date(iso).toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   const EXPIRES = '2026-09-30T11:13:00.000Z'
 
   it('reads UTC until told the zone: the bug the gate caught', () => {
