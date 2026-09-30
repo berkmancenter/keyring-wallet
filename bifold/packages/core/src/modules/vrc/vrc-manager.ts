@@ -36,38 +36,13 @@ import { DATA_INTEGRITY_PROOF_TYPE, EDDSA_RDFC_2022_CRYPTOSUITE_NAME } from './s
 import { extractFormInputFromJCard } from './types/rcard'
 import { requestBiometricWithHardwareSigning } from './vrc-biometric'
 import { prepareHardwareKeyForSigning } from './vrc-hardware-signing'
+import { logIssuedVrcJson } from './vrc-credential-log'
 import { createEvidenceBuilder } from './services/EvidenceBuilder'
 import type { WitnessSession, WitnessConnectionState } from './context/WitnessConnectionProvider'
 import { WitnessedVRCManager } from './witnessed-vrc-manager'
 import { witnessStatusStore, vrcFlowStore, type VrcFlowErrorType } from './witnessStatusStore'
 
 const WITNESS_BACKGROUND_TIMEOUT_MS = 15000 // 15 seconds — if no session-challenge arrives, counterparty is not on the witness
-
-/**
- * Replace bulky PEM / binary blobs so a full credential (incl. LD proof) fits
- * in a single ReactNativeJS log line. Structure is preserved for debugging.
- */
-function slimCredentialForLog(credential: unknown): unknown {
-  if (credential == null || typeof credential !== 'object') return credential
-  const walk = (value: any): any => {
-    if (Array.isArray(value)) return value.map(walk)
-    if (value && typeof value === 'object') {
-      const out: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(value)) {
-        if (k === 'certificateChain' && Array.isArray(v)) {
-          out[k] = v.map((c, i) => (typeof c === 'string' ? `<PEM #${i + 1}: ${c.length} chars>` : walk(c)))
-        } else if (typeof v === 'string' && (v.includes('-----BEGIN CERTIFICATE-----') || v.length > 500)) {
-          out[k] = `<omitted ${v.length} chars>`
-        } else {
-          out[k] = walk(v)
-        }
-      }
-      return out
-    }
-    return value
-  }
-  return walk(credential)
-}
 
 async function logIssuedCredentialSnapshot(
   agent: Agent,
@@ -95,13 +70,7 @@ async function logIssuedCredentialSnapshot(
             ? first.toJSON()
             : first
     if (!raw || typeof raw !== 'object') return
-    const slim = slimCredentialForLog(raw)
-    // Single-line marker so e2e/logcat can reassemble without Android's ~4KB
-    // truncation of multi-line pretty-prints of PEM-heavy credentials.
-    // eslint-disable-next-line no-console
-    console.log(
-      `[VRC:IssuedCredentialJSON] side=${side} exchange=${record.id} record=${w3cCredRef.credentialRecordId} ${JSON.stringify(slim)}`
-    )
+    logIssuedVrcJson(side, record.id, w3cCredRef.credentialRecordId, raw)
   } catch {
     /* best-effort diagnostic dump */
   }
