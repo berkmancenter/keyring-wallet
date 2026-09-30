@@ -133,7 +133,9 @@ scripts/openvtc/sign-lab-tool.sh pnm --build       # build VTI's pnm, sign it, r
 scripts/openvtc/sign-lab-tool.sh openvtc --build   # same for openvtc (OPENVTC_SRC, CARGO_TARGET_DIR)
 ```
 
-Run it after every rebuild; without `--build` it signs the existing build. Every
+Run it after every rebuild; without `--build` it signs the existing build. It signs the
+cargo output (`target/debug/<tool>`) in place too, so a script or server that still calls
+that path never meets an ad hoc build. Every
 entry point defaults to `~/vti-stack/bin/pnm` (`PNM_BIN` still overrides), and the TUI
 runners default `--openvtc-bin` to `~/vti-stack/bin/openvtc`. Do not point anything at
 `target/debug/pnm` or at the old `pnm-0.19.0-trusted`. With pnm built from VTI main,

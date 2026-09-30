@@ -11,7 +11,9 @@
 # once stays granted. The harness defaults to the stable paths:
 #   ~/vti-stack/bin/pnm      → ~/vti-stack/bin/pnm-<rev>
 #   ~/vti-stack/bin/openvtc  → ~/vti-stack/bin/openvtc-<rev>
-# Never run target/debug/pnm (or any ad hoc build) against the Keychain.
+# The cargo output itself (target/debug/<tool>) is signed in place too, so a
+# script or a long-running server that still calls it by path never meets an
+# ad hoc build (every rebuild would otherwise re-prompt for each Keychain item).
 #
 # Sources (override with the env var):
 #   pnm      VTI_SRC      (default ~/Documents/vti-main), binary target/debug/pnm
@@ -70,7 +72,17 @@ case "$REQ" in
 esac
 mv -f "$DEST.new" "$DEST"
 
+# Sign the cargo output in place as well, by rename (never overwrite a binary
+# that may be running): the copy is signed, checked, then moved over it.
+cp -p "$BUILT" "$BUILT.signed.new"
+codesign --force -s "$IDENTITY" -i "org.keyring.lab.$TOOL" "$BUILT.signed.new"
+case "$(codesign -d -r- "$BUILT.signed.new" 2>&1 | grep '^designated')" in
+  *"identifier \"org.keyring.lab.$TOOL\""*"certificate leaf"*) mv -f "$BUILT.signed.new" "$BUILT" ;;
+  *) echo "in-place signature check failed for $BUILT" >&2; rm -f "$BUILT.signed.new"; exit 1 ;;
+esac
+
 # Repoint the stable path (-h: replace the link itself, not what it points to).
 ln -sfh "$DEST" "$BIN_DIR/$TOOL"
 echo "$TOOL → $(readlink "$BIN_DIR/$TOOL")"
 echo "  $REQ"
+echo "  $BUILT signed in place"
