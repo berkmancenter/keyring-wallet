@@ -12,6 +12,9 @@
  * The tick runs every {@link HEARTBEAT_INTERVAL_MS} from app start
  * ({@link useAgentPresence}), so a notice listener mounted near the root hears
  * the first one. An agent that cannot be reached is tried again next tick.
+ * A failed tick is handed on (`onFailed`): the agent refuses a phone another
+ * device removed ("DID not in ACL"), and the controller moves the link on
+ * that, as it does for a refused sign-in.
  *
  * @module trust-tasks/module/vtaPresence
  */
@@ -49,6 +52,8 @@ export interface AgentPresenceDeps {
   platform: string
   now?: () => Date
   onSiblingSeen: (device: AgentDevice) => void
+  /** A tick that failed, for the controller to read (a removed phone's refusal). */
+  onFailed?: (error: unknown) => void
   log?: (message: string) => void
 }
 
@@ -87,6 +92,7 @@ export class AgentPresence {
       this.announced = liveNow
     } catch (e) {
       this.deps.log?.(`[VTA] telling the agent this phone is here: ${(e as Error)?.message ?? e}`)
+      this.deps.onFailed?.(e)
     } finally {
       this.running = false
     }
@@ -96,18 +102,25 @@ export class AgentPresence {
 /**
  * Run {@link AgentPresence} while the app runs, from app start. `port` answers
  * a signed-in client while the phone is linked (the controller's
- * `presencePort`). Emits {@link SIBLING_SEEN_EVENT}.
+ * `presencePort`); `onFailed` hears a failed tick (the controller's
+ * `presenceFailed`). Emits {@link SIBLING_SEEN_EVENT}.
  */
-export function useAgentPresence(port: (() => Promise<AgentDevicePort | undefined>) | undefined): void {
+export function useAgentPresence(
+  port: (() => Promise<AgentDevicePort | undefined>) | undefined,
+  onFailed?: (error: unknown) => void,
+  log?: (message: string) => void
+): void {
   useEffect(() => {
     if (!port) return
     const presence = new AgentPresence({
       port,
       platform: Platform.OS,
       onSiblingSeen: (device) => DeviceEventEmitter.emit(SIBLING_SEEN_EVENT, device),
+      onFailed,
+      log,
     })
     void presence.tick()
     const timer = setInterval(() => void presence.tick(), HEARTBEAT_INTERVAL_MS)
     return () => clearInterval(timer)
-  }, [port])
+  }, [port, onFailed, log])
 }

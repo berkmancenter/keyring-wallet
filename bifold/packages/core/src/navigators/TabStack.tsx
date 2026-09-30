@@ -89,7 +89,10 @@ const TabStack: React.FC = () => {
     () => (agent && linkOnline ? () => vtaAgent.presencePort(agent) : undefined),
     [agent, linkOnline]
   )
-  useAgentPresence(presencePort)
+  // A removed phone learns it from its next refused heartbeat, not only at its next sign-in.
+  const presenceFailed = useCallback((error: unknown) => vtaAgent.presenceFailed(error), [])
+  const presenceLog = useCallback((message: string) => agent?.config.logger.warn(message), [agent])
+  useAgentPresence(presencePort, presenceFailed, presenceLog)
   // A community's removal notice is said in plain words when it arrives.
   useVtiRemovedNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
