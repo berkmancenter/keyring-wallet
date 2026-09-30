@@ -13,34 +13,41 @@ versions it hit** — `farm/farm-health.sh` reads them.
 ## Runner VTAs
 
 Each harness has its own runner VTA, so two runs never share one agent's ACL.
-All are VTA Only, Platform stack, on the Farm's shared mediator
-(`firstperson-mediator`, `mediator.ic3.dev`).
+All are VTA Only, on the Farm's shared mediator
+(`did:webvh:QmTq4cFfz9wmrCJFKRskQsEx64e6ubF7pQkzJnanW9iEed:dids.ic3.dev:ic3-mediator`,
+advertised for both TSP and DIDComm).
 
-| VTA | DID | `pnm` slug | Used by | DID host |
+**The Farm was wiped on 2026-09-29 and rebuilt on 2026-09-30.** Every Farm DID,
+community and fixture from before is gone. The runners below are the new ones,
+under new `pnm` slugs (`farm2-*`). What the old ones held is kept read-only in
+`~/vti-stack/farm-salvage-2026-09-29/` on the harness Mac.
+
+| VTA | DID | `pnm` slug | Used by | REST |
 |---|---|---|---|---|
-| `keyring-runner-prague` | `did:webvh:Qmf6vgGqjWAVn1RveovRfbndpFFo4kV1nMqsvYRgcXUKMM:dids.ic3.dev:keyring-runner-prague-vta` | `farm-runner-prague` | the Prague / VTI harness | `dids.ic3.dev` |
-| `keyring-runner-uiux` | `did:webvh:QmVMwnx5JRyfCrX4h8QnVaA2s4XjBPF4wmBGgKf7CUPWBA:dids.ic3.dev:keyring-runner-uiux-vta` | `farm-runner-uiux` | the UI/UX harness | `dids.ic3.dev` |
-| `keyring-runner` | `did:webvh:QmS4PpPKqSrSTUjinSf8Dv5SDay4FNrs7p2w4deJiUm5BV:dids.ic3.dev:keyring-runner-vta` | `farm-runner` | spare; the first runner (2026-09-22) | `dids.ic3.dev` |
-| `keyring-runner-openvtc` | `did:webvh:QmQFFkXYBzo5d6imJwGNpE2jGMgcjA1DC6fMBwqGcPzuWs:dids.ic3.dev:keyring-runner-openvtc-vta` | `farm-runner-openvtc` | the openvtc TUI in the interop harness (created by Alberto, 2026-09-25) | `dids.ic3.dev` |
-| `keyring-runner-nohost` | `did:webvh:QmNaKHRQZpe1NJ3SoBaTML6mgZX2woXyuCGwAruk3vKNu8:dids.ic3.dev:keyring-runner-nohost-vta` | `farm-runner-nohost` | the "agent with no DID host" check | **none, on purpose** |
+| `keyring-runner-prague` | `did:webvh:QmVqeyPbHZ5kVdtusmwvphWqGUVFsy17YQgpBNoVDFUxUi:dids.ic3.dev:keyring-runner-prague-vta` | `farm2-runner-prague` | the Prague / VTI harness | `https://vta-keyring-runner-prague.ic3.dev` |
+| `keyring-runner-uiux` | `did:webvh:QmXoLDBV3PcHkwMXXMWsjhZvPeadTTM4Dc8vgBf9oFi6ji:dids.ic3.dev:keyring-runner-uiux-vta` | `farm2-runner-uiux` | the UI/UX harness | `https://vta-keyring-runner-uiux.ic3.dev` |
+| `keyring-runner-openvtc` | `did:webvh:QmPxMQ5zvDFJfNMV4trXSz8xaBZwK53reRwWVmui9zw8fA:dids.ic3.dev:keyring-runner-openvtc-vta` | `farm2-runner-openvtc` | the openvtc TUI in the interop harness | `https://vta-keyring-runner-openvtc.ic3.dev` |
 
-**`keyring-runner-nohost` has no DID host by design.** Its `control` server was
-removed after creation (`pnm --vta farm-runner-nohost did-mgmt servers delete
-control`), so a persona minted through it has nowhere to be published. It is
-the live target for keyring-bifold#79: linking to it works, and joining a
-community must stop with *"Your agent has nowhere to publish a new identity"*.
-Do not re-add a server to it; use a different runner for ordinary runs.
+All three have the Farm's DID host (`dids.ic3.dev`) registered. The spare
+`keyring-runner` and the no-DID-host runner were not recreated.
+
+**The no-DID-host runner (keyring-bifold#79's live target) is gone with the
+reset.** Recreate it, then remove its `control` server
+(`did-mgmt servers delete control`), before the next check that needs an agent
+with nowhere to publish.
 
 Each runner is set up with `pnm setup --name <slug>` (which mints the admin
 `did:key` pasted at the Farm wizard's *Admin DID* step), then, once the portal
 shows *Running*, `pnm setup continue <slug> --vta-did <did>`. The ACL's admin is
 then a long-lived key created by the pasted one, which is expected. A runner's
-harness environment is `RUNNER_VTA`, `RUNNER_VTA_DID` and `PNM_HOME`.
+harness environment is `RUNNER_VTA` and `RUNNER_VTA_DID`
+(`~/vti-stack/farm-runner-<name>.env`), with `PNM_BIN=~/vti-stack/bin/pnm`.
 
 **One pnm call per runner at a time, machine-wide.** pnm keeps a runner's admin
 key in the login keychain (service `pnm-cli`, account `vta:<slug>`), and its
-profile list in `~/Library/Application Support/pnm/config.toml`. It never reads
-`PNM_HOME`, which isolates nothing and is only a label our scripts still pass.
+profile list in `~/Library/Application Support/pnm/config.toml`. pnm from VTI
+main reads `PNM_HOME` as its config home, so leave it unset: pointing it
+anywhere else hides every profile.
 Every session on this Mac therefore uses the same admin DID for a slug. The
 mediator keeps one socket per DID by design (VTI `vta-sdk/src/acl_setup.rs`,
 "a second is evicted as `duplicate-channel`"), so two concurrent calls on one
@@ -55,6 +62,10 @@ Runs remove the ACL entries they create (`e2e/lib/aclCleanup.js`); a failed run
 keeps them as evidence and prints the commands to remove them.
 
 ## Communities
+
+**`keyring-test-vtc` did not survive the 2026-09-29 reset and is being
+recreated.** The table and notes below describe the old one, and apply again
+only once the new community's DID and REST base replace them here.
 
 | VTC | DID | REST | Admission | Mediator |
 |---|---|---|---|---|
@@ -90,11 +101,14 @@ exposes a commit.
 
 | Component | Version | Read on |
 |---|---|---|
-| Runner VTAs (all four) | VTA 0.42.0 (after the Farm's announced upgrade) | 2026-09-25 |
-| `keyring-test-vtc` | VTC 0.11.58 | 2026-09-25 |
-| Shared mediator (`firstperson-mediator`) | 0.29.4 | 2026-09-25 |
-| `keyring-stack-mediator` | 0.28.36 | 2026-09-23 |
-| `dids.ic3.dev`, `dids-keyring-stack.ic3.dev` | did-hosting-control 0.8.8 | 2026-09-23 |
+| Runner VTAs (all three) | VTA 0.45.1; `/openapi.json` 119023 bytes, sha256 `2350f05afd9f…`, byte-identical to VTI `e907a34c` | 2026-09-30 |
+| VTC `vtc.ic3.dev` (the Farm's own) | VTC 0.11.58; `/openapi.json` sha256 `05537c174435…` | 2026-09-29 |
+| `dids.ic3.dev` | did-hosting-control 0.8.8 (`/api/health`) | 2026-09-29 |
+
+Versions from before the reset (runner VTAs 0.42.0, `keyring-stack-mediator`
+0.28.36, shared mediator 0.29.4) describe services that no longer exist.
+A VTA's version string can stay the same across a redeploy, so the openapi
+fingerprint is the measurement that counts.
 
 ## Health check
 
@@ -120,7 +134,11 @@ covered by one from-scratch setup per openvtc version bump
 (`e2e/openvtc/setup-fixture.mjs`, which refuses to overwrite an existing
 fixture).
 
-The fixture lives on `keyring-runner-openvtc`. It was on
+**The Farm fixture below was lost in the 2026-09-29 reset** and has to be
+set up again on the new `keyring-runner-openvtc` (one `setup-fixture.mjs` run).
+The rest of this section is the record of the old one.
+
+The fixture lived on `keyring-runner-openvtc`. It was on
 `keyring-runner-prague` for the first hour (06:03–06:15Z, 2026-09-25), before
 this runner existed, and was removed from there completely: the persona DID
 `…:pattern-useful`, the contexts `openvtc` and `openvtc/keyring-harness-vetter`,
