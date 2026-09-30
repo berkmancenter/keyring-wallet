@@ -35,14 +35,18 @@ Secrets are not in it; each one says where it comes from.
 >     image build;
 >   - `mediator-account` logs in with the admin identity exactly as
 >     `mediator-setup` writes it (the signing key only).
+> - **An agent on a hosted VTA service reaches it (2026-09-30).** A runner
+>   agent on the OpenVTC hosted service, homed on that service's mediator, set
+>   a wake channel naming the gateway. Its signed `push/provision` was relayed
+>   from the service's mediator to the bundled one and accepted by the
+>   gateway. The reply was relayed back, and the agent logged it as
+>   provisioned 4.7 seconds after the set-wake. So that service's mediator
+>   relays to a mediator it has never seen and accepts relays back (§3).
 >
 > **Not yet proven**
-> - **A wake to a phone through the bundled mediator.** It uses the same path
->   as the provision above, but hasn't run. Next: the iPhone test again.
-> - **That an agent on a hosted service's mediator can reach it.** The agent
->   in our lab uses our lab's mediator, which relays to other mediators. The
->   production agents' mediator must allow the same (§3), and hasn't been
->   tested yet.
+> - **A wake to a phone through the bundled mediator, with the visible
+>   alert.** It uses the same path as the provisions above, but hasn't run.
+>   Next: the iPhone test again.
 > - A real Android phone. The gateway loads the Google key at startup, but no
 >   notification has been sent through Google yet.
 > - Apple's production channel, used by App Store and TestFlight builds.
@@ -52,7 +56,8 @@ Secrets are not in it; each one says where it comes from.
 > **Open decisions** (§3)
 > - Which agents the gateway serves (the allowlist).
 > - Which VTA issues the gateway's identity, and which DID host publishes it.
-> - Whether the production agents' mediator relays to other mediators (§3).
+> - If production agents live on a service other than the OpenVTC hosted one,
+>   whether its mediator relays to other mediators (§3). The hosted service's does.
 >
 > **How this package reaches your deployment:** your repository pins it by
 > commit (`package_ref`). It first pins the tip of this package's branch as
@@ -186,7 +191,7 @@ they change which values go into `.env` and who runs §8.
 | --- | --- | --- |
 | **Which VTA issues the gateway's identity** | An admin of that VTA runs §8 step 2 | The VTA service that hosts Keyring's agents in production. Its admin runs step 2 (the project lead, or that service's operator), so you don't need to run a VTA yourself |
 | **Which DID host (`WEBVH_SERVER`)** | Where the gateway's `did:webvh` document is published. Anyone resolving the gateway's DID fetches it from there | The DID host that VTA already publishes its own DIDs on |
-| **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. Remote agents need **no account** on the bundled mediator, but their own mediator must have the settings listed below | Nothing for you to set. The project checks that mediator's configuration once it is known; the VTI lab's has all of them |
+| **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. Remote agents need **no account** on the bundled mediator, but their own mediator must have the settings listed below | Nothing for you to set. Measured on 2026-09-30: the VTI lab's mediator and the OpenVTC hosted service's mediator both do this. Another service's mediator is checked once it is known |
 | **Which agents it serves (`GATEWAY_ALLOWED_CONTROLLERS`)** | An exact list of agent DIDs, or `*` for any agent. More below | **Still an open question**, for you and the project lead. We recommend `*` for production, for the reason below |
 
 **The allowlist, in more detail.** The setting is required: unset means every
@@ -1232,10 +1237,10 @@ The project decides when, and sends you the steps for that mediator.
 
 ## 14. Known gaps
 
-- **The bundled mediator is unproven.** Until the lab proof (STATUS box)
-  passes, no wake-up has crossed from an agent's own mediator to it, and its
-  refusal to relay a stranger's message onward has been read from its source
-  but not tested.
+- **No phone has been woken through the bundled mediator yet.** Provisions
+  from agents on other mediators, the lab's and the OpenVTC hosted
+  service's, cross it both ways, and a wake takes the same path (STATUS box).
+  The iPhone test through it is next.
 - **The agents' mediator must relay.** The production agents' mediator needs
   the settings in §3's table. The project checks its configuration once it is
   known.
