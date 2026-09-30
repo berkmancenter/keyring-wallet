@@ -28,6 +28,7 @@ import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCom
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
 import { didPrefix } from './didPrefix'
+import { releaseWarn } from './releaseLog'
 import { vtiAgent } from './vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
@@ -63,6 +64,9 @@ function ownedByInbox(message: { type?: unknown; body?: unknown }): boolean {
   )
 }
 
+/** A look that has been busy this long says so: something it waits on has not settled. */
+export const PERSONA_INBOX_STUCK_MS = 60_000
+
 /** Start collecting; returns the function that stops it. */
 export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): () => void {
   const community = new GenericRecordsCommunityStore(agent)
@@ -75,6 +79,24 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
   let again = false
   // A look that met someone else's sign-in in flight: run it once that settles.
   let afterAgent = false
+  // When the running look began, and whether it has already said it is stuck.
+  let busySince = 0
+  let saidStuck = false
+  // Why the last look did not open the session. Said in the Release log when it
+  // changes, so an inbox that never opens says why once, not every 30 s (227
+  // gate, Farm: the invitation push never reached the phone, and the inbox
+  // left no line at all).
+  let lastWhy = ''
+  const said = (why: string) => {
+    if (why === lastWhy) return
+    lastWhy = why
+    const { status, did } = vtiAgent.getState()
+    releaseWarn(
+      `[VTI] persona inbox (${options.communityDid ? didPrefix(options.communityDid) : 'latest persona'}): ${why}; ` +
+        `persona ${persona ? didPrefix(persona.did) : 'none'}, keyAgreement ${persona?.kmsKeyIds?.keyAgreement ? 'yes' : 'no'}, ` +
+        `session ${vtiAgent.isConnected ? `open as ${did ? didPrefix(did) : '?'}` : 'closed'}, status ${status}`
+    )
+  }
 
   // Registered before any connect: opening the session drains what the
   // mediator held, and a listener attached after the connect misses that
@@ -92,10 +114,13 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
         `[VTI] persona inbox skipped ${String(message.type ?? '')} from ${didPrefix(message.from)}: ${why}`
       )
     }
-    if (!target) return skipped(`no persona for ${options.communityDid ? didPrefix(options.communityDid) : 'any community'}`)
+    if (!target)
+      return skipped(`no persona for ${options.communityDid ? didPrefix(options.communityDid) : 'any community'}`)
     const sessionDid = vtiAgent.getState().did
     if (sessionDid !== target.did)
-      return skipped(`the session is ${sessionDid ? didPrefix(sessionDid) : 'not connected'}, not ${didPrefix(target.did)}`)
+      return skipped(
+        `the session is ${sessionDid ? didPrefix(sessionDid) : 'not connected'}, not ${didPrefix(target.did)}`
+      )
     // The community removed this persona, or received its join request: applied
     // once checked (vtiCommunityNotices), and nothing else to do with it.
     if (message.type === REMOVAL_NOTICE || message.type === SUBMIT_RECEIPT) {
@@ -143,25 +168,44 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     if (stopped) return
     if (busy) {
       again = true
+      if (!saidStuck && Date.now() - busySince > PERSONA_INBOX_STUCK_MS) {
+        saidStuck = true
+        const { status } = vtiAgent.getState()
+        releaseWarn(
+          `[VTI] persona inbox: a look has been running ${Math.round((Date.now() - busySince) / 1000)} s ` +
+            `(status ${status}); later looks wait for it`
+        )
+      }
       return
     }
     busy = true
+    busySince = Date.now()
+    saidStuck = false
     again = false
     try {
       persona = await personaFor(agent, options.communityDid)
-      if (!persona?.kmsKeyIds?.keyAgreement) return
+      if (!persona) return said('no persona for this community yet')
+      if (!persona.kmsKeyIds?.keyAgreement) return said("the persona's key-agreement key is not borrowed yet")
       // Only when nothing holds the session: never take it from a flow that
       // opened it on purpose.
-      const { status } = vtiAgent.getState()
-      if (vtiAgent.isConnected) return
+      const { status, did } = vtiAgent.getState()
+      if (vtiAgent.isConnected)
+        return said(
+          did === persona.did
+            ? 'listening (the session is this persona)'
+            : 'listening only: another identity holds the session'
+        )
       if (status === 'resolving' || status === 'authenticating') {
         // Another sign-in is running (after an unlock, the inbox that just
         // stopped): this look is not dropped but waits for it (228 lab check).
         afterAgent = true
-        return
+        return said('waiting for a sign-in already running')
       }
+      said('signing in as the persona')
       await vtiAgent.connect(agent, options.mediatorDid, { persona, peerRevisionStore })
+      said('signed in')
     } catch (e) {
+      said(`sign-in failed: ${e instanceof Error ? e.message : String(e)}`)
       options.onError?.(e)
     } finally {
       busy = false

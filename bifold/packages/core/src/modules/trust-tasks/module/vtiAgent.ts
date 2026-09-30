@@ -56,6 +56,7 @@ import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
+import { releaseWarn } from './releaseLog'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
@@ -734,6 +735,7 @@ class VtiAgentController {
       peerRevisionStore?: TspPeerRevisionStore
     } = {}
   ): Promise<void> {
+    if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
     while (this.connecting) await this.connecting.catch(() => undefined)
     const attempt = this.connectNow(agent, mediatorDid, options)
     this.connecting = attempt
@@ -753,12 +755,27 @@ class VtiAgentController {
     const wantedDid = options.persona?.did ?? options.identity?.did
     if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
     if (this.session) await this.disconnect()
+    // Each step of a sign-in, timed, in the Release log: the 227 gate's Farm run
+    // stopped between the persona's document and its mediator's, and nothing
+    // said so (releaseLog).
+    const t0 = Date.now()
+    const step = (what: string) =>
+      releaseWarn(
+        `vtiAgent: connect ${wantedDid ? didPrefix(wantedDid) : '(new identity)'} +${Date.now() - t0} ms: ${what}`
+      )
     try {
       this.set({ status: 'resolving', error: undefined })
+      step('resolving')
       const own = options.persona
-        ? await advertisedMediatorDid(agent, options.persona.did).catch(() => undefined)
+        ? await advertisedMediatorDid(agent, options.persona.did).catch((error) => {
+            step(
+              `the persona's document gave no mediator (${error instanceof Error ? error.message : String(error)}); using the configured one`
+            )
+            return undefined
+          })
         : undefined
       const mediatorDid = own ?? configuredMediatorDid
+      step(`mediator ${mediatorDid ? didPrefix(mediatorDid) : 'none'} (${own ? "the persona's own" : 'configured'})`)
       if (!mediatorDid) throw new Error('vtiAgent: no mediator — the persona names none and none is configured')
       if (own && configuredMediatorDid && own !== configuredMediatorDid) {
         agent.config.logger.info(
@@ -766,6 +783,7 @@ class VtiAgentController {
         )
       }
       const mediator = await resolveVtiMediator(agent, mediatorDid)
+      step(`mediator resolved: ws ${mediator.wsEndpoint}, auth ${mediator.authEndpoint}`)
       this.mediator = mediator
       this.mediatorDid = mediatorDid
       this.set({ status: 'authenticating', host: hostOf(mediator.wsEndpoint) })
@@ -790,15 +808,30 @@ class VtiAgentController {
       this.tsp = tspSession
       this.persona = options.persona
       this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
+      let first = true
+      const firstMessage = () => {
+        if (first) step('first message on the session')
+        first = false
+      }
       const session = new VtiMediatorSession(agent, identity, mediator, {
         onError: (error) => this.set({ error: error.message }),
         onMessage: (plaintext) => {
+          firstMessage()
           this.noteInbound(plaintext, 'didcomm')
           return this.deliver(plaintext)
         },
-        ...(tspSession ? { onTspFrame: (bytes: Uint8Array) => this.receiveTspFrame(bytes, did) } : {}),
+        ...(tspSession
+          ? {
+              onTspFrame: (bytes: Uint8Array) => {
+                firstMessage()
+                return this.receiveTspFrame(bytes, did)
+              },
+            }
+          : {}),
       })
+      step(`signing in as ${didPrefix(did)} (challenge, then the socket)`)
       await session.start()
+      step('socket open')
       // Discard any stale backlog the mediator flushes on live delivery before
       // a request could have a reply (see VtaClient.connect).
       await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -816,7 +849,9 @@ class VtiAgentController {
         tspReady: Boolean(tspSession),
         peerRevisions: (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? [],
       })
+      step('connected')
     } catch (error) {
+      step(`failed: ${error instanceof Error ? error.message : String(error)}`)
       this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error
     }
