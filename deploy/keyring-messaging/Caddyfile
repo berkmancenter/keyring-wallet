@@ -25,7 +25,7 @@
 # address; from the internet the endpoint is refused, so no stranger can hold
 # a session: all they can do is hand the mediator a relayed message.
 # (Unverified: whether it relays a stranger's message onward to a third party.
-# The lab proof checks it; see HANDOVER.md §13.)
+# The lab proof checks it; see HANDOVER.md §14.)
 {$SITE_SCHEME:https}://{$MEDIATOR_HOST} {
 	@public_login {
 		path /mediator/v1/authenticate*

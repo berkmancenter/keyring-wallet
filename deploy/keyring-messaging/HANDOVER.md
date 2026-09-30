@@ -1,7 +1,7 @@
 # Keyring push gateway: handover
 
 This document is for a backend engineer who will run Keyring's push wake-up
-gateway on a server. It assumes you know Linux, Docker and DNS. It assumes no
+gateway, and the mediator it receives wake-ups through, on a server. It assumes you know Linux, Docker and DNS. It assumes no
 background in Keyring or in the identity technology it uses: §1 defines every
 term. It is self-contained, so you can read it without the repository.
 Secrets are not in it; each one says where it comes from.
@@ -16,10 +16,17 @@ Secrets are not in it; each one says where it comes from.
 >   design.
 > - The Apple push key: Apple accepted it and delivered to that iPhone, on
 >   Apple's development (sandbox) channel.
-> - The image: CI builds it for amd64 and arm64 and passes upstream's own test
->   suite with our patch applied.
+> - The gateway image: CI builds it for amd64 and arm64 and passes upstream's
+>   own test suite with our patch applied.
 >
 > **Not yet proven**
+> - **The bundled mediator.** The iPhone test ran through our lab's mediator:
+>   the same Affinidi release, and the same settings except the two relay
+>   changes in §7. The package's own mediator is set up but untested:
+>   - that CI builds and boots it is not yet confirmed;
+>   - no wake-up has yet crossed from an agent's mediator to it.
+>
+>   We prove it in our lab before you deploy.
 > - A real Android phone. The gateway loads the Google key at startup, but no
 >   notification has been sent through Google yet.
 > - Apple's production channel, used by App Store and TestFlight builds.
@@ -29,7 +36,7 @@ Secrets are not in it; each one says where it comes from.
 > **Open decisions** (§3)
 > - Which agents the gateway serves (the allowlist).
 > - Which VTA issues the gateway's identity, and which DID host publishes it.
-> - Which shared mediator the gateway and the agents use.
+> - Whether the production agents' mediator relays to other mediators (§3).
 >
 > **The production test in §10 is what turns it production-ready.**
 
@@ -42,12 +49,13 @@ Secrets are not in it; each one says where it comes from.
 5. [From zero: a fresh server to a running gateway](#5-from-zero-a-fresh-server-to-a-running-gateway)
 6. [The settings (`.env`), annotated](#6-the-settings-env-annotated)
 7. [The services (`docker-compose.yml`), explained](#7-the-services-docker-composeyml-explained)
-8. [The gateway's identity: who does what](#8-the-gateways-identity-who-does-what)
+8. [The two identities: who does what](#8-the-two-identities-who-does-what)
 9. [Host needs, backups and monitoring](#9-host-needs-backups-and-monitoring)
 10. [Go-live checklist and the production test](#10-go-live-checklist-and-the-production-test)
 11. [Troubleshooting](#11-troubleshooting)
 12. [Updates, secret rotation and rollback](#12-updates-secret-rotation-and-rollback)
-13. [Known gaps](#13-known-gaps)
+13. [Moving to a shared mediator later](#13-moving-to-a-shared-mediator-later)
+14. [Known gaps](#14-known-gaps)
 
 ## 1. What the gateway is, and the terms used here
 
@@ -63,10 +71,11 @@ fetches the actual request from the agent directly.
                 │  phone → gateway: "here is my push token" → gateway: "your handle is H"
                 │  phone → agent:   "wake me at gateway G, handle H"             │
                 ▼                                                                │
-  ┌────────┐  signed push/wake (DIDComm/TSP)  ┌───────────┐   APNs / FCM    ┌───────┐
-  │ agent  │ ── via its DIDComm v2 mediator ─▶│  gateway  │ ──────────────▶ │ phone │
-  │ (VTA)  │                                  │ (this)    │  "something is  │       │
-  └────────┘                                  └───────────┘   waiting"      └───┬───┘
+  ┌────────┐ signed push/wake ┌──────────┐ relay ┌──────────────┐ ┌─────────┐ APNs/FCM ┌───────┐
+  │ agent  │ ────────────────▶│ agent's  │──────▶│ gateway's    │▶│ gateway │────────▶ │ phone │
+  │ (VTA)  │  (DIDComm/TSP)   │ mediator │       │ mediator     │ │         │"some-    │       │
+  └────────┘                  └──────────┘       └──────────────┘ └─────────┘ thing is └───┬───┘
+                                                  (this package: both boxes)  waiting"    │
        ▲                                                                        │
        └──────────── the phone opens Keyring and fetches the real request ──────┘
                          directly from its agent, over its own encrypted channel
@@ -83,7 +92,7 @@ fetches the actual request from the agent directly.
 | **`did:webvh`** | A kind of DID whose document is published as a file on an ordinary web server (a **DID host**), with a signed history of changes. Resolving it is an HTTPS fetch from that host |
 | **VTA** | Verifiable Trust Agent: the server software each person's agent runs on (from OpenVTC's open-source *VTI*, Verifiable Trust Infrastructure). A VTA also *issues* identities to services such as this gateway (§8). It has admins, who run commands against it with `pnm`, its command-line tool |
 | **DIDComm v2** | A messaging protocol between DIDs: each message is encrypted to the recipient's DID keys and signed by the sender's |
-| **Mediator** | A DIDComm v2 relay: a mailbox server that holds messages for a DID until that DID connects and collects them. The gateway connects *out* to one, so agents can reach it without the gateway opening any port |
+| **Mediator** | A DIDComm v2 relay: a mailbox server that holds messages for a DID until that DID connects and collects them. Mediators also relay messages to each other. This package bundles one (Affinidi's, the kind the VTI stack runs) that serves only the gateway: agents' mediators relay wake-ups to it, and the gateway collects them over a connection it opens *out*, so the gateway itself opens no port for agents |
 | **TSP** | Trust Spanning Protocol: a second protocol for sending signed and encrypted messages between DIDs. The gateway accepts wakes over both TSP and DIDComm, through the same mediator. A `TSPTransport` entry in its DID document tells agents how to reach it over TSP |
 | **Trust Task** | A small signed JSON document naming one operation, such as `push/register`, `push/provision` or `push/wake`. The gateway's whole interface is three Trust Tasks |
 | **Controller / allowlist** | The agent a handle belongs to is its *controller*. The allowlist (`GATEWAY_ALLOWED_CONTROLLERS`) names the agents the gateway serves |
@@ -117,14 +126,16 @@ arrived never authorises anything.
 
 **How it's reached:**
 - **Phones reach it over HTTPS.** That is the only inbound traffic.
-- **Agents reach it through the mediator.** The gateway connects out to the
-  mediator and collects its messages there, so wake-ups need no inbound port.
-  The mediator has to be one the agents already send through (§3).
+- **Agents reach it through the bundled mediator.** An agent sends a wake-up
+  to its own mediator, which relays it over HTTPS to the gateway's mediator.
+  The gateway collects it there. So the gateway's mediator needs its own public
+  HTTPS hostname, and the agents' mediators must be allowed to relay to other
+  mediators (§3).
 
 **You're done with this section when** you can say what the gateway stores
 (credentials, and tokens behind handles), what it sends (a push with no
-content), and how each side reaches it (phones by HTTPS, agents through the
-mediator).
+content), and how each side reaches it (phones by HTTPS, agents through their
+mediator and then the bundled one).
 
 ## 2. What we send you, and who to ask
 
@@ -137,7 +148,6 @@ The project lead is your contact for everything below.
 | The package folder, and a current image or CI run ID (§4) | A link to the branch, or a tarball plus the image file |
 | The decisions in §3 | Agreed with the project lead before you start |
 | The identity approval (§8, step 2) | You send `request.json`. The VTA admin sends back `bundle.armor`, and the digest by a separate channel |
-| If the mediator denies unknown DIDs: allowing the gateway's DID | The mediator's admin, once you tell them the DID (§8, step 4) |
 | The test agent's DID, for the allowlist during the production test | From us, before the test |
 | The production test (§10) | Scheduled with you once the checklist's first steps pass |
 
@@ -154,7 +164,7 @@ they change which values go into `.env` and who runs §8.
 | --- | --- | --- |
 | **Which VTA issues the gateway's identity** | An admin of that VTA runs §8 step 2 | The VTA service that hosts Keyring's agents in production. Its admin runs step 2 (the project lead, or that service's operator), so you don't need to run a VTA yourself |
 | **Which DID host (`WEBVH_SERVER`)** | Where the gateway's `did:webvh` document is published. Anyone resolving the gateway's DID fetches it from there | The DID host that VTA already publishes its own DIDs on |
-| **Which DIDComm v2 mediator** | Agents send wake-ups to the gateway through it, so both sides must be able to reach it | The mediator the production agents already use. If it denies unknown DIDs, its admin has to allow the gateway's DID (§8, step 4) |
+| **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. That mediator must relay to other mediators and accept relays from them | Nothing for you to set. The project checks that mediator's configuration once it is known (§14); the VTI lab's does both |
 | **Which agents it serves (`GATEWAY_ALLOWED_CONTROLLERS`)** | An exact list of agent DIDs, or `*` for any agent. More below | **Still an open question**, for you and the project lead. We recommend `*` for production, for the reason below |
 
 **The allowlist, in more detail.** The setting is required: unset means every
@@ -171,10 +181,12 @@ agent wake only the phones that registered with it and that it provisioned,
 and the limits above still apply. For the production test the list is just
 our test agent's DID, either way.
 
+The mediator itself is not a decision: the package bundles it (§7), and you run
+it. It may move to a shared mediator later (§13).
+
 **You're done with this section when** you have, in writing:
 - the issuing VTA and its admin;
 - the DID host's id;
-- the mediator's DID;
 - the allowlist choice for production.
 
 ## 4. Getting the package and the image
@@ -198,6 +210,9 @@ or ask the project lead for a tarball of the folder. It contains:
 | `.env.example` | The settings template (§6) |
 | `gateway/Dockerfile`, `gateway/entrypoint.sh` | Builds the gateway from upstream source at a pinned commit, with our patch |
 | `gateway/patches/0001-…visible-alert…patch` | Our one patch (below) |
+| `mediator/Dockerfile` | Builds the mediator from upstream source at a pinned commit |
+| `mediator/mediator.toml` | The mediator's settings (§7) |
+| `mediator/setup-identity.sh`, `mediator/mediator-build.toml` | Create the mediator's own identity (§8) |
 | `tools/gateway-identity/` | A small Rust tool that writes the gateway's identity file (§8) |
 | `README.md` | A shorter operator reference |
 
@@ -240,9 +255,18 @@ The patch is self-contained, with its own tests, and is a candidate for
 contributing upstream (tracked as CONTRIB-01). It hasn't been submitted; the
 project does that itself, so please don't open anything upstream.
 
-**You're done with this section when**
-`docker image ls keyring-messaging/vti-push-gateway` lists the tag
-`e542a9d77a7369f4f3da01d573107ea155c80691` on the server.
+**The mediator's image** is Affinidi's `affinidi-messaging-mediator` v0.33.1,
+commit **`555806151b30a4ba2085a29384c8e048307e0083`**: the release our lab
+runs, and the one the iPhone test went through. Affinidi's newest published
+image is far older, so it is built from source the same two ways:
+- the same workflow uploads `messaging-mediator-image-amd64` and `-arm64`
+  (14 days), which you load with `docker load -i messaging-mediator.tar`;
+- or `docker compose build mediator` (a large Rust build: allow 8 GB of RAM
+  and 20 minutes or more).
+
+**You're done with this section when** `docker image ls | grep keyring-messaging`
+lists `vti-push-gateway:e542a9d7…` and `messaging-mediator:55580615…` on the
+server.
 
 ## 5. From zero: a fresh server to a running gateway
 
@@ -287,16 +311,18 @@ Expected: `Status: active`, with `OpenSSH`, `80/tcp`, `443/tcp` and `443/udp`
 set to `ALLOW`. Open the same ports in the cloud provider's firewall or
 security group, if it has one. Outbound access is listed in §9.
 
-**3. Point DNS at the server.** Create an A record for your hostname, and an
-AAAA record if the VM has IPv6. Do this **before** the first start: Caddy asks
-Let's Encrypt for a certificate on boot, and that fails until the name
-resolves to this server.
+**3. Point DNS at the server.** Create an A record for each of the two
+hostnames, and AAAA records if the VM has IPv6: one for the gateway
+(`push.example.org` here) and one for its mediator (`mediator.example.org`). Do
+this **before** the first start: Caddy asks Let's Encrypt for both certificates
+on boot, and that fails until the names resolve to this server.
 
 ```sh
 dig +short push.example.org
+dig +short mediator.example.org
 ```
 
-Expected: this server's public IP.
+Expected: this server's public IP, twice.
 
 **4. Get the package** (§4) into `/opt`:
 
@@ -309,8 +335,9 @@ cd /opt/keyring-messaging && ls
 Expected: `Caddyfile  HANDOVER.md  README.md  docker-compose.yml  gateway  tools`
 (and `.env.example`, which `ls -a` shows).
 
-**5. Get the image** (§4). Either `sudo docker load -i vti-push-gateway.tar`
-with the CI artifact, or `sudo docker compose build gateway`.
+**5. Get the images** (§4). Either `sudo docker load -i vti-push-gateway.tar`
+and `sudo docker load -i messaging-mediator.tar` with the CI artifacts, or
+`sudo docker compose build gateway mediator`.
 
 **6. First boot, without credentials.** This checks DNS, TLS and the proxy
 before any secret is on the machine. It uses the gateway's *echo sender*,
@@ -323,10 +350,11 @@ sudo chown -R 10001:10001 data/gateway secrets
 sudo chmod 700 data/gateway secrets
 sudo nano .env
 #   GATEWAY_HOST=push.example.org
+#   MEDIATOR_HOST=mediator.example.org
 #   GATEWAY_DEV_ECHO_SENDER=1
 #   GATEWAY_ALLOWED_CONTROLLERS=did:example:first-run-check
 sudo docker compose config >/dev/null && echo config-ok
-sudo docker compose up -d
+sudo docker compose up -d gateway caddy     # the mediator comes in step 8
 sleep 30; sudo docker compose ps
 curl -fsS https://push.example.org/healthz; echo
 ```
@@ -369,10 +397,15 @@ sudo ls -ln secrets
 
 Expected: each file shows `-rw-------` and owner `10001 10001`.
 
-**8. Create the gateway's identity** (§8). The result is
-`secrets/gateway-identity.json`.
+**8. Create the mediator's identity and start it** (§8, part A). The result:
+- `MEDIATOR_DID` and `MEDIATOR_ADMIN_DID` in `.env`;
+- the mediator running and healthy;
+- its login endpoint refused from outside.
 
-**9. Fill in `.env` for real** (§6). Clear `GATEWAY_DEV_ECHO_SENDER`, and set
+**9. Create the gateway's identity** (§8, part B), naming the mediator's DID.
+The result is `secrets/gateway-identity.json`.
+
+**10. Fill in `.env` for real** (§6). Clear `GATEWAY_DEV_ECHO_SENDER`, and set
 the Apple, Google, identity and allowlist values. Then run:
 
 ```sh
@@ -380,12 +413,13 @@ sudo docker compose up -d
 sleep 20; sudo docker compose logs --tail 80 gateway
 ```
 
-**10. Verify.** Work through the go-live checklist in §10. Its startup lines
+**11. Verify.** Work through the go-live checklist in §10. Its startup lines
 tell you each part is configured. If a line is missing or an error appears,
 see §11.
 
 **You're done with this section when**:
 - `https://push.example.org/healthz` returns `ok`;
+- `sudo docker compose ps` shows the gateway and mediator `healthy`;
 - the log shows every line in §10 step 3;
 - the echo-sender warning is gone.
 
@@ -409,6 +443,10 @@ GATEWAY_HOST=<push.example.org>
 # https = Caddy gets and renews a Let's Encrypt certificate itself.
 # (http is only for a local run, or behind a tunnel that terminates TLS.)
 SITE_SCHEME=https
+
+# The mediator's public hostname, no scheme. Its own DNS record pointing here.
+# Agents' mediators relay wake-ups to https://<this>/mediator/v1/inbound.
+MEDIATOR_HOST=<mediator.example.org>
 
 # Host ports Caddy publishes. Keep 80/443 on a server: the certificate
 # challenge needs port 80.
@@ -474,6 +512,21 @@ GATEWAY_HTTP_BURST=400
 
 # Log filter. Blank = vti_push_gateway=info,tower_http=info
 GATEWAY_LOG=
+
+###############################################################################
+# Mediator (Affinidi messaging mediator)
+###############################################################################
+
+# The upstream commit the mediator image is built from, which is also its tag:
+# affinidi-messaging-mediator v0.33.1. Change it only as part of an update the
+# project gives you (§12).
+MEDIATOR_COMMIT=555806151b30a4ba2085a29384c8e048307e0083
+
+# The mediator's own DID (did:peer:2…) and its admin DID (did:key:…), without a
+# did:// prefix. mediator/setup-identity.sh creates both and prints these lines
+# (§8, part A).
+MEDIATOR_DID=<did:peer:2…>
+MEDIATOR_ADMIN_DID=<did:key:…>
 ```
 
 Blank values are fine: the image's entrypoint unsets every empty `GATEWAY_*`
@@ -487,8 +540,11 @@ effect with `sudo docker compose up -d`, which recreates the container.
 
 ## 7. The services (`docker-compose.yml`), explained
 
-The compose project is called `keyring-messaging`. It has two services on one
-private network (`edge`), and **only Caddy publishes ports**.
+The compose project is called `keyring-messaging`. It has four services on two
+private networks, and **only Caddy publishes ports**:
+- `edge`, which has outbound internet, carries the gateway, the mediator and
+  Caddy;
+- `store` has no route out at all, and carries only the mediator and Redis.
 
 **`gateway`**: `vti-push-gateway`.
 - **Image:** `keyring-messaging/vti-push-gateway:<GATEWAY_COMMIT>`, loaded or
@@ -513,13 +569,48 @@ private network (`edge`), and **only Caddy publishes ports**.
 - **Watchtower:** labelled so it never auto-updates. Updates are deliberate
   (§12).
 
+**`mediator`**: Affinidi's messaging mediator, the gateway's post office.
+- **Image:** `keyring-messaging/messaging-mediator:<MEDIATOR_COMMIT>`, loaded
+  or built as in §4.
+- **Listens:** on port 7037, reachable only from Caddy.
+- **Settings:** `mediator/mediator.toml`, mounted read-only. These are our
+  lab mediator's settings, with two relay changes:
+  - it accepts relays from other mediators explicitly
+    (`enable_inter_mediator_relay = "true"`);
+  - it knows its own public URL (`LOCAL_ENDPOINTS`, from `MEDIATOR_HOST`), so
+    it delivers messages for itself locally instead of relaying them to
+    itself.
+
+  Its identity (`MEDIATOR_DID`, `ADMIN_DID`) and Redis address come from the
+  environment.
+- **Who may use it:**
+  - Anyone may relay a message in, on `/mediator/v1/inbound`. That is how
+    agents' mediators deliver wake-ups.
+  - Only the gateway can log in. Caddy refuses the login endpoint
+    (`/mediator/v1/authenticate…`) from public addresses. Inside the stack,
+    `MEDIATOR_HOST` resolves to Caddy itself (a network alias), so the gateway
+    logs in from a private address.
+  - Without a login, nobody can collect messages or send through it.
+- **Volumes:** `./secrets/mediator` → `/run/secrets/mediator`, read-only. It
+  holds the mediator's keys, owned by uid 10002.
+- **Health check:** `GET /mediator/v1/livez` every 15 s.
+
+**`redis`**: the mediator's store (Redis 7.4, pinned by digest).
+- **Holds:** messages waiting for the gateway, sessions and accounts. It
+  persists to `./data/redis` (append-only file).
+- **Network:** `store` only, so nothing but the mediator can reach it.
+
 **`caddy`**: the HTTPS proxy.
 - **Image:** `caddy:2.11.4-alpine`, pinned by digest.
 - **Publishes:** `HTTP_PORT` → 80, and `HTTPS_PORT` → 443 on both TCP and UDP.
-- **Certificate:** gets and renews a Let's Encrypt certificate for
-  `GATEWAY_HOST`.
-- **Routing:** everything goes to `gateway:8300`, except `/metrics`, which
-  answers 404.
+- **Certificates:** gets and renews Let's Encrypt certificates for
+  `GATEWAY_HOST` and `MEDIATOR_HOST`.
+- **Routing:**
+  - `GATEWAY_HOST` goes to `gateway:8300`, except `/metrics`, which answers
+    404.
+  - `MEDIATOR_HOST` goes to `mediator:7037`, WebSockets included. Its login
+    endpoint answers 403 to public addresses.
+- **Network alias:** `MEDIATOR_HOST`, on `edge`.
 - **Volumes:**
   - `./Caddyfile`, read-only;
   - `./data/caddy/data` and `./data/caddy/config`, for certificates and
@@ -532,17 +623,75 @@ What the gateway serves publicly:
 
 | Path | Who calls it |
 | --- | --- |
-| `POST /trust-tasks` | Phones: `push/register` |
-| `GET /healthz` | You, and your monitoring |
+| `https://GATEWAY_HOST/trust-tasks` (POST) | Phones: `push/register` |
+| `https://GATEWAY_HOST/healthz` | You, and your monitoring |
+| `https://MEDIATOR_HOST/mediator/v1/inbound` | Agents' mediators, relaying wake-ups |
+| `https://MEDIATOR_HOST/mediator/v1/livez`, `…/readyz` | You, and your monitoring |
+| `https://MEDIATOR_HOST/mediator/v1/authenticate…`, `wss://MEDIATOR_HOST/mediator/v1/ws` | The gateway only, from inside the stack |
 
-Agents never call it over HTTPS. Their `push/provision` and `push/wake` arrive
-through the mediator.
+Agents never call the gateway over HTTPS. Their `push/provision` and
+`push/wake` arrive through the mediator.
 
-**You're done with this section when** `sudo docker compose ps` shows the
-gateway `healthy` and Caddy `Up`, and `curl -s -o /dev/null -w '%{http_code}\n'
-https://push.example.org/metrics` prints `404`.
+**You're done with this section when**:
+- `sudo docker compose ps` shows the gateway and mediator `healthy`, and Redis
+  and Caddy `Up`;
+- `curl -s -o /dev/null -w '%{http_code}\n' https://push.example.org/metrics`
+  prints `404`;
+- `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://mediator.example.org/mediator/v1/authenticate/challenge`
+  prints `403`.
 
-## 8. The gateway's identity: who does what
+## 8. The two identities: who does what
+
+The mediator and the gateway each have their own DID. The mediator's comes
+first, because the gateway's DID document names it.
+
+### Part A: the mediator's identity (you, 5 minutes)
+
+The mediator's DID is a self-contained `did:peer:2`. Its document is encoded
+in the DID string itself, so it needs no DID host and no VTA. It names the
+mediator's keys and its URLs on `MEDIATOR_HOST`. Upstream's `mediator-setup`
+tool creates it, and `mediator/setup-identity.sh` runs that tool for you:
+
+```sh
+cd /opt/keyring-messaging
+grep ^MEDIATOR_HOST= .env                  # must be your mediator hostname
+sudo ./mediator/setup-identity.sh
+```
+
+Expected: the tool's own output, then:
+
+```
+Mediator identity created. Put these two lines in .env:
+
+MEDIATOR_DID=did:peer:2.Vz6Mk…
+MEDIATOR_ADMIN_DID=did:key:z6Mk…
+```
+
+It also writes `secrets/mediator/mediator-secrets.json`, the mediator's
+private keys, and `secrets/mediator/admin-monitor.json`, its admin identity for
+upstream's `mediator-console`. Both are owned by uid 10002, mode 0600. It
+refuses to run a second time: a new mediator identity means a new gateway
+identity too.
+
+Copy the two lines into `.env`, then start the mediator and check it:
+
+```sh
+sudo docker compose up -d mediator
+sleep 20; sudo docker compose ps mediator redis
+curl -fsS https://mediator.example.org/mediator/v1/livez; echo
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://mediator.example.org/mediator/v1/authenticate/challenge
+```
+
+Expected:
+- the mediator is `healthy` and Redis is `Up`;
+- `livez` answers;
+- the login endpoint prints `403`, because only the gateway may log in.
+
+The hostname in the DID is fixed. Changing `MEDIATOR_HOST` later means a new
+mediator DID, and with it a new gateway identity, so pick the hostname you'll
+keep.
+
+### Part B: the gateway's identity
 
 The gateway has its own `did:webvh`. Agents address their wake-ups to it, and
 it receives them through the mediator it connects **out** to. The identity is
@@ -575,8 +724,10 @@ server itself, or on a trusted machine you then copy the identity file from.
 | 1. Request | **You** | Your machine | `request.json`. The one-time seed stays with you |
 | 2. Approve | **The issuing VTA's admin** | Their machine | `bundle.armor`, and a digest |
 | 3. Open | **You** | Your machine | `gateway-identity.json` |
-| 4. Allow on the mediator (only if it denies unknown DIDs) | **The mediator's admin** | Their machine | The gateway may connect |
-| 5. Install | **You** | The server | The gateway starts with its DID |
+| 4. Install | **You** | The server | The gateway starts with its DID |
+
+In every command below, `<the mediator's DID>` is `MEDIATOR_DID` from `.env`
+(Part A), the whole `did:peer:2…` string.
 
 **Step 1, request (you).**
 
@@ -645,13 +796,10 @@ or the bundle, and never prints a private key. The file looks like this:
 > finding VTI-53), which is why `tools/gateway-identity` exists. It opens the
 > bundle with the VTA SDK's documented `open_bundle`.
 
-**Step 4, the mediator account (the mediator's admin, sometimes).** On a
-mediator that admits new DIDs by default there is nothing to do: the gateway
-registers itself the first time it connects. On a mediator that denies unknown
-DIDs, send its admin the gateway's DID (the `did` in the file) to allow before
-step 5.
+There is no mediator account to create: the gateway registers itself the first
+time it logs in to the bundled mediator.
 
-**Step 5, install (you).**
+**Step 4, install (you).**
 
 ```sh
 sudo install -o 10001 -g 10001 -m 600 gateway-identity.json /opt/keyring-messaging/secrets/
@@ -660,7 +808,8 @@ cd /opt/keyring-messaging && sudo docker compose up -d gateway
 sleep 20; sudo docker compose logs --tail 80 gateway | grep -E 'mediator listener|TSPTransport'
 ```
 
-Expected, two lines naming the gateway's DID and the mediator:
+Expected, two lines naming the gateway's DID and the mediator (your
+`MEDIATOR_DID`):
 - `mediator listener started (TSP and DIDComm)`;
 - `DID document advertises TSPTransport`.
 
@@ -668,47 +817,61 @@ The identity file holds the gateway's private keys. Back it up with the other
 secrets (§9). Then delete the working copies of the seed, the bundle and the
 file from the machine where you ran steps 1–3, if that wasn't the server.
 
-**You're done with this section when** both lines above appear, the
-identity file is backed up, and you've sent the gateway's DID to the project
-lead.
+**You're done with this section when**:
+- the mediator is healthy, and its login endpoint is refused from outside;
+- the two gateway lines above appear;
+- both identities are backed up (§9);
+- you've sent the project lead the gateway's DID and the mediator's DID.
 
 ## 9. Host needs, backups and monitoring
 
 - **Docker** with Compose v2.
-- **A public HTTPS hostname** with DNS pointing at the host. Phones register at
-  `https://<host>/trust-tasks`.
+- **Two public HTTPS hostnames** with DNS pointing at the host:
+  - the gateway's, where phones register (`https://<gateway host>/trust-tasks`);
+  - the mediator's, where agents' mediators relay wake-ups. It must be
+    reachable from the internet, like the gateway's.
 - **Inbound:** TCP 80 and 443, and UDP 443. That's all: there is **no inbound
   port for DIDComm**, which is outbound to the mediator.
 - **Outbound HTTPS:**
   - `api.push.apple.com` and `api.sandbox.push.apple.com`;
   - `fcm.googleapis.com` and `oauth2.googleapis.com`;
   - Let's Encrypt (`acme-v02.api.letsencrypt.org`);
-  - the mediator;
+  - the agents' mediators (the gateway's replies are relayed to them);
   - the `did:webvh` hosts: the DID host of the gateway's own DID, and those of
     the agents it verifies.
-- **A persistent volume** for `data/gateway`. It holds phones' push tokens
-  **in clear text**, so protect it and its backups like credentials.
+- **A persistent volume** for `data/`:
+  - `data/gateway` holds phones' push tokens **in clear text**, so protect it
+    and its backups like credentials;
+  - `data/redis` holds the mediator's queued messages and sessions.
+- **Memory:** the running stack is small (both services are Rust). Building
+  the mediator image on the host needs about 8 GB; loading the CI image
+  needs nothing extra.
 
 **Backups.** Treat all of these as credentials:
 
 | What | Why |
 | --- | --- |
 | `data/gateway/gateway-store.json` | The handle registry, with raw push tokens in clear text. Copy it with its 0600 mode, encrypt the backup, and restrict who can read it |
-| `secrets/` | The APNs key, the FCM key, the gateway identity |
+| `secrets/` | The APNs key, the FCM key, the gateway identity, and in `secrets/mediator/` the mediator's keys and admin identity |
+| `data/redis/` | Optional. Messages waiting for the gateway, and sessions. Losing it loses only wake-ups in flight at that moment |
 | `.env` | The configuration: no secret values, but needed to restore |
 | `data/caddy/` | Optional. Certificates are re-issued, but keeping them avoids Let's Encrypt rate limits |
 
 Restore by putting back `.env`, `secrets/` and `data/gateway/`, owned by 10001
-with the modes from §5. Then load the image and run `sudo docker compose up -d`.
+with the modes from §5, and `secrets/mediator/` owned by 10002. Then load the image and run `sudo docker compose up -d`.
 
 Losing the store is survivable but disruptive. Every phone's handle is gone,
 so wakes stop until each phone turns notifications off and on again in
-Keyring. Losing the identity file means a new identity (§8). Agents then
-refuse to wake the new DID, so every phone has to register again too.
+Keyring. Losing the gateway's identity file means a new identity (§8). Agents then
+refuse to wake the new DID, so every phone has to register again too. Losing
+the mediator's keys means a new mediator DID, and so a new gateway identity as
+well.
 
 **Monitoring.**
-- **Health:** `GET https://<host>/healthz` returns `ok`. The container also has
-  its own health check (`docker compose ps`).
+- **Health:** `GET https://<gateway host>/healthz` returns `ok`, and
+  `GET https://<mediator host>/mediator/v1/livez` answers. Both containers
+  have their own health checks (`docker compose ps`), and
+  `…/mediator/v1/readyz` reports the mediator's components, Redis included.
 - **Metrics:** Prometheus text format on the container's loopback only. Read
   them with:
   ```sh
@@ -722,8 +885,8 @@ refuse to wake the new DID, so every phone has to register again too.
   A rising `transient_failure` means Apple or Google are refusing; check the
   log (§11). `token_unregistered` is normal churn: an app deleted, or a token
   replaced.
-- **Logs:** `sudo docker compose logs gateway`, and
-  `sudo docker compose logs caddy` for certificates. No message content is
+- **Logs:** `sudo docker compose logs gateway`, `… logs mediator` (JSON lines),
+  and `… logs caddy` for certificates. No message content is
   ever logged, because there is none.
 
 **You're done with this section when**:
@@ -733,10 +896,14 @@ refuse to wake the new DID, so every phone has to register again too.
 
 ## 10. Go-live checklist and the production test
 
-1. The image is loaded (§4), and `.env` and `secrets/` are in place (§6, §8),
-   with owner 10001 and modes 700/600.
-2. DNS points at the host, the firewall is open (§5), and
-   `sudo docker compose up -d` brings up `https://<host>/healthz` → `ok`.
+1. Both images are loaded (§4), and `.env` and `secrets/` are in place
+   (§6, §8), with owners 10001 (gateway) and 10002 (`secrets/mediator`) and
+   modes 700/600.
+2. DNS points both hostnames at the host, the firewall is open (§5), and
+   `sudo docker compose up -d` brings up:
+   - `https://<gateway host>/healthz` → `ok`;
+   - `https://<mediator host>/mediator/v1/livez` answering;
+   - the mediator's login endpoint refused from outside (`403`, §8 part A).
 3. `sudo docker compose logs gateway` shows all of these:
    - `APNs sender enabled`, with the key and team IDs (compare them with the
      ones you were sent);
@@ -746,11 +913,13 @@ refuse to wake the new DID, so every phone has to register again too.
    - `APNs topic allow-list`, naming the test app;
    - `controller allowlist` with `controllers=N listed`, or the open-mode
      warning if `*` was chosen (§3);
-   - `mediator listener started (TSP and DIDComm)`;
+   - `mediator listener started (TSP and DIDComm)`, naming your
+     `MEDIATOR_DID`;
    - `DID document advertises TSPTransport`.
 
    It shows **no** echo-sender warning, and no `ERROR` lines.
-4. Send us the URL and the gateway's DID. **The production test**, which we
+   `sudo docker compose logs mediator` shows no `ERROR` lines either.
+4. Send us the gateway's URL, the gateway's DID and the mediator's DID. **The production test**, which we
    run with you:
    - We build Keyring's push-test app with `https://<host>` as its gateway, and
      install it on a test iPhone and a test Android phone.
@@ -793,7 +962,19 @@ else is a `WARN` or `ERROR` line while the gateway keeps running.
 | `parse identity file: …` | `GATEWAY_IDENTITY_FILE` points at the wrong file, such as the bundle or the seed | Point it at the output of `gateway-identity` (§8, step 3) |
 | `egress policy: …` | A malformed `GATEWAY_APNS_TOPICS` value | Comma-separated bundle IDs, no wildcards |
 | An error naming `GATEWAY_ALLOWED_CONTROLLERS` | A malformed allowlist | Exact DIDs separated by commas or spaces, or a lone `*` |
-| `set GATEWAY_HOST in .env` (from `docker compose`, before anything starts) | `.env` is missing, or has no host | `sudo cp .env.example .env` and set it |
+| `set GATEWAY_HOST in .env` or `set MEDIATOR_HOST in .env` (from `docker compose`, before anything starts) | `.env` is missing, or has no host | `sudo cp .env.example .env` and set both |
+
+**The mediator**
+
+| You see | Cause | Fix |
+| --- | --- | --- |
+| The mediator restarts in a loop, and its log names its DID or `did://` | `MEDIATOR_DID` or `MEDIATOR_ADMIN_DID` is blank or has a typo | Copy the two lines `setup-identity.sh` printed into `.env` exactly, without `did://` |
+| The mediator restarts in a loop, and its log names the secrets file | `secrets/mediator/mediator-secrets.json` is missing, or not readable by uid 10002 | `sudo chown -R 10002:10002 secrets/mediator && sudo chmod 700 secrets/mediator && sudo chmod 600 secrets/mediator/*` |
+| The mediator waits, or its `readyz` reports the database down | Redis isn't healthy | `sudo docker compose ps redis` and `… logs redis`; check `data/redis` is writable |
+| `setup-identity.sh` says the identity exists | It refuses to replace the mediator's keys | Intended. To really start over, move `secrets/mediator/` aside first: this makes a new mediator DID, and so a new gateway identity (§8) |
+| The login endpoint answers something other than `403` from outside | The Caddyfile's mediator site was changed, or a proxy in front of Caddy hides the caller's address | Restore the `@public_login` block. Behind another proxy, tell us: the rule relies on seeing public addresses |
+| The gateway logs `mediator listener failed to start` and Caddy logs a `403` on `/mediator/v1/authenticate` | The gateway reached the mediator from a public address, bypassing the network alias | Check that Caddy has the `MEDIATOR_HOST` alias on `edge` (`sudo docker compose config`), and that the gateway is on `edge` |
+| Agents' wake-ups never arrive; the mediator log shows a refusal on `/inbound` with an `authorization.…` code | The relay settings of the agents' mediator and ours disagree (for example `relay_mode`) | Send us the log lines and the time. `relay_mode` must be the same on both mediators |
 
 **At startup: runs, but degraded**
 
@@ -807,10 +988,10 @@ else is a `WARN` or `ERROR` line while the gateway keeps running.
 | `GATEWAY_APNS_TOPICS not set` | Any iOS app could register | Set it to the test app's bundle ID |
 | `GATEWAY_DEV_ECHO_SENDER is set — … Do not enable this in production.` | Left on from the first boot | Clear it and run `sudo docker compose up -d gateway`. While it's on, wakes are reported delivered and nothing is sent |
 | `no GATEWAY_IDENTITY_FILE — TSP and DIDComm disabled, HTTPS-only` | No identity yet | Do §8. Until then phones can register, but nothing can be provisioned or woken |
-| `mediator listener failed to start; HTTPS-only` | The gateway couldn't connect or authenticate to the mediator named in its identity file. The mediator may be unreachable, it may deny the gateway's DID, or the gateway's DID may not resolve | Check outbound access to the mediator. Ask its admin to allow the gateway's DID (§8, step 4). Check that the DID resolves (next row) |
+| `mediator listener failed to start; HTTPS-only` | The gateway couldn't connect or log in to the mediator named in its identity file. The bundled mediator may be down, the network alias may be missing (see "The mediator" above), or the gateway's DID may not resolve | Check `sudo docker compose ps mediator`. Check the alias. Check that the DID resolves (next row) |
 | `could not resolve the gateway's DID to check its TSPTransport service` | The DID host is unreachable from the server, or the DID isn't published there | Check outbound access to the DID host. Ask the VTA's admin whether the DID was published |
 | `the gateway's DID document has no TSPTransport service …` | Step 1 ran without `SERVICE_TSP` | Agents can't find the gateway over TSP. Redo §8 with `SERVICE_TSP` set |
-| `the gateway's TSPTransport service does not name the mediator it listens on` | `SERVICE_TSP` and `--mediator` named different mediators | Redo §8 with the same mediator DID in all three places |
+| `the gateway's TSPTransport service does not name the mediator it listens on` | `SERVICE_TSP` and `--mediator` named different mediators | Redo §8 part B with `MEDIATOR_DID` in all three places |
 
 **While running**
 
@@ -877,13 +1058,18 @@ Registrations made between the update and the rollback are lost with the
 restored store. Those phones register again when notifications are turned off
 and on.
 
+**Updating the mediator** works the same way, with `MEDIATOR_COMMIT` and the
+mediator's image. Back up `data/redis/` first as well as the gateway's store,
+and roll back by restoring both and the old commit. The mediator's DID and keys
+don't change on an update.
+
 **Updating Caddy.** Bump its tag and digest together in `docker-compose.yml`.
 Read the digest with `docker buildx imagetools inspect caddy:<tag>`, then run
 `sudo docker compose up -d caddy`. Roll back by restoring the old line.
 
 **Changing settings.** Edit `.env`, then run `sudo docker compose up -d`.
 
-**Rotating a secret** (a new APNs key, FCM key or identity):
+**Rotating a secret** (a new APNs key, FCM key or gateway identity):
 
 ```sh
 sudo install -o 10001 -g 10001 -m 600 <new file> /opt/keyring-messaging/secrets/<name>
@@ -902,7 +1088,37 @@ phone registers again.
 - `/healthz` returns `ok`;
 - `gateway_wake_total{outcome="delivered"}` keeps rising with normal use.
 
-## 13. Known gaps
+## 13. Moving to a shared mediator later
+
+The bundled mediator exists because no shared DIDComm v2 mediator is available
+to us yet. Later, the gateway may move to one: for example the mediator the
+production agents use, once that service is stable. Then:
+- **It saves** running the mediator and Redis, the second hostname, and the
+  inter-mediator relay hop (wake-ups would be delivered locally).
+- **It needs** a new gateway identity, or an edit to the existing one, whose
+  `URL`, `SERVICE_TSP` and identity-file `mediator` name the shared mediator's
+  DID instead of `MEDIATOR_DID` (§8 part B). If the shared mediator is closed
+  to unknown DIDs, its admin must also allow the gateway's DID.
+- **Phones:** a *new* gateway DID means every phone registers again. Editing
+  the existing DID document instead keeps them (the VTA's DID editing), but
+  that path hasn't been tried.
+- **Then** stop and remove the `mediator` and `redis` services and the
+  mediator's Caddy site, and keep `secrets/mediator/` until the move is
+  confirmed.
+
+The project decides when, and sends you the steps for that mediator.
+
+## 14. Known gaps
+
+- **The bundled mediator is unproven across mediators.** Until the lab proof
+  (STATUS box) passes:
+  - no wake-up has crossed from an agent's own mediator to it;
+  - nobody has checked that a stranger's relayed message, addressed to anyone
+    but the gateway, is not forwarded onward. If it is, the relay settings are
+    tightened before you deploy.
+- **The agents' mediator must relay.** The production agents' mediator has to
+  relay to other mediators and accept relays back (§3). The project checks its
+  configuration once it is known.
 
 - **No unregister.** A removed phone's handle and token stay in the store. They
   can't be used once no agent wakes them, but they are still stored tokens.
@@ -912,4 +1128,4 @@ phone registers again.
 - **Timing is visible.** The gateway, Apple and Google see *when* a wake goes
   out, and that correlates with the agent's activity. The content is never
   visible.
-- **The upstream commit moves with the agents** (§12).
+- **The upstream commits move with the agents** (§12).
