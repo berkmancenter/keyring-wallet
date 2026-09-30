@@ -840,9 +840,16 @@ class AttestationModule : AttestationSpec {
       return length
     }
 
-    fun readInteger(): Long {
+    fun readInteger(): Long = readIntegerValue(allowEnumerated = false)
+
+    /** KeyDescription's security levels are ENUMERATED (0x0A); older encoders used INTEGER. */
+    fun readIntegerOrEnumerated(): Long = readIntegerValue(allowEnumerated = true)
+
+    private fun readIntegerValue(allowEnumerated: Boolean): Long {
       val tag = readTag()
-      if (tag != 0x02) throw IllegalStateException("ASN.1: expected INTEGER (0x02) but got 0x${tag.toString(16)}")
+      if (tag != 0x02 && !(allowEnumerated && tag == 0x0A)) {
+        throw IllegalStateException("ASN.1: expected INTEGER (0x02) but got 0x${tag.toString(16)}")
+      }
       val len = readLength()
       if (len > 8) throw IllegalStateException("ASN.1: integer too large ($len bytes)")
       var value = 0L
@@ -961,14 +968,14 @@ class AttestationModule : AttestationSpec {
       // index 0: attestationVersion (INTEGER)
       keyDescParser.readInteger()
 
-      // index 1: attestationSecurityLevel (INTEGER used as enum)
-      val attSecLevel = keyDescParser.readInteger().toInt()
+      // index 1: attestationSecurityLevel (SecurityLevel ::= ENUMERATED)
+      val attSecLevel = keyDescParser.readIntegerOrEnumerated().toInt()
 
       // index 2: keymasterVersion (INTEGER)
       keyDescParser.readInteger()
 
-      // index 3: keymasterSecurityLevel (INTEGER)
-      val kmSecLevel = keyDescParser.readInteger().toInt()
+      // index 3: keymasterSecurityLevel (SecurityLevel ::= ENUMERATED)
+      val kmSecLevel = keyDescParser.readIntegerOrEnumerated().toInt()
 
       // index 4: attestationChallenge (OCTET STRING)
       val challengeBytes = keyDescParser.readOctetString()
