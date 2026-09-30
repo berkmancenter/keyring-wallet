@@ -33,9 +33,10 @@
  * enforced by `__tests__/hardware-signing/credo-free-boundary.test.ts`, which
  * fails the build rather than letting the boundary rot.
  *
- * The permitted external dependencies are exactly three:
+ * The permitted external dependencies are exactly four:
  * `@bifold/react-native-attestation` (the native module this is a client of),
- * `react-native` (`Platform`) and `buffer`.
+ * `react-native` (`Platform`), `buffer`, and `@noble/hashes/sha2.js` (the
+ * content-binding gate in `binding.ts`).
  *
  * The Credo-side callers keep their existing signatures and behaviour — see
  * `modules/vrc/vrc-hardware-signing.ts` and

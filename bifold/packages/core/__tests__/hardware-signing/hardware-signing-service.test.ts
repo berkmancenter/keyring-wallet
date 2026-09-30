@@ -32,6 +32,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }))
 
+import { contentHashBase64 } from '../../src/hardware-signing/binding'
 import {
   createHardwareSigningService,
   createInMemoryAttestationCache,
@@ -370,9 +371,10 @@ describe('createHardwareSigningService', () => {
   })
 
   describe('verify', () => {
-    it('hands the native verifier the payload the attestation carries', async () => {
+    it('hands the native verifier the payload the attestation carries and the recomputed hash', async () => {
       givenAnExistingKey()
-      givenASuccessfulSignature()
+      // A genuine signer reports the SHA-256 of what it signed.
+      givenASuccessfulSignature({ clientDataHash: contentHashBase64('login-challenge-abc123') })
       givenAvailableAttestation()
       mockVerifyHardwareEvidence.mockResolvedValue({
         valid: true,
@@ -391,7 +393,7 @@ describe('createHardwareSigningService', () => {
         'login-challenge-abc123',
         PUBLIC_KEY_B64,
         'apple-appattest-v1',
-        'aGFzaA=='
+        contentHashBase64('login-challenge-abc123')
       )
       expect(result.valid).toBe(true)
       expect(result.details.verificationLevel).toBe('cryptographic')

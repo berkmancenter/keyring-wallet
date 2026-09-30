@@ -19,6 +19,7 @@ import {
   verifyVrcHardwareEvidence,
 } from '../../../src/modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../../../src/modules/vrc/types/evidence'
+import { contentHashBase64 } from '../../../src/hardware-signing/binding'
 
 const testCredential = {
   '@context': ['https://www.w3.org/2018/credentials/v1'],
@@ -56,7 +57,6 @@ const testEvidence: HardwareAttestationEvidence = {
   signature: {
     value: 'dGVzdC1zaWduYXR1cmU=',
     algorithm: 'ECDSA-SHA256',
-    signedContentHash: 'dGVzdC1oYXNo',
   },
 }
 
@@ -106,7 +106,7 @@ describe('BiometricSignatureVerifier', () => {
         'test-content',
         testEvidence.hardwareBinding.publicKey,
         testEvidence.attestation.format,
-        testEvidence.signature.signedContentHash
+        contentHashBase64('test-content')
       )
     })
 
@@ -358,7 +358,7 @@ describe('BiometricSignatureVerifier', () => {
       expect(result.details.certificateChainValid).toBe(false)
     })
 
-    it('should pass undefined signedContentHash to native when missing from evidence', async () => {
+    it('should pass the recomputed hash to native when the evidence carries none', async () => {
       mockVerifyHardwareEvidence.mockResolvedValue({
         valid: true,
         certificateChainValid: true,
@@ -380,7 +380,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
-        undefined
+        contentHashBase64('test-content')
       )
     })
   })
@@ -464,7 +464,6 @@ describe('BiometricSignatureVerifier', () => {
       signature: {
         value: 'dGVzdC1zaWduYXR1cmU=',
         algorithm: 'ECDSA-SHA256',
-        signedContentHash: 'dGVzdC1oYXNo',
       },
     }
 

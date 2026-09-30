@@ -397,7 +397,9 @@ export interface NativeVerificationResult {
  * @param signedContent - The VRC content string that was signed
  * @param publicKeyBase64 - Base64-encoded public key from evidence
  * @param attestationFormat - 'apple-appattest-v1' or 'android-key-attestation-v3'
- * @param signedContentHashBase64 - Optional pre-computed SHA256 hash of signed content (base64)
+ * @param signedContentHashBase64 - SHA256 of `signedContent` (base64), computed by the caller from the
+ *   content it holds; never a value taken from the evidence. The native verifier always recomputes the
+ *   hash itself and fails with `contentBindingMismatch` if a non-empty value differs.
  */
 export const verifyHardwareEvidence = async (
   certificateChainPem: string[],

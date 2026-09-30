@@ -16,9 +16,9 @@ const DIRECTORY = path.join(__dirname, '..', '..', 'src', 'hardware-signing')
 /**
  * The only packages the directory may depend on: the native module it is a
  * client of, plus what it needs to know which platform it is on and to hand
- * bytes to the bridge.
+ * bytes to the bridge, plus the pure-JS SHA-256 the content-binding gate uses.
  */
-const ALLOWED_PACKAGES = ['@bifold/react-native-attestation', 'react-native', 'buffer']
+const ALLOWED_PACKAGES = ['@bifold/react-native-attestation', 'react-native', 'buffer', '@noble/hashes/sha2.js']
 
 const IMPORT_PATTERN = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s+['"]([^'"]+)['"]/g
 
