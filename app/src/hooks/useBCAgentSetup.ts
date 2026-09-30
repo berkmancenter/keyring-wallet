@@ -31,8 +31,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { activate } from '@/utils/PushNotificationsHelper'
+import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
@@ -360,12 +359,6 @@ const useBCAgentSetup = () => {
         void runDataIntegritySelfTest(newAgent)
       }
 
-      // DISABLED: Push notifications disabled — no server backend yet
-      // if (store.preferences.usePushNotifications) {
-      //   logger.info('Activating push notifications...')
-      //   activate(newAgent)
-      // }
-
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
@@ -374,7 +367,6 @@ const useBCAgentSetup = () => {
       store.preferences.selectedMediator,
       store.developer.enableTspCarriage,
       store.developer.enableDidCommV2,
-      // store.preferences.usePushNotifications, // DISABLED: Push notifications disabled
       logger,
       indyLedgers,
       createNewAgent,
@@ -387,7 +379,7 @@ const useBCAgentSetup = () => {
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {
       try {
-        await agent.shutdown()
+        await shutdownAgent(agent)
       } catch (error) {
         logger.error(`Error shutting down agent with shutdownAndClearAgentIfExists: ${error}`)
       } finally {

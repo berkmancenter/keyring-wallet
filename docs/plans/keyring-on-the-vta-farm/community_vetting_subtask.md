@@ -63,7 +63,7 @@ The newest images a Farm session can select (GHCR `ic3software/vta`, `vtc`: `0.2
 
 The transport, the screens and the invitation flow are the same under both; the Vetting Card is a signed object, so the choice decides which side the ceremony code lives on. Until it is made, the rungs that are identical under both go first (§6 P5).
 
-Under B, persona and join-DID keys are **held by the VTA**, as upstream designs them: a persona is a `did:webvh` minted by the member's own VTA, one per community (`vti-setup` `developer/03-joining-a-community.md`), and the join persona is fixed at the start of an application ([[VETTING-DESIGN]]). The phone's own admin `did:key` is software Ed25519 first; the hardware target is chosen in P4 by measurement among: a P-256 `did:key` in the Secure Enclave (if the VTA accepts one), StrongBox Ed25519 (Android API 33+), or software Ed25519 wrapped by a hardware key. The parent's custody position (§3.2) is unchanged; this subtask sequences it. §3.6 records why TSP Rev 3 eases the hardware case.
+Under B, persona and join-DID keys are **held by the VTA**, as upstream designs them: a persona is a `did:webvh` minted by the member's own VTA, one per community (`vti-setup` `developer/03-joining-a-community.md`), and the join persona is fixed at the start of an application ([[VETTING-DESIGN]]). The phone's own admin `did:key` is software Ed25519 first; the hardware target is chosen in P4 by measurement among: a P-256 `did:key` in the Secure Enclave (if the VTA accepts one), StrongBox Ed25519 (Android API 33+), or software Ed25519 wrapped by a hardware key. The parent's custody position (§3.2) is unchanged; this subtask sequences it. §3.6 records why TSP Rev 3 eases the hardware case, and [`tsp_rev3_subtask.md`](./tsp_rev3_subtask.md) §2.4 is where the hardware-custody choice is revisited once Rev 3 is what the wallet sends — as it now is on the peer leg.
 
 ### 2.5 Counterparties in test are upstream's own code
 
@@ -144,7 +144,7 @@ The ceremony is exercised end to end server-side by [[VETTING-JOURNEY]] and clie
 Consequences for this subtask:
 
 - **The vetting path does not depend on TSP.** Every leg has a DIDComm v2 route; TSP legs are optional until Rev 3 settles, and fixtures record which TSP revision produced them.
-- **Keyring's existing TSP work is Rev 2 throughout** — the HPKE-Auth crypto proven against the CFRG Auth-mode vector in `[ref-03-noble-crypto](../../../tsp-reference/ref-03-noble-crypto/)`, the envelope fixtures in `ref-00…04`, and the TSP carriage. Its migration belongs to `[openvtc-integration-plan.md](../openvtc-integration-plan.md)`, triggered by upstream's Rev 3 release, and is not scheduled here.
+- **Keyring's TSP work packs Rev 3 and reads both** — the migration is [`tsp_rev3_subtask.md`](./tsp_rev3_subtask.md), and this subtask does not depend on it: the vetting legs ride DIDComm v2 unless a build says `VTI_PEER_LEG=tsp`. The Rev 2 fixtures in `ref-00…04` and the HPKE-Auth vector in `[ref-03-noble-crypto](../../../tsp-reference/ref-03-noble-crypto/)` remain, marked by the revision that produced them.
 - **Rev 3 helps hardware custody.** HPKE-Base authenticates the sender by signature rather than by a static X25519 key agreement, and X25519 cannot live in the Secure Enclave or StrongBox; under Rev 3 the key a device must hold in hardware to send is a signing key.
 
 

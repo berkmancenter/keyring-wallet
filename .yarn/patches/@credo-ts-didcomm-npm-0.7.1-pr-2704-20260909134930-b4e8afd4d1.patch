@@ -674,7 +674,7 @@ diff --git a/build/modules/routing/DidCommMediationRecipientModule.mjs b/build/m
 index 576c2ffe0484ebe0ef7bcbe9636fa8d287921d21..9f08ba82d076eb01c06aa0f603c3e17a361d3a59 100644
 --- a/build/modules/routing/DidCommMediationRecipientModule.mjs
 +++ b/build/modules/routing/DidCommMediationRecipientModule.mjs
-@@ -79,13 +79,30 @@ var DidCommMediationRecipientModule = class {
+@@ -79,13 +79,39 @@ var DidCommMediationRecipientModule = class {
  			agentContext.config.logger.warn(`Error initiating message pickup with mediator ${defaultMediator.id}`, { error });
  		});
  	}
@@ -702,6 +702,15 @@ index 576c2ffe0484ebe0ef7bcbe9636fa8d287921d21..9f08ba82d076eb01c06aa0f603c3e17a
 +				if (outOfBandRecord) await oobApi.deleteById(outOfBandRecord.id).catch(() => {});
 +				return this.getMediationConnection(agentContext, mediatorInvitationUrl, true);
 +			}
++		}
++		// keyring: the other stranded state — the out-of-band record was stored
++		// but the connection was never created (receiveInvitation failed after
++		// saving the record). Receiving the same invitation again is refused
++		// ("has already been received"), so every Retry fails. Discard the
++		// record first so the invitation can be received again (2026-09-21).
++		if (!connection && outOfBandRecord) {
++			agentContext.config.logger.warn(`Mediator invitation ${outOfBandInvitation.id} was received earlier but has no connection — discarding the out-of-band record and receiving it again`);
++			await oobApi.deleteById(outOfBandRecord.id);
 +		}
  		if (!connection) {
  			agentContext.config.logger.debug("Mediation connection does not exist, creating connection");

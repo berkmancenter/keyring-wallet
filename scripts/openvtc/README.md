@@ -63,6 +63,15 @@ the reference ladder. **Don't advance pins in the middle of a piece of work** â€
 do it at a boundary, then re-run the ladder bottom-up: the first rung that goes
 red tells you which layer upstream changed.
 
+**Moving the `verifiable-trust-infrastructure` pin moves `card-verify` in the
+same pull request.** It builds against the pinned clone with `--locked` in
+keyring-bifold's conformance check, and its exact pins (`dtg-credentials`,
+`affinidi-secrets-resolver`, `trust-tasks-rs`) follow the pinned commit's own
+`Cargo.lock`. Update them, rebuild so `Cargo.lock` follows, and rerun the
+check's steps and `card-verify vectors` against bifold's committed vectors
+before merging. #168 moved the pin alone and turned that check red on every
+bifold pull request until #169.
+
 ## Files here
 
 | File | Purpose |
@@ -108,6 +117,30 @@ once fetched (`VTA_BIN` overrides it). See `BINARY_PINS.json` for what's
 pinned, exercised, and still just sitting there unverified â€” most of the
 mediator/VTC/did-hosting binaries were downloaded once to confirm the URLs
 work, not because anything in this repo runs them yet.
+
+## Signed lab tools: `~/vti-stack/bin/pnm` and `~/vti-stack/bin/openvtc`
+
+pnm and openvtc read their secrets from the login Keychain. An ad hoc build (what
+`cargo build` produces, for example `~/Documents/vti-main/target/debug/pnm`) gets a new
+code identity on every rebuild, so macOS asks "Always Allow" again for every item it
+opens. The harness therefore runs only builds signed with the one local
+"Keyring lab tools" identity, under identifier `org.keyring.lab.<tool>`. Their
+designated requirement doesn't change across rebuilds, so an item granted once stays
+granted.
+
+```sh
+scripts/openvtc/sign-lab-tool.sh pnm --build       # build VTI's pnm, sign it, repoint ~/vti-stack/bin/pnm
+scripts/openvtc/sign-lab-tool.sh openvtc --build   # same for openvtc (OPENVTC_SRC, CARGO_TARGET_DIR)
+scripts/openvtc/sign-lab-tool.sh all               # every lab binary as built: pnm, cnm, openvtc, vta, vtc, mediator, did-hosting-daemon
+```
+
+Run it after every rebuild; without `--build` it signs the existing build. It signs the
+cargo output (`target/debug/<tool>`) in place too, so a script or server that still calls
+that path never meets an ad hoc build. Every
+entry point defaults to `~/vti-stack/bin/pnm` (`PNM_BIN` still overrides), and the TUI
+runners default `--openvtc-bin` to `~/vti-stack/bin/openvtc`. Do not point anything at
+`target/debug/pnm` or at the old `pnm-0.19.0-trusted`. With pnm built from VTI main,
+leave `PNM_HOME` unset: it reads `PNM_HOME` as its config home.
 
 ## Checking claims
 

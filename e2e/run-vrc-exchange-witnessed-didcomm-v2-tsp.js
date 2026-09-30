@@ -27,6 +27,7 @@
  * --didcomm-v2` (tunnel mode, so one MEDIATOR_V2_URL is reachable from both),
  * appium, cloudflared.
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,

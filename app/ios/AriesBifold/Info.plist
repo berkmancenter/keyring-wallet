@@ -26,12 +26,25 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>keyring</string>
+				<string>vetting-ticket</string>
 			</array>
 		</dict>
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>didcomm</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>did</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>openid-credential-offer</string>
 			</array>
 		</dict>
 	</array>

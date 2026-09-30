@@ -10,6 +10,7 @@ import {
   NavContainer,
   NetworkProvider,
   StoreProvider,
+  Stacks,
   ThemeProvider,
   toastConfig,
   TourProvider,
@@ -17,7 +18,7 @@ import {
 } from '@bifold/core'
 import messaging from '@react-native-firebase/messaging'
 import { useNavigationContainerRef } from '@react-navigation/native'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isTablet } from 'react-native-device-info'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
@@ -32,6 +33,7 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
+import { onPushWake } from '@/push/pushHandlers'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
@@ -42,11 +44,13 @@ import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
 
-// Do nothing with push notifications received while the app is in the background
-messaging().setBackgroundMessageHandler(async () => {})
-
-// Do nothing with push notifications received while the app is in the foreground
-messaging().onMessage(async () => {})
+// A push is a contentless wake-up (docs/plans/push-notifications-plan.md §2):
+// log it, never open the agent from here. None arrive unless the build names a
+// push gateway and the person turned notifications on.
+messaging().setBackgroundMessageHandler(async (message) =>
+  onPushWake('background', message, (m, d) => BCLogger.info(m, d))
+)
+messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
 
 const App = () => {
   const { t } = useTranslation()
@@ -54,14 +58,10 @@ const App = () => {
   const bifoldContainer = new MainContainer(container.createChildContainer()).init()
   const [surveyVisible, setSurveyVisible] = useState(false)
   const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
-  // Additive, per demo-profiles/README.md ("A worked demo: trading-card/") —
-  // registers whatever profiles are installed (trading-card and approver, as
-  // of this profile) on top of the running container. No rebuild-per-demo:
-  // the whole point of the DemoProfile shape is that this is safe to leave
-  // on. ACTIVE_DEMO_PROFILE (app/.env, optional) narrows this to a single
-  // profile by id when a specific e2e run or demo-day walkthrough wants only
-  // one active, or excludes every profile with ACTIVE_DEMO_PROFILE=none for
-  // a plain Keyring build — see demo-profiles/index.ts's selectDemoProfiles.
+  // Demo profiles (demo-profiles/README.md) are opt-in per build: with
+  // ACTIVE_DEMO_PROFILE unset this registers none, so a shipped build shows the
+  // plain contact list and home header. A demo build sets a profile id, or
+  // `all` — see demo-profiles/index.ts's selectDemoProfiles.
   registerDemoProfiles(bcwContainer, selectDemoProfiles(Config.ACTIVE_DEMO_PROFILE))
 
   if (!isTablet()) {
@@ -78,8 +78,22 @@ const App = () => {
     SplashScreen.hide()
   }, [])
 
+  /**
+   * Leaving a screen that failed. The boundary calls this before it renders
+   * the app again, so what comes back is not the thing that just threw — a
+   * tester was otherwise caught between the error card and the app lock, with
+   * force-quit the only way out (report #27).
+   *
+   * Resetting the root rather than going back: the route that failed may be
+   * anywhere in the stack, and its params are usually what it failed on.
+   */
+  const leaveFailedScreen = useCallback(() => {
+    if (!navigationRef.isReady()) return
+    navigationRef.resetRoot({ index: 0, routes: [{ name: Stacks.TabStack }] })
+  }, [navigationRef])
+
   return (
-    <ErrorBoundaryWrapper logger={BCLogger}>
+    <ErrorBoundaryWrapper logger={BCLogger} onEscape={leaveFailedScreen}>
       <ContainerProvider value={bcwContainer}>
         <StoreProvider initialState={initialState} reducer={reducer}>
           <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>

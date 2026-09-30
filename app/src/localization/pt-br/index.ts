@@ -33,6 +33,7 @@ const translation = {
     "CodeCopied": "Copiado",
     "ShareCodeWithSupport": "Compartilhe este código com o suporte ao entrar em contato.",
     "Problem": "Algo deu errado",
+    "GoHome": "Ir para a tela inicial",
     "ProblemDescription": "Ocorreu um erro inesperado. Reporte este erro e tente novamente.",
   },
   "Global": {
@@ -233,9 +234,9 @@ const translation = {
   },
   "Scan": {
     "ScanOnySpecial": "Apenas códigos QR especiais podem ser digitalizados pelo Keyring.",
-    "ScanOnlySpecial3": "O Keyring atualmente não suporta a adição de credenciais digitais digitalizando ou tirando fotos de credenciais físicas.",
+    "ScanOnlySpecial3": "O Keyring lê o código do seu agente, o de uma comunidade, o código de contato de outra pessoa que usa o Keyring ou o ticket de um verificador.",
     "WhereToUseLink": "Veja onde você pode usar o Keyring",
-    "BadQRCodeDescription": "O código QR digitalizado não funciona com o Keyring. O Keyring só funciona com serviços participantes.\n\nAtualmente, não é possível adicionar credenciais digitais tirando fotos de credenciais físicas.",
+    "BadQRCodeDescription": "O Keyring não consegue usar este código QR. Ele lê o código do seu agente, o de uma comunidade, o código de contato de outra pessoa que usa o Keyring ou o ticket de um verificador.",
   },
   "Services": {
     "CatalogueTitle": "Services (PT-BR)",

@@ -18,7 +18,7 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc:photo:android-only` | Same photo-exchange test on **two Android emulators** | No |
 | `yarn e2e:vrc:trading-card` | Same exchange with the `trading-card` demo profile (`app/src/demo-profiles/trading-card/`) active — asserts the exchanged R-Card renders as a `TradingCard` (rarity badge, photo) on **both** sides, not the default `ContactCard` | No |
 | `yarn e2e:vrc:trading-card:android-only` | Same trading-card test on **two Android emulators** | No |
-| `yarn e2e:plain-build` | Same exchange with `app/.env`'s `ACTIVE_DEMO_PROFILE=none` — proves the built app is a plain Keyring build: the exchanged R-Card renders as the default `ContactCard`, not `TradingCard`, and no Approver-demo testID appears anywhere in the Wallet tab, on **both** sides. Requires the APK be built with `ACTIVE_DEMO_PROFILE=none` already set — see `run-plain-build-smoke.js`'s header comment | No |
+| `yarn e2e:plain-build` | Same exchange on a build with no demo profile (`ACTIVE_DEMO_PROFILE` unset or `none`, the shipped default) — proves the built app is a plain Keyring build: the exchanged R-Card renders as the default `ContactCard`, not `TradingCard`, and no Approver-demo testID appears anywhere in the Wallet tab, on **both** sides. Requires the APK be built with `ACTIVE_DEMO_PROFILE=none` already set — see `run-plain-build-smoke.js`'s header comment | No |
 | `yarn e2e:plain-build:android-only` | Same plain-build negative test on **two Android emulators** | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
@@ -502,6 +502,37 @@ needed again after any `yarn mediator` restart — same caveat as the
 plain-mediator "Restarting changes the address" note in
 `bifold/packages/mediator-server/README.md`.
 
+## VTI agent connect (`agent-connect`)
+
+One device against a local VTI stack: onboarding → the Developer screen →
+the VTA probe, which logs into the mediator a VTI agent advertises, holds a
+Pickup 3.0 socket, asks a community for its join manifest and applies for
+membership. It asserts the probe's own stages, which the screen records as
+well as the log — a simulator has no logcat, and React Native's console
+output never reaches iOS's unified log.
+
+```bash
+# Android
+E2E_KEEP_STATE=1 ANDROID_AVD=Pixel_6_API_33 ANDROID_HOME=$HOME/Library/Android/sdk \
+  APPIUM_PORT=4750 PLATFORM=android node run-agent-connect.js
+
+# iOS simulator
+E2E_KEEP_STATE=1 PLATFORM=ios WDA_LOCAL_PORT=8101 APPIUM_PORT=4751 node run-agent-connect.js
+```
+
+The stack's DIDs are baked into `app/.env` (`VTI_MEDIATOR_DID`,
+`VTI_COMMUNITY_DID`) and read at build time, so a re-tunnelled stack means a
+rebuild of both apps — see `scripts/openvtc/local-vti-stack/README.md`.
+
+- `E2E_ENABLE_V2=1` flips the DIDComm v2 developer toggle and restarts the
+  agent. Needed once per fresh install; `E2E_KEEP_STATE` runs inherit it.
+- `E2E_KEEP_STATE=1` reuses an installed, onboarded app instead of paying an
+  onboarding lap per iteration. It unlocks with the PIN first — a cold start
+  opens on "Enter PIN" — and then waits out the agent's start-up, which takes
+  minutes on a machine also running the stack.
+- `VTI_PROBE_ON_START=1` in `app/.env` fires the probe as the Developer screen
+  mounts, so a run does not depend on a button tap landing.
+
 ## Store migration (`yarn e2e:migration`)
 
 Needs a baseline APK built from the `upgrade-baseline-p0` tag — the full
@@ -831,6 +862,52 @@ there found and fixed six real bugs (one a genuine upstream bug in
 ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
 ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
 ```
+
+## Push is off for testers (`push-off-probe`): every release gate, both platforms
+
+Push is built in and switched off in the testers' configuration: the build sets
+no `PUSH_GATEWAY_URL`, so the onboarding push step and the Settings →
+Notifications switch must not appear. Run it after each platform's link, on the
+build the gate ships:
+
+```sh
+PLATFORM=ios UDID=<sim udid> APPIUM_PORT=4761 npm run push-off-probe
+```
+
+It opens Settings on the installed app and searches it end to end for the
+`Notifications` row and any "notification" text. Prints
+`PUSH_OFF PASS|FAIL`; exit 0 pass, 3 fail, 1 the run failed.
+
+The rest of the check comes from the gate's own records:
+
+- **Onboarding.** The link run's transcript shows no `PushNotificationContinue`
+  step and no notification permission alert.
+- **Logs.** No `push/register`, `push/provision`, `push/wake` or
+  `device/set-wake` in the runner VTA's log over the gate window.
+
+## Real lock and unlock (`lock-probe`) — every release gate, both platforms
+
+Locking shuts the wallet's agent down and drops every identity's in-memory
+keys; unlocking restarts it or builds a new one. A build that does not hand
+that agent to the VTA link still looks fine, and the persona's inbox is no
+longer picked up until the app is killed. Every other run relaunches the app,
+which builds everything fresh and hides this, so the gate runs a real lock:
+
+```sh
+PLATFORM=ios UDID=<sim udid> APPIUM_PORT=4761 \
+  MEDIATOR_LOG=~/vti-stack/logs/mediator.log PERSONA_MATCH=<persona DID's SCID> \
+  npm run lock-probe
+```
+
+The phone must already be linked, with a persona. The probe unlocks, sends the
+app to the background for `BACKGROUND_S` (330 s, past the default 5-minute
+auto-lock), checks the PIN screen came back, unlocks, and stays for
+`LINGER_S` (90 s). With the lab mediator's log it decides:
+`LOCK_PROBE PASS` when the persona picks up within `PICKUP_S` (30 s) of the
+unlock, and it lists the persona's mediator events one per line, each with its
+own time. On the Farm (no log on this machine) it prints the marks and
+`UNDECIDED`; read the mediator's log for the window after `UNLOCKED`.
+Exit: 0 pass, 2 did not lock, 3 no pickup, 4 undecided, 1 the run failed.
 
 ## Troubleshooting
 

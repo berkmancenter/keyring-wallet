@@ -1,6 +1,6 @@
 {
   "name": "keyring-wallet-mobile-app",
-  "version": "0.1.0-alpha.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Keyring Wallet to hold Verifiable Credentials",
   "main": "index.js",
@@ -92,6 +92,7 @@
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.11",
     "expo-secure-store": "~15.0.8",
+    "expo-sharing": "~14.0.8",
     "fast-text-encoding": "~1.0.6",
     "i18next": "~21.6.16",
     "js-sha256": "^0.11.1",

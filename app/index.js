@@ -24,6 +24,10 @@ if (typeof global.self === 'undefined') {
   global.self = global
 }
 
+// Keep recent console output for "Report this problem" (app/src/utils/problemReport.ts).
+// First, so it sees everything that logs after it.
+require('./src/utils/logBuffer').installLogBuffer()
+
 // =============================================================================
 // Step 1: Set up crypto.getRandomValues using react-native-get-random-values
 // This MUST come before any other crypto setup
@@ -150,6 +154,13 @@ require('@formatjs/intl-relativetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/polyfill')
 require('@formatjs/intl-datetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/add-all-tz')
+// The polyfill formats in UTC until told the phone's zone (IN-58): tell it now
+// and whenever the app comes back to the foreground.
+require('./src/utils/deviceTimeZone').followDeviceTimeZone(
+  Intl,
+  () => require('react-native-localize').getTimeZone(),
+  require('react-native').AppState
+)
 require('reflect-metadata')
 
 // Buffer polyfill

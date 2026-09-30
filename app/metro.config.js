@@ -59,7 +59,9 @@ const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', '
 // one README table, no way for "runtime says none" and "bundle still has
 // them" to drift apart. See src/demo-profiles/README.md's "Stripping demos
 // from a build" section.
-const stripDemoProfiles = process.env.ACTIVE_DEMO_PROFILE === 'none'
+// Unset strips too: a shipped build carries no demo code at all (decided
+// 2026-09-25). A demo build sets a profile id or `all`, which keeps them.
+const stripDemoProfiles = !process.env.ACTIVE_DEMO_PROFILE || process.env.ACTIVE_DEMO_PROFILE === 'none'
 const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
 const watchFolders = [...packageDirs, bifoldNodeModules]
@@ -205,6 +207,10 @@ module.exports = (async () => {
           // DIDComm v2 envelope registers renames Credo's JsonTransformer must see, so the
           // bundle needs exactly one copy (didcomm_v2_subtask.md C10).
           'class-transformer',
+          // Carries a keyring patch (utf8 always uses its pure-JS codec; the
+          // built-in path breaks credo's first agent start in release bundles,
+          // 2026-09-21). bifold's own install has unpatched copies, so pin it.
+          '@scure/base',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {

@@ -39,9 +39,17 @@
     "vrc-exchange:witnessed:tsp:android-only": "node run-vrc-exchange-witnessed-tsp-android-only-devices.js",
     "vrc-exchange:witnessed:android-only:mediator": "node run-vrc-exchange-witnessed-android-only-devices-mediator.js",
     "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js",
-    "credential-exchange-query": "node run-credential-exchange-query.js"
+    "credential-exchange-query": "node run-credential-exchange-query.js",
+    "agent-connect": "node run-agent-connect.js",
+    "agent-connect:ios": "PLATFORM=ios node run-agent-connect.js",
+    "my-agent": "node run-my-agent.js",
+    "my-agent:ios": "PLATFORM=ios node run-my-agent.js",
+    "lock-probe": "node run-lock-probe.mjs",
+    "push-off-probe": "node run-push-off-probe.mjs"
   },
   "dependencies": {
+    "@xterm/headless": "^6.0.0",
+    "node-pty": "^1.1.0",
     "webdriverio": "^9.12.0"
   }
 }

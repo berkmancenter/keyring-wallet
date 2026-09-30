@@ -32,7 +32,7 @@ import {
 } from '@credo-ts/didcomm'
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
 import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
-import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
@@ -84,10 +84,17 @@ export function getBCAgentModules({
     }),
     kms: new Kms.KeyManagementModule({
       backends: [
+        // Persona keys borrowed from the agent for this session, never stored
+        // (#10). First and the default: Credo tries the default backend, then
+        // the first capable one, and routes key-agreement by neither key id. It
+        // claims only its own ("vta-copy:") keys, so key creation, the wallet's
+        // imports and everything else fall through to askar, and new keys stay
+        // in the wallet store.
+        new BifoldCore.EphemeralKeyManagementService(),
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
       ],
-      defaultBackend: 'askar',
+      defaultBackend: BifoldCore.EPHEMERAL_KMS_BACKEND,
     }),
     anoncreds: new AnonCredsModule({
       anoncreds,
@@ -192,7 +199,7 @@ export function getBCAgentModules({
     }),
     dids: new DidsModule({
       resolvers: [
-        new WebVhDidResolver(),
+        new BifoldCore.RetryingWebVhDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),

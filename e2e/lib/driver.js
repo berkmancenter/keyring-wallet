@@ -1,5 +1,6 @@
+import { execFileSync as execFileSyncForSim } from "node:child_process";
 import { remote } from "webdriverio";
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +8,9 @@ import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 
-const METRO_PORT = 8081;
+// The host port this worktree's Metro serves on; a second worktree runs its
+// own on another port (Android reaches it via debug_http_host, see below).
+const METRO_PORT = Number(process.env.METRO_PORT || 8081);
 const THIS_APP_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -39,15 +42,20 @@ function portInUse(port) {
  */
 async function checkMetroIsThisWorktree() {
   if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
-  let ps;
+  // The process listening on THIS port — not the first Metro in `ps`, which on
+  // a shared machine can be another worktree's Metro on another port.
+  let metroAppDir;
   try {
-    ps = execSync("ps -eo pid,args", { encoding: "utf8" });
+    const pid = execSync(`lsof -nP -iTCP:${METRO_PORT} -sTCP:LISTEN -t`, { encoding: "utf8" }).trim().split("\n")[0];
+    if (!pid) return;
+    const cwd = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { encoding: "utf8" })
+      .split("\n")
+      .find((line) => line.startsWith("n"));
+    if (!cwd) return;
+    metroAppDir = path.resolve(cwd.slice(1));
   } catch {
     return; // can't introspect processes on this platform — don't block the run over it
   }
-  const match = ps.match(/(\S+\/app)\/node_modules\/react-native\/cli\.js\s+start/);
-  if (!match) return; // something else owns the port, or we can't identify it — not our call to make
-  const metroAppDir = path.resolve(match[1]);
   if (metroAppDir !== THIS_APP_DIR) {
     throw new Error(
       `Metro on :${METRO_PORT} is serving ${metroAppDir}, not this worktree's ` +
@@ -116,8 +124,56 @@ export async function ensureAppium() {
   throw new Error("appium did not start within 60s");
 }
 
+/** Every process below `pid`, by PID (never by name). */
+function descendantPids(pid) {
+  let kids = [];
+  try {
+    kids = execFileSync("pgrep", ["-P", String(pid)], { encoding: "utf8" }).trim().split(/\s+/).filter(Boolean).map(Number);
+  } catch {
+    return []; // pgrep exits 1 when there are none
+  }
+  return kids.flatMap((k) => [k, ...descendantPids(k)]);
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Stop the Appium this run started — and what it started. WebDriverAgent runs
+ * as an `xcodebuild … test-without-building` child of Appium; SIGTERM to Appium
+ * alone left it running, reparented to PID 1, holding the device's WDA port and
+ * counting as an xcodebuild to anyone checking the Mac (an iPhone 11 runner
+ * outlived its run by 40 minutes, 2026-09-23, and ignored SIGTERM). So note the
+ * whole tree first, stop Appium, then its descendants, escalating to SIGKILL
+ * for any still alive after a short grace. By PID only; an Appium this run did
+ * not start (appiumProc unset) is never touched.
+ */
 export function stopAppium() {
-  if (appiumProc) appiumProc.kill("SIGTERM");
+  if (!appiumProc) return;
+  const tree = descendantPids(appiumProc.pid);
+  appiumProc.kill("SIGTERM");
+  for (const pid of tree) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
+  for (let i = 0; i < 6 && tree.some(alive); i++) execFileSync("sleep", ["0.5"]);
+  for (const pid of tree.filter(alive)) {
+    try {
+      process.kill(pid, "SIGKILL");
+      console.log(`[e2e] stopped a leftover Appium child by PID ${pid}`);
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 export async function createSession(platform, capsOverride) {
@@ -135,6 +191,11 @@ export async function createSession(platform, capsOverride) {
     capabilities,
   });
   driver.e2ePlatform = platform;
+  // Two simulators of the same platform both logged as "ios", so a two-sim run
+  // could not say WHICH phone was stuck (2026-09-23: five minutes spent working
+  // out which of two iPhones was sitting on a PIN pad). Keep the simulator name
+  // so deviceTag can tell them apart.
+  driver.e2eDeviceName = capabilities["appium:deviceName"] || undefined;
   if (platform === "android") {
     // Debug builds load the JS bundle from metro on the host; map emulator port 8081 back
     // BEFORE the first app launch (autoLaunch is disabled in the caps).
@@ -156,9 +217,17 @@ export async function createSession(platform, capsOverride) {
     // host port 8081 — lets this suite run its own metro on another port
     // without touching that unrelated process.
     const metroPort = process.env.METRO_PORT || "8081";
-    execSync(`adb -s ${udid} reverse tcp:8081 tcp:${metroPort}`);
-    console.log(`[e2e] adb reverse tcp:8081 -> tcp:${metroPort} set up on ${udid}`);
-    if (metroPort !== "8081") {
+    // A Release APK bundles its JS: it needs no Metro, and touching the
+    // device's tcp:8081 reverse would only disturb whoever else uses it.
+    const { ANDROID_APK } = await import("./config.js");
+    const releaseApk = process.env.E2E_RELEASE === "1" || /release/i.test(ANDROID_APK);
+    if (!releaseApk) {
+      execSync(`adb -s ${udid} reverse tcp:8081 tcp:${metroPort}`);
+      console.log(`[e2e] adb reverse tcp:8081 -> tcp:${metroPort} set up on ${udid}`);
+    } else {
+      console.log(`[e2e] release APK: no Metro, tcp:8081 left as it is on ${udid}`);
+    }
+    if (!releaseApk && metroPort !== "8081") {
       // This app's debug bundle loader resolves the packager via
       // 10.0.2.2:8081 (the emulator's host alias) BEFORE consulting the
       // adb-reverse-mapped localhost:8081 — so on a non-default METRO_PORT,
@@ -203,7 +272,14 @@ export async function createSession(platform, capsOverride) {
     try {
       const { execSync } = await import("node:child_process");
       const { APP_ID } = await import("./config.js");
-      execSync(`xcrun simctl privacy booted grant camera ${APP_ID}`);
+      // Target THIS session's simulator, never "booted". With two simulators
+      // up, "booted" is ambiguous, simctl picks one WITHOUT erroring — and the
+      // grant kills the app it lands on, as the note below says. So the second
+      // session's camera grant can terminate the app on the FIRST session's
+      // phone, which is then never relaunched: that phone shows neither the
+      // home tabs nor the PIN screen, and the run blames whatever it was
+      // waiting for. Measured 2026-09-23 on a two-simulator vetting run.
+      execSync(`xcrun simctl privacy ${simTarget(driver)} grant camera ${APP_ID}`);
       // granting TCC permission kills the app; relaunch it cleanly (immediate
       // activate can race the teardown and leave a black screen)
       await driver.terminateApp(APP_ID).catch(() => {});
@@ -271,6 +347,23 @@ export async function collapseNotificationShadeIfOpen(driver) {
  * Find an element by bifold testID (testIdWithKey key).
  * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
  */
+/**
+ * The simulator a simctl command should target: this session's own udid, or —
+ * when the session does not know it — the only booted simulator. Never
+ * "booted" with two up: simctl then picks one WITHOUT erroring, and a grant
+ * kills the app it lands on, so one session silently broke the other's phone
+ * (2026-09-23). With several booted and no udid known, refuse rather than guess.
+ */
+export function simTarget(driver) {
+  const caps = driver?.capabilities ?? {};
+  const udid = caps.udid || caps.deviceUDID || caps["appium:udid"] || process.env.IOS_UDID;
+  if (udid) return udid;
+  const out = execFileSyncForSim("xcrun", ["simctl", "list", "devices", "booted", "-j"], { encoding: "utf8" });
+  const booted = Object.values(JSON.parse(out).devices ?? {}).flat().filter((d) => d.state === "Booted");
+  if (booted.length === 1) return booted[0].udid;
+  throw new Error(`simTarget: ${booted.length} simulators are booted and this session's udid is unknown — refusing to guess which one`);
+}
+
 export function byTestId(driver, key) {
   const full = `${TEST_ID_PREFIX}${key}`;
   if (driver.e2ePlatform === "android") {
@@ -281,7 +374,10 @@ export function byTestId(driver, key) {
 
 export async function waitForTestId(driver, key, timeout = 30000) {
   const el = byTestId(driver, key);
-  const timeoutMsg = `element testID=${key} not found in ${timeout}ms`;
+  // Name the device in the message: a two-phone suite that says only "element
+  // not found" costs a page dump before anyone can even ask WHICH phone
+  // (2026-09-23, three runs in a row).
+  const timeoutMsg = `[${deviceTag(driver)}] element testID=${key} not found in ${timeout}ms`;
   try {
     await el.waitForExist({ timeout, timeoutMsg });
   } catch (err) {
@@ -290,7 +386,10 @@ export async function waitForTestId(driver, key, timeout = 30000) {
     // anywhere from seconds to over a minute after the connect (attempts
     // 13 and 16, 2026-09-13) — and blocks every tap under it. Clear it and
     // look once more before giving up.
-    if (key !== PREFLIGHT_ALLOW_KEY && (await clearLocalityPreflightIfUp(driver))) {
+    const cleared =
+      key !== PREFLIGHT_ALLOW_KEY &&
+      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))));
+    if (cleared) {
       await el.waitForExist({ timeout: Math.min(timeout, 10000), timeoutMsg });
     } else {
       throw err;
@@ -315,14 +414,34 @@ export async function clearLocalityPreflightIfUp(driver) {
   return true;
 }
 
+/**
+ * If the "also open as you" notice (#10, SiblingNotice) is on screen, tap OK.
+ * Returns whether it was. On a shared runner agent every test phone is a
+ * sibling of the others, so it appears whenever another test phone goes live
+ * — mid-ceremony, above the tabs, pushing the screen down. It is dismissed
+ * the way a person would (OK), never "My devices".
+ */
+export async function clearSiblingNoticeIfUp(driver) {
+  const ok = byTestId(driver, "SiblingNoticeDismiss");
+  if (!(await ok.isExisting().catch(() => false))) return false;
+  await ok.click().catch(() => undefined);
+  console.log(`[e2e] ${deviceTag(driver)}: "also open as you" notice — tapped OK`);
+  await new Promise((r) => setTimeout(r, 800));
+  return true;
+}
+
 /** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
  *  is tracked) — prefixes every tap log so a two-device run's log is
  *  attributable to the device that acted, not just "android" twice. */
 export function deviceTag(driver) {
-  return driver.e2eUdid ? `${driver.e2ePlatform}:${driver.e2eUdid}` : driver.e2ePlatform;
+  if (driver.e2eUdid) return `${driver.e2ePlatform}:${driver.e2eUdid}`;
+  // A simulator has no udid here; its name is what distinguishes two of them.
+  if (driver.e2eDeviceName) return `${driver.e2ePlatform}:${driver.e2eDeviceName}`;
+  return driver.e2ePlatform;
 }
 
 export async function tapTestId(driver, key, timeout = 30000) {
+  if (!key.startsWith("SiblingNotice")) await clearSiblingNoticeIfUp(driver);
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   await el.click();
@@ -342,18 +461,103 @@ export async function tapTestId(driver, key, timeout = 30000) {
  * log in the handler itself), while a coordinate gesture worked immediately.
  * Android only — iOS's XCUITest click doesn't have this failure mode.
  */
+/**
+ * Tap an element you already hold, at the centre of its bounds, using the
+ * same gesture `tapTestIdByCoordinates` uses. For elements found by a scoped
+ * lookup — a control inside the CURRENT desk request, say — where re-finding
+ * by testID would match a stale one somewhere else on the page.
+ */
+/**
+ * Tap a point on Android through `adb shell input tap`.
+ *
+ * Neither a W3C pointer sequence nor UiAutomator2's own `mobile: clickGesture`
+ * reliably reaches a React Native `Pressable`: measured on the vetter's
+ * publish-profile and new-ticket controls, where both report success, the
+ * element reports clickable and enabled, and `onPress` never runs — four
+ * verified retries in a row failed. `adb shell input tap` on the identical
+ * centre point fired the handler every time. So that is what Android taps use,
+ * with the WebDriver paths kept as fallbacks.
+ */
+function adbTap(driver, x, y) {
+  const udid = driver.capabilities?.deviceUDID || driver.capabilities?.udid || process.env.ANDROID_UDID;
+  const target = udid ? ["-s", udid] : [];
+  execSync(["adb", ...target, "shell", "input", "tap", String(x), String(y)].join(" "), { stdio: "ignore" });
+}
+
+export async function tapElement(driver, el) {
+  await el.waitForDisplayed({ timeout: 30000 });
+  // iOS: let XCUITest tap the element it resolved — a coordinate from the
+  // element's rect misses on an iPad whose app runs in an inset window (see
+  // tapTestIdByCoordinates). Android keeps its adb / clickGesture path.
+  if (driver.e2ePlatform === "ios") {
+    await el.click();
+    return el;
+  }
+  const { x, y } = await el.getLocation();
+  const { width, height } = await el.getSize();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  if (driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      return el;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        return el;
+      } catch {
+        /* fall through to the pointer sequence */
+      }
+    }
+  }
+  await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  return el;
+}
+
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
-  await driver
-    .action("pointer")
-    .move({ x: Math.floor(x + width / 2), y: Math.floor(y + height / 2) })
-    .down()
-    .pause(80)
-    .up()
-    .perform();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  // A W3C pointer press is not always enough for a React Native `Pressable`:
+  // measured on the vetter's "publish my profile" control, which reports
+  // clickable and enabled, accepts the pointer sequence without error, and
+  // never fires `onPress` — while `adb shell input tap` on the same centre
+  // point fires it every time. UiAutomator2's own gesture is what `input tap`
+  // does, so prefer it on Android and keep the pointer sequence as the
+  // fallback for iOS and for anything the gesture refuses.
+  let tapped = false;
+  // On iOS, let XCUITest tap the element it resolved: a coordinate computed
+  // from the element's rect missed on a physical iPad whose app ran in a
+  // window inset from the screen's origin — the tap reported success and
+  // never reached the button (the vetter's Publish, 2026-09-21). The
+  // Pressable trouble that made coordinates necessary is Android's.
+  if (driver.e2ePlatform === "ios") {
+    try {
+      await el.click();
+      tapped = true;
+    } catch {
+      tapped = false;
+    }
+  }
+  if (!tapped && driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      tapped = true;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        tapped = true;
+      } catch {
+        tapped = false;
+      }
+    }
+  }
+  if (!tapped) {
+    await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  }
   console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (by coordinates)`);
   return el;
 }
@@ -391,13 +595,24 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
     if (await el.isExisting()) {
-      await el.click().catch(() => {});
+      // Prefer the same gesture `tapElement` uses: a plain `.click()` on a
+      // React Native Pressable can return success without the handler ever
+      // running — measured on the vetter's publish and new-ticket controls,
+      // where `adb shell input tap` on the identical point fired every time.
+      await tapElement(driver, el).catch(async () => {
+        await el.click().catch(() => {});
+      });
     }
-    await sleep(settleMs);
-    if (await verify()) {
-      console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
-      return;
-    }
+    // Up to settleMs for the tap to show, checked each second: a slow answer
+    // gets its time, a quick one returns at once.
+    const settleBy = Date.now() + settleMs;
+    do {
+      await sleep(Math.min(1000, settleMs));
+      if (await verify()) {
+        console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
+        return;
+      }
+    } while (Date.now() < settleBy);
   }
   throw new Error(
     `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`
@@ -405,19 +620,37 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
 }
 
 /** Swipe up until the element with the given testID is displayed (max 6 swipes). */
-export async function scrollToTestId(driver, key, maxSwipes = 6) {
+// `from` is where the drag starts (fraction of the screen height): a drag that
+// begins on a TextInput selects text instead of scrolling, so a screen with an
+// input mid-page needs a lower origin.
+export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, direction = "down", both = true } = {}) {
+  try {
+    return await scrollOnce(driver, key, maxSwipes, from, direction);
+  } catch (err) {
+    // A long screen may already have scrolled past the element; look the other way.
+    if (!both) throw err;
+    return scrollOnce(driver, key, maxSwipes, from, direction === "up" ? "down" : "up");
+  }
+}
+
+async function scrollOnce(driver, key, maxSwipes, from, direction) {
+  await clearSiblingNoticeIfUp(driver);
+  // An upward swipe starts well below the top: on an iPad the app can run in a
+  // window inset from the screen's top edge, and a swipe starting at 15% lands
+  // in the app's own header, where it scrolls nothing (seen on a real iPad).
+  const [startY, endY] = direction === "up" ? [0.3, Math.max(from, 0.75)] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);
     if ((await el.isExisting()) && (await el.isDisplayed())) return el;
     const { width, height } = await driver.getWindowRect();
     await driver
       .action("pointer")
-      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * startY) })
       .down()
       .pause(100)
       .move({
         x: Math.floor(width / 2),
-        y: Math.floor(height * 0.25),
+        y: Math.floor(height * endY),
         duration: 400,
       })
       .up()

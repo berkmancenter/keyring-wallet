@@ -595,6 +595,80 @@ index 0000000000000000000000000000000000000000..2082da489996ca1d7a44331c132bb9af
 +export { DcqlService };
 +//# sourceMappingURL=DcqlService.mjs.map
 \ No newline at end of file
+diff --git a/build/modules/dids/domain/service/ServiceTransformer.mjs b/build/modules/dids/domain/service/ServiceTransformer.mjs
+index cd489f8100e902595bc798cedabba35b64678444..5a055369da591f2d892986793f6e855ec5d146df 100644
+--- a/build/modules/dids/domain/service/ServiceTransformer.mjs
++++ b/build/modules/dids/domain/service/ServiceTransformer.mjs
+@@ -25,9 +25,37 @@ const serviceTypes = {
+ *   private service: Service
+ * }
+ */
++// DID Core allows `service.type` to be a string OR a set of strings, and
++// Credo's classes only accept a string: `DidDocumentService.type` carries a
++// plain `@IsString()`, so a document declaring `type: ["DIDCommMessaging"]`
++// fails class validation and the WHOLE document is discarded — the caller sees
++// only `notFound`. Measured 2026-09-20 against the VTA Farm, whose mediator
++// declares `#service` as `["DIDCommMessaging"]` and `#auth` as
++// `["Authentication"]`; the wallet could not resolve its mediator at all.
++//
++// The producer is conformant, so the fix belongs here. A single-element array
++// is collapsed to its string before the JSON reaches the class, which is the
++// shape every consumer already expects: validation passes, and equality checks
++// such as `service.type === DidCommV2Service.type` keep working. Longer arrays
++// are left alone rather than guessed at — picking one of several types is a
++// decision this transformer has no basis to make, and DID Core gives no
++// precedence rule.
++//
++// Note `serviceTypes[serviceJson.type]` already selects the right class for an
++// array, because indexing coerces `["DIDCommMessaging"]` to the same string.
++// It was never the lookup that failed, only the validation afterwards.
++function normalizeServiceType(serviceJson) {
++	if (!serviceJson || !Array.isArray(serviceJson.type)) return serviceJson;
++	if (serviceJson.type.length !== 1 || typeof serviceJson.type[0] !== "string") return serviceJson;
++	return {
++		...serviceJson,
++		type: serviceJson.type[0]
++	};
++}
+ function ServiceTransformer() {
+ 	return Transform(({ value }) => {
+-		return value?.map((serviceJson) => {
++		return value?.map((rawServiceJson) => {
++			const serviceJson = normalizeServiceType(rawServiceJson);
+ 			let serviceClass = serviceTypes[serviceJson.type] ?? DidDocumentService;
+ 			if (serviceJson.type === DidCommV2Service.type && "serviceEndpoint" in serviceJson && typeof serviceJson.serviceEndpoint === "string") serviceClass = LegacyDidCommV2Service;
+ 			return JsonTransformer.fromJSON(serviceJson, serviceClass);
+diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
+--- a/build/modules/vc/W3cCredentialServiceOptions.d.mts
++++ b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+@@ -159,6 +159,13 @@ interface W3cJwtVerifyPresentationOptions extends W3cVerifyPresentationOptionsBa
+ interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentationOptionsBase {
+   presentation: W3cJsonLdVerifiablePresentation;
+   purpose?: ProofPurpose;
++  /**
++   * keyring: whether the presentation's holder proof must authenticate the
++   * credentialSubject of every included credential (upstream default: true).
++   * Keyring's VRC presenter is the credential's ISSUER, not its subject, so the
++   * witness ceremony verifies party membership itself and passes false.
++   */
++  verifyCredentialSubjectAuthentication?: boolean;
+ }
+ type W3cStoreCredentialOptions = {
+   record: W3cCredentialRecord;
+diff --git a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+index f3bc5c1c1ac97b732e9160397a564fb15a752721..c3b3078ef81ae614541983598dff5b1e9c8b9c86 100644
+--- a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
++++ b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+@@ -187,7 +187,7 @@ let W3cJsonLdCredentialService = class W3cJsonLdCredentialService {
+ 			const holderVerificationMethods = asArray(options.presentation.proof).filter((proof) => proof.proofPurpose === holderProofPurpose).map((proof) => proof.verificationMethod);
+ 			const credentialValidations = credentials.map((credential) => {
+ 				const credentialSubjectIds = credential.credentialSubjectIds;
+-				const credentialSubjectAuthentication = credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
++				const credentialSubjectAuthentication = options.verifyCredentialSubjectAuthentication === false || credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
+ 					isValid: false,
+ 					error: new CredoError("Presentation does not authenticate the credentialSubject of one or more included credentials")
+ 				};
 diff --git a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
 index 3b5714feb609a171e24f3720a364e162aba19ef5..22a1c2a7dc7ef2bfd72901e45b9521313df13084 100644
 --- a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
@@ -823,34 +897,3 @@ index 0000000000000000000000000000000000000000..426119e976ffe2f31744cc0ceba83f49
 +export { IsCredentialJsonLdContext, IsCredentialType, IsVerifiablePresentationType, validateVc2ContextBaseline, validateVc2CredentialStatus, validateVc2CredentialValidityPeriod };
 +//# sourceMappingURL=validators.mjs.map
 \ No newline at end of file
-diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
-index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
---- a/build/modules/vc/W3cCredentialServiceOptions.d.mts
-+++ b/build/modules/vc/W3cCredentialServiceOptions.d.mts
-@@ -159,6 +159,13 @@ interface W3cJwtVerifyPresentationOptions extends W3cVerifyPresentationOptionsBa
- interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentationOptionsBase {
-   presentation: W3cJsonLdVerifiablePresentation;
-   purpose?: ProofPurpose;
-+  /**
-+   * keyring: whether the presentation's holder proof must authenticate the
-+   * credentialSubject of every included credential (upstream default: true).
-+   * Keyring's VRC presenter is the credential's ISSUER, not its subject, so the
-+   * witness ceremony verifies party membership itself and passes false.
-+   */
-+  verifyCredentialSubjectAuthentication?: boolean;
- }
- type W3cStoreCredentialOptions = {
-   record: W3cCredentialRecord;
-diff --git a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-index f3bc5c1c1ac97b732e9160397a564fb15a752721..c3b3078ef81ae614541983598dff5b1e9c8b9c86 100644
---- a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-+++ b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-@@ -187,7 +187,7 @@ let W3cJsonLdCredentialService = class W3cJsonLdCredentialService {
- 			const holderVerificationMethods = asArray(options.presentation.proof).filter((proof) => proof.proofPurpose === holderProofPurpose).map((proof) => proof.verificationMethod);
- 			const credentialValidations = credentials.map((credential) => {
- 				const credentialSubjectIds = credential.credentialSubjectIds;
--				const credentialSubjectAuthentication = credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
-+				const credentialSubjectAuthentication = options.verifyCredentialSubjectAuthentication === false || credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
- 					isValid: false,
- 					error: new CredoError("Presentation does not authenticate the credentialSubject of one or more included credentials")
- 				};

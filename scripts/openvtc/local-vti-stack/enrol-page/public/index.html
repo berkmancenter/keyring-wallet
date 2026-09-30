@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link a Phone</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --fg: #1b1f24; --muted: #5f6b7a; --line: #dde1e6;
+    --accent: #1f5fd1; --accent-fg: #ffffff; --ok: #1a7f37; --bad: #b42318; --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --card: #1a1e24; --fg: #e8eaed; --muted: #9aa4b1; --line: #2c323a;
+      --accent: #5b8def; --accent-fg: #0b0d10; --ok: #4ac26b; --bad: #f27366; --code-bg: #232830;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 32px 16px;
+  }
+  .card {
+    width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  button {
+    font: inherit; font-weight: 600; border-radius: 10px; padding: 12px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--card); color: var(--fg); width: 100%;
+  }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  button:disabled { opacity: .55; cursor: default; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .qr { display: flex; justify-content: center; margin: 8px 0 12px; }
+  .qr svg { width: 280px; height: 280px; background: #fff; border-radius: 8px; }
+  .meta { color: var(--muted); font-size: 14px; text-align: center; margin: 0 0 12px; }
+  .link {
+    display: block; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg);
+    border-radius: 8px; padding: 8px 10px; word-break: break-all; user-select: all; max-height: 5.6em; overflow: auto;
+  }
+  .code {
+    font: 700 40px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em;
+    text-align: center; margin: 12px 0 4px; padding: 12px 0; background: var(--code-bg); border-radius: 10px;
+  }
+  .state { margin-top: 16px; font-weight: 600; text-align: center; }
+  .state.ok { color: var(--ok); } .state.bad { color: var(--bad); }
+  .err { color: var(--bad); font-size: 13px; white-space: pre-wrap; margin-top: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Link a phone</h1>
+  <p class="sub">Lab only — lets a Keyring phone manage this agent for one hour, until it rotates to its own key.</p>
+
+  <button class="primary" data-testid="add-phone" id="add">Add a phone</button>
+
+  <section id="offer" hidden>
+    <div class="qr" data-testid="qr" id="qr"></div>
+    <p class="meta"><span data-testid="label" id="label"></span><br><span data-testid="countdown" id="countdown"></span></p>
+    <code class="link" data-testid="link" id="link"></code>
+    <div class="row"><button data-testid="copy-link" id="copy">Copy link</button></div>
+  </section>
+
+  <section id="submitted" hidden>
+    <p class="state">A phone wants to link</p>
+    <p class="meta">Check that the phone shows the same code.</p>
+    <div class="code" data-testid="code" id="code"></div>
+    <div class="row">
+      <button class="primary" data-testid="grant" id="grant">Codes match — grant access</button>
+    </div>
+    <div class="row">
+      <button data-testid="refuse" id="refuse">Codes differ</button>
+    </div>
+  </section>
+
+  <p class="state" data-testid="state" id="state" data-state=""></p>
+  <p class="err" data-testid="error" id="error" hidden></p>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id)
+  let current = null, timer = null, tick = null
+
+  const MESSAGES = {
+    open: 'Waiting for the phone to scan…',
+    submitted: '',
+    granted: 'Linked ✓ — the phone can now connect',
+    refused: 'Refused',
+    expired: 'Expired — add the phone again',
+  }
+
+  function showError(msg) { const e = $('error'); e.textContent = msg || ''; e.hidden = !msg }
+
+  function setState(state, data) {
+    const el = $('state')
+    el.dataset.state = state
+    el.textContent = MESSAGES[state] ?? state
+    el.className = 'state' + (state === 'granted' ? ' ok' : (state === 'refused' || state === 'expired') ? ' bad' : '')
+    $('offer').hidden = state !== 'open'
+    $('submitted').hidden = state !== 'submitted'
+    if (state === 'submitted' && data && data.code) $('code').textContent = data.code
+    if (state !== 'open' && state !== 'submitted') stopPolling()
+    $('add').hidden = state === 'open' || state === 'submitted'
+    $('add').textContent = state === 'granted' ? 'Add another phone' : 'Add a phone'
+  }
+
+  function stopPolling() { clearInterval(timer); clearInterval(tick); timer = tick = null }
+
+  function countdown() {
+    if (!current) return
+    const left = current.offer.exp - Math.floor(Date.now() / 1000)
+    $('countdown').textContent = left > 0 ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Expired'
+  }
+
+  async function poll() {
+    if (!current) return
+    try {
+      const r = await fetch(`/api/offers/${current.offer.n}/status`, { cache: 'no-store' })
+      const s = await r.json()
+      if (r.ok && s.state !== $('state').dataset.state) setState(s.state, s)
+    } catch { /* transient; next tick retries */ }
+  }
+
+  $('add').addEventListener('click', async () => {
+    const btn = $('add')
+    btn.disabled = true; btn.textContent = 'Creating…'; showError('')
+    try {
+      const r = await fetch('/api/offers', { method: 'POST' })
+      const body = await r.json()
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`)
+      current = body
+      $('qr').innerHTML = body.qrSvg
+      $('link').textContent = body.link
+      $('label').textContent = body.offer.label
+      $('grant').disabled = $('refuse').disabled = false
+      $('grant').textContent = 'Codes match — grant access'
+      $('refuse').textContent = 'Codes differ'
+      setState('open')
+      stopPolling(); countdown()
+      timer = setInterval(poll, 1000); tick = setInterval(countdown, 1000)
+    } catch (e) {
+      showError(String(e.message || e)); btn.textContent = 'Add a phone'
+    } finally { btn.disabled = false }
+  })
+
+  $('copy').addEventListener('click', async () => {
+    const btn = $('copy')
+    try { await navigator.clipboard.writeText($('link').textContent); btn.textContent = 'Copied' }
+    catch { getSelection().selectAllChildren($('link')); btn.textContent = 'Press ⌘C / Ctrl+C' }
+    setTimeout(() => { btn.textContent = 'Copy link' }, 1500)
+  })
+
+  async function act(which) {
+    const grant = $('grant'), refuse = $('refuse')
+    grant.disabled = refuse.disabled = true
+    ;(which === 'grant' ? grant : refuse).textContent = which === 'grant' ? 'Granting…' : 'Refusing…'
+    showError('')
+    try {
+      const r = await fetch(`/api/offers/${current.offer.n}/${which}`, { method: 'POST' })
+      const body = await r.json()
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`)
+      setState(body.state, body)
+    } catch (e) {
+      showError(String(e.message || e))
+      grant.disabled = refuse.disabled = false
+      grant.textContent = 'Codes match — grant access'; refuse.textContent = 'Codes differ'
+      poll()
+    }
+  }
+  $('grant').addEventListener('click', () => act('grant'))
+  $('refuse').addEventListener('click', () => act('refuse'))
+})()
+</script>
+</body>
+</html>

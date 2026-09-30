@@ -3,10 +3,16 @@ name: Staging - Internal Testing Build & Deploy
 on:
   push:
     branches: [staging]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which store builds to run (a rerun of one failed platform need not rebuild the other)
+        type: choice
+        options: [both, android, ios]
+        default: both
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   calculate-build-number:
@@ -17,15 +23,18 @@ jobs:
       - name: Calculate build number
         id: calc
         run: |
-          OFFSET=5
-          MIN_BUILD_NUMBER=34
+          # The run counter restarted at 1 when the pipeline moved from
+          # AdvancedIdentity, whose uploads reached build ~151. OFFSET must keep
+          # every build above the highest build either store has accepted, and is
+          # only ever raised. A floor alone would repeat the same number on every
+          # run until the counter caught up, and the stores reject a repeat.
+          OFFSET=200
+          MIN_BUILD_NUMBER=201
 
-          CALCULATED_BUILD=$((GITHUB_RUN_NUMBER + OFFSET))
-
-          if [ $CALCULATED_BUILD -lt $MIN_BUILD_NUMBER ]; then
-            BUILD_NUMBER=$MIN_BUILD_NUMBER
-          else
-            BUILD_NUMBER=$CALCULATED_BUILD
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          if [ $BUILD_NUMBER -lt $MIN_BUILD_NUMBER ]; then
+            echo "Build number $BUILD_NUMBER is below the floor $MIN_BUILD_NUMBER"
+            exit 1
           fi
 
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
@@ -41,13 +50,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version from package.json
         id: get_version
@@ -59,43 +61,63 @@ jobs:
 
   check-secrets:
     runs-on: ubuntu-22.04
+    environment: internal
     steps:
       - name: Check required secrets
         shell: bash
         run: |
-          required_secrets=(
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
-            "BUILD_PROVISION_PROFILE_BASE64"
-            "APP_STORE_CONNECT_PRIVATE_KEY_95"
-            "APP_STORE_CONNECT_ISSUER_ID"
-            "APP_STORE_CONNECT_KEY_IDENTIFIER_95"
-            "PLAY_STORE_JKS_BASE64"
-            "PLAY_STORE_JKS_ALIAS"
-            "PLAY_STORE_JKS_PASSWD"
-            "GOOGLE_API_CREDENTIALS_BASE64"
-            "MEDIATOR_URL"
-          )
+          required_secrets=("MEDIATOR_URL")
+          if [ "$DEPLOY_IOS" != "false" ]; then
+            required_secrets+=(
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
+              "BUILD_PROVISION_PROFILE_BASE64"
+              "APP_STORE_CONNECT_API_KEY_P8"
+              "APP_STORE_CONNECT_API_KEY_ID"
+            )
+          else
+            echo "ℹ️ iOS is switched off (repository variable DEPLOY_IOS=false)"
+          fi
+          if [ "$DEPLOY_ANDROID" != "false" ]; then
+            required_secrets+=(
+              "PLAY_STORE_JKS_BASE64"
+              "PLAY_STORE_JKS_ALIAS"
+              "PLAY_STORE_JKS_PASSWD"
+              "GOOGLE_API_CREDENTIALS_BASE64"
+            )
+          else
+            echo "ℹ️ Android is switched off (repository variable DEPLOY_ANDROID=false)"
+          fi
 
+          missing=0
           for secret in "${required_secrets[@]}"; do
             if [ -z "${!secret}" ]; then
-              echo "⚠️ Warning: Secret $secret is not set"
+              echo "❌ Secret $secret is not set"
+              missing=1
             else
               echo "✅ Secret $secret is set"
             fi
           done
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "ℹ️ SLACK_WEBHOOK_URL is not set; the Slack notification will be skipped"
+          fi
+
+          exit $missing
         env:
           APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          APP_STORE_CONNECT_PRIVATE_KEY_95: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER_95: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           PLAY_STORE_JKS_BASE64: ${{ secrets.PLAY_STORE_JKS_BASE64 }}
           PLAY_STORE_JKS_ALIAS: ${{ secrets.PLAY_STORE_JKS_ALIAS }}
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DEPLOY_IOS: ${{ vars.DEPLOY_IOS }}
+          DEPLOY_ANDROID: ${{ vars.DEPLOY_ANDROID }}
 
   test:
     runs-on: ubuntu-22.04
@@ -103,13 +125,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - uses: actions/setup-python@v5
         with:
@@ -130,8 +145,13 @@ jobs:
 
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
+    # Repository variable DEPLOY_ANDROID=false switches the platform off.
+    # A manual run can build one platform only (inputs.platform is empty on push).
+    if: vars.DEPLOY_ANDROID != 'false' && inputs.platform != 'ios'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    environment: internal
+    # Four ABIs of native code; 60 min left no margin.
+    timeout-minutes: 90
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
@@ -140,13 +160,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
         run: |
@@ -321,8 +334,30 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -362,21 +397,10 @@ jobs:
           find bifold/packages -type f -name "*.map" -delete 2>/dev/null || true
           find bifold/packages -type f -name "*.d.ts.map" -delete 2>/dev/null || true
 
-          # Clean up large node_modules that aren't needed for Android build
-          # Keep only what's needed for Metro bundling and native builds
-          # CRITICAL: Do NOT delete android/ or ios/ directories - Gradle needs them for native modules!
-          # Remove test directories and files (not needed for runtime/bundling, but exclude native dirs)
-          find . -path "*/node_modules/*" -type d -name "__tests__" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "test" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "tests" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.test.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.spec.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          # Remove documentation files (not needed for runtime/bundling, but preserve CMakeLists.txt and native dirs)
-          find . -path "*/node_modules/*" -type f -name "*.md" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.txt" ! -name "CMakeLists.txt" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "LICENSE*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "CHANGELOG*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "README*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
+          # Never delete files inside node_modules by name: a folder called
+          # "test" can be runtime code (@openvtc/trust-tasks exports
+          # dist/vtc/policies/test/, and deleting it broke build 220's bundle).
+          # There is ~96 GB free at this point; those deletions saved nothing.
 
           # Clean up yarn cache (if not already cleaned)
           yarn cache clean 2>/dev/null || true
@@ -462,12 +486,26 @@ jobs:
 
             export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
-            echo "Accepting Android SDK licenses..."
-            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            echo "Accepting licenses and installing below."
 
-            echo "Installing Android SDK components..."
-            sdkmanager "platform-tools" "platforms;android-35" "build-tools;33.0.2" "ndk;25.1.8937393" > /dev/null 2>&1 || true
           fi
+
+          # Install exactly what the app declares (android/build.gradle), and
+          # fail here if it can't, instead of letting Gradle find out later.
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ] || [ -z "$CMAKE" ]; then
+            echo "❌ Could not read ndk/compileSdk/buildTools/cmake from android/build.gradle"; exit 1
+          fi
+          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK, CMake $CMAKE"
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
+          test -d "$ANDROID_HOME/ndk/$NDK" || { echo "❌ NDK $NDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-$SDK" || { echo "❌ android-$SDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/build-tools/$BT" || { echo "❌ build-tools $BT is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/cmake/$CMAKE" || { echo "❌ CMake $CMAKE is not installed"; exit 1; }
 
           # Set ANDROID_HOME and PATH for subsequent steps
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -490,7 +528,10 @@ jobs:
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           VERSION_CODE: ${{ env.APP_BUILD_NUMBER }}
           VERSION_NAME: ${{ env.APP_VERSION }}
-          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          # No reactNativeArchitectures override: build the four ABIs that
+          # gradle.properties lists, as the gated local release builds do. An
+          # arm64-only native build still packaged prebuilt libs for all four,
+          # so a 32-bit phone would get hermes but no libappmodules.so.
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
         run: |
           # Bundle React Native code
@@ -518,7 +559,7 @@ jobs:
           df -h
 
           # Build with Gradle (limit memory to reduce disk usage)
-          cd android && ./gradlew bundleRelease assembleRelease --no-parallel --stacktrace --max-workers=1
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
           # Aggressively clean up Gradle cache immediately after build (frees ~1-2GB)
           rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
@@ -549,7 +590,6 @@ jobs:
           echo "✅ Build verification complete"
 
       - name: Upload Android artifact
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
         uses: actions/upload-artifact@v4
         with:
           name: android-staging-${{ env.APP_BUILD_NUMBER }}
@@ -557,22 +597,11 @@ jobs:
           retention-days: 30
 
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
@@ -586,7 +615,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Ship to Google Play Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
@@ -605,8 +633,13 @@ jobs:
 
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
-    runs-on: macos-14
-    timeout-minutes: 60
+    # Repository variable DEPLOY_IOS=false switches the platform off.
+    if: vars.DEPLOY_IOS != 'false' && inputs.platform != 'android'
+    # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
+    # since 2026-04-28; macos-26 carries every Xcode 26 release.
+    runs-on: macos-26
+    environment: internal
+    timeout-minutes: 120
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
@@ -614,13 +647,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
+          # The release-notes step reads the range since the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -645,10 +673,13 @@ jobs:
         with:
           working-directory: ./app
 
-      - name: Switch to correct Xcode
+      # Pinned to the Xcode used for local builds. Xcode 26.4+ (clang) rejects
+      # fmt 11.0.2's consteval format strings, which React Native 0.81 bundles.
+      - name: Select Xcode 26.3
         run: |
-          sudo xcode-select --switch /Applications/Xcode_16.2.app
-          sudo xcode-select -p
+          sudo xcode-select --switch /Applications/Xcode_26.3.app
+          xcode-select -p
+          xcodebuild -version
 
       - name: Cache pod dependencies
         id: pod-cache
@@ -730,24 +761,52 @@ jobs:
       - name: Install iOS dependencies
         working-directory: app
         run: |
-          export USE_HERMES=true
+          # '1', not 'true': ExpoModulesCore.podspec only treats '1' (or unset) as
+          # Hermes, and otherwise depends on React-jsc, which RN 0.81 does not ship.
+          export USE_HERMES=1
           yarn run ios:setup
 
       - name: Bump Build No.
+        id: ios-version
         working-directory: app/ios
         env:
           CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
           MARKETING_VERSION: ${{ env.APP_VERSION }}
         run: |
+          # App Store Connect rejects a pre-release suffix (ITMS-90060), so iOS
+          # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
           agvtool new-version ${CURRENT_PROJECT_VERSION}
-          agvtool new-marketing-version ${MARKETING_VERSION}
+          agvtool new-marketing-version ${MARKETING_VERSION%%-*}
+          echo "version=${MARKETING_VERSION%%-*}" >> $GITHUB_OUTPUT
 
       - name: Create environment settings
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
 
       - name: Update APS environment
         run: |
@@ -758,7 +817,6 @@ jobs:
         with:
           certificate: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           certificate_password: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
           provisioning_profile: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
 
       - name: Clear Metro bundler cache
@@ -775,15 +833,15 @@ jobs:
           # Also clear React Native cache
           rm -rf $TMPDIR/react-* 2>/dev/null || true
           rm -rf /tmp/react-* 2>/dev/null || true
-          # Clear any Xcode derived data that might have cached bundles
-          rm -rf ios/build 2>/dev/null || true
+          # Not ios/build: React Native 0.81's codegen writes its sources to
+          # ios/build/generated during pod install, and the archive compiles them.
+          # The archive's own derived data lives in ios/xbuild.
           echo "✅ Metro cache cleared"
 
+      # Signing is manual (certificate + profile from the secrets), so the archive
+      # needs no API key and no provisioning updates.
       - name: Archive build
         working-directory: app/ios
-        env:
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
         run: |
           xcodebuild \
           -workspace AriesBifold.xcworkspace \
@@ -792,74 +850,129 @@ jobs:
           -xcconfig ../../release.xcconfig \
           -derivedDataPath xbuild \
           -archivePath ../../AriesBifold.xcarchive \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p9" \
-          -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-          -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
           -sdk iphoneos \
           archive
 
       - name: Export production archive
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/export-ios-archive
         with:
           export_options: "export-options-keyring.plist"
           ouput_artifact_ref: "ios-staging-artifact"
 
       - name: Upload iOS artifact
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: actions/upload-artifact@v4
         with:
           name: ios-staging-${{ env.APP_BUILD_NUMBER }}
           path: export/KeyRing.ipa
           retention-days: 30
 
-      - name: Extract commit message for release notes
+      - name: Summarise what this build adds
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
+          set -u
+          # GitHub runs this with -e -o pipefail: a grep that matches nothing
+          # fails its whole pipeline, so every pipeline here ends in || true.
+          # Test changes to this step with: bash --noprofile --norc -e -o pipefail
+          # What a tester wants in "What to Test" is what CHANGED, not the subject
+          # line of whichever merge happened to be last. Most user-facing work lands
+          # in the bifold submodule, so summarise both: the wallet's own commits
+          # since the previous staging tag, and the submodule commits the pointer
+          # moved across. Fall back to the old behaviour if either range is unknown.
+          # This build's own tag is created after the build, so the previous
+          # release is the newest staging tag reachable from HEAD's parent.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
+
+          collect() { # $1 = repo dir, $2 = range
+            git -C "$1" log --no-merges --pretty=%s "$2" 2>/dev/null \
+              | grep -E '^(feat|fix)(\(|:)' \
+              | grep -vE '^(feat|fix)\((ci|e2e|test|tests|lab|harness|deps)\)' \
+              | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
+              | sed -E 's/[[:space:]]+$//' \
+              | awk 'NF && !seen[$0]++' || true
+          }
+
+          LINES=""
+          if [ -n "${PREV_TAG:-}" ] && git rev-parse -q --verify "$PREV_TAG^{commit}" >/dev/null; then
+            LINES=$(collect . "$PREV_TAG..HEAD")
+            OLD_PIN=$(git ls-tree "$PREV_TAG" bifold 2>/dev/null | awk '{print $3}')
+            NEW_PIN=$(git ls-tree HEAD bifold 2>/dev/null | awk '{print $3}')
+            if [ -n "${OLD_PIN:-}" ] && [ -n "${NEW_PIN:-}" ] && [ "$OLD_PIN" != "$NEW_PIN" ]; then
+              git -C bifold fetch -q --no-tags origin "$OLD_PIN" "$NEW_PIN" 2>/dev/null || true
+              if git -C bifold merge-base --is-ancestor "$OLD_PIN" "$NEW_PIN" 2>/dev/null; then
+                LINES=$(printf '%s\n%s\n' "$(collect bifold "$OLD_PIN..$NEW_PIN")" "$LINES" | awk 'NF && !seen[$0]++')
+              fi
+            fi
+          fi
+
+          if [ -n "$LINES" ]; then
+            KEPT=$(printf '%s\n' "$LINES" | head -8 | sed 's/^/• /')
+            REST=$(printf '%s\n' "$LINES" | tail -n +9 | grep -c . || true)
+            NOTES="$KEPT"
+            if [ "${REST:-0}" -gt 0 ]; then
+              NOTES=$(printf '%s\n• and %s more change(s)\n' "$NOTES" "$REST")
             fi
           else
+            # Nothing conventional in the range: keep the previous behaviour.
             COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
+            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
               COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+            fi
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+          fi
+
+          # A release's own notes win: the same plain-words bullets as the build's
+          # card on the command center. Used only when this release changed the
+          # file, so one release's notes are never shipped with the next.
+          NOTES_FILE=.github/testflight/whats-new.md
+          if [ -s "$NOTES_FILE" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$NOTES_FILE" 2>/dev/null)" ]; then
+            # Lines starting with # are the file's own instructions, not notes.
+            # App Store Connect's "What to Test" holds at most 4000 characters.
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              NOTES="$FROM_FILE"
+              echo "using $NOTES_FILE"
             fi
           fi
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
-          CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-          if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
-            CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
+          if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
+            NOTES="Build ${{ env.APP_BUILD_NUMBER }} of ${{ env.APP_VERSION }}."
           fi
 
+          echo "--- release notes ---"
+          printf '%s\n' "$NOTES"
           {
-            echo "release_notes<<EOF"
-            echo "$CLEAN_MSG"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+            echo "release_notes<<RELEOF"
+            printf '%s\n' "$NOTES"
+            echo "RELEOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Ship to TestFlight Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
+          # An individual key (no issuer) or a team key (with APP_STORE_CONNECT_ISSUER_ID).
+          app_store_connect_key_id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           app_store_connect_issuer_id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_key_identifier: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
+          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ipa_path: export/KeyRing.ipa
+          bundle_id: asml.bkc.harvard.wallet
           version_code: ${{ env.APP_BUILD_NUMBER }}
-          version_name: ${{ env.APP_VERSION }}-staging
+          version_name: ${{ steps.ios-version.outputs.version }}
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
-          distribute_external: "false"
-          beta_groups: "KeyRing Internal Testers"
+          # Internal first, then the external maintainers' group. distribute.mjs
+          # submits an external group for Beta App Review automatically; only the
+          # first build of a version needs it.
+          beta_groups: "KeyRing Internal Testers,openvtc testers"
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: github.event_name == 'push' && success()
+    # Runs when any platform shipped, so the next build's notes start after this one.
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
     steps:
@@ -867,12 +980,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive
 
       - name: Extract version
         id: get_version
@@ -891,21 +998,14 @@ jobs:
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: success() # Only notify on successful builds
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    environment: internal
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version
         id: get_version
@@ -915,22 +1015,11 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract commit message for Slack
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-slack
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -3 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
@@ -950,8 +1039,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Send Slack Notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data "{

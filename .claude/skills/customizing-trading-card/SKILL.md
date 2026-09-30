@@ -82,18 +82,16 @@ without re-checking for clipping.
    exchange, which is out of scope for this demo — say so rather than reaching
    into `bifold/packages/core/src/modules/vrc/`.
 5. **"Nothing changed" can mean the profile isn't active, not that the edit
-   was wrong — but check what "unset" actually does before assuming this.**
-   `selectDemoProfiles` (`demo-profiles/index.ts`) registers *every*
-   installed profile, trading-card included, when `ACTIVE_DEMO_PROFILE` is
-   unset — that's the default and it does claim `COMPONENT_CONTACT_CARD`, so
-   an unset var is fine. What actually leaves the app drawing bifold's stock
-   `ContactCard` instead of this file: `ACTIVE_DEMO_PROFILE=none`;
-   `ACTIVE_DEMO_PROFILE=approver` (narrows to *only* approver, which
+   was wrong.** `selectDemoProfiles` (`demo-profiles/index.ts`) registers
+   *no* demo profile when `ACTIVE_DEMO_PROFILE` is unset (the default, what
+   ships) or `none`, so the app draws bifold's stock `ContactCard` instead
+   of this file. It must be `ACTIVE_DEMO_PROFILE=trading-card` (or `all`).
+   `ACTIVE_DEMO_PROFILE=approver` narrows to *only* approver, which
    deliberately doesn't claim `COMPONENT_CONTACT_CARD`, so nothing overrides
-   the default); or any value that was changed in `.env` without a native
-   rebuild afterward, since it's baked in at build time (see "Seeing it on
-   screen" below). Check the actual value and build history before
-   re-deriving the styling logic — don't assume unset is the problem.
+   the default either; and a value changed in `.env` without a native
+   rebuild afterward has no effect, since it's baked in at build time (see
+   "Seeing it on screen" below). Check the actual value and build history
+   before re-deriving the styling logic.
 
 Attribute overlays are also a dead end: `capture_base.attributes` is empty on
 purpose because an R-Card's payload is a jCard, so only the meta and branding
@@ -135,8 +133,8 @@ rather than describing it):
    was used last time — check `adb devices` / simulator state first, since a
    physical phone given an emulator-only endpoint (`10.0.2.2`) will never
    connect and fail silently.
-2. Set `ACTIVE_DEMO_PROFILE=trading-card` in `app/.env` (unset also works —
-   see gotcha 5 — but setting it explicitly removes any doubt).
+2. Set `ACTIVE_DEMO_PROFILE=trading-card` in `app/.env`. Required: unset
+   registers no demo profiles (see gotcha 5).
 3. Build and install once: `cd app && yarn ios:setup && yarn ios` or
    `yarn android`. **This step is baked at build time** — if `.env` changes
    after this, it needs another install, not just a reload. Run `yarn start`

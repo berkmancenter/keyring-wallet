@@ -23,10 +23,14 @@ import {
   loadLoginAttempt,
   testIdWithKey,
   initializeVrcModule,
+  setPeerLegCarriage,
+  ownerChecks,
+  vtaAgent,
 } from '@bifold/core'
 import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
 // import { Agent } from '@credo-ts/core' // DISABLED: Only used by push notifications
+import DeviceInfo from 'react-native-device-info'
 import { NavigationProp } from '@react-navigation/native'
 import { TFunction } from 'react-i18next'
 // import { Linking } from 'react-native'
@@ -35,8 +39,8 @@ import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { activate, deactivate, setup, status } from '@utils/PushNotificationsHelper'
+import { appPushNotificationsConfig } from '@/push/pushDefaults'
+import { offerFeedbackReport } from '@/utils/problemReport'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
 import AddCredentialButton from './src/keyring-theme/components/AddCredentialButton'
@@ -137,11 +141,54 @@ export class AppContainer implements Container {
         },
       },
     ])
+    // The peer leg's carriage is baked into the build (tsp_rev3_subtask.md
+    // §2.3): `VTI_PEER_LEG=tsp` sends TSP Rev 3 frames between personas over
+    // the mediator socket; anything else keeps DIDComm v2. Read here, once.
+    const vtiPeerLeg = Config.VTI_PEER_LEG === 'tsp' ? 'tsp' : 'didcomm'
+    setPeerLegCarriage(vtiPeerLeg)
+    // Owning an agent from this phone (own_agent_subtask.md §3): owner acts ask
+    // for Face ID, a fingerprint or the passcode at that moment. Unwired, the
+    // controller refuses every owner act, so a build that forgot this fails loudly.
+    vtaAgent.setOwnerChecks(ownerChecks)
+    // Its own entry on the agent reads "Keyring — <this phone's name>", so the
+    // person can tell their devices apart in My devices and on their host.
+    // Android 12+ answers "unknown" without BLUETOOTH_CONNECT (and emulators
+    // always do): fall back to the model, e.g. "Keyring — Pixel 6".
+    vtaAgent.setDeviceName(async () => {
+      const name = await DeviceInfo.getDeviceName()
+      return name && name !== 'unknown' ? name : DeviceInfo.getModel()
+    })
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
+      // The VTI agent this build talks to. Both DIDs are bound to the host the
+      // stack runs behind, so they are baked in per environment rather than
+      // discovered — see scripts/openvtc/local-vti-stack/README.md.
+      vti: {
+        mediatorDid: Config.VTI_MEDIATOR_DID,
+        communityDid: Config.VTI_COMMUNITY_DID,
+        vtaDid: Config.VTI_VTA_DID,
+        personaBaseUrl: Config.VTI_PERSONA_BASE_URL,
+        peerLeg: vtiPeerLeg,
+      },
       settings: [
-        /* Help section commented out — re-enable when help actions are wired up
+        {
+          header: {
+            title: this.t('Settings.Help'),
+            icon: { name: 'help' },
+          },
+          data: [
+            {
+              // Opens the same report as "Report this problem" (email or share,
+              // with the recent log), for problems that show no error screen.
+              title: this.t('Settings.GiveFeedback'),
+              accessibilityLabel: this.t('Settings.GiveFeedback'),
+              testID: testIdWithKey('GiveFeedback'),
+              onPress: () => offerFeedbackReport(),
+            },
+          ],
+        },
+        /* Rest of the Help section commented out — re-enable when help actions are wired up
         {
           header: {
             title: this.t('Settings.Help'),
@@ -204,18 +251,10 @@ export class AppContainer implements Container {
       showDetailsInfo: true,
       contactHideList: ['BCAttestationService'],
       proofTemplateBaseUrl: Config.PROOF_TEMPLATE_URL,
-      // DISABLED: Push notifications disabled — no server backend yet
-      // enablePushNotifications: {
-      //   status: status,
-      //   setup: setup,
-      //   toggle: async (state: boolean, agent: Agent) => {
-      //     if (state) {
-      //       await activate(agent)
-      //     } else {
-      //       await deactivate(agent)
-      //     }
-      //   },
-      // },
+      // Push wake-ups (docs/plans/push-notifications-plan.md): undefined unless
+      // the build names a push gateway, so a tester's build has no prompt, no
+      // Settings switch and no registration.
+      enablePushNotifications: appPushNotificationsConfig(),
       appUpdateConfig: {
         appleAppStoreUrl,
         googlePlayStoreUrl,

@@ -114,6 +114,13 @@ android {
 
     defaultConfig {
         applicationId "asml.bkc.harvard.wallet"
+        // The push-test variant (scripts/push-test/build-android.sh,
+        // docs/plans/push-notifications-plan.md §6): only a build run with
+        // -PkeyringPushTest gets its own application ID and installs beside the
+        // release app. Every other build is unchanged.
+        if (project.hasProperty("keyringPushTest")) {
+            applicationIdSuffix ".pushtest"
+        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode System.getenv("VERSION_CODE") ? System.getenv("VERSION_CODE").toInteger() : 4
@@ -170,6 +177,13 @@ android {
             // libreactnative.so etc. into their own AARs, colliding with the copies
             // from the react-android AAR. The contents are identical — keep one.
             pickFirsts += ['**/libreactnative.so', '**/libjsi.so', '**/libfbjni.so', '**/libc++_shared.so']
+        }
+        resources {
+            // androidx.annotation 1.11.0 and its annotation-jvm split both ship
+            // this licence text; a transitive AndroidX resolution moved to them
+            // with no change in our trees, and the merge refused the duplicate
+            // (2026-09-23). The texts are identical — keep one, for this path only.
+            pickFirsts += ['META-INF/androidx/annotation/annotation/LICENSE.txt']
         }
     }
 }

@@ -119,8 +119,6 @@ export enum BCLocalStorageKeys {
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
   EnableTspCarriage = 'EnableTspCarriage',
   EnableDidCommV2 = 'EnableDidCommV2',
-  UserDeniedPushNotifications = 'userDeniedPushNotifications',
-  DeviceToken = 'deviceToken',
 }
 
 export const initialState: BCState = {

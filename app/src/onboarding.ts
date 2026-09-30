@@ -28,16 +28,6 @@ export const isBiometryComplete = (didConsiderBiometry: boolean): OnboardingTask
   return { name: Screens.Biometry, completed: didConsiderBiometry }
 }
 
-// DISABLED: Push notifications disabled — no server backend yet
-// export const isPushNotificationComplete = (
-//   didConsiderPushNotifications: boolean,
-//   enablePushNotifications: any
-// ): OnboardingTask => {
-//   return {
-//     name: Screens.PushNotifications,
-//     completed: !enablePushNotifications || (didConsiderPushNotifications && enablePushNotifications),
-//   }
-// }
 export const isPushNotificationComplete = (): OnboardingTask => {
   return { name: Screens.PushNotifications, completed: true }
 }
@@ -81,9 +71,8 @@ export const generateOnboardingWorkflowSteps = (
   const { servedPenalty } = state.loginAttempt
   const { enableWalletNaming } = state.preferences
   const { showPreface } = config
-  // const { enablePushNotifications } = config // DISABLED: Push notifications disabled
   const { needsUpdate, dismissed = false } = state.versionInfo
-  const hasRCardCredential = Boolean(state.rCard?.template)
+  const hasRCardCredential = Boolean(state.rCard?.profiles?.length)
 
   return [
     isPrefaceComplete(didSeePreface, showPreface ?? false),

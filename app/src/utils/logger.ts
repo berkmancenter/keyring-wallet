@@ -9,6 +9,7 @@ import {
   getVersion,
 } from 'react-native-device-info'
 import { autoDisableRemoteLoggingIntervalInMinutes } from '../constants'
+import { offerProblemReport } from './problemReport'
 import { generateReferenceCode } from './reference-code'
 
 const logOptions: RemoteLoggerOptions = {
@@ -67,6 +68,10 @@ export const reportProblem = (error: BifoldError): string => {
     // Never let a reporting failure prevent the user from getting their code.
     BCLogger.error?.(`Failed to send problem report to Loki: ${e}`)
   }
+
+  // The tester sends the report (log included) by email or the share sheet;
+  // this works with or without a Loki endpoint.
+  offerProblemReport({ referenceCode, title, description, message, error })
 
   return referenceCode
 }

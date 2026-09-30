@@ -1,8 +1,12 @@
 # R-Card Profile Picture — Plan
 
 *Plan for adding a per-holder profile picture to the R-Card (Relationship Card) and
-displaying it in the VRC contact list and detail views. No subtask plans yet; no
-companions yet — this is the initial draft.*
+displaying it in the VRC contact list and detail views. No subtask plans yet.*
+
+**Companions**: [`rcard-profile-picture-plan/2026-09-18-bam.md`](rcard-profile-picture-plan/2026-09-18-bam.md) —
+the crop step was moved off the OS picker's own `allowsEditing` UI (a stale-image
+bug) and into this app's own center-crop in `processRCardPhoto`; resolves the
+crop-UX open question below differently than originally framed.
 
 ---
 
@@ -146,15 +150,21 @@ mediator** — see §6.
 
 ### 3.4 Client-side pipeline
 
-Resize, strip EXIF/GPS/ICC metadata, and JPEG-encode exactly once, at
-issuance/template-save time, from the original capture — never resize then
-recompress then resize again, which stacks generation loss. EXIF orientation
-must be baked into pixels (not left as metadata) before the tag is stripped,
-or the photo renders sideways for any consumer that doesn't honor EXIF
-orientation. Use `expo-image-manipulator` if Expo is already a dependency in
-`app/`/`bifold/packages/core` (needs confirming at implementation time); it
-covers resize/rotate/crop with broader adoption than
-`react-native-image-resizer`.
+Center-crop to a square, resize, strip EXIF/GPS/ICC metadata, and JPEG-encode
+exactly once, at issuance/template-save time, from the original capture —
+never resize then recompress then resize again, which stacks generation loss.
+EXIF orientation must be baked into pixels (not left as metadata) before the
+tag is stripped, or the photo renders sideways for any consumer that doesn't
+honor EXIF orientation. Uses `expo-image-manipulator` (confirmed a dependency
+of `bifold/packages/core`); it covers resize/rotate/crop with broader
+adoption than `react-native-image-resizer`.
+
+The square crop happens here, in this app-controlled pipeline
+(`processRCardPhoto`, `bifold/packages/core/src/modules/vrc/utils/rcardPhoto.ts`),
+not via the image picker's own `allowsEditing` crop UI — see
+[`rcard-profile-picture-plan/2026-09-18-bam.md`](rcard-profile-picture-plan/2026-09-18-bam.md):
+that native step was found to sometimes hand back a stale, previously-cropped
+image instead of the one just picked.
 
 ### 3.5 Not OCA
 
@@ -251,8 +261,14 @@ consumes these as a library and needs no changes.
   `yarn e2e:vrc:tsp` with a maximum-size photo through a real mediator/relay
   and confirm no truncation, rejection, or unexpected latency. If this surfaces
   a lower real ceiling, §3.3's numbers need revising before implementation.
-- **Crop/aspect-ratio UX** for the onboarding capture flow (§4.2) is not
-  designed yet — needs a design pass, not just an engineering one.
+- **Crop/aspect-ratio UX** for the onboarding capture flow (§4.2): a
+  user-adjustable crop now exists (`RCardPhotoCropModal.tsx` — pinch-zoom and
+  pan a square viewport over the picked photo), but per
+  [`rcard-profile-picture-plan/2026-09-18-bam.md`](rcard-profile-picture-plan/2026-09-18-bam.md)
+  it was built as an engineering default, not a designed one — the circular
+  viewport mask, max zoom, and modal styling haven't had a design pass. What
+  *is* settled: the crop must not be delegated to the OS picker's own
+  `allowsEditing` UI (observed to return a stale image on Android).
 - **Format is decided** (JPEG, §3.1) but not yet stress-tested against actual
   photographic input at the 256×256/12KB budget — worth confirming the budget
   holds up visually before locking `RCardOnboarding.tsx`'s compression

@@ -1,4 +1,4 @@
-import { TOKENS, registerTrustTaskDisplay, trustTaskDisplayRegistry } from '@bifold/core'
+import { TOKENS, registerTrustTaskDisplay, trustTaskDisplayRegistry, trustTaskRegistry } from '@bifold/core'
 import { DependencyContainer } from 'tsyringe'
 
 import { DemoProfile } from '../types'
@@ -6,6 +6,7 @@ import { DemoProfile } from '../types'
 import ApproverContactSection from './ApproverContactSection'
 import ApproverGlobalListener from './ApproverGlobalListener'
 import { registerApproverTaskType } from './ceremony'
+import { TYPE_URI } from './accessRequestSpec'
 import { accessRequestDisplayHandler } from './display'
 
 /**
@@ -80,7 +81,10 @@ export const approverProfile: DemoProfile = {
     //    ITrustTaskDisplayRegistry token above rather than being passed
     //    through registerTrustTask's own `renderer` option, since this demo
     //    also needs registerTrustTaskDisplay's one-time container wiring.
-    registerApproverTaskType()
+    // App.tsx registers profiles on every render of the root component; the
+    // engine registry refuses a second registration of the same type, so
+    // make this idempotent rather than fatal.
+    if (!trustTaskRegistry.get(TYPE_URI)) registerApproverTaskType()
 
     // 3. The demo's own trigger ("Request access") + inbox (render + approve/
     //    deny), embedded in this contact's own details screen rather than a

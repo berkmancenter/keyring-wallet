@@ -14,6 +14,7 @@ import {
   tapTestIdReliable,
   waitForTestId,
   screenshot,
+  simTarget
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
@@ -154,8 +155,9 @@ export async function seedTestPhoto(driver) {
       );
       console.log(`[e2e] android: seeded test photo + granted media permission`);
     } else {
-      execSync(`xcrun simctl addmedia booted "${TEST_PHOTO_PATH}"`);
-      execSync(`xcrun simctl privacy booted grant photos ${APP_ID}`);
+      const sim = simTarget(driver);
+      execSync(`xcrun simctl addmedia ${sim} "${TEST_PHOTO_PATH}"`);
+      execSync(`xcrun simctl privacy ${sim} grant photos ${APP_ID}`);
       console.log(`[e2e] ios: seeded test photo + granted photos permission`);
     }
   } catch (err) {
@@ -383,7 +385,18 @@ export async function unlockIfLocked(driver) {
   if (!(await pinInput.isExisting())) return false;
   console.log(`[e2e] ${driver.e2ePlatform}: wallet locked — unlocking`);
   await pinInput.click();
-  await pinInput.setValue(PIN);
+  // On an iOS simulator one setValue of the whole PIN can drop a keystroke:
+  // the field holds five of six digits, Enter answers "PIN is too short", and
+  // every re-tap below fails the same way (221 gate, twice in a row). Typing a
+  // digit at a time with a pause gives each keystroke its own round trip.
+  if (driver.e2ePlatform === "ios") {
+    for (const digit of PIN) {
+      await pinInput.addValue(digit);
+      await sleep(200);
+    }
+  } else {
+    await pinInput.setValue(PIN);
+  }
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
     // A dropped tap here (same class of flakiness tapTestIdReliable exists
@@ -404,6 +417,36 @@ export async function unlockIfLocked(driver) {
     for (let i = 0; i < 10 && (await pinInput.isExisting()); i++) await sleep(500);
   }
   await sleep(3000);
+  // Postcondition, because the tap helper can believe it is done when it is
+  // not: its verify() is a single 1500ms existence check, and a transient miss
+  // under load makes it report "already satisfied, no tap needed" and skip the
+  // tap — leaving the wallet locked. Measured 2026-09-23 with two iOS
+  // simulators on one Appium: the run then waited out 300s on the next
+  // element, on a phone still showing the PIN pad. Confirm the goal rather
+  // than trusting the mechanism.
+  // Be CONSERVATIVE about what "unlocked" means. The first version of this
+  // postcondition asked existsTestId(..., 4000) and treated "not seen" as
+  // "gone" — which is the very mistake it was written to catch, one layer up:
+  // with two simulators sharing one Appium, commands serialise and a lookup
+  // can miss a control that is plainly on screen. So on any doubt, including a
+  // lookup that throws, assume STILL LOCKED and try again; a redundant retry
+  // costs seconds, while a false "unlocked" costs the run 300s and a red that
+  // names the wrong thing.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const stillLocked = await byTestId(driver, "EnterPIN")
+      .isExisting()
+      .catch(() => true);
+    if (!stillLocked) break;
+    console.log(`[e2e] ${deviceTag(driver)}: still on the PIN screen — entering it again (${attempt}/4)`);
+    const again = byTestId(driver, "EnterPIN");
+    await again.click().catch(() => undefined);
+    await again.setValue(PIN).catch(() => undefined);
+    if (await byTestId(driver, "Enter").isExisting().catch(() => false)) {
+      await hideKeyboard(driver).catch(() => undefined);
+      await tapTestId(driver, "Enter", 30000).catch(() => undefined);
+    }
+    await sleep(5000);
+  }
   return true;
 }
 
@@ -597,6 +640,14 @@ async function setAutoLockNever(driver) {
   if (!(await neverEl.isExisting())) {
     throw new Error(`${deviceTag(driver)}: "${neverKey}" option never appeared after opening the Lockout dropdown`);
   }
+  if (!(await neverEl.isExisting())) {
+    // On a reused install the preference is already "Never", and the expanded
+    // row can render without a tappable option. Not worth failing a run over:
+    // the wallet either locks (and unlockIfLocked recovers it) or it doesn't.
+    console.log(`[e2e] ${deviceTag(driver)}: leaving auto-lock as it is — "Never" never appeared`);
+    driver.e2eAutoLockNeverSet = true;
+    return;
+  }
   await neverEl.click();
   driver.e2eAutoLockNeverSet = true;
   console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
@@ -719,7 +770,7 @@ async function findRowEitherDirection(driver, testId) {
  * Settings → Developer screen (Auto-lock off on the way), whether developer
  * mode is already on or has to be tripped by tapping the Version footer.
  */
-async function openDeveloperScreen(driver) {
+export async function openDeveloperScreen(driver) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
   await setAutoLockNever(driver);
@@ -751,8 +802,11 @@ async function openDeveloperScreen(driver) {
       await sleep(150);
     }
     // Settings navigates to the Developer screen itself on the trip — wait
-    // for a Developer-screen-only element, not a Settings row.
+    // for a Developer-screen-only element, not a Settings row. The VTA probe
+    // (VTI_PROBE_ON_START) fires as the screen mounts and reports with an
+    // alert, which hides the toggle from a lookup until it is dismissed.
     if (!reachedDeveloperScreen) {
+      for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
       await waitForTestId(driver, "ToggleDeveloper", 5000);
     }
   }
@@ -775,7 +829,7 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * IMPORTANT: never tap the opener while the sheet is already up — the tap
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
-async function openQrSheet(driver) {
+export async function openQrSheet(driver) {
   // A process-level watchdog kill can relock the wallet at any moment,
   // independent of the in-app inactivity timer (autoLockTime doesn't
   // prevent this — a fresh process always needs the PIN again) — check
@@ -1697,7 +1751,7 @@ export async function startIosLogCapture(driver, deviceUdid) {
   mkdirSync("artifacts", { recursive: true });
   const file = `artifacts/ios-js-${Date.now()}.log`;
   const fd = openSync(file, "a");
-  const sim = process.env.IOS_UDID || "booted";
+  const sim = simTarget(undefined);
   const proc = spawn(
     "xcrun",
     [
@@ -2048,4 +2102,382 @@ export async function assertContactPhotoReceived(driver, peerName, timeout = 600
   throw new Error(
     `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
   );
+}
+
+/**
+ * With the Scan screen already open (e.g. from My Agent's "Link your agent"),
+ * hand it a link through its paste-URL button — the same path a person with
+ * no working camera takes, and how a simulator "scans" (plan UT). Accepts the
+ * camera disclosure on a first visit. Returns once the link was submitted and
+ * not refused; the caller waits for wherever the link leads.
+ */
+export async function pasteLinkOnScanScreen(driver, url) {
+  let pasteReady = false;
+  for (let attempt = 0; attempt < 4 && !pasteReady; attempt++) {
+    await acceptSystemAlertIfPresent(driver);
+    if (await existsTestId(driver, "PasteUrlButton", 8000)) {
+      pasteReady = true;
+      break;
+    }
+    if (await existsTestId(driver, "Continue", 5000)) {
+      await tapTestId(driver, "Continue");
+      pasteReady = await existsTestId(driver, "PasteUrlButton", 10000);
+    }
+  }
+  if (!pasteReady) {
+    await screenshot(driver, "scan-no-paste-button");
+    throw new Error(`${driver.e2ePlatform}: the Scan screen never showed its paste-URL button`);
+  }
+  await tapTestId(driver, "PasteUrlButton", 15000);
+  const input = await waitForTestId(driver, "PastedUrl", 15000);
+  if (driver.e2ePlatform === "android") {
+    await driver.setClipboard(Buffer.from(url, "utf8").toString("base64"), "plaintext");
+    await input.click();
+    await driver.pressKeyCode(279); // KEYCODE_PASTE
+    await sleep(800);
+  } else {
+    await input.setValue(url);
+  }
+  let typed = (await input.getText().catch(() => "")) ?? "";
+  // A slow phone now and then drops or reorders a key in a long link typed in
+  // one go (a ~6 KB invitation on the iPhone 11): clear the field and type it
+  // again.
+  for (let attempt = 1; driver.e2ePlatform === "ios" && typed && typed !== url && attempt <= 4; attempt++) {
+    let at = 0;
+    while (at < url.length && typed[at] === url[at]) at++;
+    console.log(
+      `[e2e] ios: the link went in wrong (${typed.length}/${url.length}) at ${at}: ` +
+        `expected ${JSON.stringify(url.slice(Math.max(0, at - 6), at + 6))}, got ${JSON.stringify(typed.slice(Math.max(0, at - 6), at + 6))} — typing it again (${attempt}/4)`
+    );
+    await input.clearValue().catch(() => undefined);
+    await sleep(500);
+    await input.setValue(url);
+    typed = (await input.getText().catch(() => "")) ?? "";
+  }
+  await hideKeyboard(driver);
+  if (driver.e2ePlatform === "ios" && (await driver.isKeyboardShown().catch(() => false))) {
+    // The helper's fixed tap point can land inside this screen's tall paste
+    // field; tap the instruction text above it, which blurs the field.
+    const hint = driver.$('-ios predicate string:type == "XCUIElementTypeStaticText" AND label BEGINSWITH "Paste a URL below"');
+    if (await hint.isExisting().catch(() => false)) await hint.click().catch(() => undefined);
+    await sleep(800);
+  }
+  if (typed && typed !== url) {
+    await screenshot(driver, "paste-link-mangled");
+    throw new Error(`${driver.e2ePlatform}: the link was not entered intact (${typed.length}/${url.length} chars)`);
+  }
+  // On a slow phone the first tap can land before React has the pasted text,
+  // while Continue is still disabled — it is ignored without a word. Tap
+  // until the paste screen is gone (or the app says why it refused).
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const submit = await scrollToTestId(driver, "ScanPastedUrl");
+    await submit.click();
+    if (await existsTestId(driver, "Try Again", 8000)) {
+      await screenshot(driver, "paste-link-refused");
+      throw new Error(`${driver.e2ePlatform}: the app refused the pasted link`);
+    }
+    if (!(await existsTestId(driver, "PastedUrl", 2000))) break;
+    if (attempt === 3) {
+      await screenshot(driver, "paste-link-stuck");
+      throw new Error(`${driver.e2ePlatform}: Continue on the paste screen did nothing, three times`);
+    }
+    console.log(`[e2e] ${driver.e2ePlatform}: still on the paste screen — tapping Continue again`);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: link pasted & submitted`);
+}
+
+/**
+ * A person leaving a community, in the app (UI/UX plan U1): My Agent → the
+ * community → Leave community → confirm. Replaces the Developer screen's
+ * "forget this community" as the harness's reset. Returns false when this
+ * phone has no community row to leave (nothing to reset).
+ */
+export async function leaveCommunityInApp(driver, { allowInProgress = false } = {}) {
+  await dismissTourIfPresent(driver);
+  // Everything below reads operator-panel ids (MyAgentCard, MyAgentCommunityRow,
+  // MyAgentMembershipCard). keyring-bifold#11 means a LINKED phone lands on the
+  // agent home instead, where none of them exist — so this read "the agent never
+  // connected" about a phone plainly showing "Online", and threw after 180s
+  // rather than reporting the truth, which was that it holds no community and
+  // there is nothing to leave (2026-09-23).
+  // A LINKED phone lands on the agent home (keyring-bifold's one-agent
+  // screen): it has no operator panel at all, so read the home directly.
+  // AgentSeat is always there on it, and says what the phone is.
+  await (await waitForTestId(driver, "MyAgent", 30000)).click()
+  await sleep(2000)
+  // AgentSeat is the one-agent screen's line; a build before it shows the
+  // agent home without it, and cannot show AgentContinueVetting either.
+  const hasSeat = await existsTestId(driver, "AgentSeat", 8000)
+  const onHome = hasSeat || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))
+  if (onHome) {
+    // A member opens each community from its row; Leave is on that screen.
+    const member = await scrollToTestId(driver, "AgentMembershipRow", 6).catch(() => undefined)
+    if (member) return leaveFromCommunityRow(driver, member)
+    // Before the one-agent screen a member's only way in was "Open my
+    // communities": such a build falls through to the panel below.
+    if (!(await existsTestId(driver, "AgentOpenCommunities", 2000))) {
+      if (await existsTestId(driver, "AgentContinueVetting", 2000)) {
+        // An applicant: it holds an identity and maybe a vetting request, and
+        // the agent home offers no Leave for one. The harness can SEE this now,
+        // so carrying on would be the silent skip this function exists to
+        // prevent — it is what broke run ten (2026-09-23), when the next join
+        // took the "you already have an identity" path. A flow that means to
+        // continue a vetting in progress says so with allowInProgress.
+        const line = await byTestId(driver, "AgentSeat").getAttribute(driver.e2ePlatform === "ios" ? "label" : "text").catch(() => "")
+        const what = `this phone is an applicant (${line || "AgentContinueVetting shown"}): its identity and any vetting request survive`
+        if (allowInProgress) {
+          console.log(`[e2e] ${deviceTag(driver)}: ${what} — continuing, as the caller asked (allowInProgress)`)
+          return false
+        }
+        await screenshot(driver, "leave-community-applicant")
+        throw new Error(
+          `[${deviceTag(driver)}] NOT FRESH — ${what}, and the agent home offers no Leave for an applicant. ` +
+            `Reinstall the app on this phone, or pass allowInProgress if this flow continues that vetting.`
+        )
+      }
+      if (!hasSeat) {
+        // A build before the one-agent screen cannot show an applicant, so
+        // "nothing here" is not "fresh" — say so as loudly as it always has.
+        console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
+        console.log(
+          `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh on this build (no AgentSeat). If it ran a vetting ` +
+            `flow before, its persona and request survive and the next join will take a different path. ` +
+            `Reinstall the app on this phone between runs.`
+        )
+        return false
+      }
+      console.log(`[e2e] ${deviceTag(driver)}: linked, holds no community identity — nothing to leave`)
+      return false
+    }
+  }
+  await openMyAgentPanel(driver);
+  await sleep(1500);
+  // My Agent lists its communities once the agent session is up; a cold
+  // start offers "Connect my agent" first (as openVetting in the runner does).
+  const connect = byTestId(driver, "ConnectMyAgentButton");
+  if (await connect.isExisting().catch(() => false)) await connect.click();
+  // Tell "nothing to leave" (connected, no community row) apart from "could
+  // not look" (never connected, or the row never rendered). The second must
+  // fail loudly: an applicant silently NOT reset carries "meets the published
+  // requirements" into the next run, which then fails much later as "the
+  // vetter never accepted" (three runs lost on 2026-09-20).
+  const until = Date.now() + 180000;
+  let connectedSince;
+  let row;
+  // Android's UiAutomator does not report off-screen children, and scrollToTestId
+  // looks down N swipes then back up N — so each look covers the WHOLE screen
+  // (8 each way), never a couple of swipes that return to where they began.
+  const seen = async (key, swipes = 8) => {
+    const el = await scrollToTestId(driver, key, swipes).catch(() => undefined);
+    return el && (await el.isExisting().catch(() => false)) ? el : undefined;
+  };
+  while (Date.now() < until) {
+    // Any way into the community screen, where Leave lives: the non-member
+    // row, the membership card, or the identity card's "Open this community".
+    row =
+      (await seen("MyAgentCommunityRow")) ||
+      (await seen("MyAgentMembershipCard", 4)) ||
+      (await seen("MyAgentOpenCommunity", 4));
+    if (row) break;
+    const connected = await seen("MyAgentCard", 3);
+    if (connected) {
+      connectedSince ??= Date.now();
+      // Whether the phone HOLDS a community is read from what it shows, not
+      // from the row: the row appears only once the community session is up.
+      // An identity, a vetting entry or "Reach the community" means there is
+      // one — bring its session up so the row renders, then leave it.
+      const reach = await seen("ConnectCommunityButton", 3);
+      const holdsOne =
+        Boolean(reach) ||
+        Boolean(await seen("MyAgentVettingRow", 4)) ||
+        Boolean(await seen("MyAgentIdentityCard", 4)) ||
+        Boolean(await seen("MyAgentPersonaDid", 4));
+      if (holdsOne) {
+        if (reach) {
+          await reach.click().catch(() => undefined);
+          console.log(`[e2e] ${driver.e2ePlatform}: reaching the community before leaving it`);
+        }
+      } else if (Date.now() - connectedSince > 20000) {
+        console.log(`[e2e] ${driver.e2ePlatform}: agent connected and holds no community — nothing to leave`);
+        return false;
+      }
+    }
+    await sleep(2000);
+  }
+  if (!row) {
+    await screenshot(driver, "leave-community-no-row");
+    throw new Error(
+      `${driver.e2ePlatform}: could not reach the community to leave it — ` +
+        (connectedSince ? "the community row never rendered" : "the agent never connected") +
+        " within 180s; refusing to skip the reset"
+    );
+  }
+  return leaveFromCommunityRow(driver, row);
+}
+
+/** Open a community from a row that leads to it, and leave it from its screen. */
+async function leaveFromCommunityRow(driver, row) {
+  await row.click();
+  // A phone that is linked but has never joined still shows a row for the
+  // community its build names, and opening it lands on a screen that cannot
+  // load: "vtiAgent: not connected", because there is no persona for that
+  // community yet. There is nothing to leave, and saying so is not the silent
+  // skip this function exists to prevent — the screen states positively that no
+  // membership exists here, rather than us failing to find one.
+  if (!(await existsTestId(driver, "LeaveCommunityButton", 4000))) {
+    const unreachable = await existsTestId(driver, "CommunityError", 2000);
+    const notAMember = await existsTestId(driver, "ApplyToCommunityButton", 2000);
+    if (unreachable || notAMember) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: the community screen offers no Leave (${unreachable ? "no session yet" : "not a member"}) — nothing to leave`
+      );
+      return false;
+    }
+  }
+  // Leave and its confirmation are the same control toggling in place, and a
+  // dropped tap here leaves the screen looking untouched — measured on the
+  // iPad, 2026-09-22: the confirm card never rendered and the page source at
+  // the failure still showed the plain Leave button. Verify each tap by what
+  // it should produce, and re-tap if it produced nothing.
+  await scrollToTestId(driver, "LeaveCommunityButton", 8);
+  await tapTestIdReliable(driver, "LeaveCommunityButton", () => existsTestId(driver, "LeaveCommunityConfirm", 2000));
+  await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
+  // One tap: a slow leave keeps the confirm button (spinning), so "the button
+  // went away" is not the test of a leave — and tapping again while it runs
+  // is not a retry. What proves the leave is the community screen closing.
+  await tapTestId(driver, "LeaveCommunityConfirm", 15000);
+  for (let retries = 0, until = Date.now() + 120000; ; ) {
+    if (!(await existsTestId(driver, "CommunityName", 2000))) break;
+    if (await existsTestId(driver, "CommunityError", 1000)) {
+      const said = await (await byTestId(driver, "CommunityError")).getText().catch(() => "");
+      // A build that offers Try again after an unanswered leave: use it, twice at most.
+      if (retries < 2 && (await existsTestId(driver, "LeaveCommunityRetry", 1000))) {
+        retries++;
+        console.log(`[e2e] ${driver.e2ePlatform}: the leave went unanswered ("${said.trim()}") — Try again (${retries}/2)`);
+        await tapTestId(driver, "LeaveCommunityRetry", 10000);
+        continue;
+      }
+      await screenshot(driver, "leave-community-failed");
+      throw new Error(`${driver.e2ePlatform}: the leave did not happen — the community screen says "${said.trim()}"`);
+    }
+    if (Date.now() > until) {
+      await screenshot(driver, "leave-community-stuck");
+      throw new Error(`${driver.e2ePlatform}: the leave neither finished nor failed within 2 minutes`);
+    }
+    await sleep(2000);
+  }
+  // Leaving returns to My Agent.
+  await waitForTestId(driver, "MyAgent", 30000);
+  await sleep(1500);
+  console.log(`[e2e] ${driver.e2ePlatform}: left the community (persona, membership, invitations, vetting)`);
+  return true;
+}
+
+/**
+ * From anywhere in the app: open the scanner from the QR tab and hand it a
+ * link through its paste-URL button — how a real device receives a link the
+ * runner cannot deep-link into (there is no `simctl openurl` for a phone),
+ * and how a long invitation gets past iOS truncating it as a deep link
+ * (VTI-32): the paste carries the whole text.
+ */
+export async function pasteLinkFromHome(driver, link) {
+  await ensureAppForeground(driver);
+  await dismissTourIfPresent(driver);
+  await openQrSheet(driver);
+  await tapTestId(driver, "ScanQRCode", 15000);
+  await pasteLinkOnScanScreen(driver, link);
+}
+
+/**
+ * Tap the My Agent tab and land on the OPERATOR PANEL — the screen that
+ * carries the `MyAgent*` ids.
+ *
+ * keyring-bifold#11 changed where the tab lands: a phone with a linked agent
+ * now opens the agent home (`Screens.VtaAgent`), and the panel is one door
+ * further in. The ids did not move — the landing screen did — so a reader that
+ * taps the tab and waits for `MyAgentVettingRow` waits out its whole timeout
+ * on a screen that was never going to show it. That failure presents exactly
+ * like a wallet that lost its data (2026-09-23: it took a screen dump to tell
+ * the two apart), which is why this walks the extra screen for every caller
+ * instead of each one rediscovering it.
+ *
+ * Returns "agent-home" when it had to walk, "panel" when the tab landed there
+ * already — an unlinked phone still goes straight to the panel.
+ */
+/**
+ * Open My Agent and say which surface it is: "panel" (a phone whose build
+ * names its agent, or a build before the one-agent screen) or "agent home" (a
+ * linked phone on the one-agent screen). Only the "no panel from here" answer
+ * becomes "agent home", and only when the home is really on screen; anything
+ * else (a locked wallet, no tab) still throws.
+ */
+export async function openMyAgentSurface(driver) {
+  try {
+    return await openMyAgentPanel(driver)
+  } catch (error) {
+    if (!/operator panel is not reachable/.test(String(error?.message))) throw error
+    if ((await existsTestId(driver, "AgentSeat", 5000)) || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))) {
+      return "agent home"
+    }
+    throw error
+  }
+}
+
+export async function openMyAgentPanel(driver) {
+  await (await waitForTestId(driver, "MyAgent", 30000)).click()
+  await sleep(2500)
+  // "No AgentOpenCommunities" is NOT proof of being on the panel — it is also
+  // what a linked phone looks like once that button goes away (keyring-bifold
+  // #11's redesign removes it). Left as an inference, this reports success and
+  // then nothing is found, which presents identically to a wallet that lost its
+  // data. So confirm a panel id is actually present, and say so plainly if not.
+  if (!(await existsTestId(driver, "AgentOpenCommunities", 3000))) {
+    const onPanel =
+      (await byTestId(driver, "MyAgentCard").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentCommunityRow").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentVettingRow").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentIdentityCard").isExisting().catch(() => false))
+    if (!onPanel) {
+      throw new Error(
+        `[${deviceTag(driver)}] the operator panel is not reachable from here: no "AgentOpenCommunities" to walk through and no MyAgent* id on screen. ` +
+          `A linked phone has no panel on the one-agent screen: read the agent home instead (AgentSeat, AgentVetterCard/AgentVetterLapsed, AgentContinueVetting, AgentMembershipRow).`
+      )
+    }
+    return "panel"
+  }
+  await tapTestIdReliable(driver, "AgentOpenCommunities", () => existsTestId(driver, "AgentOpenCommunities", 1500).then((v) => !v), {
+    attempts: 3,
+    settleMs: 2500,
+  }).catch(() => undefined)
+  await sleep(2500)
+  return "agent-home"
+}
+
+/**
+ * After "Linked ✓" → Continue, a build with #10 names this phone and opens the
+ * one-time offer when the agent lists another Keyring phone (keyring-bifold
+ * #174). Pass it with Done, which keeps every phone: never Remove. A runner
+ * agent's other phones can be a peer's live run, and Remove would wipe them.
+ * Older builds, and agents with no other phone, go straight on; answers
+ * whether the offer showed.
+ */
+export async function passNewPhoneOfferIfShown(driver, timeout = 20000) {
+  // The screen, not its Done: with several phones listed, Done is below the
+  // fold, and Android only sees what is on screen (a runner agent lists many).
+  if (!(await existsTestId(driver, "NewPhoneOffer", timeout))) return false;
+  // It loads the agent's list first, and moves on by itself when there is no
+  // other phone: wait for its first row, or for it to go.
+  const idAttr = driver.e2ePlatform === "android" ? "@resource-id" : "@name";
+  for (const until = Date.now() + 60000; ; await sleep(1000)) {
+    if (!(await existsTestId(driver, "NewPhoneOffer", 500))) return false;
+    if ((await driver.$$(`//*[starts-with(${idAttr},"${TEST_ID_PREFIX}OfferDevice_")]`)).length > 0) break;
+    if (await existsTestId(driver, "OfferDone", 300)) break;
+    if (Date.now() > until) throw new Error("the new-phone offer never showed its phones within 60 s");
+  }
+  console.log(
+    `[e2e] ${driver.e2ePlatform}: the new-phone offer is up — keeping every phone (Done)`
+  );
+  if (!(await existsTestId(driver, "OfferDone", 2000))) await scrollToTestId(driver, "OfferDone", 12);
+  await tapTestId(driver, "OfferDone", 15000);
+  return true;
 }

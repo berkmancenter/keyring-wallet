@@ -1,0 +1,327 @@
+name: Test builds (simulator app + APK)
+
+# Store-configuration builds for the release checks, so a Mac running the checks
+# downloads and installs instead of compiling. Nothing here signs for a store or
+# uploads anywhere but this run's artifacts.
+#
+# What each build carries, like the staging build: MEDIATOR_URL and nothing else
+# baked in (no VTI_* value: testers link their own agent and community).
+#
+#   gh workflow run test-builds.yml -R berkmancenter/keyring-wallet --ref <branch>
+#   gh run download <run-id> -R berkmancenter/keyring-wallet
+#
+# Every artifact is named after the wallet commit and the bifold commit it pins,
+# and carries a manifest (commits, bundle SHA-256, native fingerprint), so a
+# check can prove which build it ran.
+
+on:
+  push:
+    # TEMPORARY for validating this workflow; removed before merge.
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "e2e/**"
+      - "tsp-reference/**"
+      - "scripts/openvtc/**"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which builds to run
+        type: choice
+        options: [both, android, ios]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  heads:
+    runs-on: ubuntu-22.04
+    outputs:
+      wallet: ${{ steps.h.outputs.wallet }}
+      bifold: ${{ steps.h.outputs.bifold }}
+      native: ${{ steps.h.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - id: h
+        name: Commits and native fingerprint
+        run: |
+          set -euo pipefail
+          wallet=$(git rev-parse --short=8 HEAD)
+          bifold=$(git -C bifold rev-parse --short=8 HEAD)
+          # Everything that decides the native half of the app. If this is equal
+          # between two builds, their difference is JavaScript only.
+          native=$( { git ls-files -s app/ios app/android app/package.json yarn.lock \
+                        bifold/packages/react-native-attestation/ios bifold/packages/react-native-attestation/android \
+                        | grep -vE '\.(md|txt)$'; } | sha256sum | cut -c1-12 )
+          echo "wallet=$wallet" >> "$GITHUB_OUTPUT"
+          echo "bifold=$bifold" >> "$GITHUB_OUTPUT"
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+          echo "wallet $wallet · bifold $bifold · native fingerprint $native" >> "$GITHUB_STEP_SUMMARY"
+
+  ios-simulator:
+    needs: heads
+    if: inputs.platform != 'android'
+    runs-on: macos-26
+    environment: test-builds
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Require the mediator URL
+        env:
+          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+        run: |
+          if [ -z "$MEDIATOR_URL" ]; then
+            echo "::error::MEDIATOR_URL is not set in the test-builds environment"; exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Configure ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: ./app
+
+      # The same Xcode as the staging build.
+      - name: Select Xcode 26.3
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.3.app
+          xcodebuild -version
+
+      - name: Cache pod dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify bifold linking
+        run: node scripts/verify-bifold-linking.js
+
+      - name: Create .xcode.env.local file
+        working-directory: app/ios
+        run: echo "export NODE_BINARY=$(which node)" > .xcode.env.local
+
+      - name: Install iOS dependencies
+        working-directory: app
+        run: |
+          export USE_HERMES=1
+          yarn run ios:setup
+
+      - name: Create environment settings (store configuration)
+        working-directory: app
+        env:
+          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+        run: |
+          echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
+          echo "MEDIATOR_V2_URL=" >> .env
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
+          if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+
+      # Release configuration for the simulator: the JavaScript is bundled into
+      # the app as in a store build. Signed ad hoc ("-", no certificate): with
+      # signing disabled Xcode leaves out the simulator entitlements, and without
+      # application-identifier the simulator keychain refuses every read, so the
+      # app cannot even onboard.
+      - name: Build for the simulator
+        working-directory: app/ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace AriesBifold.xcworkspace \
+            -scheme AriesBifold \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath xbuild \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            build | tail -40
+
+      - name: Package the app and its manifest
+        run: |
+          set -euo pipefail
+          app=$(find app/ios/xbuild/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          test -n "$app" || { echo "::error::no .app produced"; exit 1; }
+          exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")
+          # The simulator embeds entitlements as a plist in __TEXT,__entitlements;
+          # otool prints it as little-endian 32-bit words, so swap each word back.
+          ents=$(otool -arch arm64 -X -s __TEXT __entitlements "$app/$exe" \
+            | awk '{for(i=2;i<=NF;i++){w=$i; printf "%s%s%s%s", substr(w,7,2),substr(w,5,2),substr(w,3,2),substr(w,1,2)}}' \
+            | xxd -r -p || true)
+          echo "$ents" | grep -q application-identifier \
+            || { echo "::error::the simulator app carries no application-identifier entitlement: its keychain would refuse every read"; exit 1; }
+          bundle_sha=$(shasum -a 256 "$app/main.jsbundle" | cut -c1-12)
+          mkdir -p out
+          (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/out/keyring-sim.zip" "$(basename "$app")")
+          cat > out/manifest.txt <<EOF
+          platform=ios-simulator
+          wallet=${{ needs.heads.outputs.wallet }}
+          bifold=${{ needs.heads.outputs.bifold }}
+          native=${{ needs.heads.outputs.native }}
+          main.jsbundle.sha256=$bundle_sha
+          vti_keys_baked=none
+          EOF
+          cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyring-ios-sim-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}
+          path: out/
+          retention-days: 7
+
+  android-apk:
+    needs: heads
+    if: inputs.platform != 'ios'
+    runs-on: ubuntu-22.04
+    environment: test-builds
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Require the mediator URL
+        env:
+          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+        run: |
+          if [ -z "$MEDIATOR_URL" ]; then
+            echo "::error::MEDIATOR_URL is not set in the test-builds environment"; exit 1
+          fi
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift \
+            /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /usr/share/vcpkg 2>/dev/null || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: 17
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify bifold linking
+        run: node scripts/verify-bifold-linking.js
+
+      - name: Create environment settings (store configuration)
+        working-directory: app
+        env:
+          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+        run: |
+          echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
+          echo "MEDIATOR_V2_URL=" >> .env
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
+          if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+
+      # The same SDK, NDK, build tools and CMake the app declares, as in staging.
+      - name: Setup Android SDK
+        working-directory: app/android
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget --quiet -O /tmp/clt.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q /tmp/clt.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdk.log 2>&1 || { tail -30 /tmp/sdk.log; exit 1; }
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/$BT" >> $GITHUB_ENV
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      # With no Play Store keystore in the environment, the release variant is
+      # signed with the repository's debug key: installable on a test device,
+      # never uploadable to a store.
+      - name: Build the release APK (test-signed)
+        working-directory: app
+        env:
+          GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
+        run: |
+          set -euo pipefail
+          npx react-native bundle --platform android --dev false --reset-cache \
+            --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # As the staging build does: no restored Gradle caches (a restored cache
+          # left the libraries' codegen folders missing, so CMake failed), and the
+          # same Gradle tasks.
+          rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
+
+      - name: Package the APK and its manifest
+        run: |
+          set -euo pipefail
+          apk=$(find app/android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          test -n "$apk" || { echo "::error::no APK produced"; exit 1; }
+          mkdir -p out
+          cp "$apk" out/keyring-release-test.apk
+          bundle_sha=$(unzip -p out/keyring-release-test.apk assets/index.android.bundle | sha256sum | cut -c1-12)
+          apk_sha=$(sha256sum out/keyring-release-test.apk | cut -c1-12)
+          cat > out/manifest.txt <<EOF
+          platform=android
+          wallet=${{ needs.heads.outputs.wallet }}
+          bifold=${{ needs.heads.outputs.bifold }}
+          native=${{ needs.heads.outputs.native }}
+          index.android.bundle.sha256=$bundle_sha
+          apk.sha256=$apk_sha
+          signing=debug-key (test only)
+          vti_keys_baked=none
+          EOF
+          cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyring-android-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}
+          path: out/
+          retention-days: 7
