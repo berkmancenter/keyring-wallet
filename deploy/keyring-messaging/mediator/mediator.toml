@@ -14,7 +14,9 @@
 #   3. LOCAL_ENDPOINTS names this mediator's public URL (set from .env), so a
 #      forward addressed to its own hostname is delivered locally instead of
 #      relayed to itself (upstream docs/multi-mediator.md §5).
-#   4. Logs are JSON, for the container log collector.
+#   4. Logs are JSON, for the container log collector. The retired
+#      admin_messages_expiry key is dropped, and admin Trust Tasks are refused
+#      when their proof fails (trust_task_verification = "enforce").
 #   5. It is CLOSED (upstream's "closed / allowlist" recipe, docs/acls.md §7),
 #      where the lab is open (explicit_deny + ALLOW_ALL):
 #      - mediator_acl_mode = "explicit_allow": only DIDs with an account may log
@@ -81,7 +83,9 @@ jwt_refresh_expiry = "86400"
 block_anonymous_outer_envelope = "true"
 force_session_did_match = "true"
 block_remote_admin_msgs = "true"
-admin_messages_expiry = "3"
+# Refuse a Trust Task (account, ACL and queue management) whose proof, issuedAt
+# or issuer fails its checks; upstream's default only logs it and runs it.
+trust_task_verification = "enforce"
 enable_inter_mediator_relay = "true"
 
 [streaming]
