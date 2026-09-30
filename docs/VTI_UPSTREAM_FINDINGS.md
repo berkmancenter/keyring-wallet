@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.70 — 2026-09-29.** A living document: every finding here was measured
+**Version 1.71 — 2026-09-30.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2205,6 +2205,31 @@ serialises in the offset form, while `valid_until` is a pre-formatted
 are valid RFC 3339, so a strict client parses both. A client that compares
 them as strings, or expects one format, trips on it.
 
+### OBS-05 — a mediator reports ready while no client can open a websocket
+
+On the Farm, 2026-09-30 from about 07:49Z, no client could open a websocket to
+either of the rebuilt Farm's mediators (the shared `ic3-mediator` and a
+community stack's `keyring-test-mediator`, both tdk `aa6d4ce8`). `pnm` on three
+VTAs authenticated normally (`POST …/authenticate/challenge` 200,
+`POST …/authenticate` 200, inbox list 200), then "Creating websocket
+connection" never completed: DIDComm calls failed after about 55 s with
+"WebSocket isActive? command timed out", and TSP calls after 30 s. The same
+calls over REST answered in 4 s. At the same time both mediators answered
+`GET /mediator/v1/readyz` 200, all checks passing. Our lab mediator showed the
+same shape on 2026-09-30 after a restart: clients' websockets were closed with
+code 1011 "streaming task unavailable" until the mediator was restarted.
+
+In tdk `aa6d4ce8`, `/readyz` checks `shutdown`, `redis_circuit_breaker`,
+`redis`, `forward_queue` and `secrets_backend`
+(`affinidi-messaging-mediator/src/handlers/mod.rs:167-190`, and the five names
+the live endpoint returns). Nothing in it covers the websocket streaming task.
+A client connection whose streaming task is gone is closed with 1011
+"streaming task unavailable" (`handlers/websocket.rs:1009`). So an
+orchestrator that restarts on failed readiness keeps such a mediator up, and
+every websocket client (VTAs, phones, the TUI) is stranded. The Farm cause
+itself is not measured here: the mediators' own logs for the window are with
+their operator.
+
 ## Farm cross-mediator round trip (2026-09-22)
 
 Step 2 of our Farm measurement, read-only, with no app involved. A fresh client
@@ -2978,6 +3003,7 @@ and the credential's own id.
 | 1.68 | 2026-09-29 | **VTI-44** (f): re-measured on VTI `afcf2470` and unchanged at main `de15b6d0`. The VTA's credential vault refuses the VTC's two-proof membership card and accepts the same card with its eddsa proof alone (first-hand, `pnm cred-vault receive` on the lab VTA). Keyring's own card copy to its agent's vault hits it, so "Get your cards from your agent" restores nothing. A removal still revokes the card (status bit 0 → 1, measured). |
 | 1.69 | 2026-09-29 | **OBS-02** (new): `vtc/members/admin-remove/0.1` for a member already removed is not refused. It logs the removal again, answers `removed: true`, and pushes a second removal notice (lab, VTI `afcf2470`). |
 | 1.70 | 2026-09-29 | **Re-check of every finding** against upstream main (VTI `de15b6d0`, tdk `da432130`, webvh `884d5520`, openvtc `e49816c`, vta-browser-plugin `1b53c79f`), recorded in each status cell. **Fixed upstream:** VTI-17 and VTI-18 (webvh #206/#221), VTI-23 (vti #1619/#1800), VTI-27 (vti #1800), VTI-46 (vti #1738), VTI-52 (tdk #905, measured 3/3). VTI-08 and VTI-09 were already fixed; VTI-09's fix is vti #1739, not #1800. **Still open at main:** VTI-01 (by design), 11, 13, 20, 44, 45, 47, 48 (context URL measured 404 at 20:18Z), 49, 50, 51. Every other resolution holds. New: **OBS-03** (console `assertionMethod` vs vta-sdk `authentication`), **OBS-04** (invitation timestamp formats), **VTI-Q37** (disable/wipe keep the wake channel, from code). |
+| 1.71 | 2026-09-30 | **OBS-05** (new): a mediator's `/readyz` passes while no client can open a websocket (Farm, both mediators, from about 07:49Z); `/readyz` has no check on the websocket streaming task (tdk `aa6d4ce8`). |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
