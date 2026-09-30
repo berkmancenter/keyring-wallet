@@ -95,8 +95,13 @@ export class RelationshipDidRepository extends Repository<RelationshipDidRecord>
     }
 
     record.counterpartyRelationshipDid = counterpartyRelationshipDid
+    // Raise-only: the Trust Task ceremony calls this with its own floor
+    // (TRUST_TASKS_MIN_RCE_VERSION, 4) when it stores the peer's relationship
+    // DID. That floor is not what the peer announced, and letting it overwrite
+    // the announced version downgraded a v5 peer to v4 before issuance, so the
+    // v5 hardware-evidence context was never selected (2026-09-30 device run).
     if (counterpartyRceVersion !== undefined) {
-      record.counterpartyRceVersion = counterpartyRceVersion
+      record.counterpartyRceVersion = Math.max(counterpartyRceVersion, record.counterpartyRceVersion ?? 0)
     }
     await this.update(agentContext, record)
     return record
