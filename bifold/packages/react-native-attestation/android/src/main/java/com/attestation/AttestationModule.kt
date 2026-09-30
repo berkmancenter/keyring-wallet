@@ -1505,7 +1505,12 @@ class AttestationModule : AttestationSpec {
         val isAppleAssertion = attestationFormat == "apple-appattest-v1" &&
           signatureBytes.size > 80 && signatureBytes[0] != 0x30.toByte()
 
-        if (isAppleAssertion) {
+        val binding = ContentBinding.resolveClientDataHash(signedContent.toByteArray(Charsets.UTF_8), signedContentHashBase64)
+
+        if (binding is ContentBinding.Result.Fail) {
+          errors.add(binding.error)
+          Log.w(TAG, "  ✗ Content binding failed: ${binding.error}")
+        } else if (isAppleAssertion) {
           Log.i(TAG, "  Apple CBOR assertion: ${signatureBytes.size}b")
 
           // Parse CBOR assertion to extract DER signature + authenticatorData
@@ -1513,26 +1518,9 @@ class AttestationModule : AttestationSpec {
           if (assertion != null) {
             Log.i(TAG, "  CBOR parsed: authData=${assertion.authenticatorData.size}b, sig=${assertion.signature.size}b")
 
-            // Determine clientDataHash: use embedded hash if available, otherwise compute from signedContent
-            val contentHash: ByteArray
-            val computedHash = java.security.MessageDigest.getInstance("SHA-256")
-              .digest(signedContent.toByteArray(Charsets.UTF_8))
-
-            val sanitizedHashBase64 = signedContentHashBase64.trim().replace("\\s".toRegex(), "")
-            if (sanitizedHashBase64.isNotEmpty()) {
-              contentHash = android.util.Base64.decode(sanitizedHashBase64, android.util.Base64.NO_WRAP)
-              Log.i(TAG, "  Using embedded signedContentHash [${contentHash.size}b]: $sanitizedHashBase64")
-              if (sanitizedHashBase64 != signedContentHashBase64) {
-                Log.w(TAG, "  ⚠ signedContentHashBase64 contained whitespace — stripped ${signedContentHashBase64.length - sanitizedHashBase64.length} chars")
-              }
-              if (!contentHash.contentEquals(computedHash)) {
-                Log.w(TAG, "  ⚠ Embedded hash differs from SHA256(signedContent) — expected for cross-device VRC")
-              }
-            } else {
-              contentHash = computedHash
-              Log.w(TAG, "  ⚠ No embedded signedContentHash — falling back to SHA256(signedContent)")
-              Log.w(TAG, "    This WILL FAIL for cross-device verification due to JSON serialization differences")
-            }
+            // clientDataHash is always the recomputed SHA-256 of the content (ContentBinding);
+            // a supplied hash was already checked against it and never substitutes for it.
+            val contentHash = (binding as ContentBinding.Result.Ok).hash
 
             val payload = assertion.authenticatorData + contentHash
 
