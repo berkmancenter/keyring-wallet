@@ -1378,6 +1378,7 @@
     "IntroBody": "Pour vous inviter dans {{community}}, son admin a besoin de votre identité pour cette communauté. Votre agent la crée maintenant — vous confirmez avec votre visage ou votre empreinte — puis vous l'envoyez à l'admin.",
     "Continue": "Continuer",
     "Preparing": "Préparation de votre identité…",
+    "PreparingSlow": "Cela peut prendre une ou deux minutes.",
     "ConfirmTitle": "Créer votre identité",
     "ConfirmBody": "Votre agent crée votre identité pour {{community}} — celle que son admin invitera.",
     "ShareStepTitle": "Envoyez ceci à l'admin de la communauté",

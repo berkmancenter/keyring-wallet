@@ -52,6 +52,7 @@ import { plainError, type PlainError } from './plainError'
 import { useCommunityDid } from './useCommunity'
 import { asksFrom, type Asks } from './VtiJoin'
 import { useVtaDid } from './VtaStatus'
+import { useTakingLong } from './useTakingLong'
 
 type Step = 'intro' | 'share' | 'waiting' | 'joined' | 'deferred' | 'pending'
 
@@ -78,6 +79,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<Step>('intro')
   const [busy, setBusy] = useState(false)
+  const preparingLong = useTakingLong(busy)
   // Which action is running: a join in flight must not read as a withdrawal.
   const [busyWith, setBusyWith] = useState<'join' | 'withdraw' | 'other'>()
   // Off unless the person turns it on (VTI-Q14).
@@ -459,6 +461,11 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           >
             {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
+          {preparingLong ? (
+            <ThemedText style={{ textAlign: 'center' }} testID={testIdWithKey('PreparingSlow')}>
+              {t('Invited.PreparingSlow')}
+            </ThemedText>
+          ) : null}
         </>
       )
       break

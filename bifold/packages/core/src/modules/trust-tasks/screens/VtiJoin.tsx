@@ -43,6 +43,7 @@ import { DidDetails } from './DidDetails'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
+import { useTakingLong } from './useTakingLong'
 
 type Step = 'which' | 'asks' | 'as'
 
@@ -143,6 +144,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // Which community could not be read at all — for one the phone remembers, worth saying.
   const [unreachable, setUnreachable] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const preparingLong = useTakingLong(busy)
   const [error, setError] = useState<PlainError>()
   const [errorOpen, setErrorOpen] = useState(false)
   const joinAs = useJoinAsChoice(navigation)
@@ -515,6 +517,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           >
             {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
+          {preparingLong ? (
+            <ThemedText style={{ textAlign: 'center' }} testID={testIdWithKey('PreparingSlow')}>
+              {t('Invited.PreparingSlow')}
+            </ThemedText>
+          ) : null}
         </>
       )
       break

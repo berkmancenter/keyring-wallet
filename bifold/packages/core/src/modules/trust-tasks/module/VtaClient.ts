@@ -51,6 +51,18 @@ import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
+
+/**
+ * How long a persona mint may take. A first mint against a DID host includes
+ * the VTA opening a TSP relationship with that host: on the VTA Farm (227
+ * gate, 09-30) the answer left the VTA 31.2 s after the request, just after a
+ * 30 s wait had given up, and the persona was minted with nobody to take it.
+ * A warm mint took 6 s. Two minutes leaves room for a slow host.
+ */
+export const MINT_TIMEOUT_MS = 120_000
+
+/** How many keyed requests `VtaClient` remembers the attempts of. */
+const MAX_KEYED_REQUESTS_REMEMBERED = 32
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 
@@ -356,11 +368,24 @@ export class VtaClient {
    * A reply is matched by its thread (see `deliver`); only a reply that names
    * no thread falls back to arriving next, with a warning.
    */
+  /**
+   * The ids each keyed request was sent with, by its idempotency key, so a
+   * retry with the same key also takes an answer threaded to an earlier
+   * attempt. The VTA answers a keyed retry by replaying the first attempt's
+   * recorded reply as it was (vta-service trust_tasks/idempotency.rs:249-253),
+   * whose document is threaded to that first attempt; and the first attempt's
+   * own answer may arrive after it gave up. Either is this request's answer.
+   * In memory, and only for keyed requests: no other task's threading loosens.
+   */
+  private attemptsByKey = new Map<string, string[]>()
+
   private pending?: {
     resolve: (plaintext: DidCommV2PlaintextMessage) => void
     sentAt: number
     /** What the reply may name as its thread: our DIDComm message, our document, our thread. */
     ids: Set<string>
+    /** Of `ids`, those an earlier attempt of the same keyed request was sent with. */
+    earlier?: Set<string>
   }
   /** The task on the wire now: what a task queued behind it logs that it waits on. */
   private inFlight?: { type: string; since: number; id: string }
@@ -371,6 +396,18 @@ export class VtaClient {
   /** Whether the VTA has been greeted (§7.2.2) this session. */
   private greeted = false
   private queue: Promise<unknown> = Promise.resolve()
+
+  /** Keep a keyed attempt's ids; the oldest keys go first, past a few dozen. */
+  private rememberAttempt(key: string, ids: string[]): void {
+    const all = [...(this.attemptsByKey.get(key) ?? []), ...ids]
+    this.attemptsByKey.delete(key)
+    this.attemptsByKey.set(key, all)
+    while (this.attemptsByKey.size > MAX_KEYED_REQUESTS_REMEMBERED) {
+      const oldest = this.attemptsByKey.keys().next().value
+      if (oldest === undefined) break
+      this.attemptsByKey.delete(oldest)
+    }
+  }
 
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
     // A granted notice answers a wait, never a task.
@@ -412,6 +449,10 @@ export class VtaClient {
         this.options.onInbound?.(plaintext)
         return
       }
+      if (pending.earlier && threadRefs.some((ref) => pending.earlier?.has(ref)))
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} took the answer to an earlier attempt of the same keyed request (${body?.type ?? 'no type'})`
+        )
       this.pending = undefined
       pending.resolve(plaintext)
       return
@@ -688,8 +729,11 @@ export class VtaClient {
         { proofPurpose: purposeForDocumentType(type) }
       )
       const sentAt = Date.now()
+      const key = typeof documentExtras.idempotencyKey === 'string' ? documentExtras.idempotencyKey : undefined
+      const earlier = new Set(key ? (this.attemptsByKey.get(key) ?? []) : [])
+      if (key) this.rememberAttempt(key, [envelopeId, documentId, threadId])
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-        this.pending = { resolve, sentAt, ids: new Set([envelopeId, documentId, threadId]) }
+        this.pending = { resolve, sentAt, ids: new Set([envelopeId, documentId, threadId, ...earlier]), earlier }
         this.inFlight = { type, since: sentAt, id: documentId }
       })
       // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
@@ -747,9 +791,11 @@ export class VtaClient {
         const logger = this.agent.config?.logger
         if (!logger) return
         if (verdict.kind === 'verified') logger.info(`${LOG_PREFIX} reply verified: ${type}`)
-        else if (verdict.kind === 'wrongSigner') logger.warn(`${LOG_PREFIX} reply signed by ${verdict.signer}, not ${this.vtaDid}: ${type}`)
+        else if (verdict.kind === 'wrongSigner')
+          logger.warn(`${LOG_PREFIX} reply signed by ${verdict.signer}, not ${this.vtaDid}: ${type}`)
         else if (verdict.kind === 'unsigned') logger.warn(`${LOG_PREFIX} reply unsigned: ${type}`)
-        else if (verdict.kind === 'invalid') logger.warn(`${LOG_PREFIX} reply proof does not verify (${verdict.detail}): ${type}`)
+        else if (verdict.kind === 'invalid')
+          logger.warn(`${LOG_PREFIX} reply proof does not verify (${verdict.detail}): ${type}`)
       })
       const body = answer.body as { type?: string; payload?: unknown } | undefined
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
@@ -1124,7 +1170,7 @@ export class VtaClient {
         addTspService: false,
         setPrimary: false,
       },
-      30000,
+      MINT_TIMEOUT_MS,
       // A mint whose answer is lost still succeeds at the VTA; retried with the
       // same key within 24 h the VTA returns that first mint instead of minting
       // an orphan (VTI-Q17, answered by the maintainers 2026-09-23).
@@ -1248,7 +1294,9 @@ export class VtaClient {
   }
 
   /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */
-  async borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
+  async borrowKey(
+    vtaKeyId: string
+  ): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
     const exported = await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
     // Held in memory only (#10, plan part C), under an id that is the same every
     // session, so a persona's record keeps naming it across restarts.
