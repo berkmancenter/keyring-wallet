@@ -540,7 +540,11 @@ export async function openApplications(tui) {
   await tui.waitFor(/ Applications \(\d+\) /, { step: 'applicant.vettingPage', source: 'ui/pages/main/components/vetting_panel.rs:165-175' });
   // The tabs are marked by colour only; the desk is recognised by its views line (:1425-1445).
   if (/Requests \(\d+\)\s+Tickets \(\d+\)/.test(tui.screen())) await tui.pressEach(['Tab'], 800);
-  await tui.waitFor(/n: new {2}f: face {2}r: ask a vetter|You are not applying to any community\.|You have no persona yet\./, {
+  // The key-hint line sits under the list and the selected application's
+  // details (vetting_panel.rs:999), so a profile holding many applications
+  // pushes it off the bottom of the screen. The selected application's
+  // "Joining as" line (:820) shows the tab just as well.
+  await tui.waitFor(/n: new {2}f: face {2}r: ask a vetter|You are not applying to any community\.|You have no persona yet\.|║Joining as {2,}did:/, {
     step: 'applicant.applications',
     source: src(tui, 'ui/pages/main/components/vetting_panel.rs:932, :773, :763', 'ui/pages/main/components/vetting_panel.rs:605, :467'),
   });
