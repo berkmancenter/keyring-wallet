@@ -79,6 +79,11 @@ done
 # REDIS_PORT: point the stack at a dedicated instance instead of the default
 # 6379 (a shared host's Redis may hold someone else's data in db0). Default unchanged.
 REDIS_PORT="${REDIS_PORT:-6379}"
+# REDIS_DB: a database index on that instance (0-15), so the mediator's keys stay out of
+# db0 when the instance also holds other data. Default unset = db0, the URL unchanged.
+REDIS_DB="${REDIS_DB:-}"
+case "$REDIS_DB" in ""|[0-9]|1[0-5]) ;; *) echo "REDIS_DB must be 0-15, got: $REDIS_DB"; exit 1;; esac
+REDIS_URL="redis://127.0.0.1:$REDIS_PORT/$REDIS_DB"
 redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1 || { echo "redis is not running on port $REDIS_PORT: brew services start redis (macOS), or redis-server --port $REDIS_PORT --save \"\" (Linux)"; exit 1; }
 
 # An ngrok.yml in the stack dir names the hostnames. Validate it now, before the
@@ -159,7 +164,7 @@ FORCE_MEDIATOR=""
 # shellcheck disable=SC2086
 "$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol didcomm \
   --did-method peer --public-url "https://$MED_HOST" --mediator-url "https://$MED_HOST" \
-  --secret-storage file --ssl none --database-url "redis://127.0.0.1:$REDIS_PORT/" \
+  --secret-storage file --ssl none --database-url "$REDIS_URL" \
   --admin generate --listen-address 127.0.0.1:7037 \
   --config "$STACK_DIR/mediator/conf/mediator.toml" >/dev/null
 MED_DID=$(grep '^mediator_did' mediator/conf/mediator.toml | sed 's/.*did:\/\///; s/"$//')
