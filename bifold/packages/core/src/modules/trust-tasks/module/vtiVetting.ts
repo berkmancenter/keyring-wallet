@@ -41,6 +41,7 @@ import {
 import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
+import { isDtgV1WritingEnabled, vettedV1Statement } from './dtgV1Writing'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
@@ -1309,31 +1310,51 @@ export class VtiVetterDesk {
 
     const validFrom = new Date()
     const validUntil = new Date(validFrom.getTime() + (decision.validDays ?? 120) * 86400000)
-    const statement: Record<string, unknown> = {
-      '@context': DTG_CONTEXT,
-      type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
-      id: `urn:uuid:${utils.uuid()}`,
-      issuer: this.persona.did,
-      validFrom: validFrom.toISOString(),
-      validUntil: validUntil.toISOString(),
-      // Names the session it was issued in (MUST), and binds the name to that
-      // document (SHOULD): vetting/session/0.1 "The session's name".
-      taskContext: desk.session.documentId,
-      ...(desk.session.taskDigestMultibase ? { taskDigestMultibase: desk.session.taskDigestMultibase } : {}),
-      credentialSubject: {
-        id: desk.applicantDid,
-        endorsement: {
-          type: IDENTITY_VETTING_ENDORSEMENT_TYPE,
-          community: desk.communityDid,
-          method: desk.session.method,
-          documentClasses: decision.documentClasses,
-          claimsVerified: decision.claimsVerified,
-          livenessConfirmed: true,
-          identityCommitment: desk.card.identityCommitment,
-          cardDigestMultibase: cardDigestMultibase(desk.card),
-          declaredRelationship: decision.declaredRelationship ?? 'none',
+    const attestation = {
+      community: desk.communityDid,
+      method: desk.session.method,
+      documentClasses: decision.documentClasses,
+      claimsVerified: decision.claimsVerified,
+      livenessConfirmed: true,
+      identityCommitment: String(desk.card.identityCommitment ?? ''),
+      cardDigestMultibase: cardDigestMultibase(desk.card),
+      declaredRelationship: decision.declaredRelationship ?? 'none',
+    }
+    let statement: Record<string, unknown>
+    if (isDtgV1WritingEnabled()) {
+      // DTG Credentials v1 (228, behind its flag): a vetted/1 statement, which
+      // MUST carry the session's task digest. A session opened before the
+      // digest was kept cannot be answered in this shape: say so rather than
+      // write one an applicant refuses.
+      if (!desk.session.taskDigestMultibase)
+        throw new Error('vtiVetting: this session kept no task digest, so a vetted/1 statement cannot be written')
+      statement = vettedV1Statement({
+        id: `urn:uuid:${utils.uuid()}`,
+        issuer: this.persona.did,
+        subject: desk.applicantDid,
+        validFrom: validFrom.toISOString(),
+        validUntil: validUntil.toISOString(),
+        taskContext: desk.session.documentId,
+        taskDigestMultibase: desk.session.taskDigestMultibase,
+        attestation,
+      })
+    } else {
+      statement = {
+        '@context': DTG_CONTEXT,
+        type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
+        id: `urn:uuid:${utils.uuid()}`,
+        issuer: this.persona.did,
+        validFrom: validFrom.toISOString(),
+        validUntil: validUntil.toISOString(),
+        // Names the session it was issued in (MUST), and binds the name to that
+        // document (SHOULD): vetting/session/0.1 "The session's name".
+        taskContext: desk.session.documentId,
+        ...(desk.session.taskDigestMultibase ? { taskDigestMultibase: desk.session.taskDigestMultibase } : {}),
+        credentialSubject: {
+          id: desk.applicantDid,
+          endorsement: { type: IDENTITY_VETTING_ENDORSEMENT_TYPE, ...attestation },
         },
-      },
+      }
     }
     const signed = await signDocumentProof(this.agent, statement, this.persona.did, {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
