@@ -23,13 +23,26 @@ export function runningEmulators() {
     .map(([serial]) => serial);
 }
 
-/** The AVD name an emulator reports for itself (first line of `adb emu avd name`). */
+/**
+ * The AVD name of a running emulator. Read from the guest's boot property:
+ * `adb emu avd name` answers nothing on some emulators (an API 33 image,
+ * 2026-10-01 — exit 0, empty output), which made a running AVD look absent.
+ * The console command stays as the fallback for images without the property.
+ */
 function avdNameOf(serial) {
-  try {
-    return execFileSync("adb", ["-s", serial, "emu", "avd", "name"], { encoding: "utf8" }).split(/\r?\n/)[0].trim();
-  } catch {
-    return undefined;
-  }
+  const tryRead = (args) => {
+    try {
+      return execFileSync("adb", ["-s", serial, ...args], { encoding: "utf8" }).split(/\r?\n/)[0].trim();
+    } catch {
+      return "";
+    }
+  };
+  return (
+    tryRead(["shell", "getprop", "ro.boot.qemu.avd_name"]) ||
+    tryRead(["shell", "getprop", "ro.kernel.qemu.avd_name"]) ||
+    tryRead(["emu", "avd", "name"]) ||
+    undefined
+  );
 }
 
 /**
