@@ -12,6 +12,7 @@
  * what the desk wrote. Upstream judging it is the vti-conformance job (W2).
  */
 const sent: { to: string; type: string; body: Record<string, unknown>; options?: unknown }[] = []
+const mockFetchManifest = jest.fn()
 
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
@@ -19,6 +20,7 @@ jest.mock('../module/vtiAgent', () => ({
     send: jest.fn(async (to: string, type: string, body: Record<string, unknown>, options?: unknown) => {
       sent.push({ to, type, body, options })
     }),
+    fetchManifest: (...a: unknown[]) => mockFetchManifest(...a),
     onInbound: () => () => undefined,
   },
 }))
@@ -33,7 +35,16 @@ import { taskDigestMultibase, vettingStatementShapeProblem } from '@bifold/trust
 // eslint-disable-next-line import/order
 import minted from './fixtures/dtg-v1-minted.json'
 // eslint-disable-next-line import/order
-import { isDtgV1WritingEnabled, setDtgV1WritingEnabled, vettedV1Statement } from '../module/dtgV1Writing'
+import {
+  DTG_V1_WRITING_RELEASE_DEFAULT,
+  chooseStatementShape,
+  getDtgV1WritingMode,
+  isDtgV1WritingEnabled,
+  publishedStatementType,
+  setDtgV1WritingEnabled,
+  setDtgV1WritingMode,
+  vettedV1Statement,
+} from '../module/dtgV1Writing'
 // eslint-disable-next-line import/order
 import { CREDENTIAL_EXCHANGE_ISSUE } from '../module/vtiInbox'
 // eslint-disable-next-line import/order
@@ -107,7 +118,7 @@ const session = (digest?: string) => ({
   ...(digest ? { taskDigestMultibase: digest } : {}),
 })
 
-function deskWith(digest?: string) {
+function deskWith(digest?: string, communityStore: unknown = {}) {
   const state: { desk: VettingDeskRequest[] } = {
     desk: [
       {
@@ -128,19 +139,21 @@ function deskWith(digest?: string) {
       state.desk = [...state.desk.filter((x) => x.requestId !== r.requestId), JSON.parse(JSON.stringify(r))]
     },
   } as unknown as VtiVettingStore
-  return new VtiVetterDesk(vetter.agent as never, vetter.persona(community) as never, store, {} as never)
+  return new VtiVetterDesk(vetter.agent as never, vetter.persona(community) as never, store, communityStore as never)
 }
 
 const decision = { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
 const delivered = () => ((sent.at(-1)!.body.payload as Json).credential_response as { credential: Json }).credential
 
 afterEach(() => {
-  setDtgV1WritingEnabled(false)
+  setDtgV1WritingMode(DTG_V1_WRITING_RELEASE_DEFAULT)
   sent.length = 0
+  mockFetchManifest.mockReset()
 })
 
 describe('the writer flag', () => {
-  it('is off by default, and the desk writes the endorsement shape as before', async () => {
+  it('is off in mode off, and the desk writes the endorsement shape as before', async () => {
+    setDtgV1WritingMode('off')
     expect(isDtgV1WritingEnabled()).toBe(false)
     await deskWith(taskDigestMultibase(sessionDocument)).attest('r', decision)
     const statement = delivered()
@@ -277,5 +290,148 @@ describe('the desk with the flag on', () => {
     expect(application.requests[0].statementRefusal).toBeUndefined()
     expect(application.requests[0]).toMatchObject({ status: 'attested', statementId: statement.id })
     expect(held).toHaveLength(1)
+  })
+})
+
+// ---- 228: the shape follows the community (mode auto) ----------------------
+
+const VETTED = 'https://registry.trustoverip.org/dtg/vsc/vetted/1'
+const ENDORSEMENT = 'https://firstperson.network/endorsements/identity-vetting/0.1'
+const manifestNaming = (statementType: string) => ({ criteria: [{ id: 'vetted-member', vetting: { statementType } }] })
+
+describe('the release default', () => {
+  // The one line a release changes: 'auto' once the Farm 0.47 gate passes, else 'off'.
+  it('is a mode the release decision allows, and the mode a fresh app starts in', () => {
+    expect(['off', 'auto']).toContain(DTG_V1_WRITING_RELEASE_DEFAULT)
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const fresh = require('../module/dtgV1Writing') as typeof import('../module/dtgV1Writing')
+      expect(fresh.getDtgV1WritingMode()).toBe(DTG_V1_WRITING_RELEASE_DEFAULT)
+    })
+  })
+})
+
+describe('chooseStatementShape', () => {
+  it.each([
+    ['off ignores everything', { mode: 'off', statementType: VETTED, grantShape: 'vac' }, 'endorsement', 'mode'],
+    [
+      'force ignores everything',
+      { mode: 'force', statementType: ENDORSEMENT, grantShape: 'endorsement' },
+      'vetted/1',
+      'mode',
+    ],
+    ['auto: a moved community’s requirements', { mode: 'auto', statementType: VETTED }, 'vetted/1', 'requirements'],
+    [
+      'auto: a community that has not moved',
+      { mode: 'auto', statementType: ENDORSEMENT },
+      'endorsement',
+      'requirements',
+    ],
+    ['auto: no requirements, a VAC grant', { mode: 'auto', grantShape: 'vac' }, 'vetted/1', 'grant'],
+    [
+      'auto: no requirements, an endorsement grant',
+      { mode: 'auto', grantShape: 'endorsement' },
+      'endorsement',
+      'grant',
+    ],
+    [
+      'auto: an unknown statementType, a VAC grant',
+      { mode: 'auto', statementType: 'https://example/other', grantShape: 'vac' },
+      'vetted/1',
+      'grant',
+    ],
+    ['auto: nothing to go on', { mode: 'auto' }, 'endorsement', 'default'],
+  ] as const)('%s', (_name, input, shape, by) => {
+    expect(chooseStatementShape(input as never)).toMatchObject({ shape, by })
+  })
+
+  it('follows the requirements when they and the grant disagree, and says so', () => {
+    expect(chooseStatementShape({ mode: 'auto', statementType: VETTED, grantShape: 'endorsement' })).toEqual({
+      shape: 'vetted/1',
+      by: 'requirements',
+      disagreement: { requirements: 'vetted/1', grant: 'endorsement' },
+    })
+  })
+
+  it('reads statementType from a manifest the way the applicant does (criteria[].vetting)', () => {
+    expect(publishedStatementType(manifestNaming(VETTED))).toBe(VETTED)
+    expect(publishedStatementType({ criteria: [{ id: 'invited-member' }] })).toBeUndefined()
+    expect(publishedStatementType(undefined)).toBeUndefined()
+  })
+})
+
+describe('the desk in mode auto', () => {
+  const digest = () => taskDigestMultibase(sessionDocument)
+  const grantStore = (shape: 'vac' | 'endorsement') => ({
+    listHeldCredentials: async () => [
+      {
+        kind: 'vetter-grant',
+        communityDid: community,
+        subjectDid: vetter.did,
+        receivedAt: '2026-10-01T00:00:00Z',
+        credential:
+          shape === 'vac'
+            ? {
+                type: ['VerifiableCredential', 'DTGCredential', 'AuthorityCredential'],
+                issuer: community,
+                credentialSubject: { id: vetter.did, authority: { scope: community, actions: ['role:vetter'] } },
+              }
+            : {
+                type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
+                issuer: community,
+                credentialSubject: {
+                  id: vetter.did,
+                  endorsement: { type: 'CommunityRole', role: 'vetter', communityDid: community },
+                },
+              },
+      },
+    ],
+  })
+
+  it('writes vetted/1 for a community whose requirements name it', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(mockFetchManifest).toHaveBeenCalledWith(community, expect.anything())
+  })
+
+  it('writes the endorsement shape for a community that has not moved', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(ENDORSEMENT))
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+  })
+
+  it('goes by its own grant when the requirements cannot be read: a VAC means vetted/1', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockRejectedValue(new Error('offline'))
+    await deskWith(digest(), grantStore('vac')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+  })
+
+  it('… and an endorsement grant means the old shape', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockRejectedValue(new Error('offline'))
+    await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+  })
+
+  it('follows the requirements over its grant, and logs the disagreement', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    logger.warn.mockClear()
+    await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(logger.warn.mock.calls.some((c) => String(c[0]).includes('statement shape'))).toBe(true)
+  })
+
+  it('in mode off, writes the old shape even for a moved community, and reads nothing', async () => {
+    setDtgV1WritingMode('off')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+    expect(mockFetchManifest).not.toHaveBeenCalled()
+    expect(getDtgV1WritingMode()).toBe('off')
   })
 })

@@ -42,7 +42,14 @@ export {
 } from './ceremony'
 
 // 228 writer: DTG Credentials v1 shapes are written only when this is on (default off).
-export { setDtgV1WritingEnabled, isDtgV1WritingEnabled } from './module/dtgV1Writing'
+export {
+  DTG_V1_WRITING_RELEASE_DEFAULT,
+  getDtgV1WritingMode,
+  isDtgV1WritingEnabled,
+  setDtgV1WritingEnabled,
+  setDtgV1WritingMode,
+  type DtgV1WritingMode,
+} from './module/dtgV1Writing'
 
 // R5 — the open type→handler registry and its render/approve-deny scaffold.
 // See docs/plans/reference-app-sdk-packaging.md and its 2026-09-01-al.md /

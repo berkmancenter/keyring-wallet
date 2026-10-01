@@ -22,6 +22,7 @@ import { TypedArrayEncoder, utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import {
   CROCKFORD,
+  communityRoleCard,
   digestBytesEqual,
   digestMultibase,
   evaluateStatements,
@@ -41,7 +42,13 @@ import {
 import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
-import { isDtgV1WritingEnabled, vettedV1Statement } from './dtgV1Writing'
+import {
+  chooseStatementShape,
+  getDtgV1WritingMode,
+  publishedStatementType,
+  vettedV1Statement,
+  type StatementShapeChoice,
+} from './dtgV1Writing'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
@@ -1292,6 +1299,33 @@ export class VtiVetterDesk {
   }
 
   /** The human check, then the statement — never automatic, signed as the member persona. */
+  /**
+   * The statement shape to write for `communityDid` (228; `chooseStatementShape`).
+   * In `auto` it reads the community's published requirements (A) and this
+   * vetter's own grant from it (B); a manifest that cannot be read now leaves
+   * the grant to decide. `off` and `force` read nothing.
+   */
+  private async statementShapeFor(communityDid: string): Promise<StatementShapeChoice> {
+    const mode = getDtgV1WritingMode()
+    if (mode !== 'auto') return chooseStatementShape({ mode })
+    let statementType: string | undefined
+    try {
+      statementType = publishedStatementType(await vtiAgent.fetchManifest(communityDid, this.agent))
+    } catch (e) {
+      this.agent.config?.logger?.info?.(
+        `[VTI] statement shape: the community's requirements could not be read (${(e as Error)?.message ?? e}); deciding by this vetter's grant`,
+        { communityDid }
+      )
+    }
+    const grants =
+      (await this.communityStore?.listHeldCredentials?.('vetter-grant', communityDid).catch(() => [])) ?? []
+    const own = grants
+      .filter((g) => g.subjectDid === this.persona.did)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+    const grantShape = communityRoleCard(own[0]?.credential)?.shape
+    return chooseStatementShape({ mode, statementType, grantShape })
+  }
+
   async attest(
     requestId: string,
     decision: {
@@ -1326,7 +1360,14 @@ export class VtiVetterDesk {
       declaredRelationship: decision.declaredRelationship ?? 'none',
     }
     let statement: Record<string, unknown>
-    if (isDtgV1WritingEnabled()) {
+    const shape = await this.statementShapeFor(desk.communityDid)
+    if (shape.disagreement) {
+      this.agent.config?.logger?.warn?.(
+        `[VTI] statement shape: the community's requirements name ${shape.disagreement.requirements}, this vetter's grant ${shape.disagreement.grant}; following the requirements`,
+        { communityDid: desk.communityDid }
+      )
+    }
+    if (shape.shape === 'vetted/1') {
       // DTG Credentials v1 (228, behind its flag): a vetted/1 statement, which
       // MUST carry the session's task digest. A session opened before the
       // digest was kept cannot be answered in this shape: say so rather than
