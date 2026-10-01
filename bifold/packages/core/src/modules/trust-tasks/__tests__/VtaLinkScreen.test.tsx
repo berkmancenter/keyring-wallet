@@ -12,6 +12,8 @@ import QRCode from 'react-native-qrcode-svg'
 import { useAgent } from '@bifold/react-hooks'
 
 import enCopy from '../../../localization/en/en.json'
+import frCopy from '../../../localization/fr/fr.json'
+import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
@@ -127,7 +129,7 @@ describe('the key the admin has to add', () => {
     test('shows its code as a QR, with Copy and the code as text, and nothing about an admin', () => {
       showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
       const tree = show()
-      expect(tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))).toHaveTextContent(/VtaLink\.ShowToOtherPhone/)
+      expect(tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))).toHaveTextContent(/VtaLink\.AddThisPhone/)
       expect(tree.UNSAFE_getByType(QRCode).props.value).toBe('did:key:z6MkNewPhone')
       expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
       expect(tree.queryByTestId(testIdWithKey('VtaLinkShareKey'))).toBeNull()
@@ -152,6 +154,42 @@ describe('the key the admin has to add', () => {
       } finally {
         jest.useRealTimers()
       }
+    })
+
+    /**
+     * On a Pixel 6 (1080×2400, default text) Copy sat under the ~260 dp QR, at
+     * the bottom of the scrolling card: only its top edge showed above "Stop
+     * linking", and "Show as text" was off screen (2026-10-01). Larger text
+     * pushes it further down. Copy now belongs to the action bar, which never
+     * scrolls — this test fails if it drifts back inside the card.
+     */
+    test('Copy sits with Stop linking in the action bar, not under the QR', () => {
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      const card = tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))
+      const inCard = (testID: string) =>
+        Boolean(card.findAll((node) => node.props?.testID === testIdWithKey(testID)).length)
+      expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
+      expect(inCard('VtaLinkCopyKey')).toBe(false)
+      expect(inCard('VtaLinkCancel')).toBe(false)
+      expect(inCard('VtaLinkKeyQr')).toBe(true)
+    })
+
+    /**
+     * The same scan lands here from an agent host's own page (a QR holding
+     * just the agent's address, beside an "Admin DID" box) as from another
+     * phone's "Add another phone" code: both are a bare agent DID, and the
+     * phone cannot tell them apart. So the words cover both, and name no host.
+     */
+    test('the words cover an agent host’s Admin DID box as well as another phone', () => {
+      for (const words of [enCopy, frCopy, ptBrCopy]) {
+        const said = [words.VtaLink.AddThisPhone, words.VtaLink.AddThisPhoneBody, words.VtaLink.WaitingToBeAdded]
+        expect(said.join(' ')).not.toMatch(/farm/i)
+        expect(words.VtaLink.AddThisPhoneBody).toContain('Admin DID')
+      }
+      expect(enCopy.VtaLink.AddThisPhone).not.toMatch(/other phone/i)
+      expect(enCopy.VtaLink.WaitingToBeAdded).not.toMatch(/other phone/i)
+      expect(enCopy.VtaLink.AddThisPhoneBody).toMatch(/other phone/i)
     })
   })
 
