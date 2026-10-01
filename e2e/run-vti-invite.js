@@ -75,6 +75,10 @@ const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
 // phone's camera app opens a QR (simctl openurl / adb am start), instead of
 // scanned in Keyring. Needs a build that claims openid-credential-offer.
 const OPEN_BY_OS = process.env.INVITE_OPEN === "os";
+// INVITE_COLD=1 (console-push only): the invitation is delivered while the app
+// is closed, as a tester's phone in a pocket, and must be there once it opens —
+// the backlog a persona inbox reads on its first connect, not a live push.
+const INVITE_COLD = process.env.INVITE_COLD === "1";
 const openOffer = (d, url) => (OPEN_BY_OS ? openLink(url) : pasteLinkFromHome(d, url));
 const EXPECT_INVITED_ERROR = process.env.EXPECT_INVITED_ERROR || "";
 const EXPECT_JOIN = process.env.EXPECT_JOIN || "member";
@@ -311,7 +315,24 @@ async function inviteByDoor(d) {
   if (INVITE_VIA === "console-push") {
     // The person stays on "Waiting for your invitation"; nothing is opened.
     await tapTestId(d, "InvitedSent", 15000).catch(() => undefined);
+    if (INVITE_COLD) {
+      const { APP_ID } = await import("./lib/config.js");
+      await d.terminateApp(APP_ID).catch(() => undefined);
+      console.log(`[e2e] ${d.e2ePlatform}: app closed before the invitation is sent (cold start)`);
+    }
     consoleInvite(personaDid, "message");
+    if (INVITE_COLD) {
+      // Let the delivery land at the mediator while nothing is listening.
+      await sleep(20000);
+      const { APP_ID } = await import("./lib/config.js");
+      await d.activateApp(APP_ID);
+      // A cold JS boot mounts the PIN screen late: wait for it, or the unlock
+      // check runs first, finds nothing, and the run waits on a locked app.
+      await waitForTestId(d, "EnterPIN", 45000).catch(() => undefined);
+      await unlockIfLocked(d);
+      await dismissTourIfPresent(d).catch(() => undefined);
+      console.log(`[e2e] ${d.e2ePlatform}: app opened 20 s after the invitation was sent (cold start)`);
+    }
   } else if (INVITE_VIA === "console-qr") {
     offerLink = consoleInvite(personaDid, "offer");
     // First the state a person was stuck in: an ordinary OpenID offer whose
