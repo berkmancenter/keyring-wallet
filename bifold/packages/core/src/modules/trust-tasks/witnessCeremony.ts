@@ -37,7 +37,14 @@ import {
   LocalityTranscript,
   transcriptDigestMultibase,
 } from './deviceLocality'
-import { digestBytesEqual, digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
+import {
+  digestBytesEqual,
+  digestMultibase,
+  signDocumentProof,
+  taskDigestMultibase,
+  verifyDocumentProof,
+} from './documentProof'
+import { taskCitationOf } from './taskCitation'
 
 const LOG_PREFIX = '[TrustTasks:Witness]'
 
@@ -71,7 +78,11 @@ export function resolveWitnessResponse(document: Record<string, unknown>): boole
   return true
 }
 
-function awaitWitnessResponse(threadId: string, expectedType: string, timeoutMs: number): Promise<Record<string, unknown>> {
+function awaitWitnessResponse(
+  threadId: string,
+  expectedType: string,
+  timeoutMs: number
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       if (pendingWitnessResponses.delete(threadId)) {
@@ -118,7 +129,10 @@ export interface RunWitnessSessionOptions {
  * challenge, submit the presentation, validate and store the VWC.
  * Throws on refusal, proof failure, or a VWC whose task binding is wrong.
  */
-export async function runWitnessSession(agent: Agent, options: RunWitnessSessionOptions): Promise<WitnessSessionOutcome> {
+export async function runWitnessSession(
+  agent: Agent,
+  options: RunWitnessSessionOptions
+): Promise<WitnessSessionOutcome> {
   const logger = agent.config.logger
   const timeoutMs = options.timeoutMs ?? 60_000
   const witnessConnection = await agent.modules.didcomm.connections.getById(options.witnessConnectionId)
@@ -174,9 +188,8 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
   // advertise/GATT exchange now — the result is what gets attached to the
   // submit request below, and what item 10's cross-check verifies against
   // whatever the witness later claims to have observed.
-  const directive = (
-    challengeDoc as { payload?: { ext?: Record<string, { locality?: LocalitySensorDirective }> } }
-  ).payload?.ext?.[LOCALITY_EXT_NAMESPACE]?.locality
+  const directive = (challengeDoc as { payload?: { ext?: Record<string, { locality?: LocalitySensorDirective }> } })
+    .payload?.ext?.[LOCALITY_EXT_NAMESPACE]?.locality
   let transcript: LocalityTranscript | null = null
   if (directive && options.deviceLocalityProvider) {
     transcript = await options.deviceLocalityProvider.respondToSensor({
@@ -184,7 +197,9 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
       challenge: challengePayload.challenge,
       directive,
     })
-    logger.info(`${LOG_PREFIX} locality radio phase ${transcript ? 'produced a transcript' : 'did not complete'} (session ${sessionId})`)
+    logger.info(
+      `${LOG_PREFIX} locality radio phase ${transcript ? 'produced a transcript' : 'did not complete'} (session ${sessionId})`
+    )
   }
 
   // ---- submit the presentation bound to {challenge, domain} ---------------
@@ -221,12 +236,12 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
   if (!vwcPayload.vwcDigestMultibase || !digestBytesEqual(vwcPayload.vwcDigestMultibase, digestMultibase(vwc))) {
     throw new Error('vwcDigestMultibase does not match the delivered VWC')
   }
-  const subject = Array.isArray(vwc.credentialSubject) ? vwc.credentialSubject[0] : vwc.credentialSubject
-  const taskContext = (subject as { taskContext?: string } | undefined)?.taskContext
+  // The citation sits at the top level in a witnessed/1 VWC (DTG Credentials
+  // v1) and in the subject before it: either binds the session the same way.
+  const { taskContext, taskDigestMultibase: taskDigest } = taskCitationOf(vwc)
   if (taskContext !== sessionId) {
     throw new Error(`VWC taskContext ${taskContext ?? 'absent'} does not name this session (${sessionId})`)
   }
-  const taskDigest = (subject as { taskDigestMultibase?: string } | undefined)?.taskDigestMultibase
   // §4.9.3: the task digest excludes the document's top-level proof, and
   // digests compare as decoded multihash bytes, never encoded strings.
   if (!taskDigest || !digestBytesEqual(taskDigest, taskDigestMultibase(sessionDoc))) {
@@ -245,7 +260,16 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
       payload?: {
         ext?: Record<
           string,
-          { locality?: { observation?: { confirmed?: boolean; method?: string; reason?: string; transcriptDigestMultibase?: string } } }
+          {
+            locality?: {
+              observation?: {
+                confirmed?: boolean
+                method?: string
+                reason?: string
+                transcriptDigestMultibase?: string
+              }
+            }
+          }
         >
       }
     }

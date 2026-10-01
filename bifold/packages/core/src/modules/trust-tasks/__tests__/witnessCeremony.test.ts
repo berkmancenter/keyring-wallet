@@ -9,7 +9,12 @@
 import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payload'
 import * as witnessSubmit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 
-import { DeviceLocalityProvider, LOCALITY_EXT_NAMESPACE, LocalityTranscript, transcriptDigestMultibase } from '../deviceLocality'
+import {
+  DeviceLocalityProvider,
+  LOCALITY_EXT_NAMESPACE,
+  LocalityTranscript,
+  transcriptDigestMultibase,
+} from '../deviceLocality'
 import { digestMultibase } from '../documentProof'
 import { resolveWitnessResponse, runWitnessSession } from '../witnessCeremony'
 
@@ -231,7 +236,8 @@ describe('runWitnessSession', () => {
   test('a delivery whose vwcDigestMultibase mismatches the VWC is refused', async () => {
     const { agent, storedCredentials } = makeFakeAgent()
     const witness = makeWitness((response) => {
-      ;(response.payload as { vwcDigestMultibase: string }).vwcDigestMultibase = digestMultibase({ not: 'the vwc' })
+      const payload = response.payload as { vwcDigestMultibase: string }
+      payload.vwcDigestMultibase = digestMultibase({ not: 'the vwc' })
     })
 
     await expect(runWitnessSession(agent, baseOptions(witness, []))).rejects.toThrow('vwcDigestMultibase')
@@ -262,7 +268,12 @@ describe('runWitnessSession', () => {
     test('an offer plus a sensor directive runs the radio phase and attaches the transcript to the submit ext', async () => {
       const directive = {
         [LOCALITY_EXT_NAMESPACE]: {
-          locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 },
+          locality: {
+            policy: 'offered',
+            method: 'ble-challenge-response/0.1',
+            sensorDid: 'did:peer:4witness',
+            windowSeconds: 120,
+          },
         },
       }
       const witness = makeWitness(undefined, { challengeExt: directive })
@@ -282,7 +293,14 @@ describe('runWitnessSession', () => {
 
     test('windowLost (provider resolves null) is recorded honestly — no transcript, session still completes', async () => {
       const directive = {
-        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+        [LOCALITY_EXT_NAMESPACE]: {
+          locality: {
+            policy: 'offered',
+            method: 'ble-challenge-response/0.1',
+            sensorDid: 'did:peer:4witness',
+            windowSeconds: 120,
+          },
+        },
       }
       const witness = makeWitness(undefined, { challengeExt: directive })
       const { agent, storedCredentials } = makeFakeAgent()
@@ -306,21 +324,30 @@ describe('runWitnessSession', () => {
       const witness = makeWitness(undefined, {
         observationFor: () => ({
           [LOCALITY_EXT_NAMESPACE]: {
-            locality: { observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) } },
+            locality: {
+              observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) },
+            },
           },
         }),
       })
       const { agent, storedCredentials } = makeFakeAgent()
 
-      await expect(
-        runWitnessSession(agent, { ...baseOptions(witness, []), localityOffered: true })
-      ).rejects.toThrow('never produced a transcript')
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), localityOffered: true })).rejects.toThrow(
+        'never produced a transcript'
+      )
       expect(storedCredentials).toHaveLength(0)
     })
 
     test("a witness claiming an observation whose digest doesn't match this device's real transcript is refused", async () => {
       const directive = {
-        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+        [LOCALITY_EXT_NAMESPACE]: {
+          locality: {
+            policy: 'offered',
+            method: 'ble-challenge-response/0.1',
+            sensorDid: 'did:peer:4witness',
+            windowSeconds: 120,
+          },
+        },
       }
       const witness = makeWitness(undefined, {
         challengeExt: directive,
@@ -344,13 +371,22 @@ describe('runWitnessSession', () => {
 
     test('a witness observation that genuinely matches the real transcript completes normally', async () => {
       const directive = {
-        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+        [LOCALITY_EXT_NAMESPACE]: {
+          locality: {
+            policy: 'offered',
+            method: 'ble-challenge-response/0.1',
+            sensorDid: 'did:peer:4witness',
+            windowSeconds: 120,
+          },
+        },
       }
       const witness = makeWitness(undefined, {
         challengeExt: directive,
         observationFor: () => ({
           [LOCALITY_EXT_NAMESPACE]: {
-            locality: { observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) } },
+            locality: {
+              observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) },
+            },
           },
         }),
       })
@@ -365,5 +401,45 @@ describe('runWitnessSession', () => {
       expect(outcome.locality).toEqual({ transcriptProduced: true })
       expect(storedCredentials).toHaveLength(1)
     })
+  })
+})
+
+// ---- 228: the witness answers with a witnessed/1 VWC (DTG Credentials v1) --
+
+/** Reshape the scripted witness's VWC as witnessed/1: the citation at the top level, no parties. */
+const asWitnessedV1 =
+  (taskContext?: string) => (response: Record<string, unknown>, sessionDoc: Record<string, unknown>) => {
+    const payload = response.payload as { vwc: Record<string, unknown>; vwcDigestMultibase: string }
+    payload.vwc = {
+      '@context': ['https://www.w3.org/ns/credentials/v2', 'https://registry.trustoverip.org/dtg/context/v1'],
+      type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
+      issuer: 'did:example:witness',
+      issuerScope: 'public',
+      taskContext: taskContext ?? sessionDoc.id,
+      taskDigestMultibase: digestMultibase(sessionDoc),
+      credentialSubject: {
+        id: 'did:peer:0zMyRel',
+        predicate: 'https://registry.trustoverip.org/dtg/vsc/witnessed/1',
+        object: { digestMultibase: 'zQmXhTCPnjuGdyMqWWfdwyqNW4D6banDLjnA9x6Kxzc9ecK' },
+      },
+      proof: { type: 'DataIntegrityProof', proofValue: 'zvwc' },
+    }
+    payload.vwcDigestMultibase = digestMultibase(payload.vwc)
+  }
+
+describe('runWitnessSession with a witnessed/1 VWC', () => {
+  test('binds the session through the top-level citation, and stores it', async () => {
+    const { agent, storedCredentials } = makeFakeAgent()
+    const witness = makeWitness(asWitnessedV1())
+    const outcome = await runWitnessSession(agent, baseOptions(witness, []))
+    expect(storedCredentials).toHaveLength(1)
+    expect((outcome.vwc as { taskContext: string }).taskContext).toBe(outcome.sessionId)
+  })
+
+  test('refuses one whose top-level taskContext names another session', async () => {
+    const { agent, storedCredentials } = makeFakeAgent()
+    const witness = makeWitness(asWitnessedV1('some-other-session'))
+    await expect(runWitnessSession(agent, baseOptions(witness, []))).rejects.toThrow('taskContext')
+    expect(storedCredentials).toHaveLength(0)
   })
 })

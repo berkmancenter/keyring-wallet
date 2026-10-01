@@ -1347,7 +1347,11 @@ async function handleInboundWitnessShare(
 
       // Party bindings: the shared VWC must be ABOUT the sender (its subject
       // is the sender's relationship DID — the value the contact keys on)
-      // and about THIS exchange (parties name both relationship DIDs).
+      // and about THIS exchange (parties name both relationship DIDs). A
+      // witnessed/1 VWC (DTG Credentials v1) carries no `parties`: they are in
+      // the witness/session document it cites, which is this bundle's
+      // initiating evidence — already proven above to be that document
+      // (its id is the VWC's taskContext and its task digest reproduces).
       const vwc = (payload.presentation as { verifiableCredential?: Record<string, unknown>[] })
         .verifiableCredential?.[0]
       if (!vwc) return notAccepted('presentation carries no credential')
@@ -1356,7 +1360,10 @@ async function handleInboundWitnessShare(
       if (subjectId !== record.counterpartyRelationshipDid) {
         return notAccepted('VWC subject is not the sender relationship DID')
       }
-      const parties = ((subject as { parties?: string[] } | undefined)?.parties ?? []) as string[]
+      const sessionParties = (payload.outcomeEvidence.initiating as { payload?: { parties?: unknown } }).payload
+        ?.parties
+      const parties = ((subject as { parties?: string[] } | undefined)?.parties ??
+        (Array.isArray(sessionParties) ? sessionParties : [])) as string[]
       if (!parties.includes(record.myRelationshipDid) || !parties.includes(record.counterpartyRelationshipDid)) {
         return notAccepted('VWC parties do not name this exchange relationship DIDs')
       }
