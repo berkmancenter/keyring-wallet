@@ -19,6 +19,9 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { confirmOwner } from '../module/ownerConfirm'
+import enCopy from '../../../localization/en/en.json'
+import frCopy from '../../../localization/fr/fr.json'
+import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import { agentAddressScan } from '../module/agentAddressScan'
 import { deviceCodeScan } from '../module/deviceCodeScan'
 import { vtaAgent } from '../module/vtaAgent'
@@ -128,6 +131,16 @@ describe('create my agent: the address can be scanned', () => {
       expect(agentAddressScan.claim(VTA)).toEqual({ taken: true })
     })
     expect(tree.getByTestId(id('AgentCreateAddressInput')).props.value).toBe(VTA)
+  })
+
+  test('the step says the address can be scanned as well as pasted, in every language', () => {
+    for (const [words, scan] of [
+      [enCopy, /scan/i],
+      [frCopy, /scannez/i],
+      [ptBrCopy, /escaneie/i],
+    ] as const) {
+      expect(words.CreateAgent.AddressBody).toMatch(scan)
+    }
   })
 
   test("a host's automatic-connection QR goes to that flow, asking the person there", () => {

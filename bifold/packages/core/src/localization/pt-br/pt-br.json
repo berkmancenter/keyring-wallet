@@ -1700,7 +1700,7 @@
     "IntroStep3": "3. Adicione o código de proprietário deste telefone ao seu agente",
     "Step": "Etapa {{n}} de {{of}}",
     "AddressTitle": "O endereço do seu agente",
-    "AddressBody": "Depois que seu agente for criado, o host dele mostra o endereço. Ele começa com did:webvh:. Copie e cole aqui.",
+    "AddressBody": "Depois que seu agente for criado, o host dele mostra o endereço. Ele começa com did:webvh:. Escaneie, ou copie e cole aqui.",
     "Paste": "Colar",
     "ScanAddress": "Escanear",
     "NotAnAddress": "Isso não é o endereço de um agente. Ele começa com did:webvh: — copie a linha inteira que o host do seu agente mostra.",
