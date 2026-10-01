@@ -28,6 +28,17 @@
         "vta-service/Cargo.toml"
       ]
     },
+    "verifiable-trust-infrastructure-v047": {
+      "url": "https://github.com/OpenVTC/verifiable-trust-infrastructure.git",
+      "sha": "439a0333",
+      "commitDate": "2026-10-01",
+      "pinnedOn": "2026-10-01",
+      "why": "A second, separate clone of VTI at tag vta-service-v0.47.0 (DTG Credentials v1, #1859): card-verify-v047 is built from it so bifold's vti-conformance job can have vta-sdk 0.58 judge the vetted/1 statement Keyring writes behind its off-by-default flag (228). The main pin above, its clone and the frozen lab do not move with it.",
+      "watch": [
+        "vta-sdk/src/vetting/",
+        "vta-sdk/src/protocols/vetting.rs"
+      ]
+    },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
       "sha": "da432130",

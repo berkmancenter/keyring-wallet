@@ -1,0 +1,164 @@
+# The push gateway's mediator (Affinidi messaging mediator v0.33.1).
+#
+# These are the settings of the VTI lab mediator the gateway was tested
+# against, with five deliberate differences:
+#
+#   1. Container paths. The identity comes from the environment (MEDIATOR_DID,
+#      ADMIN_DID, set by docker-compose.yml from .env), the keys from a file in
+#      ./secrets/mediator, Redis from the compose network.
+#   2. Inter-mediator relay is switched on explicitly
+#      (enable_inter_mediator_relay). The agents that wake the gateway live on
+#      other mediators, and their wake-ups arrive here as anonymous relays on
+#      /inbound. The lab accepted them implicitly (ALLOW_ALL grants
+#      SEND_FORWARDED), a path upstream has deprecated.
+#   3. LOCAL_ENDPOINTS names this mediator's public URL (set from .env), so a
+#      forward addressed to its own hostname is delivered locally instead of
+#      relayed to itself (upstream docs/multi-mediator.md §5).
+#   4. Logs are JSON, for the container log collector. The retired
+#      admin_messages_expiry key is dropped, and admin Trust Tasks are refused
+#      when their proof fails (trust_task_verification = "enforce").
+#   5. It is CLOSED (upstream's "closed / allowlist" recipe, docs/acls.md §7),
+#      where the lab is open (explicit_deny + ALLOW_ALL):
+#      - mediator_acl_mode = "explicit_allow": only DIDs with an account may log
+#        in, and only the admin creates accounts. The gateway's account is
+#        created once with mediator-account (HANDOVER.md §8), with its own
+#        rights; nobody else has one.
+#      - global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,
+#        RECEIVE_FORWARDED,MODE_EXPLICIT_DENY" is what every DID without an
+#        account gets, and what the accounts the mediator creates by itself
+#        start with (the root admin at startup, server.rs
+#        seed_privileged_accounts; an agent the first time it is a next hop):
+#          SEND_MESSAGES     agents on other mediators may have wake-ups
+#                            delivered to the gateway (their relayed envelope
+#                            is a direct delivery, checked against the
+#                            sender's rights, inbound.rs:1190-1204);
+#          RECEIVE_FORWARDED
+#          + MODE_EXPLICIT_DENY  an agent may be the next hop of the gateway's
+#                            reply: its auto-created account must accept a
+#                            forward, and not start with a closed access list
+#                            (both were refused in the lab without them);
+#          LOCAL
+#          + RECEIVE_MESSAGES  the admin's own account has an inbox, so it can
+#                            open its live connection and receive replies
+#                            (mediator-account needs both);
+#          no SEND_FORWARDED nobody but the gateway may have a forward relayed
+#                            onward, so the mediator is not an open relay
+#                            (routing.rs resolve_forward_sender).
+#        LOCAL and RECEIVE_MESSAGES give nobody else anything: without an
+#        account nobody can log in to collect.
+#        A consequence: agents' mediators must relay in upstream's default
+#        blind mode (the inner envelope verbatim, a direct delivery here). A
+#        rewrapped or double forward names a sender that needs SEND_FORWARDED,
+#        and is refused.
+#      Narrowing it further cuts agents on other mediators off (HANDOVER.md §3).
+#
+#      Lab-only override, to run it open as the lab mediator does: set
+#      mediator_acl_mode = "explicit_deny" and global_acl_default = "ALLOW_ALL".
+#      Never on a public server: ALLOW_ALL grants SEND_FORWARDED to anyone.
+#
+# The login endpoint (/mediator/v1/authenticate) is also reachable only from
+# inside the Docker network (Caddyfile), a second fence around the same rule.
+#
+# Every field is overridable by environment variable; see upstream's annotated
+# template (crates/messaging/affinidi-messaging-mediator/conf/mediator.toml).
+
+log_level = "info"
+log_json = "true"
+
+# Set from MEDIATOR_DID (did://did:peer:2…).
+mediator_did = ""
+
+[secrets]
+# Written by mediator/setup-identity.sh. Plain JSON on disk, owner-only; back it
+# up with the other secrets.
+backend = "file:///run/secrets/mediator/mediator-secrets.json"
+
+[server]
+listen_address = "0.0.0.0:7037"
+api_prefix = "/mediator/v1/"
+# Set from ADMIN_DID (did://did:key:…).
+admin_did = ""
+# Set from LOCAL_ENDPOINTS (https://<MEDIATOR_HOST>).
+# local_endpoints = []
+
+[database]
+functions_file = "/app/conf/atm-functions.lua"
+# Set from DATABASE_URL.
+database_url = "redis://redis:6379/"
+database_timeout = "2"
+
+[security]
+mediator_acl_mode = "explicit_allow"
+global_acl_default = "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,MODE_EXPLICIT_DENY"
+local_direct_delivery_allowed = "true"
+local_direct_delivery_allow_anon = "false"
+# TLS ends at Caddy.
+use_ssl = "false"
+jwt_access_expiry = "900"
+jwt_refresh_expiry = "86400"
+block_anonymous_outer_envelope = "true"
+force_session_did_match = "true"
+block_remote_admin_msgs = "true"
+# Refuse a Trust Task (account, ACL and queue management) whose proof, issuedAt
+# or issuer fails its checks; upstream's default only logs it and runs it.
+trust_task_verification = "enforce"
+enable_inter_mediator_relay = "true"
+
+[streaming]
+enabled = "true"
+uuid = "hostname://"
+
+[did_resolver]
+cache_capacity = "1000"
+cache_ttl = "300"
+network_timeout = "5000"
+network_limit = "100"
+
+[limits]
+attachments_max_count = "20"
+crypto_operations_per_message = "1000"
+deleted_messages = "100"
+forward_task_queue = "50000"
+http_size = "10485760"
+listed_messages = "100"
+local_max_acl = "1000"
+message_expiry_seconds = "604800"
+message_size = "1048576"
+queued_send_messages_per_peer = "50"
+queued_send_messages_soft = "2000"
+queued_send_messages_hard = "10000"
+queued_receive_messages_soft = "200"
+queued_receive_messages_hard = "1000"
+to_keys_per_recipient = "100"
+to_recipients = "100"
+ws_size = "10485760"
+access_list_limit = "1000"
+oob_invite_ttl = "86400"
+
+[processors.forwarding]
+enabled = "true"
+future_time_limit = "86400"
+external_forwarding = "true"
+report_errors = "true"
+blocked_forwarding_dids = "[]"
+rate_window_seconds = "300"
+ws_threshold_msgs_per_10s = "1"
+ws_idle_timeout_seconds = "60"
+batch_size = "50"
+max_retries = "5"
+initial_backoff_ms = "1000"
+max_backoff_ms = "60000"
+consumer_group = "forwarding"
+max_hops = "10"
+# Must match the agents' mediators; the VTI lab runs blind.
+relay_mode = "blind"
+relay_trusted_mediators = ""
+
+[processors.message_expiry_cleanup]
+enabled = "true"
+
+[processors.session_expiry_cleanup]
+enabled = "true"
+
+[storage]
+backend = "redis"

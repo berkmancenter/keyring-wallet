@@ -33,6 +33,7 @@ import {
   showRelationshipInvitation,
 } from "./flows.js";
 import { printSuccess, printFailure } from "./banner.js";
+import { pinToRunningEmulator } from "./emulator.js";
 
 const PEER = { firstName: "Alice", lastName: "Anderson" }; // peer wallet (new build)
 const HOLDER = { firstName: "Bob", lastName: "Baker" }; // android (old → new build)
@@ -54,7 +55,7 @@ async function createAndroidSession() {
     port: APPIUM_PORT,
     connectionRetryTimeout: 600000,
     connectionRetryCount: 1,
-    capabilities: {
+    capabilities: pinToRunningEmulator({
       platformName: "Android",
       "appium:automationName": "UiAutomator2",
       "appium:avd": ANDROID_AVD,
@@ -66,7 +67,7 @@ async function createAndroidSession() {
       "appium:autoGrantPermissions": true,
       "appium:adbExecTimeout": 120000,
       "appium:uiautomator2ServerLaunchTimeout": 120000,
-    },
+    }),
   });
   driver.e2ePlatform = "android";
   const udid =
