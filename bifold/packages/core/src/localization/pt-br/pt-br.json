@@ -1450,8 +1450,8 @@
       "grantMalformed": "O papel de verificador não pôde ser lido.",
       "grantExpired": "O papel de verificador está vencido.",
       "grantProof": "A assinatura da comunidade no papel de verificador não confere.",
-      "legacyExpired": "Ele usou a prova de uma versão antiga do Keyring, que não é mais aceita.",
-      "grantLegacyShape": "O papel de verificador dele está em um formato antigo que não é mais aceito."
+      "legacyExpired": "O verificador usou a prova de uma versão antiga do Keyring, que não é mais aceita.",
+      "grantLegacyShape": "O papel de verificador está em um formato antigo que não é mais aceito."
     },
     "NeedsMethod": "mais {{n}} {{method}}",
     "IndependenceCapped": "Mais declarações de pessoas que declararam um vínculo {{relationships}} com você do que esta comunidade conta. Sua candidatura continua valendo — alguém vai analisá-la.",

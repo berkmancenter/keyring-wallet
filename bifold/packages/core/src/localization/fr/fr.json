@@ -1544,7 +1544,7 @@
       "grantMalformed": "Son rôle de vérificateur est illisible.",
       "grantExpired": "Son rôle de vérificateur a expiré.",
       "grantProof": "La signature de la communauté sur son rôle n'est pas valide.",
-      "legacyExpired": "Il a utilisé la preuve d'une ancienne version de Keyring, qui n'est plus acceptée.",
+      "legacyExpired": "Le vérificateur a utilisé la preuve d'une ancienne version de Keyring, qui n'est plus acceptée.",
       "grantLegacyShape": "Son rôle de vérificateur est dans un ancien format qui n'est plus accepté."
     },
     "NeedsMethod": "encore {{n}} {{method}}",
