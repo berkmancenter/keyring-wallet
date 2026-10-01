@@ -614,7 +614,10 @@ export async function startApplication(tui, { communityDid, personaDid, personaL
   // 177a218 draws the whole DID in the field (vetting_panel.rs:209), wrapped.
   const communityShown = pin
     ? flatPanel(tui.screen()).includes(`CommunityDID${communityDid}`)
-    : tui.screen().split('\n').some((l) => l.includes('Community DID') && l.includes(didTail(communityDid)));
+    : tui.screen().includes('Community DID') &&
+      // A long DID wraps in the field, so its tail can land on the next line:
+      // read the panel with line breaks and padding removed.
+      flatPanel(tui.screen()).includes(didTail(communityDid).replace(/\s+/g, ''));
   if (!communityShown) {
     throw tui.failure('applicant.applyCommunity', started, 'the pasted community DID is not in the "Community DID" field', src(tui, 'ui/pages/main/components/vetting_panel.rs:211', 'ui/pages/main/components/vetting_panel.rs:209'));
   }
