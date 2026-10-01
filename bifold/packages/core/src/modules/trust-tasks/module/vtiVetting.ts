@@ -32,6 +32,8 @@ import {
   verifyDocumentProof,
   verifyTrustTaskProof,
   vettingMatchCode,
+  vettingStatementBody,
+  vettingStatementShapeProblem,
   type TicketPresentation,
 } from '@bifold/trust-tasks'
 
@@ -610,9 +612,6 @@ function logRefusedDocument(agent: Agent, m: DidCommV2PlaintextMessage, code: Pe
     from: String(m.from ?? ''),
   })
 }
-
-/** The context a statement must carry: vta-sdk `vetting/statement.rs:30` `DTG_CONTEXT`. */
-const DTG_CREDENTIALS_CONTEXT = 'https://firstperson.network/credentials/dtg/v1'
 
 /** How far ahead a statement's validFrom may be: vta-sdk `vetting::card::CLOCK_SKEW` (card.rs:45). */
 export const STATEMENT_CLOCK_SKEW_MS = 60 * 1000
@@ -1858,9 +1857,12 @@ export class VtiApplicant {
       | Record<string, unknown>
       | undefined
     if (!credential) return
-    const subject = credential.credentialSubject as { id?: string; endorsement?: Record<string, unknown> } | undefined
-    const endorsement = subject?.endorsement
-    if (endorsement?.type !== IDENTITY_VETTING_ENDORSEMENT_TYPE) return
+    const subject = credential.credentialSubject as { id?: string } | undefined
+    // Either shape: the endorsement, or vetted/1's object.value (DTG
+    // Credentials v1). Both name the members checked below.
+    const statement = vettingStatementBody(credential)
+    if (!statement) return
+    const endorsement = statement.body
     const application = await this.store.getApplication(this.persona.communityDid)
     if (!application) return
     const issuer =
@@ -1875,21 +1877,13 @@ export class VtiApplicant {
       // One already kept is never replaced by a refusal of a copy.
       if (request.status !== 'attested') await this.update(sender, { status: 'statementRefused', statementRefusal })
     }
-    // vta-sdk verify_statement: shape.
-    const types = ([] as unknown[]).concat(credential.type ?? [])
-    const contexts = ([] as unknown[]).concat(credential['@context'] ?? [])
+    // vta-sdk verify_statement: shape, per shape (vettingStatementShapeProblem).
+    // An old-shape statement after LEGACY_DTG_SHAPE_UNTIL is refused as malformed.
+    const now = Date.now()
+    if (vettingStatementShapeProblem(credential, now)) return refuse('malformed')
     const validUntil = Date.parse(String(credential.validUntil ?? ''))
     const validFrom = Date.parse(String(credential.validFrom ?? ''))
-    if (
-      !['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'].every((t) => types.includes(t)) ||
-      !contexts.includes(DTG_CREDENTIALS_CONTEXT) ||
-      !credential.id ||
-      !credential.taskContext ||
-      !Number.isFinite(validUntil)
-    )
-      return refuse('malformed')
     // vta-sdk verify_statement: the validity window, with the SDK's clock skew (card.rs CLOCK_SKEW).
-    const now = Date.now()
     if ((Number.isFinite(validFrom) && validFrom > now + STATEMENT_CLOCK_SKEW_MS) || now > validUntil)
       return refuse('expired')
     // vta-sdk verify_statement: the proof, by the issuer.
