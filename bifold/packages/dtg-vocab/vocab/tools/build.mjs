@@ -2,6 +2,7 @@
 // emits dist/ — the three artifacts a verifier or issuer actually consumes.
 // Run with: node vocab/tools/build.mjs (writes dist/, exits non-zero on any
 // invalid predicate definition).
+/* eslint-disable no-console -- this is a CLI build tool; stdout/stderr is its progress and error report */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs'
 import Ajv from 'ajv'
 

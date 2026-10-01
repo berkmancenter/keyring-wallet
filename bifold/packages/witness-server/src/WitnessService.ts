@@ -82,7 +82,6 @@ import {
 
 import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
-import { LocalityAssertion } from './trustTasks/locality'
 import { BleLocalityProvider, TaskLocalityProvider } from './trustTasks/BleLocalityProvider'
 import { NobleLocalityProvider } from './trustTasks/NobleLocalityProvider'
 
@@ -178,7 +177,6 @@ export {
 export type { VrcFreshnessResult, WitnessCredentialBuildContext } from './credentialBuilder'
 import {
   checkVrcFreshness,
-  computeVrcDigest,
   buildWitnessCredentialJson,
   extractVrcHardwareAttestationPublicKey,
 } from './credentialBuilder'

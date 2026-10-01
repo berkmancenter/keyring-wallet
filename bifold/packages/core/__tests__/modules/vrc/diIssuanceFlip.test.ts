@@ -24,7 +24,6 @@ import {
   DTG_CONTEXT_URL,
   HARDWARE_EVIDENCE_CONTEXT_URL,
   RCARD_CONTEXT_URL,
-  RELATIONSHIP_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_URL,
 } from '../../../src/modules/vrc/types/relationshipContext'
 

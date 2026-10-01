@@ -159,7 +159,7 @@ async function issueVscWitnessCredentials(this: Witness, sessionId: string): Pro
   }
 
   // Same cleanup as the original.
-  ;(this as unknown as { activeSessions: Map<string, unknown> }).activeSessions.delete(sessionId)
+  (this as unknown as { activeSessions: Map<string, unknown> }).activeSessions.delete(sessionId)
 }
 
 describe('Capture: Witnessed Edge, vsc shape (real production builder)', () => {
