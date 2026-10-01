@@ -76,8 +76,14 @@ describe('Capture: Witnessed Edge (rebuilt capture tool)', () => {
     if (!aliceIssuerDid) throw new Error('Alice issuer DID not initialized after acceptConnection')
     if (!bobIssuerDid) throw new Error('Bob issuer DID not initialized after connection completed')
 
-    await bob.agent.modules.didcomm.basicMessages.sendMessage(bobAliceConnectionId, JSON.stringify({ rDid: bobIssuerDid }))
-    await alice.agent.modules.didcomm.basicMessages.sendMessage(aliceBobConnectionId, JSON.stringify({ rDid: aliceIssuerDid }))
+    await bob.agent.modules.didcomm.basicMessages.sendMessage(
+      bobAliceConnectionId,
+      JSON.stringify({ rDid: bobIssuerDid })
+    )
+    await alice.agent.modules.didcomm.basicMessages.sendMessage(
+      aliceBobConnectionId,
+      JSON.stringify({ rDid: aliceIssuerDid })
+    )
     await new Promise((resolve) => setTimeout(resolve, 2000))
 
     await waitForCondition(async () => {
@@ -123,153 +129,157 @@ describe('Capture: Witnessed Edge (rebuilt capture tool)', () => {
     await cleanupAgents(alice, bob, witness)
   }, 15000)
 
-  it(
-    'captures a full 5-phase witnessed VRC exchange',
-    async () => {
-      // Phase 1 — session creation
-      const {
-        sessionId,
-        challenge: sessionChallenge,
-        domain: sessionDomain,
-      } = await witness.createWitnessedSession(aliceWitnessConnectionId, bobWitnessConnectionId)
+  it('captures a full 5-phase witnessed VRC exchange', async () => {
+    // Phase 1 — session creation
+    const {
+      sessionId,
+      challenge: sessionChallenge,
+      domain: sessionDomain,
+    } = await witness.createWitnessedSession(aliceWitnessConnectionId, bobWitnessConnectionId)
 
-      // Phase 2 — credential creation & wrapping
-      const aliceRDid = bob.getCounterpartyRDid(bobAliceConnectionId)
-      const bobRDid = alice.getAnyCounterpartyRDid()
-      if (!aliceRDid) throw new Error('Bob does not have Alice R-DID')
-      if (!bobRDid) throw new Error('Alice does not have Bob R-DID')
+    // Phase 2 — credential creation & wrapping
+    const aliceRDid = bob.getCounterpartyRDid(bobAliceConnectionId)
+    const bobRDid = alice.getAnyCounterpartyRDid()
+    if (!aliceRDid) throw new Error('Bob does not have Alice R-DID')
+    if (!bobRDid) throw new Error('Alice does not have Bob R-DID')
 
-      // createAndSubmitPresentation returns the raw VRC it minted — this is
-      // the only place the VRC is observable pre-witnessing; a self-issued
-      // VRC targeting a counterparty is never stored in one's own
-      // w3cCredentials wallet (it's submitted inside a VP, not offered via
-      // the credential-exchange protocol), matching the original capture's
-      // "(minted, submitted in VP)" holder notes.
-      const { vrc: bobVrcJson } = await bob.createAndSubmitPresentation(
-        bobConnectionToWitness,
-        aliceRDid,
-        'alice',
-        sessionChallenge,
-        sessionDomain
-      )
-      const { vrc: aliceVrcJson } = await alice.createAndSubmitPresentation(
-        aliceConnectionToWitness,
-        bobRDid,
-        'bob',
-        sessionChallenge,
-        sessionDomain
-      )
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+    // createAndSubmitPresentation returns the raw VRC it minted — this is
+    // the only place the VRC is observable pre-witnessing; a self-issued
+    // VRC targeting a counterparty is never stored in one's own
+    // w3cCredentials wallet (it's submitted inside a VP, not offered via
+    // the credential-exchange protocol), matching the original capture's
+    // "(minted, submitted in VP)" holder notes.
+    const { vrc: bobVrcJson } = await bob.createAndSubmitPresentation(
+      bobConnectionToWitness,
+      aliceRDid,
+      'alice',
+      sessionChallenge,
+      sessionDomain
+    )
+    const { vrc: aliceVrcJson } = await alice.createAndSubmitPresentation(
+      aliceConnectionToWitness,
+      bobRDid,
+      'bob',
+      sessionChallenge,
+      sessionDomain
+    )
+    await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      await waitForCondition(async () => {
-        const count = witness.getSessionPresentationCount(sessionId)
-        const sessionExists = witness.getSessionData(sessionId) !== undefined
-        return count >= 2 || !sessionExists
-      }, 20000)
+    await waitForCondition(async () => {
+      const count = witness.getSessionPresentationCount(sessionId)
+      const sessionExists = witness.getSessionData(sessionId) !== undefined
+      return count >= 2 || !sessionExists
+    }, 20000)
 
-      // Phase 3/4 — witness verification, VWC minting & distribution
-      const sessionData = witness.getSessionData(sessionId)
-      if (sessionData) {
-        await witness.issueWitnessCredentials(sessionId)
-      }
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+    // Phase 3/4 — witness verification, VWC minting & distribution
+    const sessionData = witness.getSessionData(sessionId)
+    if (sessionData) {
+      await witness.issueWitnessCredentials(sessionId)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000))
 
-      // Phase 5 — both wallets accept their VWC offers and hold final state
-      await waitForCondition(async () => {
-        const a = await alice.agent.modules.didcomm.credentials.getAll()
-        const b = await bob.agent.modules.didcomm.credentials.getAll()
-        return a.some((r) => r.state === 'offer-received') && b.some((r) => r.state === 'offer-received')
-      }, 20000)
-      await alice.acceptPendingCredentialOffers()
-      await bob.acceptPendingCredentialOffers()
-      await waitForCondition(async () => {
-        const a = await alice.agent.w3cCredentials.getAll()
-        const b = await bob.agent.w3cCredentials.getAll()
-        return a.some((r) => (r as any).firstCredential) && b.some((r) => (r as any).firstCredential)
-      }, 30000)
+    // Phase 5 — both wallets accept their VWC offers and hold final state
+    await waitForCondition(async () => {
+      const a = await alice.agent.modules.didcomm.credentials.getAll()
+      const b = await bob.agent.modules.didcomm.credentials.getAll()
+      return a.some((r) => r.state === 'offer-received') && b.some((r) => r.state === 'offer-received')
+    }, 20000)
+    await alice.acceptPendingCredentialOffers()
+    await bob.acceptPendingCredentialOffers()
+    await waitForCondition(async () => {
+      const a = await alice.agent.w3cCredentials.getAll()
+      const b = await bob.agent.w3cCredentials.getAll()
+      return a.some((r) => (r as any).firstCredential) && b.some((r) => (r as any).firstCredential)
+    }, 30000)
 
-      const aliceCredentials = await alice.agent.w3cCredentials.getAll()
-      const bobCredentials = await bob.agent.w3cCredentials.getAll()
+    const aliceCredentials = await alice.agent.w3cCredentials.getAll()
+    const bobCredentials = await bob.agent.w3cCredentials.getAll()
 
-      const jsonOf = (r: any) => JsonTransformer.toJSON(r.firstCredential) as any
-      const findByType = (records: any[], type: string) =>
-        records.find((r) => jsonOf(r).type?.includes(type))
+    const jsonOf = (r: any) => JsonTransformer.toJSON(r.firstCredential) as any
+    const findByType = (records: any[], type: string) => records.find((r) => jsonOf(r).type?.includes(type))
 
-      // The VWC IS a received/accepted credential, so it's found in wallet storage.
-      const aliceVwcRecord = findByType(aliceCredentials, 'WitnessCredential')
-      const bobVwcRecord = findByType(bobCredentials, 'WitnessCredential')
+    // The VWC IS a received/accepted credential, so it's found in wallet storage.
+    const aliceVwcRecord = findByType(aliceCredentials, 'WitnessCredential')
+    const bobVwcRecord = findByType(bobCredentials, 'WitnessCredential')
 
-      expect(aliceVwcRecord).toBeDefined()
-      expect(bobVwcRecord).toBeDefined()
+    expect(aliceVwcRecord).toBeDefined()
+    expect(bobVwcRecord).toBeDefined()
 
-      const aliceVwcJson = jsonOf(aliceVwcRecord) // Alice holds the VWC witnessing Bob's VRC
-      const bobVwcJson = jsonOf(bobVwcRecord) // Bob holds the VWC witnessing Alice's VRC
+    const aliceVwcJson = jsonOf(aliceVwcRecord) // Alice holds the VWC witnessing Bob's VRC
+    const bobVwcJson = jsonOf(bobVwcRecord) // Bob holds the VWC witnessing Alice's VRC
 
-      const verify = async (agentHolder: Alice | Bob, credential: any) =>
-        agentHolder.agent.w3cCredentials.verifyCredential({
-          credential: JsonTransformer.fromJSON(credential, W3cJsonLdVerifiableCredential) as any,
-        })
+    const verify = async (agentHolder: Alice | Bob, credential: any) =>
+      agentHolder.agent.w3cCredentials.verifyCredential({
+        credential: JsonTransformer.fromJSON(credential, W3cJsonLdVerifiableCredential) as any,
+      })
 
-      const aliceVwcVerification = await verify(alice, aliceVwcJson)
-      const bobVwcVerification = await verify(bob, bobVwcJson)
+    const aliceVwcVerification = await verify(alice, aliceVwcJson)
+    const bobVwcVerification = await verify(bob, bobVwcJson)
 
-      // ------------------------------------------------------------------
-      // Regression guard: the captured shape must match what Check D
-      // (tsp-reference/ref-07-dtg-edge-semantics) audits against the spec.
-      // ------------------------------------------------------------------
-      expect(bobVrcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'])
-      expect(aliceVrcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'])
-      expect(aliceVwcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'WitnessCredential'])
-      expect(bobVwcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'WitnessCredential'])
-      // The witnessed halves must mutually name each other — the exact bug
-      // this rung's Check D found and fixed (wrong-R-DID minting).
-      expect(bobVrcJson.issuer).toBe(aliceVrcJson.credentialSubject.id)
-      expect(aliceVrcJson.issuer).toBe(bobVrcJson.credentialSubject.id)
-      // Each VWC's credentialSubject.id names the VRC issuer it witnesses.
-      expect(aliceVwcJson.credentialSubject.id).toBe(bobVrcJson.issuer)
-      expect(bobVwcJson.credentialSubject.id).toBe(aliceVrcJson.issuer)
-      // KNOWN GAP (unchanged by this capture — see Check D): legacy digest
-      // form, no taskContext. Asserted here so a future fix to this legacy
-      // path is caught as a deliberate change, not silent drift.
-      expect(typeof aliceVwcJson.credentialSubject.digest).toBe('string')
-      expect(aliceVwcJson.credentialSubject.digest.startsWith('sha256:')).toBe(true)
-      expect(aliceVwcJson.credentialSubject.taskContext).toBeUndefined()
-      expect(aliceVwcJson.credentialSubject.witnessContext).toBeDefined()
-      expect(aliceVwcVerification.isValid).toBe(true)
-      expect(bobVwcVerification.isValid).toBe(true)
+    // ------------------------------------------------------------------
+    // Regression guard: the captured shape must match what Check D
+    // (tsp-reference/ref-07-dtg-edge-semantics) audits against the spec.
+    // ------------------------------------------------------------------
+    expect(bobVrcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'])
+    expect(aliceVrcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'])
+    expect(aliceVwcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'WitnessCredential'])
+    expect(bobVwcJson.type).toEqual(['VerifiableCredential', 'DTGCredential', 'WitnessCredential'])
+    // The witnessed halves must mutually name each other — the exact bug
+    // this rung's Check D found and fixed (wrong-R-DID minting).
+    expect(bobVrcJson.issuer).toBe(aliceVrcJson.credentialSubject.id)
+    expect(aliceVrcJson.issuer).toBe(bobVrcJson.credentialSubject.id)
+    // Each VWC's credentialSubject.id names the VRC issuer it witnesses.
+    expect(aliceVwcJson.credentialSubject.id).toBe(bobVrcJson.issuer)
+    expect(bobVwcJson.credentialSubject.id).toBe(aliceVrcJson.issuer)
+    // KNOWN GAP (unchanged by this capture — see Check D): legacy digest
+    // form, no taskContext. Asserted here so a future fix to this legacy
+    // path is caught as a deliberate change, not silent drift.
+    expect(typeof aliceVwcJson.credentialSubject.digest).toBe('string')
+    expect(aliceVwcJson.credentialSubject.digest.startsWith('sha256:')).toBe(true)
+    expect(aliceVwcJson.credentialSubject.taskContext).toBeUndefined()
+    expect(aliceVwcJson.credentialSubject.witnessContext).toBeDefined()
+    expect(aliceVwcVerification.isValid).toBe(true)
+    expect(bobVwcVerification.isValid).toBe(true)
 
-      if (process.env.CAPTURE_OUTPUT) {
-        const captured = {
-          description:
-            'A REAL witnessed Keyring edge, recaptured by the rebuilt capture tool ' +
-            '(bifold/packages/vrc-reference/__tests__/integration/captureWitnessedEdge.test.ts). ' +
-            'Same shape as the original 2026-08-26 capture that ' +
-            'tsp-reference/ref-07-dtg-edge-semantics/fixtures/edge-witnessed-captured.json freezes — ' +
-            'this file is a throwaway, regenerable sample, not a ladder input.',
-          captureMeta: {
-            capturedAt: new Date().toISOString(),
-            tool: 'vrc-reference (committed), __tests__/integration/captureWitnessedEdge.test.ts',
-            witnessIssuerDid: witness.getIssuerDid(),
-            sessionNote: 'sessionId/challenge are per-run values inside witnessContext; the digest binds the VWC to its VRC',
+    if (process.env.CAPTURE_OUTPUT) {
+      const captured = {
+        description:
+          'A REAL witnessed Keyring edge, recaptured by the rebuilt capture tool ' +
+          '(bifold/packages/vrc-reference/__tests__/integration/captureWitnessedEdge.test.ts). ' +
+          'Same shape as the original 2026-08-26 capture that ' +
+          'tsp-reference/ref-07-dtg-edge-semantics/fixtures/edge-witnessed-captured.json freezes — ' +
+          'this file is a throwaway, regenerable sample, not a ladder input.',
+        captureMeta: {
+          capturedAt: new Date().toISOString(),
+          tool: 'vrc-reference (committed), __tests__/integration/captureWitnessedEdge.test.ts',
+          witnessIssuerDid: witness.getIssuerDid(),
+          sessionNote:
+            'sessionId/challenge are per-run values inside witnessContext; the digest binds the VWC to its VRC',
+        },
+        declaredScopes: { half1: 'pairwise', half2: 'pairwise' },
+        vrcs: [
+          {
+            holder: 'bob (minted, submitted in VP)',
+            verifiedAtCapture: 'inside witness-verified VP',
+            credential: bobVrcJson,
           },
-          declaredScopes: { half1: 'pairwise', half2: 'pairwise' },
-          vrcs: [
-            { holder: 'bob (minted, submitted in VP)', verifiedAtCapture: 'inside witness-verified VP', credential: bobVrcJson },
-            { holder: 'alice (minted, submitted in VP)', verifiedAtCapture: 'inside witness-verified VP', credential: aliceVrcJson },
-          ],
-          vwcs: [
-            { holder: 'alice', verifiedAtCapture: aliceVwcVerification.isValid === true, credential: aliceVwcJson },
-            { holder: 'bob', verifiedAtCapture: bobVwcVerification.isValid === true, credential: bobVwcJson },
-          ],
-        }
-
-        const outDir = join(__dirname, 'capture-output')
-        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
-        writeFileSync(join(outDir, 'edge-witnessed-captured.json'), JSON.stringify(captured, null, 2))
-        // eslint-disable-next-line no-console
-        console.log(`Captured fresh witnessed edge -> ${join(outDir, 'edge-witnessed-captured.json')}`)
+          {
+            holder: 'alice (minted, submitted in VP)',
+            verifiedAtCapture: 'inside witness-verified VP',
+            credential: aliceVrcJson,
+          },
+        ],
+        vwcs: [
+          { holder: 'alice', verifiedAtCapture: aliceVwcVerification.isValid === true, credential: aliceVwcJson },
+          { holder: 'bob', verifiedAtCapture: bobVwcVerification.isValid === true, credential: bobVwcJson },
+        ],
       }
-    },
-    90000
-  )
+
+      const outDir = join(__dirname, 'capture-output')
+      if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true })
+      writeFileSync(join(outDir, 'edge-witnessed-captured.json'), JSON.stringify(captured, null, 2))
+      // eslint-disable-next-line no-console
+      console.log(`Captured fresh witnessed edge -> ${join(outDir, 'edge-witnessed-captured.json')}`)
+    }
+  }, 90000)
 })

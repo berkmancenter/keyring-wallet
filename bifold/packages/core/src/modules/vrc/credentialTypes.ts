@@ -31,7 +31,13 @@
  * it silently falls back to type-string-only detection — document it here.
  */
 
-import { DTG_PREDICATE_WITNESSED, PredicateHandlingConfig, configure, loadAcceptList, loadSchemaStore } from '@bifold/dtg-vocab'
+import {
+  DTG_PREDICATE_WITNESSED,
+  PredicateHandlingConfig,
+  configure,
+  loadAcceptList,
+  loadSchemaStore,
+} from '@bifold/dtg-vocab'
 
 export const VERIFIABLE_CREDENTIAL_TYPE = 'VerifiableCredential'
 export const DTG_CREDENTIAL_TYPE = 'DTGCredential'

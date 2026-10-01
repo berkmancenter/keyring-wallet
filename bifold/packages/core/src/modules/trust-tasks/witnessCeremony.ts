@@ -86,17 +86,35 @@ function subjectOf(vwc: Record<string, unknown>): Record<string, unknown> | unde
 
 /** Legacy WD02 digest: sha256(JCS(the referenced VRC, PROOF INCLUDED)) — a different document than taskDigestMultibase covers (plan §3.1). Verification-only; the witness-server's own issuance-side equivalent is being deleted in V4, not ported here. */
 function legacyVrcDigest(vrc: Record<string, unknown>): string {
-  return 'sha256:' + Array.from(sha256(new TextEncoder().encode(jcsCanonicalize(vrc))), (b) => b.toString(16).padStart(2, '0')).join('')
+  return (
+    'sha256:' +
+    Array.from(sha256(new TextEncoder().encode(jcsCanonicalize(vrc))), (b) => b.toString(16).padStart(2, '0')).join('')
+  )
 }
 
-export function checkSubjectBinding(vwc: Record<string, unknown>, referencedVrc?: Record<string, unknown>): SubjectBinding {
-  if (!referencedVrc) return { checked: false, ok: false, reason: 'no referenced VRC available — opaque hash, not an identified edge (cred-spec C5)' }
+export function checkSubjectBinding(
+  vwc: Record<string, unknown>,
+  referencedVrc?: Record<string, unknown>
+): SubjectBinding {
+  if (!referencedVrc)
+    return {
+      checked: false,
+      ok: false,
+      reason: 'no referenced VRC available — opaque hash, not an identified edge (cred-spec C5)',
+    }
   const subject = subjectOf(vwc)
   if (!subject?.id) return { checked: true, ok: false, reason: 'VWC carries no credentialSubject.id' }
 
-  const issuer = typeof referencedVrc.issuer === 'string' ? referencedVrc.issuer : (referencedVrc.issuer as { id?: string } | undefined)?.id
+  const issuer =
+    typeof referencedVrc.issuer === 'string'
+      ? referencedVrc.issuer
+      : (referencedVrc.issuer as { id?: string } | undefined)?.id
   if (subject.id !== issuer) {
-    return { checked: true, ok: false, reason: `credentialSubject.id (${subject.id}) is not the referenced VRC's issuer (${issuer})` }
+    return {
+      checked: true,
+      ok: false,
+      reason: `credentialSubject.id (${subject.id}) is not the referenced VRC's issuer (${issuer})`,
+    }
   }
 
   const object = subject.object as { digestMultibase?: string } | undefined

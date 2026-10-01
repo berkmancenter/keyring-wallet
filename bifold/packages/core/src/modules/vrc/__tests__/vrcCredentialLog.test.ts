@@ -13,7 +13,10 @@ const vrc = {
 describe('vrc-credential-log', () => {
   it('elides PEM chains and long strings but keeps structure', () => {
     const slim = slimCredentialForLog(vrc) as any
-    expect(slim.evidence[0].attestation.certificateChain).toEqual([`<PEM #1: ${PEM.length} chars>`, `<PEM #2: ${PEM.length} chars>`])
+    expect(slim.evidence[0].attestation.certificateChain).toEqual([
+      `<PEM #1: ${PEM.length} chars>`,
+      `<PEM #2: ${PEM.length} chars>`,
+    ])
     expect(slim.proof.proofValue).toBe('<omitted 601 chars>')
     expect(slim.proof.cryptosuite).toBe('eddsa-rdfc-2022')
     expect(slim.issuerScope).toBe('pairwise')

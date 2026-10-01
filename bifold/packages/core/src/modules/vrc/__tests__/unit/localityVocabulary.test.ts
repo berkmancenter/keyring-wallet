@@ -16,7 +16,11 @@
  */
 import jsonld from 'jsonld'
 
-import { WITNESSED_EXCHANGE_CONTEXT_DOCUMENT, CREDENTIALS_V2_CONTEXT_DOCUMENT, CREDENTIALS_V2_CONTEXT_URL } from '@bifold/vrc-contexts'
+import {
+  WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
+  CREDENTIALS_V2_CONTEXT_DOCUMENT,
+  CREDENTIALS_V2_CONTEXT_URL,
+} from '@bifold/vrc-contexts'
 
 // The full tier 1+2+3 shape a confirmed locality assertion produces
 // (assertionFromObservation in witness-server's trustTasks/locality.ts —
@@ -273,9 +277,7 @@ describe('VSC members added for the migration — expanded-IRI checks, not quad 
       ] as never[]
       const subjectNode = subject[0] as Record<string, unknown>
       expect(subjectNode['predicate']).toBeUndefined()
-      expect(
-        subjectNode['https://registry.trustoverip.org/dtg/credentials#predicate']
-      ).toBeUndefined()
+      expect(subjectNode['https://registry.trustoverip.org/dtg/credentials#predicate']).toBeUndefined()
     }
   })
 })

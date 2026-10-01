@@ -37,9 +37,13 @@ export function configure(acceptList: AcceptList, schemaStore: SchemaStore = {})
   for (const [iri, entry] of Object.entries(acceptList)) {
     const members: Record<string, CompiledMember> = {}
     for (const [name, m] of Object.entries(entry.additionalMembers ?? {})) {
-      const key = m.schema ? m.schema.split('/').pop() ?? null : null
+      const key = m.schema ? (m.schema.split('/').pop() ?? null) : null
       const schema = key ? schemaStore[key] : undefined
-      members[name] = { required: m.required, validate: schema ? ajv.compile(schema) : null, schemaUrl: m.schema ?? null }
+      members[name] = {
+        required: m.required,
+        validate: schema ? ajv.compile(schema) : null,
+        schemaUrl: m.schema ?? null,
+      }
     }
     profiles[iri] = { ...entry, members }
   }
@@ -76,7 +80,11 @@ export interface VerifyOptions {
  * relationships, declared issuer scope), so a caller never mistakes
  * "verified" for "every profile constraint was enforced."
  */
-export function verify(config: PredicateHandlingConfig, cred: Record<string, unknown>, options: VerifyOptions = {}): VerifyResult {
+export function verify(
+  config: PredicateHandlingConfig,
+  cred: Record<string, unknown>,
+  options: VerifyOptions = {}
+): VerifyResult {
   const { relations = {}, referenced = [] } = options
   const checked: string[] = []
   const unchecked: string[] = []
@@ -87,7 +95,8 @@ export function verify(config: PredicateHandlingConfig, cred: Record<string, unk
 
   // Step 1 — absolute IRI (malformed, not merely unknown)
   if (predicate === undefined) return reject('step 1: no predicate')
-  if (typeof predicate !== 'string' || !ABSOLUTE_IRI.test(predicate)) return reject('step 1: predicate is not an absolute IRI')
+  if (typeof predicate !== 'string' || !ABSOLUTE_IRI.test(predicate))
+    return reject('step 1: predicate is not an absolute IRI')
   checked.push('absolute IRI')
 
   // Step 2 — accepted vocabulary (the verifier's own configuration, never derived from the credential)
@@ -98,11 +107,13 @@ export function verify(config: PredicateHandlingConfig, cred: Record<string, unk
   // Step 3 — the profile's constraints
   const object = cs.object as Record<string, unknown> | undefined
   const kinds = (['id', 'digestMultibase', 'value'] as const).filter((k) => object && k in object)
-  if (kinds.length !== 1) return reject(`object must carry exactly one of id|digestMultibase|value (has ${kinds.join(',') || 'none'})`)
+  if (kinds.length !== 1)
+    return reject(`object must carry exactly one of id|digestMultibase|value (has ${kinds.join(',') || 'none'})`)
   if (!profile.objectKind.includes(kinds[0])) return reject(`object kind ${kinds[0]} not permitted`)
   checked.push('objectKind')
 
-  if (profile.taskContextRequired && typeof cred.taskContext !== 'string') return reject('taskContext required but absent')
+  if (profile.taskContextRequired && typeof cred.taskContext !== 'string')
+    return reject('taskContext required but absent')
   checked.push('taskContextRequired')
 
   for (const [name, m] of Object.entries(profile.members)) {
@@ -112,7 +123,9 @@ export function verify(config: PredicateHandlingConfig, cred: Record<string, unk
     }
     if (m.schemaUrl && !m.validate) return reject(`schema for ${name} named but not loaded at configuration time`)
     if (m.validate && !m.validate(cs[name])) {
-      return reject(`${name} fails its schema: ${(m.validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message}`).join('; ')}`)
+      return reject(
+        `${name} fails its schema: ${(m.validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message}`).join('; ')}`
+      )
     }
     checked.push(`additional member ${name}`)
   }
@@ -136,7 +149,8 @@ export function verify(config: PredicateHandlingConfig, cred: Record<string, unk
     if (cs.id !== expected) return reject(`${relation}: subject ${String(cs.id)} is not ${String(expected)}`)
     checked.push(`subject relationship (${relation})`)
   }
-  if (profile.minimumIssuerScope) unchecked.push('minimumIssuerScope (no credential property carries a declared scope — cred-spec #46)')
+  if (profile.minimumIssuerScope)
+    unchecked.push('minimumIssuerScope (no credential property carries a declared scope — cred-spec #46)')
 
   return { ok: true, reason: 'accepted', checked, unchecked, ignored }
 }

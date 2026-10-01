@@ -460,7 +460,11 @@ describe('runWitnessSession', () => {
           ...vsc,
           taskContext: sessionDoc.id,
           taskDigestMultibase: digestMultibase(sessionDoc),
-          credentialSubject: { ...subject, taskContext: sessionDoc.id, taskDigestMultibase: digestMultibase(sessionDoc) },
+          credentialSubject: {
+            ...subject,
+            taskContext: sessionDoc.id,
+            taskDigestMultibase: digestMultibase(sessionDoc),
+          },
         }
         ;(response.payload as Record<string, unknown>).vwcDigestMultibase = digestMultibase(payload.vwc)
       }
@@ -514,7 +518,7 @@ describe('runWitnessSession', () => {
       expect(storedCredentials).toHaveLength(1) // unchecked is conforming, not a refusal
     })
 
-    test('a VSC-shaped VWC whose subject is NOT the referenced VRC\'s issuer is refused (the D6 violation this check exists to catch)', async () => {
+    test("a VSC-shaped VWC whose subject is NOT the referenced VRC's issuer is refused (the D6 violation this check exists to catch)", async () => {
       const { agent, storedCredentials } = makeFakeAgent()
       const witness = makeWitness(withVsc(vscVwc({ subjectId: 'did:peer:0zSomeoneElse' })))
 
@@ -566,7 +570,7 @@ describe('runWitnessSession', () => {
       expect(storedCredentials).toHaveLength(0)
     })
 
-    test('issuerScope: pairwise is narrower than the dtg:witnessed profile\'s directed minimum, and is refused', async () => {
+    test("issuerScope: pairwise is narrower than the dtg:witnessed profile's directed minimum, and is refused", async () => {
       const { agent, storedCredentials } = makeFakeAgent()
       const witness = makeWitness(withVsc(vscVwc({ issuerScope: 'pairwise' })))
 

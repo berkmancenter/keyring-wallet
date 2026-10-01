@@ -27,7 +27,9 @@ describe('dtg-vocab: Predicate Handling (cred-spec C4, steps 1-3)', () => {
   const config = configure(loadAcceptList(), schemaStore)
 
   it('step 1 rejects a non-absolute-IRI predicate as malformed', () => {
-    const result = verify(config, { credentialSubject: { predicate: 'not-an-iri', object: { digestMultibase: 'zQm...' } } })
+    const result = verify(config, {
+      credentialSubject: { predicate: 'not-an-iri', object: { digestMultibase: 'zQm...' } },
+    })
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/^step 1/)
   })
@@ -59,13 +61,23 @@ describe('dtg-vocab: Predicate Handling (cred-spec C4, steps 1-3)', () => {
     )
     expect(result.ok).toBe(true)
     expect(result.checked).toEqual(
-      expect.arrayContaining(['absolute IRI', 'in accept-list', 'objectKind', 'taskContextRequired', 'additional member witnessContext'])
+      expect.arrayContaining([
+        'absolute IRI',
+        'in accept-list',
+        'objectKind',
+        'taskContextRequired',
+        'additional member witnessContext',
+      ])
     )
   })
 
   it('rejects dtg:witnessed when taskContext is required but absent', () => {
     const result = verify(config, {
-      credentialSubject: { id: 'did:key:zWitness', predicate: DTG_PREDICATE_WITNESSED, object: { digestMultibase: 'zQmTargetDigest' } },
+      credentialSubject: {
+        id: 'did:key:zWitness',
+        predicate: DTG_PREDICATE_WITNESSED,
+        object: { digestMultibase: 'zQmTargetDigest' },
+      },
     })
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/taskContext required but absent/)
@@ -102,7 +114,11 @@ describe('dtg-vocab: Predicate Handling (cred-spec C4, steps 1-3)', () => {
 
   it('flags subjectObjectRelationship as unchecked when the caller supplies no relation to check', () => {
     const result = verify(config, {
-      credentialSubject: { id: 'did:key:zWitness', predicate: DTG_PREDICATE_WITNESSED, object: { digestMultibase: 'zQmTargetDigest' } },
+      credentialSubject: {
+        id: 'did:key:zWitness',
+        predicate: DTG_PREDICATE_WITNESSED,
+        object: { digestMultibase: 'zQmTargetDigest' },
+      },
       taskContext: 'urn:uuid:session-abc',
     })
     expect(result.ok).toBe(true)
@@ -111,10 +127,16 @@ describe('dtg-vocab: Predicate Handling (cred-spec C4, steps 1-3)', () => {
 
   it('accepts a well-formed dtg:endorses credential with no taskContext', () => {
     const result = verify(config, {
-      credentialSubject: { id: 'did:key:zSubject', predicate: DTG_PREDICATE_ENDORSES, object: { value: { skill: 'welding', level: 3 } } },
+      credentialSubject: {
+        id: 'did:key:zSubject',
+        predicate: DTG_PREDICATE_ENDORSES,
+        object: { value: { skill: 'welding', level: 3 } },
+      },
     })
     expect(result.ok).toBe(true)
-    expect(result.unchecked).toContain('minimumIssuerScope (no credential property carries a declared scope — cred-spec #46)')
+    expect(result.unchecked).toContain(
+      'minimumIssuerScope (no credential property carries a declared scope — cred-spec #46)'
+    )
   })
 
   it('ignores undefined credentialSubject members rather than rejecting them (PR #47 profile item 5)', () => {

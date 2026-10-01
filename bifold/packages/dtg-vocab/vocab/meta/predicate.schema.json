@@ -2,7 +2,21 @@
   "$comment": "Transcribes the real dtgwg-vsc-registry's predicate.jsonld shape (predicates/witnessed/1, predicates/endorses/1), not cred-spec issue #52's issue-body example — the registry now exists (undeployed) and is richer: it adds name/version, and id is a flat versioned path (.../vsc/<name>/<n>), not a #fragment. Required/optional split follows PR #47 'Predicate Profiles' (a profile MUST state these nine points) plus the two real registry entries' actual usage.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["id", "type", "name", "version", "status", "label", "definition", "classification", "objectKind", "taskContextRequired", "issuer", "establishes", "doesNotEstablish"],
+  "required": [
+    "id",
+    "type",
+    "name",
+    "version",
+    "status",
+    "label",
+    "definition",
+    "classification",
+    "objectKind",
+    "taskContextRequired",
+    "issuer",
+    "establishes",
+    "doesNotEstablish"
+  ],
   "properties": {
     "@context": { "type": "string" },
     "id": { "type": "string", "pattern": "^https://[^\\s#]+/[0-9]+$" },
@@ -23,7 +37,11 @@
       "additionalProperties": {
         "type": "object",
         "required": ["required"],
-        "properties": { "required": { "type": "boolean" }, "schema": { "type": "string" }, "description": { "type": "string" } }
+        "properties": {
+          "required": { "type": "boolean" },
+          "schema": { "type": "string" },
+          "description": { "type": "string" }
+        }
       }
     },
     "taskContextRequired": { "type": "boolean" },
@@ -38,6 +56,9 @@
   },
   "allOf": [
     { "if": { "properties": { "status": { "const": "active" } } }, "then": { "required": ["since"] } },
-    { "if": { "properties": { "objectKind": { "contains": { "const": "value" } } } }, "then": { "required": ["valueSchema"] } }
+    {
+      "if": { "properties": { "objectKind": { "contains": { "const": "value" } } } },
+      "then": { "required": ["valueSchema"] }
+    }
   ]
 }

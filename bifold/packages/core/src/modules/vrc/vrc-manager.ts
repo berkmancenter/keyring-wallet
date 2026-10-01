@@ -465,7 +465,10 @@ function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string)
  * resolve it offline. Older peers fail to resolve an unknown context IRI, so
  * they must keep receiving the legacy DTG_CONTEXT_URL.
  */
-function counterpartySpeaksHardwareEvidenceContext(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+function counterpartySpeaksHardwareEvidenceContext(
+  agent: Agent,
+  counterpartyRelationshipDid: string
+): Promise<boolean> {
   return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 5)
 }
 

@@ -25,17 +25,20 @@ const agentForPeerVersion = (counterpartyRceVersion: number | undefined) =>
 const V2_CONTEXT = 'https://www.w3.org/ns/credentials/v2'
 
 describe('VRC issuerScope and proof-family gate', () => {
-  test.each([3, 4, 5])('RCE v%i peer: VC 2.0 VRC with issuerScope pairwise, DI proof, no Ed25519 suite context', async (v) => {
-    const agent = agentForPeerVersion(v)
-    const { credential } = await buildVrcCredential(agent, 'did:peer:0issuer', 'did:peer:0subject')
-    expect(credential['@context'][0]).toBe(V2_CONTEXT)
-    expect(credential.issuerScope).toBe('pairwise')
-    expect(credential.issuer).toBe('did:peer:0issuer')
-    expect(credential['@context']).not.toContain(ED25519_2018_SUITE_CONTEXT_URL)
+  test.each([3, 4, 5])(
+    'RCE v%i peer: VC 2.0 VRC with issuerScope pairwise, DI proof, no Ed25519 suite context',
+    async (v) => {
+      const agent = agentForPeerVersion(v)
+      const { credential } = await buildVrcCredential(agent, 'did:peer:0issuer', 'did:peer:0subject')
+      expect(credential['@context'][0]).toBe(V2_CONTEXT)
+      expect(credential.issuerScope).toBe('pairwise')
+      expect(credential.issuer).toBe('did:peer:0issuer')
+      expect(credential['@context']).not.toContain(ED25519_2018_SUITE_CONTEXT_URL)
 
-    const options = await getVrcJsonLdProofOptions(agent, 'did:peer:0subject')
-    expect(options).toMatchObject({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })
-  })
+      const options = await getVrcJsonLdProofOptions(agent, 'did:peer:0subject')
+      expect(options).toMatchObject({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })
+    }
+  )
 
   test.each([undefined, 1, 2])(
     'RCE %s peer: legacy VCDM 1.1 VRC, no issuerScope, Ed25519Signature2018 — never a VC 2.0 document',

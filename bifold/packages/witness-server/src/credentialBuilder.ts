@@ -23,7 +23,12 @@
 import { utils } from '@credo-ts/core'
 import { createHash } from 'crypto'
 
-import { jcsCanonicalize, CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
+import {
+  jcsCanonicalize,
+  CREDENTIALS_V2_CONTEXT_URL,
+  WITNESSED_EXCHANGE_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+} from '@bifold/vrc-contexts'
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 import { taskDigestMultibase } from '@bifold/trust-tasks'
 import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
