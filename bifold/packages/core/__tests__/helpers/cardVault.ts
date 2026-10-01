@@ -137,11 +137,20 @@ export function fakeCommunityStore(init: { memberships?: VtiMembership[]; held?:
 }
 
 /**
- * A VTA's credential vault: `receive` refuses a proof set as the vault does
- * today (400, "proof has no verificationMethod"), `query` answers by purpose
- * and `get` by id. `offline` makes every call go unanswered.
+ * A VTA's credential vault: `receive` refuses a proof set as a vault before
+ * VTI #1868 does (400, "proof has no verificationMethod") unless
+ * `acceptsProofSets`, refuses the ids in `refuses`, `query` answers by
+ * purpose and `get` by id. `offline` makes every call go unanswered.
  */
-export function fakeVault(options: { offline?: boolean } = {}) {
+export function fakeVault(
+  options: {
+    offline?: boolean
+    /** A VTA on VTI #1868 (VTI-44): its vault verifies a proof set and keeps the card. */
+    acceptsProofSets?: boolean
+    /** Credential ids it refuses for some other reason (not a proof set). */
+    refuses?: string[]
+  } = {}
+) {
   const kept = new Map<string, { credential: Record<string, unknown>; contextId?: string; purpose: string }>()
   const calls: { type: string; payload: Record<string, unknown> }[] = []
   const purposeOf = (c: Record<string, unknown>) =>
@@ -151,8 +160,10 @@ export function fakeVault(options: { offline?: boolean } = {}) {
     if (options.offline) throw new Error('the VTA did not answer')
     if (type.endsWith('/receive/0.1')) {
       const credential = payload.credential as Record<string, unknown>
-      if (Array.isArray(credential.proof))
+      if (Array.isArray(credential.proof) && !options.acceptsProofSets)
         throw Object.assign(new Error('proof has no verificationMethod'), { code: 'invalidCredential' })
+      if (options.refuses?.includes(String(credential.id)))
+        throw Object.assign(new Error('issuer proof verification failed'), { code: 'invalidCredential' })
       kept.set(String(payload.id ?? credential.id), {
         credential,
         contextId: payload.contextId as string | undefined,
