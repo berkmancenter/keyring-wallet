@@ -20,6 +20,8 @@ import {
   RELATIONSHIP_CONTEXT_DOCUMENT,
   WITNESSED_EXCHANGE_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
+  DTG_REGISTRY_CONTEXT_V1_URL,
+  DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
 } from '@bifold/vrc-contexts'
 
 /**
@@ -36,10 +38,7 @@ function resolveDidKey(did: string): DidDocument | null {
 
     // Build a minimal DID Document
     const didDocument = {
-      '@context': [
-        'https://www.w3.org/ns/did/v1',
-        'https://w3id.org/security/suites/ed25519-2018/v1'
-      ],
+      '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/ed25519-2018/v1'],
       id: did,
       verificationMethod: [
         {
@@ -47,7 +46,7 @@ function resolveDidKey(did: string): DidDocument | null {
           type: 'Ed25519VerificationKey2018',
           controller: did,
           publicKeyBase58: key.publicKeyBase58,
-        }
+        },
       ],
       authentication: [verificationMethodId],
       assertionMethod: [verificationMethodId],
@@ -83,10 +82,7 @@ function resolveDidPeer0(did: string): DidDocument | null {
 
     // Build a minimal DID Document for did:peer:0
     const didDocument = {
-      '@context': [
-        'https://www.w3.org/ns/did/v1',
-        'https://w3id.org/security/suites/ed25519-2018/v1'
-      ],
+      '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/ed25519-2018/v1'],
       id: did,
       verificationMethod: [
         {
@@ -94,7 +90,7 @@ function resolveDidPeer0(did: string): DidDocument | null {
           type: 'Ed25519VerificationKey2018',
           controller: did,
           publicKeyBase58: key.publicKeyBase58,
-        }
+        },
       ],
       authentication: [verificationMethodId],
       assertionMethod: [verificationMethodId],
@@ -204,7 +200,7 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
         if (key.type === 'Ed25519VerificationKey2018' && !key['@context']) {
           keyWithContext['@context'] = verificationMethodContexts['Ed25519VerificationKey2018'] || [
             'https://www.w3.org/ns/did/v1',
-            'https://w3id.org/security/suites/ed25519-2018/v1'
+            'https://w3id.org/security/suites/ed25519-2018/v1',
           ]
         }
 
@@ -245,6 +241,17 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
         contextUrl: null,
         documentUrl: url,
         document: DTG_CONTEXT_DOCUMENT,
+      }
+    }
+
+    // DTG Credentials v1 (credentials from VTI 0.47.0 on): the registry's
+    // frozen bytes, never fetched. The spec compares this IRI byte-exact, so
+    // only the exact URL is served from here.
+    if (url === DTG_REGISTRY_CONTEXT_V1_URL) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
       }
     }
 

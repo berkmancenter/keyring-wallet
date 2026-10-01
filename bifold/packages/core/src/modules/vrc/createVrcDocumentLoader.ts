@@ -15,12 +15,14 @@ import {
   RCARD_CONTEXT_URL,
   RCARD_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
-import {
-  WITNESSED_EXCHANGE_CONTEXT_URL,
-  WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
-} from './types/witnessedExchangeContext'
+import { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
 import { CACHED_SECURITY_CONTEXTS } from './types/cachedSecurityContexts'
-import { CREDENTIALS_V2_CONTEXT_URL, CREDENTIALS_V2_CONTEXT_DOCUMENT } from '@bifold/vrc-contexts'
+import {
+  CREDENTIALS_V2_CONTEXT_URL,
+  CREDENTIALS_V2_CONTEXT_DOCUMENT,
+  DTG_REGISTRY_CONTEXT_V1_URL,
+  DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
+} from '@bifold/vrc-contexts'
 
 /**
  * The context community cards name (VTC-issued membership, role and vetter
@@ -160,6 +162,13 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     // W3C VCDM 2.0 base context (credo's offline cache only bundles v1.1)
     if (url === CREDENTIALS_V2_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: CREDENTIALS_V2_CONTEXT_DOCUMENT }
+    }
+
+    // DTG Credentials v1 (community cards from VTI 0.47.0 on): the registry's
+    // frozen bytes, never fetched. The spec compares this IRI byte-exact, so
+    // only the exact URL is served from here.
+    if (url === DTG_REGISTRY_CONTEXT_V1_URL) {
+      return { contextUrl: null, documentUrl: url, document: DTG_REGISTRY_CONTEXT_V1_DOCUMENT }
     }
 
     // Handle well-known W3C/DID/security contexts locally to avoid
