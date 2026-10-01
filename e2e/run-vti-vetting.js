@@ -51,6 +51,14 @@ const platforms = (process.env.PLATFORMS || "android,ios").split(",");
 const REFUSAL = process.env.E2E_REFUSAL || "";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
+/** Run the shell command an E2E_* hook variable names, if set; it must exit 0. */
+function hook(name) {
+  const cmd = process.env[name];
+  if (!cmd) return;
+  console.log(`[e2e] ${name}: ${cmd}`);
+  execFileSync("/bin/bash", ["-c", cmd], { stdio: "inherit", timeout: 600000 });
+}
+
 /** One vtc-admin call, as the lab's community administrator; returns its JSON. */
 function admin(...args) {
   const env = Object.fromEntries(
@@ -402,9 +410,15 @@ try {
     // The applicant waits for the statement; away and back, the step stays.
     if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
+    // A gate leg that changes the world around the attest — the Farm 0.47
+    // gate's (c) makes the community unreachable for it, so the desk must
+    // choose the statement shape by the vetter's own grant — runs its own
+    // command on either side. Each must exit 0.
+    hook("E2E_BEFORE_ATTEST");
     await roles.vetter.attest(vetter, o);
     await screenshot(vetter, "vetting-06-attested");
     await checkVettingStep(vetter, "desk, statement issued");
+    hook("E2E_AFTER_ATTEST");
     await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
     await screenshot(applicant, "vetting-07-checklist");
     await checkVettingStep(applicant, "applicant, ready to apply");
