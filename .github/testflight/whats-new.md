@@ -6,14 +6,20 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
-• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
-• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
-• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
-• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
-• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
-• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
-• Screens stay above the keyboard when you type or paste a code.
-• The demo collector card and approval demo are gone; contacts show the regular list.
-• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
-• Update over your current version; there's no need to reinstall.
+What's new
+• Vetting uses the new community credential formats. When a community asks for them, a vetter's statement is written in the new format; elsewhere it uses the old one.
+• Connect this phone to a new agent by scanning a code: when you create an agent with your hosting service, choose the automatic mobile connection, then tap Scan in Keyring under My Agent → Set up a new agent.
+• You can now Share the phone's code, not just copy it: send it by Messages or AirDrop, or save it to Files.
+• While Keyring waits for your agent to add this phone, it shows a calm "Waiting…" line instead of a red warning that came and went.
+• A message no longer hangs when your agent's sign-in at the mediator has just expired.
+
+Please test
+• Join a community and get vetted, as a vetter and as an applicant.
+• Set up a new agent with the scan option.
+
+Known issues
+• A vetter using the openvtc terminal app can't vet yet (fixed upstream; waiting for that app to pick up the fix). Vetting between two Keyring users works.
+• Some cards say "On this phone only": your agent can't keep a copy of them yet.
+• Notifications are built in but switched off in this build.
+• Vetters: please update to this build. A vetting done from the previous build no longer counts in a community that uses the new formats.
+• Update over your current version; your memberships carry over, with no need to re-join.
