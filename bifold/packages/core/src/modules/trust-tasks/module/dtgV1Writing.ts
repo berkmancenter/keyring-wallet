@@ -36,7 +36,7 @@ export type DtgV1WritingMode = 'off' | 'auto' | 'force'
  * decision (228: 'auto' once the Farm 0.47 gate passes on the candidate,
  * else 'off'); nothing else needs to move.
  */
-export const DTG_V1_WRITING_RELEASE_DEFAULT: DtgV1WritingMode = 'off'
+export const DTG_V1_WRITING_RELEASE_DEFAULT: DtgV1WritingMode = 'auto'
 
 let writingMode: DtgV1WritingMode = DTG_V1_WRITING_RELEASE_DEFAULT
 
