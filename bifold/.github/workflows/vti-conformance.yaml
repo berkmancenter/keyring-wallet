@@ -53,6 +53,12 @@ jobs:
           echo "VTI pin: $vti"
           git clone --filter=blob:none https://github.com/OpenVTC/verifiable-trust-infrastructure.git "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure"
           git -C "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure" checkout --detach "$vti"
+          # 228: a second, separate VTI clone at the 0.47 pin, for card-verify-v047,
+          # which judges the vetted/1 statement Keyring writes behind its flag.
+          vti047="$(node -e "process.stdout.write(require('$RUNNER_TEMP/wallet/scripts/openvtc/PINS.json').repos['verifiable-trust-infrastructure-v047'].sha)")"
+          echo "VTI 0.47 pin: $vti047"
+          git clone --filter=blob:none https://github.com/OpenVTC/verifiable-trust-infrastructure.git "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure-v047"
+          git -C "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure-v047" checkout --detach "$vti047"
 
       - name: Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
@@ -60,10 +66,16 @@ jobs:
       - name: Cache the checker's build
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: ${{ runner.temp }}/wallet/scripts/openvtc/card-verify -> target
+          workspaces: |
+            ${{ runner.temp }}/wallet/scripts/openvtc/card-verify -> target
+            ${{ runner.temp }}/wallet/scripts/openvtc/card-verify-v047 -> target
 
       - name: Build card-verify
         working-directory: ${{ runner.temp }}/wallet/scripts/openvtc/card-verify
+        run: cargo build --release --locked
+
+      - name: Build card-verify-v047
+        working-directory: ${{ runner.temp }}/wallet/scripts/openvtc/card-verify-v047
         run: cargo build --release --locked
 
       - name: Keyring makes a card and a statement
@@ -83,7 +95,7 @@ jobs:
         # Each proof must be for the purpose vta-sdk signs its type for
         # (purpose_for_document_type): card-verify checks it with upstream's own function.
         env:
-          CARD_VERIFY_EXPECT_PURPOSE: "1"
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
@@ -93,6 +105,20 @@ jobs:
             "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
             "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
             "$bin" verify-eligibility "$out/eligibility.json" "$out/expect.json"
+          done
+
+      # 228 writer: the vetted/1 statement Keyring's vetter writes with
+      # setDtgV1WritingEnabled(true) (cardConformance writes statement-v1.json and
+      # the session document it cites), judged by VTI 0.47's own SDK as an openvtc
+      # applicant on 0.47 judges it: verify_statement, check_against_card,
+      # check_against_session. The default-shape statement stays judged above,
+      # at the main pin.
+      - name: VTI 0.47 SDK judges the vetted/1 statement (flag on)
+        run: |
+          bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify-v047/target/release/card-verify-v047"
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            echo "== $out"
+            "$bin" verify-statement "$out/statement-v1.json" "$out/card.json" "$out/session.json" "$out/expect.json"
           done
 
       # Every Trust Task document Keyring signs — to a peer, a community, its
@@ -105,7 +131,7 @@ jobs:
         # Each proof must be for the purpose vta-sdk signs its type for
         # (purpose_for_document_type): card-verify checks it with upstream's own function.
         env:
-          CARD_VERIFY_EXPECT_PURPOSE: "1"
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
