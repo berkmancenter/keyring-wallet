@@ -118,7 +118,8 @@ describe('a role grant, read in either shape', () => {
     }
     expect(communityRoleCard(both)?.roles).toEqual(['moderator', 'vetter'])
     expect(classifyCredential(both).kind).toBe('vetter-grant')
-    expect(roleNameOf(both)).toBe('moderator')
+    // Filed as the vetter grant, and named so: never labelled with another of its roles.
+    expect(roleNameOf(both)).toBe('vetter')
   })
 })
 

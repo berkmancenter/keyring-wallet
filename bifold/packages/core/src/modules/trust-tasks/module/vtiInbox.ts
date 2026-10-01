@@ -15,7 +15,7 @@
  * @module trust-tasks/module/vtiInbox
  */
 
-import { communityRoleCard, confersRole, vettingStatementBody, VETTER_ROLE } from '@bifold/trust-tasks'
+import { communityRoleCard, confersRole, roleMatches, vettingStatementBody, VETTER_ROLE } from '@bifold/trust-tasks'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -74,15 +74,19 @@ export function credentialsOfIssue(body: unknown): Record<string, unknown>[] {
 
 /**
  * The role a role card confers, in either shape: the endorsement's `role`, or
- * the first `role:<name>` of a DTG Credentials v1 VAC. Undefined for anything
- * else.
+ * a DTG Credentials v1 VAC's `role:<name>`. A VAC may confer several; when one
+ * is the vetter role it is the one named, as classifyCredential files such a
+ * card as the vetter grant — so the card is not labelled with another role.
+ * Undefined for anything else.
  */
 export function roleNameOf(credential: Record<string, unknown>): string | undefined {
   const endorsement = (credential.credentialSubject as Record<string, unknown> | undefined)?.endorsement as
     | Record<string, unknown>
     | undefined
   if (typeof endorsement?.role === 'string' && endorsement.role) return endorsement.role
-  return communityRoleCard(credential)?.roles[0]
+  const card = communityRoleCard(credential)
+  if (!card) return undefined
+  return card.roles.find((role) => roleMatches(role, VETTER_ROLE)) ?? card.roles[0]
 }
 
 /** Say what a credential is, from its type and its endorsement body. */
