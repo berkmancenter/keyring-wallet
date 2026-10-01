@@ -40,17 +40,20 @@ guard() { # hostname...
 parse_domains() { # file
   python3 - "$1" <<'PY'
 import re, sys
-in_t = False; cur = None
+in_t = False; cur = None; name_ind = None
 for raw in open(sys.argv[1]).read().splitlines():
     line = raw.split(" #")[0].rstrip()
     if not line.strip() or line.lstrip().startswith("#"): continue
     ind = len(line) - len(line.lstrip())
     s = line.strip()
     if ind == 0:
-        in_t = (s == "tunnels:"); cur = None; continue
+        in_t = (s == "tunnels:"); cur = None; name_ind = None; continue
     if not in_t: continue
+    # ngrok re-saves the file with its own indent (4 spaces) after `add-authtoken`:
+    # the tunnel-name indent is whatever the first nested line under `tunnels:` uses.
+    if name_ind is None: name_ind = ind
     m = re.match(r"^([A-Za-z0-9_-]+):\s*$", s)
-    if m and ind <= 2: cur = m.group(1); continue
+    if m and ind == name_ind: cur = m.group(1); continue
     m = re.match(r"^domain:\s*['\"]?([^'\"\s]+)['\"]?\s*$", s)
     if m and cur: print(cur + "\t" + m.group(1))
 PY
@@ -125,6 +128,9 @@ self_test() {
   "$me" --hosts "$t/x.yml" >/dev/null 2>&1 && bad "guard did not fire (read)" || ok "keyring-vti guard fires (read)"
   sed '/^  bob:/,/^    domain/d' "$f" > "$t/m.yml"
   out=$("$me" --hosts "$t/m.yml" 2>&1) && bad "missing name accepted" || { case "$out" in *"for: bob"*) ok "missing-name error names bob";; *) bad "msg: $out";; esac; }
+  # ngrok re-saves the file with 4-space indent after `ngrok config add-authtoken`; the parser must cope.
+  sed -e 's/^  /    /' -e 's/^    \(proto\|addr\|domain\)/        \1/' "$f" > "$t/i4.yml"
+  "$me" --hosts "$t/i4.yml" >/dev/null 2>&1 && ok "parses ngrok's 4-space re-saved format" || bad "4-space format"
   "$me" --three a b c >/dev/null 2>&1 && bad "--three should not succeed" || ok "--three is a stub"
   "$me" --check "$f" >/dev/null && ok "--check passes" || bad "--check"
   [ "$fails" -eq 0 ] && { echo "self-test passed"; return 0; } || { echo "self-test: $fails failure(s)" >&2; return 1; }
