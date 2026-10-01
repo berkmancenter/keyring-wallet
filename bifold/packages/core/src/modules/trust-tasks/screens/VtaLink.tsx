@@ -383,12 +383,6 @@ const VtaLink: React.FC = () => {
               quietZone={16}
               testID={testIdWithKey('VtaLinkKeyQr')}
             />
-            {phonePollUntil !== undefined ? (
-              <View style={styles.row} testID={testIdWithKey('VtaLinkWaitingForPhone')}>
-                <ActivityIndicator color={ColorPalette.brand.primary} />
-                <ThemedText style={{ flex: 1 }}>{t('VtaLink.WaitingToBeAdded')}</ThemedText>
-              </View>
-            ) : null}
             <Pressable
               onPress={() => setKeyShown(!keyShown)}
               accessibilityRole="button"
@@ -413,6 +407,14 @@ const VtaLink: React.FC = () => {
                   interpolation: { escapeValue: false },
                 })}
               </ThemedText>
+            ) : null}
+            {/* The screen's status, with the buttons: under the QR it was cut
+                off at the bottom of the scroll (228). */}
+            {phonePollUntil !== undefined ? (
+              <View style={styles.row} testID={testIdWithKey('VtaLinkWaitingForPhone')}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <ThemedText style={{ flex: 1 }}>{t('VtaLink.WaitingToBeAdded')}</ThemedText>
+              </View>
             ) : null}
             {phonePollExpired ? (
               <Button

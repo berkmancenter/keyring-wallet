@@ -648,6 +648,7 @@ exports[`QRScanner Component Renders QR code view when defaultToConnect is true 
         <View
           style={
             Object {
+              "alignItems": "center",
               "backgroundColor": "white",
               "flexGrow": 1,
               "marginVertical": 20,

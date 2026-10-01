@@ -47,6 +47,7 @@ import QRRenderer from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import type { AgentLabel } from '../module/agentLabel'
 import { vtaAgent } from '../module/vtaAgent'
+import { agentAddressScan, type ScannedAgent } from '../module/agentAddressScan'
 import { deviceCodeScan } from '../module/deviceCodeScan'
 import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
@@ -145,6 +146,7 @@ const VtaCreateAgent: React.FC = () => {
   const [addressShown, setAddressShown] = useState(false)
   // A scan asked for from here and never answered is dropped with the screen.
   useEffect(() => () => deviceCodeScan.cancel(), [])
+  useEffect(() => () => agentAddressScan.cancel(), [])
   // The add-device code is sized to the space the screen has left, not only
   // its width (IN-50): on a tall phone with large text a width-sized code ran
   // under the Next bar, and a code with hidden rows cannot be read.
@@ -219,6 +221,20 @@ const VtaCreateAgent: React.FC = () => {
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * What Scan read: an agent's address fills the field, for Continue; a
+   * host's automatic-connection QR goes to that flow, which asks the person
+   * on the link screen before anything is sent.
+   */
+  const onAddressScanned = (scanned: ScannedAgent) => {
+    if (scanned.kind === 'address') {
+      setAddress(scanned.vtaDid)
+      return
+    }
+    vtaAgent.scanHostOffer(scanned.offer)
+    navigation.navigate(Screens.VtaLink as never)
   }
 
   /** Step 2 → 3: resolve the agent and make this phone's key (it names the agent's mediator). */
@@ -387,6 +403,18 @@ const VtaCreateAgent: React.FC = () => {
     actions = (
       <>
         {errorLine('AgentCreateError')}
+        {/* The host's page shows the agent's address as a QR, or its
+            automatic-connection QR: Scan takes either (228). */}
+        <Button
+          title={t('CreateAgent.ScanAddress')}
+          buttonType={ButtonType.Secondary}
+          onPress={() => {
+            setError(undefined)
+            agentAddressScan.request(onAddressScanned)
+            openScanner(navigation)
+          }}
+          testID={testIdWithKey('AgentCreateScanAddress')}
+        />
         <Button
           title={t('CreateAgent.Paste')}
           buttonType={ButtonType.Secondary}

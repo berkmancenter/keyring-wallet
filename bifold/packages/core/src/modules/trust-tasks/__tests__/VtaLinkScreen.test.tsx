@@ -176,6 +176,19 @@ describe('the key the admin has to add', () => {
     })
 
     /**
+     * On 228 the waiting line sat under the QR and was cut off at the bottom
+     * of the scroll (a maintainer's screenshot). It is the screen's status,
+     * so it sits in the bar with the buttons, always in view.
+     */
+    test('the waiting line sits in the action bar, not under the QR', () => {
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      const card = tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))
+      expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+      expect(card.findAll((node) => node.props?.testID === testIdWithKey('VtaLinkWaitingForPhone'))).toHaveLength(0)
+    })
+
+    /**
      * The same scan lands here from an agent host's own page (a QR holding
      * just the agent's address, beside an "Admin DID" box) as from another
      * phone's "Add another phone" code: both are a bare agent DID, and the

@@ -13,6 +13,9 @@ import { useNavigation } from '@react-navigation/native'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import enCopy from '../../../localization/en/en.json'
+import frCopy from '../../../localization/fr/fr.json'
+import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import MyAgent from '../screens/MyAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
@@ -190,6 +193,46 @@ describe('My Agent — the connected gate', () => {
     expect(tree.getByTestId(testIdWithKey('LinkWithoutQrButton'))).toBeTruthy()
     // With no agent there is nothing to connect to, so no button that could only fail.
     expect(tree.queryByTestId(testIdWithKey('ConnectMyAgentButton'))).toBeNull()
+  })
+
+  /**
+   * A maintainer on 228 picked "I already have one — link it" for an agent a
+   * host had just made, met "Show this to your other phone", and went back
+   * for "Claim your agent". Each choice now says what it is for, under it.
+   */
+  test('each way in says what it is for: a new agent, an agent used elsewhere, or no code', async () => {
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    setVta({ link: { kind: 'notLinked' } })
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentCreate'))).toHaveTextContent('CreateAgent.CreateMyAgent')
+    expect(tree.getByTestId(testIdWithKey('AgentCreateHint'))).toHaveTextContent('CreateAgent.CreateMyAgentHint')
+    expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toHaveTextContent('CreateAgent.AlreadyHaveOne')
+    expect(tree.getByTestId(testIdWithKey('LinkYourAgentHint'))).toHaveTextContent('CreateAgent.AlreadyHaveOneHint')
+    expect(tree.getByTestId(testIdWithKey('LinkWithoutQrButton'))).toBeTruthy()
+  })
+
+  test('the words for the ways in: set up a new agent, add this phone to one, in every language', () => {
+    for (const [words, newAgent, addPhone] of [
+      [enCopy, /new agent/i, /add this phone/i],
+      [frCopy, /nouvel agent/i, /ajouter ce téléphone/i],
+      [ptBrCopy, /novo agente/i, /adicionar este telefone/i],
+    ] as const) {
+      expect(words.CreateAgent.CreateMyAgent).toMatch(newAgent)
+      expect(words.Screens.VtaCreateAgent).toBe(words.CreateAgent.CreateMyAgent)
+      expect(words.CreateAgent.AlreadyHaveOne).toMatch(addPhone)
+      expect(words.CreateAgent.CreateMyAgentHint).toEqual(expect.any(String))
+      expect(words.CreateAgent.AlreadyHaveOneHint).toEqual(expect.any(String))
+      // The steps that name the second choice name it as it now reads.
+      expect(words.CreateAgent.BackupScanThisBody).toContain(words.CreateAgent.AlreadyHaveOne)
+      expect(JSON.stringify(words.CreateAgent)).not.toMatch(/claim|revendiquer|reivindi/i)
+    }
   })
 
   /** The one client for the VTA exists before the state is set, so mounting does not reset it. */
