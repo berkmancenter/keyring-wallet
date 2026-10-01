@@ -85,6 +85,8 @@ import {
   type VtiVettingStore,
 } from '../module/vtiVetting'
 // eslint-disable-next-line import/order
+import { setDtgV1WritingEnabled } from '../module/dtgV1Writing'
+// eslint-disable-next-line import/order
 import { verifyEligibilityPresentation } from '../module/vtiEligibility'
 import { purposeForDocumentType } from '../module/proofPurpose'
 // eslint-disable-next-line import/order
@@ -235,6 +237,61 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     expect(endorsement.identityCommitment).toBe(card.identityCommitment)
     await expect(verifyDocumentProof(vetter.agent as never, statement, vetter.did)).resolves.toBe(true)
 
+    // 228 writer, flag on: the same attestation as DTG Credentials v1's vetted/1
+    // statement, over a session document the vetter opened. Written out as
+    // statement-v1.json + session.json for the 0.47 checker (card-verify-v047),
+    // which runs vta-sdk 0.58 verify_statement, check_against_card and
+    // check_against_session on it.
+    const sessionDocument = await signDocumentProof(
+      vetter.agent as never,
+      {
+        id: session.documentId,
+        type: VETTING.session,
+        threadId: session.documentId,
+        issuer: vetter.did,
+        recipient: applicant.did,
+        issuedAt: new Date().toISOString(),
+        payload: {
+          requestId: 'request-conformance',
+          challenge: session.challenge,
+          domain: session.domain,
+          method: 'inPerson',
+          requiredClaims: session.requiredClaims,
+          expiresAt: session.expiresAt,
+        },
+      },
+      vetter.did,
+      { kmsKeyId: 'vetter-key', verificationMethodId: vetter.verificationMethodId, proofPurpose: 'authentication' }
+    )
+    const deskV1: VettingDeskRequest = {
+      ...desk,
+      status: 'cardReceived',
+      session: { ...desk.session!, taskDigestMultibase: taskDigestMultibase(sessionDocument) },
+    }
+    mockSend.mockClear()
+    setDtgV1WritingEnabled(true)
+    try {
+      await new VtiVetterDesk(
+        vetter.agent as never,
+        vetterPersona as never,
+        { listDesk: async () => [deskV1], saveDesk: jest.fn(async () => undefined) } as unknown as VtiVettingStore,
+        {} as never
+      ).attest(desk.requestId, {
+        documentClasses: ['passport'],
+        claimsVerified: ['name.legal'],
+        livenessConfirmed: true,
+      })
+    } finally {
+      setDtgV1WritingEnabled(false)
+    }
+    const issueV1 = (mockSend.mock.calls.at(-1) as unknown as [string, string, Record<string, unknown>])[2]
+    const statementV1 = (
+      (issueV1.payload as Record<string, unknown>).credential_response as { credential: Record<string, unknown> }
+    ).credential
+    expect(statementV1.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(statementV1.taskDigestMultibase).toBe(taskDigestMultibase(sessionDocument))
+    await expect(verifyDocumentProof(vetter.agent as never, statementV1, vetter.did)).resolves.toBe(true)
+
     // The vetter accepts a request, presenting its grant. The community here is
     // a did:key so an upstream checker can verify the grant offline.
     const grantor = didKeySigner()
@@ -326,6 +383,8 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       mkdirSync(out, { recursive: true })
       writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
       writeFileSync(join(out, 'statement.json'), JSON.stringify(statement, null, 2))
+      writeFileSync(join(out, 'statement-v1.json'), JSON.stringify(statementV1, null, 2))
+      writeFileSync(join(out, 'session.json'), JSON.stringify(sessionDocument, null, 2))
       // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
       // The vetter's is its request response: the statement travels in a bare
       // credential-exchange/issue body, which is not a signed document (the
