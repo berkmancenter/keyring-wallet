@@ -86,6 +86,41 @@ const RESYNC_DEBOUNCE_MS = 1000
 export const SOCKET_OPEN_TIMEOUT_MS = 8000
 /** How long one login step (challenge, authenticate) may take before it is aborted and tried again. */
 export const LOGIN_STEP_TIMEOUT_MS = 15000
+/**
+ * A cached access token this close to its `exp` is not presented: the mediator
+ * ends a socket at its token's expiry and closes at once a reopen that presents
+ * an expired one (affinidi-messaging-mediator handlers/websocket.rs), so a
+ * token is replaced, and a live socket renewed, this long before.
+ */
+export const TOKEN_RENEW_MARGIN_SECS = 60
+/**
+ * The longest a send waits for a socket to reopen. Every step inside has its
+ * own bound, but a send must never wait for ever on a reopen that cannot finish
+ * (229 lab gate: a vetter's attest waited on one for good).
+ */
+export const REOPEN_BOUND_MS = 45000
+
+/** The `exp` (seconds) of a JWT access token, or undefined when it cannot be read. */
+export function accessTokenExpiry(token: string | undefined): number | undefined {
+  const payload = token?.split('.')[1]
+  if (!payload) return undefined
+  try {
+    const json = JSON.parse(utf8FromBase64Url(payload)) as { exp?: unknown }
+    return typeof json.exp === 'number' ? json.exp : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function utf8FromBase64Url(text: string): string {
+  const b64 = text.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(padded)
+    return decodeURIComponent(Array.from(binary, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''))
+  }
+  return Buffer.from(padded, 'base64').toString('utf8')
+}
 const SOCKET_OPEN_TIMEOUT = 'socket did not open'
 const isOpenTimeout = (error: unknown) => error instanceof Error && error.message.includes(SOCKET_OPEN_TIMEOUT)
 const PLAIN = 'application/didcomm-plain+json'
@@ -423,6 +458,7 @@ export class VtiMediatorSession {
   private opening?: Promise<void>
   private readonly seen = new Set<string>()
   private accessToken?: string
+  private renewTimer?: ReturnType<typeof setTimeout>
 
   constructor(
     private readonly agent: Agent,
@@ -560,6 +596,11 @@ export class VtiMediatorSession {
    * tunnel itself is not a refusal, so try a few times before giving up.
    */
   private async ensureAccessToken(): Promise<void> {
+    // A token that has expired, or is about to, would be accepted by the socket
+    // upgrade and then closed at once: never present one.
+    const exp = accessTokenExpiry(this.accessToken)
+    if (exp !== undefined && exp - Math.floor(Date.now() / 1000) <= TOKEN_RENEW_MARGIN_SECS)
+      this.accessToken = undefined
     let lastError: unknown
     for (let attempt = 0; attempt < 3 && !this.accessToken; attempt++) {
       try {
@@ -607,7 +648,37 @@ export class VtiMediatorSession {
       // is what failed.
       await this.openSocket()
     }
-    await this.startLiveDelivery()
+    try {
+      await this.startLiveDelivery()
+    } catch (error) {
+      // Upgraded and then closed — the mediator's answer to a token it no longer
+      // honours. Without a cached token there is nothing left to try.
+      if (!hadCachedToken) throw error
+      this.accessToken = undefined
+      await this.ensureAccessToken()
+      await this.openSocket()
+      await this.startLiveDelivery()
+    }
+    this.scheduleRenewal()
+  }
+
+  /**
+   * Replace the socket before the mediator ends it at the token's expiry, so a
+   * send never lands in the gap (229 lab gate, 2026-10-01: a vetter's statement
+   * did, 15 minutes after its sign-in).
+   */
+  private scheduleRenewal(): void {
+    if (this.renewTimer) clearTimeout(this.renewTimer)
+    this.renewTimer = undefined
+    const exp = accessTokenExpiry(this.accessToken)
+    if (exp === undefined || this.stopped) return
+    const inMs = Math.max(0, (exp - TOKEN_RENEW_MARGIN_SECS) * 1000 - Date.now())
+    this.renewTimer = setTimeout(() => {
+      this.renewTimer = undefined
+      if (this.stopped) return
+      this.accessToken = undefined
+      void this.reopen().catch((error) => this.options.onError?.(error as Error))
+    }, inMs)
   }
 
   /** Open the websocket and attach the frame handler. */
@@ -656,13 +727,21 @@ export class VtiMediatorSession {
     socket.onmessage = (event: WebSocketMessageEvent) => {
       void this.handleFrame(typeof event.data === 'string' ? event.data : String(event.data))
     }
+    // The mediator says why it ends a socket. A token it no longer honours is
+    // not presented again: the next reopen signs in.
+    socket.addEventListener('close', (event: unknown) => {
+      const reason = String((event as { reason?: unknown } | undefined)?.reason ?? '')
+      if (/token expired|expired/i.test(reason) && this.socket === socket) this.accessToken = undefined
+    })
     this.socket = socket
   }
 
   /** Ask for live delivery, drain what was queued, and start the backstop poll. */
   private async startLiveDelivery(): Promise<void> {
     // Pickup 3.0 live mode: without this the mediator queues and waits to be polled.
-    await this.send({
+    // Sent on the socket just opened, never through `ensureOpen`: this runs
+    // inside a reopen, and a reopen that waits on itself never finishes.
+    await this.sendOnSocket({
       id: uuid(),
       typ: PLAIN,
       type: LIVE_DELIVERY_CHANGE,
@@ -678,7 +757,7 @@ export class VtiMediatorSession {
     // mediator queued while this DID was offline — a consent request pushed to
     // an approver before its app opened — is fetched with an explicit
     // delivery-request; the `delivery` response is unpacked in `handleFrame`.
-    await this.requestDelivery()
+    await this.requestDelivery(true)
     // And a live push can be missed — measured: a vetting statement sat in the
     // recipient's queue while its socket was open (VTI-24's shape again). A
     // periodic delivery-request is the backstop; an empty queue answers with a
@@ -696,9 +775,9 @@ export class VtiMediatorSession {
    * limit}` (`MessagePickupDeliveryRequest`, affinidi-messaging-sdk) — without
    * `recipient_did` it answers a problem-report and nothing is delivered.
    */
-  private async requestDelivery(): Promise<void> {
+  private async requestDelivery(onSocketOnly = false): Promise<void> {
     this.lastDeliveryRequestAt = Date.now()
-    await this.send({
+    await (onSocketOnly ? this.sendOnSocket.bind(this) : this.send.bind(this))({
       id: uuid(),
       typ: PLAIN,
       type: DELIVERY_REQUEST,
@@ -951,9 +1030,29 @@ export class VtiMediatorSession {
     // socket for the same DID, owned by nobody, which took the answer meant for
     // the next attempt (Android link on a slow device, 2026-09-24).
     if (this.stopped) throw new Error(`${LOG_PREFIX} session stopped`)
-    // One reopen at a time: an acknowledgement, the poll and a task can all
-    // find the socket closed in the same tick, and two starts racing replace
-    // the socket under the first caller ("socket is not open").
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        this.reopen(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`${LOG_PREFIX} the mediator socket did not reopen within ${REOPEN_BOUND_MS} ms`)),
+            REOPEN_BOUND_MS
+          )
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Close whatever socket is left and start again. One reopen at a time: an
+   * acknowledgement, the poll and a task can all find the socket closed in the
+   * same tick, and two starts racing replace the socket under the first caller
+   * ("socket is not open").
+   */
+  private reopen(): Promise<void> {
     if (!this.opening) {
       this.opening = (async () => {
         try {
@@ -967,15 +1066,25 @@ export class VtiMediatorSession {
         this.opening = undefined
       })
     }
-    await this.opening
+    return this.opening
   }
 
   private async send(plaintext: DidCommV2PlaintextMessage): Promise<void> {
     await this.ensureOpen()
+    await this.sendOnSocket(plaintext)
+  }
+
+  /** Pack and send on the socket as it is now; never reopens it. */
+  private async sendOnSocket(plaintext: DidCommV2PlaintextMessage): Promise<void> {
     if (!this.socket || this.socket.readyState !== 1) {
       throw new Error(`${LOG_PREFIX} socket is not open`)
     }
-    this.socket.send(JSON.stringify(await this.packForMediator(plaintext)))
+    const packed = JSON.stringify(await this.packForMediator(plaintext))
+    // Packing takes time; the mediator may have closed the socket meanwhile.
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket closed while the message was packed`)
+    }
+    this.socket.send(packed)
   }
 
   /**
@@ -1040,6 +1149,8 @@ export class VtiMediatorSession {
 
   async stop(): Promise<void> {
     this.stopped = true
+    if (this.renewTimer) clearTimeout(this.renewTimer)
+    this.renewTimer = undefined
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = undefined
     this.socket?.close()
