@@ -1695,7 +1695,7 @@
       "expired": "Details: the statement has already expired.",
       "proof": "Details: the statement's signature could not be verified.",
       "noCard": "Details: the statement came before this phone sent your card in that session.",
-      "legacyShape": "Details: the statement is in an older format this phone no longer accepts. Ask your vetter to update their app and vet you again."
+      "legacyShape": "Details: the statement is in an older format this phone no longer accepts. Ask your vetter to update Keyring and vet you again."
     },
     "CardRefused": "The applicant's card arrived, but this phone could not accept it. The session is still open, so they can send it again.",
     "CardRefusedReason": {

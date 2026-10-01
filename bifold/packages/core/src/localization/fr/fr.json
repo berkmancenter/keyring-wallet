@@ -1630,7 +1630,7 @@
       "expired": "Détails : la déclaration a déjà expiré.",
       "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée.",
       "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session.",
-      "legacyShape": "Détails : la déclaration est dans un ancien format que ce téléphone n'accepte plus. Demandez à votre vérificateur de mettre à jour son application et de vous vérifier à nouveau."
+      "legacyShape": "Détails : la déclaration est dans un ancien format que ce téléphone n'accepte plus. Demandez à votre vérificateur de mettre à jour Keyring et de vous vérifier à nouveau."
     },
     "CardRefused": "La carte du demandeur est arrivée, mais ce téléphone n'a pas pu l'accepter. La session est toujours ouverte ; il peut la renvoyer.",
     "CardRefusedReason": {

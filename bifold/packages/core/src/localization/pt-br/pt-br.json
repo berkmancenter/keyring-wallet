@@ -1536,7 +1536,7 @@
       "expired": "Detalhes: a declaração já expirou.",
       "proof": "Detalhes: não foi possível verificar a assinatura da declaração.",
       "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão.",
-      "legacyShape": "Detalhes: a declaração está em um formato antigo que este telefone não aceita mais. Peça ao seu verificador para atualizar o aplicativo e verificar você novamente."
+      "legacyShape": "Detalhes: a declaração está em um formato antigo que este telefone não aceita mais. Peça ao seu verificador para atualizar o Keyring e verificar você novamente."
     },
     "CardRefused": "O cartão do solicitante chegou, mas este telefone não pôde aceitá-lo. A sessão continua aberta, então ele pode enviá-lo de novo.",
     "CardRefusedReason": {
