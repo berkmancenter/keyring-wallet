@@ -27,7 +27,7 @@
  *
  * @module trust-tasks/module/vtiWalletCards
  */
-import { communityRoleCard } from '@bifold/trust-tasks'
+import { communityRoleCard, isCommunityIdentityCheck } from '@bifold/trust-tasks'
 import { JsonTransformer, W3cCredentialRecord, type Agent } from '@credo-ts/core'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
@@ -55,6 +55,7 @@ export function isCommunityCard(vc: Json): boolean {
   if (t.includes('MembershipCredential')) return true
   const endorsement = (vc.credentialSubject as Json | undefined)?.endorsement as Json | undefined
   if (t.includes('EndorsementCredential') && endorsement?.type === 'CommunityRole') return true
+  if (isCommunityIdentityCheck(vc)) return true
   return communityRoleCard(vc)?.shape === 'vac'
 }
 
@@ -72,7 +73,7 @@ async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<str
     add(m.roleVec)
   }
   for (const h of await store.listHeldCredentials())
-    if (h.kind === 'role' || h.kind === 'vetter-grant') add(h.credential)
+    if (h.kind === 'role' || h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
   return held
 }
 

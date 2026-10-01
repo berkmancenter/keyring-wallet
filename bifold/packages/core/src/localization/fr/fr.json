@@ -1146,6 +1146,7 @@
   "Community": {
     "CardMemberOf": "Membre de {{community}}",
     "CardVetterFor": "Vérificateur pour {{community}}",
+    "CardIdentityCheckedBy": "Identité vérifiée par {{community}}",
     "CardRoleIn": "{{role}} dans {{community}}",
     "RoleAdmin": "Administrateur",
     "RoleMember": "Membre",

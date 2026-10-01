@@ -1,0 +1,31 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+  "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+  "issuer": "did:webvh:QmSbCcXWDDJmqE8m1nZt7Ew5DhN3w2Lq6G2rB9sX4yYk1a:chess-club.example",
+  "issuerScope": "public",
+  "validFrom": "2026-10-01T09:30:00Z",
+  "validUntil": "2027-10-01T09:30:00Z",
+  "taskContext": "urn:uuid:8f3a2c1e-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+  "taskDigestMultibase": "zQmNLei78zWmzUdbeRB3CiUfAizWUrbeeZh5K1rhAQKCh51",
+  "credentialSubject": {
+    "id": "did:key:z6MkjRagNiMu91DduvCvgEsqLZDVzrJzFrwahc4tXLt9DoHd",
+    "predicate": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+    "object": {
+      "value": {
+        "community": "did:webvh:QmSbCcXWDDJmqE8m1nZt7Ew5DhN3w2Lq6G2rB9sX4yYk1a:chess-club.example",
+        "method": "inPerson",
+        "documentClasses": ["nationalId"],
+        "claimsVerified": ["name.legal"],
+        "livenessConfirmed": true
+      }
+    }
+  },
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-jcs-2022",
+    "created": "2026-10-01T09:30:00Z",
+    "proofPurpose": "assertionMethod",
+    "verificationMethod": "did:webvh:QmSbCcXWDDJmqE8m1nZt7Ew5DhN3w2Lq6G2rB9sX4yYk1a:chess-club.example#key-1",
+    "proofValue": "z3FXQjecWJKT…illustrative…"
+  }
+}

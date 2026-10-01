@@ -15,7 +15,14 @@
  * @module trust-tasks/module/vtiInbox
  */
 
-import { communityRoleCard, confersRole, roleMatches, vettingStatementBody, VETTER_ROLE } from '@bifold/trust-tasks'
+import {
+  communityRoleCard,
+  confersRole,
+  isCommunityIdentityCheck,
+  roleMatches,
+  vettingStatementBody,
+  VETTER_ROLE,
+} from '@bifold/trust-tasks'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -33,7 +40,13 @@ export const CREDENTIAL_EXCHANGE_ISSUE = 'https://trusttasks.org/spec/credential
 export { IDENTITY_VETTING_ENDORSEMENT_TYPE } from '@bifold/trust-tasks'
 export const COMMUNITY_ROLE_ENDORSEMENT_TYPE = 'CommunityRole'
 
-export type VtiCredentialKind = 'membership' | 'role' | 'vetter-grant' | 'vetting-statement' | 'other'
+export type VtiCredentialKind =
+  | 'membership'
+  | 'role'
+  | 'vetter-grant'
+  | 'vetting-statement'
+  | 'identity-check'
+  | 'other'
 
 export interface VtiReceivedCredential {
   kind: VtiCredentialKind
@@ -100,7 +113,13 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
   // StatementCredential (DTG Credentials v1). Its community is in the body.
   const statement = vettingStatementBody(vc)
   if (t.includes('MembershipCredential')) kind = 'membership'
-  else if (statement) {
+  else if (statement && isCommunityIdentityCheck(vc)) {
+    // A community's own identity check (vetted/1 by the community it names,
+    // none of the vetter-only members): evidence it holds about this person,
+    // kept as its other cards are — not a vetter's statement.
+    kind = 'identity-check'
+    communityDid = String(statement.body.community)
+  } else if (statement) {
     kind = 'vetting-statement'
     communityDid = String(statement.body.community ?? communityDid)
   } else if (t.includes('EndorsementCredential') && endorsement) {
