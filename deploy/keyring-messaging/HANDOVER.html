@@ -423,9 +423,9 @@ they change which values go into <code>.env</code> and who runs §8.</p>
 <td>Nothing for you to set. Measured on 2026-09-30: the VTI lab's mediator and the OpenVTC hosted service's mediator both do this. Another service's mediator is checked once it is known</td>
 </tr>
 <tr>
-<td><strong>Which agents it serves (<code>GATEWAY_ALLOWED_CONTROLLERS</code>)</strong></td>
-<td>An exact list of agent DIDs, or <code>*</code> for any agent. More below</td>
-<td><strong>Still an open question</strong>, for you and the project lead. We recommend <code>*</code> for production, for the reason below</td>
+<td><strong>Which agents it serves (<code>GATEWAY_ALLOWED_CONTROLLERS</code>, <code>GATEWAY_ALLOWED_CONTROLLER_HOSTS</code>)</strong></td>
+<td>An exact list of agent DIDs, the DID hosts the agents live on, or <code>*</code> for any agent. More below</td>
+<td>We recommend the <strong>DID hosts</strong> for production (for example <code>dids.example.org</code> or <code>*.example.org</code>): the hosts are closed, so only agents the operators create can be on them. To be confirmed with the project lead</td>
 </tr>
 </tbody>
 </table></div>
@@ -446,17 +446,27 @@ registration is refused.</p>
 <td>Every new person's agent means a configuration change and a restart</td>
 </tr>
 <tr>
+<td><strong>DID hosts</strong> (<code>GATEWAY_ALLOWED_CONTROLLER_HOSTS</code>, Keyring's patch 0002)</td>
+<td>Any <code>did:webvh</code> or <code>did:web</code> agent whose DID is published on a listed host: an exact host, or <code>*.</code> plus a domain for its subdomains (never the domain itself). Works next to the exact list</td>
+<td>Safe only while the host is closed: if anyone could publish a DID there, this is as open as <code>*</code>. Agents with other DID methods (<code>did:key</code>, <code>did:peer</code>) still need the exact list. Cannot be combined with <code>*</code></td>
+</tr>
+<tr>
 <td><strong><code>*</code> (open mode)</strong></td>
 <td>Any agent may register phones</td>
 <td>The gateway logs a warning at startup. The bounds still hold: at most 4096 live handles per agent, a handle no agent provisions is dropped after 1 hour, and per-sender and per-handle budgets apply</td>
 </tr>
 </tbody>
 </table></div>
-<p>Why we recommend <code>*</code>: each Keyring user has their own agent, so an exact list
-would need a change and a restart for every new user. Open mode still lets an
-agent wake only the phones that registered with it and that it provisioned,
-and the limits above still apply. For the production test the list is just
-our test agent's DID, either way.</p>
+<p>Why we recommend the DID hosts: each Keyring user has their own agent, so an
+exact list would need a change and a restart for every new user. The agents'
+DID hosts are closed (nobody can publish a DID there except through the
+operators), and an agent's host is part of its DID and is where its document
+is fetched from, so &quot;this DID is on our host&quot; means &quot;an operator created this
+agent&quot;. New agents on those hosts are served without a restart, and strangers
+are not. <code>*</code> would also work (an agent can still wake only the phones that
+registered with it and that it provisioned, and the limits above still apply),
+but it admits agents nobody created. For the production test the exact list is
+just our test agent's DID, either way.</p>
 <p>The mediator itself is not a decision: the package bundles it (§7), and you run
 it. It may move to a shared mediator later (§13).</p>
 <p><strong>How an agent on another mediator reaches the gateway</strong>, and what that
@@ -794,9 +804,13 @@ HTTPS_PORT=443
 GATEWAY_COMMIT=e542a9d77a7369f4f3da01d573107ea155c80691
 
 # Which agents the gateway serves: exact DIDs separated by commas or spaces,
-# or * for any agent (§3). Unset or empty = every phone registration is
-# refused.
+# or * for any agent (§3). Unset or empty (and no hosts below) = every phone
+# registration is refused.
 GATEWAY_ALLOWED_CONTROLLERS=&lt;the test agent's DID, for the production test&gt;
+
+# Optional: also serve every did:webvh / did:web agent on these DID hosts
+# (§3), e.g. &quot;dids.example.org *.example.org&quot;. Closed hosts only.
+GATEWAY_ALLOWED_CONTROLLER_HOSTS=
 
 # The gateway's identity file (§8), as a path INSIDE the container.
 # Blank = HTTPS-only: phones can register, but no agent can reach the
@@ -1381,8 +1395,9 @@ ones you were sent);</li>
 <li><code>visible alert mode: interactive wakes are shown as notifications</code>, with
 <code>loc_key=KEYRING_WAKE</code>;</li>
 <li><code>APNs topic allow-list</code>, naming the test app;</li>
-<li><code>controller allowlist</code> with <code>controllers=N listed</code>, or the open-mode
-warning if <code>*</code> was chosen (§3);</li>
+<li><code>controller allowlist</code> with <code>controllers=N listed</code> (and
+<code>, hosts …</code> when DID hosts are set), or the open-mode warning if <code>*</code>
+was chosen (§3);</li>
 <li><code>mediator listener started (TSP and DIDComm)</code>, naming your
 <code>MEDIATOR_DID</code>;</li>
 <li><code>DID document advertises TSPTransport</code>.</li>
@@ -1430,7 +1445,7 @@ restart:</p>
 sudo docker compose up -d gateway
 </code></pre>
 <p>If you chose an exact allowlist, keep adding agents' DIDs as the project
-sends them. Keyring then ships a release pointing at this URL; when is the
+sends them (agents on a listed DID host need nothing). Keyring then ships a release pointing at this URL; when is the
 project's call. Push goes live for users only then.</p>
 </li>
 </ol>
@@ -1479,9 +1494,9 @@ else is a <code>WARN</code> or <code>ERROR</code> line while the gateway keeps r
 <td>Comma-separated bundle IDs, no wildcards</td>
 </tr>
 <tr>
-<td>An error naming <code>GATEWAY_ALLOWED_CONTROLLERS</code></td>
+<td>An error naming <code>GATEWAY_ALLOWED_CONTROLLERS</code> or <code>GATEWAY_ALLOWED_CONTROLLER_HOSTS</code></td>
 <td>A malformed allowlist</td>
-<td>Exact DIDs separated by commas or spaces, or a lone <code>*</code></td>
+<td>Exact DIDs separated by commas or spaces, or a lone <code>*</code>; hosts as <code>dids.example.org</code> or <code>*.example.org</code> (no scheme, port or path), and no hosts next to <code>*</code></td>
 </tr>
 <tr>
 <td><code>set GATEWAY_HOST in .env</code> or <code>set MEDIATOR_HOST in .env</code> (from <code>docker compose</code>, before anything starts)</td>

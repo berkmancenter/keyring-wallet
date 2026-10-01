@@ -41,6 +41,7 @@ services:
       # The controller VTAs (agents) this gateway serves, as exact DIDs. Unset
       # serves nothing: every push/register is refused.
       GATEWAY_ALLOWED_CONTROLLERS: ${GATEWAY_ALLOWED_CONTROLLERS:-}
+      GATEWAY_ALLOWED_CONTROLLER_HOSTS: ${GATEWAY_ALLOWED_CONTROLLER_HOSTS:-}
       GATEWAY_APNS_KEY_FILE: ${GATEWAY_APNS_KEY_FILE:-}
       GATEWAY_APNS_KEY_ID: ${GATEWAY_APNS_KEY_ID:-}
       GATEWAY_APNS_TEAM_ID: ${GATEWAY_APNS_TEAM_ID:-}

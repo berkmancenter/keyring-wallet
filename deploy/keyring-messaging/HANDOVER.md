@@ -199,7 +199,7 @@ they change which values go into `.env` and who runs §8.
 | **Which VTA issues the gateway's identity** | An admin of that VTA runs §8 step 2 | The VTA service that hosts Keyring's agents in production. Its admin runs step 2 (the project lead, or that service's operator), so you don't need to run a VTA yourself |
 | **Which DID host (`WEBVH_SERVER`)** | Where the gateway's `did:webvh` document is published. Anyone resolving the gateway's DID fetches it from there | The DID host that VTA already publishes its own DIDs on |
 | **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. Remote agents need **no account** on the bundled mediator, but their own mediator must have the settings listed below | Nothing for you to set. Measured on 2026-09-30: the VTI lab's mediator and the OpenVTC hosted service's mediator both do this. Another service's mediator is checked once it is known |
-| **Which agents it serves (`GATEWAY_ALLOWED_CONTROLLERS`)** | An exact list of agent DIDs, or `*` for any agent. More below | **Still an open question**, for you and the project lead. We recommend `*` for production, for the reason below |
+| **Which agents it serves (`GATEWAY_ALLOWED_CONTROLLERS`, `GATEWAY_ALLOWED_CONTROLLER_HOSTS`)** | An exact list of agent DIDs, the DID hosts the agents live on, or `*` for any agent. More below | We recommend the **DID hosts** for production (for example `dids.example.org` or `*.example.org`): the hosts are closed, so only agents the operators create can be on them. To be confirmed with the project lead |
 
 **The allowlist, in more detail.** The setting is required: unset means every
 registration is refused.
@@ -207,13 +207,19 @@ registration is refused.
 | Option | What it means | Limits |
 | --- | --- | --- |
 | **An exact list** of agent DIDs | Only those agents' phones can register or be woken. No wildcards or patterns, by upstream's design | Every new person's agent means a configuration change and a restart |
+| **DID hosts** (`GATEWAY_ALLOWED_CONTROLLER_HOSTS`, Keyring's patch 0002) | Any `did:webvh` or `did:web` agent whose DID is published on a listed host: an exact host, or `*.` plus a domain for its subdomains (never the domain itself). Works next to the exact list | Safe only while the host is closed: if anyone could publish a DID there, this is as open as `*`. Agents with other DID methods (`did:key`, `did:peer`) still need the exact list. Cannot be combined with `*` |
 | **`*` (open mode)** | Any agent may register phones | The gateway logs a warning at startup. The bounds still hold: at most 4096 live handles per agent, a handle no agent provisions is dropped after 1 hour, and per-sender and per-handle budgets apply |
 
-Why we recommend `*`: each Keyring user has their own agent, so an exact list
-would need a change and a restart for every new user. Open mode still lets an
-agent wake only the phones that registered with it and that it provisioned,
-and the limits above still apply. For the production test the list is just
-our test agent's DID, either way.
+Why we recommend the DID hosts: each Keyring user has their own agent, so an
+exact list would need a change and a restart for every new user. The agents'
+DID hosts are closed (nobody can publish a DID there except through the
+operators), and an agent's host is part of its DID and is where its document
+is fetched from, so "this DID is on our host" means "an operator created this
+agent". New agents on those hosts are served without a restart, and strangers
+are not. `*` would also work (an agent can still wake only the phones that
+registered with it and that it provisioned, and the limits above still apply),
+but it admits agents nobody created. For the production test the exact list is
+just our test agent's DID, either way.
 
 The mediator itself is not a decision: the package bundles it (§7), and you run
 it. It may move to a shared mediator later (§13).
@@ -529,9 +535,13 @@ HTTPS_PORT=443
 GATEWAY_COMMIT=e542a9d77a7369f4f3da01d573107ea155c80691
 
 # Which agents the gateway serves: exact DIDs separated by commas or spaces,
-# or * for any agent (§3). Unset or empty = every phone registration is
-# refused.
+# or * for any agent (§3). Unset or empty (and no hosts below) = every phone
+# registration is refused.
 GATEWAY_ALLOWED_CONTROLLERS=<the test agent's DID, for the production test>
+
+# Optional: also serve every did:webvh / did:web agent on these DID hosts
+# (§3), e.g. "dids.example.org *.example.org". Closed hosts only.
+GATEWAY_ALLOWED_CONTROLLER_HOSTS=
 
 # The gateway's identity file (§8), as a path INSIDE the container.
 # Blank = HTTPS-only: phones can register, but no agent can reach the
@@ -1024,8 +1034,9 @@ well.
    - `visible alert mode: interactive wakes are shown as notifications`, with
      `loc_key=KEYRING_WAKE`;
    - `APNs topic allow-list`, naming the test app;
-   - `controller allowlist` with `controllers=N listed`, or the open-mode
-     warning if `*` was chosen (§3);
+   - `controller allowlist` with `controllers=N listed` (and
+     `, hosts …` when DID hosts are set), or the open-mode warning if `*`
+     was chosen (§3);
    - `mediator listener started (TSP and DIDComm)`, naming your
      `MEDIATOR_DID`;
    - `DID document advertises TSPTransport`.
@@ -1068,7 +1079,7 @@ well.
    sudo docker compose up -d gateway
    ```
    If you chose an exact allowlist, keep adding agents' DIDs as the project
-   sends them. Keyring then ships a release pointing at this URL; when is the
+   sends them (agents on a listed DID host need nothing). Keyring then ships a release pointing at this URL; when is the
    project's call. Push goes live for users only then.
 
 **You're done when** the production test passes on both phones and the release
@@ -1092,7 +1103,7 @@ else is a `WARN` or `ERROR` line while the gateway keeps running.
 | `… has mode 0644; GATEWAY_STRICT_KEY_PERMS requires owner-only permissions (chmod 600)` | The secret is readable by others | `sudo chmod 600 secrets/*` and `sudo chmod 700 secrets` |
 | `parse identity file: …` | `GATEWAY_IDENTITY_FILE` points at the wrong file, such as the bundle or the seed | Point it at the output of `gateway-identity` (§8, step 3) |
 | `egress policy: …` | A malformed `GATEWAY_APNS_TOPICS` value | Comma-separated bundle IDs, no wildcards |
-| An error naming `GATEWAY_ALLOWED_CONTROLLERS` | A malformed allowlist | Exact DIDs separated by commas or spaces, or a lone `*` |
+| An error naming `GATEWAY_ALLOWED_CONTROLLERS` or `GATEWAY_ALLOWED_CONTROLLER_HOSTS` | A malformed allowlist | Exact DIDs separated by commas or spaces, or a lone `*`; hosts as `dids.example.org` or `*.example.org` (no scheme, port or path), and no hosts next to `*` |
 | `set GATEWAY_HOST in .env` or `set MEDIATOR_HOST in .env` (from `docker compose`, before anything starts) | `.env` is missing, or has no host | `sudo cp .env.example .env` and set both |
 
 **The mediator**
