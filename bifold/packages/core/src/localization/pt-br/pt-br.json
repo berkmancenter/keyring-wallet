@@ -1060,6 +1060,7 @@
     "CardCommunity": "Comunidade",
     "CardRole": "Função",
     "CardSince": "Desde",
+    "CardCheckedOn": "Verificada em",
     "CardUntil": "Válido até",
     "CardFromCommunity": "Este cartão vem de {{community}}. Para abrir mão dele, saia da comunidade.",
     "CardOpenCommunity": "Abrir {{community}}",

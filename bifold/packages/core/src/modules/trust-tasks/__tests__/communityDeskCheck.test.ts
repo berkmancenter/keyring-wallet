@@ -18,8 +18,11 @@ import type { TFunction } from 'i18next'
 import { isCommunityIdentityCheck } from '@bifold/trust-tasks'
 
 import deskCheck from './fixtures/registry-vetted-1-community-desk-check.json'
+import { W3cCredentialRecord } from '@credo-ts/core'
+
+import { fakeAgent, fakeCommunityStore } from '../../../../__tests__/helpers/cardVault'
 import { communityCardDisplay } from '../screens/communityCardDisplay'
-import { isCommunityCard } from '../module/vtiWalletCards'
+import { isCommunityCard, syncCardsToWallet, walletCardKey } from '../module/vtiWalletCards'
 import { CREDENTIAL_EXCHANGE_ISSUE, classifyCredential, receiveIssue } from '../module/vtiInbox'
 import { VtiApplicant, type VettingApplication, type VtiVettingStore } from '../module/vtiVetting'
 
@@ -175,12 +178,52 @@ describe('in the Wallet', () => {
           .join(',')})`
       : key) as unknown as TFunction
 
-  it('is a community card, named for the check and the community', () => {
+  it('is a community card, named for the check and the community, dated as checked on', () => {
     const vc = { ...copy(), id: 'urn:uuid:desk-check-1' }
     expect(isCommunityCard(vc)).toBe(true)
     const d = communityCardDisplay(vc, t)!
     expect(d.name).toMatch(/^Community\.CardIdentityCheckedBy\(community=/)
     expect(d.attributes?.['Community.CardRole']).toBeUndefined()
+    // The day the community made the check, not a membership's "Since".
+    expect(Object.keys(d.attributes ?? {})).toEqual(
+      expect.arrayContaining(['Community.CardCheckedOn', 'Community.CardUntil'])
+    )
+    expect(d.attributes?.['Community.CardSince']).toBeUndefined()
+  })
+
+  it('without an `id` (as the registry example) it is still shown, under a key from its proof', async () => {
+    const vc = copy()
+    expect(vc.id).toBeUndefined()
+    const key = walletCardKey(vc)!
+    expect(key).toMatch(/^urn:keyring:card:[0-9a-f]{64}$/)
+    // Stable: the same card, members in another order, has the same key.
+    const reversed = (o: Json): Json => Object.fromEntries(Object.entries(o).reverse())
+    const reordered = { ...reversed(vc), proof: reversed(vc.proof as Json) }
+    expect(Object.keys(reordered.proof as Json)).not.toEqual(Object.keys(vc.proof as Json))
+    expect(walletCardKey(reordered)).toBe(key)
+    // And a different proof is a different card.
+    const other = { ...vc, proof: { ...(vc.proof as Json), proofValue: 'zOther' } }
+    expect(walletCardKey(other)).not.toBe(key)
+
+    const { agent } = fakeAgent()
+    const records: W3cCredentialRecord[] = []
+    ;(agent as unknown as Json).w3cCredentials = {
+      getAll: async () => [...records],
+      store: async ({ record }: { record: W3cCredentialRecord }) => void records.push(record),
+      deleteById: async (id: string) => {
+        const at = records.findIndex((r) => r.id === id)
+        if (at >= 0) records.splice(at, 1)
+      },
+    }
+    const { store } = fakeCommunityStore({
+      held: [{ kind: 'identity-check', communityDid: COMMUNITY, subjectDid: PERSONA, credential: vc, receivedAt: 't' }],
+    })
+    const now = Date.parse('2026-10-02T00:00:00Z')
+    expect((await syncCardsToWallet(agent, store, { now })).added).toEqual([key])
+    expect(records).toHaveLength(1)
+    // A second reconcile keeps that one copy: matched by the same key, not added again.
+    expect(await syncCardsToWallet(agent, store, { now })).toMatchObject({ added: [], removed: [] })
+    expect(records).toHaveLength(1)
   })
 
   it('a vetter statement is still not a Wallet card', () => {

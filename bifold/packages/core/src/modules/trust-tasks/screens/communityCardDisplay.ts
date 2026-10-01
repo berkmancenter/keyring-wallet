@@ -71,7 +71,8 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   const labels = [
     label('Community.CardCommunity'),
     label('Community.CardRole'),
-    label('Community.CardSince'),
+    // The day a community made its own identity check, rather than a "Since".
+    label(kind === 'identity-check' ? 'Community.CardCheckedOn' : 'Community.CardSince'),
     label('Community.CardUntil'),
   ]
   // Words not loaded (no language yet): the generic display, rather than a card

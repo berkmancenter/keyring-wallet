@@ -29,6 +29,8 @@
  */
 import { communityRoleCard, isCommunityIdentityCheck } from '@bifold/trust-tasks'
 import { JsonTransformer, W3cCredentialRecord, type Agent } from '@credo-ts/core'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -59,12 +61,25 @@ export function isCommunityCard(vc: Json): boolean {
   return communityRoleCard(vc)?.shape === 'vac'
 }
 
-/** The cards the store holds that the Wallet shows, by the credential's own id. */
+/**
+ * The key the Wallet files a card under: the credential's own `id`, or, for a
+ * card without one, a digest of its proof. A community's identity check may
+ * have no `id` (the registry's example has none); keyed on its proof it is
+ * still shown, and the same card read back in any member order is matched,
+ * not added again. Undefined for a credential with neither.
+ */
+export function walletCardKey(vc: Json): string | undefined {
+  if (typeof vc.id === 'string' && vc.id) return vc.id
+  if (vc.proof === undefined || vc.proof === null) return undefined
+  return `urn:keyring:card:${bytesToHex(sha256(utf8ToBytes(JSON.stringify(sortKeys(vc.proof)))))}`
+}
+
+/** The cards the store holds that the Wallet shows, by `walletCardKey`. */
 async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<string, Json>> {
   const held = new Map<string, Json>()
   const add = (vc: Json | undefined) => {
-    if (vc && typeof vc.id === 'string' && vc.id && isCommunityCard(vc) && cardStandingOf(vc, now).state === 'held')
-      held.set(vc.id, vc)
+    const key = vc ? walletCardKey(vc) : undefined
+    if (vc && key && isCommunityCard(vc) && cardStandingOf(vc, now).state === 'held') held.set(key, vc)
   }
   for (const m of await store.listMemberships()) {
     // A membership the community removed is not a card the person holds.
@@ -134,7 +149,7 @@ async function storeCopy(agent: Agent, vc: Json): Promise<boolean> {
     return true
   } catch (e) {
     agent.config?.logger?.warn?.(
-      `[VTI] a community card could not be stored in the Wallet (${String(vc.id)}): ${(e as Error)?.message ?? e}`
+      `[VTI] a community card could not be stored in the Wallet (${walletCardKey(vc) ?? 'no key'}): ${(e as Error)?.message ?? e}`
     )
     return false
   }
@@ -161,14 +176,15 @@ export function syncCardsToWallet(
     // the old: the old is then a duplicate, and nothing is stored again.
     const current = (r: W3cCredentialRecord) => {
       const vc = jsonOf(r)
-      const want = vc && typeof vc.id === 'string' ? held.get(vc.id) : undefined
+      const key = vc ? walletCardKey(vc) : undefined
+      const want = key ? held.get(key) : undefined
       return vc && want && sameCard(vc, want) ? 0 : 1
     }
     const records = (await agent.w3cCredentials.getAll()).sort((a, b) => current(a) - current(b))
     for (const record of records) {
       const vc = jsonOf(record)
       if (!vc || !isCommunityCard(vc)) continue
-      const id = typeof vc.id === 'string' ? vc.id : ''
+      const id = walletCardKey(vc) ?? ''
       const want = held.get(id)
       if (!want || seen.has(id)) {
         await agent.w3cCredentials.deleteById(record.id)

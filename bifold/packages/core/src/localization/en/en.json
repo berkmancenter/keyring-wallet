@@ -1216,6 +1216,7 @@
     "CardCommunity": "Community",
     "CardRole": "Role",
     "CardSince": "Since",
+    "CardCheckedOn": "Checked on",
     "CardUntil": "Valid until",
     "CardFromCommunity": "This card comes from {{community}}. To give it up, leave the community.",
     "CardOpenCommunity": "Open {{community}}",
