@@ -355,6 +355,14 @@ const UNSOLICITED = new Set<string>([
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()
 
+/** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
+export class VtaTaskDropped extends Error {
+  constructor(readonly taskType: string) {
+    super(`${LOG_PREFIX} ${taskType} was dropped before it was sent`)
+    this.name = 'VtaTaskDropped'
+  }
+}
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -396,6 +404,24 @@ export class VtaClient {
   /** Whether the VTA has been greeted (§7.2.2) this session. */
   private greeted = false
   private queue: Promise<unknown> = Promise.resolve()
+  /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
+  private tickets = 0
+  private droppedThrough = 0
+  /** Stops the wait of the task in flight ({@link dropQueued}). */
+  private cancelInFlight?: () => void
+
+  /**
+   * Drop every task queued and not yet sent, and stop waiting for the one in
+   * flight: each fails with {@link VtaTaskDropped}. For a phone about to
+   * unlink, whose startup tasks (whoami … device/list) would otherwise go
+   * first and leave no time to tell the agent (227 gate, U4); an answer to the
+   * dropped one, if it comes, is taken for no task. Tasks asked for after this
+   * run as usual, at once.
+   */
+  dropQueued(): void {
+    this.droppedThrough = this.tickets
+    this.cancelInFlight?.()
+  }
 
   /** Keep a keyed attempt's ids; the oldest keys go first, past a few dozen. */
   private rememberAttempt(key: string, ids: string[]): void {
@@ -604,10 +630,13 @@ export class VtaClient {
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
     onSent?: () => void
   ): Promise<T> {
+    const ticket = ++this.tickets
     const run = (): Promise<T> =>
-      this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
-        this.inFlight = undefined
-      })
+      ticket <= this.droppedThrough
+        ? Promise.reject(new VtaTaskDropped(type))
+        : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
+            this.inFlight = undefined
+          })
     // One task at a time: one queued behind another says what it waits on, so a
     // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
     const ahead = this.inFlight
@@ -770,11 +799,16 @@ export class VtaClient {
           body: document,
         })
       onSent?.()
+      let timer: ReturnType<typeof setTimeout> | undefined
       const answer = await Promise.race([
         reply,
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+        new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), timeoutMs))),
+        new Promise<'dropped'>((resolve) => (this.cancelInFlight = () => resolve('dropped'))),
       ])
+      clearTimeout(timer)
+      this.cancelInFlight = undefined
       this.pending = undefined
+      if (answer === 'dropped') throw new VtaTaskDropped(type)
       if (!answer) throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
 
       // An auth/ACL refusal never reaches the task handler: the VTA answers
