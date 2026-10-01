@@ -967,12 +967,12 @@ describe("the vetter's statement delivery", () => {
     expect(await readStatement(before, 'bare', 'endorsement')).toMatchObject({ status: 'attested' })
   })
 
-  it('an endorsement-shape statement is refused after LEGACY_DTG_SHAPE_UNTIL, in either envelope', async () => {
+  it('an endorsement-shape statement is refused after LEGACY_DTG_SHAPE_UNTIL, in either envelope, as legacyShape', async () => {
     const later = Date.parse('2027-06-01T00:00:00Z')
     for (const envelope of ['document', 'bare'] as const) {
       expect(await readStatement(later, envelope, 'endorsement')).toMatchObject({
         status: 'statementRefused',
-        statementRefusal: 'malformed',
+        statementRefusal: 'legacyShape',
       })
     }
   })
