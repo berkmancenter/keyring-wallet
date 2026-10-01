@@ -81,6 +81,15 @@ done
 REDIS_PORT="${REDIS_PORT:-6379}"
 redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1 || { echo "redis is not running on port $REDIS_PORT: brew services start redis (macOS), or redis-server --port $REDIS_PORT --save \"\" (Linux)"; exit 1; }
 
+# An ngrok.yml in the stack dir names the hostnames. Validate it now, before the
+# stop/re-provision below: a missing tunnel name or a keyring-vti-* domain (the
+# live shared stack's, refused unless LAB_ALLOW_LIVE_DOMAINS=1) must fail early.
+NGROK_HOSTS=""
+if [ -f "$STACK_DIR/ngrok.yml" ]; then
+  NGROK_HOSTS=$("$(dirname "$0")/ngrok-lab-config.sh" --hosts "$STACK_DIR/ngrok.yml") || exit 1
+  command -v ngrok >/dev/null || { echo "ngrok is not installed or not on PATH"; exit 1; }
+fi
+
 # Re-running this script re-provisions, and a running daemon holds a lock on the
 # store being rewritten ("FjallError: Locked"). So stop first, always.
 stop_stack
@@ -112,16 +121,22 @@ log "opening tunnels"
 # forces `app/.env` re-baked and both apps rebuilt. Reserved domains survive a
 # restart, which is what makes this a fixture you can come back to.
 if [ -f "$STACK_DIR/ngrok.yml" ]; then
-  nohup ngrok start --all --config "$HOME/.config/ngrok/ngrok.yml" --config "$STACK_DIR/ngrok.yml" \
+  # Hostnames come from the lab's own config (validated above, before the stack
+  # was stopped). ONLY the six named tunnels start, and ONLY from this config:
+  # never --all, and never the user's ~/.config/ngrok/ngrok.yml, which on a
+  # shared host holds someone else's tunnels. The config carries its own
+  # authtoken (ngrok config add-authtoken <token> --config "$STACK_DIR/ngrok.yml").
+  # LAB_ALLOW_LIVE_DOMAINS=1 is the Mac stack owner's path: it keeps that
+  # stack's original behaviour of layering the default config underneath.
+  NGROK_CONFIGS=(--config "$STACK_DIR/ngrok.yml")
+  if [ "${LAB_ALLOW_LIVE_DOMAINS:-}" = "1" ] && [ -f "$HOME/.config/ngrok/ngrok.yml" ]; then
+    NGROK_CONFIGS=(--config "$HOME/.config/ngrok/ngrok.yml" "${NGROK_CONFIGS[@]}")
+  fi
+  nohup ngrok start alice community bob vtc dids mediator "${NGROK_CONFIGS[@]}" \
     > "$STACK_DIR/logs/ngrok.log" 2>&1 &
   echo $! > "$STACK_DIR/ngrok.pid"
   sleep 8
-  ALICE_HOST=keyring-vti-alice.ngrok.app
-  COMMUNITY_HOST=keyring-vti-community.ngrok.app
-  BOB_HOST=keyring-vti-bob.ngrok.app
-  VTC_HOST=keyring-vti-vtc.ngrok.app
-  DIDS_HOST=keyring-vti-dids.ngrok.app
-  MED_HOST=keyring-vti-mediator.ngrok.app
+  eval "$NGROK_HOSTS"
 else
   ALICE_HOST=$(open_tunnel alice 8110)
   COMMUNITY_HOST=$(open_tunnel community 8111)
