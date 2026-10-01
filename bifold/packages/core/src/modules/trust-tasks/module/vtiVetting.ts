@@ -64,6 +64,7 @@ import {
 import { VETTING_SCHEMAS } from './vettingSchemas'
 import { againstSchema, checkVetterProfile, checkVettingRequirements } from './vettingShape'
 import { purposeForDocumentType } from './proofPurpose'
+import { releaseWarn } from './releaseLog'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -1361,6 +1362,9 @@ export class VtiVetterDesk {
     }
     let statement: Record<string, unknown>
     const shape = await this.statementShapeFor(desk.communityDid)
+    // Which shape went out, and what decided it: a device run cannot see it
+    // otherwise (the Farm 0.47 gate reads it from a Release build's log).
+    releaseWarn(`[VTI] statement shape: writing ${shape.shape} (by ${shape.by})`)
     if (shape.disagreement) {
       this.agent.config?.logger?.warn?.(
         `[VTI] statement shape: the community's requirements name ${shape.disagreement.requirements}, this vetter's grant ${shape.disagreement.grant}; following the requirements`,

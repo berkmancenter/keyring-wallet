@@ -391,9 +391,13 @@ describe('the desk in mode auto', () => {
   it('writes vetted/1 for a community whose requirements name it', async () => {
     setDtgV1WritingMode('auto')
     mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     await deskWith(digest()).attest('r', decision)
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
     expect(mockFetchManifest).toHaveBeenCalledWith(community, expect.anything())
+    // What a device run reads to see the shape (a Release build's log).
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by requirements)')
+    warn.mockRestore()
   })
 
   it('writes the endorsement shape for a community that has not moved', async () => {
@@ -406,8 +410,11 @@ describe('the desk in mode auto', () => {
   it('goes by its own grant when the requirements cannot be read: a VAC means vetted/1', async () => {
     setDtgV1WritingMode('auto')
     mockFetchManifest.mockRejectedValue(new Error('offline'))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     await deskWith(digest(), grantStore('vac')).attest('r', decision)
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by grant)')
+    warn.mockRestore()
   })
 
   it('… and an endorsement grant means the old shape', async () => {
