@@ -26,6 +26,7 @@
  */
 
 import { expiryUnder } from './duration'
+import { vettingStatementBody } from './statementShape'
 
 /** The community's published vetting requirement, as much of it as bears on counting. */
 export interface VettingRequirements {
@@ -89,13 +90,16 @@ export interface VettingEvaluation {
 }
 
 /**
- * Read the facts this evaluation needs out of an endorsement credential.
- * Tolerates a credential that is missing pieces — a statement that says
- * nothing about its method is judged on what it does say.
+ * Read the facts this evaluation needs out of a vetting statement, in either
+ * shape (`vettingStatementBody`: the endorsement, or vetted/1's
+ * `object.value`). Tolerates a credential that is missing pieces — a statement
+ * that says nothing about its method is judged on what it does say.
  */
 export function statementFacts(credential: Record<string, unknown>): StatementFacts {
   const subject = credential.credentialSubject as { id?: string; endorsement?: Record<string, unknown> } | undefined
-  const endorsement = subject?.endorsement ?? {}
+  // A statement in either shape; an endorsement missing its `type` is still
+  // read for what it says, as before.
+  const endorsement = vettingStatementBody(credential)?.body ?? subject?.endorsement ?? {}
   const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
   return {
     issuer: str(credential.issuer) ?? str((credential.issuer as { id?: string })?.id) ?? '',
@@ -161,7 +165,8 @@ export function evaluateStatements(
   let counted = distinct
   if (requirements.independence?.requireConsistentIdentityCommitment && distinct.length > 1) {
     const tally = new Map<string, number>()
-    for (const s of distinct) if (s.identityCommitment) tally.set(s.identityCommitment, (tally.get(s.identityCommitment) ?? 0) + 1)
+    for (const s of distinct)
+      if (s.identityCommitment) tally.set(s.identityCommitment, (tally.get(s.identityCommitment) ?? 0) + 1)
     const [majority] = [...tally.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
     if (majority) counted = distinct.filter((s) => !s.identityCommitment || s.identityCommitment === majority)
     for (const s of distinct) if (!counted.includes(s)) discounted.push({ statement: s, reason: 'commitment-mismatch' })

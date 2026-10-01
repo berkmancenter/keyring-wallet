@@ -15,6 +15,7 @@
  * @module trust-tasks/module/vtiInbox
  */
 
+import { vettingStatementBody } from '@bifold/trust-tasks'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -29,7 +30,7 @@ import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredC
 export const VTI_CARD_REFUSED_EVENT = 'vti:card-refused'
 
 export const CREDENTIAL_EXCHANGE_ISSUE = 'https://trusttasks.org/spec/credential-exchange/issue/0.1'
-export const IDENTITY_VETTING_ENDORSEMENT_TYPE = 'https://firstperson.network/endorsements/identity-vetting/0.1'
+export { IDENTITY_VETTING_ENDORSEMENT_TYPE } from '@bifold/trust-tasks'
 export const COMMUNITY_ROLE_ENDORSEMENT_TYPE = 'CommunityRole'
 
 export type VtiCredentialKind = 'membership' | 'role' | 'vetter-grant' | 'vetting-statement' | 'other'
@@ -78,13 +79,16 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
   const endorsement = subject?.endorsement as Record<string, unknown> | undefined
   let kind: VtiCredentialKind = 'other'
   let communityDid = issuerOf(vc)
+  // A vetting statement in either shape: the endorsement, or a vetted/1
+  // StatementCredential (DTG Credentials v1). Its community is in the body.
+  const statement = vettingStatementBody(vc)
   if (t.includes('MembershipCredential')) kind = 'membership'
-  else if (t.includes('EndorsementCredential') && endorsement) {
+  else if (statement) {
+    kind = 'vetting-statement'
+    communityDid = String(statement.body.community ?? communityDid)
+  } else if (t.includes('EndorsementCredential') && endorsement) {
     const et = String(endorsement.type ?? '')
-    if (et === IDENTITY_VETTING_ENDORSEMENT_TYPE) {
-      kind = 'vetting-statement'
-      communityDid = String(endorsement.community ?? communityDid)
-    } else if (et === COMMUNITY_ROLE_ENDORSEMENT_TYPE || endorsement.role !== undefined) {
+    if (et === COMMUNITY_ROLE_ENDORSEMENT_TYPE || endorsement.role !== undefined) {
       kind = String(endorsement.role ?? '') === 'vetter' ? 'vetter-grant' : 'role'
       communityDid = String(endorsement.communityDid ?? endorsement.community ?? communityDid)
     }
@@ -188,7 +192,11 @@ export async function receiveIssue(
     const checked = await options.checkCard(item.credential, sender)
     if (checked) {
       options.onRefused?.(item, checked)
-      DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, { communityDid: item.communityDid, kind: item.kind, refusal: checked })
+      DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, {
+        communityDid: item.communityDid,
+        kind: item.kind,
+        refusal: checked,
+      })
       continue
     }
     if (item.kind === 'membership') {
