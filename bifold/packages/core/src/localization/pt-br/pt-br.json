@@ -1256,6 +1256,7 @@
     "SeatApplicant": "Você tem uma identidade aqui e ainda não é membro",
     "ContinueVetting": "Continuar sua verificação",
     "SeatNone": "Você ainda não entrou em uma comunidade",
+    "SeatRemoved": "{{community}} removeu você",
     "WhatBringsYou": "O que você quer fazer?",
     "WantToJoin": "Quero entrar em uma comunidade",
     "WantToJoinHint": "Você vai encontrar um de seus verificadores, que confere que é você.",

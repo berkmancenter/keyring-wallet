@@ -1412,6 +1412,7 @@
     "SeatApplicant": "You have an identity here, and are not a member yet",
     "ContinueVetting": "Continue your vetting",
     "SeatNone": "You have not joined a community yet",
+    "SeatRemoved": "{{community}} removed you",
     "WhatBringsYou": "What brings you here?",
     "WantToJoin": "I want to join a community",
     "WantToJoinHint": "You'll meet one of its vetters, who checks it's you.",

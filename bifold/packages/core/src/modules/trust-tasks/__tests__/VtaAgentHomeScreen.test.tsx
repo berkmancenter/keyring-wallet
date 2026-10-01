@@ -296,6 +296,61 @@ describe('Your agent — after linking', () => {
 
   // #166's lab run (09-29): the community's removal notice was stored on the
   // membership, and My Agent still said "You are a member".
+  // 227 gate U11 (09-30, lab): after the community removed the member, the
+  // agent home read "You have an identity here, and are not a member yet" and
+  // offered "Continue your vetting" — as if the person had never joined. The
+  // seat says who removed them; the card below says what to do.
+  it('after a removal the seat says the community removed you, and offers no vetting to continue', async () => {
+    const removed: Rec = {
+      tags: membership.tags,
+      content: {
+        ...membership.content,
+        removal: {
+          code: 'adminRemoved',
+          decidedBy: 'did:webvh:QmAdmin:vtc.example:admin',
+          decidedAt: '2026-09-30T13:28:08Z',
+          disposition: 'tombstone',
+          noticeId: 'urn:uuid:removal-notice-2',
+        },
+      },
+    }
+    const tree = await renderHome([persona, removed])
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    const seat = tree.getByTestId(testIdWithKey('AgentSeat'))
+    expect(seat).toHaveTextContent('VtaLink.SeatRemoved')
+    expect(seat).not.toHaveTextContent('VtaLink.SeatApplicant')
+    expect(tree.queryByTestId(testIdWithKey('AgentContinueVetting'))).toBeNull()
+  })
+
+  it('removed by one community and applying to another: the seat is the application, with vetting to continue', async () => {
+    const otherCommunity = 'did:webvh:QmOther:vtc.example.org:other'
+    const applying: Rec = {
+      tags: { ...persona.tags, key: otherCommunity },
+      content: { ...persona.content, communityDid: otherCommunity, did: 'did:webvh:QmPersona2:vta.example.org:p2' },
+    }
+    const removed: Rec = {
+      tags: membership.tags,
+      content: {
+        ...membership.content,
+        removal: {
+          code: 'adminRemoved',
+          decidedBy: 'did:webvh:QmAdmin:vtc.example:admin',
+          decidedAt: '2026-09-30T13:28:08Z',
+          disposition: 'tombstone',
+          noticeId: 'urn:uuid:removal-notice-3',
+        },
+      },
+    }
+    const tree = await renderHome([persona, removed, applying])
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatApplicant')
+    expect(tree.getByTestId(testIdWithKey('AgentContinueVetting'))).toBeTruthy()
+  })
+
   it('a membership the community removed is not membership: the seat, the steps and the card say it ended', async () => {
     const removed: Rec = {
       tags: membership.tags,
@@ -436,9 +491,9 @@ describe('Your agent — after linking', () => {
     const tree = await renderHome([persona, grant])
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toHaveTextContent(/VtaLink.YouCanVet/)
     // The desk is the community card's one button; the vetter card no longer repeats it.
-    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${communityCardKey(communityDid)}`))).toHaveTextContent(
-      'VtaLink.OpenDesk'
-    )
+    expect(
+      tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${communityCardKey(communityDid)}`))
+    ).toHaveTextContent('VtaLink.OpenDesk')
     expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
   })
 
