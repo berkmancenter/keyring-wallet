@@ -52,6 +52,7 @@ import {
   digestMultibase,
   LEGACY_DTG_SHAPE_UNTIL,
   signDocumentProof,
+  taskDigestMultibase,
   verifyDocumentProof,
   verifyTrustTaskProof,
 } from '@bifold/trust-tasks'
@@ -517,6 +518,17 @@ describe("the applicant takes a session as openvtc's on_session does", () => {
     const r = await run(sessionPayload())
     expect(r).toMatchObject({ status: 'session' })
     expect(r.sessionRefusal).toBeUndefined()
+  })
+
+  // tf vetting/session/0.1 spec.md:339: the document is durable, and the
+  // applicant keeps it, with its task digest, for the statement to bind to.
+  it('keeps the session document as received, and its task digest', async () => {
+    const r = await run(sessionPayload())
+    const document = r.session?.document as Record<string, unknown>
+    expect(document?.id).toBe(r.session?.documentId)
+    expect((document?.payload as { requestId?: string })?.requestId).toBe('r')
+    expect(document?.proof).toBeDefined()
+    expect(r.session?.taskDigestMultibase).toBe(taskDigestMultibase(document))
   })
 
   // Built inside the test: the suite's clock is fixed only while a test runs.

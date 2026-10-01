@@ -22,6 +22,7 @@ import { TypedArrayEncoder, utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import {
   CROCKFORD,
+  digestBytesEqual,
   digestMultibase,
   evaluateStatements,
   statementFacts,
@@ -196,6 +197,19 @@ export interface VettingApplicationRequest {
     method: VettingMethod
     expiresAt: string
     matchCode: string
+    /**
+     * The task digest of the session document as received (SPEC §4.9.3):
+     * what a statement's `taskDigestMultibase` must reproduce. Absent on a
+     * session opened before it was kept (228).
+     */
+    taskDigestMultibase?: string
+    /**
+     * The session document itself, kept for as long as a statement citing it
+     * is held (tf vetting/session/0.1 spec.md:339: "This document is
+     * durable… The applicant SHOULD retain it… and SHOULD submit it with the
+     * statement if the community asks").
+     */
+    document?: Record<string, unknown>
   }
   cardDigest?: string
   /** The same card hashed with its proof, which Keyring vetters up to 223 put in their statements. */
@@ -1767,6 +1781,8 @@ export class VtiApplicant {
         method: (p.method as VettingMethod) ?? 'inPerson',
         expiresAt: String(p.expiresAt ?? ''),
         matchCode: vettingMatchCode(documentId),
+        taskDigestMultibase: taskDigestMultibase(body),
+        document: body,
       },
     })
   }
@@ -1894,6 +1910,21 @@ export class VtiApplicant {
     if (endorsement.community !== application.communityDid) return refuse('community')
     if (request.status === 'attested' && request.statementId === String(credential.id)) return
     if (!request.session || credential.taskContext !== request.session.documentId) return refuse('session')
+    // The name binds to the very document: the statement's task digest must
+    // reproduce over the session document as received (vta-sdk
+    // check_against_session; openvtc on_statement). A vetted/1 statement always
+    // cites one (its shape check); the endorsement shape may not, and is read
+    // on its taskContext alone as before. A session opened before the digest
+    // was kept cannot be checked: kept, and said.
+    const cited = typeof credential.taskDigestMultibase === 'string' ? credential.taskDigestMultibase : undefined
+    if (cited && request.session.taskDigestMultibase) {
+      if (!digestBytesEqual(cited, request.session.taskDigestMultibase)) return refuse('session')
+    } else if (cited) {
+      this.agent.config?.logger?.warn?.(
+        '[VTI] statement taskDigestMultibase not checked: the session document was not kept (opened before 228)',
+        { vetterDid: sender }
+      )
+    }
     // openvtc on_statement: a statement answers a card we sent on that session
     // (applicant.rs:1104-1106, "take a statement before a card").
     if (!request.cardDigest) return refuse('noCard')
