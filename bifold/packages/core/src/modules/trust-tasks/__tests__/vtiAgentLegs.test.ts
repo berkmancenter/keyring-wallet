@@ -250,7 +250,7 @@ describe('the community leg', () => {
     // The next ask goes straight to DIDComm.
     const tspBefore = session.tsp.length
     await vtiAgent.ask(COMMUNITY, 'https://t/submit/0.2', {}, 20)
-    expect(session.tsp.length).toBe(tspBefore)
+    expect(session.tsp).toHaveLength(tspBefore)
     expect(session.didcomm).toHaveLength(2)
   })
 

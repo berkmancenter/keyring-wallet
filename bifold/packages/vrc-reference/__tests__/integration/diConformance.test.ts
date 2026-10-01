@@ -45,7 +45,6 @@ import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bif
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
 import { WITNESSED_EXCHANGE_CONTEXT_URL } from '../../src/witnessedExchangeContext'
 
-const CREDENTIALS_V1_CONTEXT_URL = 'https://www.w3.org/2018/credentials/v1'
 const WALLET_ID = `di-conformance-${process.env.JEST_WORKER_ID ?? '0'}`
 
 function buildAgent() {

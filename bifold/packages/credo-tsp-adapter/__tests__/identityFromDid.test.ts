@@ -63,7 +63,7 @@ describe('identityFromDid', () => {
 
     const message = new TextEncoder().encode('signed via identityFromDid')
     const signature = await identity.signingKey.sign(message)
-    expect(signature.length).toBe(64)
+    expect(signature).toHaveLength(64)
 
     // Regression: a did:key document's keyAgreement verification method is a
     // DERIVED X25519 key (Edwards→Montgomery of the signing key), never a
