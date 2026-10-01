@@ -124,7 +124,7 @@ export async function declineStale(tui) {
 
 /** Move the desk to one of its views: Requests, Tickets or Issued (←/→). */
 export async function deskView(tui, view) {
-  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
+  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
   for (let i = 0; i < 3; i++) {
     if (marker.test(tui.screen())) return tui;
     await tui.pressEach(['Right'], 700);
