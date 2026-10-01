@@ -1,0 +1,88 @@
+name: Promote Android build
+
+# Moves the build already on a Play track (internal testing by default) to
+# open testing ("beta" in the API), without rebuilding it. Run it by hand from
+# the Actions tab, on the staging branch: the Play key is a secret of the
+# "internal" environment, which only staging may use. A dry run reports and
+# commits nothing. A real promotion first waits for a required reviewer on the
+# "open-testing" environment, which holds no secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_track:
+        description: 'Target track (beta = open testing)'
+        type: choice
+        options: [beta]
+        default: beta
+      version_code:
+        description: 'Build number to promote (empty = the newest on internal)'
+        type: string
+        required: false
+      rollout:
+        description: 'Share of the track that gets it, 0.01–1 (below 1 = staged)'
+        type: string
+        default: '1'
+      dry_run:
+        description: 'Only report what would change'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  approve:
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-22.04
+    environment: open-testing
+    steps:
+      - run: echo "Approved - promote to ${{ inputs.to_track }}, rollout ${{ inputs.rollout }}, build ${{ inputs.version_code || 'newest on internal' }}."
+
+  promote:
+    needs: approve
+    # A dry run skips the approval; a real run needs it to have succeeded.
+    if: ${{ always() && (inputs.dry_run || needs.approve.result == 'success') }}
+    runs-on: ubuntu-22.04
+    environment: internal
+    steps:
+      - name: Refuse any branch but staging
+        if: github.ref != 'refs/heads/staging'
+        run: |
+          echo "Run this workflow on staging (Run workflow → Use workflow from: staging)."
+          exit 1
+      - uses: actions/checkout@v4
+      - name: Take the release notes
+        run: |
+          set -euo pipefail
+          # A short Play version (500 characters at most) wins when a release has one;
+          # otherwise the TestFlight notes are cut to fit.
+          if [ -f .github/play/whats-new.md ]; then
+            cp .github/play/whats-new.md "${RUNNER_TEMP}/whats-new.md"
+          else
+            cp .github/testflight/whats-new.md "${RUNNER_TEMP}/whats-new.md"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Promote
+        working-directory: scripts/gpublish
+        env:
+          GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
+          GOOGLE_API_CREDENTIALS: ${{ runner.temp }}/api_keys.json
+          ANDROID_PACKAGE_NAME: asml.bkc.harvard.wallet
+          FROM_TRACK: internal
+          TO_TRACK: ${{ inputs.to_track }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          ROLLOUT: ${{ inputs.rollout }}
+          NOTES_FILE: ${{ runner.temp }}/whats-new.md
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_API_CREDENTIALS_BASE64}" ]; then
+            echo "The Play key is empty: is this run on staging, in the internal environment?"
+            exit 1
+          fi
+          echo "${GOOGLE_API_CREDENTIALS_BASE64}" | base64 -d > "${GOOGLE_API_CREDENTIALS}"
+          npm ci
+          node promote.js
