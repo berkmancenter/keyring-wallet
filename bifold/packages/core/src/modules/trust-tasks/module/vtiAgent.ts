@@ -279,6 +279,13 @@ export interface VtiAgentState {
   status: VtiAgentStatus
   /** The DID this wallet presents to a community — its member identity. */
   did?: string
+  /**
+   * Whom the session is signing in as, from just before its socket opens until
+   * it is connected (`did` from then on). The mediator drains what waited for
+   * that DID the moment the socket opens, before `did` is set: an inbox reads
+   * this to know whose those messages are (227.1).
+   */
+  signingInAs?: string
   /** The mediator's host, which is what a person can recognise. */
   host?: string
   error?: string
@@ -830,6 +837,7 @@ class VtiAgentController {
           : {}),
       })
       step(`signing in as ${didPrefix(did)} (challenge, then the socket)`)
+      this.set({ signingInAs: did })
       await session.start()
       step('socket open')
       // Discard any stale backlog the mediator flushes on live delivery before
@@ -845,6 +853,7 @@ class VtiAgentController {
       this.set({
         status: 'connected',
         did,
+        signingInAs: undefined,
         peerLeg: peerLeg === 'tsp' && tspSession ? 'tsp' : 'didcomm',
         tspReady: Boolean(tspSession),
         peerRevisions: (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? [],
@@ -852,7 +861,11 @@ class VtiAgentController {
       step('connected')
     } catch (error) {
       step(`failed: ${error instanceof Error ? error.message : String(error)}`)
-      this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      this.set({
+        status: 'failed',
+        signingInAs: undefined,
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
   }
@@ -865,7 +878,14 @@ class VtiAgentController {
     this.asks.clear()
     this.tsp = undefined
     this.persona = undefined
-    this.set({ status: 'disconnected', did: undefined, error: undefined, peerLeg: undefined, tspReady: undefined })
+    this.set({
+      status: 'disconnected',
+      did: undefined,
+      signingInAs: undefined,
+      error: undefined,
+      peerLeg: undefined,
+      tspReady: undefined,
+    })
   }
 
   /**

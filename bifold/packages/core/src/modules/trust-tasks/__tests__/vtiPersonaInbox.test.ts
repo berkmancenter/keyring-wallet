@@ -7,7 +7,13 @@ import { DeviceEventEmitter } from 'react-native'
 
 const mockHandlers: Array<(m: unknown) => void> = []
 const mockOrder: string[] = []
-const mockAgentState = { isConnected: false, status: 'disconnected' as string }
+const mockAgentState = {
+  isConnected: false,
+  status: 'disconnected' as string,
+  signingInAs: undefined as string | undefined,
+  /** Whom the session is connected as, when not this inbox's persona. */
+  otherDid: undefined as string | undefined,
+}
 const mockAgentListeners = new Set<() => void>()
 const mockAgentChanged = () => mockAgentListeners.forEach((l) => l())
 jest.mock('../module/vtiAgent', () => ({
@@ -21,7 +27,11 @@ jest.mock('../module/vtiAgent', () => ({
       mockHandlers.push(h)
       return () => mockHandlers.splice(mockHandlers.indexOf(h), 1)
     },
-    getState: () => ({ status: mockAgentState.status, did: mockAgentState.isConnected ? mockPersona.did : undefined }),
+    getState: () => ({
+      status: mockAgentState.status,
+      did: mockAgentState.otherDid ?? (mockAgentState.isConnected ? mockPersona.did : undefined),
+      signingInAs: mockAgentState.signingInAs,
+    }),
     get isConnected() {
       return mockAgentState.isConnected
     },
@@ -233,11 +243,15 @@ describe('startPersonaInbox', () => {
     mockAgentState.isConnected = true // held by another flow…
     const stop = startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
     await flush()
-    mockAgentState.isConnected = false // …and now connected as nobody this inbox knows
-    mockHandlers[0]({ type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' })
-    await flush()
-    expect(mockReceiveIssue).not.toHaveBeenCalled()
-    stop()
+    mockAgentState.otherDid = 'did:webvh:p:host:someone-else' // …and now connected as nobody this inbox knows
+    try {
+      mockHandlers[0]({ type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' })
+      await flush()
+      expect(mockReceiveIssue).not.toHaveBeenCalled()
+    } finally {
+      mockAgentState.otherDid = undefined
+      stop()
+    }
   })
 
   it('never takes a session another flow holds', async () => {
@@ -348,16 +362,20 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     const logged = { config: { logger: { warn, info: jest.fn(), debug: jest.fn() } } } as never
     startPersonaInbox(logged, { communityDid: mockPersona.communityDid })
     await flush()
-    mockAgentState.isConnected = false
-    mockHandlers.forEach((h) =>
-      h({
-        type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
-        from: mockPersona.communityDid,
-        body: {},
-      })
-    )
-    await flush()
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*session/))
+    mockAgentState.otherDid = 'did:webvh:p:host:someone-else'
+    try {
+      mockHandlers.forEach((h) =>
+        h({
+          type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
+          from: mockPersona.communityDid,
+          body: {},
+        })
+      )
+      await flush()
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*session/))
+    } finally {
+      mockAgentState.otherDid = undefined
+    }
   })
 
   it('says so when it has no persona for the chosen community', async () => {
@@ -365,6 +383,7 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     const logged = { config: { logger: { warn, info: jest.fn(), debug: jest.fn() } } } as never
     startPersonaInbox(logged, { communityDid: 'did:webvh:other:host' })
     await flush()
+    mockAgentState.isConnected = true // a session this phone holds, for an identity of another community
     mockHandlers.forEach((h) =>
       h({
         type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
@@ -439,5 +458,63 @@ describe('what the inbox says in the Release log', () => {
     expect(lines().filter((l) => /has been running/.test(l))).toEqual([
       expect.stringMatching(/a look has been running (6|9)\d s \(status disconnected\); later looks wait for it/),
     ])
+  })
+})
+
+// 227.1 (10-01, lab, Android): community messages waiting while the app was
+// closed were drained the moment the persona's socket opened — before the
+// agent called itself connected as that persona — and the inbox skipped each
+// ("the session is not connected") and returned, so the mediator was told they
+// were taken. Five invitation offers, gone; a vetter grant the same way (227
+// gate, lab). The inbox now knows whom the session is signing in as, and an
+// owned message it cannot place yet is not acknowledged.
+describe('a message drained as the session opens', () => {
+  const ISSUE = { type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1', from: 'did:webvh:c:host' }
+  beforeEach(() => {
+    mockHandlers.length = 0
+    mockAgentState.isConnected = false
+    mockAgentState.signingInAs = undefined
+    mockReceiveIssue.mockReset()
+    mockReceiveIssue.mockResolvedValue([{ kind: 'vetter-grant', communityDid: mockPersona.communityDid }])
+    ;(vtiAgent.connect as jest.Mock).mockClear()
+  })
+  afterEach(() => {
+    mockAgentState.signingInAs = undefined
+    mockAgentState.status = 'disconnected'
+  })
+
+  it("while the persona is signing in, is the persona's and is kept", async () => {
+    mockAgentState.status = 'authenticating'
+    mockAgentState.signingInAs = mockPersona.did
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    await flush()
+    await expect(Promise.resolve(mockHandlers[0](ISSUE))).resolves.toBeUndefined()
+    expect(mockReceiveIssue).toHaveBeenCalledWith(expect.anything(), mockPersona.did, ISSUE, expect.anything())
+  })
+
+  it('before the inbox has looked for its persona, it looks then and keeps it', async () => {
+    mockAgentState.status = 'authenticating'
+    mockAgentState.signingInAs = mockPersona.did
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    // At once: the first look has not finished reading the persona.
+    await expect(Promise.resolve(mockHandlers[0](ISSUE))).resolves.toBeUndefined()
+    expect(mockReceiveIssue).toHaveBeenCalledWith(expect.anything(), mockPersona.did, ISSUE, expect.anything())
+  })
+
+  it("while the session's identity is not known yet, is not acknowledged: the mediator keeps it", async () => {
+    mockAgentState.status = 'resolving'
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    await flush()
+    await expect(Promise.resolve(mockHandlers[0](ISSUE))).rejects.toThrow(/not taken yet/)
+    expect(mockReceiveIssue).not.toHaveBeenCalled()
+  })
+
+  it('what the inbox does not own is let go as before, whatever the session', async () => {
+    mockAgentState.status = 'resolving'
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    await flush()
+    await expect(
+      Promise.resolve(mockHandlers[0]({ type: 'https://didcomm.org/trust-ping/2.0/ping' }))
+    ).resolves.toBeUndefined()
   })
 })
