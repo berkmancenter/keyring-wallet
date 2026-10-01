@@ -1606,7 +1606,8 @@
       "grantMalformed": "Their vetter role could not be read.",
       "grantExpired": "Their vetter role is out of date.",
       "grantProof": "The community's signature on their vetter role does not check out.",
-      "legacyExpired": "They used an older Keyring's proof, which is no longer accepted."
+      "legacyExpired": "They used an older Keyring's proof, which is no longer accepted.",
+      "grantLegacyShape": "Their vetter role is in an older format that is no longer accepted."
     },
     "YourVetter": "Your vetter",
     "YourVetterN": "Your vetter {{n}}",
@@ -1693,7 +1694,8 @@
       "cardDigest": "Details: the statement is about a different card from the one you sent.",
       "expired": "Details: the statement has already expired.",
       "proof": "Details: the statement's signature could not be verified.",
-      "noCard": "Details: the statement came before this phone sent your card in that session."
+      "noCard": "Details: the statement came before this phone sent your card in that session.",
+      "legacyShape": "Details: the statement is in an older format this phone no longer accepts. Ask your vetter to update their app and vet you again."
     },
     "CardRefused": "The applicant's card arrived, but this phone could not accept it. The session is still open, so they can send it again.",
     "CardRefusedReason": {

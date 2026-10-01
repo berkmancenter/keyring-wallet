@@ -32,6 +32,7 @@ import type { Agent } from '@credo-ts/core'
 import {
   communityRoleCard,
   confersRole,
+  legacyDtgShapeReadable,
   signDocumentProof,
   verifyDocumentProof,
   type CommunityRoleCard,
@@ -92,6 +93,8 @@ export type EligibilityRefusal =
   | 'grantExpired'
   | 'grantProof'
   | 'legacyExpired'
+  /** A role grant in the shape from before DTG Credentials v1, after LEGACY_DTG_SHAPE_UNTIL (228). */
+  | 'grantLegacyShape'
 
 export type EligibilityResult =
   | {
@@ -238,6 +241,12 @@ async function verifyRoleCredential(
   const now = expect.now.getTime()
   if (validFrom > now + ELIGIBILITY_CLOCK_SKEW_MS || now > validUntil + ELIGIBILITY_CLOCK_SKEW_MS)
     return refuse('grantExpired', 'the role credential is outside its validity window')
+  // A CommunityRole endorsement is read until LEGACY_DTG_SHAPE_UNTIL, as an
+  // endorsement-shape statement is: no grant of that shape declares the
+  // issuerScope the cred-spec requires (body.md:191). After its own window,
+  // so a grant that has simply run out is still said to be out of date.
+  if (card?.shape === 'endorsement' && !legacyDtgShapeReadable(now))
+    return refuse('grantLegacyShape', 'the role credential is in the shape from before DTG Credentials v1')
   if (!(await verifyDocumentProof(agent, credential, issuer)))
     return refuse('grantProof', "the role credential's proof does not verify under the community")
   return {

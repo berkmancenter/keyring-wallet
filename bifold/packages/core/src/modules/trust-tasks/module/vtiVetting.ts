@@ -231,6 +231,11 @@ export interface VettingApplicationRequest {
     | 'commitment'
     /** No card was sent on the session it names: openvtc `on_statement` (applicant.rs:1104-1106). */
     | 'noCard'
+    /**
+     * In the shape from before DTG Credentials v1, received after
+     * LEGACY_DTG_SHAPE_UNTIL: no longer read (228).
+     */
+    | 'legacyShape'
   /**
    * Why the last `vetting/session` from this vetter was not taken
    * (openvtc `on_session`, applicant.rs:774-791). The request stays where it
@@ -1896,7 +1901,8 @@ export class VtiApplicant {
     // vta-sdk verify_statement: shape, per shape (vettingStatementShapeProblem).
     // An old-shape statement after LEGACY_DTG_SHAPE_UNTIL is refused as malformed.
     const now = Date.now()
-    if (vettingStatementShapeProblem(credential, now)) return refuse('malformed')
+    const shapeProblem = vettingStatementShapeProblem(credential, now)
+    if (shapeProblem) return refuse(shapeProblem === 'legacyShapeRetired' ? 'legacyShape' : 'malformed')
     const validUntil = Date.parse(String(credential.validUntil ?? ''))
     const validFrom = Date.parse(String(credential.validFrom ?? ''))
     // vta-sdk verify_statement: the validity window, with the SDK's clock skew (card.rs CLOCK_SKEW).
