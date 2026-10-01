@@ -1,0 +1,29 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+  "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+  "issuer": "did:webvh:QmVzTd9hRkPqLu4WgXyN3c8pT2rJ6mK9sB1dF4gH7jL0n:witness-service.example",
+  "issuerScope": "public",
+  "validFrom": "2026-01-06T10:00:00Z",
+  "taskContext": "urn:uuid:2c7f5d19-6e0b-4c3d-8a41-9b2e6f0d4c88",
+  "taskDigestMultibase": "zQmWhCFfStzUE4HGseiQ1XWi2eEp1GTQEKnt2jyBe7uqzXD",
+  "credentialSubject": {
+    "id": "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+    "predicate": "https://registry.trustoverip.org/dtg/vsc/witnessed/1",
+    "object": {
+      "digestMultibase": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n"
+    },
+    "witnessContext": {
+      "event": "EthDenver 2026",
+      "sessionId": "session-abc-123",
+      "method": "in-person-proximity"
+    }
+  },
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-jcs-2022",
+    "created": "2026-01-06T10:00:00Z",
+    "proofPurpose": "assertionMethod",
+    "verificationMethod": "did:webvh:QmVzTd9hRkPqLu4WgXyN3c8pT2rJ6mK9sB1dF4gH7jL0n:witness-service.example#key-1",
+    "proofValue": "z3FXQjecWJKT…illustrative…"
+  }
+}
