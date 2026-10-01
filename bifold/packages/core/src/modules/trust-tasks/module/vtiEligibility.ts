@@ -29,14 +29,21 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import { signDocumentProof, verifyDocumentProof } from '@bifold/trust-tasks'
-
-import { COMMUNITY_ROLE_ENDORSEMENT_TYPE } from './vtiInbox'
+import {
+  communityRoleCard,
+  confersRole,
+  signDocumentProof,
+  verifyDocumentProof,
+  type CommunityRoleCard,
+} from '@bifold/trust-tasks'
 
 /** vta-sdk `vetting/eligibility.rs:43` `ELIGIBILITY_PROOF_PURPOSE`. */
 export const ELIGIBILITY_PROOF_PURPOSE = 'authentication'
 /** The role a community's requirements name when they name none (openvtc `applicant.rs:619-623` `vetter_role`). */
 export const VETTER_ROLE = 'vetter'
+
+/** The registry's DTG Credentials v1 context, which a v1 role grant (VAC) is issued under. */
+const DTG_REGISTRY_CONTEXT_V1 = 'https://registry.trustoverip.org/dtg/context/v1'
 /** vta-sdk `vetting/card.rs:45` `CLOCK_SKEW`, applied to the grant's window at eligibility.rs:332. */
 export const ELIGIBILITY_CLOCK_SKEW_MS = 60 * 1000
 /**
@@ -100,22 +107,16 @@ export type EligibilityResult =
     }
   | { ok: false; reason: EligibilityRefusal; detail: string }
 
-/** vta-sdk `protocols/vetting.rs:227` `role_matches`: `vetter` and `custom:vetter` are one role; others match exactly. */
-export function roleMatches(held: string, required: string): boolean {
-  const bare = (role: string) => (role.startsWith('custom:') ? role.slice('custom:'.length) : role)
-  return held === required || (bare(held) === VETTER_ROLE && bare(required) === VETTER_ROLE)
-}
+export { roleMatches } from '@bifold/trust-tasks'
 
-/** vta-sdk `eligibility.rs:56` `community_role`: `(communityDid, role)` of a CommunityRole credential, shape only. */
-export function communityRole(credential: unknown): { communityDid: string; role: string } | undefined {
-  if (!credential || typeof credential !== 'object') return undefined
-  const c = credential as Record<string, unknown>
-  const types = ([] as unknown[]).concat(c.type ?? [])
-  if (!types.includes('EndorsementCredential')) return undefined
-  const endorsement = (c.credentialSubject as { endorsement?: Record<string, unknown> } | undefined)?.endorsement
-  if (endorsement?.type !== COMMUNITY_ROLE_ENDORSEMENT_TYPE) return undefined
-  if (typeof endorsement.communityDid !== 'string' || typeof endorsement.role !== 'string') return undefined
-  return { communityDid: endorsement.communityDid, role: endorsement.role }
+/**
+ * vta-sdk `eligibility.rs` `community_roles`: the community and roles of a
+ * role grant, shape only, in either shape — the `CommunityRole` endorsement,
+ * or a DTG Credentials v1 VAC (`role:<name>` actions at the community's own
+ * DID, unattenuated). See `communityRoleCard`.
+ */
+export function communityRole(credential: unknown): CommunityRoleCard | undefined {
+  return communityRoleCard(credential)
 }
 
 /**
@@ -196,7 +197,7 @@ export async function verifyEligibilityPresentation(
   let first: EligibilityResult | undefined
   for (const credential of (vp.verifiableCredential as unknown[]) ?? []) {
     const named = communityRole(credential)
-    if (!named || named.communityDid !== expect.community || !roleMatches(named.role, expect.role)) continue
+    if (!named || named.communityDid !== expect.community || !confersRole(named, expect.role)) continue
     const verdict = await verifyRoleCredential(agent, credential as Record<string, unknown>, expect)
     if (verdict.ok) return legacy ? { ...verdict, legacy } : verdict
     first ??= verdict
@@ -217,6 +218,20 @@ async function verifyRoleCredential(
   if (typeof issuer !== 'string' || typeof subjectId !== 'string' || !Number.isFinite(validFrom))
     return refuse('grantMalformed', 'the role credential has no issuer, subject or validFrom')
   if (issuer !== expect.community) return refuse('grantIssuer', 'the role credential was not issued by the community')
+  // A DTG Credentials v1 grant (VAC): what vta-sdk 0.47's verify_role_credential
+  // holds it to beyond the rest — the registry context, issuerScope `public`
+  // (the only scope a community can truthfully declare), no `parent`, and
+  // `authority.scope` the community (eligibility.rs:303-336).
+  const card = communityRoleCard(credential)
+  if (card?.shape === 'vac') {
+    const contexts = ([] as unknown[]).concat(credential['@context'] ?? [])
+    if (!contexts.includes(DTG_REGISTRY_CONTEXT_V1))
+      return refuse('grantMalformed', 'the role credential is not under the DTG Credentials v1 context')
+    if (credential.issuerScope !== 'public')
+      return refuse('grantMalformed', 'a community role credential declares issuerScope public')
+    if (card.communityDid !== expect.community)
+      return refuse('grantIssuer', 'the role credential confers a role somewhere other than the community')
+  }
   if (subjectId !== expect.vetter) return refuse('grantSubject', 'the role credential names someone else')
   const validUntil = Date.parse(String(credential.validUntil ?? ''))
   if (!Number.isFinite(validUntil)) return refuse('grantMalformed', 'no validUntil — a role grant is bounded')

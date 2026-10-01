@@ -27,6 +27,7 @@
  *
  * @module trust-tasks/module/vtiWalletCards
  */
+import { communityRoleCard } from '@bifold/trust-tasks'
 import { JsonTransformer, W3cCredentialRecord, type Agent } from '@credo-ts/core'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
@@ -43,13 +44,18 @@ type Json = Record<string, unknown>
 const typesOf = (vc: Json): string[] =>
   Array.isArray(vc.type) ? vc.type.map(String) : vc.type ? [String(vc.type)] : []
 
-/** A community card this module mirrors: a DTG membership, or a role or vetter grant (`CommunityRole`). */
+/**
+ * A community card this module mirrors: a DTG membership, or a role or vetter
+ * grant — a `CommunityRole` endorsement, or a DTG Credentials v1 VAC
+ * conferring `role:<name>` at the community (`communityRoleCard`).
+ */
 export function isCommunityCard(vc: Json): boolean {
   const t = typesOf(vc)
   if (!t.includes('DTGCredential')) return false
   if (t.includes('MembershipCredential')) return true
   const endorsement = (vc.credentialSubject as Json | undefined)?.endorsement as Json | undefined
-  return t.includes('EndorsementCredential') && endorsement?.type === 'CommunityRole'
+  if (t.includes('EndorsementCredential') && endorsement?.type === 'CommunityRole') return true
+  return communityRoleCard(vc)?.shape === 'vac'
 }
 
 /** The cards the store holds that the Wallet shows, by the credential's own id. */

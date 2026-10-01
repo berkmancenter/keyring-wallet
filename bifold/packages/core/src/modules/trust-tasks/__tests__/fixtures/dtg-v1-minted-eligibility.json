@@ -1,0 +1,291 @@
+{
+  "README": "Minted by vtc-service/examples/mint_keyring_fixtures.rs at VTI 439a0333 (vta-service-v0.47.0) with the VTC's issue_membership/issue_role_action, vta-sdk sign_statement and dtg-credentials 0.12.0 new_witnessed_vsc. did:key parties from fixed seeds; not from a deployed VTC.",
+  "applicantMembership": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialStatus": {
+      "id": "https://vtc.example/v1/status-lists/revocation/1#9",
+      "statusListCredential": "https://vtc.example/v1/status-lists/revocation/1",
+      "statusListIndex": "9",
+      "statusPurpose": "revocation",
+      "type": "BitstringStatusListEntry"
+    },
+    "credentialSubject": {
+      "id": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN"
+    },
+    "id": "urn:uuid:5a7c9e1b-3d5f-4a8c-9e0b-2d4f6a8c0e1a",
+    "issuer": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "zaqKfE9bhqFAvq5coQHhbXjXyuq7K5XMP9NFuQui5Jxkh4nFPHhYpQbr7u5QE1vHEbaMtGX3f6SftTk5acPde4aN",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p#z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+    },
+    "type": ["VerifiableCredential", "DTGCredential", "MembershipCredential"],
+    "validFrom": "2026-10-01T01:21:56Z",
+    "validUntil": "2027-10-01T01:21:56Z"
+  },
+  "boundVettingSession": {
+    "id": "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f",
+    "issuedAt": "2026-10-01T00:00:00Z",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "payload": {
+      "community": "did:webvh:QmCommunity:dids.example:community"
+    },
+    "recipient": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+    "threadId": "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f",
+    "type": "https://trusttasks.org/spec/vetting/session/0.1"
+  },
+  "boundVettingStatement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+      "object": {
+        "value": {
+          "cardDigestMultibase": "zQmZdubwrW14GRABWD49GQ6DbRPZDA81uiaD9YDw5ZqVH5c",
+          "claimsVerified": ["name.legal"],
+          "community": "did:webvh:QmCommunity:dids.example:community",
+          "declaredRelationship": "none",
+          "documentClasses": ["passport"],
+          "identityCommitment": "zQmTpxHiaisC5veqP3CFUD4EhUrWnhXNm1ZkAyULkD9DxTK",
+          "livenessConfirmed": true,
+          "method": "inPerson"
+        }
+      },
+      "predicate": "https://registry.trustoverip.org/dtg/vsc/vetted/1"
+    },
+    "id": "urn:uuid:4e6a8c0e-2a4c-4e6a-8c0e-6a8c0e2a4c6e",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "issuerScope": "directed",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z5ziTLbaSRy3PBjKvfpM7UuHsNwoEuRbbg4pma78PKqNjYhz3ESbz5h9CRNt5DFdrEv9AVqjchsRJWQqE5moj3dZB",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB#z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "taskContext": "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f",
+    "taskDigestMultibase": "zQmSHRrrNjnxHZYdgLWNHzesiyHb5J2nf8JryEn7dnT1RUo",
+    "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+    "validFrom": "2026-10-01T00:00:00Z",
+    "validUntil": "2026-10-31T00:00:00Z"
+  },
+  "eligibility": {
+    "challenge": "urn:uuid:1a3c5e7a-9c1e-4a3c-8e7a-3c5e7a9c1e3a",
+    "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "domain": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+    "role": "vetter",
+    "vetter": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+  },
+  "eligibilityVp": {
+    "@context": ["https://www.w3.org/ns/credentials/v2"],
+    "domain": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+    "holder": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "nonce": "urn:uuid:1a3c5e7a-9c1e-4a3c-8e7a-3c5e7a9c1e3a",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "authentication",
+      "proofValue": "z4fT5w4nLAL6QS9sNDpsZgp9eDyfZfjehKNrZMFeRS7KdkHzwjsWG1dCskH8h1AsgXPQ2WRTYvoeYNnLHbc3By3wf",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB#z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "type": ["VerifiablePresentation"],
+    "verifiableCredential": [
+      {
+        "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+        "credentialStatus": {
+          "id": "https://vtc.example/v1/status-lists/revocation/1#8",
+          "statusListCredential": "https://vtc.example/v1/status-lists/revocation/1",
+          "statusListIndex": "8",
+          "statusPurpose": "revocation",
+          "type": "BitstringStatusListEntry"
+        },
+        "credentialSubject": {
+          "authority": {
+            "actions": ["role:vetter"],
+            "maxAttenuation": 0,
+            "scope": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+          },
+          "id": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+        },
+        "id": "urn:uuid:3f9a1c5e-7b2d-4e6f-8a0c-1b3d5f7a9c2e",
+        "issuer": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+        "issuerScope": "public",
+        "proof": {
+          "created": "2026-10-01T01:21:56Z",
+          "cryptosuite": "eddsa-jcs-2022",
+          "proofPurpose": "assertionMethod",
+          "proofValue": "zpA3MBwUcvaiYnZ2ufjoTsRd77FWivPoqVnSUumeLXgzQy71PW6nShiidRXBzWvFUJjEaoFz2jVo62FAUQLj5a13",
+          "type": "DataIntegrityProof",
+          "verificationMethod": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p#z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+        },
+        "type": ["VerifiableCredential", "DTGCredential", "AuthorityCredential"],
+        "validFrom": "2026-10-01T01:21:56Z",
+        "validUntil": "2027-03-30T01:21:56Z"
+      }
+    ]
+  },
+  "parties": {
+    "applicant": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+    "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "vetter": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "witness": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt"
+  },
+  "vetterGrant": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialStatus": {
+      "id": "https://vtc.example/v1/status-lists/revocation/1#8",
+      "statusListCredential": "https://vtc.example/v1/status-lists/revocation/1",
+      "statusListIndex": "8",
+      "statusPurpose": "revocation",
+      "type": "BitstringStatusListEntry"
+    },
+    "credentialSubject": {
+      "authority": {
+        "actions": ["role:vetter"],
+        "maxAttenuation": 0,
+        "scope": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+      },
+      "id": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "id": "urn:uuid:3f9a1c5e-7b2d-4e6f-8a0c-1b3d5f7a9c2e",
+    "issuer": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "zpA3MBwUcvaiYnZ2ufjoTsRd77FWivPoqVnSUumeLXgzQy71PW6nShiidRXBzWvFUJjEaoFz2jVo62FAUQLj5a13",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p#z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+    },
+    "type": ["VerifiableCredential", "DTGCredential", "AuthorityCredential"],
+    "validFrom": "2026-10-01T01:21:56Z",
+    "validUntil": "2027-03-30T01:21:56Z"
+  },
+  "vetterMembership": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialStatus": {
+      "id": "https://vtc.example/v1/status-lists/revocation/1#7",
+      "statusListCredential": "https://vtc.example/v1/status-lists/revocation/1",
+      "statusListIndex": "7",
+      "statusPurpose": "revocation",
+      "type": "BitstringStatusListEntry"
+    },
+    "credentialSubject": {
+      "id": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "id": "urn:uuid:8c6f2b0e-1d3a-4f5b-9a7c-2e4d6f8a0b1c",
+    "issuer": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z5nbLSW4eZxBg6NrMeLodh3oReRJaRHXAA143GsHVRj58eKebW15oYSdP3FaJmbLWTM3A5crbFJq6TEMYNxZWDcEz",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p#z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+    },
+    "type": ["VerifiableCredential", "DTGCredential", "MembershipCredential"],
+    "validFrom": "2026-10-01T01:21:56Z",
+    "validUntil": "2027-10-01T01:21:56Z"
+  },
+  "vettingSession": {
+    "id": "urn:uuid:9b1d3f5a-7c9e-4b2d-8f0a-1c3e5a7b9d2f",
+    "issuedAt": "2026-09-30T20:00:00Z",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "payload": {
+      "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p"
+    },
+    "recipient": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+    "threadId": "urn:uuid:9b1d3f5a-7c9e-4b2d-8f0a-1c3e5a7b9d2f",
+    "type": "https://trusttasks.org/spec/vetting/session/0.1"
+  },
+  "vettingStatement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+      "object": {
+        "value": {
+          "cardDigestMultibase": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          "claimsVerified": ["name.legal"],
+          "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+          "declaredRelationship": "communityColleague",
+          "documentClasses": ["passport"],
+          "identityCommitment": "zQmYtUc4iTCbbfVSDNKvtQqrfyezPPnFvE33wFmutw9PBBk",
+          "livenessConfirmed": true,
+          "method": "inPerson"
+        }
+      },
+      "predicate": "https://registry.trustoverip.org/dtg/vsc/vetted/1"
+    },
+    "id": "urn:uuid:2c4e6a8c-0e2a-4c6e-8a0c-4e6a8c0e2a4c",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "issuerScope": "directed",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z3Rg3yStP9wnCXUbjeBr2LT6dv9UR5MH9iid6fuQyqoiqMQAAbAZ9ciVkd6LQ7GZ2jLLnh3V244pziUEAUty9617W",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB#z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "taskContext": "urn:uuid:9b1d3f5a-7c9e-4b2d-8f0a-1c3e5a7b9d2f",
+    "taskDigestMultibase": "zQmYnpUeaB9Mg4pgj3eSzybRFF89gRv81xBMT6SMZbjesqr",
+    "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+    "validFrom": "2026-09-30T20:05:00Z",
+    "validUntil": "2026-10-30T20:05:00Z"
+  },
+  "witnessSession": {
+    "id": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "issuedAt": "2026-09-30T19:00:05Z",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "payload": {
+      "parties": [
+        "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+        "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN"
+      ]
+    },
+    "recipient": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt",
+    "threadId": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "type": "https://trusttasks.org/spec/witness/session/0.1"
+  },
+  "witnessStatement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+      "object": {
+        "digestMultibase": "zQmXhTCPnjuGdyMqWWfdwyqNW4D6banDLjnA9x6Kxzc9ecK"
+      },
+      "predicate": "https://registry.trustoverip.org/dtg/vsc/witnessed/1"
+    },
+    "issuer": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z22nKnkvrBYdxbXv9BwAjNPWG9DkNua7mRQAe2MxbDoP2xhbVDdAVSRXoTHZmbxjn3NKKsmqmmGe9Fcmeg71jqgG3",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt#z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt"
+    },
+    "taskContext": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "taskDigestMultibase": "zQmeEWybzMfJ54rdzYHndUpWEnTysjtxAAZetRzF8NEf2K5",
+    "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+    "validFrom": "2026-09-30T19:01:00Z"
+  },
+  "witnessedRelationship": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN"
+    },
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "issuerScope": "pairwise",
+    "type": ["VerifiableCredential", "DTGCredential", "RelationshipCredential"],
+    "validFrom": "2026-09-30T19:00:00Z"
+  }
+}

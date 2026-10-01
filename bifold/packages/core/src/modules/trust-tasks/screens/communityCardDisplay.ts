@@ -17,7 +17,7 @@ import type { TFunction } from 'i18next'
 import { i18n } from '../../../localization'
 import { registerW3cDisplayOverride, type W3cDisplayOverride } from '../../openid/display'
 import type { W3cCredentialJson } from '../../openid/types'
-import { classifyCredential } from '../module/vtiInbox'
+import { classifyCredential, roleNameOf } from '../module/vtiInbox'
 import { isCommunityCard } from '../module/vtiWalletCards'
 
 import { communityHeadingOf } from './communityName'
@@ -53,10 +53,9 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   const { kind, communityDid } = classifyCredential(vc)
   if (!communityDid) return undefined
   const community = communityHeadingOf(communityDid, t, { claim: 'plain' })
-  const endorsement = (vc.credentialSubject as Record<string, unknown> | undefined)?.endorsement as
-    | Record<string, unknown>
-    | undefined
-  const role = typeof endorsement?.role === 'string' && endorsement.role ? roleWords(endorsement.role, t) : undefined
+  // The endorsement's `role`, or a DTG Credentials v1 VAC's first `role:<name>`.
+  const roleName = roleNameOf(vc)
+  const role = roleName ? roleWords(roleName, t) : undefined
   const words = (key: string, extra: Record<string, unknown> = {}) =>
     t(key, { community, ...extra, interpolation: { escapeValue: false } }) as string
 

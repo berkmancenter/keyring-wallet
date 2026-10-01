@@ -34,7 +34,7 @@ import { vtaAgent } from './vtaAgent'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { checkDeliveredCard, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
-import { classifyCredential } from './vtiInbox'
+import { classifyCredential, roleNameOf } from './vtiInbox'
 
 export const VAULT_RECEIVE = 'https://trusttasks.org/spec/vault/credentials/receive/0.1'
 export const VAULT_QUERY = 'https://trusttasks.org/spec/vault/credentials/query/0.1'
@@ -261,10 +261,7 @@ export async function recoverCardsFromAgent(
       })
     } else if (item.kind === 'role') {
       const existing = await store.getMembership(item.communityDid)
-      const role = String(
-        ((credential.credentialSubject as Record<string, unknown>)?.endorsement as Record<string, unknown>)?.role ??
-          'member'
-      )
+      const role = String(roleNameOf(credential) ?? 'member')
       if (existing) await store.saveMembership({ ...existing, role, roleVec: credential })
       else await store.saveHeldCredential({ ...item, kind: 'role' })
     } else if (item.kind === 'vetter-grant') {
