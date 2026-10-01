@@ -87,6 +87,64 @@ describe("keeping a persona's cards in its agent", () => {
     expect((await keepCardsInAgent(agent, store, persona, online.task)).kept).toEqual([membershipCard.id])
   })
 
+  // VTI #1868 (VTI-44): a VTA's vault keeps a proof-set card. A card refused
+  // for its proof set is offered again once per connect, so a phone whose agent
+  // has been upgraded keeps it there without anyone doing anything.
+  it('offers a card refused for its proof set again when asked (a reconnect), and keeps it once the agent can', async () => {
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ held: [grantHeld] })
+    await keepCardsInAgent(agent, store, persona, fakeVault().task)
+    expect(cardVaultStateOf(vetterGrantProofSet.id)).toEqual({ state: 'cannotKeep', reason: 'proofSet' })
+    const upgraded = fakeVault({ acceptsProofSets: true })
+    const result = await keepCardsInAgent(agent, store, persona, upgraded.task, { offerProofSetsAgain: true })
+    expect(result.kept).toEqual([vetterGrantProofSet.id])
+    expect(upgraded.calls.filter((c) => c.type === VAULT_RECEIVE)).toHaveLength(1)
+    expect(cardVaultStateOf(vetterGrantProofSet.id)).toMatchObject({ state: 'kept' })
+  })
+
+  it('does not offer it again between connects (a new delivery is not a reconnect)', async () => {
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ held: [grantHeld] })
+    await keepCardsInAgent(agent, store, persona, fakeVault().task)
+    const upgraded = fakeVault({ acceptsProofSets: true })
+    await keepCardsInAgent(agent, store, persona, upgraded.task)
+    expect(upgraded.calls).toHaveLength(0)
+  })
+
+  it('an agent that still refuses it: one send per reconnect, and the card stays marked', async () => {
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ held: [grantHeld] })
+    const old = fakeVault()
+    await keepCardsInAgent(agent, store, persona, old.task)
+    const result = await keepCardsInAgent(agent, store, persona, old.task, { offerProofSetsAgain: true })
+    expect(result.cannotKeep).toEqual([vetterGrantProofSet.id])
+    expect(old.calls.filter((c) => c.type === VAULT_RECEIVE)).toHaveLength(2)
+    expect(cardVaultStateOf(vetterGrantProofSet.id)).toEqual({ state: 'cannotKeep', reason: 'proofSet' })
+  })
+
+  it('an unanswered second offer leaves the card as it was, not pending', async () => {
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ held: [grantHeld] })
+    await keepCardsInAgent(agent, store, persona, fakeVault().task)
+    const result = await keepCardsInAgent(agent, store, persona, fakeVault({ offline: true }).task, {
+      offerProofSetsAgain: true,
+    })
+    expect(result.pending).toEqual([])
+    expect(cardVaultStateOf(vetterGrantProofSet.id)).toEqual({ state: 'cannotKeep', reason: 'proofSet' })
+  })
+
+  it('never offers again a card the agent refused for another reason', async () => {
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, roleVec: undefined }] })
+    const refusing = fakeVault({ refuses: [membershipCard.id] })
+    await keepCardsInAgent(agent, store, persona, refusing.task)
+    expect(cardVaultStateOf(membershipCard.id)).toEqual({ state: 'cannotKeep', reason: 'refusedByAgent' })
+    const upgraded = fakeVault({ acceptsProofSets: true })
+    await keepCardsInAgent(agent, store, persona, upgraded.task, { offerProofSetsAgain: true })
+    expect(upgraded.calls).toHaveLength(0)
+    expect(cardVaultStateOf(membershipCard.id)).toEqual({ state: 'cannotKeep', reason: 'refusedByAgent' })
+  })
+
   it("leaves another persona's cards alone", async () => {
     const { agent } = fakeAgent()
     const { store } = fakeCommunityStore({ memberships: [{ ...membership, personaDid: 'did:webvh:QmOther:p' }] })
