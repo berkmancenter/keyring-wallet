@@ -46,7 +46,11 @@ The scripts branch on `uname` where macOS and Linux differ; nothing else changes
   `DID:*`, `MSG:*`, `SEND_Q:*`, so db0 of a Redis that already ran a mediator would collide).
 - **Keychain signing is skipped.** `../sign-lab-tool.sh` only exists to keep a
   macOS "Always Allow" grant across rebuilds; on Linux it just makes the
-  revisioned copy and the stable `~/vti-stack/bin/<tool>` link.
+  revisioned copy and the stable `~/vti-stack/bin/<tool>` link. That link is a
+  prerequisite of `up.sh` (it runs `pnm` from `~/vti-stack/bin/pnm`): run
+  `scripts/openvtc/sign-lab-tool.sh all` (or just `... pnm`) once after building and
+  before `./up.sh`. If `~/vti-stack/bin/pnm` is missing on Linux, `up.sh` calls
+  `sign-lab-tool.sh pnm` itself.
 - **pnm's secret store.** Linux pnm uses the DBus Secret Service, which an
   unattended run can find locked. For an unattended lab export
   `VTI_SECURE_STORE=file` for every pnm call (plaintext 0600 under pnm's config
@@ -78,6 +82,12 @@ reads it, never passes it to ngrok, and never uses `--all`. It starts exactly
 and six reserved domains. ngrok limits online endpoints and reserved domains
 per plan; confirm in the dashboard that the account's current plan allows six of
 each before starting. Do not assume it from a previous plan or from this text.
+Verified 2026-10-01: a 3-endpoint account fails (ERR_NGROK_18021, and ERR_NGROK_324
+"more than N endpoints over a single agent session"), and a plan capped at 5 per
+session fails the same way; after upgrading, all six tunnels start in one session.
+`up.sh` now watches ngrok for 30 s after launch and aborts with the token-scrubbed
+log tail if it exits or logs `ERR_NGROK_*`, then checks that each public hostname
+answers before provisioning anything.
 
 1. In the ngrok dashboard (new account), reserve six domains, e.g.
    `myname-alice.ngrok.app`, `-community`, `-bob`, `-vtc`, `-dids`, `-mediator`.
@@ -99,6 +109,8 @@ Self-test: `./ngrok-lab-config.sh --self-test`.
 
 ```sh
 ./up.sh          # provisions everything, prints ~/vti-stack/stack.env
+                 # (the DID host's generated admin key is NOT printed: it goes to
+                 #  ~/vti-stack/dids/admin-credentials.txt, mode 0600)
 ./up.sh --stop
 ```
 
