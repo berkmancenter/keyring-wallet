@@ -7,6 +7,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Share } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -19,7 +20,7 @@ import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { openScanner } from '../screens/openScanner'
-import VtaLink, { PHONE_GRANT_POLL_EVERY_MS } from '../screens/VtaLink'
+import VtaLink, { PHONE_GRANT_POLL_EVERY_MS, PHONE_GRANT_POLL_WINDOW_MS } from '../screens/VtaLink'
 import { shareableKey } from '../screens/shareableKey'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -132,7 +133,6 @@ describe('the key the admin has to add', () => {
       expect(tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))).toHaveTextContent(/VtaLink\.AddThisPhone/)
       expect(tree.UNSAFE_getByType(QRCode).props.value).toBe('did:key:z6MkNewPhone')
       expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
-      expect(tree.queryByTestId(testIdWithKey('VtaLinkShareKey'))).toBeNull()
       expect(tree.queryByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeNull()
       fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowAsText')))
       expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toHaveTextContent('did:key:z6MkNewPhone')
@@ -173,6 +173,49 @@ describe('the key the admin has to add', () => {
       expect(inCard('VtaLinkCopyKey')).toBe(false)
       expect(inCard('VtaLinkCancel')).toBe(false)
       expect(inCard('VtaLinkKeyQr')).toBe(true)
+    })
+
+    /**
+     * The code often goes to a browser on another device (an agent host's
+     * Admin DID box): Copy alone left it on the phone. Share sends it — as a
+     * sentence with the code on its own line, as elsewhere — over AirDrop,
+     * Messages or Notes (Alberto, iPhone 11, 2026-10-01).
+     */
+    test('Share sits beside Copy, and sends a sentence with the code, never the bare code', () => {
+      const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never)
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      const card = tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))
+      expect(card.findAll((node) => node.props?.testID === testIdWithKey('VtaLinkShareKey'))).toHaveLength(0)
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShareKey')))
+      const sent = share.mock.calls[0][0] as { message: string }
+      expect(sent.message).toContain('did:key:z6MkNewPhone')
+      expect(sent.message.startsWith('did:')).toBe(false)
+    })
+
+    /**
+     * While the phone checks on its own, a check the agent did not answer
+     * yet is not news: the agent may still be being made. The red "didn't
+     * answer" came and went between checks and read as a failure while all
+     * was well (Alberto, iPhone 11, 2026-10-01). It shows only once the
+     * waiting window has run out, beside Check again.
+     */
+    test('no red line while it is still waiting; only once the wait runs out', () => {
+      jest.useFakeTimers()
+      try {
+        jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+        showKey({ via: 'scan', did: 'did:key:z6MkNewPhone', noAnswer: true })
+        const tree = show()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+        expect(tree.queryByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeNull()
+        act(() => {
+          jest.advanceTimersByTime(PHONE_GRANT_POLL_WINDOW_MS + PHONE_GRANT_POLL_EVERY_MS * 2)
+        })
+        expect(tree.getByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeTruthy()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkCheckAgain'))).toBeTruthy()
+      } finally {
+        jest.useRealTimers()
+      }
     })
 
     /**

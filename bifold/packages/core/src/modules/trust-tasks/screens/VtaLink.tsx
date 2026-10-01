@@ -400,7 +400,11 @@ const VtaLink: React.FC = () => {
         )
         actions = (
           <>
-            {link.noAnswer ? (
+            {/* A check the agent did not answer yet is not news while the phone
+                is still checking on its own (the agent may still be being made):
+                in red it came and went between checks and read as a failure
+                (iPhone 11, 2026-10-01). Said once the wait has run out. */}
+            {link.noAnswer && phonePollExpired ? (
               <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
                 {t('VtaLink.NoAnswer', {
                   label: agentDisplayNameStart(link, t),
@@ -429,15 +433,27 @@ const VtaLink: React.FC = () => {
             ) : null}
             {/* In the bar, never under the QR: there it fell below the fold on a
                 Pixel 6 at default text, half hidden behind Stop linking. */}
-            <Button
-              title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
-              buttonType={phonePollExpired ? ButtonType.Secondary : ButtonType.Primary}
-              onPress={() => {
-                Clipboard.setString(link.did)
-                setCopied(true)
-              }}
-              testID={testIdWithKey('VtaLinkCopyKey')}
-            />
+            {/* Copy, and Share for a browser on another device (an agent host's
+                Admin DID box): a sentence with the code on its own line. */}
+            <View style={styles.row}>
+              <Button
+                title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
+                buttonType={phonePollExpired ? ButtonType.Secondary : ButtonType.Primary}
+                onPress={() => {
+                  Clipboard.setString(link.did)
+                  setCopied(true)
+                }}
+                testID={testIdWithKey('VtaLinkCopyKey')}
+              />
+              <Button
+                title={t('VtaLink.ShareKey')}
+                buttonType={ButtonType.Secondary}
+                onPress={() =>
+                  void Share.share(shareableKey(t, agentDisplayName(link, t), link.did)).catch(() => undefined)
+                }
+                testID={testIdWithKey('VtaLinkShareKey')}
+              />
+            </View>
             <Button
               title={t('VtaLink.StopLinking')}
               buttonType={ButtonType.Secondary}
