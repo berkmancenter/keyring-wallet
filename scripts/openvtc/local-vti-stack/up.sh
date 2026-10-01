@@ -73,6 +73,12 @@ stop_stack() {
 
 if [ "${1:-}" = "--stop" ]; then stop_stack; exit 0; fi
 
+# On Linux sign-lab-tool.sh only makes the stable ~/vti-stack/bin/<tool> link, so
+# create a missing pnm link here rather than failing on a forgotten prerequisite.
+if [ "$(uname)" = "Linux" ] && [ ! -x "$PNM_BIN" ] && [ "$PNM_BIN" = "$HOME/vti-stack/bin/pnm" ]; then
+  echo "creating $PNM_BIN via sign-lab-tool.sh pnm"
+  VTI_SRC="$VTI_SRC" "$(dirname "$0")/../sign-lab-tool.sh" pnm || true
+fi
 for bin in "$VTA_BIN" "$VTC_BIN" "$PNM_BIN" "$MEDIATOR_BIN" "$MEDIATOR_SETUP_BIN" "$WEBVH_BIN"; do
   [ -x "$bin" ] || { echo "missing: $bin — build it first (see README)"; exit 1; }
 done
@@ -119,6 +125,57 @@ open_tunnel() { # name port -> echoes hostname
   echo "tunnel for $name never came up" >&2; exit 1
 }
 
+# ngrok fails on its own, after this script has moved on: a plan that caps a
+# session's endpoints (ERR_NGROK_324 / 18021), a bad token, a domain the account
+# does not own. Nothing downstream notices, and the run hangs at "provisioning
+# the VTAs" against hostnames that answer ERR_NGROK_3200 (offline) — measured
+# 2026-10-01. So watch the process and its log for NGROK_WATCH_SECS, and fail
+# fast with the log's tail.
+NGROK_WATCH_SECS="${NGROK_WATCH_SECS:-30}"
+scrub_log() { # stdin -> stdout, with anything token-shaped masked
+  sed -E 's/(authtoken|auth_token|token)([=: "]+)[A-Za-z0-9_-]{16,}/\1\2<scrubbed>/Ig; s/\b[0-9][A-Za-z0-9]{20,}_[A-Za-z0-9]{20,}\b/<scrubbed>/g'
+}
+ngrok_fail() { # reason
+  echo "ngrok failed: $1" >&2
+  echo "--- tail of $STACK_DIR/logs/ngrok.log (token-scrubbed) ---" >&2
+  tail -n 20 "$STACK_DIR/logs/ngrok.log" 2>/dev/null | scrub_log >&2 || true
+  echo "---" >&2
+  echo "hint: ERR_NGROK_324 / ERR_NGROK_18021 mean the plan allows fewer than six concurrent endpoints" >&2
+  echo "      (the lab needs six); ERR_NGROK_105/107 a bad authtoken in $STACK_DIR/ngrok.yml;" >&2
+  echo "      ERR_NGROK_334 / 3200 a domain already online elsewhere or not reserved on this account." >&2
+  stop_stack >/dev/null 2>&1 || true
+  exit 1
+}
+watch_ngrok() {
+  local pid i
+  pid=$(cat "$STACK_DIR/ngrok.pid")
+  for i in $(seq 1 "$NGROK_WATCH_SECS"); do
+    kill -0 "$pid" 2>/dev/null || ngrok_fail "the ngrok process exited after ${i}s"
+    if grep -q 'ERR_NGROK_' "$STACK_DIR/logs/ngrok.log" 2>/dev/null; then
+      ngrok_fail "the log reports an ERR_NGROK_* error"
+    fi
+    sleep 1
+  done
+}
+# Each public hostname has to answer something before anything is provisioned
+# behind it. No backend runs yet, so a 502 (ERR_NGROK_8012: tunnel up, nothing
+# listening) is the GOOD answer; ERR_NGROK_3200 means the endpoint is offline.
+# HTTP/1.1 + bounded retry: ngrok can answer an early HTTP/2 request with 421.
+check_public_hosts() { # host...
+  local h try hdr code
+  for h in "$@"; do
+    for try in $(seq 1 10); do
+      hdr=$(curl -sS --http1.1 -m 8 -o /dev/null -D - "https://$h/" 2>/dev/null || true)
+      code=$(printf '%s' "$hdr" | head -1 | awk '{print $2}')
+      if [ -n "$code" ] && [ "$code" != 421 ] && ! printf '%s' "$hdr" | grep -qi '^ngrok-error-code: *3200'; then
+        echo "  $h answers (HTTP $code)"; continue 2
+      fi
+      sleep 3
+    done
+    ngrok_fail "https://$h/ never answered (offline, ERR_NGROK_3200, or HTTP 421 for 30s)"
+  done
+}
+
 log "opening tunnels"
 # Reserved ngrok domains if there is a config for them, quick tunnels otherwise.
 # The difference is not convenience: a did:webvh is bound to the host it was
@@ -140,8 +197,9 @@ if [ -f "$STACK_DIR/ngrok.yml" ]; then
   nohup ngrok start alice community bob vtc dids mediator "${NGROK_CONFIGS[@]}" \
     > "$STACK_DIR/logs/ngrok.log" 2>&1 &
   echo $! > "$STACK_DIR/ngrok.pid"
-  sleep 8
   eval "$NGROK_HOSTS"
+  watch_ngrok
+  check_public_hosts "$ALICE_HOST" "$COMMUNITY_HOST" "$BOB_HOST" "$VTC_HOST" "$DIDS_HOST" "$MED_HOST"
 else
   ALICE_HOST=$(open_tunnel alice 8110)
   COMMUNITY_HOST=$(open_tunnel community 8111)
@@ -281,7 +339,15 @@ EOF
 FORCE_DIDS=""
 [ -f "$STACK_DIR/dids/config.toml" ] && { FORCE_DIDS="--force-reprovision"; rm -rf "$STACK_DIR/dids/data"; }
 # shellcheck disable=SC2086
-"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS 2>&1 | grep -E "admin did|Private key" | sed 's/^/  dids daemon /' || true
+# The setup prints a generated admin did:key AND its private key, shown once.
+# Never let that reach this script's output or logs: capture it, keep only those
+# two lines in a 0600 file, and print a pointer.
+DIDS_ADMIN_FILE="$STACK_DIR/dids/admin-credentials.txt"
+DIDS_SETUP_OUT=$("$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS 2>&1) || true
+( umask 077; printf '%s\n' "$DIDS_SETUP_OUT" | grep -E "admin did|Private key" > "$DIDS_ADMIN_FILE" || true )
+chmod 600 "$DIDS_ADMIN_FILE" 2>/dev/null || true
+unset DIDS_SETUP_OUT
+echo "  dids daemon admin credentials written to $DIDS_ADMIN_FILE, mode 0600"
 nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
 sleep 6
 DIDS_DID=$(curl -s "https://$DIDS_HOST/.well-known/did.jsonl" | tail -1 | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print((d.get("state") or d).get("id",""))' 2>/dev/null || true)
