@@ -295,35 +295,29 @@ const VtaLink: React.FC = () => {
 
     case 'showingKey':
       if (link.via === 'scan') {
-        // #30: another phone's "Add another phone" code was scanned. Show this
-        // phone's code for that phone to scan; no admin, no Share.
+        // A bare agent DID was scanned: another phone's "Add another phone"
+        // code (#30), or an agent host's page that shows the agent's address
+        // beside an "Admin DID" box. The phone cannot tell which, so the words
+        // cover both: copy this phone's code into that box, or scan it from the
+        // other phone. No Share; this phone notices by itself once it's added.
         body = (
           <View style={styles.card} testID={testIdWithKey('VtaLinkForOtherPhone')}>
             <ThemedText variant="headingThree" accessibilityRole="header">
-              {t('VtaLink.ShowToOtherPhone')}
+              {t('VtaLink.AddThisPhone')}
             </ThemedText>
+            <ThemedText>{t('VtaLink.AddThisPhoneBody')}</ThemedText>
             <QRRenderer
               value={link.did}
               size={Math.min(windowWidth - 2 * (20 + 16 + 16), 260)}
               quietZone={16}
               testID={testIdWithKey('VtaLinkKeyQr')}
             />
-            <ThemedText>{t('VtaLink.ShowToOtherPhoneBody')}</ThemedText>
             {phonePollUntil !== undefined ? (
               <View style={styles.row} testID={testIdWithKey('VtaLinkWaitingForPhone')}>
                 <ActivityIndicator color={ColorPalette.brand.primary} />
-                <ThemedText style={{ flex: 1 }}>{t('VtaLink.WaitingForPhone')}</ThemedText>
+                <ThemedText style={{ flex: 1 }}>{t('VtaLink.WaitingToBeAdded')}</ThemedText>
               </View>
             ) : null}
-            <Button
-              title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => {
-                Clipboard.setString(link.did)
-                setCopied(true)
-              }}
-              testID={testIdWithKey('VtaLinkCopyKey')}
-            />
             <Pressable
               onPress={() => setKeyShown(!keyShown)}
               accessibilityRole="button"
@@ -360,6 +354,17 @@ const VtaLink: React.FC = () => {
                 testID={testIdWithKey('VtaLinkCheckAgain')}
               />
             ) : null}
+            {/* In the bar, never under the QR: there it fell below the fold on a
+                Pixel 6 at default text, half hidden behind Stop linking. */}
+            <Button
+              title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
+              buttonType={phonePollExpired ? ButtonType.Secondary : ButtonType.Primary}
+              onPress={() => {
+                Clipboard.setString(link.did)
+                setCopied(true)
+              }}
+              testID={testIdWithKey('VtaLinkCopyKey')}
+            />
             <Button
               title={t('VtaLink.StopLinking')}
               buttonType={ButtonType.Secondary}

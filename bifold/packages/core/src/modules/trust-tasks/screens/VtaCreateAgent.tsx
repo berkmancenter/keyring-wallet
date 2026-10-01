@@ -1,10 +1,10 @@
 /**
  * Claim your agent (own_agent_subtask.md §1, §7): a person with only a phone
- * and the VTA Farm's website makes an agent and owns it from Keyring.
+ * and an agent host's website makes an agent and owns it from Keyring.
  *
- * The steps follow the Farm's own wizard: the agent's address first (the
+ * The steps follow the host's own wizard: the agent's address first (the
  * phone's key names the agent's mediator, so it cannot be made before), then
- * this phone's owner code for the Farm's "Admin DID" box, then connect. The
+ * this phone's owner code for the host's "Admin DID" box, then connect. The
  * connect is today's no-QR link underneath — `startManualLink` makes and
  * shows the key, `checkManualGrant` signs in and moves onto the long-term key
  * — so the link machine's states drive the later steps.
@@ -80,9 +80,8 @@ export const GRANT_POLL_WINDOW_MS = 10 * 60 * 1000
 
 type LocalStep = 'intro' | 'address' | 'backupAddress' | 'backupCode' | 'ready'
 
-/** An agent's address, as the Farm shows it after "Create session". */
+/** An agent's address, as an agent host shows it after "Create session". */
 export const looksLikeAgentAddress = (text: string): boolean => /^did:webvh:[^\s]+:[^\s]+$/.test(text.trim())
-
 
 /**
  * What "… is online and belongs to this phone" calls the agent: the name it
