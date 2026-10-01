@@ -95,7 +95,7 @@ jobs:
         # Each proof must be for the purpose vta-sdk signs its type for
         # (purpose_for_document_type): card-verify checks it with upstream's own function.
         env:
-          CARD_VERIFY_EXPECT_PURPOSE: "1"
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
@@ -131,7 +131,7 @@ jobs:
         # Each proof must be for the purpose vta-sdk signs its type for
         # (purpose_for_document_type): card-verify checks it with upstream's own function.
         env:
-          CARD_VERIFY_EXPECT_PURPOSE: "1"
+          CARD_VERIFY_EXPECT_PURPOSE: '1'
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
