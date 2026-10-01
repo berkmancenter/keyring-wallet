@@ -403,8 +403,20 @@ const VtaAgentHome: React.FC = () => {
   // but it is not membership (#166).
   const currentMemberships = (holdings?.memberships ?? []).filter(isCurrentMembership)
   const isMember = currentMemberships.length > 0
-  // Holds an identity for a community, and neither belongs nor vets there yet.
-  const isApplicant = !isMember && !isVetter && (holdings?.personas.length ?? 0) > 0
+  // Holds an identity for a community it has never been a member of, and
+  // neither belongs nor vets anywhere yet.
+  const everMemberOf = new Set((holdings?.memberships ?? []).map((m) => m.communityDid))
+  const isApplicant =
+    !isMember && !isVetter && (holdings?.personas ?? []).some((p) => !everMemberOf.has(p.communityDid))
+  // Removed, and nothing since: the seat names who removed them (the latest
+  // removal), where it used to read "not a member yet" and offer vetting to
+  // continue (227 gate U11). The community's card says what to do next.
+  const removedBy =
+    !isMember && !isVetter && !isApplicant
+      ? (holdings?.memberships ?? [])
+          .filter((m) => !isCurrentMembership(m))
+          .sort((a, b) => String(b.removal?.decidedAt ?? '').localeCompare(String(a.removal?.decidedAt ?? '')))[0]
+      : undefined
   const lapsed = holdings?.lapsed ?? []
   const day = (iso: string) => new Date(iso).toLocaleDateString()
   const lapsedText = (communityDid: string, grant: Holdings['lapsed'][number]['grant']) => {
@@ -490,15 +502,20 @@ const VtaAgentHome: React.FC = () => {
               this line can trust the cards below it have settled too. */}
           {holdings ? (
             <ThemedText style={styles.muted} testID={testIdWithKey('AgentSeat')}>
-              {t(
-                holdings.vetterFor.length
-                  ? 'VtaLink.SeatVetter'
-                  : isMember
-                    ? 'VtaLink.SeatMember'
-                    : isApplicant
-                      ? 'VtaLink.SeatApplicant'
-                      : 'VtaLink.SeatNone'
-              )}
+              {removedBy
+                ? t('VtaLink.SeatRemoved', {
+                    community: communityLabelOf(removedBy.communityDid, t),
+                    interpolation: { escapeValue: false },
+                  })
+                : t(
+                    holdings.vetterFor.length
+                      ? 'VtaLink.SeatVetter'
+                      : isMember
+                        ? 'VtaLink.SeatMember'
+                        : isApplicant
+                          ? 'VtaLink.SeatApplicant'
+                          : 'VtaLink.SeatNone'
+                  )}
             </ThemedText>
           ) : null}
           {/* An applicant's way back to vetting. It used to be the operator
