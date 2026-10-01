@@ -58,6 +58,41 @@ The scripts branch on `uname` where macOS and Linux differ; nothing else changes
   and `STACK_DIR` override every default path. Not Linux-ported: the farm's QR
   check (`../farm/qr.swift`, macOS Vision) and the openvtc TUI Keychain fixture.
 
+## ngrok with your own account (Linux lab)
+
+Reserved domains keep every DID stable across restarts. Without an
+`ngrok.yml` in the stack dir, `up.sh` falls back to cloudflared quick tunnels
+(new hostnames, so new DIDs, every run).
+
+**Warnings.** The `keyring-vti-*.ngrok.app` domains are the live shared stack
+and belong to another account; never point a lab at them. `up.sh` and
+`ngrok-lab-config.sh` refuse those names unless `LAB_ALLOW_LIVE_DOMAINS=1`,
+which exists only for the Mac stack's owner. A host's default
+`~/.config/ngrok/ngrok.yml` may hold someone else's tunnels; the lab never
+reads it, never passes it to ngrok, and never uses `--all`. It starts exactly
+`alice community bob vtc dids mediator`, from `$STACK_DIR/ngrok.yml` only.
+
+**Account and plan.** The stack needs six simultaneously online HTTP endpoints
+and six reserved domains. ngrok limits online endpoints and reserved domains
+per plan; confirm in the dashboard that the account's current plan allows six of
+each before starting. Do not assume it from a previous plan or from this text.
+
+1. In the ngrok dashboard (new account), reserve six domains, e.g.
+   `myname-alice.ngrok.app`, `-community`, `-bob`, `-vtc`, `-dids`, `-mediator`.
+2. Generate the config, offline:
+   `./ngrok-lab-config.sh --prefix myname --suffix ngrok.app --out ~/vti-stack/ngrok.yml`
+   or six explicit domains in the order alice community bob vtc dids mediator.
+   Mode 0600, no authtoken; `--force` overwrites (and drops any token, so re-add it).
+   Validate any time with `./ngrok-lab-config.sh --check` (prints the six hostnames).
+3. Put your own token in that file, yourself (the scripts never see it):
+   `ngrok config add-authtoken <token> --config ~/vti-stack/ngrok.yml`
+4. `./up.sh`. Hostnames are read from that file and written into `stack.env`
+   (which `stack-health.sh` reads).
+
+A consolidated three-endpoint layout (`--three`) is a stub: it needs
+`VTA_ALLOW_PRIVATE_ENDPOINTS` behaviour that has not been verified.
+Self-test: `./ngrok-lab-config.sh --self-test`.
+
 ## Run it
 
 ```sh
