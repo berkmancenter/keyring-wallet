@@ -23,13 +23,15 @@ import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
 // eslint-disable-next-line import/order
 import { ed25519 } from '@noble/curves/ed25519.js'
 // eslint-disable-next-line import/order
-import { communityRoleCard, confersRole } from '@bifold/trust-tasks'
+import { communityRoleCard, confersRole, LEGACY_DTG_SHAPE_UNTIL } from '@bifold/trust-tasks'
 // eslint-disable-next-line import/order
 import minted from './fixtures/dtg-v1-minted-eligibility.json'
 // eslint-disable-next-line import/order
 import upstream from './fixtures/vti-upstream-eligibility.json'
 // eslint-disable-next-line import/order
 import { buildEligibilityPresentation, verifyEligibilityPresentation } from '../module/vtiEligibility'
+// eslint-disable-next-line import/order
+import { grantState } from '../module/vtiGrantState'
 // eslint-disable-next-line import/order
 import { classifyCredential, roleNameOf } from '../module/vtiInbox'
 // eslint-disable-next-line import/order
@@ -213,5 +215,47 @@ describe('an applicant judging a vetter who presents a VAC grant', () => {
     await expect(
       verifyEligibilityPresentation(resolver as never, vp, expectations({ role: 'custom:senior-vetter' }))
     ).resolves.toMatchObject({ ok: false, reason: 'noRoleCredential' })
+  })
+})
+
+describe('a CommunityRole endorsement after LEGACY_DTG_SHAPE_UNTIL', () => {
+  const cut = Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`)
+  const e = upstream.eligibility
+
+  it('is refused by an applicant with its own reason, grantLegacyShape', async () => {
+    const judge = (now: number) =>
+      verifyEligibilityPresentation(resolver as never, upstream.vp as unknown as Json, {
+        vetter: e.vetter,
+        community: e.community,
+        role: e.role,
+        challenge: e.challenge,
+        domain: e.domain,
+        now: new Date(now),
+      })
+    await expect(judge(cut + 3600 * 1000)).resolves.toMatchObject({ ok: false, reason: 'grantLegacyShape' })
+    await expect(judge(cut - 3600 * 1000)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('ends the vetter’s own seat on that day; a VAC grant is not touched by it', async () => {
+    const held = {
+      kind: 'vetter-grant',
+      communityDid: e.community,
+      subjectDid: e.vetter,
+      credential: oldGrant,
+      receivedAt: 't',
+    }
+    await expect(grantState({} as never, held as never, { now: new Date(cut + 1000) })).resolves.toEqual({
+      state: 'expired',
+      validUntil: `${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`,
+    })
+    // Past the cut-off a VAC grant still stands on its own window and status
+    // (the status list is unreachable here, so its bit is unchecked).
+    const vacHeld = { ...held, communityDid: community, subjectDid: vetter, credential: vac }
+    const offline = (async () => {
+      throw new Error('no network in this test')
+    }) as never
+    await expect(
+      grantState({} as never, vacHeld as never, { now: new Date(cut + 1000), fetchImpl: offline })
+    ).resolves.toMatchObject({ state: 'active', statusChecked: false })
   })
 })

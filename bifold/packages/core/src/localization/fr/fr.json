@@ -1544,7 +1544,8 @@
       "grantMalformed": "Son rôle de vérificateur est illisible.",
       "grantExpired": "Son rôle de vérificateur a expiré.",
       "grantProof": "La signature de la communauté sur son rôle n'est pas valide.",
-      "legacyExpired": "Il a utilisé la preuve d'une ancienne version de Keyring, qui n'est plus acceptée."
+      "legacyExpired": "Le vérificateur a utilisé la preuve d'une ancienne version de Keyring, qui n'est plus acceptée.",
+      "grantLegacyShape": "Son rôle de vérificateur est dans un ancien format qui n'est plus accepté."
     },
     "NeedsMethod": "encore {{n}} {{method}}",
     "IndependenceCapped": "Plus d'attestations de personnes ayant déclaré un lien {{relationships}} avec vous que cette communauté n'en compte. Votre candidature reste valable — quelqu'un va l'examiner.",
@@ -1628,7 +1629,8 @@
       "cardDigest": "Détails : la déclaration porte sur une autre carte que celle envoyée.",
       "expired": "Détails : la déclaration a déjà expiré.",
       "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée.",
-      "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session."
+      "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session.",
+      "legacyShape": "Détails : la déclaration est dans un ancien format que ce téléphone n'accepte plus. Demandez à votre vérificateur de mettre à jour son application et de vous vérifier à nouveau."
     },
     "CardRefused": "La carte du demandeur est arrivée, mais ce téléphone n'a pas pu l'accepter. La session est toujours ouverte ; il peut la renvoyer.",
     "CardRefusedReason": {

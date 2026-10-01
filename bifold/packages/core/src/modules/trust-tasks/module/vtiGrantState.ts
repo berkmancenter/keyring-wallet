@@ -16,6 +16,7 @@
  * @module trust-tasks/module/vtiGrantState
  */
 
+import { communityRoleCard, LEGACY_DTG_SHAPE_UNTIL, legacyDtgShapeReadable } from '@bifold/trust-tasks'
 import type { Agent } from '@credo-ts/core'
 
 import type { VtiHeldCredential } from './VtiCommunityStore'
@@ -61,6 +62,11 @@ export async function grantState(
   const validUntil = dateOf(credential, 'validUntil', 'expirationDate')
   if (validFrom && Date.parse(validFrom) > now) return { state: 'notYetValid', validFrom }
   if (validUntil && Date.parse(validUntil) <= now) return { state: 'expired', validUntil }
+  // A CommunityRole endorsement stops counting on LEGACY_DTG_SHAPE_UNTIL: an
+  // applicant refuses it after that day (vtiEligibility grantLegacyShape), so
+  // the vetter's own seat says it ended then, not that it still stands.
+  if (communityRoleCard(credential)?.shape === 'endorsement' && !legacyDtgShapeReadable(now))
+    return { state: 'expired', validUntil: `${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z` }
   const status = await checkCredentialStatus(agent, credential, issuerOf(credential, held.communityDid), {
     allowInsecureLocal: options.allowInsecureLocal,
     fetchImpl: options.fetchImpl,

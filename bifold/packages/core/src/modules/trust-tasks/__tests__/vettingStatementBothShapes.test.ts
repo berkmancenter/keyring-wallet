@@ -275,3 +275,22 @@ describe('an endorsement-shape statement, which may cite no task digest', () => 
     expect(w.request()).toMatchObject({ status: 'attested', statementId: oldStatement.id })
   })
 })
+
+describe('after LEGACY_DTG_SHAPE_UNTIL', () => {
+  afterEach(() => jest.restoreAllMocks())
+
+  it('an endorsement-shape statement is refused with its own reason, legacyShape', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(`${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z`) + 3600 * 1000)
+    const w = world(signed.vetterDid)
+    await w.deliver(oldStatement)
+    expect(w.held).toHaveLength(0)
+    expect(w.request()).toMatchObject({ status: 'statementRefused', statementRefusal: 'legacyShape' })
+  })
+
+  it('the same statement the day before is still read', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z'))
+    const w = world(signed.vetterDid)
+    await w.deliver(oldStatement)
+    expect(w.request()).toMatchObject({ status: 'attested' })
+  })
+})

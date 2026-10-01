@@ -1450,7 +1450,8 @@
       "grantMalformed": "O papel de verificador não pôde ser lido.",
       "grantExpired": "O papel de verificador está vencido.",
       "grantProof": "A assinatura da comunidade no papel de verificador não confere.",
-      "legacyExpired": "Ele usou a prova de uma versão antiga do Keyring, que não é mais aceita."
+      "legacyExpired": "O verificador usou a prova de uma versão antiga do Keyring, que não é mais aceita.",
+      "grantLegacyShape": "O papel de verificador está em um formato antigo que não é mais aceito."
     },
     "NeedsMethod": "mais {{n}} {{method}}",
     "IndependenceCapped": "Mais declarações de pessoas que declararam um vínculo {{relationships}} com você do que esta comunidade conta. Sua candidatura continua valendo — alguém vai analisá-la.",
@@ -1534,7 +1535,8 @@
       "cardDigest": "Detalhes: a declaração se refere a outro cartão, não ao que você enviou.",
       "expired": "Detalhes: a declaração já expirou.",
       "proof": "Detalhes: não foi possível verificar a assinatura da declaração.",
-      "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão."
+      "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão.",
+      "legacyShape": "Detalhes: a declaração está em um formato antigo que este telefone não aceita mais. Peça ao seu verificador para atualizar o aplicativo e verificar você novamente."
     },
     "CardRefused": "O cartão do solicitante chegou, mas este telefone não pôde aceitá-lo. A sessão continua aberta, então ele pode enviá-lo de novo.",
     "CardRefusedReason": {
