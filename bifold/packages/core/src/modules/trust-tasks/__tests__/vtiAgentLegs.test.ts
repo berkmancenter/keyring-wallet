@@ -19,6 +19,8 @@ const mockGreetings: Array<{ from: string; to: string }> = []
 const mockAdvertised: Record<string, string | undefined> = {}
 const mockTspVia: Record<string, string | undefined> = {}
 const mockPacked: Record<string, unknown>[] = []
+/** Called as a mock session's socket opens, to read the agent's state then. */
+let mockOnStart: (() => void) | undefined
 
 jest.mock('@bifold/trust-tasks', () => ({
   tsp: { CODEC_FORMS_RELATIONSHIPS: true, peekRevision: () => ({ minor: 0 }) },
@@ -69,6 +71,7 @@ jest.mock('../module/VtiMediatorTransport', () => ({
       return this.open
     }
     async start() {
+      mockOnStart?.()
       this.open = true
     }
     async stop() {
@@ -161,6 +164,24 @@ describe('the community leg', () => {
       vtiAgent.connect(agent, 'did:peer:lab', { persona: p }),
     ])
     expect(mockSessions.filter((s) => s.did === 'did:webvh:p:one')).toHaveLength(1)
+  })
+
+  // 227.1: what waited at the mediator drains as the socket opens, before the
+  // agent says it is connected; an inbox reads whom it is signing in as.
+  it('says whom it is signing in as while the socket opens, and stops once connected', async () => {
+    const seen: Array<{ did?: string; signingInAs?: string; status: string }> = []
+    mockOnStart = () => {
+      const { did, signingInAs, status } = vtiAgent.getState()
+      seen.push({ did, signingInAs, status })
+    }
+    try {
+      await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:drain') })
+      expect(seen).toEqual([{ did: undefined, signingInAs: 'did:webvh:p:drain', status: 'authenticating' }])
+      expect(vtiAgent.getState()).toMatchObject({ status: 'connected', did: 'did:webvh:p:drain' })
+      expect(vtiAgent.getState().signingInAs).toBeUndefined()
+    } finally {
+      mockOnStart = undefined
+    }
   })
 
   it("rides the persona's own mediator, and the configured one only as a fallback", async () => {

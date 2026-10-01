@@ -101,22 +101,35 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
   // Registered before any connect: opening the session drains what the
   // mediator held, and a listener attached after the connect misses that
   // backlog for good (the measurement in VtiVetting's inbox effect).
-  const stopListening = vtiAgent.onInbound((message) => {
-    const target = persona
+  const stopListening = vtiAgent.onInbound(async (message) => {
     // Only for the persona the session is connected as: another flow may hold
     // it as a different identity (a join as a new persona, a community
     // connect), and what arrives then is not this persona's to store. A message
     // this inbox would have taken says why it was skipped: silence looks
     // exactly like a message that never came (lab, 2026-09-29).
+    const owned = ownedByInbox(message)
     const skipped = (why: string) => {
-      if (!ownedByInbox(message)) return
+      if (!owned) return
       agent.config?.logger?.warn?.(
         `[VTI] persona inbox skipped ${String(message.type ?? '')} from ${didPrefix(message.from)}: ${why}`
       )
     }
+    // What waited at the mediator is drained the moment the socket opens, and
+    // can arrive before this inbox's first look has read its persona (227.1).
+    const target = persona ?? (persona = await personaFor(agent, options.communityDid))
+    // Whose the session is: connected as, or signing in as while the backlog
+    // drains — before `did` is set. Skipped then, a message was acknowledged
+    // and lost (227.1: five invitation offers; a vetter grant, 227 gate).
+    const { did, signingInAs } = vtiAgent.getState()
+    const sessionDid = did ?? signingInAs
+    if (owned && !sessionDid) {
+      // Not taken, so not acknowledged: the mediator keeps it for the next drain.
+      throw new Error(
+        `[VTI] persona inbox: ${String(message.type ?? '')} from ${didPrefix(message.from)} not taken yet: the session's identity is not known`
+      )
+    }
     if (!target)
       return skipped(`no persona for ${options.communityDid ? didPrefix(options.communityDid) : 'any community'}`)
-    const sessionDid = vtiAgent.getState().did
     if (sessionDid !== target.did)
       return skipped(
         `the session is ${sessionDid ? didPrefix(sessionDid) : 'not connected'}, not ${didPrefix(target.did)}`
