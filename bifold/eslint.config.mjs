@@ -26,6 +26,9 @@ export default [
         varsIgnorePattern: '^_',
         caughtErrorsIgnorePattern: '^_',
       }],
+      // Prettier (semi: false) owns semicolon style and re-inserts the leading ';' before a
+      // statement that starts with '(' or '['; the deprecated core rule flags those as extra.
+      'no-extra-semi': 'off',
     },
   },
   {
@@ -67,6 +70,7 @@ export default [
       'vrc_reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
       'packages/vrc-reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
       'packages/witness-server/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/mediator-server/**/*.{js,mjs,cjs,ts,jsx,tsx}',
     ],
     rules: {
       'no-console': 'off',

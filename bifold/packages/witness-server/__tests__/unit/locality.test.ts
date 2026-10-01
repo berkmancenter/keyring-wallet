@@ -194,7 +194,7 @@ describe('assertionFromObservation', () => {
       localityRssiDbm: -58,
       localityRttBoundMs: 400,
     })
-    for (const [key, value] of Object.entries(assertion)) {
+    for (const value of Object.values(assertion)) {
       expect(typeof value === 'object' && value !== null).toBe(false)
     }
   })
@@ -319,7 +319,7 @@ describe('verifyTranscript — iOS App Attest transcripts', () => {
   test('the raw 65-byte iOS public key needs no SPKI unwrapping and still verifies', () => {
     const privateKey = randomBytes(32)
     const transcript = makeIosTranscript(privateKey)
-    expect(Buffer.from(transcript.devicePublicKey, 'base64').length).toBe(65)
+    expect(Buffer.from(transcript.devicePublicKey, 'base64')).toHaveLength(65)
     expect(verifyTranscript(transcript, expected)).toEqual({ ok: true })
   })
 

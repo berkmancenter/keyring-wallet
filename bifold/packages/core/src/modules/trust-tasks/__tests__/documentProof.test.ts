@@ -37,7 +37,7 @@ describe('digestMultibase', () => {
     // multihash header: 0x12 = sha2-256, 0x20 = 32-byte digest
     expect(multihash[0]).toBe(0x12)
     expect(multihash[1]).toBe(0x20)
-    expect(multihash.length).toBe(34)
+    expect(multihash).toHaveLength(34)
   })
 
   test('is stable across member ordering (canonicalization is doing the work)', () => {

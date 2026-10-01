@@ -121,7 +121,7 @@ describe('parseAppAttestAssertion', () => {
   test('reads both members', () => {
     const parsed = parseAppAttestAssertion(makeAssertion(privateKey))
     expect(parsed).toBeDefined()
-    expect(parsed!.authenticatorData.length).toBe(AUTHENTICATOR_DATA_MIN_BYTES)
+    expect(parsed!.authenticatorData).toHaveLength(AUTHENTICATOR_DATA_MIN_BYTES)
     expect(parsed!.signature.length).toBeGreaterThan(8)
   })
 

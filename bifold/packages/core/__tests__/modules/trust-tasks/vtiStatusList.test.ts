@@ -102,7 +102,7 @@ describe('decodeEncodedList', () => {
   it('round-trips a multibase-prefixed GZIP bitstring', () => {
     const bits = decodeEncodedList(encodeList(1024))
     expect(bits).toBeInstanceOf(Uint8Array)
-    expect((bits as Uint8Array).length).toBe(128)
+    expect((bits as Uint8Array)).toHaveLength(128)
   })
 
   it('accepts a bare base64url string without the multibase prefix', () => {

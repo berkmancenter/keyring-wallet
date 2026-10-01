@@ -597,7 +597,7 @@ describe('RemoteLogger', () => {
     })
   })
 
-  describe('overrideCurrentAutoDisableExpiration', () => {
+  describe('overrideCurrentAutoDisableExpiration (fake-timer behaviour)', () => {
     it('ignores a non-positive expiration', () => {
       jest.useFakeTimers()
       try {

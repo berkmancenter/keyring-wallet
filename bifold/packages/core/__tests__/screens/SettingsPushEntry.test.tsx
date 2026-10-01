@@ -17,12 +17,15 @@ import authContext from '../contexts/auth'
 import { testDefaultState } from '../contexts/store'
 import { BasicAppContext } from '../helpers/app'
 
+// useNavigation is a hook, so it must be called from a component rather than from renderSettings.
+const SettingsWithNavigation = () => <Settings navigation={useNavigation()} route={{} as any} />
+
 async function renderSettings(config: typeof defaultConfig) {
   const tree = render(
     <StoreContext.Provider value={[testDefaultState, () => undefined]}>
       <BasicAppContext configure={(c) => c.container.registerInstance(TOKENS.CONFIG, config)}>
         <AuthContext.Provider value={authContext}>
-          <Settings navigation={useNavigation()} route={{} as any} />
+          <SettingsWithNavigation />
         </AuthContext.Provider>
       </BasicAppContext>
     </StoreContext.Provider>
