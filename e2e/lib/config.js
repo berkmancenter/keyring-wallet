@@ -125,11 +125,39 @@ const keepState = () => process.env.E2E_KEEP_STATE === '1'
 const keepStateCaps = () =>
   keepState() ? { "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : {}
 
-export function androidCaps(avd = ANDROID_AVD) {
+/**
+ * Where an Android session lands.
+ *
+ * AVD mode (the default): `appium:avd` names an emulator Appium boots or
+ * attaches to. Appium's own AVD launch/ready timeouts default to 60 s, which a
+ * second emulator's cold boot overruns (it surfaced as a session-creation
+ * failure with the emulator still starting), so both are raised to 5 minutes.
+ *
+ * Device mode: when a serial is given — `androidCaps(undefined, serial)`, or
+ * the established `ANDROID_UDID` env var when no AVD is passed — `appium:udid`
+ * replaces `appium:avd` and no AVD launch settings are sent. A serial may be a
+ * physical phone (`R5CN70Q6PDP`) or an already-running emulator
+ * (`emulator-5554`). Passing an explicit `avd` stays AVD mode, so the
+ * second-AVD callers (`androidCaps(ANDROID_AVD2)`) are unaffected by a
+ * `ANDROID_UDID` left in the shell.
+ *
+ * Exported for tests; the keep-app/keep-state handling is shared by both modes.
+ */
+export function androidTargetCaps(avd, udid) {
+  const serial = udid === undefined ? (avd === undefined ? ANDROID_UDID : "") : udid;
+  if (serial) return { "appium:udid": serial };
+  return {
+    "appium:avd": avd === undefined ? ANDROID_AVD : avd,
+    "appium:avdLaunchTimeout": 300000,
+    "appium:avdReadyTimeout": 300000,
+  };
+}
+
+export function androidCaps(avd, udid) {
   return {
     platformName: "Android",
     "appium:automationName": "UiAutomator2",
-    "appium:avd": avd,
+    ...androidTargetCaps(avd, udid),
     "appium:app": ANDROID_APK,
     "appium:appPackage": APP_ID,
     "appium:appWaitActivity": "*",

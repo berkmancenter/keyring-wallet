@@ -29,7 +29,7 @@ const keepState = process.env.E2E_KEEP_STATE === "1";
 function readMarkers(driver) {
   try {
     if (driver.e2ePlatform === "android") {
-      return execFileSync("adb", ["-s", process.env.ANDROID_SERIAL || "emulator-5554", "logcat", "-d", "-s", "ReactNativeJS"], {
+      return execFileSync("adb", ["-s", driver.e2eUdid || process.env.ANDROID_UDID || process.env.ANDROID_SERIAL || "emulator-5554", "logcat", "-d", "-s", "ReactNativeJS"], {
         encoding: "utf8",
         maxBuffer: 32 * 1024 * 1024,
       });
