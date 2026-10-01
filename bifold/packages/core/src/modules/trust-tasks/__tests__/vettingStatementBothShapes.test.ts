@@ -23,6 +23,7 @@ jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 import {
   LEGACY_DTG_SHAPE_UNTIL,
   statementFacts,
+  taskDigestMultibase,
   vettingStatementBody,
   vettingStatementShapeProblem,
 } from '@bifold/trust-tasks'
@@ -51,7 +52,7 @@ const agent = {
 }
 
 /** One application, with a request to `vetterDid` on the fixtures' session and card. */
-function world(vetterDid: string) {
+function world(vetterDid: string, retainedDigest?: string) {
   let application: VettingApplication = {
     communityDid: signed.community,
     joinDid: signed.applicantDid,
@@ -66,7 +67,13 @@ function world(vetterDid: string) {
         vetterDid,
         requestDocumentId: 'urn:uuid:request-both-shapes',
         status: 'cardSent',
-        session: { ...signed.session, method: 'inPerson', matchCode: 'ABCD-1234', expiresAt: '2026-12-31T00:00:00Z' },
+        session: {
+          ...signed.session,
+          method: 'inPerson',
+          matchCode: 'ABCD-1234',
+          expiresAt: '2026-12-31T00:00:00Z',
+          ...(retainedDigest ? { taskDigestMultibase: retainedDigest } : {}),
+        },
         cardCommitment: card.identityCommitment as string,
         cardDigest: cardDigestMultibase(card),
         updatedAt: 't',
@@ -205,6 +212,33 @@ describe('a vetted/1 statement through the applicant’s full check', () => {
     expect(w.request().status).toBe('cardSent')
   })
 
+  // vta-sdk check_against_session: the statement's task digest reproduces over
+  // the session document the applicant received and kept.
+  it('is kept when its task digest reproduces over the session document kept at intake', async () => {
+    const w = world(minted.parties.vetter, taskDigestMultibase(minted.boundVettingSession as Json))
+    await w.deliver(newStatement)
+    expect(w.request()).toMatchObject({ status: 'attested', statementId: newStatement.id })
+  })
+
+  it('is refused (session) when its task digest names another document under the same id', async () => {
+    const counterfeit = { ...(minted.boundVettingSession as Json), payload: { community: 'did:example:elsewhere' } }
+    const w = world(minted.parties.vetter, taskDigestMultibase(counterfeit))
+    await w.deliver(newStatement)
+    expect(w.held).toHaveLength(0)
+    expect(w.request()).toMatchObject({ status: 'statementRefused', statementRefusal: 'session' })
+  })
+
+  it('is kept, and said, when the session was opened before its document was kept', async () => {
+    const w = world(minted.parties.vetter)
+    await w.deliver(newStatement)
+    expect(w.request()).toMatchObject({ status: 'attested' })
+    expect(
+      (agent.config.logger.warn as jest.Mock).mock.calls.some((c) =>
+        String(c[0]).includes('taskDigestMultibase not checked')
+      )
+    ).toBe(true)
+  })
+
   it('is refused as malformed when it declares no issuerScope', async () => {
     const w = world(minted.parties.vetter)
     await w.deliver({ ...newStatement, issuerScope: undefined })
@@ -227,5 +261,17 @@ describe('a community’s requirements naming the vetted/1 predicate', () => {
       version: '0.1',
     }
     expect(checkVettingRequirements(requirements)).toEqual({ ok: true })
+  })
+})
+
+describe('an endorsement-shape statement, which may cite no task digest', () => {
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-25T00:05:00Z')))
+  afterEach(() => jest.restoreAllMocks())
+
+  it('is read on its taskContext alone, as before, even when the session document was kept', async () => {
+    expect(oldStatement.taskDigestMultibase).toBeUndefined()
+    const w = world(signed.vetterDid, 'zQmSomeSessionDigest')
+    await w.deliver(oldStatement)
+    expect(w.request()).toMatchObject({ status: 'attested', statementId: oldStatement.id })
   })
 })
