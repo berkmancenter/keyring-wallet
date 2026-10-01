@@ -1,4 +1,6 @@
-The 227 fix
-• Invitations, vetter roles and removal notices sent while Keyring is closed now arrive when you next open the app. You no longer need to keep it open.
-• Nothing else changes from 227.
-Known: some cards stay "On this phone only". Notifications are off in this build.
+• Vetting uses the new community credential formats.
+• Connect this phone to a new agent by scanning a code (My Agent → Set up a new agent → Scan).
+• Share the phone's code, not just copy it.
+• A calmer waiting screen while your agent adds this phone.
+Vetters: please update. Memberships carry over.
+Known: an openvtc terminal vetter can't vet yet. Notifications are off.
