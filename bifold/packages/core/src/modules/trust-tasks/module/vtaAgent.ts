@@ -245,10 +245,7 @@ export const GRANT_CONNECT_DEADLINE_MS = 30000
 export const SESSION_CONNECT_DEADLINE_MS = 30000
 /** How long Unlink waits on the agent to hear it (wake cleared, sessions ended), from when it is told, before it unlinks anyway. */
 export const UNLINK_TELL_DEADLINE_MS = 5000
-/**
- * The most Unlink waits in all, from the tap: a task already in flight goes
- * first, and an agent that has not answered it by then is not waited on.
- */
+/** The most Unlink waits in all, from the tap, whether or not the telling left the phone. */
 export const UNLINK_TELL_QUEUE_MS = 10000
 /**
  * Signing in and the agent's answer to an owner act (adding a device): the
@@ -618,13 +615,14 @@ export class VtaAgentController {
     const link = this.state.link
     const client = this.current?.client
     if (link.kind !== 'linked' || link.connection.kind !== 'online' || !client) return
-    // What was queued (an app just started queues whoami … device/list) is
-    // pointless once the phone unlinks, and went first: the telling waited
-    // behind it past its deadline and never reached the agent (227 gate, U4).
+    // What was queued or in flight (an app just started runs whoami …
+    // device/list) is pointless once the phone unlinks, and went first: the
+    // telling waited behind it past its deadline and never reached the agent
+    // (227 gate, U4). Dropped, the telling is sent at once; offline, it fails
+    // at once and the phone unlinks without waiting.
     client.dropQueued()
-    // The deadline counts from when the agent is told, not from the tap: a
-    // task already in flight finishes first. At most UNLINK_TELL_QUEUE_MS in
-    // all, sent or not. Timers, not clock readings.
+    // The deadline counts from when the agent is told, not from the tap; at
+    // most UNLINK_TELL_QUEUE_MS in all, sent or not. Timers, not clock readings.
     const timers: ReturnType<typeof setTimeout>[] = []
     let giveUp: () => void = () => undefined
     const deadline = new Promise<void>((resolve) => {

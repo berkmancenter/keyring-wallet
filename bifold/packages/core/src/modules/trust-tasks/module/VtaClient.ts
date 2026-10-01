@@ -407,16 +407,20 @@ export class VtaClient {
   /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
   private tickets = 0
   private droppedThrough = 0
+  /** Stops the wait of the task in flight ({@link dropQueued}). */
+  private cancelInFlight?: () => void
 
   /**
-   * Drop every task queued and not yet sent: each fails with
-   * {@link VtaTaskDropped}, and the one in flight finishes as it would. For a
-   * phone about to unlink, whose startup tasks (whoami … device/list) would
-   * otherwise go first and leave no time to tell the agent (227 gate, U4).
-   * Tasks asked for after this run as usual.
+   * Drop every task queued and not yet sent, and stop waiting for the one in
+   * flight: each fails with {@link VtaTaskDropped}. For a phone about to
+   * unlink, whose startup tasks (whoami … device/list) would otherwise go
+   * first and leave no time to tell the agent (227 gate, U4); an answer to the
+   * dropped one, if it comes, is taken for no task. Tasks asked for after this
+   * run as usual, at once.
    */
   dropQueued(): void {
     this.droppedThrough = this.tickets
+    this.cancelInFlight?.()
   }
 
   /** Keep a keyed attempt's ids; the oldest keys go first, past a few dozen. */
@@ -795,11 +799,16 @@ export class VtaClient {
           body: document,
         })
       onSent?.()
+      let timer: ReturnType<typeof setTimeout> | undefined
       const answer = await Promise.race([
         reply,
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+        new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), timeoutMs))),
+        new Promise<'dropped'>((resolve) => (this.cancelInFlight = () => resolve('dropped'))),
       ])
+      clearTimeout(timer)
+      this.cancelInFlight = undefined
       this.pending = undefined
+      if (answer === 'dropped') throw new VtaTaskDropped(type)
       if (!answer) throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
 
       // An auth/ACL refusal never reaches the task handler: the VTA answers

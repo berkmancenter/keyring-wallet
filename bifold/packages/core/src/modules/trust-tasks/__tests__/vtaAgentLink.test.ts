@@ -910,6 +910,36 @@ describe('unlinking this phone from its agent', () => {
     }
   })
 
+  // 227 gate U5: unlinking with the network off finished in 1.8 s. The link can
+  // still read online while the socket is gone; the telling then fails at once
+  // ("not connected") and the phone unlinks without waiting out a deadline.
+  it('a telling that cannot be sent fails at once: the phone unlinks without waiting', async () => {
+    jest.useFakeTimers()
+    mockClient.task.mockClear()
+    mockClient.task.mockImplementation(async () => {
+      throw new Error('[TrustTasks:VtaClient] not connected')
+    })
+    try {
+      const { vta, stored } = unlinkable()
+      await vta.restore({} as never)
+      await jest.advanceTimersByTimeAsync(0)
+      let finished = false
+      const done = vta.unlink({} as never).then(() => {
+        finished = true
+      })
+      await jest.advanceTimersByTimeAsync(10)
+      expect(finished).toBe(true)
+      await done
+      expect(stored()).toBeUndefined()
+    } finally {
+      mockClient.task.mockImplementation(async (_t, _p, _x, _e, onSent) => {
+        onSent?.()
+        return {}
+      })
+      jest.useRealTimers()
+    }
+  })
+
   it('offline, sends nothing and unlinks at once', async () => {
     mockClient.task.mockClear()
     mockClient.connect.mockImplementationOnce(async () => {

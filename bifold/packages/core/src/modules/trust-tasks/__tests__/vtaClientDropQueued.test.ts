@@ -45,9 +45,9 @@ const flush = async () => {
 }
 
 describe('dropping the queue', () => {
-  it('drops what is queued, lets the task in flight finish, and runs what comes after', async () => {
+  it('drops what is queued and the wait in flight, and sends what comes after at once', async () => {
     const { client, sentTypes, answerLast } = connectedClient()
-    const inFlight = client.task('https://t/whoami', {}, 5_000)
+    const inFlight = client.task('https://t/whoami', {}, 30_000)
     const queuedA = client.task('https://t/acl-list', {}, 5_000)
     const queuedB = client.task('https://t/device-list', {}, 5_000)
     await flush()
@@ -56,11 +56,11 @@ describe('dropping the queue', () => {
     client.dropQueued()
     const after = client.task('https://t/set-wake', {}, 5_000)
 
-    answerLast()
-    await expect(inFlight).resolves.toEqual({ ok: true })
+    await expect(inFlight).rejects.toBeInstanceOf(VtaTaskDropped)
     await expect(queuedA).rejects.toBeInstanceOf(VtaTaskDropped)
     await expect(queuedB).rejects.toThrow(/device-list was dropped before it was sent/)
     await flush()
+    // Sent without waiting out whoami's 30 s.
     expect(sentTypes()).toEqual(['https://t/whoami', 'https://t/set-wake'])
     answerLast()
     await expect(after).resolves.toEqual({ ok: true })
