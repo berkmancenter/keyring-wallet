@@ -34,6 +34,30 @@ brew install redis && brew services start redis
 
 `vetting` is not a `vta-service` feature — it rides `vta-sdk` and is built in.
 
+## On Linux
+
+The scripts branch on `uname` where macOS and Linux differ; nothing else changes.
+
+- **Redis:** `brew install redis` is macOS. On Linux install your distro's Redis
+  and, on a host whose Redis already serves other data, run a dedicated one and
+  point the stack at it: `redis-server --port 6390 --save "" --dir <stack>/redis`
+  then `REDIS_PORT=6390 ./up.sh` (default 6379, unchanged).
+- **Keychain signing is skipped.** `../sign-lab-tool.sh` only exists to keep a
+  macOS "Always Allow" grant across rebuilds; on Linux it just makes the
+  revisioned copy and the stable `~/vti-stack/bin/<tool>` link.
+- **pnm's secret store.** Linux pnm uses the DBus Secret Service, which an
+  unattended run can find locked. For an unattended lab export
+  `VTI_SECURE_STORE=file` for every pnm call (plaintext 0600 under pnm's config
+  dir; the lab's keys are re-minted each `up.sh`).
+- **pnm profile list** is `${XDG_CONFIG_HOME:-~/.config}/pnm/config.toml` (override
+  with `PNM_CONFIG_FILE`); `own-agent-twin/twin-vta.sh` follows it.
+- **`stack-health.sh`** reads the tunnel URLs from `$STACK_DIR/stack.env`, so a
+  stack on any hostname is checked.
+- Build packages (`libdbus-1-dev` for the Secret Service build) and sources
+  outside `~/Documents` are yours to arrange; `VTI_SRC`, `TDK_SRC`, `WEBVH_SRC`
+  and `STACK_DIR` override every default path. Not Linux-ported: the farm's QR
+  check (`../farm/qr.swift`, macOS Vision) and the openvtc TUI Keychain fixture.
+
 ## Run it
 
 ```sh

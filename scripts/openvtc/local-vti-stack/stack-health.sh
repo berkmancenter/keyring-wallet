@@ -74,9 +74,16 @@ fi
 log "tunnels"
 # A 502 means the tunnel is up and nothing is behind it — the shape a dead
 # service takes from the outside, and the one that reads as a client problem.
+# Each tunnel's URL comes from $STACK_DIR/stack.env (written by up.sh) so a stack
+# on any hostname is checked; a name stack.env lacks falls back to the reserved
+# ngrok lab hostname this script used to hard-code.
+tunnel_url() { # name -> URL
+  local v; v=$(grep "^$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_URL=" "$STACK_DIR/stack.env" 2>/dev/null | tail -1 | cut -d= -f2-)
+  echo "${v:-https://keyring-vti-$1.ngrok.app}"
+}
 for h in alice community bob vtc dids mediator; do
   body=$(mktemp)
-  code=$(curl -s -o "$body" -w "%{http_code}" --max-time 12 "https://keyring-vti-$h.ngrok.app/" 2>/dev/null)
+  code=$(curl -s -o "$body" -w "%{http_code}" --max-time 12 "$(tunnel_url "$h")/" 2>/dev/null)
   # ngrok answers its own refusals with an HTML page naming an ERR_NGROK_ code
   # (4026: the account is out of credit). That is the edge, not the service —
   # and a VTA whose own hostname is refused cannot resolve its own DID.
