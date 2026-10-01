@@ -41,7 +41,9 @@ The scripts branch on `uname` where macOS and Linux differ; nothing else changes
 - **Redis:** `brew install redis` is macOS. On Linux install your distro's Redis
   and, on a host whose Redis already serves other data, run a dedicated one and
   point the stack at it: `redis-server --port 6390 --save "" --dir <stack>/redis`
-  then `REDIS_PORT=6390 ./up.sh` (default 6379, unchanged).
+  then `REDIS_PORT=6390 ./up.sh` (default 6379, unchanged). To share an instance instead,
+  `REDIS_DB=5 ./up.sh` keeps the mediator's keys out of db0 (the mediator's keys are unprefixed:
+  `DID:*`, `MSG:*`, `SEND_Q:*`, so db0 of a Redis that already ran a mediator would collide).
 - **Keychain signing is skipped.** `../sign-lab-tool.sh` only exists to keep a
   macOS "Always Allow" grant across rebuilds; on Linux it just makes the
   revisioned copy and the stable `~/vti-stack/bin/<tool>` link.
