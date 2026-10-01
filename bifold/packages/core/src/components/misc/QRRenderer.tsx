@@ -28,6 +28,8 @@ const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, quietZone
       flexGrow: 1,
       marginVertical: 20,
       backgroundColor: 'white',
+      // A code sized smaller than its box sits in the middle, not at the left.
+      alignItems: 'center',
     },
     errorMessage: {
       color: ColorPalette.semantic.error,

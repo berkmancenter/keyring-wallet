@@ -23,6 +23,7 @@ import {
 
 import { Screens } from '../../../types/navigators'
 
+import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
@@ -52,6 +53,7 @@ export class KeyringLinkError extends Error {
 }
 
 export type KeyringAgentLinkKind =
+  | 'agentHost'
   | 'enrolment'
   | 'invitation'
   | 'invitationOffer'
@@ -63,6 +65,9 @@ export type KeyringAgentLinkKind =
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
   const trimmed = text.trim()
+  // An agent host's automatic connection: JSON with a callback. Claimed even
+  // when it fails its checks, so the scanner says why rather than "invalid".
+  if (looksLikeAgentHostQr(trimmed)) return 'agentHost'
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
   // A community admin console's invitation QR: an OID4VCI offer whose issuer
@@ -236,6 +241,27 @@ export async function routeKeyringAgentLink(
 ): Promise<void> {
   const trimmed = text.trim()
   switch (keyringAgentLinkKind(trimmed)) {
+    case 'agentHost': {
+      if (vtaAgent.getState().link.kind === 'linked') {
+        throw new KeyringLinkError('This phone is already linked to an agent.')
+      }
+      let offer
+      try {
+        offer = parseAgentHostQr(trimmed)
+      } catch (error) {
+        if (error instanceof AgentHostConnectionError && error.reason === 'hostNotAllowed') {
+          throw new KeyringLinkError(
+            "This code is from a site Keyring doesn't connect to, so nothing was sent. Use the Admin DID option on your agent host's page instead."
+          )
+        }
+        throw error
+      }
+      if (!offer)
+        throw new KeyringLinkError("This agent host's code couldn't be read. Make a new one and scan it again.")
+      vtaAgent.scanHostOffer(offer)
+      navigate('VtaLink')
+      return
+    }
     case 'enrolment': {
       let offer
       try {

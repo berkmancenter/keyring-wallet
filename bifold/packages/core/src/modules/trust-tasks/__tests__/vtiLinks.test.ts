@@ -370,3 +370,64 @@ describe('a bare DID of another method, as the browser plugin shows beside every
     }
   })
 })
+
+describe("an agent host's automatic-connection QR", () => {
+  const vtaDid = 'did:webvh:QmAgent:dids.ic3.dev:alice-vta'
+  const callback = 'https://vtafarm-api.ic3.dev/api/v1/mobile-connections/callback/req.SECRET'
+  const qr = (value: Record<string, unknown>) => JSON.stringify(value)
+  const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+
+  beforeEach(() => controller.set({ link: { kind: 'notLinked' } }))
+  afterEach(() => jest.restoreAllMocks())
+
+  it('is ours, before anything else reads it', () => {
+    expect(keyringAgentLinkKind(qr({ vta_did: vtaDid, callback_url: callback }))).toBe('agentHost')
+    // One that fails its checks is still claimed, so the scanner explains it.
+    expect(keyringAgentLinkKind(qr({ vta_did: vtaDid, callback_url: 'http://x.example/cb' }))).toBe('agentHost')
+    expect(keyringAgentLinkKind('{"some":"json"}')).toBeUndefined()
+  })
+
+  it('opens the link screen, asking the person, with nothing sent', async () => {
+    const scan = jest.spyOn(vtaAgent, 'scanHostOffer')
+    const navigate = jest.fn()
+    await routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback }), {} as never, navigate)
+    expect(scan).toHaveBeenCalledWith({ vtaDid, callbackUrl: callback, host: 'vtafarm-api.ic3.dev' })
+    expect(navigate).toHaveBeenCalledWith('VtaLink')
+    expect(vtaAgent.getState().link).toMatchObject({ kind: 'confirming', via: 'host' })
+  })
+
+  it('a callback on a site Keyring does not connect to is refused in words, and never called', async () => {
+    const scan = jest.spyOn(vtaAgent, 'scanHostOffer')
+    const route = routeKeyringAgentLink(
+      qr({ vta_did: vtaDid, callback_url: 'https://vtafarm-api.example.com/cb/x' }),
+      {} as never,
+      jest.fn()
+    )
+    await expect(route).rejects.toBeInstanceOf(KeyringLinkError)
+    await expect(route).rejects.toThrow(/site Keyring doesn.t connect to/)
+    expect(scan).not.toHaveBeenCalled()
+  })
+
+  it('a QR that is not quite one is explained, not routed', async () => {
+    await expect(
+      routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback, extra: 1 }), {} as never, jest.fn())
+    ).rejects.toBeInstanceOf(KeyringLinkError)
+  })
+
+  it('on a phone already linked, says so and starts nothing', async () => {
+    const scan = jest.spyOn(vtaAgent, 'scanHostOffer')
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:Qm:other',
+        label: 'x',
+        linkedAt: '2026-10-01T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+    await expect(
+      routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback }), {} as never, jest.fn())
+    ).rejects.toThrow(/already linked/)
+    expect(scan).not.toHaveBeenCalled()
+  })
+})

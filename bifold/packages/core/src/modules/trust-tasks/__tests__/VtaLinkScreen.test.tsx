@@ -7,6 +7,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Share } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -19,7 +20,7 @@ import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { openScanner } from '../screens/openScanner'
-import VtaLink, { PHONE_GRANT_POLL_EVERY_MS } from '../screens/VtaLink'
+import VtaLink, { PHONE_GRANT_POLL_EVERY_MS, PHONE_GRANT_POLL_WINDOW_MS } from '../screens/VtaLink'
 import { shareableKey } from '../screens/shareableKey'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -132,7 +133,6 @@ describe('the key the admin has to add', () => {
       expect(tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))).toHaveTextContent(/VtaLink\.AddThisPhone/)
       expect(tree.UNSAFE_getByType(QRCode).props.value).toBe('did:key:z6MkNewPhone')
       expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
-      expect(tree.queryByTestId(testIdWithKey('VtaLinkShareKey'))).toBeNull()
       expect(tree.queryByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeNull()
       fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowAsText')))
       expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toHaveTextContent('did:key:z6MkNewPhone')
@@ -173,6 +173,62 @@ describe('the key the admin has to add', () => {
       expect(inCard('VtaLinkCopyKey')).toBe(false)
       expect(inCard('VtaLinkCancel')).toBe(false)
       expect(inCard('VtaLinkKeyQr')).toBe(true)
+    })
+
+    /**
+     * The code often goes to a browser on another device (an agent host's
+     * Admin DID box): Copy alone left it on the phone. Share sends it — as a
+     * sentence with the code on its own line, as elsewhere — over AirDrop,
+     * Messages or Notes (Alberto, iPhone 11, 2026-10-01).
+     */
+    test('Share sits beside Copy, and sends a sentence with the code, never the bare code', () => {
+      const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never)
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      const card = tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))
+      expect(card.findAll((node) => node.props?.testID === testIdWithKey('VtaLinkShareKey'))).toHaveLength(0)
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShareKey')))
+      const sent = share.mock.calls[0][0] as { message: string }
+      expect(sent.message).toContain('did:key:z6MkNewPhone')
+      expect(sent.message.startsWith('did:')).toBe(false)
+    })
+
+    /**
+     * While the phone checks on its own, a check the agent did not answer
+     * yet is not news: the agent may still be being made. The red "didn't
+     * answer" came and went between checks and read as a failure while all
+     * was well (Alberto, iPhone 11, 2026-10-01). It shows only once the
+     * waiting window has run out, beside Check again.
+     */
+    test('no red line while it is still waiting; only once the wait runs out', () => {
+      jest.useFakeTimers()
+      try {
+        jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+        showKey({ via: 'scan', did: 'did:key:z6MkNewPhone', noAnswer: true })
+        const tree = show()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+        expect(tree.queryByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeNull()
+        act(() => {
+          jest.advanceTimersByTime(PHONE_GRANT_POLL_WINDOW_MS + PHONE_GRANT_POLL_EVERY_MS * 2)
+        })
+        expect(tree.getByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeTruthy()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkCheckAgain'))).toBeTruthy()
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    /**
+     * On 228 the waiting line sat under the QR and was cut off at the bottom
+     * of the scroll (a maintainer's screenshot). It is the screen's status,
+     * so it sits in the bar with the buttons, always in view.
+     */
+    test('the waiting line sits in the action bar, not under the QR', () => {
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      const card = tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))
+      expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+      expect(card.findAll((node) => node.props?.testID === testIdWithKey('VtaLinkWaitingForPhone'))).toHaveLength(0)
     })
 
     /**
@@ -438,5 +494,98 @@ describe('Link your agent — this phone was removed', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkEraseKeep')))
     expect(tree.queryByTestId(testIdWithKey('VtaLinkEraseWhat'))).toBeNull()
     expect(erase).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * An agent host's automatic connection (vtafarm-api mobile connection): the
+ * person sees which agent and which site before anything is sent, then that
+ * the host is setting the agent up — never a code to compare, which this
+ * flow does not have — and, if it stops, why in the host's terms.
+ */
+describe("an agent host's automatic connection", () => {
+  const VTA = 'did:webvh:QmXo:dids.ic3.dev:alice-vta'
+  const at = (kind: string, extra: Record<string, unknown> = {}) =>
+    (vtaAgent as unknown as Setter).set({
+      link: {
+        kind,
+        via: 'host',
+        vtaDid: VTA,
+        label: 'dids.ic3.dev',
+        offerUrl: 'vtafarm-api.ic3.dev',
+        exp: 2e12,
+        ...extra,
+      },
+    })
+  const show = () =>
+    render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+  beforeEach(() => (useAgent as jest.Mock).mockReturnValue({ agent: {} }))
+
+  test('asks first, showing the agent’s full address and the site the code came from', () => {
+    at('confirming')
+    const tree = show()
+    const card = tree.getByTestId(testIdWithKey('VtaLinkConfirm'))
+    expect(card).toHaveTextContent(/VtaLink\.Host\.ConfirmTitle/)
+    expect(card).toHaveTextContent(/VtaLink\.Host\.ConfirmBody/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostSite'))).toHaveTextContent(/VtaLink\.Host\.CodeFrom/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkAgentAddress'))).toHaveTextContent(VTA)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkButton'))).toHaveTextContent('VtaLink.Host.Connect')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCancel'))).toHaveTextContent('VtaLink.Host.NotNow')
+  })
+
+  test('Connect confirms, and Not now cancels', () => {
+    at('confirming')
+    const confirm = jest.spyOn(vtaAgent, 'confirmOffer').mockResolvedValue(undefined)
+    const cancel = jest.spyOn(vtaAgent, 'cancelLink').mockImplementation(() => undefined)
+    const tree = show()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkButton')))
+    expect(confirm).toHaveBeenCalled()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkCancel')))
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  test('while the host sets the agent up: says so, with no code to compare', () => {
+    at('awaitingGrant', { code: '' })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostSettingUp'))).toHaveTextContent(/VtaLink\.Host\.SettingUpTitle/)
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkCode'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCancel'))).toBeTruthy()
+  })
+
+  test.each([
+    'badKey',
+    'badRequest',
+    'badAnswer',
+    'expired',
+    'taken',
+    'unavailable',
+    'busy',
+    'unreachable',
+    'notAccepted',
+    'gone',
+    'timedOut',
+    'setupFailed',
+    'needsScreenLock',
+  ])('stopped (%s): says why in the host’s terms, every locale having the words', (hostReason) => {
+    const controller = vtaAgent as unknown as Setter
+    controller.set({ link: { kind: 'notLinked', lastError: { reason: 'failed', hostReason } } })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent(`VtaLink.Host.Failed.${hostReason}`)
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      const failed = (words.VtaLink as unknown as { Host: { Failed: Record<string, string> } }).Host.Failed
+      expect(failed[hostReason]).toEqual(expect.any(String))
+    }
+  })
+
+  test('the words name no provider, and the Admin DID way stays the fallback', () => {
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      const host = JSON.stringify((words.VtaLink as unknown as { Host: unknown }).Host)
+      expect(host).not.toMatch(/farm/i)
+      expect(host).toContain('Admin DID')
+    }
   })
 })

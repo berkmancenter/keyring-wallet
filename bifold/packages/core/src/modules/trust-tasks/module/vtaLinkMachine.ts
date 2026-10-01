@@ -32,6 +32,7 @@
  */
 
 import type { AgentGoneWhy } from './agentGone'
+import type { HostLinkFailure } from './agentHostConnection'
 
 export type VtaConnection =
   | { kind: 'online' }
@@ -58,9 +59,10 @@ export interface VtaIdentityOfAgent {
 
 export type VtaLinkState =
   | { kind: 'notLinked'; lastError?: VtaLinkFailure }
-  | ({ kind: 'confirming'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
-  | ({ kind: 'submitting'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
-  | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string } & VtaIdentityOfAgent)
+  | ({ kind: 'confirming'; offerUrl: string; exp: number; via?: 'host' } & VtaIdentityOfAgent)
+  | ({ kind: 'submitting'; offerUrl: string; exp: number; via?: 'host' } & VtaIdentityOfAgent)
+  /** `host`: an agent host's automatic connection — no code to compare; the host sets the agent up. */
+  | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string; via?: 'host' } & VtaIdentityOfAgent)
   | ({
       kind: 'showingKey'
       did: string
@@ -91,11 +93,13 @@ export function revocationCause(reason: string): RevocationCause {
 export interface VtaLinkFailure {
   reason: 'expired' | 'refused' | 'unreachable' | 'rejected' | 'failed'
   detail?: string
+  /** An agent host's automatic connection stopped: why, in its own words for a screen (agentHostConnection.ts). */
+  hostReason?: HostLinkFailure
 }
 
 export type VtaLinkEvent =
   | { type: 'restored'; link?: VtaIdentityOfAgent & { linkedAt: string }; now: number }
-  | ({ type: 'offerScanned'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
+  | ({ type: 'offerScanned'; offerUrl: string; exp: number; via?: 'host' } & VtaIdentityOfAgent)
   | { type: 'confirmed' }
   | { type: 'cancelled' }
   | { type: 'submitted'; code: string }
@@ -145,7 +149,14 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
     case 'offerScanned':
       // A new offer replaces an unfinished attempt, never a working link.
       if (state.kind === 'linked' || state.kind === 'linking') return state
-      return { kind: 'confirming', vtaDid: event.vtaDid, label: event.label, offerUrl: event.offerUrl, exp: event.exp }
+      return {
+        kind: 'confirming',
+        vtaDid: event.vtaDid,
+        label: event.label,
+        offerUrl: event.offerUrl,
+        exp: event.exp,
+        ...(event.via ? { via: event.via } : {}),
+      }
 
     case 'confirmed':
       return state.kind === 'confirming' ? { ...state, kind: 'submitting' } : state

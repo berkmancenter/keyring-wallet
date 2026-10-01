@@ -12,6 +12,7 @@ import { ToastType } from '../components/toast/BaseToast'
 import LoadingView from '../components/views/LoadingView'
 import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
+import { agentAddressScan } from '../modules/trust-tasks/module/agentAddressScan'
 import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
 import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
 import { BifoldError, QrCodeScanError } from '../types/error'
@@ -93,6 +94,18 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
       }
       if (forDevice) {
         setQrCodeScanError(new QrCodeScanError(t('Scan.NotADeviceCode'), value, t('Scan.NotADeviceCode')))
+        return
+      }
+      // "Scan" on Create my agent's address step: an agent's address, or a
+      // host's automatic-connection QR, goes back to that screen.
+      const forAddress = agentAddressScan.claim(value)
+      if (forAddress?.taken) {
+        navigation.goBack()
+        return
+      }
+      if (forAddress) {
+        const said = t(forAddress.why === 'hostNotAllowed' ? 'Scan.HostNotAllowed' : 'Scan.NotAnAgentAddress')
+        setQrCodeScanError(new QrCodeScanError(said, value, said))
         return
       }
       try {

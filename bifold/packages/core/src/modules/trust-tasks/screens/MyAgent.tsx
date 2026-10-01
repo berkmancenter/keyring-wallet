@@ -705,18 +705,26 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             </Text>
             {/* A person with no agent at all makes one here (own_agent_subtask.md §7);
                 one who has an agent links it below. */}
+            {/* Each way in says what it is for (228: a maintainer took "I already
+                have one" for an agent a host had just made for him). */}
             <Button
               title={t('CreateAgent.CreateMyAgent')}
               buttonType={ButtonType.Primary}
               onPress={() => navigation.navigate(Screens.VtaCreateAgent)}
               testID={testIdWithKey('AgentCreate')}
             />
+            <Text style={styles.label} testID={testIdWithKey('AgentCreateHint')}>
+              {t('CreateAgent.CreateMyAgentHint')}
+            </Text>
             <Button
               title={t('CreateAgent.AlreadyHaveOne')}
               buttonType={ButtonType.Secondary}
               onPress={onLinkAgent}
               testID={testIdWithKey('LinkYourAgentButton')}
             />
+            <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHint')}>
+              {t('CreateAgent.AlreadyHaveOneHint')}
+            </Text>
             <Button
               title={t('VtaLink.WithoutQr')}
               buttonType={ButtonType.Tertiary}

@@ -16,8 +16,13 @@ import QRCode from 'react-native-qrcode-svg'
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { confirmOwner } from '../module/ownerConfirm'
+import enCopy from '../../../localization/en/en.json'
+import frCopy from '../../../localization/fr/fr.json'
+import ptBrCopy from '../../../localization/pt-br/pt-br.json'
+import { agentAddressScan } from '../module/agentAddressScan'
 import { deviceCodeScan } from '../module/deviceCodeScan'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
@@ -105,6 +110,52 @@ describe('create my agent: the address comes first', () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
     expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(/CreateAgent\.NeedsScreenLock(Ios|Android)/)
+  })
+})
+
+/**
+ * The address step scans too (228: "now the scanning QR code part isn't
+ * here"). A host's page shows either the agent's address as a QR, which
+ * fills the field, or its automatic-connection QR, which goes to that flow.
+ */
+describe('create my agent: the address can be scanned', () => {
+  afterEach(() => agentAddressScan.cancel())
+
+  test('Scan opens the scanner for an address; a scanned address fills the field', () => {
+    mockOpenScanner.mockClear()
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
+    fireEvent.press(tree.getByTestId(id('AgentCreateScanAddress')))
+    expect(mockOpenScanner).toHaveBeenCalled()
+    act(() => {
+      expect(agentAddressScan.claim(VTA)).toEqual({ taken: true })
+    })
+    expect(tree.getByTestId(id('AgentCreateAddressInput')).props.value).toBe(VTA)
+  })
+
+  test('the step says the address can be scanned as well as pasted, in every language', () => {
+    for (const [words, scan] of [
+      [enCopy, /scan/i],
+      [frCopy, /scannez/i],
+      [ptBrCopy, /escaneie/i],
+    ] as const) {
+      expect(words.CreateAgent.AddressBody).toMatch(scan)
+    }
+  })
+
+  test("a host's automatic-connection QR goes to that flow, asking the person there", () => {
+    const scanHost = jest.spyOn(vtaAgent, 'scanHostOffer')
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
+    fireEvent.press(tree.getByTestId(id('AgentCreateScanAddress')))
+    const callback = 'https://vtafarm-api.ic3.dev/api/v1/mobile-connections/callback/r.S'
+    act(() => {
+      expect(agentAddressScan.claim(JSON.stringify({ vta_did: VTA, callback_url: callback }))).toEqual({ taken: true })
+    })
+    expect(scanHost).toHaveBeenCalledWith({ vtaDid: VTA, callbackUrl: callback, host: 'vtafarm-api.ic3.dev' })
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaLink)
   })
 })
 
@@ -317,7 +368,7 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(navigation.setOptions).toHaveBeenCalledWith({ title: 'Screens.AddDevice' })
   })
 
-  test('claiming keeps the stack\'s own title', () => {
+  test("claiming keeps the stack's own title", () => {
     const navigation = useNavigation() as unknown as { setOptions: jest.Mock }
     navigation.setOptions.mockClear()
     show()
