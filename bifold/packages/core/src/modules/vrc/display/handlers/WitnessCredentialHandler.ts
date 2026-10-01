@@ -20,9 +20,9 @@ import {
   CredentialButtonText,
   W3cCredentialJson,
   extractIssuerObject,
-  hasCredentialType,
   formatDateForDisplay,
 } from '../types'
+import { isWitnessCredential } from '../../credentialTypes'
 
 /**
  * Handler for WitnessCredential display
@@ -34,7 +34,8 @@ export class WitnessCredentialHandler implements CredentialDisplayHandler {
   readonly priority = 110
 
   canHandle(credential: W3cCredentialJson): boolean {
-    return hasCredentialType(credential, 'WitnessCredential')
+    // Either shape: the WitnessCredential type, or a witnessed/1 statement (DTG Credentials v1).
+    return isWitnessCredential(credential)
   }
 
   /**
@@ -168,9 +169,7 @@ export class WitnessCredentialHandler implements CredentialDisplayHandler {
       return new Attribute({
         name: 'locality',
         label: 'Witness.VWC.Locality',
-        value: confirmed
-          ? 'Witness.VWC.LocalityConfirmed'
-          : this.formatDeclineReason(witnessContext.localityReason),
+        value: confirmed ? 'Witness.VWC.LocalityConfirmed' : this.formatDeclineReason(witnessContext.localityReason),
         mimeType: 'text/plain',
       })
     }

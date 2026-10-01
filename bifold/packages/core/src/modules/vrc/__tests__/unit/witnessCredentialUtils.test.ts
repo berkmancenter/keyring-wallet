@@ -11,6 +11,7 @@ import {
   getWitnessCredentialsForSubject,
   extractWitnessInfo,
 } from '../../utils/witnessCredentialUtils'
+import minted from '../../../trust-tasks/__tests__/fixtures/dtg-v1-minted-witness.json'
 
 describe('witnessCredentialUtils', () => {
   describe('hasWitnessCredentialType', () => {
@@ -397,9 +398,19 @@ describe('witnessCredentialUtils', () => {
       })
 
       it('distinguishes declinedByHolder (a choice) from windowLost (an interruption)', () => {
-        const declined = extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder' }))
-        const interrupted = extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' }))
-        expect(declined?.locality).toEqual({ outcome: 'declined', method: 'none', reason: 'declinedByHolder', venue: undefined, observedAt: undefined })
+        const declined = extractWitnessInfo(
+          vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder' })
+        )
+        const interrupted = extractWitnessInfo(
+          vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' })
+        )
+        expect(declined?.locality).toEqual({
+          outcome: 'declined',
+          method: 'none',
+          reason: 'declinedByHolder',
+          venue: undefined,
+          observedAt: undefined,
+        })
         expect(interrupted?.locality?.reason).toBe('windowLost')
         expect(declined?.locality?.outcome).toBe(interrupted?.locality?.outcome) // both 'declined' — the DISPLAY layer reads `reason` to tell them apart
       })
@@ -411,8 +422,11 @@ describe('witnessCredentialUtils', () => {
 
       it('the three outcomes are pairwise distinct', () => {
         const outcomes = [
-          extractWitnessInfo(vwcWith({ localityConfirmed: true, localityMethod: 'ble-challenge-response/0.1' }))?.locality?.outcome,
-          extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' }))?.locality?.outcome,
+          extractWitnessInfo(vwcWith({ localityConfirmed: true, localityMethod: 'ble-challenge-response/0.1' }))
+            ?.locality?.outcome,
+          extractWitnessInfo(
+            vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' })
+          )?.locality?.outcome,
           extractWitnessInfo(vwcWith({ event: 'no locality here' }))?.locality?.outcome,
         ]
         expect(new Set(outcomes).size).toBe(3)
@@ -426,10 +440,69 @@ describe('witnessCredentialUtils', () => {
 
       it('the flat shape takes priority over a legacy nested one if both are somehow present', () => {
         const result = extractWitnessInfo(
-          vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder', localityVerification: { confirmed: true } })
+          vwcWith({
+            localityConfirmed: false,
+            localityMethod: 'none',
+            localityReason: 'declinedByHolder',
+            localityVerification: { confirmed: true },
+          })
         )
         expect(result?.locality?.outcome).toBe('declined')
       })
+    })
+  })
+})
+
+// 228: a witnessed/1 VWC (DTG Credentials v1). Its credentialSubject.id is
+// "the issuer of the witnessed credential" (tf witness/session/submit as
+// recast by #691; dtg-credentials 0.12.0 new_witnessed_vsc reads it with
+// issuer_of, string or { id }). In a relationship exchange each party presents
+// the VRC it issued under its relationship DID (ceremony.ts: issuer
+// myRelationshipDid, as a string or { id, name }), so the VWC a counterparty
+// shares names the counterparty's relationship DID: the value this lookup and
+// the badge key on, as for the old shape.
+describe('witnessCredentialUtils with a witnessed/1 VWC', () => {
+  const record = (encoded: Record<string, unknown>, id = 'vwc-v1') =>
+    ({ id, encoded }) as unknown as W3cCredentialRecord
+
+  it("finds the crate-minted VWC under its witnessed VRC's issuer and builds the badge", () => {
+    const vwc = minted.witnessStatement as Record<string, unknown>
+    const vrcIssuer = minted.witnessedRelationship.issuer
+    expect((vwc.credentialSubject as { id: string }).id).toBe(vrcIssuer)
+
+    expect(hasWitnessCredentialType(record(vwc))).toBe(true)
+    const found = getWitnessCredentialsForSubject([record(vwc)], vrcIssuer)
+    expect(found).toHaveLength(1)
+    expect(getWitnessCredentialsForSubject([record(vwc)], minted.parties.applicant)).toHaveLength(0)
+
+    const info = extractWitnessInfo(found[0])
+    expect(info).toMatchObject({
+      witnessDid: vwc.issuer,
+      witnessName: 'Witness',
+      credentialId: 'vwc-v1',
+      locality: { outcome: 'not-offered' },
+    })
+  })
+
+  it("names the counterparty's relationship DID when the witnessed VRC's issuer is the { id, name } object Keyring writes", () => {
+    const counterparty = 'did:peer:0zCounterpartyRel'
+    // What a witness derives with issuer_of over a Keyring VRC whose issuer is
+    // { id: <relationship DID>, name }, with an optional witnessContext.
+    const vwc = {
+      ...(minted.witnessStatement as Record<string, unknown>),
+      credentialSubject: {
+        id: counterparty,
+        predicate: 'https://registry.trustoverip.org/dtg/vsc/witnessed/1',
+        object: { digestMultibase: 'zQmXhTCPnjuGdyMqWWfdwyqNW4D6banDLjnA9x6Kxzc9ecK' },
+        witnessContext: { event: 'In person', method: 'witness-server', sessionId: 'urn:uuid:s' },
+      },
+    }
+    const found = getWitnessCredentialsForSubject([record(vwc)], counterparty)
+    expect(found).toHaveLength(1)
+    expect(extractWitnessInfo(found[0])).toMatchObject({
+      event: 'In person',
+      method: 'witness-server',
+      sessionId: 'urn:uuid:s',
     })
   })
 })
