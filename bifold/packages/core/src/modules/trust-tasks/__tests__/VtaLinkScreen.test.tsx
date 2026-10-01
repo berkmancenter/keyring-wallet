@@ -440,3 +440,96 @@ describe('Link your agent — this phone was removed', () => {
     expect(erase).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * An agent host's automatic connection (vtafarm-api mobile connection): the
+ * person sees which agent and which site before anything is sent, then that
+ * the host is setting the agent up — never a code to compare, which this
+ * flow does not have — and, if it stops, why in the host's terms.
+ */
+describe("an agent host's automatic connection", () => {
+  const VTA = 'did:webvh:QmXo:dids.ic3.dev:alice-vta'
+  const at = (kind: string, extra: Record<string, unknown> = {}) =>
+    (vtaAgent as unknown as Setter).set({
+      link: {
+        kind,
+        via: 'host',
+        vtaDid: VTA,
+        label: 'dids.ic3.dev',
+        offerUrl: 'vtafarm-api.ic3.dev',
+        exp: 2e12,
+        ...extra,
+      },
+    })
+  const show = () =>
+    render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+  beforeEach(() => (useAgent as jest.Mock).mockReturnValue({ agent: {} }))
+
+  test('asks first, showing the agent’s full address and the site the code came from', () => {
+    at('confirming')
+    const tree = show()
+    const card = tree.getByTestId(testIdWithKey('VtaLinkConfirm'))
+    expect(card).toHaveTextContent(/VtaLink\.Host\.ConfirmTitle/)
+    expect(card).toHaveTextContent(/VtaLink\.Host\.ConfirmBody/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostSite'))).toHaveTextContent(/VtaLink\.Host\.CodeFrom/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkAgentAddress'))).toHaveTextContent(VTA)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkButton'))).toHaveTextContent('VtaLink.Host.Connect')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCancel'))).toHaveTextContent('VtaLink.Host.NotNow')
+  })
+
+  test('Connect confirms, and Not now cancels', () => {
+    at('confirming')
+    const confirm = jest.spyOn(vtaAgent, 'confirmOffer').mockResolvedValue(undefined)
+    const cancel = jest.spyOn(vtaAgent, 'cancelLink').mockImplementation(() => undefined)
+    const tree = show()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkButton')))
+    expect(confirm).toHaveBeenCalled()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkCancel')))
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  test('while the host sets the agent up: says so, with no code to compare', () => {
+    at('awaitingGrant', { code: '' })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostSettingUp'))).toHaveTextContent(/VtaLink\.Host\.SettingUpTitle/)
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkCode'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCancel'))).toBeTruthy()
+  })
+
+  test.each([
+    'badKey',
+    'badRequest',
+    'badAnswer',
+    'expired',
+    'taken',
+    'unavailable',
+    'busy',
+    'unreachable',
+    'notAccepted',
+    'gone',
+    'timedOut',
+    'setupFailed',
+    'needsScreenLock',
+  ])('stopped (%s): says why in the host’s terms, every locale having the words', (hostReason) => {
+    const controller = vtaAgent as unknown as Setter
+    controller.set({ link: { kind: 'notLinked', lastError: { reason: 'failed', hostReason } } })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent(`VtaLink.Host.Failed.${hostReason}`)
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      const failed = (words.VtaLink as unknown as { Host: { Failed: Record<string, string> } }).Host.Failed
+      expect(failed[hostReason]).toEqual(expect.any(String))
+    }
+  })
+
+  test('the words name no provider, and the Admin DID way stays the fallback', () => {
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      const host = JSON.stringify((words.VtaLink as unknown as { Host: unknown }).Host)
+      expect(host).not.toMatch(/farm/i)
+      expect(host).toContain('Admin DID')
+    }
+  })
+})

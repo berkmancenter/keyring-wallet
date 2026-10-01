@@ -17,6 +17,13 @@ import { DeviceEventEmitter, Platform } from 'react-native'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { agentGoneVerdict, type AgentGoneWhy } from './agentGone'
+import {
+  AGENT_HOST_QR_LIFETIME_MS,
+  AgentHostConnectionError,
+  connectWithAgentHost,
+  type AgentHostDeps,
+  type AgentHostOffer,
+} from './agentHostConnection'
 import type { AgentLabel } from './agentLabel'
 import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
@@ -58,7 +65,14 @@ import {
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { migratePersonaKeys } from './vtaKeyMigration'
 import { forgetKeyCopy } from './vtaKeys'
-import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
+import {
+  initialLinkState,
+  reconnectDelayMs,
+  reduceLink,
+  type VtaLinkEvent,
+  type VtaLinkFailure,
+  type VtaLinkState,
+} from './vtaLinkMachine'
 import {
   DeviceActionRefused,
   DeviceCannotOwn,
@@ -192,6 +206,34 @@ export interface VtaAgentDeps {
   deviceCanOwn?: DeviceCanOwn
   /** This phone's name, for the label of its own access entry ("Keyring — <name>"). */
   deviceName?: () => Promise<string> | string
+  /** An agent host's automatic connection: its waits, for tests (fetch is `fetch` above). */
+  agentHost?: Pick<AgentHostDeps, 'sleep' | 'now'>
+  /** How long to wait between sign-in tries once a host says the agent is ready; tests shorten it. */
+  hostSignInRetryMs?: number
+}
+
+/**
+ * Once an agent host says the agent is ready for this phone (`awaiting_mobile`),
+ * signing in is tried this many times, HOST_SIGN_IN_RETRY_MS apart: the agent
+ * has just restarted with this phone on its access list and may take a moment
+ * to answer.
+ */
+export const HOST_SIGN_IN_TRIES = 24
+export const HOST_SIGN_IN_RETRY_MS = 5000
+
+/** Why an automatic connection stopped, as a link failure: the reason the older screens know, and the host's own. */
+function hostFailure(error: AgentHostConnectionError): VtaLinkFailure {
+  const reason: VtaLinkFailure['reason'] =
+    error.reason === 'expired' || error.reason === 'timedOut'
+      ? 'expired'
+      : error.reason === 'unreachable' || error.reason === 'busy' || error.reason === 'unavailable'
+        ? 'unreachable'
+        : error.reason === 'taken' || error.reason === 'notAccepted'
+          ? 'refused'
+          : 'failed'
+  // The host's own words go behind Details only for a failed setup, which its doc calls safe to display.
+  const detail = error.hostError ? `${error.message}: ${error.hostError}` : error.message
+  return { reason, hostReason: error.reason, detail }
 }
 
 /** A refusal that means the agent no longer accepts this phone at all. */
@@ -313,6 +355,8 @@ export class VtaAgentController {
   private deps: VtaAgentDeps = {}
   private restored = false
   private offer?: EnrolmentOffer
+  /** A scanned agent-host QR waiting for the person to confirm. Holds a credential: never logged. */
+  private hostOffer?: AgentHostOffer
   /** Bumped by every new attempt and every cancel, so a late reply from an abandoned one moves nothing. */
   private attemptToken = 0
   private reconnectAttempt = 0
@@ -546,6 +590,7 @@ export class VtaAgentController {
   /** A scanned or pasted enrolment offer: ask the person before anything is minted. */
   scanOffer(offer: EnrolmentOffer) {
     this.offer = offer
+    this.hostOffer = undefined
     this.ownerFor = undefined
     this.dispatch({ type: 'offerScanned', vtaDid: offer.vta, label: offer.label, offerUrl: offer.url, exp: offer.exp })
   }
@@ -553,6 +598,7 @@ export class VtaAgentController {
   cancelLink() {
     this.attemptToken++
     this.offer = undefined
+    this.hostOffer = undefined
     this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
   }
@@ -675,11 +721,134 @@ export class VtaAgentController {
   }
 
   /**
+   * A scanned agent-host QR (`{ vta_did, callback_url }`): ask the person
+   * before anything is minted or sent, showing the agent and the host's site.
+   * The callback is kept out of the state the screens read.
+   */
+  scanHostOffer(offer: AgentHostOffer) {
+    this.hostOffer = offer
+    this.offer = undefined
+    this.ownerFor = undefined
+    this.dispatch({
+      type: 'offerScanned',
+      vtaDid: offer.vtaDid,
+      label: offer.vtaDid.split(':')[3] ?? offer.vtaDid,
+      offerUrl: offer.host,
+      exp: this.now() + AGENT_HOST_QR_LIFETIME_MS,
+      via: 'host',
+    })
+  }
+
+  /**
+   * The person agreed to an agent host's automatic connection: this phone's
+   * did:key — the form a host's Admin DID takes — goes to the callback, the
+   * phone waits while the host sets the agent up, then signs in and rotates
+   * as every link does, and tells the host it connected. A phone with no
+   * screen lock is refused first, as for "Create my agent": it becomes an
+   * administrator, and the agent is remembered as its own.
+   */
+  private async confirmHostOffer(agent: Agent): Promise<void> {
+    const offer = this.hostOffer
+    if (!offer || this.state.link.kind !== 'confirming') return
+    const token = ++this.attemptToken
+    const live = () => token === this.attemptToken
+    this.dispatch({ type: 'confirmed' })
+    const identities = this.identityStore(agent)
+    const label = offer.vtaDid.split(':')[3] ?? offer.vtaDid
+    try {
+      const canOwn = this.deps.deviceCanOwn
+      if (canOwn && !(await canOwn())) throw new DeviceCannotOwn()
+      this.ownerFor = offer.vtaDid
+      if (await this.resumeEarlierLink(agent, offer.vtaDid, label, identities, live)) return
+      if (!live()) return
+      await connectWithAgentHost(offer, {
+        ...(this.deps.fetch ? { fetch: this.deps.fetch } : {}),
+        ...this.deps.agentHost,
+        shouldStop: () => !live(),
+        adminDid: async () => {
+          await resolveVtaMediator(agent, offer.vtaDid)
+          const did = await createVtiTemporaryDidKey(agent)
+          await identities.setManager({
+            vtaDid: offer.vtaDid,
+            did,
+            createdAt: new Date(this.now()).toISOString(),
+            stage: 'temporary',
+          })
+          return did
+        },
+        onAccepted: () => {
+          if (live()) this.dispatch({ type: 'submitted', code: '' })
+        },
+        link: async () => {
+          if (!live()) throw new AgentHostConnectionError('cancelled')
+          const client = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
+          if (!live()) throw new AgentHostConnectionError('cancelled')
+          this.dispatch({ type: 'granted' })
+          await this.finishLink(agent, offer.vtaDid, label, identities, live, client)
+        },
+        warn: (message) => agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] ${message}`),
+      })
+    } catch (error) {
+      if (!live()) return
+      if (error instanceof AgentHostConnectionError && error.reason === 'cancelled') return
+      const failure =
+        error instanceof AgentHostConnectionError
+          ? hostFailure(error)
+          : error instanceof DeviceCannotOwn
+            ? { reason: 'refused' as const, detail: 'no screen lock', hostReason: 'needsScreenLock' as const }
+            : { reason: 'failed' as const, detail: error instanceof Error ? error.message : String(error) }
+      this.ownerFor = undefined
+      this.set({ status: 'failed', error: failure.detail })
+      this.dispatch({ type: 'failed', failure })
+    } finally {
+      if (live()) this.hostOffer = undefined
+    }
+  }
+
+  /**
+   * Sign in as the temporary key once a host says the agent is ready. The
+   * agent has just restarted with this phone on its access list, so a
+   * refusal or silence is tried again, a few seconds apart, before giving up.
+   */
+  private async signInOnceReady(
+    agent: Agent,
+    vtaDid: string,
+    identities: VtiIdentityStore,
+    live: () => boolean
+  ): Promise<VtaClient> {
+    const wait = this.deps.agentHost?.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    let last: unknown
+    for (let attempt = 0; attempt < HOST_SIGN_IN_TRIES; attempt++) {
+      if (!live()) throw new AgentHostConnectionError('cancelled')
+      await this.reset()
+      const client = this.client(agent, vtaDid, identities)
+      this.set({ status: 'connecting', error: undefined })
+      try {
+        const connected = await withDeadline(
+          client.connect(),
+          this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
+        )
+        if (connected) {
+          await client.whoAmI()
+          return client
+        }
+        last = new Error('the agent did not answer')
+      } catch (error) {
+        last = error
+      }
+      await wait(this.deps.hostSignInRetryMs ?? HOST_SIGN_IN_RETRY_MS)
+    }
+    await this.reset()
+    throw last instanceof Error ? last : new Error(String(last))
+  }
+
+  /**
    * The person agreed to link: submit the temporary key, wait for the admin,
    * then sign in as that key and rotate onto a long-lived one. Every step
    * moves the machine; the screen only renders it.
    */
   async confirmOffer(agent: Agent): Promise<void> {
+    if (this.hostOffer) return this.confirmHostOffer(agent)
     const offer = this.offer
     if (!offer || this.state.link.kind !== 'confirming') return
     const token = ++this.attemptToken

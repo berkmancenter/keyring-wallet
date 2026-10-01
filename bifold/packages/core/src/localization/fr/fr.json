@@ -1187,6 +1187,33 @@
     "RemovedReason": "Motif indiqué : {{reason}}"
   },
   "VtaLink": {
+    "Host": {
+      "ConfirmTitle": "Connecter ce téléphone à {{label}} ?",
+      "ConfirmBody": "Ce téléphone devient administrateur de cet agent. Ne continuez que si vous venez de créer ce code sur la page de l'hébergeur de votre agent.",
+      "CodeFrom": "Code provenant de {{site}}",
+      "AgentAddress": "Adresse de l'agent",
+      "Connect": "Connecter ce téléphone",
+      "Connecting": "Connexion…",
+      "NotNow": "Pas maintenant",
+      "SettingUpTitle": "Préparation de votre agent",
+      "SettingUpBody": "L'hébergeur de votre agent le prépare pour ce téléphone. Cela peut prendre quelques minutes. Gardez Keyring ouvert.",
+      "SettingUpWaiting": "En attente de votre agent…",
+      "Failed": {
+        "badKey": "L'hébergeur de votre agent n'a pas accepté le code de ce téléphone. Créez un nouveau code et réessayez, ou utilisez l'option Admin DID sur sa page.",
+        "badRequest": "Keyring et l'hébergeur de votre agent ne se sont pas compris. Utilisez plutôt l'option Admin DID sur sa page.",
+        "badAnswer": "Keyring et l'hébergeur de votre agent ne se sont pas compris. Utilisez plutôt l'option Admin DID sur sa page.",
+        "expired": "Ce code a expiré ou a déjà été utilisé. Créez un nouveau code sur la page de l'hébergeur de votre agent et scannez-le.",
+        "taken": "Un autre appareil a déjà utilisé ce code, ou votre agent n'était pas prêt. Créez un nouveau code et réessayez.",
+        "unavailable": "L'hébergeur de votre agent ne peut pas connecter de téléphone automatiquement pour le moment. Utilisez plutôt l'option Admin DID sur sa page.",
+        "busy": "L'hébergeur de votre agent est occupé. Attendez une minute, puis créez un nouveau code et réessayez.",
+        "unreachable": "Impossible de joindre l'hébergeur de votre agent. Vérifiez votre connexion, puis créez un nouveau code et réessayez.",
+        "notAccepted": "L'hébergeur de votre agent n'accepte plus ce téléphone. Créez un nouveau code et réessayez.",
+        "gone": "Cet agent a été supprimé chez son hébergeur.",
+        "timedOut": "La préparation a pris trop de temps : l'hébergeur de votre agent a cessé d'attendre ce téléphone. Créez un nouveau code et scannez-le à nouveau.",
+        "setupFailed": "L'hébergeur de votre agent n'a pas pu le préparer. Consultez sa page pour plus de détails.",
+        "needsScreenLock": "Pour protéger votre agent, activez d'abord un verrouillage d'écran ou la biométrie sur ce téléphone."
+      }
+    },
     "GiveKeyHowTitle": "Comment l'admin l'ajoute",
     "GiveKeyHowTerminal": "Si vous faites tourner votre propre agent, ajoutez le code comme admin avec l'outil en ligne de commande de votre agent.",
     "Screen": "Relier votre agent",

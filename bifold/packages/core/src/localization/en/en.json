@@ -1249,6 +1249,33 @@
     "RemovedReason": "The reason given: {{reason}}"
   },
   "VtaLink": {
+    "Host": {
+      "ConfirmTitle": "Connect this phone to {{label}}?",
+      "ConfirmBody": "This phone becomes an administrator of this agent. Continue only if you just made this code on your agent host's page.",
+      "CodeFrom": "Code from {{site}}",
+      "AgentAddress": "Agent address",
+      "Connect": "Connect this phone",
+      "Connecting": "Connecting…",
+      "NotNow": "Not now",
+      "SettingUpTitle": "Setting up your agent",
+      "SettingUpBody": "Your agent host is getting your agent ready for this phone. This can take a few minutes. Keep Keyring open.",
+      "SettingUpWaiting": "Waiting for your agent…",
+      "Failed": {
+        "badKey": "Your agent host didn't accept this phone's code. Make a new code and try again, or use the Admin DID option on its page.",
+        "badRequest": "Keyring and your agent host didn't understand each other. Use the Admin DID option on its page instead.",
+        "badAnswer": "Keyring and your agent host didn't understand each other. Use the Admin DID option on its page instead.",
+        "expired": "This code has expired or was already used. Make a new code on your agent host's page and scan it.",
+        "taken": "Another device already used this code, or your agent wasn't ready. Make a new code and try again.",
+        "unavailable": "Your agent host can't connect phones automatically right now. Use the Admin DID option on its page instead.",
+        "busy": "Your agent host is busy. Wait a minute, then make a new code and try again.",
+        "unreachable": "Your agent host couldn't be reached. Check your connection, then make a new code and try again.",
+        "notAccepted": "Your agent host stopped accepting this phone. Make a new code and try again.",
+        "gone": "This agent was deleted on your agent host.",
+        "timedOut": "Setting up took too long, so your agent host stopped waiting for this phone. Make a new code and scan it again.",
+        "setupFailed": "Your agent host couldn't set up your agent. Check its page for details.",
+        "needsScreenLock": "To protect your agent, turn on a screen lock or biometrics on this phone first."
+      }
+    },
     "GiveKeyHowTitle": "How the admin adds it",
     "GiveKeyHowTerminal": "If you run your own agent, add the code as an admin with your agent's command-line tool.",
     "Screen": "Link your agent",

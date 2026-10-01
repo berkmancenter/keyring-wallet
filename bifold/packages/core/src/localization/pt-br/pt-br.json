@@ -1093,6 +1093,33 @@
     "RemovedReason": "Motivo informado: {{reason}}"
   },
   "VtaLink": {
+    "Host": {
+      "ConfirmTitle": "Conectar este telefone a {{label}}?",
+      "ConfirmBody": "Este telefone passa a ser administrador deste agente. Continue apenas se você acabou de criar este código na página do provedor do seu agente.",
+      "CodeFrom": "Código de {{site}}",
+      "AgentAddress": "Endereço do agente",
+      "Connect": "Conectar este telefone",
+      "Connecting": "Conectando…",
+      "NotNow": "Agora não",
+      "SettingUpTitle": "Preparando o seu agente",
+      "SettingUpBody": "O provedor do seu agente está preparando o agente para este telefone. Isso pode levar alguns minutos. Mantenha o Keyring aberto.",
+      "SettingUpWaiting": "Aguardando o seu agente…",
+      "Failed": {
+        "badKey": "O provedor do seu agente não aceitou o código deste telefone. Crie um novo código e tente de novo, ou use a opção Admin DID na página dele.",
+        "badRequest": "O Keyring e o provedor do seu agente não se entenderam. Use a opção Admin DID na página dele.",
+        "badAnswer": "O Keyring e o provedor do seu agente não se entenderam. Use a opção Admin DID na página dele.",
+        "expired": "Este código expirou ou já foi usado. Crie um novo código na página do provedor do seu agente e escaneie-o.",
+        "taken": "Outro aparelho já usou este código, ou o seu agente não estava pronto. Crie um novo código e tente de novo.",
+        "unavailable": "O provedor do seu agente não consegue conectar telefones automaticamente agora. Use a opção Admin DID na página dele.",
+        "busy": "O provedor do seu agente está ocupado. Espere um minuto, depois crie um novo código e tente de novo.",
+        "unreachable": "Não foi possível falar com o provedor do seu agente. Verifique sua conexão, depois crie um novo código e tente de novo.",
+        "notAccepted": "O provedor do seu agente deixou de aceitar este telefone. Crie um novo código e tente de novo.",
+        "gone": "Este agente foi excluído no provedor.",
+        "timedOut": "A preparação demorou demais, e o provedor do seu agente parou de esperar por este telefone. Crie um novo código e escaneie-o de novo.",
+        "setupFailed": "O provedor do seu agente não conseguiu preparar o agente. Veja os detalhes na página dele.",
+        "needsScreenLock": "Para proteger o seu agente, ative primeiro um bloqueio de tela ou a biometria neste telefone."
+      }
+    },
     "GiveKeyHowTitle": "Como o admin adiciona",
     "GiveKeyHowTerminal": "Se você roda seu próprio agente, adicione o código como admin com a ferramenta de linha de comando do agente.",
     "Screen": "Vincular seu agente",

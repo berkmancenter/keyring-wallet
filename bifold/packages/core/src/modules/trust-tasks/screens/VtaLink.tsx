@@ -208,6 +208,8 @@ const VtaLink: React.FC = () => {
   }, [agent, deviceName, defaultName, navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {
+    // An agent host's automatic connection says why in its own terms.
+    if (failure?.hostReason) return t(`VtaLink.Host.Failed.${failure.hostReason}`)
     switch (failure?.reason) {
       case 'expired':
         return t('VtaLink.FailedExpired')
@@ -231,6 +233,49 @@ const VtaLink: React.FC = () => {
   switch (link.kind) {
     case 'confirming':
     case 'submitting':
+      if (link.via === 'host') {
+        // An agent host's QR: which agent, and the site the code came from,
+        // before this phone sends anything — accepting makes it an admin.
+        body = (
+          <View style={styles.card} testID={testIdWithKey('VtaLinkConfirm')}>
+            <ThemedText variant="headingThree" accessibilityRole="header">
+              {t('VtaLink.Host.ConfirmTitle', {
+                label: agentDisplayName(link, t),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+            <ThemedText>{t('VtaLink.Host.ConfirmBody')}</ThemedText>
+            <ThemedText testID={testIdWithKey('VtaLinkHostSite')}>
+              {t('VtaLink.Host.CodeFrom', { site: link.offerUrl, interpolation: { escapeValue: false } })}
+            </ThemedText>
+            <ThemedText variant="labelTitle">{t('VtaLink.Host.AgentAddress')}</ThemedText>
+            <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkAgentAddress')} selectable>
+              {link.vtaDid}
+            </ThemedText>
+          </View>
+        )
+        actions = (
+          <>
+            <Button
+              title={link.kind === 'submitting' ? t('VtaLink.Host.Connecting') : t('VtaLink.Host.Connect')}
+              buttonType={ButtonType.Primary}
+              onPress={onConfirm}
+              disabled={link.kind === 'submitting'}
+              testID={testIdWithKey('VtaLinkButton')}
+              accessibilityLabel={t('VtaLink.Host.Connect')}
+            >
+              {link.kind === 'submitting' ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+            </Button>
+            <Button
+              title={t('VtaLink.Host.NotNow')}
+              buttonType={ButtonType.Secondary}
+              onPress={onCancel}
+              testID={testIdWithKey('VtaLinkCancel')}
+            />
+          </>
+        )
+        break
+      }
       body = (
         <View style={styles.card} testID={testIdWithKey('VtaLinkConfirm')}>
           <ThemedText variant="headingThree" accessibilityRole="header">
@@ -263,6 +308,32 @@ const VtaLink: React.FC = () => {
       break
 
     case 'awaitingGrant':
+      if (link.via === 'host') {
+        // The host is setting the agent up; there is no code to compare.
+        body = (
+          <View style={styles.card} testID={testIdWithKey('VtaLinkHostSettingUp')}>
+            <ThemedText variant="headingThree" accessibilityRole="header">
+              {t('VtaLink.Host.SettingUpTitle')}
+            </ThemedText>
+            <ThemedText>{t('VtaLink.Host.SettingUpBody')}</ThemedText>
+            <View style={styles.row}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <ThemedText style={{ flex: 1 }} testID={testIdWithKey('VtaLinkState')}>
+                {t('VtaLink.Host.SettingUpWaiting')}
+              </ThemedText>
+            </View>
+          </View>
+        )
+        actions = (
+          <Button
+            title={t('VtaLink.StopLinking')}
+            buttonType={ButtonType.Secondary}
+            onPress={onCancel}
+            testID={testIdWithKey('VtaLinkCancel')}
+          />
+        )
+        break
+      }
       body = (
         <View style={styles.card}>
           <ThemedText variant="headingThree" accessibilityRole="header">
