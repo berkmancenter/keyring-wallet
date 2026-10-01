@@ -251,11 +251,13 @@ beforeEach(() => {
   setVtaSwapTestHook(undefined)
 })
 
+// Unlink tells a reachable agent first and may wait on it (UNLINK_TELL_QUEUE_MS
+// each); this mock agent never answers set-wake, and a phone here can be mid-task.
 afterEach(async () => {
   // Stop every retry timer a controller left behind.
   for (const vta of alive) await vta.unlink(agent).catch(() => undefined)
   alive = []
-})
+}, 30_000)
 
 describe('a first link whose swap answer is lost', () => {
   it('app killed after the agent swapped: the relaunch is linked, as the new key, nothing pending', async () => {

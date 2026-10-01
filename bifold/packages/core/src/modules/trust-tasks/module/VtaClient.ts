@@ -355,6 +355,14 @@ const UNSOLICITED = new Set<string>([
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()
 
+/** A task dropped from the queue before it was sent ({@link VtaClient.dropQueued}). */
+export class VtaTaskDropped extends Error {
+  constructor(readonly taskType: string) {
+    super(`${LOG_PREFIX} ${taskType} was dropped before it was sent`)
+    this.name = 'VtaTaskDropped'
+  }
+}
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -396,6 +404,20 @@ export class VtaClient {
   /** Whether the VTA has been greeted (§7.2.2) this session. */
   private greeted = false
   private queue: Promise<unknown> = Promise.resolve()
+  /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
+  private tickets = 0
+  private droppedThrough = 0
+
+  /**
+   * Drop every task queued and not yet sent: each fails with
+   * {@link VtaTaskDropped}, and the one in flight finishes as it would. For a
+   * phone about to unlink, whose startup tasks (whoami … device/list) would
+   * otherwise go first and leave no time to tell the agent (227 gate, U4).
+   * Tasks asked for after this run as usual.
+   */
+  dropQueued(): void {
+    this.droppedThrough = this.tickets
+  }
 
   /** Keep a keyed attempt's ids; the oldest keys go first, past a few dozen. */
   private rememberAttempt(key: string, ids: string[]): void {
@@ -604,10 +626,13 @@ export class VtaClient {
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
     onSent?: () => void
   ): Promise<T> {
+    const ticket = ++this.tickets
     const run = (): Promise<T> =>
-      this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
-        this.inFlight = undefined
-      })
+      ticket <= this.droppedThrough
+        ? Promise.reject(new VtaTaskDropped(type))
+        : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
+            this.inFlight = undefined
+          })
     // One task at a time: one queued behind another says what it waits on, so a
     // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
     const ahead = this.inFlight

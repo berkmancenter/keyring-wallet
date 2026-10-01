@@ -36,6 +36,7 @@ import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentit
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import {
+  AGENT_DEVICE_TASK,
   clearThisDeviceWake,
   listAgentDevices,
   registerThisDevice,
@@ -242,8 +243,13 @@ export const GRANT_CHECK_DEADLINE_MS = 10000
 export const GRANT_CONNECT_DEADLINE_MS = 30000
 /** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
 export const SESSION_CONNECT_DEADLINE_MS = 30000
-/** How long Unlink waits on the agent to hear it (wake cleared, sessions ended) before it unlinks anyway. */
+/** How long Unlink waits on the agent to hear it (wake cleared, sessions ended), from when it is told, before it unlinks anyway. */
 export const UNLINK_TELL_DEADLINE_MS = 5000
+/**
+ * The most Unlink waits in all, from the tap: a task already in flight goes
+ * first, and an agent that has not answered it by then is not waited on.
+ */
+export const UNLINK_TELL_QUEUE_MS = 10000
 /**
  * Signing in and the agent's answer to an owner act (adding a device): the
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
@@ -612,13 +618,33 @@ export class VtaAgentController {
     const link = this.state.link
     const client = this.current?.client
     if (link.kind !== 'linked' || link.connection.kind !== 'online' || !client) return
+    // What was queued (an app just started queues whoami … device/list) is
+    // pointless once the phone unlinks, and went first: the telling waited
+    // behind it past its deadline and never reached the agent (227 gate, U4).
+    client.dropQueued()
+    // The deadline counts from when the agent is told, not from the tap: a
+    // task already in flight finishes first. At most UNLINK_TELL_QUEUE_MS in
+    // all, sent or not. Timers, not clock readings.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let giveUp: () => void = () => undefined
+    const deadline = new Promise<void>((resolve) => {
+      giveUp = resolve
+      timers.push(setTimeout(resolve, UNLINK_TELL_QUEUE_MS))
+    })
     const tell = (async () => {
-      await clearThisDeviceWake(client).catch(() => undefined)
-      await client.task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }).catch(() => undefined)
+      // `set-wake` with no handle clears the wake channel (clearThisDeviceWake),
+      // sent here directly to know when it leaves the phone.
+      await client
+        .task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, () => {
+          timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
+        })
+        .catch(() => undefined)
+      await client
+        .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
+        .catch(() => undefined)
     })()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    await Promise.race([tell, new Promise<void>((resolve) => (timer = setTimeout(resolve, UNLINK_TELL_DEADLINE_MS)))])
-    clearTimeout(timer)
+    await Promise.race([tell, deadline])
+    timers.forEach((timer) => clearTimeout(timer))
   }
 
   /**
