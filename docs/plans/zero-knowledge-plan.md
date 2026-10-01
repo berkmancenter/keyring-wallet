@@ -12,6 +12,7 @@
 - **[[VETTING-DESIGN]]** — `docs/design/vetting-process.md` in `OpenVTC/openvtc` (DRAFT v3): §1 non-goals, §10.5 accountability, §14.2 V2 scope, D7/D14/D19.
 - **[[VTI-CRED-ARCH]]** — `docs/05-design-notes/vti-credential-architecture.md` in VTI, present at our pin `187ad9cd`: D4 and §4, proof formats.
 - **[[AGENT-STATE]]** — *The Agent Is the State: UIs That Keep Nothing*, `ic3.software/blog/the-agent-is-the-state`.
+- **[[OPENVTC-HIDDEN]]** — `openvtc-core/src/vetting/hidden.rs` on `OpenVTC/openvtc` **main at `e49816c`** (public, read 2026-09-29): the shipped client half — the namespace it implements, the parameters a community publishes, and why criticality is what makes refusal possible.
 - **[[ZKP-SPEC]]** — `trustoverip/dtgwg-zkp-spec` (public; `spec/body.md`, status *"Proposed · 2026-08-25"*): the Accessibility Considerations section on proving cost and mediated proving, and open PR #11 on key profiles.
 - **[[W39]]** — *Week 39 OpenVTC report*, `docs.fpp.storm.ws/week-39-openvtc-report.html` (public, read 2026-09-27): hidden vetting implemented on unmerged `zkp-pcs` branches in both repositories, *"proving runs on the client side (via the community app), while verification occurs server-side"*, a proof *"about 1.3 KB, and milliseconds to check"*, and the library *"a research artefact and unaudited"*.
 - **[[ZKP-TF]]** — `trustoverip/dtgwg-zkp-tf` (DTG ZKP V1.0, working draft targeted at IIW #43, Nov 2026) and its evidence lab `mitchuski/dtgwg-zkp-mage`.
@@ -52,7 +53,7 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 | **Math** | Pairing-based signature over BLS12-381; the holder derives a proof of knowledge of the signature | Σ-protocols made non-interactive by Fiat–Shamir over a pairing-friendly curve; pseudorandom *tags* stand in for identities; blind issuance | R1CS circuit (circom), BN254 curve, Poseidon hashing; constant-size proof |
 | **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | Constant-size proof; proving and verifying are both cheap on server hardware. No public benchmark we can cite | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
 | **Setup** | None | None beyond the issuer's keys | A **per-circuit trusted-setup ceremony**; the lab's is lab-only |
-| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | **Implemented upstream** on `zkp-pcs` branches in both repositories, unmerged and not public, proof *"about 1.3 KB"* ([[W39]]); deliberately off the 5 October critical path. Still no public specification, and the library is *"a research artefact and unaudited"* ([[W39]]) | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
+| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | **Shipped and public.** Merged to openvtc `main` at `e49816c` (2026-09-29), and the library is published as `predicate-credential-system` 0.1.0 on crates.io under MIT (2026-09-28). Proof *"about 1.3 KB"* ([[W39]]). The library remains unaudited (C6a), and there is still no published *specification* — the readable contract is the code | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
 | **Our track** | Z2 | Z1 | Z3 |
 
 ### 2.3 The building blocks, in the words the specs use
@@ -186,7 +187,9 @@ This keeps §3.1 and resolves the tension with the vetting subtask's §2.6 witho
 
 ### 3.6 Keyring's contract is with the community's declared extension, not with a construction
 
-**Our design rule, and it decides what ZK1 builds.** A specification that standardised *one* zero-knowledge method would freeze a young research area into a wire format, so the likelier shape — and the one we should build to — is that the operation layer stays method-neutral: a community publishes the parameters of whatever scheme it uses in a namespace it controls, marks that namespace as one a client must understand, and the client either honours it or refuses the criterion.
+**Our design rule — and the shipped client now works exactly this way**, which turns this section from a prediction into a contract we can read. A community publishes the parameters of whatever scheme it uses in a namespace it controls (`org.openvtc.hidden-vetting`, suite `ps-ddh-bls12381`), marks that namespace critical (Trust Tasks framework §4.5.1, manifest 0.2), and a client either honours it or stops. The reason criticality matters is stated in the shipped module and is worth quoting, because it is the failure this plan's §4.1 fail-closed row exists to prevent: *"Without it, a client that does not implement the namespace ignores it … gathers ordinary named statements and presents them to a criterion whose whole purpose is that it never receives them. The community sees a named submission, the applicant sees a rejection, and neither learns that a downgrade happened"* ([[OPENVTC-HIDDEN]]).
+
+**One implementation detail to carry, from the same module:** the parameters must be read from the **raw** criterion rather than a parsed one, because a generated requirements type carries only the members its schema declares and silently drops the rest ([[OPENVTC-HIDDEN]]). Any Keyring reader of a community's manifest has the same exposure.
 
 For Keyring that is the better contract anyway, and it changes the work:
 
@@ -270,7 +273,7 @@ Each phase starts only on instruction. Every phase that touches upstream behavio
 
 ### ZK0 — Baseline and access
 
-- Obtain the predicate-credential library this construction needs and pin it in `external/` via `setup-external.mjs`. A repository now exists at `OpenVTC/predicate-credential-system`, but as of 2026-09-27 it holds **one commit, a title-only README, 0 KB of code and no licence** — a placeholder, not the library. Pin it when it has source and a licence; an unlicensed dependency is unusable regardless of visibility. alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
+- **Done, as of 2026-09-29.** `predicate-credential-system` 0.1.0 is published on crates.io under **MIT**, with its source at `OpenVTC/predicate-credential-system`; pin that repository in `external/` via `setup-external.mjs`, and pin `OpenVTC/openvtc` too (cloned, still absent from `PINS.json`), so the shipped client half is read at a fixed commit rather than at whatever `main` says today. alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
 - Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to a release carrying the vetting-privacy work, coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work. The VTI advance is its own motion: it does not ride with the `dtgwg-cred-spec` advance that [`vsc-migration-plan.md`](./vsc-migration-plan.md) schedules at the start of its V0 (*"One pin, one reason, one entry in `SYNC_LOG.md`"*, §10). It shares the VTI clone repair and the `personhood.rego` re-read that plan's §7.1 needs, so do those once for both.
 - Re-read §2.2's upstream-status column against the new pins and correct this plan.
 
@@ -347,8 +350,8 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 | Trigger | Unblocks |
 |---|---|
-| `OpenVTC/predicate-credential-system` gains source **and a licence** | ZK0 (B1) |
-| The `zkp-pcs` branches merge, or are pushed where we can read them | ZK1 (B2) |
+| ~~The library gains source and a licence~~ · ~~the branches merge~~ | **both happened 2026-09-29** |
+| A specification (not only code) to conform against | B2's remainder |
 | A hidden-vetting task URI appears in any readable spec, even a draft | ZK1 (B2) |
 | A VTI release whose `vta-service` carries the vetter's proof key | ZK2, ZK3 (B3) |
 | A manifest field, or a Farm signal, naming the operator of a VTA or mediator | §3.5, VTI-Q16 (B5) |
@@ -356,8 +359,8 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 **Decided upstream, waiting on someone else:**
 
-- **B1** — A readable, licensed predicate-credential library. `OpenVTC/predicate-credential-system` exists but is an empty placeholder (see ZK0), and a service that publishes to crates.io cannot depend on a git-only crate in any case. Who publishes it, and under what licence, is not ours to decide. Blocks ZK0.
-- **B2** — The message and task definitions for hidden vetting. The work exists on unmerged `zkp-pcs` branches ([[W39]]), so the shapes are written but not readable by us, and they are behind their own `main` by a wide margin. What we need published: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
+- ~~**B1**~~ — **Closed 2026-09-29.** `predicate-credential-system` 0.1.0 is on crates.io under MIT, and openvtc `main` depends on the published crate rather than a git reference (`e49816c`). The audit gate of C6a is unaffected and still open.
+- **B2 — much reduced.** The client half is merged and public ([[OPENVTC-HIDDEN]]), so the shapes ZK1 needs are now **readable code rather than guesses**, and its fixtures should be taken from there instead of invented. What is still unpublished is a *specification* to conform against, and in particular: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
 - **B3** — Hidden-vetting support in `vtc-service` and `vta-service`. Upstream. Blocks ZK2 and ZK3.
 - **B4** — Governance acceptance of the trade hidden mode makes. The accountability machinery [[VETTING-DESIGN]] §10.5 describes — lineage, and the cascade review that re-examines everyone a discredited vetter vouched for — cannot work against vetters nobody can name. A community must decide it accepts that, and that decision is not ours. Hidden mode may never be enabled anywhere Keyring runs.
 - **B5** — A signal a client can read that the VTA and VTC operators differ (§3.5). Not designed anywhere yet. Raised as **VTI-Q16** in `docs/VTI_UPSTREAM_FINDINGS.md` (on `main`, `a5f5cab`), which cites only published sources.
