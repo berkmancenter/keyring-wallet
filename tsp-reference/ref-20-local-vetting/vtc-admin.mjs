@@ -17,12 +17,16 @@
  *   `admin_signer`); there is no sign-in, so these commands leave no pending
  *   challenge behind and are charged to the signer's own rate bucket, not the
  *   per-address anonymous one (`routing/trust_task_admission.rs`).
- * - **The REST routes VTI main keeps**, behind a bearer from DID auth
- *   (`/v1/auth/challenge` → signed `auth/authenticate/0.1` → `/v1/auth/`):
- *   whoami, the criteria store (`/v1/schemas/accepts`), the vetter grant
- *   listing, resend, the endorsement list and revoke, and branding. Each sends
+ * - **Bearer REST routes**, behind DID auth (`/v1/auth/challenge` → signed
+ *   `auth/authenticate/0.1` → `/v1/auth/`): whoami and branding. Each sends
  *   the `Trust-Task` header its route is bound to, or none on a route mounted
  *   without one (`routes/mod.rs`) — as the console's `getJsonExempt` does.
+ *   VTI 0.47 (#1858) retired these and the REST sign-in with them.
+ * - **Signed first, REST if the VTC predates the task**: the vetter grant
+ *   listing, resend, and the endorsement list and revoke. VTI 0.47 serves them
+ *   only as signed documents; a VTC that answers `unsupportedType` (resend/0.2,
+ *   the administrator's form, is newer than the rest) gets the bearer route
+ *   it still has, and the label says which door answered.
  *
  * The signer is `di-proof.mjs`, which mirrors
  * `@bifold/trust-tasks/src/documentProof.ts` (JCS, proof-config-hash ||
@@ -53,10 +57,15 @@
  *     put-policy <regoFile> [purpose] [name]      policy/upsert/0.2
  *     activate-policy <id> [purpose]        policy/activate/0.1 (purpose read from the revision if omitted)
  *     active-policies [purpose]             policy/active/0.1
- *   REST (bearer):
- *     whoami, put-criterion <jsonFile>, delete-criterion <id>, vetters-list,
- *     vetter-resend <memberDid>, endorsements, revoke-endorsement <id>,
- *     branding-show, branding-set <displayName> [logoUrl]
+ *     put-criterion <jsonFile>              vtc/schemas/accepts/register/0.1
+ *     delete-criterion <id>                 vtc/schemas/accepts/delete/0.1
+ *   signed, REST on a VTC that predates the task:
+ *     vetters-list                          vtc/vetting/vetters/grants/list/0.1, every page
+ *     vetter-resend <memberDid>             vtc/vetting/vetters/resend/0.2
+ *     endorsements                          vtc/endorsements/list/0.1, every page
+ *     revoke-endorsement <id>               vtc/endorsements/revoke/0.1
+ *   REST (bearer; not on VTI 0.47):
+ *     whoami, branding-show, branding-set <displayName> [logoUrl]
  */
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -84,6 +93,8 @@ export const TASK = {
   memberRemove: `${SPEC}vtc/members/admin-remove/0.1`,
   memberCredentials: `${SPEC}vtc/members/credentials/0.1`,
   vettersGrant: `${SPEC}vtc/vetting/vetters/grant/0.1`,
+  vettersGrantsList: `${SPEC}vtc/vetting/vetters/grants/list/0.1`,
+  vettersResendAdmin: `${SPEC}vtc/vetting/vetters/resend/0.2`,
   policyUpsert: `${SPEC}policy/upsert/0.2`,
   policyGet: `${SPEC}policy/get/0.1`,
   policyActivate: `${SPEC}policy/activate/0.1`,
@@ -244,7 +255,8 @@ export async function sendTask(base, vtcDid, holder, typeUri, payload) {
 
 /**
  * Every page of a signed list (members, join requests, endorsement types): each
- * pages at `limit` up to 200 with `cursor` / `nextCursor`. Reading one page
+ * pages at `limit` up to 200 (or the payload's own `limit`, where a task's
+ * maximum is lower) with `cursor` / `nextCursor`. Reading one page
  * misses whoever joined after the 50th — the lab passed 50 members on
  * 2026-09-25 and a join read as "not a member". Returns the first failing page
  * as is, or every item under one `items` (no `nextCursor`).
@@ -252,7 +264,7 @@ export async function sendTask(base, vtcDid, holder, typeUri, payload) {
 export async function sendTaskAll(base, vtcDid, holder, typeUri, payload = {}, cursor) {
   const items = [];
   for (let page = 0; page < 100; page++) {
-    const r = await sendTask(base, vtcDid, holder, typeUri, { ...payload, limit: 200, ...(cursor ? { cursor } : {}) });
+    const r = await sendTask(base, vtcDid, holder, typeUri, { limit: 200, ...payload, ...(cursor ? { cursor } : {}) });
     if (r.status !== 200 || !Array.isArray(r.body?.items)) return r;
     items.push(...r.body.items);
     cursor = r.body.nextCursor;
@@ -422,30 +434,45 @@ const COMMANDS = {
     run: ({ send }, [purpose]) => send(TASK.policyActive, purpose ? { purpose } : {}),
   },
 
-  // ── REST routes VTI main keeps ─────────────────────────────────────────
-  // `whoami` describes the bearer session a request carries, which a signed
-  // document does not have, so it stays with the session surface (routes/mod.rs).
-  whoami: { run: ({ token, base }) => rest(base, "/auth/whoami", { task: TASK.whoami, token }) },
-  // The grant listing ({ vetters: [...] }) has no Trust Task; the signed
-  // vetters/list/0.1 is the applicant's public listing, a different answer.
-  "vetters-list": { run: ({ token, base }) => rest(base, "/vetting/vetters", { token }) },
+  // ── Signed first, REST on a VTC that predates the task ─────────────────
+  // The grant listing, as the REST route answered it ({ vetters: [...] }).
+  "vetters-list": {
+    hybrid: true,
+    signed: async ({ sendAll }) => {
+      const r = await sendAll(TASK.vettersGrantsList, { limit: 100 }); // the task's maximum
+      return r.status === 200 ? { status: 200, body: { vetters: r.body.items } } : r;
+    },
+    rest: ({ token, base }) => rest(base, "/vetting/vetters", { token }),
+  },
   // A grant is issued once and delivered once. A vetter whose client was not
   // listening — or was reinstalled since — has the role and not the
-  // credential, and shows no vetter seat at all. This hands it over again.
+  // credential, and shows no vetter seat at all. This hands it over again
+  // (resend/0.2 with `memberDid` is the administrator's form).
   "vetter-resend": {
-    run: ({ token, base }, [memberDid]) =>
+    hybrid: true,
+    signed: ({ send }, [memberDid]) => send(TASK.vettersResendAdmin, { memberDid }),
+    rest: ({ token, base }, [memberDid]) =>
       rest(base, `/vetting/vetters/${encodeURIComponent(memberDid)}/resend`, { method: "POST", task: TASK.vettersResend, token, body: {} }),
   },
   // A vetter grant is an endorsement, withdrawn through endorsements/revoke,
   // which flips the status-list bit the grant's `credentialStatus` points at.
   endorsements: {
-    run: ({ token, base }) => rest(base, "/credentials/endorsements", { task: TASK.endorsementList, token }),
+    hybrid: true,
+    signed: ({ sendAll }) => sendAll(TASK.endorsementList, { includeRevoked: true }),
+    rest: ({ token, base }) => rest(base, "/credentials/endorsements", { task: TASK.endorsementList, token }),
   },
-  // The response carries `statusListIndex` — the bit that just flipped.
+  // Both answers carry `statusListIndex` — the bit that just flipped.
   "revoke-endorsement": {
-    run: ({ token, base }, [id]) =>
+    hybrid: true,
+    signed: ({ send }, [endorsementId]) => send(TASK.endorsementRevoke, { endorsementId }),
+    rest: ({ token, base }, [id]) =>
       rest(base, `/credentials/endorsements/${encodeURIComponent(id)}`, { method: "DELETE", task: TASK.endorsementRevoke, token }),
   },
+
+  // ── Bearer REST (gone from VTI 0.47) ───────────────────────────────────
+  // `whoami` describes the bearer session a request carries, which a signed
+  // document does not have, so it stays with the session surface (routes/mod.rs).
+  whoami: { run: ({ token, base }) => rest(base, "/auth/whoami", { task: TASK.whoami, token }) },
   // What an applicant's client shows before it joins: `branding` on
   // join-requests/manifest/0.2. Admin REST with no Trust Task of its own.
   "branding-show": { run: ({ token, base }) => rest(base, "/community/branding", { token }) },
@@ -490,7 +517,14 @@ const SIGNED_TASK = {
   "put-policy": TASK.policyUpsert,
   "activate-policy": TASK.policyActivate,
   "active-policies": TASK.policyActive,
+  "vetters-list": TASK.vettersGrantsList,
+  "vetter-resend": TASK.vettersResendAdmin,
+  endorsements: TASK.endorsementList,
+  "revoke-endorsement": TASK.endorsementRevoke,
 };
+
+/** Whether a signed answer is the VTC saying it does not serve that task at all. */
+const unsupportedType = (r) => r.status !== 200 && /unsupported.?type/i.test(String(r.body?.code ?? ""));
 
 async function main() {
   const [base, vtcDid, credPath, command, ...args] = process.argv.slice(2);
@@ -505,6 +539,20 @@ async function main() {
   }
   const holder = holderFromCredential(credPath);
   console.log(`[ref-20] admin ${holder.did}`);
+
+  if (cmd.hybrid) {
+    console.log(`[ref-20] signed Trust Tasks to ${base}/trust-tasks, no sign-in`);
+    const ctx = {
+      send: (typeUri, payload) => sendTask(base, vtcDid, holder, typeUri, payload),
+      sendAll: (typeUri, payload, cursor) => sendTaskAll(base, vtcDid, holder, typeUri, payload, cursor),
+    };
+    const answer = await cmd.signed(ctx, args);
+    if (!unsupportedType(answer)) return void show(taskLabel(SIGNED_TASK[command]), answer);
+    console.log(`[ref-20] the VTC does not serve ${taskLabel(SIGNED_TASK[command])}; asking its REST route`);
+    const token = await authenticate(base, vtcDid, holder);
+    console.log(`[ref-20] authenticated, bearer acquired`);
+    return void show(REST_LABEL[command](args), await cmd.rest({ token, base }, args));
+  }
 
   if (cmd.signed) {
     console.log(`[ref-20] signed Trust Tasks to ${base}/trust-tasks, no sign-in`);
