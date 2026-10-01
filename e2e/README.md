@@ -533,6 +533,41 @@ rebuild of both apps — see `scripts/openvtc/local-vti-stack/README.md`.
 - `VTI_PROBE_ON_START=1` in `app/.env` fires the probe as the Developer screen
   mounts, so a run does not depend on a button tap landing.
 
+### Phones, two Android devices, and a private lab build
+
+- **A phone instead of an AVD.** `androidCaps()` stays in AVD mode by default.
+  Set `ANDROID_UDID=<serial>` (the same variable the `*-devices*` runners use;
+  `adb devices`) and, when no AVD is named, it sends `appium:udid` instead of
+  `appium:avd` and no AVD launch settings. It also accepts a running emulator's
+  serial (`emulator-5554`). Do not leave `ANDROID_UDID` exported in the shell
+  for an emulator run. `fullReset` still uninstalls the app, wiping any state
+  on that phone, so use `E2E_KEEP_STATE=1` for a phone holding a persona.
+  `run-agent-connect.js` reads logcat from the session's own serial.
+- **AVD boot.** In AVD mode the Appium caps `appium:avdLaunchTimeout` and
+  `appium:avdReadyTimeout` are 300000 (Appium's default is 60 s, which a second
+  emulator's cold boot overran).
+- **Two Android roles** (`run-vti-vetting.js`, `run-vti-approve.js`, with
+  `PLATFORMS=android,android`): `APPLICANT_ANDROID_UDID` / `VETTER_ANDROID_UDID`
+  and `MANAGER_ANDROID_UDID` / `APPROVER_ANDROID_UDID` (or the `_ANDROID_AVD`
+  forms) pick one device per role. **Unverified:** no android+android run of
+  these two scripts has been made; the role code goes through
+  `lib/keyringRoles.js`, whose Android paths were only exercised with one
+  Android role.
+- **Private lab APK (do not overwrite the shared `app/.env` or APK).** The
+  lab's DIDs are baked at native build time. Rather than swapping `app/.env`
+  (`use-stack.sh lab`), build from the lab env file directly:
+
+  ```bash
+  scripts/openvtc/local-vti-stack/use-stack.sh lab --private   # app/.env untouched
+  (cd app/android && ENVFILE=.env.lab ./gradlew assembleDebug) # react-native-config reads $ENVFILE
+  mkdir -p ~/lab-apk && cp app/android/app/build/outputs/apk/debug/app-debug.apk ~/lab-apk/keyring-lab.apk
+  ANDROID_APK=$HOME/lab-apk/keyring-lab.apk ANDROID_UDID=<serial> node run-agent-connect.js
+  ```
+
+  `ENVFILE` is relative to `app/` (or an absolute path). Copy the APK out
+  immediately: any later build in the checkout overwrites the one in `build/`.
+  `app/.env.lab` is gitignored.
+
 ## Store migration (`yarn e2e:migration`)
 
 Needs a baseline APK built from the `upgrade-baseline-p0` tag — the full
