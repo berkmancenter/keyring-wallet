@@ -28,6 +28,7 @@ import {
   evaluateStatements,
   statementFacts,
   encodeTicketUri,
+  isCommunityIdentityCheck,
   parseTicketUri,
   signDocumentProof,
   taskDigestMultibase,
@@ -1949,6 +1950,9 @@ export class VtiApplicant {
     // Credentials v1). Both name the members checked below.
     const statement = vettingStatementBody(credential)
     if (!statement) return
+    // A community's own identity check is not a vetter's statement, even from a
+    // community asked to vet: the inbox keeps it as evidence (receiveIssue).
+    if (isCommunityIdentityCheck(credential)) return
     const endorsement = statement.body
     const application = await this.store.getApplication(this.persona.communityDid)
     if (!application) return

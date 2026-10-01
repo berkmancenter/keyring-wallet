@@ -1146,6 +1146,7 @@
   "Community": {
     "CardMemberOf": "Membre de {{community}}",
     "CardVetterFor": "Vérificateur pour {{community}}",
+    "CardIdentityCheckedBy": "Identité vérifiée par {{community}}",
     "CardRoleIn": "{{role}} dans {{community}}",
     "RoleAdmin": "Administrateur",
     "RoleMember": "Membre",
@@ -1153,6 +1154,7 @@
     "CardCommunity": "Communauté",
     "CardRole": "Rôle",
     "CardSince": "Depuis",
+    "CardCheckedOn": "Vérifiée le",
     "CardUntil": "Valable jusqu’au",
     "CardFromCommunity": "Cette carte vient de {{community}}. Pour y renoncer, quittez la communauté.",
     "CardOpenCommunity": "Ouvrir {{community}}",

@@ -86,6 +86,43 @@ export function vettingStatementBody(credential: Record<string, unknown>): Vetti
 }
 
 /**
+ * The members only a vetter's vetted/1 statement carries: present together or
+ * absent together (the registry schema's `dependentRequired`). A community
+ * never holds the salt behind `identityCommitment`, so its own statement
+ * carries none of them (dtgwg-vsc-registry #24).
+ */
+export const VETTER_ONLY_STATEMENT_MEMBERS = [
+  'identityCommitment',
+  'cardDigestMultibase',
+  'declaredRelationship',
+] as const
+
+const issuerDidOf = (credential: Record<string, unknown>): string | undefined =>
+  typeof credential.issuer === 'string'
+    ? credential.issuer
+    : typeof asObject(credential.issuer)?.id === 'string'
+      ? (asObject(credential.issuer)!.id as string)
+      : undefined
+
+/**
+ * Whether `credential` is a community's own identity check: a vetted/1
+ * statement issued by the community its `value.community` names, carrying none
+ * of the vetter-only members (dtgwg-vsc-registry #24; tf #697). Its
+ * `taskContext` is the request in which the community recorded the check, not
+ * a vetting session, so it is evidence a community holds about a person and
+ * not a vetter's statement: none of the vetter's checks apply to it. Anything
+ * else — another issuer, or some of the vetter-only members — is read as a
+ * vetter's statement, as before. Says nothing about whether it verifies.
+ */
+export function isCommunityIdentityCheck(credential: Record<string, unknown>): boolean {
+  const read = vettingStatementBody(credential)
+  if (read?.shape !== 'vetted/1') return false
+  const community = read.body.community
+  if (typeof community !== 'string' || !community || issuerDidOf(credential) !== community) return false
+  return VETTER_ONLY_STATEMENT_MEMBERS.every((member) => read.body[member] === undefined)
+}
+
+/**
  * Why a vetting statement's shape is not one this reader accepts, or
  * undefined when it is: the type triple and context its shape requires, the
  * members every statement needs (`id`, `taskContext`, a parseable

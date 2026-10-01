@@ -135,7 +135,7 @@ export interface VtiCommunityStore {
 }
 
 export interface VtiHeldCredential {
-  kind: 'role' | 'vetter-grant' | 'vetting-statement' | 'other'
+  kind: 'role' | 'vetter-grant' | 'vetting-statement' | 'identity-check' | 'other'
   communityDid: string
   subjectDid: string
   credential: Record<string, unknown>

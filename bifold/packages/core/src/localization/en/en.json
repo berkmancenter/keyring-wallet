@@ -1208,6 +1208,7 @@
   "Community": {
     "CardMemberOf": "Member of {{community}}",
     "CardVetterFor": "Vetter for {{community}}",
+    "CardIdentityCheckedBy": "Identity checked by {{community}}",
     "CardRoleIn": "{{role}} in {{community}}",
     "RoleAdmin": "Admin",
     "RoleMember": "Member",
@@ -1215,6 +1216,7 @@
     "CardCommunity": "Community",
     "CardRole": "Role",
     "CardSince": "Since",
+    "CardCheckedOn": "Checked on",
     "CardUntil": "Valid until",
     "CardFromCommunity": "This card comes from {{community}}. To give it up, leave the community.",
     "CardOpenCommunity": "Open {{community}}",
