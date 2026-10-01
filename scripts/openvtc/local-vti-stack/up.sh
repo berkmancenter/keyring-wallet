@@ -76,7 +76,10 @@ if [ "${1:-}" = "--stop" ]; then stop_stack; exit 0; fi
 for bin in "$VTA_BIN" "$VTC_BIN" "$PNM_BIN" "$MEDIATOR_BIN" "$MEDIATOR_SETUP_BIN" "$WEBVH_BIN"; do
   [ -x "$bin" ] || { echo "missing: $bin — build it first (see README)"; exit 1; }
 done
-redis-cli ping >/dev/null 2>&1 || { echo "redis is not running: brew services start redis"; exit 1; }
+# REDIS_PORT: point the stack at a dedicated instance instead of the default
+# 6379 (a shared host's Redis may hold someone else's data in db0). Default unchanged.
+REDIS_PORT="${REDIS_PORT:-6379}"
+redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1 || { echo "redis is not running on port $REDIS_PORT: brew services start redis (macOS), or redis-server --port $REDIS_PORT --save \"\" (Linux)"; exit 1; }
 
 # Re-running this script re-provisions, and a running daemon holds a lock on the
 # store being rewritten ("FjallError: Locked"). So stop first, always.
@@ -141,7 +144,7 @@ FORCE_MEDIATOR=""
 # shellcheck disable=SC2086
 "$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol didcomm \
   --did-method peer --public-url "https://$MED_HOST" --mediator-url "https://$MED_HOST" \
-  --secret-storage file --ssl none --database-url redis://127.0.0.1/ \
+  --secret-storage file --ssl none --database-url "redis://127.0.0.1:$REDIS_PORT/" \
   --admin generate --listen-address 127.0.0.1:7037 \
   --config "$STACK_DIR/mediator/conf/mediator.toml" >/dev/null
 MED_DID=$(grep '^mediator_did' mediator/conf/mediator.toml | sed 's/.*did:\/\///; s/"$//')
@@ -184,8 +187,10 @@ cp "$TDK_SRC/crates/messaging/affinidi-messaging-mediator/conf/atm-functions.lua
 # Since tdk-rs #843 (our VTI-07) the mediator resolves `functions_file` against
 # the config file's own directory, and the working-directory form is a
 # deprecated fallback it warns about. The library sits beside mediator.toml.
-sed -i '' 's|^functions_file = "./conf/atm-functions.lua"|functions_file = "atm-functions.lua"|' \
+# `-i.bak` + rm: the one in-place form both BSD (macOS) and GNU sed accept.
+sed -i.bak 's|^functions_file = "./conf/atm-functions.lua"|functions_file = "atm-functions.lua"|' \
   "$STACK_DIR/mediator/conf/mediator.toml" 2>/dev/null || true
+rm -f "$STACK_DIR/mediator/conf/mediator.toml.bak"
 
 # Keep the queue limits at UPSTREAM DEFAULTS rather than whatever the
 # generating version happened to ship. `queued_send_messages_per_peer` did not
@@ -325,7 +330,8 @@ BOB_DID=$(setup_vta bob 8112 "$BOB_HOST")
 # the consent rule `approver-setup.sh` writes — `pnm approvals list` shows it —
 # and never evaluates it: the key borrow runs unheld and nothing says why
 # (2026-09-21). Enforcement is config-only; no pnm command sets it.
-sed -i '' '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
+sed -i.bak '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
+rm -f alice/config.toml.bak
 for n in alice community bob; do
   nohup "$VTA_BIN" --config "$n/config.toml" > "logs/$n.log" 2>&1 &
 done
