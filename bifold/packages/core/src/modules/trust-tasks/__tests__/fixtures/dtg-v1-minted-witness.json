@@ -1,0 +1,92 @@
+{
+  "README": "Minted by vtc-service/examples/mint_keyring_fixtures.rs at VTI 439a0333 (vta-service-v0.47.0): dtg-credentials 0.12.0 new_witnessed_vsc over witnessSession and witnessedRelationship, signed eddsa-jcs-2022 by a did:key witness. Not from a deployed witness.",
+  "parties": {
+    "applicant": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+    "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+    "vetter": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "witness": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt"
+  },
+  "witnessedRelationship": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN"
+    },
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "issuerScope": "pairwise",
+    "type": ["VerifiableCredential", "DTGCredential", "RelationshipCredential"],
+    "validFrom": "2026-09-30T19:00:00Z"
+  },
+  "witnessSession": {
+    "id": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "issuedAt": "2026-09-30T19:00:05Z",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "payload": {
+      "parties": [
+        "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+        "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN"
+      ]
+    },
+    "recipient": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt",
+    "threadId": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "type": "https://trusttasks.org/spec/witness/session/0.1"
+  },
+  "witnessStatement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+      "object": {
+        "digestMultibase": "zQmXhTCPnjuGdyMqWWfdwyqNW4D6banDLjnA9x6Kxzc9ecK"
+      },
+      "predicate": "https://registry.trustoverip.org/dtg/vsc/witnessed/1"
+    },
+    "issuer": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt",
+    "issuerScope": "public",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z22nKnkvrBYdxbXv9BwAjNPWG9DkNua7mRQAe2MxbDoP2xhbVDdAVSRXoTHZmbxjn3NKKsmqmmGe9Fcmeg71jqgG3",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt#z6MktPiWbFRRVqD9pY3DQvDHkRMkbKV4FhXxzxkLtLABZ6Rt"
+    },
+    "taskContext": "urn:uuid:6d8f0b2d-4f6b-4d8f-0b2d-6f8b0d2f4b6d",
+    "taskDigestMultibase": "zQmeEWybzMfJ54rdzYHndUpWEnTysjtxAAZetRzF8NEf2K5",
+    "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+    "validFrom": "2026-09-30T19:01:00Z"
+  },
+  "vettingStatement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+    "credentialSubject": {
+      "id": "did:key:z6MksaGY756infX67QbEV2F2Dvoe5UrhLgLy1bs7b8QkihBN",
+      "object": {
+        "value": {
+          "cardDigestMultibase": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          "claimsVerified": ["name.legal"],
+          "community": "did:key:z6MkkckEJvRiDoUSv2KFGPFuUoNjJbWTZUvWThqshF7g1u4p",
+          "declaredRelationship": "communityColleague",
+          "documentClasses": ["passport"],
+          "identityCommitment": "zQmYtUc4iTCbbfVSDNKvtQqrfyezPPnFvE33wFmutw9PBBk",
+          "livenessConfirmed": true,
+          "method": "inPerson"
+        }
+      },
+      "predicate": "https://registry.trustoverip.org/dtg/vsc/vetted/1"
+    },
+    "id": "urn:uuid:2c4e6a8c-0e2a-4c6e-8a0c-4e6a8c0e2a4c",
+    "issuer": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB",
+    "issuerScope": "directed",
+    "proof": {
+      "created": "2026-10-01T01:21:56Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z3Rg3yStP9wnCXUbjeBr2LT6dv9UR5MH9iid6fuQyqoiqMQAAbAZ9ciVkd6LQ7GZ2jLLnh3V244pziUEAUty9617W",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB#z6MkjxNbMohku9aCX9pw5WLXkfbF2nZaivTm3XgPeDp3ABtB"
+    },
+    "taskContext": "urn:uuid:9b1d3f5a-7c9e-4b2d-8f0a-1c3e5a7b9d2f",
+    "taskDigestMultibase": "zQmYnpUeaB9Mg4pgj3eSzybRFF89gRv81xBMT6SMZbjesqr",
+    "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+    "validFrom": "2026-09-30T20:05:00Z",
+    "validUntil": "2026-10-30T20:05:00Z"
+  }
+}

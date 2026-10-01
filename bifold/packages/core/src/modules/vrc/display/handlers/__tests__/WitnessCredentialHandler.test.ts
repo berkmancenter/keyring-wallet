@@ -4,6 +4,7 @@
  */
 import { witnessCredentialHandler } from '../WitnessCredentialHandler'
 import { W3cCredentialJson } from '../../types'
+import minted from '../../../../trust-tasks/__tests__/fixtures/dtg-v1-minted-witness.json'
 
 function vwc(witnessContext: Record<string, unknown>): W3cCredentialJson {
   return {
@@ -16,9 +17,9 @@ function vwc(witnessContext: Record<string, unknown>): W3cCredentialJson {
 }
 
 function localityField(credential: W3cCredentialJson) {
-  return witnessCredentialHandler.extractFields(credential).find((f) => (f as { name?: string }).name === 'locality') as
-    | { value: string }
-    | undefined
+  return witnessCredentialHandler
+    .extractFields(credential)
+    .find((f) => (f as { name?: string }).name === 'locality') as { value: string } | undefined
 }
 
 describe('WitnessCredentialHandler locality field', () => {
@@ -28,8 +29,12 @@ describe('WitnessCredentialHandler locality field', () => {
   })
 
   it('renders a declined-by-holder reason distinctly from an interrupted one', () => {
-    const declined = localityField(vwc({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder' }))
-    const interrupted = localityField(vwc({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' }))
+    const declined = localityField(
+      vwc({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder' })
+    )
+    const interrupted = localityField(
+      vwc({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' })
+    )
     expect(declined?.value).toBe('Witness.VWC.LocalityDeclined')
     expect(interrupted?.value).toBe('Witness.VWC.LocalityInterrupted')
     expect(declined?.value).not.toBe(interrupted?.value)
@@ -52,5 +57,13 @@ describe('WitnessCredentialHandler locality field', () => {
   it('falls back to the legacy nested shape only when no flat locality* members exist', () => {
     const field = localityField(vwc({ localityVerification: { confirmed: true } }))
     expect(field?.value).toBe('Witness.VWC.LocalityConfirmed')
+  })
+})
+
+// 228: a witnessed/1 VWC (DTG Credentials v1) carries no WitnessCredential type.
+describe('WitnessCredentialHandler with a witnessed/1 VWC', () => {
+  it('handles a witnessed/1 statement, and not a vetting statement', () => {
+    expect(witnessCredentialHandler.canHandle(minted.witnessStatement as unknown as W3cCredentialJson)).toBe(true)
+    expect(witnessCredentialHandler.canHandle(minted.vettingStatement as unknown as W3cCredentialJson)).toBe(false)
   })
 })

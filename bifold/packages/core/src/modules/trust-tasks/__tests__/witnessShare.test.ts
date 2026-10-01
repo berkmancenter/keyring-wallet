@@ -233,8 +233,8 @@ describe('the inbound witness-share (verify the bundle, store, receipt)', () => 
     expect(fake.sentMessages).toHaveLength(1)
     const receipt = fake.sentMessages[0].document as { type: string; payload: { vwcDigestMultibase: string } }
     expect(receipt.type).toBe(witnessShare.RESPONSE_TYPE_URI)
-    const vwc = ((share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } })
-      .presentation.verifiableCredential)[0]
+    const vwc = (share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } }).presentation
+      .verifiableCredential[0]
     expect(receipt.payload.vwcDigestMultibase).toBe(digestMultibase(vwc))
     expect(
       (fake.logger.info as jest.Mock).mock.calls.some((c) => String(c[0]).includes('witness-share verified and stored'))
@@ -247,7 +247,8 @@ describe('the inbound witness-share (verify the bundle, store, receipt)', () => 
     await deliver(
       fake,
       genuineShare((payload) => {
-        const vwc = (payload.presentation as { verifiableCredential: Record<string, unknown>[] }).verifiableCredential[0]
+        const vwc = (payload.presentation as { verifiableCredential: Record<string, unknown>[] })
+          .verifiableCredential[0]
         // the counterfeit: my own VWC bounced back at me
         ;(vwc.credentialSubject as Record<string, unknown>).id = MY_REL_DID
       })
@@ -299,8 +300,8 @@ describe('the inbound witness-share (verify the bundle, store, receipt)', () => 
     const fake = makeFakeAgent()
     setupTrustTasksInbound(fake.agent)
     const share = genuineShare()
-    const vwc = ((share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } })
-      .presentation.verifiableCredential)[0]
+    const vwc = (share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } }).presentation
+      .verifiableCredential[0]
     ;(fake.agent as { w3cCredentials: { getAll: jest.Mock } }).w3cCredentials.getAll.mockResolvedValue([
       { firstCredential: vwc },
     ] as never)
@@ -319,8 +320,8 @@ describe('the witness-share receipt (correlate against our sent share)', () => {
     // receipt whose digest names the same VWC. Retention of our own share is
     // exercised through the send path in e2e; here we retain it directly.
     const share = genuineShare()
-    const vwc = ((share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } })
-      .presentation.verifiableCredential)[0]
+    const vwc = (share.payload as { presentation: { verifiableCredential: Record<string, unknown>[] } }).presentation
+      .verifiableCredential[0]
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getTrustTasksService } = require('../ceremony') as typeof import('../ceremony')
     const service = getTrustTasksService(fake.agent)
@@ -349,11 +350,96 @@ describe('the witness-share receipt (correlate against our sent share)', () => {
       payload: { vwcDigestMultibase: digestMultibase(vwc) },
     })
 
-    expect(
-      (fake.logger.warn as jest.Mock).mock.calls.some((c) => String(c[0]).includes('receipt not consumed'))
-    ).toBe(false)
+    expect((fake.logger.warn as jest.Mock).mock.calls.some((c) => String(c[0]).includes('receipt not consumed'))).toBe(
+      false
+    )
     expect(
       (fake.logger.info as jest.Mock).mock.calls.some((c) => String(c[0]).includes('witness-share receipt matched'))
     ).toBe(true)
+  })
+})
+
+// ---- 228: a witnessed/1 VWC (DTG Credentials v1) --------------------------
+
+/**
+ * Turn the share's VWC into DTG Credentials v1's witnessed/1 shape (VTI 0.47.0;
+ * tf witness/session/submit as recast by #691): a StatementCredential under the
+ * registry context, the task citation at the top level, and NO `parties` — they
+ * are in the witness/session document it cites. `initiating` replaces the
+ * session document when given, and the citation is computed over it.
+ */
+function asWitnessedV1(payload: Record<string, unknown>, initiating?: Record<string, unknown>) {
+  const evidence = payload.outcomeEvidence as { initiating: Record<string, unknown>; terminal: Record<string, unknown> }
+  if (initiating) evidence.initiating = initiating
+  const presentation = payload.presentation as { verifiableCredential: Record<string, unknown>[] }
+  const old = presentation.verifiableCredential[0]
+  const vwc: Record<string, unknown> = {
+    '@context': ['https://www.w3.org/ns/credentials/v2', 'https://registry.trustoverip.org/dtg/context/v1'],
+    type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
+    issuer: old.issuer,
+    issuerScope: 'public',
+    validFrom: '2026-08-19T00:00:04Z',
+    taskContext: SESSION_ID,
+    taskDigestMultibase: taskDigestMultibase(evidence.initiating),
+    credentialSubject: {
+      id: PEER_REL_DID,
+      predicate: 'https://registry.trustoverip.org/dtg/vsc/witnessed/1',
+      object: { digestMultibase: 'zQmXhTCPnjuGdyMqWWfdwyqNW4D6banDLjnA9x6Kxzc9ecK' },
+    },
+    proof: old.proof,
+  }
+  presentation.verifiableCredential = [vwc]
+  evidence.terminal = { ...evidence.terminal, payload: { vwc, vwcDigestMultibase: digestMultibase(vwc) } }
+}
+
+describe('the inbound witness-share of a witnessed/1 VWC', () => {
+  test('is verified and stored: the parties come from the session document it cites', async () => {
+    const fake = makeFakeAgent()
+    setupTrustTasksInbound(fake.agent)
+    await deliver(
+      fake,
+      genuineShare((payload) => asWitnessedV1(payload))
+    )
+    expect(fake.storedCredentials).toHaveLength(1)
+    const receipt = fake.sentMessages[0].document as { type: string }
+    expect(receipt.type).toBe(witnessShare.RESPONSE_TYPE_URI)
+  })
+
+  test('is refused when the session document it cites names other parties', async () => {
+    const fake = makeFakeAgent()
+    setupTrustTasksInbound(fake.agent)
+    // The citation is recomputed over this document, so the digest binds:
+    // only the party check can refuse it.
+    await deliver(
+      fake,
+      genuineShare((payload) => {
+        const evidence = payload.outcomeEvidence as { initiating: Record<string, unknown> }
+        asWitnessedV1(payload, {
+          ...evidence.initiating,
+          payload: { parties: [PEER_REL_DID, 'did:peer:0zSomeoneElse'] },
+        })
+      })
+    )
+    expect(fake.storedCredentials).toHaveLength(0)
+    const error = fake.sentMessages[0].document as { type: string; payload: { message: string } }
+    expect(error.type).toContain('trust-task-error')
+    expect(error.payload.message).toContain('parties do not name')
+  })
+
+  test('is refused when its citation does not reproduce over the session document', async () => {
+    const fake = makeFakeAgent()
+    setupTrustTasksInbound(fake.agent)
+    await deliver(
+      fake,
+      genuineShare((payload) => {
+        asWitnessedV1(payload)
+        const evidence = payload.outcomeEvidence as { initiating: Record<string, unknown> }
+        evidence.initiating = {
+          ...evidence.initiating,
+          payload: { parties: [PEER_REL_DID, MY_REL_DID, 'did:peer:0zX'] },
+        }
+      })
+    )
+    expect(fake.storedCredentials).toHaveLength(0)
   })
 })

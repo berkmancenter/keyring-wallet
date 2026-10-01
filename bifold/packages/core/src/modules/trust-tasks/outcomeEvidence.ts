@@ -32,6 +32,7 @@ import {
 
 import { getTrustTasksService } from './ceremony'
 import { digestBytesEqual, taskDigestMultibase, verifyDocumentProof } from './documentProof'
+import { taskCitationOf } from './taskCitation'
 
 const LOG_PREFIX = '[TrustTasks:Evidence]'
 const ERROR_TYPE_MARKER = '/trust-task-error/'
@@ -65,10 +66,8 @@ export interface AssembleOptions {
  * matching evidence, and shipping a hollow bundle would misrepresent one.
  */
 export async function assembleVwcPresentation(agent: Agent, options: AssembleOptions): Promise<VwcPresentationBundle> {
-  const subject = Array.isArray(options.vwc.credentialSubject)
-    ? (options.vwc.credentialSubject[0] as Record<string, unknown>)
-    : (options.vwc.credentialSubject as Record<string, unknown> | undefined)
-  const taskContext = String(subject?.taskContext ?? '')
+  // Top level (DTG Credentials v1's witnessed/1) or in the subject (before it).
+  const taskContext = taskCitationOf(options.vwc).taskContext ?? ''
   if (!taskContext) throw new Error('credential carries no taskContext')
 
   const service = getTrustTasksService(agent)
@@ -133,7 +132,10 @@ export interface VerifyBundleOptions {
 }
 
 /** Run the Outcome-Interpretability pairing algorithm over a bundle. */
-export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyBundleOptions): Promise<EvidenceVerdict> {
+export async function verifyVwcPresentationBundle(
+  agent: Agent,
+  options: VerifyBundleOptions
+): Promise<EvidenceVerdict> {
   const failures: string[] = []
   const { bundle } = options
 
@@ -223,13 +225,10 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
   }
 
   // 3–7. The pairing checklist.
-  const subject = vwc
-    ? Array.isArray(vwc.credentialSubject)
-      ? (vwc.credentialSubject[0] as Record<string, unknown>)
-      : (vwc.credentialSubject as Record<string, unknown> | undefined)
-    : undefined
-  const taskContext = String(subject?.taskContext ?? '')
-  const taskDigest = String(subject?.taskDigestMultibase ?? '')
+  // Top level (DTG Credentials v1's witnessed/1) or in the subject (before it).
+  const citation = taskCitationOf(vwc)
+  const taskContext = citation.taskContext ?? ''
+  const taskDigest = citation.taskDigestMultibase ?? ''
   const { initiating, terminal } = bundle.outcomeEvidence
 
   if (!taskContext) failures.push('credential carries no taskContext')
@@ -267,9 +266,6 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
     failures,
     // What this verification deliberately does not settle — named, per the
     // spec's verdict style, so no caller mistakes silence for coverage.
-    residuals: [
-      'witness identity legibility (issuer-to-witness mapping is registry/naming work)',
-      'revocation status',
-    ],
+    residuals: ['witness identity legibility (issuer-to-witness mapping is registry/naming work)', 'revocation status'],
   }
 }

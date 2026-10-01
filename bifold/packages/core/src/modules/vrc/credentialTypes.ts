@@ -19,6 +19,14 @@ export const RELATIONSHIP_CREDENTIAL_TYPE = 'RelationshipCredential'
 export const RELATIONSHIP_CARD_TYPE = 'RelationshipCard'
 export const RCARD_TEMPLATE_TYPE = 'RCardTemplate'
 export const WITNESS_CREDENTIAL_TYPE = 'WitnessCredential'
+export const STATEMENT_CREDENTIAL_TYPE = 'StatementCredential'
+/**
+ * The registry predicate a DTG Credentials v1 witness credential states
+ * (VTI 0.47.0 / #1859, tf witness/session/submit as recast by #691): the VWC
+ * is a `StatementCredential` under it, and no longer carries the
+ * `WitnessCredential` type.
+ */
+export const WITNESSED_V1_PREDICATE = 'https://registry.trustoverip.org/dtg/vsc/witnessed/1'
 
 /** A credential JSON, a `type` array, or a single type string. */
 export type CredentialTypeInput = unknown
@@ -68,9 +76,40 @@ export function isRCardTemplate(input: CredentialTypeInput): boolean {
   return hasCredentialTypeName(input, RCARD_TEMPLATE_TYPE)
 }
 
-/** WitnessCredential — a VWC issued by a witness for a witnessed exchange. */
+/**
+ * The `predicate` of a credential's (first) subject, from its JSON or from a
+ * Credo credential instance (whose subject keeps members other than `id` in
+ * `claims`). Undefined when the input is not a credential object.
+ */
+function subjectPredicateOf(input: CredentialTypeInput): string | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const subjects = (input as { credentialSubject?: unknown }).credentialSubject
+  const subject = (Array.isArray(subjects) ? subjects[0] : subjects) as
+    | { predicate?: unknown; claims?: { predicate?: unknown } }
+    | undefined
+  const predicate = subject?.predicate ?? subject?.claims?.predicate
+  return typeof predicate === 'string' ? predicate : undefined
+}
+
+/**
+ * A DTG Credentials v1 witness credential: a `StatementCredential` (matched
+ * exactly — a vetting statement is one too) stating the witnessed/1
+ * predicate. Needs the credential itself: a bare type list cannot say.
+ */
+export function isWitnessedStatement(input: CredentialTypeInput): boolean {
+  return (
+    getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE) &&
+    subjectPredicateOf(input) === WITNESSED_V1_PREDICATE
+  )
+}
+
+/**
+ * A VWC issued by a witness for a witnessed exchange, in either shape: the
+ * `WitnessCredential` type, or a witnessed/1 statement (`isWitnessedStatement`,
+ * which needs the credential, not just its types).
+ */
 export function isWitnessCredential(input: CredentialTypeInput): boolean {
-  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE)
+  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE) || isWitnessedStatement(input)
 }
 
 /**
