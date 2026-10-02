@@ -9,7 +9,8 @@
  *
  * - `status` / `setup`: the notification permission, read or requested.
  * - `toggle(true)`: make this phone wakeable by its agent (`enablePushWake`).
- * - `toggle(false)`: stop its agent waking it (`device/set-wake` with no handle).
+ * - `toggle(false)`: stop its agent waking it (`device/set-wake` with no handle),
+ *   and withdraw this install's token from the platform push service.
  */
 import type { Config } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
@@ -25,6 +26,8 @@ export interface PushConfigDeps {
   requestPermission(): Promise<PermissionState>
   enableWake(agent: Agent): Promise<PushWakeOutcome>
   clearWake(agent: Agent): Promise<unknown>
+  /** Withdraw this install's token from the platform push service. */
+  stopPlatformPush(): Promise<void>
   log(message: string, data?: Record<string, unknown>): void
 }
 
@@ -47,6 +50,15 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
         }
       } catch (e) {
         deps.log('push wake: failed', { enable: state, error: e instanceof Error ? e.message : String(e) })
+      }
+      // Turned off: the platform push service forgets this install too, even
+      // if the agent could not be told (it may be unreachable or unlinked).
+      if (!state) {
+        try {
+          await deps.stopPlatformPush()
+        } catch (e) {
+          deps.log('push platform: stop failed', { error: e instanceof Error ? e.message : String(e) })
+        }
       }
     },
   }

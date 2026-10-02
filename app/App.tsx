@@ -36,6 +36,7 @@ import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
 import { onPushWake, openApprovalsOnTap } from '@/push/pushHandlers'
+import PushStartup from '@/push/PushStartup'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
@@ -48,7 +49,10 @@ initLanguages(localization)
 
 // A push is a contentless wake-up (docs/plans/push-notifications-plan.md §2):
 // log it, never open the agent from here. None arrive unless the build names a
-// push gateway and the person turned notifications on.
+// push gateway and the person turned notifications on. Registering these
+// handlers contacts nobody: Firebase's automatic start is off (firebase.json),
+// and the platform push service first hears of this install when the person
+// turns notifications on (src/push/pushPlatform.ts).
 messaging().setBackgroundMessageHandler(async (message) =>
   onPushWake('background', message, (m, d) => BCLogger.info(m, d))
 )
@@ -100,6 +104,7 @@ const App = () => {
     <ErrorBoundaryWrapper logger={BCLogger} onEscape={leaveFailedScreen}>
       <ContainerProvider value={bcwContainer}>
         <StoreProvider initialState={initialState} reducer={reducer}>
+          <PushStartup />
           <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>
             <NavContainer navigationRef={navigationRef}>
               <AnimatedComponentsProvider value={animatedComponents}>
