@@ -7,6 +7,7 @@
 # Run by up.sh before it stops or starts anything; `up.sh --check` runs only this.
 # Same env as up.sh: STACK_DIR VTI_SRC WEBVH_SRC TDK_SRC PNM_BIN REDIS_PORT REDIS_DB.
 #   LAB_ALLOW_REDIS_DB0=1   allow Redis db0 on the default port 6379 (see below)
+#   LAB_ALLOW_LIVE_DOMAINS=1  the Mac stack owner's override; implies the db0 allowance
 #   LAB_MIN_MEM_GIB=20      MemAvailable below this is a warning
 set -uo pipefail
 
@@ -25,17 +26,31 @@ pass() { echo "  ok    $*"; }
 warn() { echo "  WARN  $*"; }
 fail() { echo "  FAIL  $*" >&2; fails=$((fails+1)); }
 section() { printf '\n== %s\n' "$*"; }
-version_of() { # binary -> first line of --version, or "(no --version)"
+# macOS has no `timeout` unless Homebrew coreutils provides it (gtimeout).
+TMO=""
+if command -v timeout >/dev/null; then TMO=timeout; elif command -v gtimeout >/dev/null; then TMO=gtimeout; fi
+version_of() { # binary [--no-version] -> first line of --version, or size and mtime
   local v
-  v=$(timeout 5 "$1" --version 2>/dev/null | head -1) || true
-  echo "${v:-(no --version output)}"
+  if [ "${2:-}" != "--no-version" ] && [ -n "$TMO" ]; then
+    v=$("$TMO" 5 "$1" --version 2>/dev/null | head -1) || true
+    [ -n "$v" ] && { echo "$v"; return; }
+  fi
+  # pnm and mediator-setup reject --version ("unexpected argument"), and without
+  # a timeout binary a binary that ignores it could hang: describe the file instead.
+  local sz mt
+  sz=$(stat -c %s "$1" 2>/dev/null || stat -f %z "$1" 2>/dev/null || echo "?")
+  mt=$(stat -c %y "$1" 2>/dev/null | cut -d. -f1 || true)
+  [ -n "$mt" ] || mt=$(stat -f %Sm -t '%Y-%m-%d %H:%M:%S' "$1" 2>/dev/null || echo "?")
+  echo "no --version: $sz bytes, modified $mt"
 }
+[ -n "$TMO" ] || echo "note: no timeout/gtimeout on PATH (macOS: brew install coreutils); --version is not queried, file size and mtime are shown instead"
 
 section "binaries"
 for bin in "$VTI_SRC/target/debug/vta" "$VTI_SRC/target/debug/vtc" "$PNM_BIN" \
            "$TDK_SRC/target/debug/mediator" "$TDK_SRC/target/debug/mediator-setup" \
            "$WEBVH_SRC/target/debug/did-hosting-daemon"; do
-  if [ -x "$bin" ]; then pass "$bin  [$(version_of "$bin")]"
+  case "$bin" in */pnm|*/pnm-*|*/mediator-setup) vflag=--no-version ;; *) vflag="" ;; esac
+  if [ -x "$bin" ]; then pass "$bin  [$(version_of "$bin" $vflag)]"
   else fail "missing: $bin: build it first (see README)"; fi
 done
 cnm="$VTI_SRC/target/debug/cnm"
@@ -56,7 +71,7 @@ if [ ! -f "$NG" ]; then
   else fail "no $NG: create it with $HERE/ngrok-lab-config.sh (see README, 'ngrok with your own account')"; fi
 else
   mode=$(stat -c %a "$NG" 2>/dev/null || stat -f %Lp "$NG" 2>/dev/null || echo "?")
-  [ "$mode" = 600 ] && pass "$NG mode 0600" || fail "$NG mode is $mode, must be 600 (it holds an authtoken): chmod 600 $NG"
+  [ "$mode" = 600 ] && pass "$NG mode 0600" || fail "$NG mode is $mode, must be 600 (it holds an authtoken). Run: chmod 600 $NG"
   if hosts=$("$HERE/ngrok-lab-config.sh" --hosts "$NG" 2>&1); then
     pass "six named endpoints (alice community bob vtc dids mediator)"
     # --hosts prints ALICE_HOST=... lines only; show the hostnames, nothing else.
@@ -74,11 +89,13 @@ else
 fi
 # db0 of a shared Redis holds other sessions' data and the mediator's keys are
 # unprefixed. Refuse it (unset means db0) on the default port; a dedicated
-# instance on another REDIS_PORT is yours, so db0 there is fine.
+# instance on another REDIS_PORT is yours, so db0 there is fine. The Mac stack
+# has always used db0 on 6379: its owner sets LAB_ALLOW_LIVE_DOMAINS=1, which
+# allows it, so the lab path (no override) keeps the refusal.
 case "$REDIS_DB" in
   ""|0)
-    if [ "$REDIS_PORT" = 6379 ] && [ "${LAB_ALLOW_REDIS_DB0:-}" != "1" ]; then
-      fail "REDIS_DB is ${REDIS_DB:-unset} (db0) on the shared default port 6379: set REDIS_DB=<1-15> (the lab uses 5), or REDIS_PORT=<dedicated instance>; LAB_ALLOW_REDIS_DB0=1 overrides"
+    if [ "$REDIS_PORT" = 6379 ] && [ "${LAB_ALLOW_REDIS_DB0:-}" != "1" ] && [ "${LAB_ALLOW_LIVE_DOMAINS:-}" != "1" ]; then
+      fail "REDIS_DB is ${REDIS_DB:-unset} (db0) on the shared default port 6379: set REDIS_DB=<1-15> (the lab uses 5), or REDIS_PORT=<dedicated instance>; LAB_ALLOW_REDIS_DB0=1 overrides (LAB_ALLOW_LIVE_DOMAINS=1, the Mac stack owner's override, implies it)"
     else pass "REDIS_DB=${REDIS_DB:-0} on port $REDIS_PORT (allowed)"; fi ;;
   *) pass "REDIS_DB=$REDIS_DB" ;;
 esac
