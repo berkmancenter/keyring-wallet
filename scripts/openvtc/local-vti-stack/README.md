@@ -135,6 +135,52 @@ Self-test: `./ngrok-lab-config.sh --self-test`.
 ./up.sh --stop
 ```
 
+### Checking first
+
+`./up.sh --check` runs only `preflight.sh`: read-only, it starts and stops
+nothing. It checks the binaries (printing their versions), python >= 3.8, the
+lab `ngrok.yml` (mode 0600, the six named endpoints; hostnames shown, nothing
+else), Redis and `REDIS_DB`, the stack's ports, MemAvailable (warning under 20
+GiB, `LAB_MIN_MEM_GIB` to change) and, on Linux, ImageMagick for the e2e. A
+real `up.sh` runs the same checks before it stops or starts anything. A port
+held by a process not started from `$STACK_DIR` fails the check, since `up.sh`
+stops whatever listens on the stack's ports.
+
+**Redis db0 is refused.** `REDIS_DB` unset or `0` on the default port 6379 fails
+the preflight (db0 of a shared Redis holds other sessions' data). Use
+`REDIS_DB=5`, or a dedicated instance via `REDIS_PORT` (db0 there is allowed),
+or `LAB_ALLOW_REDIS_DB0=1`. `./test-up.sh` covers the guards offline.
+
+### Running the e2e against it
+
+`up.sh` writes `$STACK_DIR/e2e.env` and prints it: `PNM_HOME=$STACK_DIR/pnm-bob`,
+`VTI_SECURE_STORE=file`, `KEYRING_COMMUNITY_DID=<VTC DID>`. Load it before the
+runners: `set -a; . ~/vti-stack/e2e.env; set +a`. It is a separate file because
+the stack scripts `source` `stack.env`, and a `PNM_HOME` there would override the
+profile they pick. (`VTI_SECURE_STORE=file` is the Linux setting; harmless on macOS.)
+
+Order for the release-gate runners on one stack and one emulator:
+
+1. `E2E_KEEP_APP=1 node e2e/run-vta-link.js`, then `node e2e/run-vta-approvals.js`.
+   Approvals needs the app linked and left installed, and a phone with no stale
+   approval card (relink if one is left).
+2. Re-run `run-vta-link.js` before `run-vti-invite.js`: the invite run wants a
+   freshly linked phone.
+3. `INVITE_VIA=door E2E_CRITERIA=flip node e2e/run-vti-invite.js`. The lab's
+   criterion asks for one statement, so the door run defers
+   (`vetting:statements:1`) unless the runner may flip the criteria.
+4. The other gate runners (agent-segments, push-off probe, lock probe) only need
+   a linked phone.
+
+**After a `flip` run, check the criterion.** The runner deletes `vetted-member`,
+and in its `finally` calls `invite-persona.sh --restore-criteria`, which
+re-publishes `$STACK_DIR/criterion.json`. The runner swallows a failure of that
+step, and on 2026-10-01/02 the published criterion differed after a flip run
+(cause not established). What is restored is whatever `criterion.json` holds at
+that moment, not what was published before. To put it back by hand (same file,
+idempotent): `./invite-persona.sh --restore-criteria`, or `./community-setup.sh`,
+and look for `vetting criterion restored` / `criterion.json` in the output.
+
 ## What bites, and why the script does what it does
 
 - **`RUST_MIN_STACK=33554432` on every VTA and VTC.** `vta-service` 0.28.0

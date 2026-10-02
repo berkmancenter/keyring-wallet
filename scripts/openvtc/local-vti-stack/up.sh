@@ -610,8 +610,21 @@ MEDIATOR_URL=https://$MED_HOST
 DIDS_URL=https://$DIDS_HOST
 EOF
 
+# The e2e runners need three settings that nothing else records. Kept apart from
+# stack.env on purpose: invite-persona.sh, community-setup.sh and stack-health.sh
+# `source` stack.env, and PNM_HOME there would override the profile they choose.
+# Use it as `set -a; . ~/vti-stack/e2e.env; set +a` before the runners.
+cat > e2e.env <<EOF
+export PNM_HOME=$STACK_DIR/pnm-bob
+export VTI_SECURE_STORE=file
+export KEYRING_COMMUNITY_DID=$VTC_DID
+EOF
+
 log "up"
 cat stack.env
+echo
+echo "e2e env ($STACK_DIR/e2e.env; set -a; . it before the e2e runners):"
+sed 's/^export /  /' e2e.env
 cat <<EOF
 
 Next:
