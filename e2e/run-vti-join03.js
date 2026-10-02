@@ -96,6 +96,13 @@ try {
   await scrollToTestId(d, "JoinWaysTitle", 4).catch(() => undefined);
   await screenshot(d, `join03-${TAG}-card`);
   await dumpSource(d, `join03-${TAG}-card`);
+  if (MODE === "view") {
+    // The end of the page too: what scrolls into reach below the first screen.
+    const end = await scrollToTestId(d, "JoinScanCommunity", 6).catch(() => undefined);
+    log(`end of the page: JoinScanCommunity ${end ? "reached" : "NOT reached"}, JoinActions ${(await existsTestId(d, "JoinActions", 1000)) ? "present" : "absent"}`);
+    await screenshot(d, `join03-${TAG}-card-end`);
+    await dumpSource(d, `join03-${TAG}-card-end`);
+  }
   if (card.JoinAsks || card.JoinNoInvitationBypass) throw new Error("the 0.2 card (JoinAsks / JoinNoInvitationBypass) is shown for a 0.3 community");
 
   if (MODE === "notaccepting") {
