@@ -83,6 +83,46 @@ sed -i '/^  vtc:/,+3d' "$T/stack/ngrok.yml"
 run_pf REDIS_DB=5
 [ "$rc" = 1 ] && case "$out" in *vtc*) true ;; *) false ;; esac && ok "missing vtc endpoint refused" || bad "missing endpoint rc=$rc"
 
+# ---- the Mac live stack: flow-form tunnels, extra tunnels, db0 on 6379, mode 644.
+# Fixture only; "macOS paths unchanged once LAB_ALLOW_LIVE_DOMAINS=1 is set" is checked here.
+echo "preflight: Mac-style live config (fixture, stubs)"
+MAC="$T/mac"; mkdir -p "$MAC"
+cat > "$MAC/ngrok.yml" <<'YML'
+version: "3"
+agent:
+  authtoken: not-a-real-token
+tunnels:
+  alice: { proto: http, addr: 8110, domain: keyring-vti-alice.ngrok.app }
+  community: { proto: http, addr: 8111, domain: keyring-vti-community.ngrok.app }
+  bob: { proto: http, addr: 8112, domain: keyring-vti-bob.ngrok.app }
+  vtc: { proto: http, addr: 8200, domain: keyring-vti-vtc.ngrok.app }
+  dids: { proto: http, addr: 8534, domain: keyring-vti-dids.ngrok.app }
+  mediator: { proto: http, addr: 7037, domain: keyring-vti-mediator.ngrok.app }
+  extra-a: { proto: http, addr: 9001, domain: keyring-vti-extra-a.ngrok.app }
+  extra-b: { proto: http, addr: 9002, domain: keyring-vti-extra-b.ngrok.app }
+  extra-c: { proto: tcp, addr: 9003 }
+YML
+chmod 644 "$MAC/ngrok.yml"
+run_pf STACK_DIR="$MAC" LAB_ALLOW_LIVE_DOMAINS=1
+[ "$rc" = 1 ] && case "$out" in *"chmod 600 $MAC/ngrok.yml"*) true ;; *) false ;; esac && ok "mode 644 fails and prints the exact chmod 600 command" || bad "644 message (rc=$rc): $out"
+case "$out" in *"missing a tunnel"*|*"not a hostname"*) bad "flow-form fixture not parsed: $out" ;; *) ok "flow-form tunnels parse under the override" ;; esac
+case "$out" in *"db0"*"refused"*|*"REDIS_DB is"*) bad "db0 refused under the override" ;; *) ok "db0 on 6379 not refused under the override" ;; esac
+chmod 600 "$MAC/ngrok.yml"
+run_pf STACK_DIR="$MAC" LAB_ALLOW_LIVE_DOMAINS=1
+[ "$rc" = 0 ] && ok "Mac fixture passes with the one override (mode 600, db0 on 6379, REDIS_DB unset)" || bad "Mac fixture rc=$rc: $out"
+case "$out" in *"keyring-vti-alice.ngrok.app"*) ok "live hostnames listed" ;; *) bad "no hostnames" ;; esac
+run_pf STACK_DIR="$MAC"
+[ "$rc" = 1 ] && case "$out" in *"live shared stack"*) true ;; *) false ;; esac && ok "without the override the keyring-vti-* guard still refuses" || bad "guard under no override (rc=$rc)"
+run_pf STACK_DIR="$MAC" LAB_ALLOW_LIVE_DOMAINS=1 REDIS_DB=0 REDIS_PORT=6379
+[ "$rc" = 0 ] && ok "explicit REDIS_DB=0 on 6379 passes under the override" || bad "explicit db0 rc=$rc"
+sed 's/keyring-vti-/lab-/' "$MAC/ngrok.yml" > "$T/stack/ngrok.yml"
+run_pf REDIS_PORT=6379
+[ "$rc" = 1 ] && case "$out" in *"(db0) on the shared default port"*) true ;; *) false ;; esac && ok "lab path (no override) still refuses db0 on 6379" || bad "lab path db0 rc=$rc"
+case "$("$HERE/ngrok-lab-config.sh" --tunnels "$MAC/ngrok.yml" | tr '\n' ' ')" in
+  "alice community bob vtc dids mediator extra-a extra-b extra-c ") ok "--tunnels names all nine tunnels up.sh would start under the override" ;;
+  *) bad "--tunnels on the Mac fixture" ;;
+esac
+
 echo "up.sh --check: runs only preflight"
 out=$(env -i PATH="$STUB:$PATH" HOME="$T/home" STACK_DIR="$T/stack" VTI_SRC="$T/vti" WEBVH_SRC="$T/webvh" TDK_SRC="$T/tdk" PNM_BIN="$STUB/pnm" REDIS_DB=5 "$HERE/up.sh" --check 2>&1); rc=$?
 case "$out" in *"== binaries"*"preflight:"*) ok "--check printed the preflight report (rc=$rc)" ;; *) bad "--check: $out" ;; esac
