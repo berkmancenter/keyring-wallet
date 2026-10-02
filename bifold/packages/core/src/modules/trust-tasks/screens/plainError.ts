@@ -66,6 +66,11 @@ const JOIN_REFUSALS: Record<string, string> = {
   alreadyDecided: 'Errors.AlreadyDecided',
   notFound: 'Errors.NothingOpen',
   notAwaitingEvidence: 'Errors.NotAwaitingEvidence',
+  // join-requests/submit/0.3: the community's criteria decide.
+  criterionUnknown: 'Errors.JoinChanged',
+  notAccepting: 'Errors.JoinNotAccepting',
+  presentationInvalid: 'Errors.JoinPresentationInvalid',
+  policyUnsatisfied: 'Errors.JoinPolicyUnsatisfied',
 }
 
 /** Nothing to reach: a wrong address, a service that is down, no network. */

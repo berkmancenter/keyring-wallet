@@ -28,11 +28,13 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
+import { joinAsks, type JoinAsks, type JoinHolds } from '../module/joinManifest'
+import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
-import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { useCommunityChanged } from '../module/communityChanged'
-import { ensurePersonaFor, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
+import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { communityName } from './communityName'
@@ -41,6 +43,9 @@ import { plainError, type PlainError } from './plainError'
 import { claimWords, joinNeedWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
+import { readJoinHolds } from './joinHolds'
+import { joinCard } from './joinWays'
+import { JoinWaysCard } from './JoinWaysCard'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 import { useTakingLong } from './useTakingLong'
@@ -131,6 +136,15 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // suggestion is offered first, beside "a different community".
   const [step, setStep] = useState<Step>(chosenByLink ? 'asks' : 'which')
   const [asks, setAsks] = useState<Asks>()
+  // From manifest 0.3 the community states its ways in and what follows each
+  // (joinWays.ts); at 0.2 this reads as `legacy` and `asks` above is shown.
+  const [offer, setOffer] = useState<JoinAsks>()
+  const [holds, setHolds] = useState<JoinHolds>({})
+  // The community answers no join version this app speaks.
+  const [unsupported, setUnsupported] = useState<string>()
+  // A request was refused because the community changed what it asks meanwhile.
+  const [changed, setChanged] = useState(false)
+  const [reread, setReread] = useState(0)
   // Where the person already stands with this community (220): what the phone
   // holds, at once, then what the community says while a request is open. It
   // used to say only "You joined this one before", whatever had happened since.
@@ -162,6 +176,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!communityDid) return
     let live = true
     setAsks(undefined)
+    setOffer(undefined)
+    setUnsupported(undefined)
     // No session needed: a community answers the join manifest over REST, which
     // is how an applicant reads what is asked of them before any channel
     // exists. Guarding this on `connected` is why a community's published name
@@ -171,21 +187,38 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       .fetchManifest(communityDid, agent)
       // Reading the manifest also teaches the app what the community calls
       // itself; vtiAgent does that for every fetch, so nothing is needed here.
-      .then((m) => live && setAsks(asksFrom(m)))
-      .catch(() => {
-        if (live) setUnreachable(communityDid)
+      .then(async (m) => {
+        const held = agent ? await readJoinHolds(agent, communityDid).catch(() => ({})) : {}
+        if (!live) return
+        setAsks(asksFrom(m))
+        setHolds(held)
+        setOffer(joinAsks(m, held))
+      })
+      .catch((e) => {
+        if (!live) return
+        // Reached, but it speaks no join version this app does: not "unreachable".
+        if (isUnsupportedJoinVersion(e)) setUnsupported(communityDid)
+        else setUnreachable(communityDid)
       })
       .finally(() => live && setNameRead(communityDid))
     return () => {
       live = false
     }
-  }, [communityDid, agent])
+  }, [communityDid, agent, reread])
 
   // A different community starts from nothing; the same one keeps what it showed.
   useEffect(() => {
     setStanding(undefined)
     setAgain(false)
+    setChanged(false)
   }, [communityDid])
+
+  // What the card shows at 0.3: each way, the one this phone meets, the button.
+  const card = offer ? joinCard(offer, holds) : undefined
+  const ways = card?.mode === 'ways' ? card : undefined
+  // A request this screen sends itself: a way the phone meets that needs no
+  // invitation (those go through "I was invited") and no vetting still to do.
+  const plainRequest = Boolean(ways && (ways.button === 'join' || ways.button === 'ask'))
 
   // Read each time the screen comes into view, not only when it first mounts:
   // a join finished elsewhere (the invited screen, the vetting) shows here.
@@ -247,6 +280,29 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!confirmed.success) return
     setBusy(true)
     try {
+      if (plainRequest) {
+        // The way the phone meets asks for nothing more: make the identity and
+        // send the request. What the community answers shows as where the
+        // person stands — admitted, or waiting for an administrator.
+        communityTarget.choose(communityDid)
+        if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
+        await joinCommunity(
+          {
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            communityStore: new GenericRecordsCommunityStore(agent),
+            vtaDid,
+            mediatorDid: config?.mediatorDid,
+            communityDid,
+          },
+          undefined,
+          { freshPersona: again }
+        )
+        setAgain(false)
+        setStanding(await readJoinState(agent, communityDid, { poll: false }))
+        setStep('asks')
+        return
+      }
       await ensurePersonaFor(
         { agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid },
         { fresh: again }
@@ -258,11 +314,19 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       const stack = navigation as unknown as { navigate: (name: string) => void }
       stack.navigate(Screens.VtiVetting)
     } catch (e) {
-      setError(plainError(e))
+      if (joinRequestRefusal(e) === 'criterionUnknown') {
+        // The community changed what it asks while the request went: read it
+        // again and show it, rather than leave the person on a dead step.
+        setChanged(true)
+        setReread((n) => n + 1)
+        setStep('asks')
+      } else {
+        setError(plainError(e))
+      }
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again])
+  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again, plainRequest, config?.mediatorDid])
 
   if (!vtaDid) {
     return (
@@ -408,7 +472,94 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       )
       break
 
-    case 'asks':
+    case 'asks': {
+      const named = { community: name, interpolation: { escapeValue: false } }
+      const different = (
+        <Button
+          title={t('Join.Different')}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => openScanner(navigation)}
+          testID={testIdWithKey('JoinScanCommunity')}
+        />
+      )
+      const toInvited = () =>
+        (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
+      const waysTitle = (
+        <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('JoinWaysTitle')}>
+          {t('Join.Ways.Title', named)}
+        </ThemedText>
+      )
+      // The community speaks no join version this app does: reached, but unreadable.
+      if (communityDid && unsupported === communityDid) {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey('JoinVersionUnsupported')}>
+              <ThemedText>{t('Join.Ways.VersionUnsupported', named)}</ThemedText>
+            </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // It publishes no way in: it accepts no applications at present.
+      if (card?.mode === 'notAccepting') {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey('JoinNotAccepting')}>
+              <ThemedText>{t('Join.Ways.NotAccepting', named)}</ThemedText>
+            </View>
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+          </>
+        )
+        actions = different
+        break
+      }
+      // Manifest 0.3: its ways in, and what follows each (joinWays.ts).
+      if (ways) {
+        const suggestedWay = offer?.suggested
+        body = (
+          <>
+            {waysTitle}
+            {changed ? (
+              <ThemedText testID={testIdWithKey('JoinChanged')}>{t('Join.Ways.Changed', named)}</ThemedText>
+            ) : null}
+            <JoinWaysCard card={ways} community={name} />
+            {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+          </>
+        )
+        actions = (
+          <>
+            {errorLine}
+            {ways.button === 'invited' ? (
+              <Button
+                title={t('VtaLink.IWasInvited')}
+                buttonType={ButtonType.Primary}
+                onPress={toInvited}
+                testID={testIdWithKey('JoinGoInvited')}
+              />
+            ) : ways.button !== 'none' ? (
+              <Button
+                title={
+                  ways.button === 'join'
+                    ? t('Join.Ways.ButtonJoin', named)
+                    : ways.button === 'ask'
+                      ? t('Join.Ways.ButtonAsk')
+                      : t('Join.Start')
+                }
+                buttonType={ButtonType.Primary}
+                // An invitation the phone holds is presented from "I was invited", where it is.
+                onPress={() => (suggestedWay?.requires.invitation ? toInvited() : setStep('as'))}
+                testID={testIdWithKey('JoinStart')}
+              />
+            ) : null}
+            {different}
+          </>
+        )
+        break
+      }
       body = (
         <>
           <ThemedText variant="headingThree" accessibilityRole="header">
@@ -478,15 +629,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               lands here, not on "which community?". Without this a person who
               brought the wrong one had no way to another from Join (found on the
               empty-config gate, 2026-09-23: a store build names none). */}
-          <Button
-            title={t('Join.Different')}
-            buttonType={ButtonType.Tertiary}
-            onPress={() => openScanner(navigation)}
-            testID={testIdWithKey('JoinScanCommunity')}
-          />
+          {different}
         </>
       )
       break
+    }
 
     case 'as':
       body = (
@@ -548,7 +695,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               : standing.kind === 'sent'
                 ? tp('Join.StandingSent')
                 : standing.kind === 'pending'
-                  ? tp('Join.StandingPending')
+                  ? // From manifest 0.3 a request left open is one an administrator reviews.
+                    offer?.wire === '0.3'
+                    ? tp('Join.Ways.SentForReview')
+                    : tp('Join.StandingPending')
                   : standing.kind === 'deferred'
                     ? tp('Join.StandingDeferred')
                     : standing.kind === 'rejected'
