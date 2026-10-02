@@ -6,14 +6,15 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
-• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
-• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
-• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
-• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
-• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
-• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
-• Screens stay above the keyboard when you type or paste a code.
-• The demo collector card and approval demo are gone; contacts show the regular list.
-• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
-• Update over your current version; there's no need to reinstall.
+The 229 fix
+• Scanning your hosting service's code from My Agent → Set up a new agent now opens the "Connect this phone to your agent?" screen. On 229 it could drop you on the Contacts tab with nothing linked.
+• Nothing else changes from 229.
+
+Please test
+• Set up a new agent with the scan option, starting from My Agent → Set up a new agent → Scan.
+
+Known issues (unchanged from 229)
+• A vetter using the openvtc terminal app can't vet until that app picks up a fix that is already merged upstream. Vetting between two Keyring users works.
+• Some cards say "On this phone only": your agent can't keep a copy of them yet.
+• Notifications are built in but switched off in this build.
+• Update over your current version; your memberships carry over, with no need to re-join.
