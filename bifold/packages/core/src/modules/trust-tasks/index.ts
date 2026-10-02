@@ -79,7 +79,17 @@ export {
   createVtiClientDid,
 } from './module/VtiMediatorTransport'
 export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
-export { vtiAgent, VtiRefusal } from './module/vtiAgent'
+export { vtiAgent, VtiRefusal, isUnsupportedJoinVersion } from './module/vtiAgent'
+export { criterionDigest, joinAsks, readManifest } from './module/joinManifest'
+export type {
+  JoinAdmission,
+  JoinAsks,
+  JoinCredentialIssuers,
+  JoinHolds,
+  JoinWay,
+  JoinWayFault,
+} from './module/joinManifest'
+export { JOIN_WIRES, type JoinWire } from './module/joinWire'
 export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
 export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
 export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'

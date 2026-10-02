@@ -1646,6 +1646,7 @@
     "TicketUnreadable": "This isn't a vetter's ticket Keyring can read.",
     "NeedsVetting": "vetting by one of its vetters",
     "NeedsInvitation": "an invitation from its admin",
+    "NeedsCredentials": "a credential it asks for",
     "NeedsAgreement": "your agreement to its {{what}}",
     "NeedsCommunity": "Join a community first. Vetting happens inside one.",
     "JoinCommunity": "Join a community",

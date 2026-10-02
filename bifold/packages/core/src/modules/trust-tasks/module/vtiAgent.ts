@@ -57,9 +57,18 @@ import { chooseCarriage, type Carriage } from './tspCapability'
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
+import { readManifest, type VtiManifest } from './joinManifest'
+import {
+  JOIN_MANIFEST_TYPES,
+  joinTaskType,
+  submitPayload,
+  wireAfterRefusal,
+  wiresToTry,
+  type JoinWire,
+} from './joinWire'
 
-const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
-const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+export type { VtiCriterion, VtiManifest } from './joinManifest'
+
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
@@ -89,10 +98,11 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  * The community tasks `ask` may send twice: reads, which change nothing, so a
  * second copy costs the community one more lookup and nothing else.
  *
- * - `MANIFEST` — `vtc/join-requests/manifest/0.2`, the published criteria.
+ * - the manifest — `vtc/join-requests/manifest`, the published criteria, at
+ *   each version this wallet speaks (`joinWire`).
  * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
  *
- * Everything else `ask` sends changes state and is a WRITE: `SUBMIT`,
+ * Everything else `ask` sends changes state and is a WRITE: the submit,
  * `SUPPLEMENT`, `WITHDRAW`, `SELF_REMOVE` above, and the vetter profile publish
  * (`vtc/vetting/vetters/profile/0.1`, `VETTING.vettersProfile` in vtiVetting).
  * A task this list does not name is a write too, so that a task added later is
@@ -100,7 +110,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  * answered — a submit it deferred, say — sent again is a second submit, and
  * reads as `requestAlreadyOpen`.
  */
-export const VTI_READ_TASKS: ReadonlySet<string> = new Set([MANIFEST, STATUS])
+export const VTI_READ_TASKS: ReadonlySet<string> = new Set([...JOIN_MANIFEST_TYPES, STATUS])
 
 /** Whether `type` is a read `ask` may send again over DIDComm after TSP silence (see `VTI_READ_TASKS`). */
 export function isVtiReadTask(type: string): boolean {
@@ -183,7 +193,28 @@ export class VtiRefusal extends Error {
  * on; `notAwaitingEvidence` means the request is queued for a decision the
  * community owes, so supplying more changes nothing.
  */
-export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence' | 'requestAlreadyOpen'
+export type JoinRequestRefusal =
+  | 'notFound'
+  | 'alreadyDecided'
+  | 'notAwaitingEvidence'
+  | 'requestAlreadyOpen'
+  // submit/0.3: the community publishes no criteria, so it accepts no applications.
+  | 'notAccepting'
+  // submit/0.3: the criterion named is not one it publishes (any more).
+  | 'criterionUnknown'
+  | 'presentationInvalid'
+  | 'policyUnsatisfied'
+
+const JOIN_REQUEST_REFUSALS: readonly string[] = [
+  'notFound',
+  'alreadyDecided',
+  'notAwaitingEvidence',
+  'requestAlreadyOpen',
+  'notAccepting',
+  'criterionUnknown',
+  'presentationInvalid',
+  'policyUnsatisfied',
+]
 
 /**
  * Why a community refused a member's request to leave, from its code:
@@ -214,13 +245,8 @@ export interface JoinRequestStatus {
 
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
-  const reason = refusal.code.split(':').pop()
-  return reason === 'notFound' ||
-    reason === 'alreadyDecided' ||
-    reason === 'notAwaitingEvidence' ||
-    reason === 'requestAlreadyOpen'
-    ? reason
-    : undefined
+  const reason = refusal.code.split(':').pop() ?? ''
+  return JOIN_REQUEST_REFUSALS.includes(reason) ? (reason as JoinRequestRefusal) : undefined
 }
 
 /**
@@ -244,6 +270,14 @@ export const openJoinRequestOf = (refusal: unknown): OpenJoinRequest | undefined
   if (typeof details?.requestId !== 'string' || !details.requestId) return undefined
   return { requestId: details.requestId, status: typeof details.status === 'string' ? details.status : 'pending' }
 }
+
+/**
+ * Whether a refusal says the community does not serve the version of the task
+ * it was asked in — for the join tasks, after every version this wallet speaks
+ * was tried: the community is newer, or older, than this wallet can join.
+ */
+export const isUnsupportedJoinVersion = (refusal: unknown): boolean =>
+  refusal instanceof VtiRefusal && ['unsupportedVersion', 'unsupportedType'].includes(refusal.code)
 
 /** A refusal arrives as a document in its own right, not as a verdict. */
 const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined => {
@@ -294,44 +328,6 @@ export interface VtiAgentState {
   tspReady?: boolean
   /** What each peer was observed to speak (diagnostic; never fed back into packing). */
   peerRevisions?: PeerRevisionRecord[]
-}
-
-/** A community's published join criteria, as a manifest states them. */
-export interface VtiCriterion {
-  id?: string
-  description?: string
-  /** Per-criterion digest — what an applicant is held to (manifest/0.2). */
-  requirementsDigest?: string
-  /** The vetting requirement object, when the criterion needs peer vetting. */
-  vetting?: {
-    version?: string
-    statementType?: string
-    minStatements?: number
-    acceptedMethods?: string[]
-    requiredClaims?: string[]
-    maxStatementAge?: string
-    eligibleVetters?: Record<string, unknown>
-    independence?: Record<string, unknown>
-    [key: string]: unknown
-  }
-  [key: string]: unknown
-}
-
-export interface VtiManifest {
-  communityDid?: string
-  criteria: VtiCriterion[]
-  requirementsDigest?: string
-  /**
-   * What the community calls itself. Optional and often absent: a community
-   * publishes none until its admin sets one, so a screen must read well
-   * without it.
-   */
-  branding?: {
-    displayName?: string
-    accentColor?: string
-    logoUrl?: string
-    [key: string]: unknown
-  }
 }
 
 /** What a community decided, and what it is still waiting for. */
@@ -414,6 +410,12 @@ class VtiAgentController {
    * two envelope formats; the plan asks for a session-scoped choice, logged.
    */
   private readonly carriageByPeer = new Map<string, Carriage>()
+  /**
+   * The version of the join tasks each community last answered in (`joinWire`).
+   * Asked first the next time; a community that has since moved refuses it
+   * with `unsupportedVersion`, which is what moves this.
+   */
+  private readonly joinWireByCommunity = new Map<string, JoinWire>()
   /**
    * How each peer last reached us, by its DID (the DIDComm sender, the TSP
    * sender, and the document's issuer). A reply goes back the same way: a
@@ -1212,45 +1214,80 @@ class VtiAgentController {
     // Packing to the community resolves its document; warm that resolution
     // patiently so a tunnel's rate limit does not surface as a failed send.
     if (withAgent) await resolveDidDocumentRetrying(withAgent, communityDid)
+    // The version is the community's to state (`joinWire`): the one it last
+    // answered in is asked first, and a version it refuses as unsupported is
+    // never asked again in this read, over either carriage.
+    const refused: JoinWire[] = []
+    let wire: JoinWire | undefined = wiresToTry(this.joinWireByCommunity.get(communityDid))[0]
     // A community answers the join manifest over REST with no session at all
     // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
     // what is asked of them on a first join — before any channel exists — and
     // the fast path when one does. A community may switch that off, and a
     // wallet with a live session can always ask over DIDComm, so a failure
     // here is not an error: it falls through.
-    const overRest = await this.manifestOverRest(communityDid, withAgent)
-    if (overRest) return overRest
-    const answer = await this.ask(communityDid, MANIFEST, {})
-    // Each unanswered ask names its task and request (`VtiSentNoAnswer`):
-    // three callers used to share one sentence, and a failed join could not
-    // say which request went unanswered.
-    if (!answer) throw this.sentNoAnswer(communityDid, MANIFEST)
-    const refusal = refusalOf(answer)
-    if (refusal) throw refusal
-    const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
-    // Reading the manifest is how the app learns what a community calls
-    // itself. Teaching the target here rather than at each screen means a
-    // published name cannot be missed by whichever screen happened to fetch.
-    communityTarget.publishedName(communityDid, payload?.branding?.displayName)
-    rememberCommunityName(withAgent, communityDid, payload?.branding?.displayName)
-    return {
-      communityDid: payload?.communityDid,
-      criteria: payload?.criteria ?? [],
-      requirementsDigest: payload?.requirementsDigest,
-      branding: payload?.branding,
+    while (wire) {
+      const overRest = await this.manifestOverRest(communityDid, withAgent, wire)
+      if (!overRest) break
+      if ('manifest' in overRest) return this.learnManifest(communityDid, withAgent, overRest.manifest)
+      refused.push(wire)
+      wire = wireAfterRefusal(overRest.unsupported, 'manifest', refused)
+      // It serves no version this wallet speaks, and said so: asking again
+      // over DIDComm would only be told the same.
+      if (!wire) throw overRest.unsupported
     }
+    while (wire) {
+      const type = joinTaskType('manifest', wire)
+      const answer = await this.ask(communityDid, type, {})
+      // Each unanswered ask names its task and request (`VtiSentNoAnswer`):
+      // three callers used to share one sentence, and a failed join could not
+      // say which request went unanswered.
+      if (!answer) throw this.sentNoAnswer(communityDid, type)
+      const refusal = refusalOf(answer)
+      if (!refusal) {
+        const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
+        return this.learnManifest(communityDid, withAgent, readManifest(payload, wire))
+      }
+      refused.push(wire)
+      wire = wireAfterRefusal(refusal, 'manifest', refused)
+      if (!wire) throw refusal
+    }
+    // Unreachable: the loop above returns or throws while a version is left.
+    throw new Error('vtiAgent: no version of the join manifest left to ask')
+  }
+
+  /**
+   * A manifest that was read: the version it came in is the one this community
+   * is asked in next, and its name is learned. Reading the manifest is how the
+   * app learns what a community calls itself; teaching the target here rather
+   * than at each screen means a published name cannot be missed by whichever
+   * screen happened to fetch.
+   */
+  private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
+    if (manifest.wire) this.joinWireByCommunity.set(communityDid, manifest.wire)
+    communityTarget.publishedName(communityDid, manifest.branding?.displayName)
+    rememberCommunityName(agent, communityDid, manifest.branding?.displayName)
+    return manifest
   }
 
   /**
    * The manifest over the community's REST endpoint, which its DID document
    * advertises as a `VTCRest` service. Communities minted before vti #1615
    * publish it without the API's version prefix (VTI-15) and later ones with
-   * it, so `/v1` is added only when it is missing. Returns undefined for
-   * anything that is not a usable manifest — a community that has turned the
-   * public read off, a network that is not there, an error document — so the
-   * caller can fall back to asking over DIDComm.
+   * it, so `/v1` is added only when it is missing.
+   *
+   * A community that does not serve the version asked says so in an error
+   * document — with a failing status (422 from vtc-service 0.49.0), so the body
+   * is read whatever the status — and that refusal is returned, because it
+   * says which version to ask in. Undefined for anything else that is not a
+   * usable manifest — a community that has turned the public read off, a
+   * network that is not there, any other error document — so the caller can
+   * fall back to asking over DIDComm.
    */
-  private async manifestOverRest(communityDid: string, agent: Agent | undefined): Promise<VtiManifest | undefined> {
+  private async manifestOverRest(
+    communityDid: string,
+    agent: Agent | undefined,
+    wire: JoinWire
+  ): Promise<{ manifest: VtiManifest } | { unsupported: VtiRefusal } | undefined> {
     if (!agent) return undefined
     try {
       const doc = await agent.dids.resolveDidDocument(communityDid)
@@ -1268,7 +1305,7 @@ class VtiAgentController {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             id: `urn:uuid:${utils.uuid()}`,
-            type: MANIFEST,
+            type: joinTaskType('manifest', wire),
             threadId: `urn:uuid:${utils.uuid()}`,
             payload: {},
             issuer: this.state.did ?? communityDid,
@@ -1279,19 +1316,20 @@ class VtiAgentController {
         undefined,
         3_000
       )
-      if (!response.ok) return undefined
-      const body = (await response.json()) as { type?: string; payload?: VtiManifest } | undefined
-      if (String(body?.type ?? '').startsWith(TASK_ERROR)) return undefined
-      const payload = body?.payload
-      if (!payload?.criteria) return undefined
-      communityTarget.publishedName(communityDid, payload.branding?.displayName)
-      rememberCommunityName(agent, communityDid, payload.branding?.displayName)
-      return {
-        communityDid: payload.communityDid,
-        criteria: payload.criteria ?? [],
-        requirementsDigest: payload.requirementsDigest,
-        branding: payload.branding,
+      const body = (await response.json()) as
+        | { type?: string; payload?: VtiManifest & { code?: string; message?: string; details?: unknown } }
+        | undefined
+      if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
+        const refusal = new VtiRefusal(
+          body?.payload?.code ?? 'unknown',
+          body?.payload?.message ?? 'The community refused the request.',
+          body?.payload?.details
+        )
+        return isUnsupportedJoinVersion(refusal) ? { unsupported: refusal } : undefined
       }
+      if (!response.ok) return undefined
+      if (!body?.payload?.criteria) return undefined
+      return { manifest: readManifest(body.payload, wire) }
     } catch {
       return undefined
     }
@@ -1445,31 +1483,68 @@ class VtiAgentController {
    * `registryConsent` is the person's answer to "list me in the community's
    * public member directory" (VTI-Q14): the community publishes a member only
    * while it is true (vti #1682, #1691). Off unless the person turned it on.
+   *
+   * Submitted in the version the manifest was read in (`joinWire`). A refusal
+   * surfaces as `VtiRefusal`: read it with `joinRequestRefusal`, and with
+   * `isUnsupportedJoinVersion` for a community that serves no version of
+   * submit this wallet speaks.
    */
   async apply(
     communityDid: string,
     manifest: VtiManifest,
     options: { credentials?: unknown[]; requirementsDigest?: string; registryConsent?: boolean } = {}
   ): Promise<VtiVerdict> {
-    // The presentation is unsigned: the community takes the holder from the
-    // sealed envelope's sender (VTI-9), so what matters is that the
-    // credentials inside name that same DID as their subject.
-    const answer = await this.ask(communityDid, SUBMIT, {
-      vp: this.presentation(options.credentials),
-      registryConsent: options.registryConsent === true,
-      // The community's `select_criterion` reads this digest to decide WHICH
-      // criterion the applicant gathered against, and records
-      // `applicant_digest_matches: false` when it is absent — which its policy
-      // may weigh. With more than one vetting criterion an absent digest means
-      // gathering against one and being judged against another, so send the
-      // digest of the criterion this application was actually built for and
-      // fall back to the manifest's only when there is nothing better.
-      extensions: (() => {
-        const digest = options.requirementsDigest ?? manifest.requirementsDigest
-        return digest ? { requirementsDigest: digest } : {}
-      })(),
-    })
-    return this.verdictOf(answer, communityDid, SUBMIT)
+    let current = manifest
+    const refused: JoinWire[] = []
+    for (;;) {
+      const wire = current.wire ?? '0.2'
+      const type = joinTaskType('submit', wire)
+      // Which criterion the submission is made under. An application gathered
+      // against a criterion names that criterion's digest: with more than one
+      // criterion an absent digest can mean gathering against one and being
+      // judged against another (at 0.2 `select_criterion` reads the digest and
+      // records `applicant_digest_matches: false` when it is absent, which the
+      // community's policy may weigh; at 0.3 `criterion` is what governs).
+      // Without one, a 0.2 submit falls back to the manifest's own digest, as
+      // it always did, and a 0.3 submit names none — an invitation included,
+      // as openvtc does (#412): the community then decides it under the first
+      // criterion, in its published order, that the submission meets.
+      const criterion = options.requirementsDigest ?? (wire === '0.2' ? current.requirementsDigest : undefined)
+      // The presentation is unsigned: the community takes the holder from the
+      // sealed envelope's sender (VTI-9), so what matters is that the
+      // credentials inside name that same DID as their subject.
+      const answer = await this.ask(
+        communityDid,
+        type,
+        submitPayload(wire, {
+          vp: this.presentation(options.credentials),
+          registryConsent: options.registryConsent === true,
+          criterion,
+        })
+      )
+      const refusal = answer ? refusalOf(answer) : undefined
+      refused.push(wire)
+      // The community does not serve this version of submit — it moved between
+      // the manifest read and now. It refuses that at dispatch, before any
+      // handler runs, so this submit was NOT taken and asking in the version it
+      // serves is the first submit, not a second. (Silence is no such proof,
+      // and is never answered with a resend — nor is any other refusal:
+      // `criterionUnknown`, say, goes to the caller, whose application was
+      // gathered for that criterion.) What it asks is read again in that
+      // version first: the criteria are that version's.
+      const other = wireAfterRefusal(refusal, 'submit', refused)
+      if (refusal && other) {
+        this.agent?.config.logger.warn(
+          `vtiAgent: ${communityDid} does not serve ${taskName(type)}/${wire} (${refusal.code}); reading its criteria again and submitting at ${other}`
+        )
+        this.joinWireByCommunity.set(communityDid, other)
+        current = await this.fetchManifest(communityDid)
+        // The manifest and the submit disagree on the version: nothing safe is left to try.
+        if ((current.wire ?? '0.2') !== other) throw refusal
+        continue
+      }
+      return this.verdictOf(answer, communityDid, type)
+    }
   }
 }
 

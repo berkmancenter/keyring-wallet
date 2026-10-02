@@ -1495,6 +1495,7 @@
     "NeedsStatements_other": "mais {{count}} declarações",
     "NeedsVetting": "verificação por um de seus verificadores",
     "NeedsInvitation": "um convite do admin",
+    "NeedsCredentials": "uma credencial que ela pede",
     "NeedsAgreement": "seu acordo com o {{what}}",
     "NeedsStatements_one": "mais 1 verificador necessário",
     "NeedsStatements_other": "mais {{count}} verificadores necessários",

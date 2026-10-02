@@ -1589,6 +1589,7 @@
     "NeedsStatements_other": "encore {{count}} attestations",
     "NeedsVetting": "une vérification par l'un de ses vérificateurs",
     "NeedsInvitation": "une invitation de son admin",
+    "NeedsCredentials": "un justificatif qu'elle demande",
     "NeedsAgreement": "votre accord à son {{what}}",
     "NeedsStatements_one": "encore 1 vérificateur",
     "NeedsStatements_other": "encore {{count}} vérificateurs",

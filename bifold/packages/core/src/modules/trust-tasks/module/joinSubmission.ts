@@ -18,19 +18,24 @@ import { VtiRefusal, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 export type JoinNeed =
   | { kind: 'statements'; count: number }
   | { kind: 'invitation' }
+  | { kind: 'credentials' }
   | { kind: 'vetting' }
   | { kind: 'agreement'; id: string }
   | { kind: 'other'; raw: string }
 
 /**
  * One need, as `join.rego` and the host name them: `vetting:statements:<n>`,
- * `vetting:invitation`, a bare `vetting`, `agreed:<id>`. Anything else is kept
- * verbatim, so a screen can still show it rather than drop it.
+ * `vetting:invitation`, a bare `vetting`, `agreed:<id>` — and, from
+ * submit/0.3, what the governing criterion still lacks: `invitation` and
+ * `credentials` (vtc-service join/criteria.rs `NEED_INVITATION`,
+ * `NEED_CREDENTIALS`). Anything else is kept verbatim, so a screen can still
+ * show it rather than drop it.
  */
 export function parseJoinNeed(raw: string): JoinNeed {
   const statements = /^vetting:statements:(\d+)$/.exec(raw)
   if (statements) return { kind: 'statements', count: Number(statements[1]) }
-  if (raw === 'vetting:invitation') return { kind: 'invitation' }
+  if (raw === 'vetting:invitation' || raw === 'invitation') return { kind: 'invitation' }
+  if (raw === 'credentials') return { kind: 'credentials' }
   if (raw === 'vetting') return { kind: 'vetting' }
   const agreed = /^agreed:(.+)$/.exec(raw)
   if (agreed) return { kind: 'agreement', id: agreed[1] }

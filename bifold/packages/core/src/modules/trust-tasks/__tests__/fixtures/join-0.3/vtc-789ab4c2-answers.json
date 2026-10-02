@@ -1,0 +1,103 @@
+{
+  "note": "Answers of a vtc-service built from VTI main 789ab4c2 (#1907, the first to serve join 0.3), run with no VTA and no mediator on localhost, read over POST /v1/trust-tasks on 2026-10-02T13:59Z. A new community's three default criteria. The submits were signed by fresh did:key applicants; request ids removed, nothing else changed.",
+  "manifest03": {
+    "status": 200,
+    "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+    "payload": {
+      "communityDid": "did:webvh:QmThrowaway1907Join03xxxxxxxxxxxxxxxxxxxxxxxxxx:localhost%3A8209",
+      "criteria": [
+        {
+          "admission": "automatic",
+          "description": "Invited by this community",
+          "id": "invited",
+          "invitationRequired": true,
+          "requirementsDigest": "zQmQn96RqUtEvrotxBniT2zymX4W7kXBmnWiiAmbJemqpoi"
+        },
+        {
+          "admission": "automatic",
+          "credentialIssuers": "community",
+          "description": "A member of this community",
+          "id": "member-credential",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "format": "ldp_vc",
+                "id": "membership",
+                "meta": {
+                  "type_values": [["MembershipCredential"]]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmScJL1HRMZfD8bMT2JrbcgzHN74uR29JdSKeF5cCFRYed"
+        },
+        {
+          "admission": "review",
+          "description": "Reviewed by an administrator",
+          "id": "review",
+          "requirementsDigest": "zQmV4x4TRAZFNpuqGBgS17EFy1UxRNdD7DpyuTbegBRPeEC"
+        }
+      ]
+    }
+  },
+  "manifest02Refused": {
+    "status": 422,
+    "type": "https://trusttasks.org/spec/trust-task-error/0.5",
+    "payload": {
+      "code": "unsupportedVersion",
+      "details": {
+        "requestedType": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2",
+        "servedVersions": ["https://trusttasks.org/spec/vtc/join-requests/manifest/0.3"]
+      },
+      "message": "unsupported version: https://trusttasks.org/spec/vtc/join-requests/manifest/0.2 — this VTC serves https://trusttasks.org/spec/vtc/join-requests/manifest/0.3",
+      "retryable": false
+    }
+  },
+  "submit02Refused": {
+    "status": 422,
+    "type": "https://trusttasks.org/spec/trust-task-error/0.5",
+    "payload": {
+      "code": "unsupportedVersion",
+      "details": {
+        "requestedType": "https://trusttasks.org/spec/vtc/join-requests/submit/0.2",
+        "servedVersions": ["https://trusttasks.org/spec/vtc/join-requests/submit/0.3"]
+      }
+    }
+  },
+  "submit03AfterThatRefusal": {
+    "status": 200,
+    "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.3#response",
+    "payload": {
+      "verdict": {
+        "effect": "refer",
+        "with": {
+          "queue": "admin-review",
+          "reason": "queued for an admin decision (approve/reject)"
+        }
+      }
+    }
+  },
+  "submit03UnknownCriterion": {
+    "status": 422,
+    "type": "https://trusttasks.org/spec/trust-task-error/0.5",
+    "payload": {
+      "code": "vtc/join-requests/submit:criterionUnknown",
+      "details": {
+        "criterion": "zQmVmw2GuXQsXe1yJf5xwU2TPvhP5mtwpQ5ACLwK76RAiEV"
+      }
+    }
+  },
+  "submit03InvitedWithoutInvitation": {
+    "status": 200,
+    "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.3#response",
+    "payload": {
+      "verdict": {
+        "effect": "requestMore",
+        "with": {
+          "needs": ["invitation"],
+          "presentationDefinition": null
+        }
+      }
+    }
+  }
+}

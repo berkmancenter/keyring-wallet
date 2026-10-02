@@ -76,6 +76,8 @@ export function joinNeedWords(need: JoinNeed, t: TFunction): string {
       return t('Vetting.NeedsInvitation') as string
     case 'vetting':
       return t('Vetting.NeedsVetting') as string
+    case 'credentials':
+      return t('Vetting.NeedsCredentials') as string
     case 'agreement':
       return t('Vetting.NeedsAgreement', { what: spelt(need.id), interpolation: { escapeValue: false } }) as string
     default:
