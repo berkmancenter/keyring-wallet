@@ -847,7 +847,9 @@
     "QRCode": "Code QR",
     "Credentials": "Justificatifs",
     "Wallet": "Portefeuille",
-    "MyAgent": "Mon agent"
+    "MyAgent": "Mon agent",
+    "RequestsWaiting_one": "1 demande en attente",
+    "RequestsWaiting_other": "{{count}} demandes en attente"
   },
   "TabStackAccessibility": {
     "Home": "Notifications tab {{notifications}} notifications (FR)",
