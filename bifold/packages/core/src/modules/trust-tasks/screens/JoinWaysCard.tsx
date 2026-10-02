@@ -35,7 +35,10 @@ function needLines(need: JoinNeed, community: string, t: TFunction): string[] {
           ? 'Join.Ways.NeedsCredentialCommunity'
           : need.issuers === 'recognised'
             ? 'Join.Ways.NeedsCredentialRecognised'
-            : 'Join.Ways.NeedsCredentialAny'
+            : need.issuers === 'any'
+              ? 'Join.Ways.NeedsCredentialAny'
+              : // Whose credentials count could not be read: the way is marked unusable.
+                'Join.Ways.NeedsCredential'
       return [t(key, { ...named, type: typeWords(need.types, t) }) as string]
     }
     case 'vetting':

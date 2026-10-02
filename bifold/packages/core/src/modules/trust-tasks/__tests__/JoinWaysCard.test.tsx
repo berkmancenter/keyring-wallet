@@ -8,7 +8,8 @@ import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
-import { joinCard, type JoinOffer, type JoinWay } from '../screens/joinWays'
+import type { JoinAsks, JoinWay } from '../module/joinManifest'
+import { joinCard } from '../screens/joinWays'
 import { JoinWaysCard } from '../screens/JoinWaysCard'
 
 const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
@@ -21,7 +22,7 @@ const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
   ...over,
 })
 const review = way({ id: 'review', admission: 'review', requiresNothing: true })
-const defaults: JoinOffer = {
+const defaults: JoinAsks = {
   wire: '0.3',
   accepting: true,
   ways: [
@@ -37,7 +38,7 @@ const defaults: JoinOffer = {
   outcomeIfMet: 'reviewed',
 }
 
-const show = (offer: JoinOffer) => {
+const show = (offer: JoinAsks) => {
   const card = joinCard(offer)
   if (card.mode !== 'ways') throw new Error('expected ways')
   return render(

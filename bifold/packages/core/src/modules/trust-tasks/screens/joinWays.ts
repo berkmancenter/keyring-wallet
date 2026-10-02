@@ -15,65 +15,17 @@
  *
  * Pure: this decides what the card shows; `JoinWaysCard` words it.
  *
- * The offer is the 0.2/0.3 reader's `JoinAsks` (module/joinManifest.ts); the
- * types here mirror it until that module is on main, then they are imported.
+ * The offer is the 0.2/0.3 reader's `JoinAsks` (module/joinManifest.ts).
  *
  * @module trust-tasks/screens/joinWays
  */
 
-export type JoinAdmission = 'automatic' | 'review' | 'unstated'
-
-/** Whose credentials count for a way: this community's, one it recognises, or any issuer's. */
-export type JoinCredentialIssuers = 'community' | 'recognised' | 'any'
-
-export interface JoinWay {
-  id: string
-  description?: string
-  admission: JoinAdmission
-  requires: {
-    invitation: boolean
-    credentials?: { issuers: JoinCredentialIssuers; types: string[] }
-    vetting?: { statements: number; claims: string[]; methods: string[] }
-  }
-  requiresNothing: boolean
-  /** Whether Keyring can read this way as published. False: it cannot be used at all. */
-  usable: boolean
-  /** Why it cannot be read (`admissionUnknown`, `digestMismatch`, …); never "the phone lacks something". */
-  unusableBecause?: string
-  /** For Details only. */
-  unusableDetail?: string
-  /**
-   * Whether this phone meets it with what it holds: `no` when something in
-   * `requires` is lacking; `unknown` when it asks for credentials, which the
-   * reader does not evaluate.
-   */
-  meets: 'yes' | 'no' | 'unknown'
-  /** The criterion's `requirementsDigest`: any change to the criterion changes it. Absent on a malformed criterion. */
-  digest?: string
-}
-
-/** What this phone holds towards a community, as far as the screen knows. */
-export interface JoinHolds {
-  invitation?: boolean
-  statements?: number
-}
-
-export interface JoinOffer {
-  /** The manifest version the community answered with. */
-  wire: '0.3' | '0.2'
-  accepting: boolean
-  /** In the community's decision order. */
-  ways: JoinWay[]
-  /** The first usable way this phone meets with what it holds; absent when it meets none (always, at 0.2). */
-  suggested?: JoinWay
-  /** What meeting the suggested way leads to; absent with it. */
-  outcomeIfMet?: 'joined' | 'reviewed' | 'unstated'
-}
+import type { JoinAsks, JoinCredentialIssuers, JoinHolds, JoinWay } from '../module/joinManifest'
 
 /** One thing a way asks for. */
 export type JoinNeed =
   | { kind: 'invitation' }
-  | { kind: 'credential'; issuers: JoinCredentialIssuers; types: string[] }
+  | { kind: 'credential'; issuers?: JoinCredentialIssuers; types: string[] }
   | { kind: 'vetting'; statements: number; claims: string[] }
   | { kind: 'nothing' }
 
@@ -129,7 +81,7 @@ const needsOf = (way: JoinWay): JoinNeed[] => {
 
 const sameWay = (a: JoinWay | undefined, b: JoinWay) => Boolean(a) && a!.id === b.id && a!.digest === b.digest
 
-export function joinCard(offer: JoinOffer, holds: JoinHolds = {}): JoinCard {
+export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
   // 0.2: no criterion states its admission. Said as today, whatever it lists.
   if (offer.wire === '0.2') return { mode: 'legacy' }
   // No criteria, or it says so: the community accepts no applications.

@@ -8,7 +8,8 @@
 import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
-import { joinCard, type JoinOffer, type JoinWay } from '../screens/joinWays'
+import type { JoinAsks, JoinWay } from '../module/joinManifest'
+import { joinCard } from '../screens/joinWays'
 
 const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
   admission: 'automatic',
@@ -37,7 +38,7 @@ const vetted = (admission: JoinWay['admission'], meets: JoinWay['meets'] = 'no')
   })
 
 /** A new community: the three defaults, in order, seen from a phone holding nothing. */
-const defaults: JoinOffer = {
+const defaults: JoinAsks = {
   wire: '0.3',
   accepting: true,
   ways: [{ ...invited, meets: 'no' }, memberCredential, review],
@@ -46,7 +47,7 @@ const defaults: JoinOffer = {
 }
 
 describe('a 0.2 manifest states no admission', () => {
-  const legacy: JoinOffer = {
+  const legacy: JoinAsks = {
     wire: '0.2',
     accepting: true,
     ways: [vetted('unstated')],
@@ -108,7 +109,7 @@ describe('the three defaults, on a phone holding nothing', () => {
 
 describe('the main button follows what meeting the suggested way leads to', () => {
   it('an invited phone joins: the invitation way is automatic and it is first', () => {
-    const offer: JoinOffer = {
+    const offer: JoinAsks = {
       ...defaults,
       ways: [invited, memberCredential, review],
       suggested: invited,
@@ -253,7 +254,6 @@ describe('the words', () => {
       for (const key of [
         'NotAccepting',
         'Changed',
-        'ReadAgain',
         'VersionUnsupported',
         'Title',
         'Several',

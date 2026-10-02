@@ -1441,7 +1441,6 @@
     "Ways": {
       "NotAccepting": "{{community}} n'accepte pas de demandes pour le moment.",
       "Changed": "{{community}} a modifié ce qu'elle demande depuis votre dernière consultation. Relisez avant de continuer.",
-      "ReadAgain": "Relire",
       "VersionUnsupported": "{{community}} utilise un mode d'adhésion que cette version de Keyring ne sait pas encore lire. Mettez Keyring à jour, puis réessayez.",
       "Title": "Ce que {{community}} demande",
       "Several": "Il y a plusieurs façons d'entrer. Une seule suffit.",
@@ -1449,6 +1448,7 @@
       "NeedsCredentialCommunity": "Un justificatif {{type}} émis par {{community}}",
       "NeedsCredentialRecognised": "Un justificatif {{type}} de {{community}} ou d'une communauté qu'elle reconnaît",
       "NeedsCredentialAny": "Un justificatif {{type}} de n'importe quel émetteur",
+      "NeedsCredential": "Un justificatif {{type}}",
       "NeedsNothing": "Rien de plus : il suffit de demander.",
       "FollowsAutomatic": "Avec cela, votre admission est immédiate.",
       "FollowsReview": "Une personne qui administre la communauté examine votre demande et décide.",
@@ -1792,6 +1792,10 @@
   },
   "Errors": {
     "AlreadyAsked": "Vous avez déjà demandé à rejoindre. La communauté décide encore, ou attend votre vérification.",
+    "JoinChanged": "Cette communauté a modifié ce qu'elle demande. Relisez, puis continuez.",
+    "JoinNotAccepting": "Cette communauté n'accepte pas de demandes pour le moment.",
+    "JoinPresentationInvalid": "La communauté n'a pas pu accepter ce que ce téléphone a présenté. Réessayez ; si cela se reproduit, prévenez une personne qui administre la communauté.",
+    "JoinPolicyUnsatisfied": "Les règles de la communauté ne permettent pas cette demande.",
     "AlreadyDecided": "La communauté a déjà répondu à votre demande. Ouvrez la communauté pour voir sa réponse.",
     "NothingOpen": "Vous n'avez aucune demande en cours auprès de cette communauté.",
     "NotAwaitingEvidence": "La communauté a ce qu'il lui faut et décide. Rien d'autre à envoyer pour l'instant.",

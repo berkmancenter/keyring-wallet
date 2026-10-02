@@ -1347,7 +1347,6 @@
     "Ways": {
       "NotAccepting": "{{community}} não está aceitando pedidos no momento.",
       "Changed": "{{community}} mudou o que pede desde a última vez que você viu. Leia de novo antes de continuar.",
-      "ReadAgain": "Ler de novo",
       "VersionUnsupported": "{{community}} usa uma forma de entrada que esta versão do Keyring ainda não lê. Atualize o Keyring e tente de novo.",
       "Title": "O que {{community}} pede",
       "Several": "Há mais de uma forma de entrar. Basta uma.",
@@ -1355,6 +1354,7 @@
       "NeedsCredentialCommunity": "Uma credencial {{type}} emitida por {{community}}",
       "NeedsCredentialRecognised": "Uma credencial {{type}} de {{community}} ou de uma comunidade que ela reconhece",
       "NeedsCredentialAny": "Uma credencial {{type}} de qualquer emissor",
+      "NeedsCredential": "Uma credencial {{type}}",
       "NeedsNothing": "Nada mais: basta pedir.",
       "FollowsAutomatic": "Com isso, sua admissão é imediata.",
       "FollowsReview": "Uma pessoa que administra a comunidade analisa seu pedido e decide.",
@@ -1698,6 +1698,10 @@
   },
   "Errors": {
     "AlreadyAsked": "Você já pediu para entrar. A comunidade ainda está decidindo, ou aguardando sua verificação.",
+    "JoinChanged": "Esta comunidade mudou o que pede. Leia de novo e continue.",
+    "JoinNotAccepting": "Esta comunidade não está aceitando pedidos no momento.",
+    "JoinPresentationInvalid": "A comunidade não conseguiu aceitar o que este telefone apresentou. Tente de novo; se continuar, avise quem administra a comunidade.",
+    "JoinPolicyUnsatisfied": "As regras da comunidade não permitem este pedido.",
     "AlreadyDecided": "A comunidade já respondeu ao seu pedido. Abra a comunidade para ver a resposta.",
     "NothingOpen": "Você não tem nenhum pedido em aberto com esta comunidade.",
     "NotAwaitingEvidence": "A comunidade já tem o que precisa e está decidindo. Nada mais a enviar por enquanto.",
