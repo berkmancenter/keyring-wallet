@@ -416,8 +416,13 @@ BOB_DID=$(setup_vta bob 8112 "$BOB_HOST")
 # the consent rule `approver-setup.sh` writes — `pnm approvals list` shows it —
 # and never evaluates it: the key borrow runs unheld and nothing says why
 # (2026-09-21). Enforcement is config-only; no pnm command sets it.
-sed -i.bak '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
-rm -f alice/config.toml.bak
+# bob gets it too (VTI-22): the runner VTA must behave like alice, or a rung that
+# passes on one fails on the other. `-i.bak` + rm is the one in-place form both
+# BSD (macOS) and GNU sed accept.
+for n in alice bob; do
+  sed -i.bak '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' "$n/config.toml"
+  rm -f "$n/config.toml.bak"
+done
 for n in alice community bob; do
   nohup "$VTA_BIN" --config "$n/config.toml" > "logs/$n.log" 2>&1 &
 done
