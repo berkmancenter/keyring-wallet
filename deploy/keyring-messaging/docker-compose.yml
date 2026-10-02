@@ -28,7 +28,11 @@ services:
       context: ./gateway
       args:
         GATEWAY_COMMIT: ${GATEWAY_COMMIT:-e542a9d77a7369f4f3da01d573107ea155c80691}
-    image: keyring-messaging/vti-push-gateway:${GATEWAY_COMMIT:-e542a9d77a7369f4f3da01d573107ea155c80691}
+    # The tag is GATEWAY_IMAGE_TAG: the commit plus the patch set (`-pN`), so an
+    # image with a new patch never shares a tag with the one before it. An
+    # .env without it falls back to the bare commit, the tag used before
+    # patch 0002 (README "Updating").
+    image: keyring-messaging/vti-push-gateway:${GATEWAY_IMAGE_TAG:-${GATEWAY_COMMIT:-e542a9d77a7369f4f3da01d573107ea155c80691}}
     restart: unless-stopped
     environment:
       # Empty values are unset by the image's entrypoint, so every optional
