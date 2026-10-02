@@ -145,15 +145,17 @@ log "every VTA can mint a served persona"
 # keeps every profile in its own config dir and reads PNM_HOME as that dir, so
 # a per-VTA PNM_HOME hid every profile and this check failed on healthy VTAs;
 # it is left unset. alice is Alberto's own agent and is not queried here.
-# up.sh keeps one pnm profile, `community`, under PNM_HOME=$STACK_DIR/pnm-community
-# and registers the host on every VTA offline (`vta did-mgmt servers add`), so a
+# up.sh keeps pnm profiles under PNM_HOME=$STACK_DIR/pnm-community and
+# $STACK_DIR/pnm-bob (each VTA is tried with its own dir first, then the
+# community one, then the default) and registers the host on every VTA offline (`vta did-mgmt servers add`), so a
 # VTA with no pnm profile here (bob, as up.sh leaves it) or an expired pnm
 # session cannot be asked: that is "unverified", not "no host" — a false
 # negative otherwise (2026-10-01). Only an answered listing with no did:webvh
 # counts as a problem.
 for n in community bob; do
   listing=""
-  for home in "$STACK_DIR/pnm-community" ""; do
+  for home in "$STACK_DIR/pnm-$n" "$STACK_DIR/pnm-community" ""; do
+    if [ -n "$home" ] && [ ! -d "$home" ]; then continue; fi
     if [ -n "$home" ]; then
       listing=$(PNM_HOME="$home" "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
     else
