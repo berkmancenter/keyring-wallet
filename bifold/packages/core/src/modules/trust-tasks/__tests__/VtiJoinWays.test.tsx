@@ -192,14 +192,26 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
     })
 
-    it('keeps the fixed button area to the two buttons: "A different community" scrolls with the list', async () => {
-      // Three buttons under the list covered the last way's lines on a phone.
+    it('puts each button under the way it acts on, and nothing fixed under the list', async () => {
+      // Two buttons under the list covered the last way's lines on a phone.
       const tree = await toAsks(vettingCommunity)
+      const vettingRow = within(tree.getByTestId(id('JoinWay_vetted-member')))
+      const reviewRow = within(tree.getByTestId(id('JoinWay_review')))
+      expect(vettingRow.getByTestId(id('JoinStart'))).toBeTruthy()
+      expect(vettingRow.queryByTestId(id('JoinAsk'))).toBeNull()
+      expect(reviewRow.getByTestId(id('JoinAsk'))).toBeTruthy()
+      // What follows each way is right above its button.
+      expect(reviewRow.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+      expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+      // "A different community" is still on the screen, with the list.
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
+    })
+
+    it('one thing to do keeps its button fixed under the list, as before', async () => {
+      const tree = await toAsks(defaults)
       const fixed = within(tree.getByTestId(id('JoinActions')))
       expect(fixed.getByTestId(id('JoinStart'))).toBeTruthy()
-      expect(fixed.getByTestId(id('JoinAsk'))).toBeTruthy()
       expect(fixed.queryByTestId(id('JoinScanCommunity'))).toBeNull()
-      // Still on the screen, and still the way to another community.
       expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
