@@ -57,7 +57,7 @@ import { chooseCarriage, type Carriage } from './tspCapability'
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
-import { criterionToName, readManifest, type JoinIntent, type VtiManifest } from './joinManifest'
+import { readManifest, type VtiManifest } from './joinManifest'
 import {
   JOIN_MANIFEST_TYPES,
   joinTaskType,
@@ -1492,29 +1492,24 @@ class VtiAgentController {
   async apply(
     communityDid: string,
     manifest: VtiManifest,
-    options: {
-      credentials?: unknown[]
-      requirementsDigest?: string
-      registryConsent?: boolean
-      /** What the submission is made with, when no digest names its criterion: an invitation, or nothing in hand. */
-      intent?: JoinIntent
-    } = {}
+    options: { credentials?: unknown[]; requirementsDigest?: string; registryConsent?: boolean } = {}
   ): Promise<VtiVerdict> {
     let current = manifest
     const refused: JoinWire[] = []
-    let readAgain = false
     for (;;) {
       const wire = current.wire ?? '0.2'
       const type = joinTaskType('submit', wire)
-      // Which criterion the submission is made under. The community decides by
-      // it: at 0.2 `select_criterion` reads the digest and records
-      // `applicant_digest_matches: false` when it is absent — which its policy
-      // may weigh — and at 0.3 `criterion` is what governs. With more than one
+      // Which criterion the submission is made under. An application gathered
+      // against a criterion names that criterion's digest: with more than one
       // criterion an absent digest can mean gathering against one and being
-      // judged against another, so send the digest of the criterion this
-      // application was actually built for, and otherwise the one its intent
-      // names — or none, which leaves the choice to the community.
-      const criterion = options.requirementsDigest ?? criterionToName(current, options.intent ?? 'plain')
+      // judged against another (at 0.2 `select_criterion` reads the digest and
+      // records `applicant_digest_matches: false` when it is absent, which the
+      // community's policy may weigh; at 0.3 `criterion` is what governs).
+      // Without one, a 0.2 submit falls back to the manifest's own digest, as
+      // it always did, and a 0.3 submit names none — an invitation included,
+      // as openvtc does (#412): the community then decides it under the first
+      // criterion, in its published order, that the submission meets.
+      const criterion = options.requirementsDigest ?? (wire === '0.2' ? current.requirementsDigest : undefined)
       // The presentation is unsigned: the community takes the holder from the
       // sealed envelope's sender (VTI-9), so what matters is that the
       // credentials inside name that same DID as their subject.
@@ -1533,9 +1528,10 @@ class VtiAgentController {
       // the manifest read and now. It refuses that at dispatch, before any
       // handler runs, so this submit was NOT taken and asking in the version it
       // serves is the first submit, not a second. (Silence is no such proof,
-      // and is never answered with a resend.) What it asks is read again in
-      // that version first: the criteria, and their digests, are that
-      // version's.
+      // and is never answered with a resend — nor is any other refusal:
+      // `criterionUnknown`, say, goes to the caller, whose application was
+      // gathered for that criterion.) What it asks is read again in that
+      // version first: the criteria are that version's.
       const other = wireAfterRefusal(refusal, 'submit', refused)
       if (refusal && other) {
         this.agent?.config.logger.warn(
@@ -1545,22 +1541,6 @@ class VtiAgentController {
         current = await this.fetchManifest(communityDid)
         // The manifest and the submit disagree on the version: nothing safe is left to try.
         if ((current.wire ?? '0.2') !== other) throw refusal
-        continue
-      }
-      // The criterion this wallet chose to name is no longer one the community
-      // publishes: it changed since the manifest was read. Nothing was taken
-      // (a submission is decided before it is stored), so read the criteria
-      // once more and choose again. A digest the caller gave is the caller's:
-      // an application gathered for it is not silently moved to another.
-      if (
-        refusal &&
-        joinRequestRefusal(refusal) === 'criterionUnknown' &&
-        !options.requirementsDigest &&
-        criterion &&
-        !readAgain
-      ) {
-        readAgain = true
-        current = await this.fetchManifest(communityDid)
         continue
       }
       return this.verdictOf(answer, communityDid, type)

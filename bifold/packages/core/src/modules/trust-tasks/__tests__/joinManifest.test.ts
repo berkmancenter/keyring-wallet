@@ -6,14 +6,7 @@
  * vtc-service 0.49.0 published (see fixtures/join-0.3/README.md). So the
  * digest and the reading are checked against values Keyring did not compute.
  */
-import {
-  criterionDigest,
-  criterionToName,
-  joinAsks,
-  readManifest,
-  type VtiCriterion,
-  type VtiManifest,
-} from '../module/joinManifest'
+import { criterionDigest, joinAsks, readManifest, type VtiCriterion, type VtiManifest } from '../module/joinManifest'
 
 import invalidExamples from './fixtures/join-0.3/manifest-invalid-examples.json'
 import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
@@ -225,28 +218,5 @@ describe('the ways in, at manifest/0.2', () => {
   it('does not read an empty list as "not accepting": 0.2 never said what it meant', () => {
     expect(joinAsks(readManifest({ criteria: [] }, '0.2')).accepting).toBe(true)
     expect(joinAsks({ criteria: [] }).wire).toBe('0.2')
-  })
-})
-
-describe('the criterion a submission names', () => {
-  const digestOf = (manifest: VtiManifest, id: string) => manifest.criteria.find((c) => c.id === id)?.requirementsDigest
-
-  it('at 0.3: the vetting criterion for a vetting application, the invitation criterion for an invitation, none for a plain request', () => {
-    expect(criterionToName(severalWays, 'vetting')).toBe(digestOf(severalWays, 'kernel-developer'))
-    expect(criterionToName(severalWays, 'invitation')).toBe(digestOf(severalWays, 'invited'))
-    expect(criterionToName(severalWays, 'plain')).toBeUndefined()
-    expect(criterionToName(vtiDefaults, 'invitation')).toBe(digestOf(vtiDefaults, 'invited'))
-  })
-
-  it('at 0.3: names none when no usable criterion fits, leaving the choice to the community', () => {
-    expect(criterionToName(vtiDefaults, 'vetting')).toBeUndefined()
-    expect(criterionToName(example('Review only'), 'invitation')).toBeUndefined()
-  })
-
-  it('at 0.2: what it always was — the vetting criterion’s digest, else the manifest’s own', () => {
-    expect(criterionToName(lab02, 'vetting')).toBe(digestOf(lab02, 'vetted-member'))
-    expect(criterionToName(lab02, 'plain')).toBeUndefined()
-    expect(criterionToName({ criteria: [], requirementsDigest: 'd' }, 'plain')).toBe('d')
-    expect(criterionToName({ criteria: [], requirementsDigest: 'd' }, 'invitation')).toBe('d')
   })
 })

@@ -282,30 +282,3 @@ export function joinAsks(manifest: VtiManifest, holds: JoinHolds = {}): JoinAsks
       : {}),
   }
 }
-
-/** What a submission is made with: gathered vetting statements, an invitation, or nothing in hand. */
-export type JoinIntent = 'vetting' | 'invitation' | 'plain'
-
-/**
- * The criterion a submission names, by its digest — or undefined, which leaves
- * the choice to the community.
- *
- * At 0.3: a vetting application names the first usable criterion that asks for
- * vetting; an invitation names the first usable criterion an invitation alone
- * meets; a plain request names none, so the community decides it under the
- * first criterion it meets. At 0.2 the digest is what it always was: the first
- * vetting criterion's, else the manifest's own.
- */
-export function criterionToName(manifest: VtiManifest, intent: JoinIntent): string | undefined {
-  if ((manifest.wire ?? '0.2') === '0.2') {
-    const vetting = intent === 'vetting' ? manifest.criteria.find((c) => c.vetting)?.requirementsDigest : undefined
-    return vetting ?? manifest.requirementsDigest
-  }
-  if (intent === 'plain') return undefined
-  const ways = joinAsks(manifest).ways.filter((way) => way.usable)
-  const way =
-    intent === 'vetting'
-      ? ways.find((w) => w.requires.vetting)
-      : ways.find((w) => w.requires.invitation && !w.requires.vetting && !w.requires.credentials)
-  return way?.digest
-}

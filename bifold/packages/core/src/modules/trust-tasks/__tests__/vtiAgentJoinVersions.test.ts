@@ -203,23 +203,29 @@ describe('submitting', () => {
   const manifest03 = () => readManifest(payload03, '0.3')
   const manifest02 = () => readManifest(payload02 as Partial<VtiManifest>, '0.2')
 
-  it('at 0.3 names the criterion in `criterion`: the invitation criterion for an invitation, none for a plain request', async () => {
+  it('at 0.3 names the criterion an application was gathered for in `criterion`, and none otherwise — an invitation included', async () => {
     const communityDid = nextCommunity()
     const asked = asking({
-      [`${SUBMIT}/0.3`]: [answer(`${SUBMIT}/0.3`, verdict('allow')), answer(`${SUBMIT}/0.3`, verdict('refer'))],
+      [`${SUBMIT}/0.3`]: [
+        answer(`${SUBMIT}/0.3`, verdict('requestMore')),
+        answer(`${SUBMIT}/0.3`, verdict('allow')),
+        answer(`${SUBMIT}/0.3`, verdict('refer')),
+      ],
     })
-    const admitted = await vtiAgent.apply(communityDid, manifest03(), {
-      credentials: [{ id: 'vic' }],
-      intent: 'invitation',
-    })
-    expect(admitted.effect).toBe('allow')
+    await vtiAgent.apply(communityDid, manifest03(), { credentials: [], requirementsDigest: 'zQmGatheredFor' })
     expect(asked[0].type).toBe(`${SUBMIT}/0.3`)
-    expect(asked[0].payload.criterion).toBe(invited.requirementsDigest)
+    expect(asked[0].payload.criterion).toBe('zQmGatheredFor')
     expect(asked[0].payload).not.toHaveProperty('extensions')
+
+    // An invitation is presented, not named: the community decides under the
+    // first criterion the submission meets, as it does for openvtc (#412).
+    const admitted = await vtiAgent.apply(communityDid, manifest03(), { credentials: [{ id: 'vic' }] })
+    expect(admitted.effect).toBe('allow')
+    expect(asked[1].payload).not.toHaveProperty('criterion')
 
     const referred = await vtiAgent.apply(communityDid, manifest03())
     expect(referred.effect).toBe('refer')
-    expect(asked[1].payload).not.toHaveProperty('criterion')
+    expect(asked[2].payload).not.toHaveProperty('criterion')
   })
 
   it('at 0.2 is what it was: the digest in `extensions.requirementsDigest`, and no `criterion`', async () => {
@@ -243,14 +249,12 @@ describe('submitting', () => {
       [`${MANIFEST}/0.3`]: [answer(`${MANIFEST}/0.3`, payload03)],
       [`${SUBMIT}/0.3`]: [answer(`${SUBMIT}/0.3`, verdict('allow'))],
     })
-    const result = await vtiAgent.apply(communityDid, manifest02(), {
-      credentials: [{ id: 'vic' }],
-      intent: 'invitation',
-    })
+    const result = await vtiAgent.apply(communityDid, manifest02(), { credentials: [{ id: 'vic' }] })
     expect(result.effect).toBe('allow')
     expect(typesOf(asked)).toEqual([`${SUBMIT}/0.2`, `${MANIFEST}/0.3`, `${SUBMIT}/0.3`])
-    // The second submit is made under the criteria as read at 0.3.
-    expect(asked[2].payload.criterion).toBe(invited.requirementsDigest)
+    // The second submit is a 0.3 one: no 0.2 extension, and no criterion named.
+    expect(asked[2].payload).not.toHaveProperty('extensions')
+    expect(asked[2].payload).not.toHaveProperty('criterion')
   })
 
   it('does the same with a real 0.3 community’s answers: its refusal of submit/0.2, then its verdict on the submit/0.3 that followed', async () => {
@@ -279,9 +283,7 @@ describe('submitting', () => {
     const result = await vtiAgent.apply(
       communityDid,
       readManifest(vtc1907.manifest03.payload as Partial<VtiManifest>, '0.3'),
-      {
-        intent: 'invitation',
-      }
+      { requirementsDigest: vtc1907.manifest03.payload.criteria[0].requirementsDigest }
     )
     expect(result.effect).toBe('requestMore')
     expect(result.needs.map(parseJoinNeed)).toEqual([{ kind: 'invitation' }])
@@ -316,48 +318,17 @@ describe('submitting', () => {
     expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`])
   })
 
-  describe('when the criterion named is no longer published (criterionUnknown)', () => {
-    const invitedNow = published({ id: 'invited', admission: 'review', invitationRequired: true })
-    const changed = { ...payload03, criteria: [invitedNow, review] }
-    const unknown = () =>
-      refusal('vtc/join-requests/submit:criterionUnknown', { criterion: invited.requirementsDigest })
-
-    it('reads the criteria again and submits once more, for a criterion this wallet chose', async () => {
-      const communityDid = nextCommunity()
-      const asked = asking({
-        [`${SUBMIT}/0.3`]: [unknown(), answer(`${SUBMIT}/0.3`, verdict('refer'))],
-        [`${MANIFEST}/0.3`]: [answer(`${MANIFEST}/0.3`, changed)],
-      })
-      const result = await vtiAgent.apply(communityDid, manifest03(), {
-        credentials: [{ id: 'vic' }],
-        intent: 'invitation',
-      })
-      expect(result.effect).toBe('refer')
-      expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`, `${MANIFEST}/0.3`, `${SUBMIT}/0.3`])
-      expect(asked[2].payload.criterion).toBe(invitedNow.requirementsDigest)
+  it('never sends a submit again after criterionUnknown: the application was gathered for that criterion, and the refusal is the caller’s', async () => {
+    const communityDid = nextCommunity()
+    const asked = asking({
+      [`${SUBMIT}/0.3`]: [
+        refusal('vtc/join-requests/submit:criterionUnknown', { criterion: invited.requirementsDigest }),
+      ],
     })
-
-    it('does so once: a second criterionUnknown is the answer', async () => {
-      const communityDid = nextCommunity()
-      const asked = asking({
-        [`${SUBMIT}/0.3`]: [unknown(), unknown()],
-        [`${MANIFEST}/0.3`]: [answer(`${MANIFEST}/0.3`, changed)],
-      })
-      const failure = await vtiAgent
-        .apply(communityDid, manifest03(), { credentials: [{ id: 'vic' }], intent: 'invitation' })
-        .catch((e) => e)
-      expect(joinRequestRefusal(failure)).toBe('criterionUnknown')
-      expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`, `${MANIFEST}/0.3`, `${SUBMIT}/0.3`])
-    })
-
-    it('does not move an application gathered for a digest to another criterion: the refusal is the caller’s', async () => {
-      const communityDid = nextCommunity()
-      const asked = asking({ [`${SUBMIT}/0.3`]: [unknown()] })
-      const failure = await vtiAgent
-        .apply(communityDid, manifest03(), { credentials: [], requirementsDigest: invited.requirementsDigest })
-        .catch((e) => e)
-      expect(joinRequestRefusal(failure)).toBe('criterionUnknown')
-      expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`])
-    })
+    const failure = await vtiAgent
+      .apply(communityDid, manifest03(), { credentials: [], requirementsDigest: invited.requirementsDigest })
+      .catch((e) => e)
+    expect(joinRequestRefusal(failure)).toBe('criterionUnknown')
+    expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`])
   })
 })
