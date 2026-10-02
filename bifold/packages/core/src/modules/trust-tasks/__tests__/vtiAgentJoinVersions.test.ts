@@ -13,8 +13,10 @@
  */
 import { VtiRefusal, VtiSentNoAnswer, isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent } from '../module/vtiAgent'
 import { criterionDigest, readManifest, type VtiCriterion, type VtiManifest } from '../module/joinManifest'
+import { parseJoinNeed } from '../module/joinSubmission'
 
 import vtc049 from './fixtures/join-0.3/vtc-0.49.0-answers.json'
+import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -134,6 +136,21 @@ describe('reading the manifest over REST', () => {
     expect(asked).toEqual([`${MANIFEST}/0.2`, `${MANIFEST}/0.3`])
   })
 
+  it('moves up to 0.3 with the answers a vtc-service that serves only 0.3 gave', async () => {
+    const communityDid = nextCommunity()
+    restServing({ [`${MANIFEST}/0.3`]: restRefuses(['0.1', '0.2']), [`${MANIFEST}/0.2`]: rest02 })
+    await vtiAgent.fetchManifest(communityDid, fakeAgent(communityDid))
+
+    const asked = restServing({
+      [`${MANIFEST}/0.2`]: { status: vtc1907.manifest02Refused.status, body: vtc1907.manifest02Refused },
+      [`${MANIFEST}/0.3`]: { status: 200, body: vtc1907.manifest03 },
+    })
+    const manifest = await vtiAgent.fetchManifest(communityDid, fakeAgent(communityDid))
+    expect(manifest.wire).toBe('0.3')
+    expect(manifest.criteria.map((c) => c.id)).toEqual(['invited', 'member-credential', 'review'])
+    expect(asked).toEqual([`${MANIFEST}/0.2`, `${MANIFEST}/0.3`])
+  })
+
   it('says so when the community serves no version this wallet speaks, without asking again over DIDComm', async () => {
     const communityDid = nextCommunity()
     restServing({ [`${MANIFEST}/0.3`]: restRefuses(['0.4']) })
@@ -234,6 +251,40 @@ describe('submitting', () => {
     expect(typesOf(asked)).toEqual([`${SUBMIT}/0.2`, `${MANIFEST}/0.3`, `${SUBMIT}/0.3`])
     // The second submit is made under the criteria as read at 0.3.
     expect(asked[2].payload.criterion).toBe(invited.requirementsDigest)
+  })
+
+  it('does the same with a real 0.3 community’s answers: its refusal of submit/0.2, then its verdict on the submit/0.3 that followed', async () => {
+    // Measured on a vtc-service built from VTI 789ab4c2: the applicant whose
+    // submit/0.2 it refused had its next submit/0.3 taken as a first request.
+    const communityDid = nextCommunity()
+    const asked = asking({
+      [`${SUBMIT}/0.2`]: [{ type: vtc1907.submit02Refused.type, body: { payload: vtc1907.submit02Refused.payload } }],
+      [`${MANIFEST}/0.3`]: [answer(`${MANIFEST}/0.3`, vtc1907.manifest03.payload)],
+      [`${SUBMIT}/0.3`]: [answer(`${SUBMIT}/0.3`, { requestId: 'r-1', ...vtc1907.submit03AfterThatRefusal.payload })],
+    })
+    const result = await vtiAgent.apply(communityDid, manifest02())
+    expect(result.effect).toBe('refer')
+    expect(typesOf(asked)).toEqual([`${SUBMIT}/0.2`, `${MANIFEST}/0.3`, `${SUBMIT}/0.3`])
+    // A plain request names no criterion: the community decided it under `review`.
+    expect(asked[2].payload).not.toHaveProperty('criterion')
+  })
+
+  it('reads what a real 0.3 community still needs under the invitation criterion', async () => {
+    const communityDid = nextCommunity()
+    asking({
+      [`${SUBMIT}/0.3`]: [
+        answer(`${SUBMIT}/0.3`, { requestId: 'r-2', ...vtc1907.submit03InvitedWithoutInvitation.payload }),
+      ],
+    })
+    const result = await vtiAgent.apply(
+      communityDid,
+      readManifest(vtc1907.manifest03.payload as Partial<VtiManifest>, '0.3'),
+      {
+        intent: 'invitation',
+      }
+    )
+    expect(result.effect).toBe('requestMore')
+    expect(result.needs.map(parseJoinNeed)).toEqual([{ kind: 'invitation' }])
   })
 
   it('never sends a submit again after silence: the community may have taken it', async () => {

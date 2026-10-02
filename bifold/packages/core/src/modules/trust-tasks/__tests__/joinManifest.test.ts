@@ -18,6 +18,7 @@ import {
 import invalidExamples from './fixtures/join-0.3/manifest-invalid-examples.json'
 import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
 import vtc049 from './fixtures/join-0.3/vtc-0.49.0-answers.json'
+import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
 
 const example = (title: string): VtiManifest => {
   const found = specExamples.find((e) => e.title.startsWith(title))
@@ -33,25 +34,11 @@ const published = (criterion: VtiCriterion): VtiCriterion => ({
   requirementsDigest: criterionDigest(criterion),
 })
 
-/** The criteria a new community starts with (vti docs/03-vtc/join-criteria.md, The defaults), in their order. */
-const vtiDefaults = readManifest(
-  {
-    communityDid: 'did:webvh:QmVtcScid:vtc.example.org',
-    criteria: [
-      published({ id: 'invited', admission: 'automatic', invitationRequired: true }),
-      published({
-        id: 'member-credential',
-        admission: 'automatic',
-        presentationDefinition: {
-          credentials: [{ id: 'membership', format: 'ldp_vc', meta: { type_values: [['MembershipCredential']] } }],
-        },
-        credentialIssuers: 'community',
-      }),
-      published({ id: 'review', admission: 'review' }),
-    ],
-  },
-  '0.3'
-)
+/**
+ * The criteria a new community starts with (vti docs/03-vtc/join-criteria.md,
+ * The defaults), as a vtc-service that serves 0.3 published them.
+ */
+const vtiDefaults = readManifest(vtc1907.manifest03.payload as Partial<VtiManifest>, '0.3')
 
 describe('requirementsDigest', () => {
   const specCriteria = specExamples.flatMap((e) =>
@@ -61,6 +48,13 @@ describe('requirementsDigest', () => {
   it.each(specCriteria)('recomputes to the value the specification prints: %s', (_name, criterion) => {
     expect(criterionDigest(criterion)).toBe(criterion.requirementsDigest)
   })
+
+  it.each(vtiDefaults.criteria.map((c) => [c.id, c] as const))(
+    'recomputes to the value a running 0.3 community published: %s',
+    (_id, criterion) => {
+      expect(criterionDigest(criterion)).toBe(criterion.requirementsDigest)
+    }
+  )
 
   it.each(lab02.criteria.map((c) => [c.id, c] as const))(
     'recomputes to the value a running 0.2 community published: %s',
@@ -122,6 +116,11 @@ describe('the ways in, at manifest/0.3', () => {
   })
 
   it('reads a new community’s default criteria: reviewed with nothing in hand, admitted with an invitation', () => {
+    expect(joinAsks(vtiDefaults).ways.map((w) => [w.id, w.admission, w.usable])).toEqual([
+      ['invited', 'automatic', true],
+      ['member-credential', 'automatic', true],
+      ['review', 'review', true],
+    ])
     expect(joinAsks(vtiDefaults).suggested?.id).toBe('review')
     expect(joinAsks(vtiDefaults).outcomeIfMet).toBe('reviewed')
     expect(joinAsks(vtiDefaults, { invitation: true }).suggested?.id).toBe('invited')

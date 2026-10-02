@@ -17,3 +17,8 @@ blocks again, and read every change as a finding before accepting it.
 
 - `vtc-0.49.0-answers.json` — what a running vtc-service 0.49.0 answered: its
   manifest at 0.2, and its refusal of a manifest/0.3 request.
+- `vtc-789ab4c2-answers.json` — what a vtc-service built from VTI main 789ab4c2
+  (#1907) answered: its manifest at 0.3 (a new community's default criteria),
+  its refusals of manifest/0.2 and submit/0.2, and its answers to three
+  submits. The same applicant's submit/0.2 was refused and its next submit/0.3
+  was taken as a first request (`refer`), not as `requestAlreadyOpen`.
