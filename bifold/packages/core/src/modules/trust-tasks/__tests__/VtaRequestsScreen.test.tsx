@@ -123,6 +123,10 @@ describe('Requests', () => {
     expect(tree.queryByTestId(id('ApproveConsentButton'))).toBeNull()
     const earlier = within(tree.getByTestId(id('RequestsEarlier')))
     expect(earlier.getByTestId(id(`AgentApprovalDecided_${DIGEST}`))).toHaveTextContent('MyAgent.Approved')
+    // Decided: what was asked and what was decided, not the advice for deciding.
+    expect(earlier.queryByTestId(id('ApprovalMatchCode'))).toBeNull()
+    expect(earlier.queryByTestId(id('ApprovalOutcomeUnknown'))).toBeNull()
+    expect(earlier.getByTestId(id('AgentApprovalCard'))).toHaveTextContent(/MyAgent\.ApprovalAsks/)
     fireEvent.press(tree.getByTestId(id('RequestsBackToAgent')))
     expect(navigation.goBack).toHaveBeenCalledTimes(1)
   })
@@ -168,6 +172,7 @@ describe('Requests', () => {
       jest.advanceTimersByTime(5 * 60 * 1000 + 1000)
     })
     expect(tree.getByTestId(id('RequestExpired'))).toHaveTextContent('Requests.Expired')
+    expect(tree.queryByTestId(id('ApprovalMatchCode'))).toBeNull()
     expect(tree.queryByTestId(id('ApproveConsentButton'))).toBeNull()
     expect(tree.queryByTestId(id('DenyConsentButton'))).toBeNull()
     // Not "nothing is waiting": the request that brought the person here is shown.

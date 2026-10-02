@@ -5,7 +5,8 @@
  *
  * A request past its expiry says so and has no buttons: the agent would
  * refuse the answer, so offering it would only mislead. A decided request
- * says what was decided.
+ * says what was decided. Neither repeats what approving would do or the code
+ * to compare, which only serve a decision still to make.
  *
  * Each card and its controls also carry the request's own handle in their
  * test ids, so a test with several requests waiting acts on its own.
@@ -68,13 +69,18 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
         </ThemedText>
         {shows === 'expired' ? (
           <ThemedText testID={testIdWithKey('RequestExpired')}>{t('Requests.Expired')}</ThemedText>
-        ) : (
-          <ThemedText style={styles.muted}>
-            {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
-          </ThemedText>
-        )}
-        <ApprovalDetails approval={approval} />
-        <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
+        ) : null}
+        {shows === 'waiting' ? (
+          <>
+            <ThemedText style={styles.muted}>
+              {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
+            </ThemedText>
+            {/* What approving would do and the code to compare are for deciding:
+                not repeated under a request that can no longer be decided. */}
+            <ApprovalDetails approval={approval} />
+            <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
+          </>
+        ) : null}
         {shows === 'waiting' ? (
           <View style={styles.row}>
             <View testID={testIdWithKey(`ApproveConsentButton_${handle}`)}>
