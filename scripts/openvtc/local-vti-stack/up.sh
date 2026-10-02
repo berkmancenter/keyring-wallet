@@ -114,7 +114,8 @@ fi
 # 6379 (a shared host's Redis may hold someone else's data in db0). Default unchanged.
 REDIS_PORT="${REDIS_PORT:-6379}"
 # REDIS_DB: a database index on that instance (0-15), so the mediator's keys stay out of
-# db0. preflight.sh refuses db0 on port 6379 unless LAB_ALLOW_REDIS_DB0=1.
+# db0. preflight.sh refuses db0 on port 6379 unless LAB_ALLOW_REDIS_DB0=1 or
+# LAB_ALLOW_LIVE_DOMAINS=1 (the Mac stack, which has always used db0).
 REDIS_DB="${REDIS_DB:-}"
 REDIS_URL="redis://127.0.0.1:$REDIS_PORT/$REDIS_DB"
 
@@ -124,6 +125,18 @@ REDIS_URL="redis://127.0.0.1:$REDIS_PORT/$REDIS_DB"
 NGROK_HOSTS=""
 if [ -f "$STACK_DIR/ngrok.yml" ]; then
   NGROK_HOSTS=$("$(dirname "$0")/ngrok-lab-config.sh" --hosts "$STACK_DIR/ngrok.yml") || exit 1
+  # Tunnels to start: the six by default. With LAB_ALLOW_LIVE_DOMAINS=1 (the Mac
+  # stack owner) every tunnel the lab file names, since that file also keeps
+  # tunnels added at runtime so a restart brings them back. Names are validated
+  # by ngrok-lab-config.sh; never `ngrok start --all` (it would also start
+  # whatever a layered default config declares).
+  NGROK_TUNNELS=(alice community bob vtc dids mediator)
+  if [ "${LAB_ALLOW_LIVE_DOMAINS:-}" = "1" ]; then
+    NGROK_TUNNELS=()
+    while IFS= read -r _t; do NGROK_TUNNELS+=("$_t"); done \
+      < <("$(dirname "$0")/ngrok-lab-config.sh" --tunnels "$STACK_DIR/ngrok.yml") || exit 1
+    [ ${#NGROK_TUNNELS[@]} -ge 6 ] || { echo "no tunnels found in $STACK_DIR/ngrok.yml"; exit 1; }
+  fi
   command -v ngrok >/dev/null || { echo "ngrok is not installed or not on PATH"; exit 1; }
 fi
 
@@ -210,7 +223,8 @@ log "opening tunnels"
 # restart, which is what makes this a fixture you can come back to.
 if [ -f "$STACK_DIR/ngrok.yml" ]; then
   # Hostnames come from the lab's own config (validated above, before the stack
-  # was stopped). ONLY the six named tunnels start, and ONLY from this config:
+  # was stopped). Only the six named tunnels start (with LAB_ALLOW_LIVE_DOMAINS=1,
+  # every tunnel this file names), and the tunnels come only from the lab file:
   # never --all, and never the user's ~/.config/ngrok/ngrok.yml, which on a
   # shared host holds someone else's tunnels. The config carries its own
   # authtoken (ngrok config add-authtoken <token> --config "$STACK_DIR/ngrok.yml").
@@ -220,7 +234,7 @@ if [ -f "$STACK_DIR/ngrok.yml" ]; then
   if [ "${LAB_ALLOW_LIVE_DOMAINS:-}" = "1" ] && [ -f "$HOME/.config/ngrok/ngrok.yml" ]; then
     NGROK_CONFIGS=(--config "$HOME/.config/ngrok/ngrok.yml" "${NGROK_CONFIGS[@]}")
   fi
-  nohup ngrok start alice community bob vtc dids mediator "${NGROK_CONFIGS[@]}" \
+  nohup ngrok start "${NGROK_TUNNELS[@]}" "${NGROK_CONFIGS[@]}" \
     > "$STACK_DIR/logs/ngrok.log" 2>&1 &
   echo $! > "$STACK_DIR/ngrok.pid"
   eval "$NGROK_HOSTS"
