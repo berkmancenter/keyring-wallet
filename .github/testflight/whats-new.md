@@ -6,14 +6,21 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
-• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
-• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
-• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
-• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
-• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
-• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
-• Screens stay above the keyboard when you type or paste a code.
-• The demo collector card and approval demo are gone; contacts show the regular list.
-• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
-• Update over your current version; there's no need to reinstall.
+What's new
+• Joining works with communities on the new join format, and still works with communities on the earlier one. Builds 229 and 230 can't join a community that has moved to the new format; this build can.
+• The Join screen shows each way into a community and what follows it: with some ways you're admitted straight away, with others an administrator reviews your request and decides.
+• Where a community offers both, the Join screen gives you "Meet a vetter" to get vetted and "Ask to join" to ask an administrator.
+• "Ask to join" sends your request from the Join screen. While it waits, the screen says an administrator will review it, and shows the answer there.
+• If a community isn't accepting applications, the Join screen says so.
+• Includes the 230 fix: scanning your hosting service's code from My Agent → Set up a new agent opens the "Connect this phone to your agent?" screen.
+
+Please test
+• Join a community, by invitation and by asking to join.
+• Get vetted, as a vetter and as an applicant.
+
+Known issues
+• Keyring can't present a credential you already hold to join a community yet, so a community's "membership credential" way isn't available from Keyring. Asking to join still works.
+• A vetter using the openvtc terminal app needs a build of that app from its current main branch; its latest release predates the fixes.
+• Some cards say "On this phone only": your agent can't keep a copy of them yet.
+• Notifications are built in but switched off in this build.
+• Update over your current version; your memberships carry over, with no need to re-join.
