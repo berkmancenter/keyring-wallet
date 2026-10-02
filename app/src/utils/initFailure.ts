@@ -57,3 +57,12 @@ export function initFailureWords(error: unknown): InitFailureWords {
   }
   return { title: 'Error.Title2026', description: 'Error.Message2026', showRawText: true }
 }
+
+/**
+ * The card's words as the person read them, for the problem report's "Shown
+ * to the user" line: a report says what was on the screen, not the error's
+ * own description.
+ */
+export function initFailureShown(words: InitFailureWords, t: (key: string) => string): string {
+  return `${t(words.title)}. ${t(words.description)}`
+}

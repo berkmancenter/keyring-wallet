@@ -2,7 +2,7 @@ import enWords from '../localization/en'
 import frWords from '../localization/fr'
 import ptBrWords from '../localization/pt-br'
 
-import { initFailureWords, messageServiceUnreachable } from './initFailure'
+import { initFailureShown, initFailureWords, messageServiceUnreachable } from './initFailure'
 
 /** The chain a tester's phone showed on first run while the hosted mediator was down (IN-75). */
 const didcommTimedOut = () => {
@@ -82,6 +82,17 @@ describe('what the start-up error card says', () => {
       description: 'Error.Message2026',
       showRawText: true,
     })
+  })
+
+  it("the problem report is given the words the card showed, not the error's own description", () => {
+    const t = (key: string) =>
+      key.split('.').reduce<unknown>((at, part) => (at as Record<string, unknown>)[part], enWords) as string
+    expect(initFailureShown(initFailureWords(didcommTimedOut()), t)).toBe(
+      "Keyring couldn't reach its message service. Your wallet and everything in it are fine. The service that carries Keyring's messages didn't answer. Check that this phone is online, then try again. If it is, the service may be down for a while."
+    )
+    expect(initFailureShown(initFailureWords(new Error('boom')), t)).toBe(
+      'Oops! Something went wrong. The app has encountered a problem. Try restarting the app.'
+    )
   })
 
   it('the words exist in every language, name the service plainly and blame nobody', () => {

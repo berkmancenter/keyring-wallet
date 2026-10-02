@@ -20,7 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import KeyRingLogoWhite from '@assets/img/Keyring_Logo_White.svg'
 import { BCState } from '@/store'
-import { initFailureWords } from '@/utils/initFailure'
+import { initFailureShown, initFailureWords } from '@/utils/initFailure'
 import { reportProblem } from '@/utils/logger'
 
 const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
@@ -39,12 +39,16 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
   const gradientColors = GradientTheme?.headerGradient?.colors ?? ['#2E4953', '#622C62', '#6E121D']
   const gradientLocations = GradientTheme?.headerGradient?.locations ?? [0.00962, 0.50962, 1]
 
+  // What the card says: plain words when the message service did not answer (IN-75).
+  const failureWords = useMemo(() => initFailureWords(initError?.cause ?? initError), [initError])
+
   const report = useCallback(() => {
     if (initError) {
-      reportProblem(initError)
+      // The report says what the card said, not the error's own description.
+      reportProblem(initError, initFailureShown(failureWords, t))
     }
     setReported(true)
-  }, [initError])
+  }, [initError, failureWords, t])
 
   const steps: string[] = useMemo(
     () => [
@@ -107,9 +111,6 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
     store.authentication.didAuthenticate,
     walletSecret,
   ])
-
-  // What the card says: plain words when the message service did not answer (IN-75).
-  const failureWords = useMemo(() => initFailureWords(initError?.cause ?? initError), [initError])
 
   const handleErrorCallToActionPressed = useCallback(() => {
     setInitError(null)
