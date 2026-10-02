@@ -1,7 +1,8 @@
 /**
  * JoinWaysCard — a 0.3 community's ways in, worded (see joinWays.ts for what
  * is shown and why). One block per way, in the community's order: what it
- * needs, what follows meeting it, and which one this phone can use now.
+ * needs, what follows meeting it, and what the person can do about it now:
+ * use it as the phone stands, or go and get vetted for it.
  *
  * @module trust-tasks/screens/JoinWaysCard
  */
@@ -70,7 +71,7 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
           {row.needs
             .flatMap((need) => needLines(need, community, t))
             .map((line) => (
-              <ThemedText key={line} variant={row.suggested ? 'bold' : undefined}>
+              <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
                 {'• '}
                 {line}
               </ThemedText>
@@ -86,6 +87,9 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
           ) : null}
           {row.suggested ? (
             <ThemedText testID={testIdWithKey('JoinWaySuggested')}>{t('Join.Ways.Suggested')}</ThemedText>
+          ) : null}
+          {row.canStartVetting ? (
+            <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
           ) : null}
         </View>
       ))}

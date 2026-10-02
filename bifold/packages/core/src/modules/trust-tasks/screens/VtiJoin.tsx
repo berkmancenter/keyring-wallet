@@ -211,14 +211,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setStanding(undefined)
     setAgain(false)
     setChanged(false)
+    setPlainRequest(false)
   }, [communityDid])
 
   // What the card shows at 0.3: each way, the one this phone meets, the button.
   const card = offer ? joinCard(offer, holds) : undefined
   const ways = card?.mode === 'ways' ? card : undefined
   // A request this screen sends itself: a way the phone meets that needs no
-  // invitation (those go through "I was invited") and no vetting still to do.
-  const plainRequest = Boolean(ways && (ways.button === 'join' || ways.button === 'ask'))
+  // invitation (those go through "I was invited"). Chosen by the button the
+  // person pressed, since a card can offer vetting and asking side by side.
+  const [plainRequest, setPlainRequest] = useState(false)
 
   // Read each time the screen comes into view, not only when it first mounts:
   // a join finished elsewhere (the invited screen, the vetting) shows here.
@@ -547,12 +549,37 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                     ? t('Join.Ways.ButtonJoin', named)
                     : ways.button === 'ask'
                       ? t('Join.Ways.ButtonAsk')
-                      : t('Join.Start')
+                      : // Beside "Ask to join", the button names where it leads.
+                        ways.alsoAsk
+                        ? t('Join.Ways.ButtonVetting')
+                        : t('Join.Start')
                 }
                 buttonType={ButtonType.Primary}
-                // An invitation the phone holds is presented from "I was invited", where it is.
-                onPress={() => (suggestedWay?.requires.invitation ? toInvited() : setStep('as'))}
+                onPress={() => {
+                  if (ways.button === 'start') {
+                    setPlainRequest(false)
+                    setStep('as')
+                  } else if (suggestedWay?.requires.invitation) {
+                    // An invitation the phone holds is presented from "I was invited", where it is.
+                    toInvited()
+                  } else {
+                    setPlainRequest(true)
+                    setStep('as')
+                  }
+                }}
                 testID={testIdWithKey('JoinStart')}
+              />
+            ) : null}
+            {ways.alsoAsk ? (
+              // The other door: the review way the phone meets as it stands.
+              <Button
+                title={t('Join.Ways.ButtonAsk')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => {
+                  setPlainRequest(true)
+                  setStep('as')
+                }}
+                testID={testIdWithKey('JoinAsk')}
               />
             ) : null}
             {different}

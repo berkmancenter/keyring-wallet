@@ -1,0 +1,42 @@
+{
+  "note": "What a hosted vtc-service answered to join-requests/manifest/0.3 on 2026-10-02T17:13Z for a community set up for vetting: an invitation way, a vetting way and a review way, in that order. The criteria are as answered, digests included; the community's DID is replaced by a placeholder and the envelope (ids, proof) left out.",
+  "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+  "payload": {
+    "communityDid": "did:webvh:QmVettingCommunityPlaceholderxxxxxxxxxxxxxxxxxxx:vtc.example",
+    "criteria": [
+      {
+        "admission": "automatic",
+        "description": "An invitation from a community admin",
+        "id": "invited-member",
+        "invitationRequired": true,
+        "requirementsDigest": "zQmP3Rzx11rpQWCnZa3LUjshfS6WJJ8EkwLsmuUt3ujnycQ"
+      },
+      {
+        "admission": "automatic",
+        "description": "One vetter must confirm who you are",
+        "id": "vetted-member",
+        "requirementsDigest": "zQmRirdx2bXe1vUTz4qSsmHY4tCyXiiCvfnx5jjhMhLZ3QM",
+        "vetting": {
+          "acceptedMethods": ["inPerson", "video"],
+          "eligibleVetters": {
+            "role": "vetter"
+          },
+          "independence": {
+            "requireConsistentIdentityCommitment": true
+          },
+          "maxStatementAge": "P120D",
+          "minStatements": 1,
+          "requiredClaims": ["name.legal"],
+          "statementType": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+          "version": "0.1"
+        }
+      },
+      {
+        "admission": "review",
+        "description": "Reviewed by an administrator",
+        "id": "review",
+        "requirementsDigest": "zQmV4x4TRAZFNpuqGBgS17EFy1UxRNdD7DpyuTbegBRPeEC"
+      }
+    ]
+  }
+}

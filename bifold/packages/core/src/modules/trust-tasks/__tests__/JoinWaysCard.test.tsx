@@ -98,3 +98,22 @@ test('a way this app cannot use says so, and is not the one to use', () => {
   const tree = show({ wire: '0.3', accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
   expect(tree.getByTestId(id('JoinWay_odd'))).toHaveTextContent(/Join\.Ways\.CannotUse/)
 })
+
+test('a vetting way the person can start says so on its own row, beside a review way the phone meets', () => {
+  const vetted = way({
+    id: 'vetted-member',
+    meets: 'no',
+    requires: { invitation: false, vetting: { statements: 1, claims: ['name.legal'], methods: [] } },
+  })
+  const tree = show({
+    wire: '0.3',
+    accepting: true,
+    ways: [vetted, review],
+    suggested: review,
+    outcomeIfMet: 'reviewed',
+  })
+  expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.Ways.VettingToDo')
+  expect(tree.getByTestId(id('JoinWay_vetted-member'))).not.toHaveTextContent(/Join\.Ways\.Suggested/)
+  expect(tree.getByTestId(id('JoinWay_review'))).toHaveTextContent(/Join\.Ways\.Suggested/)
+  expect(tree.queryByTestId(id('JoinWayStart_review'))).toBeNull()
+})
