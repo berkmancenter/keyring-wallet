@@ -4,6 +4,8 @@ name: Test builds (simulator app + APK)
 # downloads and installs instead of compiling. Nothing here signs for a store or
 # uploads anywhere but this run's artifacts.
 #
+# With `push: on` a build also names the push gateway, and its artifact name
+# ends in -push-on, so it cannot be taken for the testers' configuration.
 # What each build carries, like the staging build: MEDIATOR_URL and nothing else
 # baked in (no VTI_* value: testers link their own agent and community).
 #
@@ -31,6 +33,16 @@ on:
         type: choice
         options: [both, android, ios]
         default: both
+      push:
+        description: >-
+          "off" is the testers' configuration: no push gateway, so no
+          notification prompt and no Notifications row. "on" names the push
+          gateway, as a store build cut with PUSH_GATEWAY_URL does, so the
+          push-on probe has a build to run on. A simulator or emulator build
+          is not signed for push: "on" proves the screens, not a token.
+        type: choice
+        options: ["off", "on"]
+        default: "off"
 
 permissions:
   contents: read
@@ -141,11 +153,23 @@ jobs:
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          PUSH: ${{ inputs.push }}
+          # The gateway a store build would name; the repository variable when
+          # it is set, otherwise the production gateway's address.
+          PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # Push: only when asked for (inputs.push is empty on a push to main,
+          # which builds the testers' configuration).
+          if [ "${PUSH}" = "on" ]; then
+            echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >> .env
+          fi
+          if [ "${PUSH}" != "on" ] && grep -qE '^PUSH_' .env; then
+            echo "::error::a PUSH_ value would be baked into a push-off build"; exit 1
+          fi
 
       # Release configuration for the simulator: the JavaScript is bundled into
       # the app as in a store build. Signed ad hoc ("-", no certificate): with
@@ -190,12 +214,13 @@ jobs:
           native=${{ needs.heads.outputs.native }}
           main.jsbundle.sha256=$bundle_sha
           vti_keys_baked=none
+          push=${{ inputs.push == 'on' && 'on' || 'off' }}
           EOF
           cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: keyring-ios-sim-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}
+          name: keyring-ios-sim-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}
           path: out/
           retention-days: 7
 
@@ -255,11 +280,23 @@ jobs:
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          PUSH: ${{ inputs.push }}
+          # The gateway a store build would name; the repository variable when
+          # it is set, otherwise the production gateway's address.
+          PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # Push: only when asked for (inputs.push is empty on a push to main,
+          # which builds the testers' configuration).
+          if [ "${PUSH}" = "on" ]; then
+            echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >> .env
+          fi
+          if [ "${PUSH}" != "on" ] && grep -qE '^PUSH_' .env; then
+            echo "::error::a PUSH_ value would be baked into a push-off build"; exit 1
+          fi
 
       # The same SDK, NDK, build tools and CMake the app declares, as in staging.
       - name: Setup Android SDK
@@ -317,11 +354,12 @@ jobs:
           apk.sha256=$apk_sha
           signing=debug-key (test only)
           vti_keys_baked=none
+          push=${{ inputs.push == 'on' && 'on' || 'off' }}
           EOF
           cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: keyring-android-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}
+          name: keyring-android-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}
           path: out/
           retention-days: 7
