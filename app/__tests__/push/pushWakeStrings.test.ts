@@ -8,6 +8,8 @@
 import fs from 'fs'
 import path from 'path'
 
+import { APPROVALS_LINK } from '@bifold/core'
+
 import { openApprovalsOnTap } from '@/push/pushHandlers'
 
 const APP = path.join(__dirname, '..', '..')
@@ -75,5 +77,26 @@ describe('tapping the wake notification', () => {
     openApprovalsOnTap('https://push.example.org', s, openLink)
     await new Promise((r) => setImmediate(r))
     expect(openLink).toHaveBeenCalledTimes(1)
+  })
+})
+
+// On iOS the gateway's wake goes straight to APNs, so Firebase messaging never
+// reports its tap; the app's own notification delegate does (AppDelegate.mm).
+// It is native code no jest test runs, so this pins the two values it shares
+// with the rest of the app: the wake's string key and the approvals link.
+describe('the iOS notification delegate', () => {
+  const delegate = fs.readFileSync(path.join(APP, 'ios', 'AriesBifold', 'AppDelegate.mm'), 'utf8')
+
+  it('recognises the wake by the same string key', () => {
+    expect(delegate).toContain(`isEqual:@"${KEY}"`)
+  })
+
+  it("opens bifold's approvals link", () => {
+    expect(delegate).toContain(`KeyringApprovalsLink = @"${APPROVALS_LINK}";`)
+  })
+
+  it('handles a tap on a running app and a tap that launched it', () => {
+    expect(delegate).toContain('didReceiveNotificationResponse:')
+    expect(delegate).toContain('UIApplicationLaunchOptionsRemoteNotificationKey')
   })
 })
