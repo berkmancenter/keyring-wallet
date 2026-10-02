@@ -98,11 +98,10 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
       }
       // "Scan" on Create my agent's address step: an agent's address, or a
       // host's automatic-connection QR, goes back to that screen.
-      const forAddress = agentAddressScan.claim(value)
-      if (forAddress?.taken) {
-        navigation.goBack()
-        return
-      }
+      // The scanner closes before the result is handed over: that screen may
+      // navigate on from it, and a second goBack here would then leave it (229).
+      const forAddress = agentAddressScan.claim(value, () => navigation.goBack())
+      if (forAddress?.taken) return
       if (forAddress) {
         const said = t(forAddress.why === 'hostNotAllowed' ? 'Scan.HostNotAllowed' : 'Scan.NotAnAgentAddress')
         setQrCodeScanError(new QrCodeScanError(said, value, said))

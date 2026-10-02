@@ -33,10 +33,21 @@ export const agentAddressScan = {
   },
   /**
    * For the scanner: undefined when nobody is waiting (scan as usual);
-   * `taken: true` when it went to the screen that asked (go back to it);
-   * `taken: false` with why, when it is neither (say so, keep scanning).
+   * `taken: true` when it went to the screen that asked; `taken: false` with
+   * why, when it is neither (say so, keep scanning).
+   *
+   * `close` closes the scanner, and is called BEFORE the result is handed
+   * over: the screen that asked may navigate on from it (a host's QR opens the
+   * confirm screen), and it must do so with the scanner already gone. Handing
+   * over first and closing after navigated twice — the hand-over's navigate
+   * removed the scanner, and the scanner's own goBack then went to the tab
+   * navigator, whose "back" is its first tab: Contacts, with no message (229).
+   * The scanner must not go back again after a taken claim.
    */
-  claim(value: string): { taken: true } | { taken: false; why: 'notAnAgent' | 'hostNotAllowed' } | undefined {
+  claim(
+    value: string,
+    close?: () => void
+  ): { taken: true } | { taken: false; why: 'notAnAgent' | 'hostNotAllowed' } | undefined {
     if (!waiting) return undefined
     const text = value.trim()
     let scanned: ScannedAgent | undefined
@@ -55,6 +66,7 @@ export const agentAddressScan = {
     if (!scanned) return { taken: false, why: 'notAnAgent' }
     const deliver = waiting
     waiting = undefined
+    close?.()
     deliver(scanned)
     return { taken: true }
   },
