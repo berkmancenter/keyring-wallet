@@ -16,7 +16,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
 import { claimWords } from './claimWords'
-import type { JoinCard, JoinNeed } from './joinWays'
+import type { JoinCard, JoinNeed, JoinWayRow } from './joinWays'
 
 type WaysCard = Extract<JoinCard, { mode: 'ways' }>
 
@@ -52,12 +52,22 @@ function needLines(need: JoinNeed, community: string, t: TFunction): string[] {
   }
 }
 
-export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ card, community }) => {
+export const JoinWaysCard: React.FC<{
+  card: WaysCard
+  community: string
+  /**
+   * A button for a way, shown under its lines. Used when the card offers two
+   * things to do: each sits under the way it acts on, right below what follows
+   * that way, rather than both under the whole list.
+   */
+  rowAction?: (row: JoinWayRow) => React.ReactNode
+}> = ({ card, community, rowAction }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 12 },
     way: { gap: 4 },
+    action: { marginTop: 8 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const named = { community, interpolation: { escapeValue: false } }
@@ -91,6 +101,7 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
           {row.canStartVetting ? (
             <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
           ) : null}
+          {rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
         </View>
       ))}
       {card.missing.length ? (
