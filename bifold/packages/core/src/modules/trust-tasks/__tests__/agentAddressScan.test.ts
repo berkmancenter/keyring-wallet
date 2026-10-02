@@ -26,6 +26,20 @@ test("an agent's address is handed back, trimmed, once", () => {
   expect(agentAddressScan.claim(VTA)).toBeUndefined()
 })
 
+test('the scanner is closed before the result is handed over, and exactly once', () => {
+  const order: string[] = []
+  agentAddressScan.request(() => void order.push('handed over'))
+  expect(agentAddressScan.claim(hostQr, () => void order.push('closed'))).toEqual({ taken: true })
+  expect(order).toEqual(['closed', 'handed over'])
+})
+
+test('a code that is not taken does not close the scanner', () => {
+  const close = jest.fn()
+  agentAddressScan.request(jest.fn())
+  expect(agentAddressScan.claim('did:key:z6MkNewPhone', close)).toEqual({ taken: false, why: 'notAnAgent' })
+  expect(close).not.toHaveBeenCalled()
+})
+
 test("an agent host's automatic-connection QR is handed back as its offer", () => {
   const got = jest.fn()
   agentAddressScan.request(got)
