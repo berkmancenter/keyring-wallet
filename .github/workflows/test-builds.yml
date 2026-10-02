@@ -47,8 +47,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time per branch and per push setting. A push-on dispatch and a
+# push-off build are different builds, so they do not cancel each other; a
+# newer run of the same kind still replaces an older one. (inputs.push is
+# empty on a push to main, which is a push-off build.)
 concurrency:
-  group: test-builds-${{ github.ref }}
+  group: test-builds-${{ github.ref }}-push-${{ inputs.push || 'off' }}
   cancel-in-progress: true
 
 jobs:
