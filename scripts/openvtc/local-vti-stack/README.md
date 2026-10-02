@@ -46,9 +46,9 @@ cargo build --manifest-path ~/Documents/vti-a96fe02f/Cargo.toml \
   -p vta-service -p vtc-service -p pnm-cli -p cnm-cli --features vta-service/tsp,vta-service/webvh
 VTI_SRC=~/Documents/vti-a96fe02f PNM_BIN=~/Documents/vti-a96fe02f/target/debug/pnm ./up.sh
 # then rebuild the app against the new stack.env, as after any up.sh
-
-brew install redis && brew services start redis
 ```
+
+On macOS, Redis comes from Homebrew: `brew install redis && brew services start redis`.
 
 `vetting` is not a `vta-service` feature — it rides `vta-sdk` and is built in.
 
@@ -91,13 +91,24 @@ anything): the old fallback used the default ngrok config and the
 config below first. `LAB_ALLOW_LIVE_DOMAINS=1` keeps the old fallback for the
 Mac stack's owner; `./test-up.sh` checks the guard offline.
 
+**The Mac stack's owner needs only that one override.** With
+`LAB_ALLOW_LIVE_DOMAINS=1`, `up.sh` (a) reads tunnels written in ngrok's inline
+form (`alice: { proto: http, addr: 8110, domain: ... }`) as well as the block form,
+(b) starts every tunnel the lab `ngrok.yml` names, not only the six (the file also
+keeps tunnels added at runtime), still from the named tunnels only and never
+`ngrok start --all`, and (c) allows Redis db0 on port 6379 without
+`LAB_ALLOW_REDIS_DB0=1`. Mode 600 on `ngrok.yml` is still required; preflight
+prints the exact `chmod 600 <path>` to run. Without the override (the lab path) none
+of this applies: six tunnels, db0 on 6379 refused.
+
 **Warnings.** The `keyring-vti-*.ngrok.app` domains are the live shared stack
 and belong to another account; never point a lab at them. `up.sh` and
 `ngrok-lab-config.sh` refuse those names unless `LAB_ALLOW_LIVE_DOMAINS=1`,
 which exists only for the Mac stack's owner. A host's default
 `~/.config/ngrok/ngrok.yml` may hold someone else's tunnels; the lab never
 reads it, never passes it to ngrok, and never uses `--all`. It starts exactly
-`alice community bob vtc dids mediator`, from `$STACK_DIR/ngrok.yml` only.
+`alice community bob vtc dids mediator`, from `$STACK_DIR/ngrok.yml` only
+(with `LAB_ALLOW_LIVE_DOMAINS=1`, every tunnel that file names).
 
 **Account and plan.** The stack needs six simultaneously online HTTP endpoints
 and six reserved domains. ngrok limits online endpoints and reserved domains
@@ -149,7 +160,14 @@ stops whatever listens on the stack's ports.
 **Redis db0 is refused.** `REDIS_DB` unset or `0` on the default port 6379 fails
 the preflight (db0 of a shared Redis holds other sessions' data). Use
 `REDIS_DB=5`, or a dedicated instance via `REDIS_PORT` (db0 there is allowed),
-or `LAB_ALLOW_REDIS_DB0=1`. `./test-up.sh` covers the guards offline.
+or `LAB_ALLOW_REDIS_DB0=1`; `LAB_ALLOW_LIVE_DOMAINS=1` (the Mac stack's owner)
+implies that allowance, since that stack has always used db0. `./test-up.sh`
+covers the guards offline.
+
+preflight shows each binary's `--version` where it takes one (pnm and
+mediator-setup reject it, so their size and mtime are shown). Without `timeout`
+(stock macOS; `brew install coreutils` gives `gtimeout`) it skips `--version`
+and says so.
 
 ### Running the e2e against it
 
