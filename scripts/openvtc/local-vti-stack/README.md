@@ -84,9 +84,12 @@ The scripts branch on `uname` where macOS and Linux differ; nothing else changes
 
 ## ngrok with your own account (Linux lab)
 
-Reserved domains keep every DID stable across restarts. Without an
-`ngrok.yml` in the stack dir, `up.sh` falls back to cloudflared quick tunnels
-(new hostnames, so new DIDs, every run).
+Reserved domains keep every DID stable across restarts. **`up.sh` refuses to
+run without `$STACK_DIR/ngrok.yml`** (exit 2, before it starts or stops
+anything): the old fallback used the default ngrok config and the
+`keyring-vti-*` live hosts, which are someone else's stack. Create the lab
+config below first. `LAB_ALLOW_LIVE_DOMAINS=1` keeps the old fallback for the
+Mac stack's owner; `./test-up.sh` checks the guard offline.
 
 **Warnings.** The `keyring-vti-*.ngrok.app` domains are the live shared stack
 and belong to another account; never point a lab at them. `up.sh` and

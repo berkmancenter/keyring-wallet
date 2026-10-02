@@ -73,6 +73,31 @@ stop_stack() {
 
 if [ "${1:-}" = "--stop" ]; then stop_stack; exit 0; fi
 
+# Refuse to run on the live domains by accident. Without a lab ngrok config the
+# script used to fall back to open_tunnel with the default ngrok config and the
+# keyring-vti-* hosts, which belong to someone else's running stack (that is how
+# a request once reached their live hosts). Checked before anything is started
+# or stopped; the fallback is kept, behind LAB_ALLOW_LIVE_DOMAINS=1.
+if [ ! -f "$STACK_DIR/ngrok.yml" ] && [ "${LAB_ALLOW_LIVE_DOMAINS:-}" != "1" ]; then
+  HERE_UP="$(cd "$(dirname "$0")" && pwd)"
+  cat >&2 <<EOF
+up.sh: refusing to start: no lab ngrok config at $STACK_DIR/ngrok.yml.
+
+Without it this script falls back to the default ngrok setup and the
+keyring-vti-* live domains, which are someone else's running stack. Nothing was
+started or stopped.
+
+Create your own lab config (six domains reserved on YOUR ngrok account), see
+"ngrok with your own account" in $HERE_UP/README.md:
+  $HERE_UP/ngrok-lab-config.sh --prefix <name> --suffix ngrok.app --out $STACK_DIR/ngrok.yml
+  ngrok config add-authtoken <token> --config $STACK_DIR/ngrok.yml
+
+LAB_ALLOW_LIVE_DOMAINS=1 overrides this and exists only for the owner of the
+Mac stack that runs on those domains.
+EOF
+  exit 2
+fi
+
 # On Linux sign-lab-tool.sh only makes the stable ~/vti-stack/bin/<tool> link, so
 # create a missing pnm link here rather than failing on a forgotten prerequisite.
 if [ "$(uname)" = "Linux" ] && [ ! -x "$PNM_BIN" ] && [ "$PNM_BIN" = "$HOME/vti-stack/bin/pnm" ]; then
