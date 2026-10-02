@@ -544,6 +544,16 @@ export const applicant = {
         await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(communityName)}`);
         await waitForTestId(d, "JoinAsks", 60000);
         const asks = await textOf(d, "JoinAsks").catch(() => "");
+        // What the "what it asks" screen is made of, for a before/after
+        // comparison of the screen itself: its parts, a picture, its source.
+        if (process.env.JOIN_SCREEN_RECORD) {
+          const parts = {};
+          for (const id of ["JoinAsks", "JoinStart", "JoinNoInvitationBypass", "JoinWays", "JoinWaysTitle"]) parts[id] = await existsTestId(d, id, 1500);
+          const start = parts.JoinStart ? await textOf(d, "JoinStart").catch(() => "") : "";
+          console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
+          await screenshot(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+          await dumpSource(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+        }
         // After a Leave the screen may lead with where the person stood.
         for (let i = 0; i < 20 && !(await existsTestId(d, "JoinStart", 1500)); i++) {
           const again = await scrollToTestId(d, "JoinAgain", 2).catch(() => undefined);

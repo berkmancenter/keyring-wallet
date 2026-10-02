@@ -60,6 +60,8 @@
  *     active-policies [purpose]             policy/active/0.1
  *     put-criterion <jsonFile>              vtc/schemas/accepts/register/0.1
  *     delete-criterion <id>                 vtc/schemas/accepts/delete/0.1
+ *     criteria                              vtc/schemas/accepts/list/0.2 (a community that serves join 0.3)
+ *     put-criterion-0.2 <jsonFile>          vtc/schemas/accepts/register/0.2 (admission, query + issuers, invitation, vetting)
  *   signed, REST on a VTC that predates the task:
  *     vetters-list                          vtc/vetting/vetters/grants/list/0.1, every page
  *     vetter-resend <memberDid>             vtc/vetting/vetters/resend/0.2
@@ -90,6 +92,8 @@ export const TASK = {
   typeList: `${SPEC}vtc/endorsement-types/list/0.1`,
   acceptsRegister: `${SPEC}vtc/schemas/accepts/register/0.1`,
   acceptsDelete: `${SPEC}vtc/schemas/accepts/delete/0.1`,
+  acceptsList02: `${SPEC}vtc/schemas/accepts/list/0.2`,
+  acceptsRegister02: `${SPEC}vtc/schemas/accepts/register/0.2`,
   joinDiscoveryShow: `${SPEC}vtc/community/join-discovery/show/0.1`,
   joinDiscoveryUpdate: `${SPEC}vtc/community/join-discovery/update/0.1`,
   memberRemove: `${SPEC}vtc/members/admin-remove/0.1`,
@@ -386,6 +390,12 @@ const COMMANDS = {
     run: ({ send }, [file]) => send(TASK.acceptsRegister, JSON.parse(readFileSync(file, "utf8"))),
   },
   "delete-criterion": { signed: true, run: ({ send }, [id]) => send(TASK.acceptsDelete, { id }) },
+  // A community from vti #1907 on serves these two at 0.2 only; a criterion states its admission.
+  criteria: { signed: true, run: ({ send }) => send(TASK.acceptsList02, {}) },
+  "put-criterion-0.2": {
+    signed: true,
+    run: ({ send }, [file]) => send(TASK.acceptsRegister02, JSON.parse(readFileSync(file, "utf8"))),
+  },
   // Whether the join manifest answers a caller the community cannot identify
   // (vtc-service routes/community/join_discovery.rs). "closed" makes an
   // applicant's anonymous REST read fail, so the phone must ask over DIDComm or
@@ -520,6 +530,8 @@ const SIGNED_TASK = {
   "list-types": TASK.typeList,
   "put-criterion": TASK.acceptsRegister,
   "delete-criterion": TASK.acceptsDelete,
+  criteria: TASK.acceptsList02,
+  "put-criterion-0.2": TASK.acceptsRegister02,
   "member-remove": TASK.memberRemove,
   "member-credentials": TASK.memberCredentials,
   "join-discovery-show": TASK.joinDiscoveryShow,

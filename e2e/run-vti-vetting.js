@@ -558,6 +558,16 @@ try {
     await waitForTestId(applicant, "JoinAsks", 60000);
     const asks = await textOf(applicant, "JoinAsks").catch(() => "");
     console.log(`[e2e] ${applicant.e2ePlatform}: the community asks — ${asks.replace(/\s+/g, " ").slice(0, 160)}`);
+    // What the "what it asks" screen is made of, for a before/after comparison
+    // of the screen itself: which of its parts are there, and a picture.
+    if (process.env.JOIN_SCREEN_RECORD) {
+      const parts = {};
+      for (const id of ["JoinAsks", "JoinStart", "JoinNoInvitationBypass", "JoinWays", "JoinWaysTitle"]) parts[id] = await existsTestId(applicant, id, 1500);
+      const start = parts.JoinStart ? await textOf(applicant, "JoinStart").catch(() => "") : "";
+      console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
+      await screenshot(applicant, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+      await dumpSource(applicant, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+    }
     await (await waitForTestId(applicant, "JoinStart", 30000)).click();
     await waitForTestId(applicant, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(applicant, "JoinAsContinue");
