@@ -10,6 +10,16 @@ on:
         type: choice
         options: [both, android, ios]
         default: both
+      audience:
+        description: >-
+          Who gets this build. "all" ships as usual. "internal" keeps it from
+          outside testers: on iOS only the internal TestFlight group gets it, and
+          on Android nothing is uploaded to Google Play (the signed APK is this
+          run's artifact, to side-load). For a build that must be checked on our
+          own phones first.
+        type: choice
+        options: [all, internal]
+        default: all
 
 permissions:
   contents: read
@@ -621,6 +631,19 @@ jobs:
           path: app/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
+      # An internal-audience run uploads nothing to Google Play, so the build
+      # reaches a phone as this APK: the same code and signing key as the
+      # bundle, installable with adb. A phone that has the Play copy must
+      # uninstall it first (Play re-signs what it delivers).
+      - name: Upload the signed APK (internal audience only)
+        if: inputs.audience == 'internal'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-staging-apk-${{ env.APP_BUILD_NUMBER }}
+          path: app/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Extract commit message for release notes
         id: commit-msg
         run: |
@@ -639,7 +662,19 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
+      - name: Say who gets this build
+        env:
+          AUDIENCE: ${{ inputs.audience }}
+        run: |
+          if [ "${AUDIENCE}" = "internal" ]; then
+            echo "- Audience (Android): **internal only**. Nothing is uploaded to Google Play; side-load the APK artifact." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Audience (Android): **all testers** (Google Play internal testing)." >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      # inputs.audience is empty on a push to staging, which ships as usual.
       - name: Ship to Google Play Internal Testing
+        if: inputs.audience != 'internal'
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
@@ -1011,6 +1046,16 @@ jobs:
             echo "RELEOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Say who gets this build
+        env:
+          AUDIENCE: ${{ inputs.audience }}
+        run: |
+          if [ "${AUDIENCE}" = "internal" ]; then
+            echo "- Audience (iOS): **internal only**. TestFlight group \"KeyRing Internal Testers\"; add the build to the external group by hand once checked." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Audience (iOS): **all testers** (internal and external TestFlight groups)." >>"$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Ship to TestFlight Internal Testing
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
@@ -1025,8 +1070,12 @@ jobs:
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
           # Internal first, then the external maintainers' group. distribute.mjs
           # submits an external group for Beta App Review automatically; only the
-          # first build of a version needs it.
-          beta_groups: "KeyRing Internal Testers,openvtc testers"
+          # first build of a version needs it. An internal-audience run names
+          # the internal group alone, so nothing is submitted for outside
+          # testers; the build is added to the external group by hand in App
+          # Store Connect once it has been checked. (inputs.audience is empty on
+          # a push to staging, which ships to both.)
+          beta_groups: ${{ inputs.audience == 'internal' && 'KeyRing Internal Testers' || 'KeyRing Internal Testers,openvtc testers' }}
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
@@ -1105,13 +1154,13 @@ jobs:
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data "{
-              \"text\": \"🚀 New Staging Build Available! Version: ${{ steps.get_version.outputs.version }}-staging, Build: ${{ env.APP_BUILD_NUMBER }}\",
+              \"text\": \"🚀 New Staging Build Available${{ inputs.audience == 'internal' && ' (internal testers only)' || '' }}! Version: ${{ steps.get_version.outputs.version }}-staging, Build: ${{ env.APP_BUILD_NUMBER }}\",
               \"blocks\": [
                 {
                   \"type\": \"header\",
                   \"text\": {
                     \"type\": \"plain_text\",
-                    \"text\": \"🚀 New Staging Build Available!\"
+                    \"text\": \"🚀 New Staging Build Available${{ inputs.audience == 'internal' && ' (internal testers only)' || '' }}!\"
                   }
                 },
                 {
