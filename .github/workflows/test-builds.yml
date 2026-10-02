@@ -164,8 +164,10 @@ jobs:
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
+          # The same lines the staging workflow writes for an iOS push build.
           if [ "${PUSH}" = "on" ]; then
             echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >> .env
+            echo "PUSH_APNS_ENVIRONMENT=production" >> .env
           fi
           if [ "${PUSH}" != "on" ] && grep -qE '^PUSH_' .env; then
             echo "::error::a PUSH_ value would be baked into a push-off build"; exit 1
@@ -215,6 +217,8 @@ jobs:
           main.jsbundle.sha256=$bundle_sha
           vti_keys_baked=none
           push=${{ inputs.push == 'on' && 'on' || 'off' }}
+          push_gateway_url=${{ inputs.push == 'on' && (vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org') || 'none' }}
+          push_apns_environment=${{ inputs.push == 'on' && 'production' || 'none' }}
           EOF
           cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
 
@@ -284,6 +288,8 @@ jobs:
           # The gateway a store build would name; the repository variable when
           # it is set, otherwise the production gateway's address.
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
+          # The Firebase project the gateway's FCM key belongs to.
+          PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID || 'hls-asml-identity-ba68' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
           echo "MEDIATOR_V2_URL=" >> .env
@@ -291,7 +297,15 @@ jobs:
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
+          # As in the staging workflow: Android gets the gateway only when the
+          # build's Firebase project is the gateway's. Staging leaves push off
+          # on a mismatch; a test build that was asked for push on fails
+          # instead, so it cannot be push-off without anyone noticing.
           if [ "${PUSH}" = "on" ]; then
+            project=$(jq -r '.project_info.project_id // empty' android/app/google-services.json)
+            if [ "${project}" != "${PUSH_FCM_PROJECT_ID}" ]; then
+              echo "::error::push: on was asked for, but google-services.json is project '${project}', not '${PUSH_FCM_PROJECT_ID}': a store build would leave push off on Android"; exit 1
+            fi
             echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >> .env
           fi
           if [ "${PUSH}" != "on" ] && grep -qE '^PUSH_' .env; then
@@ -355,6 +369,9 @@ jobs:
           signing=debug-key (test only)
           vti_keys_baked=none
           push=${{ inputs.push == 'on' && 'on' || 'off' }}
+          push_gateway_url=${{ inputs.push == 'on' && (vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org') || 'none' }}
+          push_fcm_project_id=${{ inputs.push == 'on' && (vars.PUSH_FCM_PROJECT_ID || 'hls-asml-identity-ba68') || 'none' }}
+          google_services_project=$(jq -r '.project_info.project_id // empty' app/android/app/google-services.json)
           EOF
           cat out/manifest.txt >> "$GITHUB_STEP_SUMMARY"
 
