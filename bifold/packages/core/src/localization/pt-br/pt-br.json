@@ -779,7 +779,9 @@
     "QRCode": "Código QR",
     "Credentials": "Credenciais",
     "Wallet": "Carteira",
-    "MyAgent": "Meu agente"
+    "MyAgent": "Meu agente",
+    "RequestsWaiting_one": "1 pedido aguardando",
+    "RequestsWaiting_other": "{{count}} pedidos aguardando"
   },
   "RootStack": {
     "Contacts": "Contatos",

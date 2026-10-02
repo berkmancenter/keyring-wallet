@@ -23,6 +23,7 @@ import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { isLinkOnline, useAgentPresence } from '../modules/trust-tasks/module/vtaPresence'
+import { myAgentTabBadge, useWaitingRequestsCount } from '../modules/trust-tasks/module/waitingRequests'
 import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
 import { StepUpAskHost } from '../modules/trust-tasks/screens/StepUpAskHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
@@ -100,9 +101,22 @@ const TabStack: React.FC = () => {
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
   const [showQRCodeBottomSheet, setShowQRCodeBottomSheet] = React.useState(false)
   const { totalUnread } = useUnreadMessages()
+  // Requests waiting for this phone's decision: said on the tab, wherever the person is.
+  const myAgentBadge = myAgentTabBadge(useWaitingRequestsCount(), t)
   const styles = StyleSheet.create({
     tabBarIcon: {
       flex: 1,
+    },
+    // One badge for every tab that counts something waiting.
+    tabBarBadge: {
+      backgroundColor: '#D21E30',
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontWeight: '600',
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      lineHeight: 17,
     },
   })
 
@@ -274,16 +288,7 @@ const TabStack: React.FC = () => {
           options={{
             tabBarIconStyle: styles.tabBarIcon,
             tabBarBadge: totalUnread > 0 ? totalUnread : undefined,
-            tabBarBadgeStyle: {
-              backgroundColor: '#D21E30',
-              color: '#FFFFFF',
-              fontSize: 11,
-              fontWeight: '600',
-              minWidth: 18,
-              height: 18,
-              borderRadius: 9,
-              lineHeight: 17,
-            },
+            tabBarBadgeStyle: styles.tabBarBadge,
             tabBarIcon: ({ color, focused }) => (
               <AttachTourStep tourID={BaseTourID.HomeTour} index={0}>
                 <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
@@ -387,6 +392,8 @@ const TabStack: React.FC = () => {
           component={MyAgentStack}
           options={{
             tabBarIconStyle: styles.tabBarIcon,
+            tabBarBadge: myAgentBadge.badge,
+            tabBarBadgeStyle: styles.tabBarBadge,
             tabBarIcon: ({ color, focused }) => (
               <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
                 <Icon name={focused ? 'shield-account' : 'shield-account-outline'} size={24} color={color} />
@@ -404,7 +411,7 @@ const TabStack: React.FC = () => {
               </View>
             ),
             tabBarShowLabel: false,
-            tabBarAccessibilityLabel: t('TabStack.MyAgent'),
+            tabBarAccessibilityLabel: myAgentBadge.label,
             // A literal key, not the translated label: the tabs that pass a
             // translated string into testIdWithKey have locale-dependent
             // testIDs, which the e2e harness already works around.

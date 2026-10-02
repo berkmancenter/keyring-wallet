@@ -80,6 +80,8 @@ function fakeAgent(records: Rec[]) {
 describe('Your agent — after linking', () => {
   beforeEach(() => {
     jest.useFakeTimers()
+    // Before the requests below expire: one past its expiry does not wait.
+    jest.setSystemTime(new Date('2026-09-23T04:00:00Z'))
     forgetAgentHoldings()
     mockGrantState.mockReset()
     mockGrantState.mockResolvedValue({ state: 'none' })
@@ -256,6 +258,23 @@ describe('Your agent — after linking', () => {
     } as never)
     const one = await renderHome([])
     expect(one.getByTestId(testIdWithKey('AgentApprovalBanner'))).toBeTruthy()
+    controller.set({ approvals: [] })
+  })
+
+  it('says nothing is waiting for a request past its expiry', async () => {
+    controller.set({
+      approvals: [
+        {
+          id: 'late',
+          requester: 'did:peer:2.Vz6MkrequesterXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+          taskType: 'https://trusttasks.org/spec/vta/contexts/list/1.0',
+          expiresAt: '2026-09-23T03:59:00Z',
+          status: 'pending',
+        },
+      ],
+    } as never)
+    const tree = await renderHome([])
+    expect(tree.queryByTestId(testIdWithKey('AgentApprovalBanner'))).toBeNull()
     controller.set({ approvals: [] })
   })
 

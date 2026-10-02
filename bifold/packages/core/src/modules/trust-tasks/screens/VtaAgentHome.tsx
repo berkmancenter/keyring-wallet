@@ -45,6 +45,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
+import { useWaitingRequestsCount } from '../module/waitingRequests'
 import { ApprovalDetails } from './ApprovalDetails'
 import { CommunityCard } from './CommunityCard'
 import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
@@ -155,8 +156,9 @@ const VtaAgentHome: React.FC = () => {
     sessionSegment = next
     setSegment(next)
   }, [])
-  // Only what still waits: a decided request stays on its card, not in the count.
-  const pendingApprovals = state.approvals.filter((a) => a.status === 'pending').length
+  // Only what still waits: a decided or expired request is not in the count.
+  // The same count as the badge on the My Agent tab (waitingRequests.ts).
+  const pendingApprovals = useWaitingRequestsCount()
   // One line per label, always: side by side while that stays readable,
   // stacked when the phone is narrow or the text is large (IN-37).
   const { width, fontScale } = useWindowDimensions()

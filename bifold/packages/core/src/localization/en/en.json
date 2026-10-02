@@ -921,7 +921,9 @@
     "QRCode": "QR Code",
     "Credentials": "Credentials",
     "Wallet": "Wallet",
-    "MyAgent": "My Agent"
+    "MyAgent": "My Agent",
+    "RequestsWaiting_one": "1 request waiting",
+    "RequestsWaiting_other": "{{count}} requests waiting"
   },
   "RootStack": {
     "Contacts": "Contacts",
