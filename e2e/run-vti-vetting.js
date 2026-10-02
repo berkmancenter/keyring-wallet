@@ -423,6 +423,47 @@ try {
     await screenshot(applicant, "vetting-07-checklist");
     await checkVettingStep(applicant, "applicant, ready to apply");
     const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
+    if (process.env.EXPECT_APPLY === "review") {
+      // A community on join 0.3 whose vetting criterion is `review`: meeting
+      // it refers the application to an administrator. The screen must say
+      // so and not "member"; this runner then approves it as the
+      // administrator, and the applicant must end as a member at the
+      // community and on the screen.
+      await screenshot(applicant, "vetting-08-referred");
+      if (outcome !== "pending") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not that an administrator will review`);
+      const referred = await roles.textOf(applicant, "VettingSubmissionState").catch(() => "");
+      console.log(`[e2e] ${applicant.e2ePlatform}: after Apply — "${referred.replace(/\s+/g, " ")}"`);
+      const pending = (admin("join-list", "pending").items ?? []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      const request = pending[0];
+      if (!request) throw new Error("the community lists no pending join request to approve");
+      if ((admin("members").items ?? []).some((m) => m.did === request.applicantDid)) throw new Error("the applicant is a member before any approval");
+      console.log(`[e2e] community: request ${request.id} pending, applicant …${String(request.applicantDid).slice(-22)}`);
+      const approvedAt = Date.now();
+      admin("join-decide", request.id, "approved");
+      console.log("[e2e] the administrator approved it");
+      let screen = "";
+      for (const until = Date.now() + 120000; Date.now() < until && !screen; await sleep(4000)) {
+        if ((await roles.stepIdOf(applicant, "applicant").catch(() => "")) === "member") screen = "the vetting screen";
+      }
+      if (!screen) {
+        // The vetting screen may not ask again by itself: where the person stands is on Join.
+        const did = process.env.KEYRING_COMMUNITY_DID;
+        await roles.openLinkViaOs(applicant, `keyring://vti/community?d=${encodeURIComponent(did)}&n=${encodeURIComponent(process.env.KEYRING_COMMUNITY_NAME || "community")}`);
+        for (const until = Date.now() + 90000; Date.now() < until && !screen; await sleep(4000)) {
+          if (await existsTestId(applicant, "JoinCheckAgain", 1000)) await tapTestIdByCoordinates(applicant, "JoinCheckAgain").catch(() => undefined);
+          const standing = await roles.textOf(applicant, "JoinStandingText").catch(() => "");
+          if (/member of/i.test(standing)) screen = `Join ("${standing.replace(/\s+/g, " ")}")`;
+        }
+      }
+      await screenshot(applicant, "vetting-09-member-after-approval");
+      const member = (admin("members").items ?? []).find((m) => m.did === request.applicantDid);
+      console.log(`[e2e] after the approval: community member=${Boolean(member)}; screen says member on ${screen || "NOTHING"} (${((Date.now() - approvedAt) / 1000).toFixed(0)} s)`);
+      if (!member) throw new Error("the community does not list the applicant as a member after the approval");
+      if (!screen) throw new Error("the phone does not show membership after the approval");
+      printSuccess("vti-vetting — vetted, referred to an administrator, approved, member");
+      process.exitCode = 0;
+      throw Object.assign(new Error("done"), { done: true });
+    }
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);

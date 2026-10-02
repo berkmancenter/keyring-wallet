@@ -542,8 +542,16 @@ export const applicant = {
       if (door === "link") {
         if (!communityDid) throw new Error("door 'link' needs communityDid");
         await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(communityName)}`);
-        await waitForTestId(d, "JoinAsks", 60000);
-        const asks = await textOf(d, "JoinAsks").catch(() => "");
+        // A community on join 0.2 shows the card it always did (JoinAsks); one
+        // on join 0.3 shows its ways in (JoinWays). Start is the same button.
+        const until03 = Date.now() + 90000;
+        let card = "";
+        while (!card && Date.now() < until03) {
+          if (await existsTestId(d, "JoinAsks", 1500)) card = "JoinAsks";
+          else if (await existsTestId(d, "JoinWays", 1500)) card = "JoinWays";
+        }
+        if (!card) throw new Error("neither JoinAsks nor JoinWays on \"what it asks\"");
+        const asks = card === "JoinAsks" ? await textOf(d, "JoinAsks").catch(() => "") : `ways in (${card})`;
         // What the "what it asks" screen is made of, for a before/after
         // comparison of the screen itself: its parts, a picture, its source.
         if (process.env.JOIN_SCREEN_RECORD) {
