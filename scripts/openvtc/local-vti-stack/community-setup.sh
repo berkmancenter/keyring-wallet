@@ -27,6 +27,24 @@ STATEMENT_TYPE="https://firstperson.network/endorsements/identity-vetting/0.1"
 CRITERION="$STACK_DIR/criterion.json"
 [ "${1:-}" = "--criterion" ] && { CRITERION="${2:?--criterion needs a file}"; }
 
+# Default criterion, written only when none exists (an edited one is never
+# overwritten). It is ref-20's criterion-two-statements.json with ONE declared
+# lab deviation: minStatements = 1 instead of 2. The lab has a single vetter
+# persona, so the fixture's two-distinct-vetters bar could never be met; claims
+# that need the two-statement bar must be proved with the fixture itself
+# (--criterion <fixture>), not with this default.
+if [ "$CRITERION" = "$STACK_DIR/criterion.json" ] && [ ! -s "$CRITERION" ]; then
+  python3 - "$REPO/tsp-reference/ref-20-local-vetting/fixtures/criteria/criterion-two-statements.json" "$CRITERION" <<'PY'
+import json, sys
+src, out = sys.argv[1], sys.argv[2]
+d = json.load(open(src))
+d["vetting"]["minStatements"] = 1
+d["description"] = "One statement from a vetter (lab default; the fixture asks for two)"
+open(out, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+  echo "  wrote default criterion $CRITERION (minStatements=1, lab deviation)"
+fi
+
 # shellcheck disable=SC1091
 source "$STACK_DIR/stack.env"
 BASE="$VTC_URL/v1"
