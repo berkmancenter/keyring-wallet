@@ -457,6 +457,27 @@ nohup "$VTA_BIN" --config community/config.toml > logs/community.log 2>&1 &
 sleep 10
 "$PNM_BIN" setup continue community --vta-did "$COMMUNITY_DID" >/dev/null
 
+# bob (the runner VTA) gets a pnm profile of its own, minted the same two-phase
+# way, so enrol-manager.sh and the e2e can drive it with PNM_HOME=$STACK_DIR/pnm-bob.
+log "creating the bob pnm profile"
+export PNM_HOME="$STACK_DIR/pnm-bob"
+[ -n "$PNM_HOME" ] && rm -rf "${PNM_HOME:?}"
+mkdir -p "$PNM_HOME"
+export PNM_VTA=bob
+BOB_ADMIN=$("$PNM_BIN" setup --name bob --overwrite 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1 || true)
+if [ -n "$BOB_ADMIN" ]; then
+  pid=$(lsof -nP -iTCP:8112 -sTCP:LISTEN -t | head -1); kill "$pid"; sleep 3
+  "$VTA_BIN" --config bob/config.toml import-did --did "$BOB_ADMIN" --role admin --label pnm-bob >/dev/null
+  nohup "$VTA_BIN" --config bob/config.toml > logs/bob.log 2>&1 &
+  sleep 10
+  "$PNM_BIN" setup continue bob --vta-did "$BOB_DID" >/dev/null
+  echo "  admin $BOB_ADMIN"
+else
+  echo "  could not mint a bob admin DID; bob has no pnm profile" >&2
+fi
+# The VTC steps below drive the community VTA through its profile.
+export PNM_HOME="$STACK_DIR/pnm-community" PNM_VTA=community
+
 # ------------------------------------------------------------------- VTC ----
 # Two phases, and `transports` is fixed at mint: a VTC that should be reachable
 # over DIDComm has to say so here, or it needs re-provisioning to add it.
