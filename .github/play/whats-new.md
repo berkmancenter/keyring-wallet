@@ -1,4 +1,4 @@
-The 229 fix
-• Scanning your hosting service's code from My Agent → Set up a new agent now opens the confirm screen. On 229 it could drop you on the Contacts tab with nothing linked.
-• Nothing else changes from 229.
-Known: an openvtc terminal vetter can't vet yet. Notifications are off.
+• Joining works with communities on the new join format, and on the earlier one.
+• The Join screen shows each way in, and whether you're admitted straight away or an administrator reviews your request.
+• Includes the fix for scanning your hosting service's code from Set up a new agent.
+Known: Keyring can't present a held credential to join yet. Notifications are off.

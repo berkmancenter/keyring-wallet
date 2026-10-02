@@ -7,9 +7,30 @@
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTRootView.h>
 #import <React/RCTLinkingManager.h>
+#import <UserNotifications/UserNotifications.h>
 #import "Orientation.h"
 
-@implementation AppDelegate
+// The app's own link to the waiting approvals (bifold's APPROVALS_LINK).
+static NSString *const KeyringApprovalsLink = @"keyring://vta/approvals";
+
+// Whether a notification is the push gateway's wake: an alert whose text is the
+// app's own KEYRING_WAKE string (Localizable.strings). It carries no content.
+static BOOL KeyringIsWakeNotification(NSDictionary *userInfo)
+{
+  id aps = userInfo[@"aps"];
+  id alert = [aps isKindOfClass:[NSDictionary class]] ? aps[@"alert"] : nil;
+  return [alert isKindOfClass:[NSDictionary class]] && [alert[@"loc-key"] isEqual:@"KEYRING_WAKE"];
+}
+
+@interface AppDelegate () <UNUserNotificationCenterDelegate>
+@end
+
+@implementation AppDelegate {
+  // The tap that launched the app is delivered twice: in the launch options and
+  // as a notification response. The launch options open the approvals link, so
+  // that one response is skipped.
+  BOOL _launchedFromWakeTap;
+}
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
@@ -28,7 +49,45 @@
   // excluded file’s resource values each time the application starts.
   [self excludeDotAFJFolderFromBackup];
 
+  // A tapped wake opens the waiting approvals. The gateway sends the wake
+  // straight to APNs, not through Firebase, so Firebase messaging's tap
+  // callbacks never fire for it (it only reports notifications that carry its
+  // own message id). Set before Firebase messaging takes the delegate over at
+  // the end of launch: it keeps this one and forwards to it.
+  [UNUserNotificationCenter currentNotificationCenter].delegate = self;
+
+  // A tap that launched the app: hand React Native the approvals link as the
+  // launch URL, which the app's deep-link handling keeps until the wallet is
+  // unlocked.
+  NSDictionary *launchNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+  if ([launchNotification isKindOfClass:[NSDictionary class]] && KeyringIsWakeNotification(launchNotification) &&
+      launchOptions[UIApplicationLaunchOptionsURLKey] == nil) {
+    NSMutableDictionary *options = [launchOptions mutableCopy];
+    options[UIApplicationLaunchOptionsURLKey] = [NSURL URLWithString:KeyringApprovalsLink];
+    launchOptions = options;
+    _launchedFromWakeTap = YES;
+  }
+
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
+}
+
+// A tap on a notification while the app is running or suspended.
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+    didReceiveNotificationResponse:(UNNotificationResponse *)response
+             withCompletionHandler:(void (^)(void))completionHandler
+{
+  NSDictionary *userInfo = response.notification.request.content.userInfo;
+  if ([response.actionIdentifier isEqualToString:UNNotificationDefaultActionIdentifier] &&
+      KeyringIsWakeNotification(userInfo)) {
+    if (_launchedFromWakeTap) {
+      _launchedFromWakeTap = NO;
+    } else {
+      [RCTLinkingManager application:[UIApplication sharedApplication]
+                             openURL:[NSURL URLWithString:KeyringApprovalsLink]
+                             options:@{}];
+    }
+  }
+  completionHandler();
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

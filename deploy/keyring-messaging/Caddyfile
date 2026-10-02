@@ -1,0 +1,36 @@
+# Two sites: the push wake-up gateway and its mediator. With SITE_SCHEME=https
+# (the default) Caddy obtains and renews both certificates automatically; each
+# host needs a public DNS
+# A/AAAA record pointing here and ports 80 and 443 open (README
+# "Prerequisites"). Environment placeholders are substituted before parsing.
+#
+# No ACME contact email is set; add a global `{ email ops@example.org }` block
+# at the top of this file if you want expiry notices.
+
+# POST /trust-tasks and GET /healthz. The gateway serves /metrics only on its
+# own loopback listener, so there is nothing to route; the explicit 404 keeps it
+# that way if that ever changes upstream.
+{$SITE_SCHEME:https}://{$GATEWAY_HOST} {
+	respond /metrics* 404
+	reverse_proxy gateway:8300
+}
+
+# The mediator the gateway receives wake-ups through. Agents' mediators relay to
+# it on /mediator/v1/inbound; its DID document names this site's https:// and
+# wss:// URLs, and reverse_proxy carries the websocket upgrade.
+#
+# Its login endpoint (/mediator/v1/authenticate…) answers only private
+# addresses. Inside this stack the mediator's hostname resolves to Caddy (the
+# network alias in docker-compose.yml), so the gateway logs in from a private
+# address; from the internet the endpoint is refused, so no stranger can hold
+# a session: all they can do is hand the mediator a relayed message.
+# (Unverified: whether it relays a stranger's message onward to a third party.
+# The lab proof checks it; see HANDOVER.md §14.)
+{$SITE_SCHEME:https}://{$MEDIATOR_HOST} {
+	@public_login {
+		path /mediator/v1/authenticate*
+		not remote_ip private_ranges
+	}
+	respond @public_login 403
+	reverse_proxy mediator:7037
+}
