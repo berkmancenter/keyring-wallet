@@ -15,6 +15,7 @@ const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
   requires: { invitation: false },
   requiresNothing: false,
   usable: true,
+  meets: 'yes',
   digest: `digest-${over.id}`,
   ...over,
 })
@@ -23,47 +24,49 @@ const invited = way({ id: 'invited', requires: { invitation: true } })
 const memberCredential = way({
   id: 'member-credential',
   requires: { invitation: false, credentials: { issuers: 'recognised', types: ['MembershipCredential'] } },
+  // The model does not evaluate credentials.
+  meets: 'unknown',
 })
 const review = way({ id: 'review', admission: 'review', requiresNothing: true })
-const vetted = (admission: JoinWay['admission']) =>
+const vetted = (admission: JoinWay['admission'], meets: JoinWay['meets'] = 'no') =>
   way({
     id: 'vetted-member',
     admission,
+    meets,
     requires: { invitation: false, vetting: { statements: 2, claims: ['name.legal'], methods: ['in-person'] } },
   })
 
 /** A new community: the three defaults, in order, seen from a phone holding nothing. */
 const defaults: JoinOffer = {
+  wire: '0.3',
   accepting: true,
-  ways: [
-    { ...invited, usable: false, unusableBecause: 'noInvitation' },
-    { ...memberCredential, usable: false, unusableBecause: 'noCredential' },
-    review,
-  ],
+  ways: [{ ...invited, meets: 'no' }, memberCredential, review],
   suggested: review,
   outcomeIfMet: 'reviewed',
 }
 
 describe('a 0.2 manifest states no admission', () => {
   const legacy: JoinOffer = {
+    wire: '0.2',
     accepting: true,
-    ways: [way({ id: 'vetted-member', admission: 'unstated', requires: vetted('unstated').requires })],
-    outcomeIfMet: 'unstated',
+    ways: [vetted('unstated')],
   }
 
   it('is shown exactly as today: the card says so, and adds nothing', () => {
     expect(joinCard(legacy)).toEqual({ mode: 'legacy' })
   })
 
-  it('even with several criteria', () => {
-    const several = { ...legacy, ways: [...legacy.ways, way({ id: 'invited', admission: 'unstated' })] }
-    expect(joinCard(several)).toEqual({ mode: 'legacy' })
+  it('whatever it lists, and with no criteria at all (today’s "asks for nothing")', () => {
+    expect(joinCard({ ...legacy, ways: [...legacy.ways, way({ id: 'invited', admission: 'unstated' })] })).toEqual({
+      mode: 'legacy',
+    })
+    expect(joinCard({ ...legacy, ways: [] })).toEqual({ mode: 'legacy' })
   })
 })
 
 describe('a community that accepts no applications', () => {
   it('says so, with nothing to start', () => {
-    expect(joinCard({ accepting: false, ways: [], outcomeIfMet: 'unstated' })).toEqual({ mode: 'notAccepting' })
+    expect(joinCard({ wire: '0.3', accepting: false, ways: [] })).toEqual({ mode: 'notAccepting' })
   })
 
   it('says so even if it still lists ways', () => {
@@ -71,7 +74,7 @@ describe('a community that accepts no applications', () => {
   })
 
   it('a 0.3 community with no ways is not accepting either', () => {
-    expect(joinCard({ accepting: true, ways: [], outcomeIfMet: 'reviewed' })).toEqual({ mode: 'notAccepting' })
+    expect(joinCard({ wire: '0.3', accepting: true, ways: [] })).toEqual({ mode: 'notAccepting' })
   })
 })
 
@@ -98,6 +101,8 @@ describe('the three defaults, on a phone holding nothing', () => {
   it('offers to ask, not to join: a plain request is reviewed, never admitted', () => {
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.button).toBe('ask')
+    // There is a way to use, so nothing is called missing.
+    expect(card.missing).toEqual([])
   })
 })
 
@@ -109,108 +114,110 @@ describe('the main button follows what meeting the suggested way leads to', () =
       suggested: invited,
       outcomeIfMet: 'joined',
     }
-    const card = joinCard(offer)
+    const card = joinCard(offer, { invitation: true })
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.button).toBe('join')
     expect(card.rows.map((r) => r.suggested)).toEqual([true, false, false])
   })
 
-  it('a way that needs vetting starts it: the person is not joining or asking yet', () => {
+  it('vetting still to do starts it: the person is not joining or asking yet', () => {
     for (const admission of ['automatic', 'review'] as const) {
-      const offer: JoinOffer = {
-        accepting: true,
-        ways: [vetted(admission)],
-        suggested: vetted(admission),
-        outcomeIfMet: admission === 'automatic' ? 'joined' : 'reviewed',
-      }
-      const card = joinCard(offer)
+      // The phone holds no statements: it meets no way, so nothing is suggested.
+      const card = joinCard({ wire: '0.3', accepting: true, ways: [vetted(admission)] })
       if (card.mode !== 'ways') throw new Error('ways')
       expect(card.button).toBe('start')
+      expect(card.missing).toEqual([])
     }
   })
 
-  it('a vetted way under review says an administrator decides, never that it admits', () => {
-    const offer: JoinOffer = {
-      accepting: true,
-      ways: [vetted('review')],
-      suggested: vetted('review'),
-      outcomeIfMet: 'reviewed',
-    }
-    const card = joinCard(offer)
-    if (card.mode !== 'ways') throw new Error('ways')
-    expect(card.rows[0]).toMatchObject({
+  it('vetting done: an automatic way joins, a review way asks', () => {
+    const auto = vetted('automatic', 'yes')
+    const joins = joinCard({ wire: '0.3', accepting: true, ways: [auto], suggested: auto, outcomeIfMet: 'joined' })
+    const rev = vetted('review', 'yes')
+    const asks = joinCard({ wire: '0.3', accepting: true, ways: [rev], suggested: rev, outcomeIfMet: 'reviewed' })
+    if (joins.mode !== 'ways' || asks.mode !== 'ways') throw new Error('ways')
+    expect(joins.button).toBe('join')
+    expect(asks.button).toBe('ask')
+    expect(asks.rows[0]).toMatchObject({
       needs: [{ kind: 'vetting', statements: 2, claims: ['name.legal'] }],
       follows: 'review',
     })
   })
 
   it('the button is never "join" unless the suggested way is automatic, whatever outcomeIfMet says', () => {
-    const offer: JoinOffer = { accepting: true, ways: [review], suggested: review, outcomeIfMet: 'joined' }
-    const card = joinCard(offer)
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [review], suggested: review, outcomeIfMet: 'joined' })
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.button).toBe('ask')
   })
 })
 
-describe('no way this phone can meet', () => {
+describe('no way this phone meets', () => {
   it('invitation only, no invitation: says an invitation is needed, and points at "I was invited"', () => {
-    const offer: JoinOffer = {
-      accepting: true,
-      ways: [{ ...invited, usable: false, unusableBecause: 'noInvitation' }],
-      outcomeIfMet: 'joined',
-    }
-    const card = joinCard(offer)
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.button).toBe('invited')
     expect(card.missing).toEqual(['invitation'])
     expect(card.several).toBe(false)
   })
 
-  it('a credential the phone does not hold: says which, and offers nothing to press', () => {
-    const offer: JoinOffer = {
-      accepting: true,
-      ways: [{ ...memberCredential, usable: false, unusableBecause: 'noCredential' }],
-      outcomeIfMet: 'joined',
-    }
-    const card = joinCard(offer)
+  it('a credential way the model cannot check: named as what is needed, nothing to press', () => {
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [memberCredential] })
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.button).toBe('none')
     expect(card.missing).toEqual(['credential'])
   })
 
-  it('both missing: both are named, and the invitation is the one a person can act on', () => {
-    const offer: JoinOffer = {
-      accepting: true,
-      ways: [
-        { ...invited, usable: false, unusableBecause: 'noInvitation' },
-        { ...memberCredential, usable: false, unusableBecause: 'noCredential' },
-      ],
-      outcomeIfMet: 'joined',
-    }
-    const card = joinCard(offer)
+  it('both: both are named, and the invitation is the one a person can act on', () => {
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }, memberCredential] })
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.missing).toEqual(['invitation', 'credential'])
     expect(card.button).toBe('invited')
   })
 
-  it('a way this app cannot use at all is marked, never offered', () => {
-    const odd = way({ id: 'odd', usable: false, unusableBecause: 'unsupportedRequirement' })
-    const card = joinCard({ accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
-    if (card.mode !== 'ways') throw new Error('ways')
-    expect(card.rows[0]).toMatchObject({ usable: false, cannotUse: true })
-    expect(card.rows[1]).toMatchObject({ usable: true, cannotUse: false })
+  it('vetting behind an invitation the phone lacks: the invitation comes first', () => {
+    const both = way({
+      id: 'invited-and-vetted',
+      meets: 'no',
+      requires: { invitation: true, vetting: { statements: 1, claims: [], methods: [] } },
+    })
+    const without = joinCard({ wire: '0.3', accepting: true, ways: [both] })
+    const withOne = joinCard({ wire: '0.3', accepting: true, ways: [both] }, { invitation: true })
+    if (without.mode !== 'ways' || withOne.mode !== 'ways') throw new Error('ways')
+    expect(without.button).toBe('invited')
+    expect(without.missing).toEqual(['invitation'])
+    // Holding the invitation, what is left is the vetting.
+    expect(withOne.button).toBe('start')
+    expect(withOne.missing).toEqual([])
+    expect(withOne.rows[0].needs.map((n) => n.kind)).toEqual(['invitation', 'vetting'])
   })
 })
 
-describe('a way that asks for several things lists each', () => {
-  it('an invitation and vetting together', () => {
-    const both = way({
-      id: 'invited-and-vetted',
-      requires: { invitation: true, vetting: { statements: 1, claims: [], methods: [] } },
+describe('a way Keyring cannot read as published', () => {
+  it.each([
+    'idMissing',
+    'admissionMissing',
+    'admissionUnknown',
+    'digestMissing',
+    'digestMismatch',
+    'issuersMissing',
+    'issuersUnknown',
+    'vettingUnreadable',
+  ])('%s: marked, never offered, never called "missing"', (unusableBecause) => {
+    const odd = way({ id: 'odd', usable: false, unusableBecause, meets: 'no', requires: { invitation: true } })
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [odd, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
     })
-    const card = joinCard({ accepting: true, ways: [both], suggested: both, outcomeIfMet: 'joined' })
     if (card.mode !== 'ways') throw new Error('ways')
-    expect(card.rows[0].needs.map((n) => n.kind)).toEqual(['invitation', 'vetting'])
+    expect(card.rows[0]).toMatchObject({ usable: false, cannotUse: true, suggested: false })
+    expect(card.rows[1]).toMatchObject({ usable: true, cannotUse: false })
+    const only = joinCard({ wire: '0.3', accepting: true, ways: [odd] })
+    if (only.mode !== 'ways') throw new Error('ways')
+    expect(only.missing).toEqual([])
+    expect(only.button).toBe('none')
   })
 })
 
@@ -260,6 +267,13 @@ describe('the words', () => {
         expect(w[key]).not.toMatch(admitted)
       }
     }
+  })
+
+  it('do not claim what the phone holds about a credential nobody checked', () => {
+    // The model does not evaluate credentials, so "this phone doesn't hold" would be a guess.
+    expect(ways(enCopy).MissingCredential).not.toMatch(/doesn.t hold|does not hold/i)
+    expect(ways(frCopy).MissingCredential).not.toMatch(/n'a pas/i)
+    expect(ways(ptBrCopy).MissingCredential).not.toMatch(/não tem/i)
   })
 
   it('name no provider', () => {

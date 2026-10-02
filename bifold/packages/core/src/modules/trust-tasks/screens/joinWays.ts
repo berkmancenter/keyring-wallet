@@ -15,8 +15,8 @@
  *
  * Pure: this decides what the card shows; `JoinWaysCard` words it.
  *
- * The offer's shape is the one agreed with the model's author for the 0.2/0.3
- * reader; the types here stand in until that module exports its own.
+ * The offer is the 0.2/0.3 reader's `JoinAsks` (module/joinManifest.ts); the
+ * types here mirror it until that module is on main, then they are imported.
  *
  * @module trust-tasks/screens/joinWays
  */
@@ -36,20 +36,38 @@ export interface JoinWay {
     vetting?: { statements: number; claims: string[]; methods: string[] }
   }
   requiresNothing: boolean
-  /** Whether this phone can apply under this way with what it holds now. */
+  /** Whether Keyring can read this way as published. False: it cannot be used at all. */
   usable: boolean
+  /** Why it cannot be read (`admissionUnknown`, `digestMismatch`, …); never "the phone lacks something". */
   unusableBecause?: string
-  /** The criterion's `requirementsDigest`: any change to the criterion changes it. */
-  digest: string
+  /** For Details only. */
+  unusableDetail?: string
+  /**
+   * Whether this phone meets it with what it holds: `no` when something in
+   * `requires` is lacking; `unknown` when it asks for credentials, which the
+   * reader does not evaluate.
+   */
+  meets: 'yes' | 'no' | 'unknown'
+  /** The criterion's `requirementsDigest`: any change to the criterion changes it. Absent on a malformed criterion. */
+  digest?: string
+}
+
+/** What this phone holds towards a community, as far as the screen knows. */
+export interface JoinHolds {
+  invitation?: boolean
+  statements?: number
 }
 
 export interface JoinOffer {
+  /** The manifest version the community answered with. */
+  wire: '0.3' | '0.2'
   accepting: boolean
   /** In the community's decision order. */
   ways: JoinWay[]
-  /** The first usable way this phone can meet with what it holds. */
+  /** The first usable way this phone meets with what it holds; absent when it meets none (always, at 0.2). */
   suggested?: JoinWay
-  outcomeIfMet: 'joined' | 'reviewed' | 'unstated'
+  /** What meeting the suggested way leads to; absent with it. */
+  outcomeIfMet?: 'joined' | 'reviewed' | 'unstated'
 }
 
 /** One thing a way asks for. */
@@ -67,15 +85,15 @@ export interface JoinWayRow {
   /** The way this phone can use now. */
   suggested: boolean
   usable: boolean
-  /** Unusable for a reason the person cannot fix by fetching something: this app cannot use it. */
+  /** Keyring cannot read this way as published: said so, never offered. */
   cannotUse: boolean
 }
 
 /**
  * The main button: `join` (an automatic way this phone meets now), `ask` (a
- * request an administrator reviews), `start` (vetting comes first, or the
- * community does not state its admission), `invited` (an invitation is what
- * is missing: go to "I was invited"), `none` (nothing this phone can do yet).
+ * way it meets that an administrator reviews), `start` (vetting is what is
+ * left to do), `invited` (an invitation is what is missing: go to "I was
+ * invited"), `none` (nothing this phone can do yet).
  */
 export type JoinButton = 'join' | 'ask' | 'start' | 'invited' | 'none'
 
@@ -91,9 +109,6 @@ export type JoinCard =
       missing: Array<'invitation' | 'credential'>
     }
 
-/** Reasons a way is unusable that mean "the phone lacks something", not "this app cannot do it". */
-const LACKS = new Set(['noInvitation', 'noCredential'])
-
 const needsOf = (way: JoinWay): JoinNeed[] => {
   const needs: JoinNeed[] = []
   if (way.requires.invitation) needs.push({ kind: 'invitation' })
@@ -108,42 +123,42 @@ const needsOf = (way: JoinWay): JoinNeed[] => {
 
 const sameWay = (a: JoinWay | undefined, b: JoinWay) => Boolean(a) && a!.id === b.id && a!.digest === b.digest
 
-export function joinCard(offer: JoinOffer): JoinCard {
-  if (!offer.accepting) return { mode: 'notAccepting' }
-  // 0.2: no criterion states its admission. Said as today, whatever the count.
-  if (offer.outcomeIfMet === 'unstated' && offer.ways.every((way) => way.admission === 'unstated')) {
-    return { mode: 'legacy' }
-  }
-  // 0.3 with no criteria: the community accepts no applications.
-  if (offer.ways.length === 0) return { mode: 'notAccepting' }
+export function joinCard(offer: JoinOffer, holds: JoinHolds = {}): JoinCard {
+  // 0.2: no criterion states its admission. Said as today, whatever it lists.
+  if (offer.wire === '0.2') return { mode: 'legacy' }
+  // No criteria, or it says so: the community accepts no applications.
+  if (!offer.accepting || offer.ways.length === 0) return { mode: 'notAccepting' }
 
   const rows: JoinWayRow[] = offer.ways.map((way) => ({
     id: way.id,
     needs: needsOf(way),
     ...(way.admission === 'unstated' ? {} : { follows: way.admission }),
-    suggested: sameWay(offer.suggested, way),
+    suggested: way.usable && sameWay(offer.suggested, way),
     usable: way.usable,
-    cannotUse: !way.usable && way.unusableBecause !== undefined && !LACKS.has(way.unusableBecause),
+    cannotUse: !way.usable,
   }))
 
   const suggested = offer.suggested
+  // Ways Keyring can read that this phone does not meet yet.
+  const open = suggested ? [] : offer.ways.filter((way) => way.usable && way.meets !== 'yes')
+  const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
   const missing: Array<'invitation' | 'credential'> = []
-  if (!suggested) {
-    const lacking = offer.ways.filter((way, i) => !way.usable && !rows[i].cannotUse)
-    if (lacking.some((way) => way.requires.invitation)) missing.push('invitation')
-    if (lacking.some((way) => way.requires.credentials)) missing.push('credential')
-  }
+  if (open.some(lacksInvitation)) missing.push('invitation')
+  // Credentials are not evaluated: named as what a way needs, never as something the phone lacks.
+  if (open.some((way) => way.requires.credentials)) missing.push('credential')
+  // Vetting the person can go and do now: nothing else of that way is lacking.
+  const vettingToDo = open.some((way) => way.requires.vetting && !way.requires.credentials && !lacksInvitation(way))
 
   const button: JoinButton = suggested
-    ? suggested.requires.vetting || suggested.admission === 'unstated'
+    ? // Never "join" on the model's word alone: the way itself must be automatic.
+      suggested.admission === 'automatic' && offer.outcomeIfMet === 'joined'
+      ? 'join'
+      : 'ask'
+    : vettingToDo
       ? 'start'
-      : // Never "join" on the model's word alone: the way itself must be automatic.
-        suggested.admission === 'automatic' && offer.outcomeIfMet === 'joined'
-        ? 'join'
-        : 'ask'
-    : missing.includes('invitation')
-      ? 'invited'
-      : 'none'
+      : missing.includes('invitation')
+        ? 'invited'
+        : 'none'
 
-  return { mode: 'ways', rows, several: rows.length > 1, button, missing }
+  return { mode: 'ways', rows, several: rows.length > 1, button, missing: vettingToDo ? [] : missing }
 }

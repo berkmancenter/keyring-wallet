@@ -1360,7 +1360,7 @@
       "FollowsReview": "Uma pessoa que administra a comunidade analisa seu pedido e decide.",
       "Suggested": "Este telefone pode usar esta agora.",
       "MissingInvitation": "Você precisa de um convite. Peça a quem administra {{community}} que convide você.",
-      "MissingCredential": "Você precisa de uma credencial que este telefone não tem: {{what}}.",
+      "MissingCredential": "Uma das formas de entrar pede uma credencial: {{what}}.",
       "CannotUse": "O Keyring ainda não consegue usar esta forma.",
       "ButtonJoin": "Entrar em {{community}}",
       "ButtonAsk": "Pedir para entrar",

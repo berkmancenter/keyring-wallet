@@ -16,19 +16,20 @@ const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
   requires: { invitation: false },
   requiresNothing: false,
   usable: true,
+  meets: 'yes',
   digest: `digest-${over.id}`,
   ...over,
 })
 const review = way({ id: 'review', admission: 'review', requiresNothing: true })
 const defaults: JoinOffer = {
+  wire: '0.3',
   accepting: true,
   ways: [
-    way({ id: 'invited', requires: { invitation: true }, usable: false, unusableBecause: 'noInvitation' }),
+    way({ id: 'invited', requires: { invitation: true }, meets: 'no' }),
     way({
       id: 'member-credential',
       requires: { invitation: false, credentials: { issuers: 'recognised', types: ['MembershipCredential'] } },
-      usable: false,
-      unusableBecause: 'noCredential',
+      meets: 'unknown',
     }),
     review,
   ],
@@ -68,12 +69,12 @@ test('a review way never shows the admitted line', () => {
 })
 
 test('one way only: no "more than one way" lead', () => {
-  const tree = show({ accepting: true, ways: [review], suggested: review, outcomeIfMet: 'reviewed' })
+  const tree = show({ wire: '0.3', accepting: true, ways: [review], suggested: review, outcomeIfMet: 'reviewed' })
   expect(tree.queryByTestId(id('JoinWaysSeveral'))).toBeNull()
 })
 
 test('nothing this phone can meet: says what is missing', () => {
-  const tree = show({ ...defaults, ways: defaults.ways.slice(0, 2), suggested: undefined, outcomeIfMet: 'joined' })
+  const tree = show({ wire: '0.3', accepting: true, ways: defaults.ways.slice(0, 2) })
   const missing = tree.getByTestId(id('JoinWaysMissing'))
   expect(missing).toHaveTextContent(/Join\.Ways\.MissingInvitation/)
   expect(missing).toHaveTextContent(/Join\.Ways\.MissingCredential/)
@@ -85,13 +86,13 @@ test('vetting keeps today’s lines: statements, and the legal name', () => {
     id: 'vetted-member',
     requires: { invitation: false, vetting: { statements: 2, claims: ['name.legal'], methods: [] } },
   })
-  const tree = show({ accepting: true, ways: [vetted], suggested: vetted, outcomeIfMet: 'joined' })
+  const tree = show({ wire: '0.3', accepting: true, ways: [vetted], suggested: vetted, outcomeIfMet: 'joined' })
   expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksStatements/)
   expect(tree.getByTestId(id('JoinWay_vetted-member'))).toHaveTextContent(/Join\.AsksLegalName/)
 })
 
 test('a way this app cannot use says so, and is not the one to use', () => {
-  const odd = way({ id: 'odd', usable: false, unusableBecause: 'unsupportedRequirement' })
-  const tree = show({ accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
+  const odd = way({ id: 'odd', usable: false, unusableBecause: 'admissionUnknown', meets: 'no' })
+  const tree = show({ wire: '0.3', accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
   expect(tree.getByTestId(id('JoinWay_odd'))).toHaveTextContent(/Join\.Ways\.CannotUse/)
 })

@@ -1516,7 +1516,7 @@
       "FollowsReview": "An administrator reviews your request and decides.",
       "Suggested": "This phone can use this one now.",
       "MissingInvitation": "You need an invitation. Ask an administrator of {{community}} to invite you.",
-      "MissingCredential": "You need a credential this phone doesn't hold: {{what}}.",
+      "MissingCredential": "One way in needs a credential: {{what}}.",
       "CannotUse": "Keyring can't use this way yet.",
       "ButtonJoin": "Join {{community}}",
       "ButtonAsk": "Ask to join",
