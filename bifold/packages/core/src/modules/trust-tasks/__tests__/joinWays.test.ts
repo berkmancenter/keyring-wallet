@@ -8,8 +8,11 @@
 import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
-import type { JoinAsks, JoinWay } from '../module/joinManifest'
+import { joinAsks, readManifest, type JoinAsks, type JoinWay, type VtiManifest } from '../module/joinManifest'
 import { joinCard } from '../screens/joinWays'
+
+import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
+import vettingCommunity from './fixtures/join-0.3/vetting-community-manifest.json'
 
 const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
   admission: 'automatic',
@@ -152,6 +155,104 @@ describe('the main button follows what meeting the suggested way leads to', () =
   })
 })
 
+/**
+ * A review way asks nothing, so every phone meets it. Beside a vetting way it
+ * must not be the only thing on offer: vetting is how a person joins a vetting
+ * community, and the review way is the other door, not the door.
+ */
+describe('a vetting way is offered whatever else the phone meets', () => {
+  const manifest = readManifest(vettingCommunity.payload as Partial<VtiManifest>, '0.3')
+  const cardOf = (m: VtiManifest, holds = {}) => {
+    const card = joinCard(joinAsks(m, holds), holds)
+    if (card.mode !== 'ways') throw new Error('ways')
+    return card
+  }
+
+  it('a hosted vetting community (invitation, vetting, review): start vetting, and ask to join beside it', () => {
+    const card = cardOf(manifest)
+    expect(card.rows.map((r) => r.id)).toEqual(['invited-member', 'vetted-member', 'review'])
+    expect(card.rows.map((r) => r.usable)).toEqual([true, true, true])
+    expect(card.button).toBe('start')
+    expect(card.alsoAsk).toBe(true)
+    // The vetting row says it can be started; the review row is still the one usable as the phone stands.
+    expect(card.rows.map((r) => r.canStartVetting)).toEqual([false, true, false])
+    expect(card.rows.map((r) => r.suggested)).toEqual([false, false, true])
+    // What follows each stays as the community states it.
+    expect(card.rows.map((r) => r.follows)).toEqual(['automatic', 'automatic', 'review'])
+    expect(card.missing).toEqual([])
+  })
+
+  it('holding its invitation: Join, and no vetting to be sent to', () => {
+    const card = cardOf(manifest, { invitation: true })
+    expect(card.button).toBe('join')
+    expect(card.alsoAsk).toBe(false)
+    expect(card.rows.map((r) => r.canStartVetting)).toEqual([false, false, false])
+  })
+
+  it('a new community’s three defaults (no vetting way): ask to join only, as before', () => {
+    const card = cardOf(readManifest(vtc1907.manifest03.payload as Partial<VtiManifest>, '0.3'))
+    expect(card.rows.map((r) => r.id)).toEqual(['invited', 'member-credential', 'review'])
+    expect(card.button).toBe('ask')
+    expect(card.alsoAsk).toBe(false)
+    expect(card.rows.some((r) => r.canStartVetting)).toBe(false)
+  })
+
+  it('a vetting-only community: start only', () => {
+    const only = { ...manifest, criteria: manifest.criteria.filter((c) => c.id === 'vetted-member') }
+    const card = cardOf(only)
+    expect(card.button).toBe('start')
+    expect(card.alsoAsk).toBe(false)
+    expect(card.rows.map((r) => r.canStartVetting)).toEqual([true])
+    expect(card.rows.map((r) => r.suggested)).toEqual([false])
+  })
+
+  it('vetting under review beside a plain review way: still start, with asking beside it', () => {
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [vetted('review'), review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.button).toBe('start')
+    expect(card.alsoAsk).toBe(true)
+  })
+
+  it('vetting behind an invitation the phone lacks is not something to start: ask only', () => {
+    const behind = way({
+      id: 'invited-and-vetted',
+      meets: 'no',
+      requires: { invitation: true, vetting: { statements: 1, claims: [], methods: [] } },
+    })
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [behind, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.button).toBe('ask')
+    expect(card.alsoAsk).toBe(false)
+    expect(card.rows[0].canStartVetting).toBe(false)
+  })
+
+  it('the vetting already done: the way is met, nothing is left to start', () => {
+    const done = vetted('automatic', 'yes')
+    const card = joinCard({
+      wire: '0.3',
+      accepting: true,
+      ways: [done, review],
+      suggested: done,
+      outcomeIfMet: 'joined',
+    })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.button).toBe('join')
+    expect(card.rows.map((r) => r.canStartVetting)).toEqual([false, false])
+  })
+})
+
 describe('no way this phone meets', () => {
   it('invitation only, no invitation: says an invitation is needed, and points at "I was invited"', () => {
     const card = joinCard({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
@@ -265,11 +366,13 @@ describe('the words', () => {
         'FollowsAutomatic',
         'FollowsReview',
         'Suggested',
+        'VettingToDo',
         'MissingInvitation',
         'CredentialNotYet',
         'CannotUse',
         'ButtonJoin',
         'ButtonAsk',
+        'ButtonVetting',
         'SentForReview',
         'TypeMembership',
       ]) {
@@ -286,7 +389,16 @@ describe('the words', () => {
     ] as const) {
       const w = ways(words)
       expect(w.FollowsAutomatic).toMatch(admitted)
-      for (const key of ['FollowsReview', 'NeedsNothing', 'Suggested', 'ButtonAsk', 'SentForReview', 'Title']) {
+      for (const key of [
+        'FollowsReview',
+        'NeedsNothing',
+        'Suggested',
+        'VettingToDo',
+        'ButtonAsk',
+        'ButtonVetting',
+        'SentForReview',
+        'Title',
+      ]) {
         expect(w[key]).not.toMatch(admitted)
       }
     }

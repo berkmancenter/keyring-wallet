@@ -36,6 +36,12 @@ export interface JoinWayRow {
   follows?: 'automatic' | 'review'
   /** The way this phone can use now. */
   suggested: boolean
+  /**
+   * Vetting is all this way still lacks, and the person can go and do it now.
+   * Said on the row, so a way the phone already meets beside it (a review way
+   * asks nothing, so every phone meets it) never reads as the only one.
+   */
+  canStartVetting: boolean
   usable: boolean
   /** Keyring cannot read this way as published: said so, never offered. */
   cannotUse: boolean
@@ -48,10 +54,15 @@ export interface JoinWayRow {
 }
 
 /**
- * The main button: `join` (an automatic way this phone meets now), `ask` (a
- * way it meets that an administrator reviews), `start` (vetting is what is
- * left to do), `invited` (an invitation is what is missing: go to "I was
- * invited"), `none` (nothing this phone can do yet).
+ * The main button: `join` (an automatic way this phone meets now), `start`
+ * (a vetting way is open to the person: go and do it), `ask` (a way it meets
+ * that an administrator reviews, and no vetting to start), `invited` (an
+ * invitation is what is missing: go to "I was invited"), `none` (nothing this
+ * phone can do yet).
+ *
+ * Vetting is offered whatever else the phone meets, short of an automatic way
+ * that admits it now: a community with a vetting way and a review way is the
+ * ordinary vetting community, and every phone meets its review way.
  */
 export type JoinButton = 'join' | 'ask' | 'start' | 'invited' | 'none'
 
@@ -63,6 +74,8 @@ export type JoinCard =
       rows: JoinWayRow[]
       several: boolean
       button: JoinButton
+      /** Beside `start`: the phone also meets a reviewed way, so it may ask instead. */
+      alsoAsk: boolean
       /** With no way this phone meets: what the person can go and get. */
       missing: Array<'invitation'>
     }
@@ -87,37 +100,47 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
   // No criteria, or it says so: the community accepts no applications.
   if (!offer.accepting || offer.ways.length === 0) return { mode: 'notAccepting' }
 
+  const suggested = offer.suggested
+  const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
+  // Ways Keyring can read that this phone does not meet yet.
+  // A credential way is left out: Keyring cannot present one, so no step of the person's opens it.
+  const open = offer.ways.filter((way) => way.usable && way.meets !== 'yes' && !way.requires.credentials)
+  // Vetting the person can go and do now: nothing else of that way is lacking.
+  const startable = (way: JoinWay) => open.includes(way) && Boolean(way.requires.vetting) && !lacksInvitation(way)
+  const vettingToDo = offer.ways.some(startable)
+  // Never "join" on the model's word alone: the way itself must be automatic.
+  const joinsNow = Boolean(suggested) && suggested!.admission === 'automatic' && offer.outcomeIfMet === 'joined'
+  // With no way this phone meets, an invitation is what the person can go and get.
+  const missing: Array<'invitation'> = !suggested && !vettingToDo && open.some(lacksInvitation) ? ['invitation'] : []
+
   const rows: JoinWayRow[] = offer.ways.map((way) => ({
     id: way.id,
     needs: needsOf(way),
     ...(way.admission === 'unstated' ? {} : { follows: way.admission }),
-    suggested: way.usable && sameWay(offer.suggested, way),
+    suggested: way.usable && sameWay(suggested, way),
+    // A phone that is admitted now has no vetting to be sent to.
+    canStartVetting: !joinsNow && startable(way),
     usable: way.usable,
     cannotUse: !way.usable,
     credentialNotYet: way.usable && Boolean(way.requires.credentials),
   }))
 
-  const suggested = offer.suggested
-  // Ways Keyring can read that this phone does not meet yet.
-  // A credential way is left out: Keyring cannot present one, so no step of the person's opens it.
-  const open = suggested
-    ? []
-    : offer.ways.filter((way) => way.usable && way.meets !== 'yes' && !way.requires.credentials)
-  const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
-  const missing: Array<'invitation'> = open.some(lacksInvitation) ? ['invitation'] : []
-  // Vetting the person can go and do now: nothing else of that way is lacking.
-  const vettingToDo = open.some((way) => way.requires.vetting && !lacksInvitation(way))
-
-  const button: JoinButton = suggested
-    ? // Never "join" on the model's word alone: the way itself must be automatic.
-      suggested.admission === 'automatic' && offer.outcomeIfMet === 'joined'
-      ? 'join'
-      : 'ask'
+  const button: JoinButton = joinsNow
+    ? 'join'
     : vettingToDo
       ? 'start'
-      : missing.includes('invitation')
-        ? 'invited'
-        : 'none'
+      : suggested
+        ? 'ask'
+        : missing.includes('invitation')
+          ? 'invited'
+          : 'none'
 
-  return { mode: 'ways', rows, several: rows.length > 1, button, missing: vettingToDo ? [] : missing }
+  return {
+    mode: 'ways',
+    rows,
+    several: rows.length > 1,
+    button,
+    alsoAsk: button === 'start' && Boolean(suggested),
+    missing,
+  }
 }

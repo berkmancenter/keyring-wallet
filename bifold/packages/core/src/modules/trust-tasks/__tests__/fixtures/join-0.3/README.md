@@ -22,3 +22,7 @@ blocks again, and read every change as a finding before accepting it.
   its refusals of manifest/0.2 and submit/0.2, and its answers to three
   submits. The same applicant's submit/0.2 was refused and its next submit/0.3
   was taken as a first request (`refer`), not as `requestAlreadyOpen`.
+- `vetting-community-manifest.json` — the manifest/0.3 answer of a hosted
+  community set up for vetting (invitation, vetting and review ways, in that
+  order), read 2026-10-02. Criteria as answered; the community's DID is a
+  placeholder. This is the shape the Join card must offer vetting on.

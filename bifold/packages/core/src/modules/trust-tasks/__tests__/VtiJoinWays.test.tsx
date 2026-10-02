@@ -127,6 +127,8 @@ describe('Join, at manifest 0.3', () => {
     // Today's card is for a community that states no admission.
     expect(tree.queryByTestId(id('JoinAsks'))).toBeNull()
     expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+    // No vetting way: one button, as before.
+    expect(tree.queryByTestId(id('JoinAsk'))).toBeNull()
   })
 
   it('asking sends a plain request once the identity is made, and never opens vetting', async () => {
@@ -166,6 +168,50 @@ describe('Join, at manifest 0.3', () => {
     expect(mockJoinCommunity).not.toHaveBeenCalled()
   })
 
+  /**
+   * The ordinary vetting community: an invitation way, a vetting way, and a
+   * review way that asks nothing — which every phone meets. Vetting must be
+   * what the screen leads with; asking is the other door.
+   */
+  describe('a vetting way beside a review way', () => {
+    const vettingCommunity: JoinAsks = {
+      wire: '0.3',
+      accepting: true,
+      ways: [{ ...invited, meets: 'no' }, vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    }
+
+    it('offers both: "Meet a vetter" first, "Ask to join" beside it, and the vetting row says it can be started', async () => {
+      const tree = await toAsks(vettingCommunity)
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
+      expect(tree.getByTestId(id('JoinAsk'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+      expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent(/Join\.Ways\.VettingToDo/)
+      // What follows each way is still said on its own row.
+      expect(tree.getByTestId(id('JoinWayFollows_vetted-member'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
+      expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+    })
+
+    it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {
+      const tree = await toAsks(vettingCommunity)
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(mockEnsurePersona).toHaveBeenCalledTimes(1)
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+      expect(mockJoinCommunity).not.toHaveBeenCalled()
+    })
+
+    it('"Ask to join" sends the plain request, and never opens vetting', async () => {
+      const tree = await toAsks(vettingCommunity)
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsk'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+      const [, invitation] = mockJoinCommunity.mock.calls[0] as unknown as [unknown, unknown]
+      expect(invitation).toBeUndefined()
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+    })
+  })
+
   it('invitation only, no invitation: no Start; the way to "I was invited"', async () => {
     const tree = await toAsks({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
     expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
@@ -176,6 +222,7 @@ describe('Join, at manifest 0.3', () => {
   it('vetting to do: "Start", then the identity, then vetting, as today', async () => {
     const tree = await toAsks({ wire: '0.3', accepting: true, ways: [vetted] })
     expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent('Join.Start')
+    expect(tree.queryByTestId(id('JoinAsk'))).toBeNull()
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
