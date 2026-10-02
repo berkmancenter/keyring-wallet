@@ -48,6 +48,7 @@
  *     invitation-deliver <id> [offer|message]  vtc/invitations/deliver/0.1
  *     invitation-revoke <id>                vtc/invitations/revoke/0.1
  *     members [cursor]                      vtc/members/list/0.1, every page from cursor
+ *     member-remove <did> [reason]          vtc/members/admin-remove/0.1 (the community's default disposition)
  *     join-list [status]                    vtc/join-requests/list/0.1, every page
  *     join-decide <id> [approved|rejected]  vtc/join-requests/decide/0.1
  *     manifest                              vtc/join-requests/manifest/0.2
@@ -81,6 +82,7 @@ export const TASK = {
   invitationDeliver: `${SPEC}vtc/invitations/deliver/0.1`,
   invitationRevoke: `${SPEC}vtc/invitations/revoke/0.1`,
   membersList: `${SPEC}vtc/members/list/0.1`,
+  memberAdminRemove: `${SPEC}vtc/members/admin-remove/0.1`,
   joinList: `${SPEC}vtc/join-requests/list/0.1`,
   joinDecide: `${SPEC}vtc/join-requests/decide/0.1`,
   manifest: `${SPEC}vtc/join-requests/manifest/0.2`,
@@ -349,6 +351,14 @@ const COMMANDS = {
   "invitation-revoke": { signed: true, run: ({ send }, [id]) => send(TASK.invitationRevoke, { id }) },
   // A cursor, if given, starts there (e2e/openvtc/communityMembers.js passes the last page's).
   members: { signed: true, run: ({ sendAll }, [cursor]) => sendAll(TASK.membersList, {}, cursor) },
+  // An administrator removing another member. No disposition is sent: the community applies its own default.
+  "member-remove": {
+    signed: true,
+    run: ({ send }, [did, ...reason]) => {
+      if (!did) throw new Error("usage: member-remove <memberDid> [reason]");
+      return send(TASK.memberAdminRemove, { did, ...(reason.length ? { reason: reason.join(" ") } : {}) });
+    },
+  },
   "join-list": {
     signed: true,
     run: ({ sendAll }, [status]) => sendAll(TASK.joinList, status ? { status } : {}),
@@ -502,6 +512,7 @@ const SIGNED_TASK = {
   "invitation-deliver": TASK.invitationDeliver,
   "invitation-revoke": TASK.invitationRevoke,
   members: TASK.membersList,
+  "member-remove": TASK.memberAdminRemove,
   "join-list": TASK.joinList,
   "join-decide": TASK.joinDecide,
   manifest: TASK.manifest,
