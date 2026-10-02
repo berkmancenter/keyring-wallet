@@ -220,7 +220,7 @@ log "provisioning the mediator"
 FORCE_MEDIATOR=""
 [ -f "$STACK_DIR/mediator/conf/mediator.toml" ] && FORCE_MEDIATOR="--force-reprovision"
 # shellcheck disable=SC2086
-"$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol didcomm \
+"$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol tsp \
   --did-method peer --public-url "https://$MED_HOST" --mediator-url "https://$MED_HOST" \
   --secret-storage file --ssl none --database-url "$REDIS_URL" \
   --admin generate --listen-address 127.0.0.1:7037 \
@@ -459,7 +459,7 @@ log "provisioning the VTC"
 "$VTC_BIN" setup --setup-key-out "$STACK_DIR/vtc/setup-key.json" --context vtc >/dev/null
 SETUP_DID=$(grep -o 'did:key:z[A-Za-z0-9]*' vtc/setup-key.json | head -1 || true)
 [ -n "$SETUP_DID" ] || SETUP_DID=$("$VTC_BIN" setup --setup-key-out "$STACK_DIR/vtc/setup-key.json" --context vtc 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1)
-"$PNM_BIN" contexts create --id vtc --name "VTC" --admin-did "$SETUP_DID" --admin-expires 4h >/dev/null
+"$PNM_BIN" contexts create --id vtc --name "VTC" --admin-did "$SETUP_DID" --admin-expires 4h --admin-handoff >/dev/null
 cat > vtc/setup.toml <<EOF
 config_path    = "$STACK_DIR/vtc/config.toml"
 base_url       = "https://$VTC_HOST"
