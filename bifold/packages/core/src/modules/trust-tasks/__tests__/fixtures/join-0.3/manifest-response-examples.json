@@ -1,0 +1,235 @@
+[
+  {
+    "title": "Several ways in: vetted, invited, a partner's member, or reviewed",
+    "document": {
+      "id": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c02",
+      "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+      "threadId": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c01",
+      "issuer": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "issuedAt": "2026-09-12T08:00:01Z",
+      "payload": {
+        "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+        "criteria": [
+          {
+            "id": "kernel-developer",
+            "description": "Two kernel vetters must confirm who you are. At least one must meet you in person.",
+            "admission": "automatic",
+            "presentationDefinition": {
+              "credentials": [
+                {
+                  "id": "vetting",
+                  "format": "ldp_vc",
+                  "multiple": true,
+                  "meta": {
+                    "type_values": [["StatementCredential"]]
+                  },
+                  "claims": [
+                    {
+                      "path": ["credentialSubject", "predicate"],
+                      "values": ["https://registry.trustoverip.org/dtg/vsc/vetted/1"]
+                    }
+                  ]
+                }
+              ]
+            },
+            "credentialIssuers": "any",
+            "vetting": {
+              "version": "0.1",
+              "statementType": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+              "minStatements": 2,
+              "minByMethod": {
+                "inPerson": 1
+              },
+              "acceptedMethods": ["inPerson", "video", "priorAcquaintance"],
+              "requiredClaims": ["name.legal"],
+              "optionalClaims": ["account.handle", "url.homepage"],
+              "maxStatementAge": "P120D",
+              "eligibleVetters": {
+                "role": "vetter"
+              },
+              "independence": {
+                "maxByDeclaredRelationship": {
+                  "family": 0,
+                  "sameEmployer": 1
+                },
+                "requireConsistentIdentityCommitment": true
+              },
+              "invitation": "optional",
+              "decisionSla": "P14D",
+              "requirementsGrace": "P30D",
+              "governanceFrameworkUrl": "https://kernel-vtc.example/governance#vetting"
+            },
+            "requirementsDigest": "zQmaf3wtkysZWg8vCzdetBwzjiHACZz8JAxTVr4W66chiXV"
+          },
+          {
+            "id": "invited",
+            "description": "Present an invitation from this community.",
+            "admission": "automatic",
+            "invitationRequired": true,
+            "requirementsDigest": "zQmRitDbNjAJrrzt8QUUKYWpQVEEaLGm5FT7JZ7cLU7PzLh"
+          },
+          {
+            "id": "partner-member",
+            "description": "Members of a partner community may join on their membership credential.",
+            "admission": "automatic",
+            "presentationDefinition": {
+              "credentials": [
+                {
+                  "id": "membership",
+                  "format": "ldp_vc",
+                  "meta": {
+                    "type_values": [["MembershipCredential"]]
+                  }
+                }
+              ]
+            },
+            "credentialIssuers": "recognised",
+            "requirementsDigest": "zQmS2pPuojY2EXRGbn24vkJEaLV2m9MD6Quri3wPZ4ApA7J"
+          },
+          {
+            "id": "apply",
+            "description": "Anyone may apply; an administrator reviews every application.",
+            "admission": "review",
+            "requirementsDigest": "zQmRLSnrQUSEdiWJxr7nMTF1QsU5VG14qtdf2BZ1kBU7RM3"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "title": "Review only",
+    "document": {
+      "id": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c05",
+      "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+      "threadId": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c01",
+      "issuer": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "issuedAt": "2026-09-12T08:00:01Z",
+      "payload": {
+        "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+        "criteria": [
+          {
+            "id": "apply",
+            "description": "Every application is reviewed by an administrator.",
+            "admission": "review",
+            "requirementsDigest": "zQmQnyY7jU5X3YxAdTn9ZxyzQAsUtxSyqzUhfnKKUADrhzo"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "title": "Open: straight through",
+    "document": {
+      "id": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c06",
+      "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+      "threadId": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c01",
+      "issuer": "did:webvh:QmVtcScid:open-vtc.example",
+      "issuedAt": "2026-09-12T08:00:01Z",
+      "payload": {
+        "communityDid": "did:webvh:QmVtcScid:open-vtc.example",
+        "criteria": [
+          {
+            "id": "open",
+            "description": "Anyone may join.",
+            "admission": "automatic",
+            "requirementsDigest": "zQmWCtwaFYPe1pTNzeSbTJLxQTKbfZEb8FiBNP1mgDMGNy5"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "title": "A criterion whose vetting parameters this version does not name",
+    "document": {
+      "id": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c04",
+      "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+      "threadId": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c03",
+      "issuer": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "issuedAt": "2026-09-12T08:00:01Z",
+      "payload": {
+        "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+        "criteria": [
+          {
+            "id": "kernel-developer-private",
+            "description": "Two kernel vetters must confirm who you are, and the community is told how many vouched for you without being told who.",
+            "admission": "automatic",
+            "presentationDefinition": {
+              "credentials": [
+                {
+                  "id": "vetting",
+                  "format": "ldp_vc",
+                  "multiple": true,
+                  "meta": {
+                    "type_values": [["StatementCredential"]]
+                  },
+                  "claims": [
+                    {
+                      "path": ["credentialSubject", "predicate"],
+                      "values": ["https://registry.trustoverip.org/dtg/vsc/vetted/1"]
+                    }
+                  ]
+                }
+              ]
+            },
+            "vetting": {
+              "version": "0.1",
+              "statementType": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+              "minStatements": 2,
+              "minByMethod": {
+                "inPerson": 1
+              },
+              "acceptedMethods": ["inPerson", "video"],
+              "requiredClaims": ["name.legal"],
+              "maxStatementAge": "P120D",
+              "eligibleVetters": {
+                "role": "vetter"
+              },
+              "invitation": "none",
+              "decisionSla": "P14D",
+              "ext": {
+                "org.openvtc.hidden-vetting": {
+                  "suite": "ps-ddh-bls12381",
+                  "helperKey": "zUC7K4ndUaGZgV7Cp2yJy6JtMoUHY6u7tkcSYUvPrEidqn97FrCvKsrXJ8uPGZvRZzKVQvKKQBYJnGm4VnGWTGqCgKPsNjCNhbXJgHLPJwCJHKxqLvDfPqFcMhJQFYrJKxCgKPs",
+                  "tokenKey": "zUC7YNfqQjHvbYWVYKxPvqJJ8ycDPZ4pGQHNqEwUbNLPjYhLcKGVKqWMxQfVzYjWQEyPQpLZnVvBqzKhQxNWbGYJRcPvMKnDLbYqWQJPKZGvYHcMXrLPqDvbNKcYzWMqJHLPvKx",
+                  "vetterLabels": ["vetter/2026-10", "vetter/2026-09"],
+                  "tokenLabels": ["token/2026-10", "token/2026-09"]
+                }
+              },
+              "extCritical": ["org.openvtc.hidden-vetting"],
+              "governanceFrameworkUrl": "https://kernel-vtc.example/governance#vetting"
+            },
+            "credentialIssuers": "any",
+            "requirementsDigest": "zQmc3pV4jDBWtJ79F79MomEuzYVghF7DWdp87xrUaW8DUop"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "title": "With community branding",
+    "document": {
+      "id": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c04",
+      "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.3#response",
+      "threadId": "urn:uuid:5b0f3c1e-7d2a-4c8e-9f41-2a6b8d0e1c03",
+      "issuer": "did:webvh:QmVtcScid:kernel-vtc.example",
+      "issuedAt": "2026-09-12T08:05:01Z",
+      "payload": {
+        "communityDid": "did:webvh:QmVtcScid:kernel-vtc.example",
+        "criteria": [
+          {
+            "id": "invited",
+            "description": "Present an invitation from this community.",
+            "admission": "automatic",
+            "invitationRequired": true,
+            "requirementsDigest": "zQmRitDbNjAJrrzt8QUUKYWpQVEEaLGm5FT7JZ7cLU7PzLh"
+          }
+        ],
+        "branding": {
+          "displayName": "Kernel VTC",
+          "accentColor": "#1f6feb",
+          "logoUrl": "https://kernel-vtc.example/assets/logo.svg"
+        }
+      }
+    }
+  }
+]

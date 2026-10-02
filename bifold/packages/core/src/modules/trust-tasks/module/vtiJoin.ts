@@ -131,6 +131,9 @@ export async function joinCommunity(
     verdict = await vtiAgent.apply(deps.communityDid, manifest, {
       credentials: invitation ? [invitation.credential] : [],
       registryConsent: deps.registryConsent,
+      // From manifest/0.3 an invitation is presented under the criterion that
+      // asks for one; with nothing in hand the community chooses.
+      intent: invitation ? 'invitation' : 'plain',
     })
   } catch (e) {
     await recordAnswer(deps.communityStore, deps.communityDid, { refusal: e }).catch(() => undefined)
