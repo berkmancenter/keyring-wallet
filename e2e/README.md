@@ -211,6 +211,14 @@ running; the port is forwarded to the phone over USB with `adb reverse`).
 
 ## Simulator/emulator run (`yarn e2e:vrc`)
 
+> **One emulator at a time, through `scripts/emu.sh`.** The harness never
+> starts or kills an emulator. Start it with `scripts/emu.sh start <avd>`
+> (refuses if one is already running or memory is short), stop it with
+> `scripts/emu.sh stop` (`adb emu kill`, then SIGTERM, never SIGKILL), and
+> run `scripts/emu.sh status` before a gate. A SIGKILLed emulator once left the
+> Mac unable to boot any emulator (`HV_NO_RESOURCES`) until a restart. The
+> `emulator -avd …` lines below still work for a hand run on a quiet machine.
+
 Fully unattended. Defaults (override via env): `ANDROID_AVD=Pixel_8_API_33`,
 `IOS_DEVICE_NAME="iPhone 17"`, `IOS_PLATFORM_VERSION=26.3`, `ANDROID_APK` /
 `IOS_APP` for binary paths, `PLATFORMS=android,ios`.
@@ -327,9 +335,11 @@ ANDROID_AVD=Pixel_8_API_33 ANDROID_AVD2=Pixel_8_API_33_b \
   yarn e2e:vrc:android-only
 ```
 
-Appium attaches to the two already-running emulators by matching each
-session's `appium:avd` capability to that AVD's instance, rather than
-launching its own — so both must already be up before you run the command.
+The harness attaches to the two already-running emulators: each session's
+`appium:avd` is turned into the `appium:udid` of that AVD's running instance
+(`e2e/lib/emulator.js`), and a session whose AVD is not running fails at once
+rather than letting Appium launch one — so both must already be up before you
+run the command.
 
 ## Two iOS devices, witnessed (`yarn e2e:vrc:witnessed:ios-devices`) — attended
 

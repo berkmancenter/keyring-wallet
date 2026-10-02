@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
+import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
 
 // The host port this worktree's Metro serves on; a second worktree runs its
 // own on another port (Android reaches it via debug_http_host, see below).
@@ -152,11 +153,13 @@ const alive = (pid) => {
  * outlived its run by 40 minutes, 2026-09-23, and ignored SIGTERM). So note the
  * whole tree first, stop Appium, then its descendants, escalating to SIGKILL
  * for any still alive after a short grace. By PID only; an Appium this run did
- * not start (appiumProc unset) is never touched.
+ * not start (appiumProc unset) is never touched. An emulator in the tree is
+ * left alone: SIGKILL to qemu left the Mac unable to boot any emulator
+ * (`HV_NO_RESOURCES`, 2026-10-01); scripts/emu.sh owns emulators.
  */
 export function stopAppium() {
   if (!appiumProc) return;
-  const tree = descendantPids(appiumProc.pid);
+  const tree = descendantPids(appiumProc.pid).filter((pid) => !isEmulatorPid(pid));
   appiumProc.kill("SIGTERM");
   for (const pid of tree) {
     try {
@@ -177,9 +180,11 @@ export function stopAppium() {
 }
 
 export async function createSession(platform, capsOverride) {
-  const capabilities =
+  const requested =
     capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
-  const realDevice = Boolean(capabilities["appium:udid"]);
+  const realDevice = Boolean(requested["appium:udid"]);
+  // Attach to a running emulator by udid; never let Appium launch one (emulator.js).
+  const capabilities = pinToRunningEmulator(requested);
   console.log(
     `[e2e] creating ${platform} session${realDevice ? " (real device)" : ""}…`
   );
