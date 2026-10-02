@@ -10,6 +10,7 @@
 #
 #   ./up.sh            bring everything up, print stack.env
 #   ./up.sh --stop     stop what this script started
+#   ./up.sh --check    run only the read-only preflight (preflight.sh); starts and stops nothing
 #
 # Requires: cargo, cloudflared, redis, and the three upstream checkouts below.
 set -euo pipefail
@@ -98,24 +99,24 @@ EOF
   exit 2
 fi
 
+if [ "${1:-}" = "--check" ]; then exec "$(dirname "$0")/preflight.sh"; fi
+
 # On Linux sign-lab-tool.sh only makes the stable ~/vti-stack/bin/<tool> link, so
 # create a missing pnm link here rather than failing on a forgotten prerequisite.
 if [ "$(uname)" = "Linux" ] && [ ! -x "$PNM_BIN" ] && [ "$PNM_BIN" = "$HOME/vti-stack/bin/pnm" ]; then
   echo "creating $PNM_BIN via sign-lab-tool.sh pnm"
   VTI_SRC="$VTI_SRC" "$(dirname "$0")/../sign-lab-tool.sh" pnm || true
 fi
-for bin in "$VTA_BIN" "$VTC_BIN" "$PNM_BIN" "$MEDIATOR_BIN" "$MEDIATOR_SETUP_BIN" "$WEBVH_BIN"; do
-  [ -x "$bin" ] || { echo "missing: $bin — build it first (see README)"; exit 1; }
-done
+# Everything up.sh needs, checked before anything is stopped or started: binaries
+# (versions printed), the lab ngrok config, Redis and REDIS_DB, ports, memory.
+"$(dirname "$0")/preflight.sh" || exit 1
 # REDIS_PORT: point the stack at a dedicated instance instead of the default
 # 6379 (a shared host's Redis may hold someone else's data in db0). Default unchanged.
 REDIS_PORT="${REDIS_PORT:-6379}"
 # REDIS_DB: a database index on that instance (0-15), so the mediator's keys stay out of
-# db0 when the instance also holds other data. Default unset = db0, the URL unchanged.
+# db0. preflight.sh refuses db0 on port 6379 unless LAB_ALLOW_REDIS_DB0=1.
 REDIS_DB="${REDIS_DB:-}"
-case "$REDIS_DB" in ""|[0-9]|1[0-5]) ;; *) echo "REDIS_DB must be 0-15, got: $REDIS_DB"; exit 1;; esac
 REDIS_URL="redis://127.0.0.1:$REDIS_PORT/$REDIS_DB"
-redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1 || { echo "redis is not running on port $REDIS_PORT: brew services start redis (macOS), or redis-server --port $REDIS_PORT --save \"\" (Linux)"; exit 1; }
 
 # An ngrok.yml in the stack dir names the hostnames. Validate it now, before the
 # stop/re-provision below: a missing tunnel name or a keyring-vti-* domain (the
