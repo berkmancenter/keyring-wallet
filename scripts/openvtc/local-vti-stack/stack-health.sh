@@ -145,9 +145,29 @@ log "every VTA can mint a served persona"
 # keeps every profile in its own config dir and reads PNM_HOME as that dir, so
 # a per-VTA PNM_HOME hid every profile and this check failed on healthy VTAs;
 # it is left unset. alice is Alberto's own agent and is not queried here.
+# up.sh keeps one pnm profile, `community`, under PNM_HOME=$STACK_DIR/pnm-community
+# and registers the host on every VTA offline (`vta did-mgmt servers add`), so a
+# VTA with no pnm profile here (bob, as up.sh leaves it) or an expired pnm
+# session cannot be asked: that is "unverified", not "no host" — a false
+# negative otherwise (2026-10-01). Only an answered listing with no did:webvh
+# counts as a problem.
 for n in community bob; do
-  servers=$(env -u PNM_HOME "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
-  if [ "${servers:-0}" -gt 0 ]; then ok "$n has a DID host registered"; else bad "$n has NO DID host registered — persona mints will not resolve (pnm did-mgmt servers add --id dids --did \$DIDS_DID)"; fi
+  listing=""
+  for home in "$STACK_DIR/pnm-community" ""; do
+    if [ -n "$home" ]; then
+      listing=$(PNM_HOME="$home" "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
+    else
+      listing=$(env -u PNM_HOME "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
+    fi
+    printf '%s' "$listing" | grep -qi "not found in config" || break
+  done
+  if printf '%s' "$listing" | grep -q "did:webvh.*dids\|dids.*did:webvh" || [ "$(printf '%s' "$listing" | grep -c "did:webvh")" -gt 1 ]; then
+    ok "$n has a DID host registered"
+  elif printf '%s' "$listing" | grep -qi "not found in config\|not authenticated"; then
+    ok "$n: DID host unverified here (no live pnm profile/session for it; up.sh registers it offline — see its \"$n -> dids\" line)"
+  else
+    bad "$n has NO DID host registered — persona mints will not resolve (pnm did-mgmt servers add --id dids --did \$DIDS_DID)"
+  fi
 done
 
 log "the DID host's DIDComm ear"
