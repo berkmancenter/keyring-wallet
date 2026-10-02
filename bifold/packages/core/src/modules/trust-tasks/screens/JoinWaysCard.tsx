@@ -57,12 +57,6 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const named = { community, interpolation: { escapeValue: false } }
-  // What the missing credential is, in the words its way uses.
-  const credentialWords = card.rows
-    .flatMap((row) => row.needs)
-    .flatMap((need) => (need.kind === 'credential' ? needLines(need, community, t) : []))
-    .join('; ')
-
   return (
     <View style={styles.card} testID={testIdWithKey('JoinWays')}>
       {card.several ? (
@@ -84,6 +78,9 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
             </ThemedText>
           ) : null}
           {row.cannotUse ? <ThemedText style={styles.muted}>{t('Join.Ways.CannotUse')}</ThemedText> : null}
+          {row.credentialNotYet ? (
+            <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText>
+          ) : null}
           {row.suggested ? (
             <ThemedText testID={testIdWithKey('JoinWaySuggested')}>{t('Join.Ways.Suggested')}</ThemedText>
           ) : null}
@@ -91,14 +88,7 @@ export const JoinWaysCard: React.FC<{ card: WaysCard; community: string }> = ({ 
       ))}
       {card.missing.length ? (
         <View style={styles.way} testID={testIdWithKey('JoinWaysMissing')}>
-          {card.missing.includes('invitation') ? (
-            <ThemedText>{t('Join.Ways.MissingInvitation', named)}</ThemedText>
-          ) : null}
-          {card.missing.includes('credential') ? (
-            <ThemedText>
-              {t('Join.Ways.MissingCredential', { what: credentialWords, interpolation: { escapeValue: false } })}
-            </ThemedText>
-          ) : null}
+          <ThemedText>{t('Join.Ways.MissingInvitation', named)}</ThemedText>
         </View>
       ) : null}
     </View>

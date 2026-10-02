@@ -160,18 +160,41 @@ describe('no way this phone meets', () => {
     expect(card.several).toBe(false)
   })
 
-  it('a credential way the model cannot check: named as what is needed, nothing to press', () => {
+  /**
+   * Keyring cannot apply under a credential way yet: nothing picks a held
+   * credential to answer a criterion's query. The row says so; it is not
+   * something the person is missing, and there is nothing to press for it.
+   */
+  it('a credential way: the row says Keyring cannot present one yet; nothing to press', () => {
     const card = joinCard({ wire: '0.3', accepting: true, ways: [memberCredential] })
     if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.rows[0]).toMatchObject({ credentialNotYet: true, cannotUse: false })
     expect(card.button).toBe('none')
-    expect(card.missing).toEqual(['credential'])
+    expect(card.missing).toEqual([])
   })
 
-  it('both: both are named, and the invitation is the one a person can act on', () => {
+  it('an invitation way beside it: the invitation is what the person can act on', () => {
     const card = joinCard({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }, memberCredential] })
     if (card.mode !== 'ways') throw new Error('ways')
-    expect(card.missing).toEqual(['invitation', 'credential'])
+    expect(card.missing).toEqual(['invitation'])
     expect(card.button).toBe('invited')
+    expect(card.rows.map((r) => r.credentialNotYet)).toEqual([false, true])
+  })
+
+  it('vetting plus a credential in one way is not something to start: the credential cannot be presented', () => {
+    const both = way({
+      id: 'vetted-holder',
+      meets: 'unknown',
+      requires: {
+        invitation: false,
+        credentials: { issuers: 'any', types: ['X'] },
+        vetting: { statements: 1, claims: [], methods: [] },
+      },
+    })
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [both] })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.button).toBe('none')
+    expect(card.rows[0].credentialNotYet).toBe(true)
   })
 
   it('vetting behind an invitation the phone lacks: the invitation comes first', () => {
@@ -243,7 +266,7 @@ describe('the words', () => {
         'FollowsReview',
         'Suggested',
         'MissingInvitation',
-        'MissingCredential',
+        'CredentialNotYet',
         'CannotUse',
         'ButtonJoin',
         'ButtonAsk',
@@ -269,11 +292,10 @@ describe('the words', () => {
     }
   })
 
-  it('do not claim what the phone holds about a credential nobody checked', () => {
-    // The model does not evaluate credentials, so "this phone doesn't hold" would be a guess.
-    expect(ways(enCopy).MissingCredential).not.toMatch(/doesn.t hold|does not hold/i)
-    expect(ways(frCopy).MissingCredential).not.toMatch(/n'a pas/i)
-    expect(ways(ptBrCopy).MissingCredential).not.toMatch(/não tem/i)
+  it('say nothing about what the phone holds for a credential nobody checked', () => {
+    // Credentials are not evaluated, so "this phone doesn't hold one" would be a guess.
+    for (const words of all) expect(ways(words).MissingCredential).toBeUndefined()
+    expect(ways(enCopy).CredentialNotYet).not.toMatch(/doesn.t hold|does not hold|don.t have/i)
   })
 
   it('name no provider', () => {

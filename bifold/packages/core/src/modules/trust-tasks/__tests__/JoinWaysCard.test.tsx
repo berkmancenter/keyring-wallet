@@ -77,7 +77,8 @@ test('nothing this phone can meet: says what is missing', () => {
   const tree = show({ wire: '0.3', accepting: true, ways: defaults.ways.slice(0, 2) })
   const missing = tree.getByTestId(id('JoinWaysMissing'))
   expect(missing).toHaveTextContent(/Join\.Ways\.MissingInvitation/)
-  expect(missing).toHaveTextContent(/Join\.Ways\.MissingCredential/)
+  // The credential way says on its own row that Keyring cannot present one yet.
+  expect(tree.getByTestId(id('JoinWay_member-credential'))).toHaveTextContent(/Join\.Ways\.CredentialNotYet/)
   expect(tree.queryByTestId(id('JoinWaySuggested'))).toBeNull()
 })
 

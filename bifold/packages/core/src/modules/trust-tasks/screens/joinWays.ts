@@ -87,6 +87,12 @@ export interface JoinWayRow {
   usable: boolean
   /** Keyring cannot read this way as published: said so, never offered. */
   cannotUse: boolean
+  /**
+   * The way asks for a credential, and Keyring cannot present one to join yet
+   * (nothing picks a held credential to answer a criterion's query): said so
+   * on the row. A property of the app today, not of the criterion.
+   */
+  credentialNotYet: boolean
 }
 
 /**
@@ -105,8 +111,8 @@ export type JoinCard =
       rows: JoinWayRow[]
       several: boolean
       button: JoinButton
-      /** With no way this phone can use: what it lacks, an invitation first. */
-      missing: Array<'invitation' | 'credential'>
+      /** With no way this phone meets: what the person can go and get. */
+      missing: Array<'invitation'>
     }
 
 const needsOf = (way: JoinWay): JoinNeed[] => {
@@ -136,18 +142,19 @@ export function joinCard(offer: JoinOffer, holds: JoinHolds = {}): JoinCard {
     suggested: way.usable && sameWay(offer.suggested, way),
     usable: way.usable,
     cannotUse: !way.usable,
+    credentialNotYet: way.usable && Boolean(way.requires.credentials),
   }))
 
   const suggested = offer.suggested
   // Ways Keyring can read that this phone does not meet yet.
-  const open = suggested ? [] : offer.ways.filter((way) => way.usable && way.meets !== 'yes')
+  // A credential way is left out: Keyring cannot present one, so no step of the person's opens it.
+  const open = suggested
+    ? []
+    : offer.ways.filter((way) => way.usable && way.meets !== 'yes' && !way.requires.credentials)
   const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
-  const missing: Array<'invitation' | 'credential'> = []
-  if (open.some(lacksInvitation)) missing.push('invitation')
-  // Credentials are not evaluated: named as what a way needs, never as something the phone lacks.
-  if (open.some((way) => way.requires.credentials)) missing.push('credential')
+  const missing: Array<'invitation'> = open.some(lacksInvitation) ? ['invitation'] : []
   // Vetting the person can go and do now: nothing else of that way is lacking.
-  const vettingToDo = open.some((way) => way.requires.vetting && !way.requires.credentials && !lacksInvitation(way))
+  const vettingToDo = open.some((way) => way.requires.vetting && !lacksInvitation(way))
 
   const button: JoinButton = suggested
     ? // Never "join" on the model's word alone: the way itself must be automatic.
