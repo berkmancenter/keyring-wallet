@@ -193,6 +193,12 @@ Nothing updates on its own.
   change can't talk. Read the upstream README diff for new or renamed
   `GATEWAY_*` variables, then rebuild or reload the image and run
   `docker compose up -d gateway`.
+- **Gateway patches:** a patch in `gateway/patches/` changes the image without
+  moving `GATEWAY_COMMIT`, so the image tag is `GATEWAY_IMAGE_TAG`
+  (`<GATEWAY_COMMIT>-pN`, N = the number of patches). Set the new tag in
+  `.env`, load or build that image, and run `docker compose up -d gateway`.
+  The previous image keeps its own tag, so rolling back is putting the old
+  tag back. An `.env` without `GATEWAY_IMAGE_TAG` runs the bare-commit tag.
 - **Caddy, Rust, Debian:** bump the tag and digest together. Get the digest with
   `docker buildx imagetools inspect <image>:<tag>`.
 

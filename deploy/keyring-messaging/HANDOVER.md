@@ -17,7 +17,7 @@ Secrets are not in it; each one says where it comes from.
 > - The Apple push key: Apple accepted it and delivered to that iPhone, on
 >   Apple's development (sandbox) channel.
 > - The gateway image: CI builds it for amd64 and arm64 and passes upstream's
->   own test suite with our patch applied.
+>   own test suite with our patches applied.
 > - **The bundled mediator, closed, in our lab (2026-09-30)**, using this
 >   package's CI images, today's VTI (main `32ddd2f2`) and the lab's Affinidi
 >   mediator (v0.33.1 + 3):
@@ -291,7 +291,7 @@ or ask the project lead for a tarball of the folder. It contains:
 
 **The image.** The gateway is OpenVTC's
 [`vti-push-gateway`](https://github.com/OpenVTC/vti-push-gateway), pinned at
-commit **`e542a9d77a7369f4f3da01d573107ea155c80691`**, plus one patch of ours.
+commit **`e542a9d77a7369f4f3da01d573107ea155c80691`**, plus two patches of ours.
 Upstream publishes no image, so there are two ways to get one:
 
 | Way | How |
@@ -530,9 +530,14 @@ HTTPS_PORT=443
 # Push gateway (OpenVTC/vti-push-gateway)
 ###############################################################################
 
-# The upstream commit the image is built from, which is also the image tag.
+# The upstream commit the image is built from.
 # Change it only as part of an update the project gives you (§12).
 GATEWAY_COMMIT=e542a9d77a7369f4f3da01d573107ea155c80691
+
+# The image's tag: the commit plus the patch set (-pN). Our patches change the
+# image without changing the commit, so the tag has to tell the images apart.
+# Change it only as part of an update the project gives you (§12).
+GATEWAY_IMAGE_TAG=e542a9d77a7369f4f3da01d573107ea155c80691-p2
 
 # Which agents the gateway serves: exact DIDs separated by commas or spaces,
 # or * for any agent (§3). Unset or empty (and no hosts below) = every phone
@@ -624,8 +629,9 @@ private networks, and **only Caddy publishes ports**:
 - `store` has no route out at all, and carries only the mediator and Redis.
 
 **`gateway`**: `vti-push-gateway`.
-- **Image:** `keyring-messaging/vti-push-gateway:<GATEWAY_COMMIT>`, loaded or
-  built as in §4.
+- **Image:** `keyring-messaging/vti-push-gateway:<GATEWAY_IMAGE_TAG>`, loaded
+  or built as in §4. The tag is the upstream commit plus `-pN` for our patch
+  set.
 - **Listens:** on port 8300, reachable only from Caddy on the `edge` network.
   Prometheus metrics listen on `127.0.0.1:9300` inside its own container, so
   nothing outside the container can reach them.
@@ -1166,22 +1172,30 @@ your own.** Its protocol has to match the agents it serves: authorisation
 changed in upstream PR #32, and a gateway and an agent on opposite sides of
 such a change can't talk to each other. When an update is due, the project
 sends you:
-- the updated package, with the new `GATEWAY_COMMIT` and a patch that applies
-  to it;
-- a CI image.
+- the updated package, with the new `GATEWAY_COMMIT` or a new patch, and the
+  `GATEWAY_IMAGE_TAG` that goes with it;
+- a CI image under that tag.
+
+An update that only adds a patch of ours keeps `GATEWAY_COMMIT` and moves
+`GATEWAY_IMAGE_TAG` alone (`…-p2` to `…-p3`). The tag is how the server tells
+the new image from the old one: with the same tag it would keep running the
+image it already has.
 
 **Updating the gateway**
 
 ```sh
 cd /opt/keyring-messaging
 # 1. Record what runs now, and back up the store.
-grep ^GATEWAY_COMMIT .env
+grep -E '^GATEWAY_(COMMIT|IMAGE_TAG)' .env
 sudo cp -p data/gateway/gateway-store.json data/gateway/gateway-store.json.pre-update
-# 2. Get the new package and image (§4), then set the new GATEWAY_COMMIT in .env.
+# 2. Get the new package and image (§4), then set the new GATEWAY_COMMIT and
+#    GATEWAY_IMAGE_TAG in .env. Check the image is loaded under that tag:
+#    sudo docker image ls keyring-messaging/vti-push-gateway
 # 3. Recreate the gateway only; Caddy keeps serving.
 sudo docker compose up -d gateway
 sleep 20; sudo docker compose logs --tail 80 gateway   # the §10 step-3 lines again
 curl -fsS https://push.example.org/healthz; echo
+sudo docker compose ps gateway    # the IMAGE column shows the new tag
 ```
 
 Keep the old image until the new one has run for a while: don't run
@@ -1190,7 +1204,8 @@ Keep the old image until the new one has run for a while: don't run
 **Rolling back**
 
 ```sh
-# 1. Put the old GATEWAY_COMMIT back in .env (and the old package files, if they changed).
+# 1. Put the old GATEWAY_COMMIT and GATEWAY_IMAGE_TAG back in .env (and the old
+#    package files, if they changed).
 # 2. If the new version wrote the store, restore the backup.
 sudo docker compose stop gateway
 sudo cp -p data/gateway/gateway-store.json.pre-update data/gateway/gateway-store.json
@@ -1198,7 +1213,7 @@ sudo cp -p data/gateway/gateway-store.json.pre-update data/gateway/gateway-store
 sudo docker compose up -d gateway
 ```
 
-The old image is still loaded under its commit tag, so this takes seconds.
+The old image is still loaded under its own tag, so this takes seconds.
 Registrations made between the update and the rollback are lost with the
 restored store. Those phones register again when notifications are turned off
 and on.
