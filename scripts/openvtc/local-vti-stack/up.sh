@@ -459,7 +459,13 @@ log "provisioning the VTC"
 "$VTC_BIN" setup --setup-key-out "$STACK_DIR/vtc/setup-key.json" --context vtc >/dev/null
 SETUP_DID=$(grep -o 'did:key:z[A-Za-z0-9]*' vtc/setup-key.json | head -1 || true)
 [ -n "$SETUP_DID" ] || SETUP_DID=$("$VTC_BIN" setup --setup-key-out "$STACK_DIR/vtc/setup-key.json" --context vtc 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1)
-"$PNM_BIN" contexts create --id vtc --name "VTC" --admin-did "$SETUP_DID" --admin-expires 4h --admin-handoff >/dev/null
+# A current vtc refuses a setup DID whose ACL entry carries no one-time hand-off
+# (VTI-ACL-053); a pnm from before that (e.g. VTI a96fe02f) has no such flag and
+# its vtc does not ask for one, so pass it only where pnm knows it.
+ADMIN_HANDOFF=""
+"$PNM_BIN" contexts create --help 2>&1 | grep -q -- '--admin-handoff' && ADMIN_HANDOFF="--admin-handoff"
+# shellcheck disable=SC2086
+"$PNM_BIN" contexts create --id vtc --name "VTC" --admin-did "$SETUP_DID" --admin-expires 4h $ADMIN_HANDOFF >/dev/null
 cat > vtc/setup.toml <<EOF
 config_path    = "$STACK_DIR/vtc/config.toml"
 base_url       = "https://$VTC_HOST"

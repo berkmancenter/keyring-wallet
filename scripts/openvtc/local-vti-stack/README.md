@@ -28,6 +28,24 @@ cargo build -p did-hosting-daemon --manifest-path ~/Documents/affinidi-webvh-ser
 git clone https://github.com/affinidi/affinidi-tdk-rs ~/Documents/affinidi-tdk-rs
 cargo build -p affinidi-messaging-mediator -p affinidi-messaging-mediator-setup \
   --manifest-path ~/Documents/affinidi-tdk-rs/Cargo.toml
+```
+
+**`e2e/run-agent-connect.js` needs a VTI from before #1687 (2026-09-23).** Its
+probe (Developer screen, "Probe VTA mediator") sends `join-requests/manifest/0.2`
+and `submit/0.2` typed as the task URI. Since VTI #1687 (`c595bcb9`, VTI-42) a
+VTC takes a Trust Task over DIDComm only in the binding envelope and refuses
+that carriage ("Trust Task arrived typed as its task URI, not in the DIDComm
+binding envelope — refused"), so on a current VTC the run stops at the
+`verdict` marker. The app's real community path already sends the envelope.
+To run this gate, build a second VTI tree at `a96fe02f` (2026-09-21; vta
+0.37.0, vtc 0.11.58) and point `up.sh` at it — the rest of the lab is unchanged:
+
+```sh
+git -C ~/Documents/vti-main worktree add --detach ~/Documents/vti-a96fe02f a96fe02f
+cargo build --manifest-path ~/Documents/vti-a96fe02f/Cargo.toml \
+  -p vta-service -p vtc-service -p pnm-cli -p cnm-cli --features vta-service/tsp,vta-service/webvh
+VTI_SRC=~/Documents/vti-a96fe02f PNM_BIN=~/Documents/vti-a96fe02f/target/debug/pnm ./up.sh
+# then rebuild the app against the new stack.env, as after any up.sh
 
 brew install redis && brew services start redis
 ```
