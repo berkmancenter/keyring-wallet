@@ -521,68 +521,86 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // Manifest 0.3: its ways in, and what follows each (joinWays.ts).
       if (ways) {
         const suggestedWay = offer?.suggested
+        const mainButton =
+          ways.button === 'invited' ? (
+            <Button
+              title={t('VtaLink.IWasInvited')}
+              buttonType={ButtonType.Primary}
+              onPress={toInvited}
+              testID={testIdWithKey('JoinGoInvited')}
+            />
+          ) : ways.button !== 'none' ? (
+            <Button
+              title={
+                ways.button === 'join'
+                  ? t('Join.Ways.ButtonJoin', named)
+                  : ways.button === 'ask'
+                    ? t('Join.Ways.ButtonAsk')
+                    : // Beside "Ask to join", the button names where it leads.
+                      ways.alsoAsk
+                      ? t('Join.Ways.ButtonVetting')
+                      : t('Join.Start')
+              }
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                if (ways.button === 'start') {
+                  setPlainRequest(false)
+                  setStep('as')
+                } else if (suggestedWay?.requires.invitation) {
+                  // An invitation the phone holds is presented from "I was invited", where it is.
+                  toInvited()
+                } else {
+                  setPlainRequest(true)
+                  setStep('as')
+                }
+              }}
+              testID={testIdWithKey('JoinStart')}
+            />
+          ) : null
+        // The other door: the review way the phone meets as it stands.
+        const askButton = ways.alsoAsk ? (
+          <Button
+            title={t('Join.Ways.ButtonAsk')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => {
+              setPlainRequest(true)
+              setStep('as')
+            }}
+            testID={testIdWithKey('JoinAsk')}
+          />
+        ) : null
+        // Two things to do: each button sits under the way it acts on, below
+        // what follows that way. Both under the list made a fixed area tall
+        // enough to cover the last way's lines on a phone — the line that says
+        // an administrator decides among them (the Farm run of 2026-10-02).
+        const vettingRow = ways.alsoAsk ? ways.rows.find((row) => row.canStartVetting)?.id : undefined
         body = (
           <>
             {waysTitle}
             {changed ? (
               <ThemedText testID={testIdWithKey('JoinChanged')}>{t('Join.Ways.Changed', named)}</ThemedText>
             ) : null}
-            <JoinWaysCard card={ways} community={name} />
+            <JoinWaysCard
+              card={ways}
+              community={name}
+              rowAction={
+                ways.alsoAsk
+                  ? (row) => (row.id === vettingRow ? mainButton : row.suggested ? askButton : null)
+                  : undefined
+              }
+            />
             {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+            {/* With the list, not under the buttons, so the fixed area stays short. */}
+            {different}
           </>
         )
-        actions = (
+        actions = ways.alsoAsk ? (
+          errorLine
+        ) : (
           <>
             {errorLine}
-            {ways.button === 'invited' ? (
-              <Button
-                title={t('VtaLink.IWasInvited')}
-                buttonType={ButtonType.Primary}
-                onPress={toInvited}
-                testID={testIdWithKey('JoinGoInvited')}
-              />
-            ) : ways.button !== 'none' ? (
-              <Button
-                title={
-                  ways.button === 'join'
-                    ? t('Join.Ways.ButtonJoin', named)
-                    : ways.button === 'ask'
-                      ? t('Join.Ways.ButtonAsk')
-                      : // Beside "Ask to join", the button names where it leads.
-                        ways.alsoAsk
-                        ? t('Join.Ways.ButtonVetting')
-                        : t('Join.Start')
-                }
-                buttonType={ButtonType.Primary}
-                onPress={() => {
-                  if (ways.button === 'start') {
-                    setPlainRequest(false)
-                    setStep('as')
-                  } else if (suggestedWay?.requires.invitation) {
-                    // An invitation the phone holds is presented from "I was invited", where it is.
-                    toInvited()
-                  } else {
-                    setPlainRequest(true)
-                    setStep('as')
-                  }
-                }}
-                testID={testIdWithKey('JoinStart')}
-              />
-            ) : null}
-            {ways.alsoAsk ? (
-              // The other door: the review way the phone meets as it stands.
-              <Button
-                title={t('Join.Ways.ButtonAsk')}
-                buttonType={ButtonType.Secondary}
-                onPress={() => {
-                  setPlainRequest(true)
-                  setStep('as')
-                }}
-                testID={testIdWithKey('JoinAsk')}
-              />
-            ) : null}
-            {different}
+            {mainButton}
           </>
         )
         break
@@ -817,7 +835,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
-      {actions ? <View style={styles.actions}>{actions}</View> : null}
+      {actions ? (
+        <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+          {actions}
+        </View>
+      ) : null}
     </SafeAreaView>
   )
 }

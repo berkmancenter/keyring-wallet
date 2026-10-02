@@ -5,7 +5,7 @@
  * community keeps today's screen (VtiJoinScreen.test.tsx).
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -190,6 +190,29 @@ describe('Join, at manifest 0.3', () => {
       // What follows each way is still said on its own row.
       expect(tree.getByTestId(id('JoinWayFollows_vetted-member'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
       expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+    })
+
+    it('puts each button under the way it acts on, and nothing fixed under the list', async () => {
+      // Two buttons under the list covered the last way's lines on a phone.
+      const tree = await toAsks(vettingCommunity)
+      const vettingRow = within(tree.getByTestId(id('JoinWay_vetted-member')))
+      const reviewRow = within(tree.getByTestId(id('JoinWay_review')))
+      expect(vettingRow.getByTestId(id('JoinStart'))).toBeTruthy()
+      expect(vettingRow.queryByTestId(id('JoinAsk'))).toBeNull()
+      expect(reviewRow.getByTestId(id('JoinAsk'))).toBeTruthy()
+      // What follows each way is right above its button.
+      expect(reviewRow.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+      expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+      // "A different community" is still on the screen, with the list.
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
+    })
+
+    it('one thing to do keeps its button fixed under the list, as before', async () => {
+      const tree = await toAsks(defaults)
+      const fixed = within(tree.getByTestId(id('JoinActions')))
+      expect(fixed.getByTestId(id('JoinStart'))).toBeTruthy()
+      expect(fixed.queryByTestId(id('JoinScanCommunity'))).toBeNull()
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
     it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {
