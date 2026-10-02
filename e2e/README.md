@@ -909,6 +909,12 @@ It finds the `Notifications` row in Settings, opens it and looks for the push
 switch (`PushNotificationSwitch`). Prints `PUSH_ON PASS|FAIL`. Run on a build
 with push off it fails, as `push-off-probe` fails on a build with push on.
 
+The probe opens the switch's screen and does not tap the switch, so it raises
+no system prompt; it leaves the app on that screen. Do not extend it to tap
+the switch on iOS: the driver's capabilities set `autoAcceptAlerts`, which
+would accept the permission prompt silently and hide the very thing the first
+device row checks.
+
 This proves the screens are reachable and nothing else. A simulator or
 emulator build is not signed for push and does not prove a token, a
 registration or a wake. Those are the real-device rows below, on the build
@@ -916,7 +922,7 @@ that ships, with the phones linked to an agent the gateway serves:
 
 | Row | iPhone | Android phone |
 | --- | --- | --- |
-| Turn notifications on in Settings: the system prompt appears once; the gateway counts one registration (`gateway_register_total`) and one provision | | |
+| Turn notifications on in Settings, by hand: the system prompt appears once; the gateway counts one registration (`gateway_register_total`) and one provision (`gateway_provision_total{outcome="ok"}`) | | |
 | A wake while the app is in the background shows the banner, in the phone's language | | |
 | A wake after the app was force-quit shows the banner | | |
 | A wake while the app is open shows nothing intrusive and loses no state | | |

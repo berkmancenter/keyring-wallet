@@ -14,7 +14,9 @@
  * testers' configuration. `on` is a build that names a push gateway: the
  * Notifications row must be there and must lead to the push switch. `on` only
  * proves the screens are reachable; that a phone registers and is woken is a
- * real-device check (README, "Push is on").
+ * real-device check (README, "Push is on"). It does not tap the switch, so it
+ * raises no system prompt. It leaves the app on the push-switch screen, where
+ * `off` leaves it on Settings: a step chained after it must go back first.
  *
  * On the installed app (driven as it is, never reset): unlock, open Settings,
  * and look for the Notifications row (testID Notifications, which leads to
