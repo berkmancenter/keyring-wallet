@@ -92,8 +92,13 @@ let manager, approver;
 let keepalive;
 try {
   await ensureAppium();
-  manager = await createSession(platforms[0], keep(platforms[0] === "android" ? androidCaps() : iosCaps()));
-  approver = await createSession(platforms[1], keep(platforms[1] === "android" ? androidCaps() : iosCaps()));
+  // Two Android roles need two devices: MANAGER_ANDROID_UDID / APPROVER_ANDROID_UDID
+  // (a phone serial or a running emulator's) or MANAGER_ANDROID_AVD /
+  // APPROVER_ANDROID_AVD. UNVERIFIED: no android+android run of this script has
+  // been made; the single-android runs (android+ios) are unchanged.
+  const androidFor = (role) => androidCaps(process.env[`${role}_ANDROID_AVD`], process.env[`${role}_ANDROID_UDID`]);
+  manager = await createSession(platforms[0], keep(platforms[0] === "android" ? androidFor("MANAGER") : iosCaps()));
+  approver = await createSession(platforms[1], keep(platforms[1] === "android" ? androidFor("APPROVER") : iosCaps()));
   console.log(`[e2e] manager = ${platforms[0]}, approver = ${platforms[1]}`);
   await Promise.all([unlockToHome(manager), unlockToHome(approver)]);
 

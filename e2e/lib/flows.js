@@ -18,6 +18,7 @@ import {
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { hwVerifiedMarkerSeen, requireHwVerified } from "./vrcCapture.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -1512,6 +1513,28 @@ async function androidSawAttestationAttempt(driver) {
  */
 export async function assertSecureExchangeBadge(driver, peerName, timeout = 120000, options = {}) {
   const requireSecureExchange = options.requireSecureExchange ?? true;
+  // Opt-in strict mode (E2E_REQUIRE_HW_VERIFIED=1): whatever path this
+  // assertion would accept, the receiving wallet must also have logged an
+  // actual verification PASS. Default behaviour is unchanged.
+  const strictVerified = async () => {
+    if (!requireHwVerified()) return;
+    if (driver.e2ePlatform !== "android" || !driver.e2eUdid) {
+      console.warn(
+        `[e2e] ${driver.e2ePlatform}: E2E_REQUIRE_HW_VERIFIED=1 cannot be enforced here (no Android log for this wallet) — skipped`
+      );
+      return;
+    }
+    const log = await readAppJsLog(driver);
+    if (!hwVerifiedMarkerSeen(log)) {
+      await screenshot(driver, "hw-verify-not-passed");
+      throw new Error(
+        `${driver.e2ePlatform}: E2E_REQUIRE_HW_VERIFIED=1 but the wallet that received "${peerName}" logged no ` +
+          `"[HW:Verify] ✓ Native verification passed" (or [VRC:Verify] equivalent) — hardware evidence was not verified ` +
+          `(a "✗ Native verification failed" line, e.g. an expired attestation root, is a failure here)`
+      );
+    }
+    console.log(`[e2e] ${driver.e2ePlatform}: hardware verification PASS logged for evidence received from "${peerName}"`);
+  };
   const deadline = Date.now() + timeout;
   let sawAttestation = false;
   while (Date.now() < deadline) {
@@ -1527,6 +1550,7 @@ export async function assertSecureExchangeBadge(driver, peerName, timeout = 1200
             ? " Secure Exchange"
             : " no Secure Exchange badge (not required — hardware verification warning accepted)")
       );
+      await strictVerified();
       return;
     }
     if (await existsTestId(driver, "BackButton", 2000)) {
@@ -1542,6 +1566,7 @@ export async function assertSecureExchangeBadge(driver, peerName, timeout = 1200
       `[e2e] ${driver.e2ePlatform}: ⚠️ no Secure Exchange badge for "${peerName}", but the verification log ` +
         `shows evidence was attempted (commonly an aging/legacy attestation root, not a flow regression); continuing`
     );
+    await strictVerified();
     return;
   }
   await screenshot(driver, "secure-exchange-missing");

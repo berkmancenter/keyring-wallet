@@ -5,7 +5,8 @@ How a Keyring release is gated from 226 on. The aim is one full gate per release
 ## 0. Prove the checkers before any device run
 
 - The harness has unit tests. Run them on every harness change:
-  - `node --test e2e/lib/*.test.mjs` (filledRule, joinOutcome, testIdKeys)
+  - `node --test e2e/lib/*.test.mjs` (filledRule, joinOutcome, testIdKeys, vrcCapture)
+  - `node e2e/check-vrc-credentials.mjs --self-test` (the issued-VRC checker, synthetic fixtures)
   - `node --test scripts/ci/js-only.test.mjs`
 - A new check lands with a known-bad case it fails on, replayed offline against saved evidence (`e2e/scripts/replay-filled.mjs` is the model).
 - A runner change that alters what counts as a pass gets a test first; it is not tried out on a device.

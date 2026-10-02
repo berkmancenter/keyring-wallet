@@ -1,0 +1,84 @@
+diff --git a/packages/core/src/modules/dcql/DcqlService.ts b/packages/core/src/modules/dcql/DcqlService.ts
+index 4b8d032..ee611bd 100644
+--- a/packages/core/src/modules/dcql/DcqlService.ts
++++ b/packages/core/src/modules/dcql/DcqlService.ts
+@@ -157,7 +157,7 @@ export class DcqlService {
+
+         // For LDP_VC we query the expanded types
+         $or: dcqlQuery.credentials
+-          .flatMap((c) => (c.format === 'jwt_vc_json' ? c.meta.type_values : []))
++          .flatMap((c) => (c.format === 'ldp_vc' ? c.meta.type_values : []))
+           .map((typeValues) => ({
+             expandedTypes: typeValues,
+           })),
+diff --git a/packages/core/src/modules/dcql/__tests__/DcqlService.test.ts b/packages/core/src/modules/dcql/__tests__/DcqlService.test.ts
+index 6a920c7..3e52507 100644
+--- a/packages/core/src/modules/dcql/__tests__/DcqlService.test.ts
++++ b/packages/core/src/modules/dcql/__tests__/DcqlService.test.ts
+@@ -1,6 +1,8 @@
++import type { DcqlQuery } from 'dcql'
+ import { AgentContext } from '../../../agent'
+-import type { SdJwtVc, SdJwtVcPayload } from '../../sd-jwt-vc'
+-import { ClaimFormat } from '../../vc'
++import { MdocApi } from '../../mdoc'
++import { type SdJwtVc, SdJwtVcApi, type SdJwtVcPayload } from '../../sd-jwt-vc'
++import { ClaimFormat, W3cCredentialRepository, W3cV2CredentialRepository } from '../../vc'
+ import { DcqlError } from '../DcqlError'
+ import { DcqlService } from '../DcqlService'
+
+@@ -61,4 +63,55 @@ describe('DcqlService', () => {
+       })
+     )
+   })
++
++  test('queries the wallet for ldp_vc credentials using the ldp_vc query entry, not a jwt_vc_json one', async () => {
++    // Regression test for a copy-paste bug: the ldp_vc branch of queryCredentialsForDcqlQuery
++    // filtered dcqlQuery.credentials for `c.format === 'jwt_vc_json'` instead of `'ldp_vc'`, so
++    // when a query contains only an ldp_vc credential (no jwt_vc_json one), the resulting $or was
++    // always `[]` and no W3C JSON-LD credential could ever be found.
++    const w3cCredentialRepository = { findByQuery: vi.fn().mockResolvedValue([]) }
++    const w3cV2CredentialRepository = { findByQuery: vi.fn().mockResolvedValue([]) }
++    const sdJwtVcApi = { findAllByQuery: vi.fn().mockResolvedValue([]), getAll: vi.fn().mockResolvedValue([]) }
++    const mdocApi = { findAllByQuery: vi.fn().mockResolvedValue([]), getAll: vi.fn().mockResolvedValue([]) }
++
++    const agentContext = {
++      dependencyManager: {
++        resolve: vi.fn((token) => {
++          if (token === W3cCredentialRepository) return w3cCredentialRepository
++          if (token === W3cV2CredentialRepository) return w3cV2CredentialRepository
++          if (token === SdJwtVcApi) return sdJwtVcApi
++          if (token === MdocApi) return mdocApi
++          throw new Error(`Unexpected dependencyManager.resolve call for ${token}`)
++        }),
++      },
++    } as unknown as AgentContext
++
++    const dcqlQuery = {
++      credentials: [
++        {
++          id: 'ldp-vc-cred',
++          format: 'ldp_vc',
++          require_cryptographic_holder_binding: true,
++          multiple: false,
++          meta: {
++            type_values: [['VerifiableCredential', 'ExampleCredential']],
++          },
++        },
++      ],
++    } as unknown as DcqlQuery
++
++    // queryCredentialsForDcqlQuery is private; reach it directly to test the query construction
++    // in isolation, without needing a full wallet/agent for the surrounding public method.
++    await (
++      dcqlService as unknown as { queryCredentialsForDcqlQuery: (...args: unknown[]) => Promise<unknown> }
++    ).queryCredentialsForDcqlQuery(agentContext, dcqlQuery)
++
++    expect(w3cCredentialRepository.findByQuery).toHaveBeenCalledWith(
++      agentContext,
++      expect.objectContaining({
++        claimFormat: ClaimFormat.LdpVc,
++        $or: [{ expandedTypes: ['VerifiableCredential', 'ExampleCredential'] }],
++      })
++    )
++  })
+ })

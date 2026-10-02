@@ -73,10 +73,33 @@ stop_stack() {
 
 if [ "${1:-}" = "--stop" ]; then stop_stack; exit 0; fi
 
+# On Linux sign-lab-tool.sh only makes the stable ~/vti-stack/bin/<tool> link, so
+# create a missing pnm link here rather than failing on a forgotten prerequisite.
+if [ "$(uname)" = "Linux" ] && [ ! -x "$PNM_BIN" ] && [ "$PNM_BIN" = "$HOME/vti-stack/bin/pnm" ]; then
+  echo "creating $PNM_BIN via sign-lab-tool.sh pnm"
+  VTI_SRC="$VTI_SRC" "$(dirname "$0")/../sign-lab-tool.sh" pnm || true
+fi
 for bin in "$VTA_BIN" "$VTC_BIN" "$PNM_BIN" "$MEDIATOR_BIN" "$MEDIATOR_SETUP_BIN" "$WEBVH_BIN"; do
   [ -x "$bin" ] || { echo "missing: $bin — build it first (see README)"; exit 1; }
 done
-redis-cli ping >/dev/null 2>&1 || { echo "redis is not running: brew services start redis"; exit 1; }
+# REDIS_PORT: point the stack at a dedicated instance instead of the default
+# 6379 (a shared host's Redis may hold someone else's data in db0). Default unchanged.
+REDIS_PORT="${REDIS_PORT:-6379}"
+# REDIS_DB: a database index on that instance (0-15), so the mediator's keys stay out of
+# db0 when the instance also holds other data. Default unset = db0, the URL unchanged.
+REDIS_DB="${REDIS_DB:-}"
+case "$REDIS_DB" in ""|[0-9]|1[0-5]) ;; *) echo "REDIS_DB must be 0-15, got: $REDIS_DB"; exit 1;; esac
+REDIS_URL="redis://127.0.0.1:$REDIS_PORT/$REDIS_DB"
+redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1 || { echo "redis is not running on port $REDIS_PORT: brew services start redis (macOS), or redis-server --port $REDIS_PORT --save \"\" (Linux)"; exit 1; }
+
+# An ngrok.yml in the stack dir names the hostnames. Validate it now, before the
+# stop/re-provision below: a missing tunnel name or a keyring-vti-* domain (the
+# live shared stack's, refused unless LAB_ALLOW_LIVE_DOMAINS=1) must fail early.
+NGROK_HOSTS=""
+if [ -f "$STACK_DIR/ngrok.yml" ]; then
+  NGROK_HOSTS=$("$(dirname "$0")/ngrok-lab-config.sh" --hosts "$STACK_DIR/ngrok.yml") || exit 1
+  command -v ngrok >/dev/null || { echo "ngrok is not installed or not on PATH"; exit 1; }
+fi
 
 # Re-running this script re-provisions, and a running daemon holds a lock on the
 # store being rewritten ("FjallError: Locked"). So stop first, always.
@@ -102,6 +125,57 @@ open_tunnel() { # name port -> echoes hostname
   echo "tunnel for $name never came up" >&2; exit 1
 }
 
+# ngrok fails on its own, after this script has moved on: a plan that caps a
+# session's endpoints (ERR_NGROK_324 / 18021), a bad token, a domain the account
+# does not own. Nothing downstream notices, and the run hangs at "provisioning
+# the VTAs" against hostnames that answer ERR_NGROK_3200 (offline) — measured
+# 2026-10-01. So watch the process and its log for NGROK_WATCH_SECS, and fail
+# fast with the log's tail.
+NGROK_WATCH_SECS="${NGROK_WATCH_SECS:-30}"
+scrub_log() { # stdin -> stdout, with anything token-shaped masked
+  sed -E 's/(authtoken|auth_token|token)([=: "]+)[A-Za-z0-9_-]{16,}/\1\2<scrubbed>/Ig; s/\b[0-9][A-Za-z0-9]{20,}_[A-Za-z0-9]{20,}\b/<scrubbed>/g'
+}
+ngrok_fail() { # reason
+  echo "ngrok failed: $1" >&2
+  echo "--- tail of $STACK_DIR/logs/ngrok.log (token-scrubbed) ---" >&2
+  tail -n 20 "$STACK_DIR/logs/ngrok.log" 2>/dev/null | scrub_log >&2 || true
+  echo "---" >&2
+  echo "hint: ERR_NGROK_324 / ERR_NGROK_18021 mean the plan allows fewer than six concurrent endpoints" >&2
+  echo "      (the lab needs six); ERR_NGROK_105/107 a bad authtoken in $STACK_DIR/ngrok.yml;" >&2
+  echo "      ERR_NGROK_334 / 3200 a domain already online elsewhere or not reserved on this account." >&2
+  stop_stack >/dev/null 2>&1 || true
+  exit 1
+}
+watch_ngrok() {
+  local pid i
+  pid=$(cat "$STACK_DIR/ngrok.pid")
+  for i in $(seq 1 "$NGROK_WATCH_SECS"); do
+    kill -0 "$pid" 2>/dev/null || ngrok_fail "the ngrok process exited after ${i}s"
+    if grep -q 'ERR_NGROK_' "$STACK_DIR/logs/ngrok.log" 2>/dev/null; then
+      ngrok_fail "the log reports an ERR_NGROK_* error"
+    fi
+    sleep 1
+  done
+}
+# Each public hostname has to answer something before anything is provisioned
+# behind it. No backend runs yet, so a 502 (ERR_NGROK_8012: tunnel up, nothing
+# listening) is the GOOD answer; ERR_NGROK_3200 means the endpoint is offline.
+# HTTP/1.1 + bounded retry: ngrok can answer an early HTTP/2 request with 421.
+check_public_hosts() { # host...
+  local h try hdr code
+  for h in "$@"; do
+    for try in $(seq 1 10); do
+      hdr=$(curl -sS --http1.1 -m 8 -o /dev/null -D - "https://$h/" 2>/dev/null || true)
+      code=$(printf '%s' "$hdr" | head -1 | awk '{print $2}')
+      if [ -n "$code" ] && [ "$code" != 421 ] && ! printf '%s' "$hdr" | grep -qi '^ngrok-error-code: *3200'; then
+        echo "  $h answers (HTTP $code)"; continue 2
+      fi
+      sleep 3
+    done
+    ngrok_fail "https://$h/ never answered (offline, ERR_NGROK_3200, or HTTP 421 for 30s)"
+  done
+}
+
 log "opening tunnels"
 # Reserved ngrok domains if there is a config for them, quick tunnels otherwise.
 # The difference is not convenience: a did:webvh is bound to the host it was
@@ -109,16 +183,23 @@ log "opening tunnels"
 # forces `app/.env` re-baked and both apps rebuilt. Reserved domains survive a
 # restart, which is what makes this a fixture you can come back to.
 if [ -f "$STACK_DIR/ngrok.yml" ]; then
-  nohup ngrok start --all --config "$HOME/.config/ngrok/ngrok.yml" --config "$STACK_DIR/ngrok.yml" \
+  # Hostnames come from the lab's own config (validated above, before the stack
+  # was stopped). ONLY the six named tunnels start, and ONLY from this config:
+  # never --all, and never the user's ~/.config/ngrok/ngrok.yml, which on a
+  # shared host holds someone else's tunnels. The config carries its own
+  # authtoken (ngrok config add-authtoken <token> --config "$STACK_DIR/ngrok.yml").
+  # LAB_ALLOW_LIVE_DOMAINS=1 is the Mac stack owner's path: it keeps that
+  # stack's original behaviour of layering the default config underneath.
+  NGROK_CONFIGS=(--config "$STACK_DIR/ngrok.yml")
+  if [ "${LAB_ALLOW_LIVE_DOMAINS:-}" = "1" ] && [ -f "$HOME/.config/ngrok/ngrok.yml" ]; then
+    NGROK_CONFIGS=(--config "$HOME/.config/ngrok/ngrok.yml" "${NGROK_CONFIGS[@]}")
+  fi
+  nohup ngrok start alice community bob vtc dids mediator "${NGROK_CONFIGS[@]}" \
     > "$STACK_DIR/logs/ngrok.log" 2>&1 &
   echo $! > "$STACK_DIR/ngrok.pid"
-  sleep 8
-  ALICE_HOST=keyring-vti-alice.ngrok.app
-  COMMUNITY_HOST=keyring-vti-community.ngrok.app
-  BOB_HOST=keyring-vti-bob.ngrok.app
-  VTC_HOST=keyring-vti-vtc.ngrok.app
-  DIDS_HOST=keyring-vti-dids.ngrok.app
-  MED_HOST=keyring-vti-mediator.ngrok.app
+  eval "$NGROK_HOSTS"
+  watch_ngrok
+  check_public_hosts "$ALICE_HOST" "$COMMUNITY_HOST" "$BOB_HOST" "$VTC_HOST" "$DIDS_HOST" "$MED_HOST"
 else
   ALICE_HOST=$(open_tunnel alice 8110)
   COMMUNITY_HOST=$(open_tunnel community 8111)
@@ -141,7 +222,7 @@ FORCE_MEDIATOR=""
 # shellcheck disable=SC2086
 "$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol didcomm \
   --did-method peer --public-url "https://$MED_HOST" --mediator-url "https://$MED_HOST" \
-  --secret-storage file --ssl none --database-url redis://127.0.0.1/ \
+  --secret-storage file --ssl none --database-url "$REDIS_URL" \
   --admin generate --listen-address 127.0.0.1:7037 \
   --config "$STACK_DIR/mediator/conf/mediator.toml" >/dev/null
 MED_DID=$(grep '^mediator_did' mediator/conf/mediator.toml | sed 's/.*did:\/\///; s/"$//')
@@ -184,8 +265,10 @@ cp "$TDK_SRC/crates/messaging/affinidi-messaging-mediator/conf/atm-functions.lua
 # Since tdk-rs #843 (our VTI-07) the mediator resolves `functions_file` against
 # the config file's own directory, and the working-directory form is a
 # deprecated fallback it warns about. The library sits beside mediator.toml.
-sed -i '' 's|^functions_file = "./conf/atm-functions.lua"|functions_file = "atm-functions.lua"|' \
+# `-i.bak` + rm: the one in-place form both BSD (macOS) and GNU sed accept.
+sed -i.bak 's|^functions_file = "./conf/atm-functions.lua"|functions_file = "atm-functions.lua"|' \
   "$STACK_DIR/mediator/conf/mediator.toml" 2>/dev/null || true
+rm -f "$STACK_DIR/mediator/conf/mediator.toml.bak"
 
 # Keep the queue limits at UPSTREAM DEFAULTS rather than whatever the
 # generating version happened to ship. `queued_send_messages_per_peer` did not
@@ -256,7 +339,15 @@ EOF
 FORCE_DIDS=""
 [ -f "$STACK_DIR/dids/config.toml" ] && { FORCE_DIDS="--force-reprovision"; rm -rf "$STACK_DIR/dids/data"; }
 # shellcheck disable=SC2086
-"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS 2>&1 | grep -E "admin did|Private key" | sed 's/^/  dids daemon /' || true
+# The setup prints a generated admin did:key AND its private key, shown once.
+# Never let that reach this script's output or logs: capture it, keep only those
+# two lines in a 0600 file, and print a pointer.
+DIDS_ADMIN_FILE="$STACK_DIR/dids/admin-credentials.txt"
+DIDS_SETUP_OUT=$("$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS 2>&1) || true
+( umask 077; printf '%s\n' "$DIDS_SETUP_OUT" | grep -E "admin did|Private key" > "$DIDS_ADMIN_FILE" || true )
+chmod 600 "$DIDS_ADMIN_FILE" 2>/dev/null || true
+unset DIDS_SETUP_OUT
+echo "  dids daemon admin credentials written to $DIDS_ADMIN_FILE, mode 0600"
 nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
 sleep 6
 DIDS_DID=$(curl -s "https://$DIDS_HOST/.well-known/did.jsonl" | tail -1 | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print((d.get("state") or d).get("id",""))' 2>/dev/null || true)
@@ -325,7 +416,8 @@ BOB_DID=$(setup_vta bob 8112 "$BOB_HOST")
 # the consent rule `approver-setup.sh` writes — `pnm approvals list` shows it —
 # and never evaluates it: the key borrow runs unheld and nothing says why
 # (2026-09-21). Enforcement is config-only; no pnm command sets it.
-sed -i '' '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
+sed -i.bak '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
+rm -f alice/config.toml.bak
 for n in alice community bob; do
   nohup "$VTA_BIN" --config "$n/config.toml" > "logs/$n.log" 2>&1 &
 done

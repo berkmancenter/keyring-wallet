@@ -1,0 +1,89 @@
+From 5a3ad127d54b0a0cd0c81198926049519d292ca8 Mon Sep 17 00:00:00 2001
+From: "Brendan A. Miller" <code+os@brendanmiller.com>
+Date: Tue, 29 Sep 2026 17:46:32 -0700
+Subject: [PATCH] fix(core): supply VC 2.0 base context when creating ldp_vp
+ presentations
+
+DifPresentationExchangeService.createPresentation() calls
+pex.verifiablePresentationFrom() with no basePresentationPayload, so the
+wrapping presentation's @context is left entirely to @animo-id/pex's own
+defaulting. When every credential in an ldp_vp is a VC 2.0-shaped ldp_vc
+credential (first @context entry is the VC 2.0 context), pex can default
+the presentation wrapper to a VC 1.1-shaped context instead, producing a
+"protected term redefinition" JSON-LD error.
+
+Add getVc2BasePresentationPayload(), mirroring the existing
+shouldSignWithAnonCredsW3cService() helper's style, to detect this case
+and supply { '@context': [CREDENTIALS_CONTEXT_V2_URL] } as the base
+presentation payload so pex doesn't have to guess.
+
+Note: this only supplies the base context on our side. It does not fully
+resolve the underlying JSON-LD conflict unless @animo-id/pex also honors
+a supplied base context when merging it with the wrapped credentials'
+own contexts.
+
+Signed-off-by: Brendan A. Miller <code+os@brendanmiller.com>
+---
+ .../DifPresentationExchangeService.ts         | 25 +++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/packages/core/src/modules/dif-presentation-exchange/DifPresentationExchangeService.ts b/packages/core/src/modules/dif-presentation-exchange/DifPresentationExchangeService.ts
+index 5e64d57..e24b72e 100644
+--- a/packages/core/src/modules/dif-presentation-exchange/DifPresentationExchangeService.ts
++++ b/packages/core/src/modules/dif-presentation-exchange/DifPresentationExchangeService.ts
+@@ -23,6 +23,7 @@ import { SdJwtVcApi } from '../sd-jwt-vc'
+ import type { W3cCredentialRecord, W3cJsonPresentation } from '../vc'
+ import {
+   ClaimFormat,
++  CREDENTIALS_CONTEXT_V2_URL,
+   SignatureSuiteRegistry,
+   W3cCredentialRepository,
+   W3cCredentialService,
+@@ -255,6 +256,8 @@ export class DifPresentationExchangeService {
+             }
+           : {}
+ 
++        const basePresentationPayload = this.getVc2BasePresentationPayload(presentationToCreate)
++
+         const verifiablePresentationResult = await this.pex.verifiablePresentationFrom(
+           presentationDefinitionForSubject,
+           credentialsForPresentation,
+@@ -267,6 +270,7 @@ export class DifPresentationExchangeService {
+               ...extraProofOptions,
+             },
+             presentationSubmissionLocation,
++            ...basePresentationPayload,
+           }
+         )
+ 
+@@ -494,6 +498,27 @@ export class DifPresentationExchangeService {
+     return validDescriptorFormat && credentialsAreSignedWithAnonCredsW3c
+   }
+ 
++  /**
++   * @animo-id/pex's `verifiablePresentationFrom` has no visibility into which `@context` the wrapping
++   * presentation should use, and defaults it independently of the credentials being wrapped. If every
++   * credential being wrapped is a VC 2.0-shaped `ldp_vc` credential (i.e. its first `@context` entry is
++   * the VC 2.0 context), we supply that context as the base presentation payload so the generated
++   * presentation doesn't fall back to a VC 1.1 context that conflicts with VC 2.0 term definitions.
++   */
++  private getVc2BasePresentationPayload(presentationToCreate: PresentationToCreate) {
++    if (presentationToCreate.claimFormat !== ClaimFormat.LdpVp) return undefined
++
++    const allCredentialsAreVc2ShapedLdpVc = presentationToCreate.verifiableCredentials.every(({ credential }) => {
++      const firstCredential = credential.firstCredential
++      if (firstCredential.claimFormat !== ClaimFormat.LdpVc) return false
++      return firstCredential.contexts?.[0] === CREDENTIALS_CONTEXT_V2_URL
++    })
++
++    return allCredentialsAreVc2ShapedLdpVc
++      ? { basePresentationPayload: { '@context': [CREDENTIALS_CONTEXT_V2_URL] } }
++      : undefined
++  }
++
+   private getPresentationSignCallback(agentContext: AgentContext, presentationToCreate: PresentationToCreate) {
+     return async (callBackParams: PresentationSignCallBackParams) => {
+       // The created partial proof and presentation, as well as original supplied options
+-- 
+2.43.0
+
