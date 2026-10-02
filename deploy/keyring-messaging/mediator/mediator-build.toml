@@ -1,0 +1,35 @@
+# Recipe for upstream's mediator-setup: creates the mediator's own identity, a
+# self-contained did:peer:2 whose services name https://@MEDIATOR_HOST@, its
+# keys, and an admin key. No VTA is involved. Used only by setup-identity.sh,
+# which fills in @MEDIATOR_HOST@ and keeps the keys and the two DIDs; the
+# mediator.toml it also writes is discarded (ours is mediator/mediator.toml).
+
+[deployment]
+type = "server"
+protocols = ["didcomm", "tsp"]
+use_vta = false
+
+[identity]
+did_method = "did:peer"
+public_url = "https://@MEDIATOR_HOST@"
+
+[secrets]
+storage = "file:///setup/mediator-secrets.json"
+
+[security]
+ssl = "none"
+admin = "generate"
+jwt_mode = "generate"
+network_mode = "open"
+cors = "none"
+
+[database]
+url = "redis://redis:6379/"
+
+[output]
+config_path = "/setup/mediator.toml"
+listen_address = "0.0.0.0:7037"
+api_prefix = "/mediator/v1/"
+
+[install]
+enabled = false
