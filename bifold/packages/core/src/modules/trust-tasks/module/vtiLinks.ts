@@ -187,13 +187,21 @@ async function routeBareDid(
 }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtaAgent' | 'VtiVetting' | 'VtiJoin' | 'VtiInvited'
+export type MyAgentDestination =
+  | 'VtaLink'
+  | 'MyAgent'
+  | 'VtaAgent'
+  | 'VtaRequests'
+  | 'VtiVetting'
+  | 'VtiJoin'
+  | 'VtiInvited'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
-  // The agent home, where waiting approvals are listed (VtaAgentHome).
   VtaAgent: Screens.VtaAgent,
+  // What waits for the person's decision (VtaRequests).
+  VtaRequests: Screens.VtaRequests,
   VtiVetting: Screens.VtiVetting,
   VtiJoin: Screens.VtiJoin,
   VtiInvited: Screens.VtiInvited,
@@ -274,7 +282,7 @@ export async function routeKeyringAgentLink(
       return
     }
     case 'approvals':
-      navigate('VtaAgent')
+      navigate('VtaRequests')
       return
     case 'enrolment': {
       let offer
