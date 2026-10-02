@@ -54,7 +54,7 @@ const VtaRequests: React.FC = () => {
 
   // Since when this screen has seen the connection up.
   const online = state.link.kind === 'linked' && state.link.connection.kind === 'online'
-  const onlineSince = useRef<number>()
+  const onlineSince = useRef<number | undefined>(undefined)
   if (!online) onlineSince.current = undefined
   else if (onlineSince.current === undefined) onlineSince.current = now
 
