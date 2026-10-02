@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import KeyRingLogoWhite from '@assets/img/Keyring_Logo_White.svg'
 import { BCState } from '@/store'
+import { initFailureWords } from '@/utils/initFailure'
 import { reportProblem } from '@/utils/logger'
 
 const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
@@ -107,6 +108,9 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
     walletSecret,
   ])
 
+  // What the card says: plain words when the message service did not answer (IN-75).
+  const failureWords = useMemo(() => initFailureWords(initError?.cause ?? initError), [initError])
+
   const handleErrorCallToActionPressed = useCallback(() => {
     setInitError(null)
     setInitAgentCount(initAgentCount + 1)
@@ -192,9 +196,10 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
             <View style={styles.errorBoxContainer}>
               <InfoBox
                 notificationType={InfoBoxType.Error}
-                title={t('Error.Title2026')}
-                description={t('Error.Message2026')}
-                message={initError?.message || t('Error.Unknown')}
+                title={t(failureWords.title)}
+                description={t(failureWords.description)}
+                // The error's own text stays in the problem report when the card has plain words for it.
+                message={failureWords.showRawText ? initError?.message || t('Error.Unknown') : undefined}
                 onCallToActionLabel={t('Init.Retry')}
                 onCallToActionPressed={handleErrorCallToActionPressed}
                 secondaryCallToActionTitle={reported ? t('Error.Reported') : t('Error.ReportThisProblem')}
