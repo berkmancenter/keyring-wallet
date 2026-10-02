@@ -46,6 +46,15 @@ Only the accessor path differs (`credentialSubject.digest` →
 `credentialSubject.object.digestMultibase`). Six subject members before, six after:
 the re-expression invents nothing and drops nothing.
 
+**CORRECTED (`docs/plans/vsc-migration-plan.md` §3.1, 2026-09-27):** this rung
+measured against the spec pin current when it was written, before the digest's
+COVERAGE changed too (it now excludes the referenced credential's own
+top-level `proof`) — see plan §5's own table, which already scopes this rung's
+claim to D1/D2/D4 and explicitly excludes D3's coverage change and D7. "Only
+the accessor path differs" is therefore no longer the whole story at the
+current pin; `tsp-reference/ref-07h-vsc-credo-suites`/`ref-07i-vsc-over-carriages`
+carry the coverage-correct digest this rung predates.
+
 Shape **B** — the explicit RDF reification `talltree` and `martipos` favour on the
 issue, where the subject DID moves out of `credentialSubject.id` into a `subject`
 member — answers **all four checks too**, with one accessor changed per check. B's

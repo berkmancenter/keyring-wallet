@@ -33,6 +33,19 @@ No network. Fixtures are frozen; the run is deterministic.
   `lib/eddsa-jcs-2022.mjs`) over deterministic test keys, and **Check 0**
   verifies every proof at run time — including a tamper probe showing the
   verification can fail.
+- **`edge-witnessed-vsc-captured.json`** (2026-09-29) is the `vsc`-shape
+  counterpart to `edge-witnessed-captured.json` below, captured by
+  `bifold/packages/vrc-reference/__tests__/integration/captureWitnessedEdgeVsc.test.ts`
+  — the same real, in-process, Askar-backed 5-phase exchange, but every VWC
+  field is computed by `witness-server`'s REAL production
+  `buildWitnessCredentialJson(..., { shape: 'vsc' })`, imported as a library
+  from `bifold/packages/witness-server/src/credentialBuilder.ts` (extracted
+  from `WitnessService.ts` so it's importable without that package's CLI/
+  server dependency tree — langchain, node-ble, three, ws), not
+  re-implemented or hand-constructed. Both VWCs are delivered over a real
+  DIDComm credential-issuance exchange and independently verified by the
+  holder's own Credo agent (`captureMeta`/`verifiedAtCapture`, same as
+  `edge-witnessed-captured.json`). See **Check D2** below.
 
 ## Sources
 
@@ -97,19 +110,71 @@ and audits our artifacts the way Glenn audits VTI. Three self-findings:
    0.6's private `record.credential` and looked for a `WitnessedCredential`
    type the witness never mints, and the offers were never accepted, so the
    whole VWC validation was unreachable).
-2. **Legacy digest form (known, planned).** The VWC's `credentialSubject.digest`
+2. **Legacy digest form (known; `wd02` was the original default, `vsc` is now the default as of the pre-production flip — plan §9 Q1, 2026-09-28 — with `WITNESS_CREDENTIAL_SHAPE=wd02` opting a specific deployment back).** The VWC's `credentialSubject.digest`
    is `"sha256:"+hex` — in vrc-reference *and* in witness-server's
    `computeVrcDigest` — not the multibase multihash of #17 / PR #18. This is
-   precisely PR #18's `digestMultibase` rename, already specified as
-   encoding-only; the rung demonstrates that claim (identical bytes,
-   `z`+base58btc multihash envelope). Note the task layer is already correct:
-   witness-server's session responses carry a proper `vwcDigestMultibase`.
+   precisely PR #18's `digestMultibase` rename. **CORRECTED
+   (`docs/plans/vsc-migration-plan.md` §3.1, 2026-09-27): "already specified as
+   encoding-only" was true at the spec pin this rung was written against and is
+   NOT true at the current pin — the digest also changes COVERAGE, excluding
+   the referenced credential's own top-level `proof`.** The rung's
+   demonstration (identical bytes, `z`+base58btc multihash envelope) is real
+   but only shows the re-encoding is lossless for the SAME (proofed) input; it
+   is not evidence that the full WD 0.4.0 digest change is encoding-only — see
+   `tsp-reference/ref-07h-vsc-credo-suites`/`ref-07i-vsc-over-carriages` for
+   the coverage-correct, three-break digest, and `WitnessService.ts`'s
+   `WITNESS_CREDENTIAL_SHAPE=vsc` path for where it's actually implemented.
+   Note the task layer is already correct: witness-server's session responses
+   carry a proper `vwcDigestMultibase`.
 3. **`taskContext` parity drift.** The vrc-reference (legacy demo) VWC carries
    only `witnessContext` — but the witness-server trust-tasks path ALREADY
    implements Trust Task Context Binding (`taskContext` = session document id,
    plus `taskDigestMultibase`, per §4.9.1/§4.9.3 —
    `witness-server/src/trustTasks/WitnessTaskSessions.ts:260`). So Keyring is
    NOT in the VTI #1065 state; the legacy demo path lags the real one.
+
+**Check D2 — the same witnessed edge, `vsc` shape, from the REAL production
+builder** (2026-09-29,
+`docs/plans/vsc-migration-plan/2026-09-29-bm.md` item 2). Check D above audits
+`wd02` output — the *only* shape a fresh capture could produce until now,
+because `vrc-reference`'s own builder is separate, hardcoded, and cannot emit
+`vsc`. This check audits the SAME real production function
+(`witness-server`'s `buildWitnessCredentialJson`) with `shape: 'vsc'`, over a
+separate real capture (`edge-witnessed-vsc-captured.json`) built the same way
+Check D's fixture was, minus the reference impl's own credential-building step
+(see that fixture's own capture test for exactly how the swap happens without
+touching `Witness.ts`). Findings:
+
+1. **D1/D2/issuerScope conform.** `type` is `['VerifiableCredential',
+   'DTGCredential', 'StatementCredential']` (no `WitnessCredential` — `vsc` has
+   no concrete `DTGCredential` subtype beyond `StatementCredential`),
+   `credentialSubject.predicate` is the real registry `dtg:witnessed` IRI (not
+   a `firstperson.network` placeholder), and `issuerScope: 'directed'` is
+   present (cred-spec #68, REQUIRED as of 2026-09-28).
+2. **D3 holds, and is a genuinely different computation than Check D's legacy
+   digest** — not a re-encoding of it. `credentialSubject.object.digestMultibase`
+   recomputes independently in this rung (its own JCS + SHA-256 + multihash +
+   base58btc, over the referenced VRC **excluding its own top-level `proof`**)
+   and discriminates between the two captured VRCs.
+3. **The `taskContext` parity drift Check D found (finding 3 above) persists
+   under `vsc` shape too — confirmed here, not assumed.** The same legacy
+   basicmessage-dialect `buildWitnessCredentialJson` call this capture uses
+   still emits no top-level `taskContext`/`taskDigestMultibase` for `vsc`
+   shape either; only the newer Trust Tasks ceremony path
+   (`WitnessTaskSessions.ts`) does. Flagged, deliberately **not** fixed here —
+   this dialect predates the Trust Tasks framework and may have nothing to
+   cite as a task context, a real design question rather than a mechanical
+   fix (`docs/plans/vsc-migration-plan/2026-09-29-bm.md` item 4).
+4. **`witnessContext` keeps only its three profile members** (`event?`,
+   `sessionId`, `method`) — `hardwareAttestationIncluded` and any
+   locality/`localityVerification` members are siblings of `witnessContext`
+   under `credentialSubject` instead, per plan §3.5.
+
+What this does NOT prove: D7 (the credential's own literal spec `@context`
+IRI) — same known, separately-tracked gap as V4's own code (see the plan's
+open items); and nothing about the `WitnessTaskSessions.ts` Trust Tasks
+ceremony path, which is a different code path from the one this capture
+exercises.
 
 **Check E — one identifier, two scope vocabularies (cross-spec).** Trust Tasks
 framework **0.5.0** (`trustoverip/dtgwg-trust-tasks-spec` @ `6425a741`,

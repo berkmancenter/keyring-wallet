@@ -322,15 +322,27 @@ export async function completeOnboarding(
     }
 
     if (await existsTestId(driver, "RCardFirstNameInput", 2000)) {
-      const first = byTestId(driver, "RCardFirstNameInput");
+      // RCardLastNameInput is the real bug here, not a timing race: on a
+      // shorter physical viewport (confirmed 1080x2340 vs. a working device's
+      // 1080x2400 at the same density, R5CY83SM4ST vs. R5CN70Q6PDP,
+      // 2026-09-29) it renders just past the ScrollView's visible bottom
+      // edge, and UiAutomator2 omits off-screen nodes from the accessibility
+      // tree entirely — no amount of waiting ever makes it appear, only
+      // scrolling does. scrollToTestId (lib/driver.js) already no-ops if the
+      // element is already visible (checks isExisting()+isDisplayed() before
+      // ever swiping), so this is safe on the taller device too. RCardSubmit
+      // gets the same treatment since hideKeyboard() closing the keyboard can
+      // itself shift the layout enough to matter.
+      const first = await waitForTestId(driver, "RCardFirstNameInput");
       await first.setValue(firstName);
-      const last = byTestId(driver, "RCardLastNameInput");
+      const last = await scrollToTestId(driver, "RCardLastNameInput");
       await last.setValue(lastName);
       await hideKeyboard(driver, last);
       if (photo) {
         await seedTestPhoto(driver);
         await pickRCardPhoto(driver);
       }
+      await scrollToTestId(driver, "RCardSubmit");
       await tapTestId(driver, "RCardSubmit");
       lastAction = "RCardSubmit";
       // R-Card creation can take a while (key generation + signing) — and the

@@ -72,6 +72,15 @@ same four checks with WD02 placement gives 4 of 4 — so *"can Keyring consume a
 VTA-issued VWC?"* has a concrete answer: **yes, after two field-placement fixes we
 already owed.**
 
+**UPDATE (2026-09-27, VSC migration V4):** the `taskContext` fix landed —
+`witnessCeremony.ts` now dual-reads top-level first, falling back to the
+nested location, so this specific row no longer fails. The digest-field row is
+a different kind of fix: `WitnessService.ts:2545`'s `computeVrcDigest`/
+`credentialSubject.digest` is still what the **default** `wd02` shape emits
+(kept deliberately, for `wd02` byte-compatibility — see `WITNESS_CREDENTIAL_SHAPE`
+in `witness-server/README.md`); the real registry's `digestMultibase` placement
+is only produced when the `vsc` shape is selected.
+
 `witnessCeremony.ts` cannot be imported into plain Node (it pulls
 `@openvtc/trust-tasks` subpaths that package does not export), so its accessor is
 transcribed with its `file:line` rather than called. `credentialTypes` is the real
