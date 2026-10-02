@@ -13,3 +13,10 @@ that commit, kept apart from anything Keyring-specific.
 When `GATEWAY_COMMIT` moves, re-apply each patch onto the new commit
 (`git am`), fix conflicts there, and regenerate the file with
 `git format-patch -1`.
+
+**Adding or removing a patch changes the image but not `GATEWAY_COMMIT`.** So
+the image tag carries the patch set: `GATEWAY_IMAGE_TAG` in `.env.example` is
+`<GATEWAY_COMMIT>-pN`, with N the number of `*.patch` files here. Move N in the
+same change as the patch; the `push-gateway-image` workflow fails if they
+disagree. Without this, a host that already has an image under the old tag
+keeps running it.

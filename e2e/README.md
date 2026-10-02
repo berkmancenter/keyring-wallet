@@ -895,6 +895,48 @@ The rest of the check comes from the gate's own records:
 - **Logs.** No `push/register`, `push/provision`, `push/wake` or
   `device/set-wake` in the runner VTA's log over the gate window.
 
+## Push is on (`push-on-probe`): only for a build that names a push gateway
+
+A build cut with the `PUSH_GATEWAY_URL` repository variable set is the
+opposite case: the Notifications row must be there. The same probe checks it,
+so one build can never pass both:
+
+```sh
+PLATFORM=ios UDID=<sim udid> APPIUM_PORT=4761 npm run push-on-probe
+```
+
+It finds the `Notifications` row in Settings, opens it and looks for the push
+switch (`PushNotificationSwitch`). Prints `PUSH_ON PASS|FAIL`. Run on a build
+with push off it fails, as `push-off-probe` fails on a build with push on.
+
+The probe opens the switch's screen and does not tap the switch, so it raises
+no system prompt; it leaves the app on that screen. Do not extend it to tap
+the switch on iOS: the driver's capabilities set `autoAcceptAlerts`, which
+would accept the permission prompt silently and hide the very thing the first
+device row checks.
+
+This proves the screens are reachable and nothing else. A simulator or
+emulator build is not signed for push and does not prove a token, a
+registration or a wake. Those are the real-device rows below, on the build
+that ships, with the phones linked to an agent the gateway serves:
+
+| Row | iPhone | Android phone |
+| --- | --- | --- |
+| Turn notifications on in Settings, by hand: the system prompt appears once; the gateway counts one registration (`gateway_register_total`) and one provision (`gateway_provision_total{outcome="ok"}`) | | |
+| A wake while the app is in the background shows the banner, in the phone's language | | |
+| A wake after the app was force-quit shows the banner | | |
+| A wake while the app is open shows nothing intrusive and loses no state | | |
+| Tapping the banner on a running app opens the waiting approvals, after unlock | | |
+| Tapping the banner on an app that was not running opens the waiting approvals, after unlock | | |
+| Turn notifications off: the next wake does not arrive | | |
+| Deny the permission: the app works as before and nothing registers | | |
+
+Record per-step timings and the wallet and bifold heads with the result. The
+rows are run on the build that ships (from TestFlight and Play internal
+testing). A rehearsal build made locally uses the dedicated test bundle id,
+never the store app's: installing over the store app keeps its data and takes
+over its push registration.
+
 ## Real lock and unlock (`lock-probe`) — every release gate, both platforms
 
 Locking shuts the wallet's agent down and drops every identity's in-memory

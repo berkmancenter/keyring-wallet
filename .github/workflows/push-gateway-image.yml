@@ -73,21 +73,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read the pinned gateway commit
+      - name: Read the pinned gateway commit and image tag
         id: pin
         run: |
           commit=$(sed -n 's/^GATEWAY_COMMIT=//p' .env.example)
           if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "::error::GATEWAY_COMMIT in .env.example is not a full SHA: '$commit'"; exit 1
           fi
+          # The tag carries the patch set: a patch changes the image but not
+          # the commit, and a host that already has an image under a tag keeps
+          # running it. So the tag must move with every added or removed patch.
+          patches=$(find gateway/patches -maxdepth 1 -name '*.patch' | wc -l | tr -d ' ')
+          if [ "$patches" -gt 0 ]; then want="$commit-p$patches"; else want="$commit"; fi
+          tag=$(sed -n 's/^GATEWAY_IMAGE_TAG=//p' .env.example)
+          if [ "$tag" != "$want" ]; then
+            echo "::error::GATEWAY_IMAGE_TAG in .env.example is '$tag' but gateway/patches has $patches patch(es): it must be '$want'"; exit 1
+          fi
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "image=keyring-messaging/vti-push-gateway:$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=keyring-messaging/vti-push-gateway:$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Compose file is valid
+      - name: Compose file is valid, and names the image by its tag
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+          COMMIT: ${{ steps.pin.outputs.commit }}
         run: |
           cp .env.example .env
           sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/; s/^MEDIATOR_HOST=$/MEDIATOR_HOST=localhost/' .env
           docker compose config --quiet
+          got=$(docker compose config --format json | jq -r '.services.gateway.image')
+          if [ "$got" != "$IMAGE" ]; then
+            echo "::error::compose names the gateway image '$got', expected '$IMAGE'"; exit 1
+          fi
+          # A deployment whose .env predates GATEWAY_IMAGE_TAG (or leaves it
+          # empty) must keep resolving to the bare-commit tag it already runs.
+          for blank in 's/^GATEWAY_IMAGE_TAG=.*$/GATEWAY_IMAGE_TAG=/' '/^GATEWAY_IMAGE_TAG=/d'; do
+            sed "$blank" .env > .env.legacy
+            got=$(docker compose --env-file .env.legacy config --format json | jq -r '.services.gateway.image')
+            if [ "$got" != "keyring-messaging/vti-push-gateway:$COMMIT" ]; then
+              echo "::error::without GATEWAY_IMAGE_TAG compose names '$got', expected the bare commit tag"; exit 1
+            fi
+          done
+          rm -f .env.legacy
 
       - name: Build the gateway image
         run: |
@@ -139,6 +166,46 @@ jobs:
           docker inspect --format '{{.State.Health.Status}}' gw || true
           docker logs gw
           docker rm -f gw
+
+      - name: The image carries the patches (DID-host allowlist, patch 0002)
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+        run: |
+          # The tag says which patches are in the image; this checks the image
+          # itself. With no DID listed and one host allowed, an agent on that
+          # host is served and an agent on another host is refused. An image
+          # without patch 0002 ignores the setting and refuses both.
+          docker run -d --name gwh -p 8300:8300 \
+            -e GATEWAY_DEV_ECHO_SENDER=1 \
+            -e GATEWAY_ALLOWED_CONTROLLER_HOSTS=hosts.ci-check.invalid \
+            -e GATEWAY_ADDR=http://localhost:8300 \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8300/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8300/healthz
+
+          register() {
+            curl -sS http://localhost:8300/trust-tasks -H 'content-type: application/json' -d '{
+              "id": "urn:uuid:'"$(cat /proc/sys/kernel/random/uuid)"'",
+              "type": "https://trusttasks.org/spec/push/register/0.2",
+              "payload": { "registration": { "platform": "fcm", "token": "ci-host-check" },
+                           "controllerVtaDid": "'"$1"'" } }'
+          }
+
+          on_host=$(register did:web:hosts.ci-check.invalid:agent)
+          echo "agent on the allowed host: $on_host"
+          if [ -z "$(printf '%s' "$on_host" | jq -r '.payload.wakeHandle.handle // empty')" ]; then
+            echo "::error::an agent on an allowed DID host was not served: the image lacks patch 0002"; docker logs gwh; exit 1
+          fi
+          off_host=$(register did:web:other.ci-check.invalid:agent)
+          echo "agent on another host: $off_host"
+          if ! printf '%s' "$off_host" | grep -q permissionDenied; then
+            echo "::error::an agent on another DID host was not refused"; docker logs gwh; exit 1
+          fi
+          docker logs gwh 2>&1 | grep 'controller allowlist'
+          docker rm -f gwh
 
       - name: Save the image
         run: docker save -o vti-push-gateway.tar "${{ steps.pin.outputs.image }}"
