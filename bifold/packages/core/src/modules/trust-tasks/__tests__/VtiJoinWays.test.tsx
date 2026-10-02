@@ -210,6 +210,23 @@ describe('Join, at manifest 0.3', () => {
       expect(invitation).toBeUndefined()
       expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
     })
+
+    it('having asked once does not turn "Meet a vetter" into a request: each button does its own thing', async () => {
+      const tree = await toAsks(vettingCommunity)
+      // The ask comes back to the ways (the community changed what it asks).
+      mockJoinCommunity.mockRejectedValueOnce(new VtiRefusal('vtc/join-requests/submit:criterionUnknown', 'unknown'))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsk'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+      // Now vetting: the identity and the Vetting screen, and no second request ahead of it.
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('invitation only, no invitation: no Start; the way to "I was invited"', async () => {
