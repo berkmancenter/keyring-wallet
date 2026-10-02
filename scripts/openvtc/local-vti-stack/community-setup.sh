@@ -136,16 +136,21 @@ t = sys.stdin.read(); i = t.find("{")
 d = json.loads(t[i:t.rfind("}") + 1])
 b = d.get("body", d)
 for c in b.get("criteria", []):
+    cid = c.get("id")
     v = c.get("vetting")
     if not v:
-        print(f"  {c.get(chr(34)+chr(34)) or c.get(\"id\")}: no vetting requirement")
+        print(f"  {cid}: no vetting requirement")
         continue
-    print(f"  {c.get(\"id\")}: {v.get(\"minStatements\")} statement(s), "
-          f"methods {v.get(\"acceptedMethods\")}, max age {v.get(\"maxStatementAge\")}")
-    if v.get("minByMethod"):
-        print(f"    per-method floors: {v[\"minByMethod\"]}")
-    if v.get("independence"):
-        print(f"    independence: {v[\"independence\"]}")
+    # Names are bound first so the f-strings hold no quotes: this script sits in
+    # a single-quoted shell string, and before Python 3.12 an f-string expression
+    # may not contain a backslash either.
+    ms, am, age = v.get("minStatements"), v.get("acceptedMethods"), v.get("maxStatementAge")
+    print(f"  {cid}: {ms} statement(s), methods {am}, max age {age}")
+    floors, indep = v.get("minByMethod"), v.get("independence")
+    if floors:
+        print(f"    per-method floors: {floors}")
+    if indep:
+        print(f"    independence: {indep}")
 '
 
 echo
