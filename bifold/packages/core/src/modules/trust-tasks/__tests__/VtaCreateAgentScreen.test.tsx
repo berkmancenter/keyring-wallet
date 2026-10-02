@@ -143,6 +143,20 @@ describe('create my agent: the address can be scanned', () => {
     }
   })
 
+  // The host's page shows a code to scan (its connection QR) as well as the
+  // address: a person holding only the code met "It starts with did:webvh:".
+  test('the step says the hosting service shows a code or the address, naming no provider', () => {
+    for (const [words, code] of [
+      [enCopy, /\bcode\b/i],
+      [frCopy, /\bcode\b/i],
+      [ptBrCopy, /código/i],
+    ] as const) {
+      expect(words.CreateAgent.AddressBody).toMatch(code)
+      expect(words.CreateAgent.AddressBody).toContain('did:webvh:')
+      expect(words.CreateAgent.AddressBody).not.toMatch(/farm/i)
+    }
+  })
+
   test("a host's automatic-connection QR goes to that flow, asking the person there", () => {
     const scanHost = jest.spyOn(vtaAgent, 'scanHostOffer')
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }

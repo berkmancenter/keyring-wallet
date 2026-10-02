@@ -1824,7 +1824,7 @@
     "IntroStep3": "3. Ajoutez le code propriétaire de ce téléphone à votre agent",
     "Step": "Étape {{n}} sur {{of}}",
     "AddressTitle": "L'adresse de votre agent",
-    "AddressBody": "Une fois votre agent créé, son hébergeur affiche son adresse. Elle commence par did:webvh:. Scannez-la, ou copiez-la et collez-la ici.",
+    "AddressBody": "Le service qui héberge votre agent affiche un code à scanner, ou l'adresse de votre agent (elle commence par did:webvh:). Scannez le code, ou copiez l'adresse et collez-la ici.",
     "Paste": "Coller",
     "ScanAddress": "Scanner",
     "NotAnAddress": "Ce n'est pas l'adresse d'un agent. Elle commence par did:webvh: — copiez toute la ligne affichée par l'hébergeur de votre agent.",
