@@ -558,7 +558,14 @@ export const applicant = {
           const parts = {};
           for (const id of ["JoinAsks", "JoinStart", "JoinNoInvitationBypass", "JoinWays", "JoinWaysTitle"]) parts[id] = await existsTestId(d, id, 1500);
           const start = parts.JoinStart ? await textOf(d, "JoinStart").catch(() => "") : "";
-          console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
+          // On a community with a vetting way beside a review way: the second button and each row's own line.
+          const said = async (id) => ((await existsTestId(d, id, 1500)) ? (await textOf(d, id).catch(() => "")).replace(/\s+/g, " ").trim() : null);
+          const more = { JoinAsk: await said("JoinAsk") };
+          for (const way of (process.env.JOIN_WAYS || "").split(",").filter(Boolean)) {
+            more[`JoinWayFollows_${way}`] = await said(`JoinWayFollows_${way}`);
+            more[`JoinWayStart_${way}`] = await said(`JoinWayStart_${way}`);
+          }
+          console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" more=${JSON.stringify(more)} asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
           await screenshot(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
           await dumpSource(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
         }

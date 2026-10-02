@@ -72,11 +72,12 @@ async function readCard(d) {
   };
   for (const id of WAYS) {
     await scrollToTestId(d, `JoinWay_${id}`, 2).catch(() => undefined);
-    card.ways[id] = { row: await existsTestId(d, `JoinWay_${id}`, 1500), follows: await text(d, `JoinWayFollows_${id}`) };
+    card.ways[id] = { row: await existsTestId(d, `JoinWay_${id}`, 1500), follows: await text(d, `JoinWayFollows_${id}`), start: await text(d, `JoinWayStart_${id}`) };
   }
   card.JoinWaySuggested = await text(d, "JoinWaySuggested");
   await scrollToTestId(d, "JoinStart", 3).catch(() => undefined);
   card.JoinStart = await text(d, "JoinStart");
+  card.JoinAsk = await text(d, "JoinAsk");
   card.JoinGoInvited = await existsTestId(d, "JoinGoInvited", 1000);
   return card;
 }
@@ -111,7 +112,12 @@ try {
   if (MODE === "plain") {
     if (!/review/i.test(card.ways.review?.follows ?? "")) throw new Error(`the review way does not say an administrator decides: "${card.ways.review?.follows}"`);
     const before = new Set((admin("join-list").items ?? []).map((r) => r.id));
-    await (await waitForTestId(d, "JoinStart", 30000)).click();
+    // Where a vetting way is open beside the review way, JoinStart leads to a
+    // vetter and the plain request is its own button (JoinAsk).
+    await scrollToTestId(d, "JoinAsk", 3).catch(() => undefined);
+    const ask = (await existsTestId(d, "JoinAsk", 1500)) ? "JoinAsk" : "JoinStart";
+    log(`plain request by ${ask}${ask === "JoinAsk" ? ` (JoinStart reads "${card.JoinStart}")` : ""}`);
+    await (await waitForTestId(d, ask, 30000)).click();
     await waitForTestId(d, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(d, "JoinAsContinue");
     await handleBiometricConfirmIfPresent(d);
