@@ -6,15 +6,15 @@
 // The rule itself (what counts as filled, which buttons are judged) lives in
 // filledRule.js, so it can be re-proved offline against saved evidence.
 //
-// macOS only (sips turns the PNG into a BMP this reads without dependencies);
-// the gate runs on the Mac. Used by the release gate's "one filled button per
+// The PNG becomes a BMP this reads without dependencies: sips on macOS (where
+// the gate runs), ImageMagick elsewhere (pngToBmp.js). Used by the release gate's "one filled button per
 // step" check (docs: next-release gate §2, §3).
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { byTestId, scrollToTestId, sleep } from "./driver.js";
 import { fillShareOfBmp, judgeButtons } from "./filledRule.js";
+import { convertPngToBmp } from "./pngToBmp.js";
 
 export { FILLED_SHARE, fillShareOfBmp, judgeButtons } from "./filledRule.js";
 
@@ -25,7 +25,7 @@ export function bmpOfPng(base64) {
     const png = join(dir, "b.png");
     const bmp = join(dir, "b.bmp");
     writeFileSync(png, Buffer.from(base64, "base64"));
-    execFileSync("sips", ["-s", "format", "bmp", png, "--out", bmp], { stdio: "ignore" });
+    convertPngToBmp(png, bmp);
     return readFileSync(bmp);
   } finally {
     rmSync(dir, { recursive: true, force: true });
