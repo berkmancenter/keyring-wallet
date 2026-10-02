@@ -47,6 +47,8 @@ if (!DID || !REST || !CRED) throw new Error("KEYRING_COMMUNITY_DID, KEYRING_COMM
 const utc = () => new Date().toISOString().slice(11, 23) + "Z";
 const log = (s) => console.log(`[e2e] ${utc()} ${s}`);
 const WAYS = (process.env.JOIN_WAYS || "invited,member-credential,review").split(",");
+// Drags start above the fixed button area at the bottom of the Join screen (a drag begun on it scrolls nothing).
+const ABOVE_BUTTONS = { from: 0.45 };
 
 /** One call as the community's administrator; the JSON it answered. */
 function admin(...args) {
@@ -71,11 +73,11 @@ async function readCard(d) {
     ways: {},
   };
   for (const id of WAYS) {
-    await scrollToTestId(d, `JoinWay_${id}`, 2).catch(() => undefined);
+    await scrollToTestId(d, `JoinWay_${id}`, 3, ABOVE_BUTTONS).catch(() => undefined);
     card.ways[id] = { row: await existsTestId(d, `JoinWay_${id}`, 1500), follows: await text(d, `JoinWayFollows_${id}`), start: await text(d, `JoinWayStart_${id}`) };
   }
   card.JoinWaySuggested = await text(d, "JoinWaySuggested");
-  await scrollToTestId(d, "JoinStart", 3).catch(() => undefined);
+  await scrollToTestId(d, "JoinStart", 4, ABOVE_BUTTONS).catch(() => undefined);
   card.JoinStart = await text(d, "JoinStart");
   card.JoinAsk = await text(d, "JoinAsk");
   card.JoinGoInvited = await existsTestId(d, "JoinGoInvited", 1000);
@@ -93,12 +95,12 @@ try {
   log(`"what it asks" shown after ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   const card = await readCard(d);
   log(`card ${JSON.stringify(card)}`);
-  await scrollToTestId(d, "JoinWaysTitle", 4).catch(() => undefined);
+  await scrollToTestId(d, "JoinWaysTitle", 6, ABOVE_BUTTONS).catch(() => undefined);
   await screenshot(d, `join03-${TAG}-card`);
   await dumpSource(d, `join03-${TAG}-card`);
   if (MODE === "view") {
     // The end of the page too: what scrolls into reach below the first screen.
-    const end = await scrollToTestId(d, "JoinScanCommunity", 6).catch(() => undefined);
+    const end = await scrollToTestId(d, "JoinScanCommunity", 8, ABOVE_BUTTONS).catch(() => undefined);
     log(`end of the page: JoinScanCommunity ${end ? "reached" : "NOT reached"}, JoinActions ${(await existsTestId(d, "JoinActions", 1000)) ? "present" : "absent"}`);
     await screenshot(d, `join03-${TAG}-card-end`);
     await dumpSource(d, `join03-${TAG}-card-end`);
@@ -121,7 +123,7 @@ try {
     const before = new Set((admin("join-list").items ?? []).map((r) => r.id));
     // Where a vetting way is open beside the review way, JoinStart leads to a
     // vetter and the plain request is its own button (JoinAsk).
-    await scrollToTestId(d, "JoinAsk", 3).catch(() => undefined);
+    await scrollToTestId(d, "JoinAsk", 4, ABOVE_BUTTONS).catch(() => undefined);
     const ask = (await existsTestId(d, "JoinAsk", 1500)) ? "JoinAsk" : "JoinStart";
     log(`plain request by ${ask}${ask === "JoinAsk" ? ` (JoinStart reads "${card.JoinStart}")` : ""}`);
     await (await waitForTestId(d, ask, 30000)).click();
