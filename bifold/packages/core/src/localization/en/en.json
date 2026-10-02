@@ -1887,7 +1887,7 @@
     "IntroStep3": "3. Add this phone's owner code to your agent",
     "Step": "Step {{n}} of {{of}}",
     "AddressTitle": "Your agent's address",
-    "AddressBody": "Once your agent is created, its host shows its address. It starts with did:webvh:. Scan it, or copy it and paste it here.",
+    "AddressBody": "Your agent's hosting service shows a code to scan, or your agent's address (it starts with did:webvh:). Scan the code, or copy the address and paste it here.",
     "Paste": "Paste",
     "ScanAddress": "Scan",
     "NotAnAddress": "That isn't an agent's address. It starts with did:webvh: — copy the whole line your agent's host shows.",
