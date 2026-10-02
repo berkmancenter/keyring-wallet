@@ -5,7 +5,7 @@
  * community keeps today's screen (VtiJoinScreen.test.tsx).
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -190,6 +190,17 @@ describe('Join, at manifest 0.3', () => {
       // What follows each way is still said on its own row.
       expect(tree.getByTestId(id('JoinWayFollows_vetted-member'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
       expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+    })
+
+    it('keeps the fixed button area to the two buttons: "A different community" scrolls with the list', async () => {
+      // Three buttons under the list covered the last way's lines on a phone.
+      const tree = await toAsks(vettingCommunity)
+      const fixed = within(tree.getByTestId(id('JoinActions')))
+      expect(fixed.getByTestId(id('JoinStart'))).toBeTruthy()
+      expect(fixed.getByTestId(id('JoinAsk'))).toBeTruthy()
+      expect(fixed.queryByTestId(id('JoinScanCommunity'))).toBeNull()
+      // Still on the screen, and still the way to another community.
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
     it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {

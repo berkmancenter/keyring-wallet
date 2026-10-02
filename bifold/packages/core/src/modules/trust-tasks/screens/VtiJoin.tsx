@@ -530,6 +530,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             <JoinWaysCard card={ways} community={name} />
             {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
+            {/* With the list, not under the buttons: the fixed button area was
+                tall enough, with two buttons and this, to cover the last way's
+                lines on a phone (the Farm run of 2026-10-02). */}
+            {different}
           </>
         )
         actions = (
@@ -582,7 +586,6 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 testID={testIdWithKey('JoinAsk')}
               />
             ) : null}
-            {different}
           </>
         )
         break
@@ -817,7 +820,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
-      {actions ? <View style={styles.actions}>{actions}</View> : null}
+      {actions ? (
+        <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+          {actions}
+        </View>
+      ) : null}
     </SafeAreaView>
   )
 }
