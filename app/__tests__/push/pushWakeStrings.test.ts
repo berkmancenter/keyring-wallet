@@ -35,7 +35,8 @@ describe('the wake line', () => {
     const project = fs.readFileSync(path.join(APP, 'ios', 'AriesBifold.xcodeproj', 'project.pbxproj'), 'utf8')
     expect(project).toMatch(/\/\* Localizable\.strings in Resources \*\//)
     for (const lang of ['en', 'fr', 'pt-BR']) {
-      expect(project).toContain(`path = AriesBifold/${lang}.lproj/Localizable.strings;`)
+      // Xcode and CocoaPods quote a path that has a hyphen in it (pt-BR).
+      expect(project).toMatch(new RegExp(`path = "?AriesBifold/${lang}\\.lproj/Localizable\\.strings"?;`))
     }
   })
 })
