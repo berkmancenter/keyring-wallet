@@ -7,7 +7,11 @@ import type { TFunction } from 'i18next'
 import { elapsedClock, hostSetupRows } from '../screens/HostSetupSteps'
 
 const t = ((key: string, values?: Record<string, unknown>) =>
-  values ? `${key}(${values.attempt}/${values.of})` : key) as unknown as TFunction
+  values
+    ? `${key}(${Object.entries(values)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(',')})`
+    : key) as unknown as TFunction
 
 describe('the steps of a hosted agent’s setup', () => {
   it('says nothing until the phone knows where the host has got to', () => {
@@ -15,24 +19,28 @@ describe('the steps of a hosted agent’s setup', () => {
   })
 
   it('while the host creates the agent: that step, timed, and connecting still to come', () => {
-    expect(hostSetupRows({ step: 'creating', since: 1_000 }, 43_000, t)).toEqual([
+    expect(hostSetupRows({ step: 'creating', since: 1_000, startedAt: 1_000 }, 43_000, t)).toEqual([
       { key: 'creating', label: 'VtaLink.Host.Steps.Creating', state: 'current', elapsed: '0:42' },
       { key: 'connecting', label: 'VtaLink.Host.Steps.Connecting', state: 'pending' },
     ])
   })
 
-  it('once the agent is ready: creating done, this phone connecting, timed from then', () => {
-    expect(hostSetupRows({ step: 'connecting', since: 100_000 }, 105_000, t)).toEqual([
+  it('once the agent is ready: creating done, this phone connecting, on the same clock', () => {
+    expect(hostSetupRows({ step: 'connecting', since: 100_000, startedAt: 40_000 }, 105_000, t)).toEqual([
       { key: 'creating', label: 'VtaLink.Host.Steps.Creating', state: 'done' },
-      { key: 'connecting', label: 'VtaLink.Host.Steps.Connecting', state: 'current', elapsed: '0:05' },
+      { key: 'connecting', label: 'VtaLink.Host.Steps.Connecting', state: 'current', elapsed: '1:05' },
     ])
   })
 
-  it('a sign-in tried again says which try it is', () => {
-    const [, connecting] = hostSetupRows({ step: 'signingIn', since: 0, attempt: 3, of: 24 }, 185_000, t)
+  it('a sign-in tried again says it is still trying, never out of how many', () => {
+    const [, connecting] = hostSetupRows(
+      { step: 'signingIn', since: 100_000, startedAt: 0, attempt: 3, of: 24 },
+      185_000,
+      t
+    )
     expect(connecting).toEqual({
       key: 'connecting',
-      label: 'VtaLink.Host.Steps.SigningIn(3/24)',
+      label: 'VtaLink.Host.Steps.SigningIn(attempt=3)',
       state: 'current',
       elapsed: '3:05',
     })

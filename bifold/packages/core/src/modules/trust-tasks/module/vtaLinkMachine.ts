@@ -107,11 +107,13 @@ export function revocationCause(reason: string): RevocationCause {
  * ready for this phone (`awaiting_mobile`) and the first sign-in is under way.
  * `signingIn`: that sign-in is being tried again (`attempt` of `of`), as the
  * agent may take a moment to answer after its restart. `since`: when this step
- * began, so the screen can say how long it has taken.
+ * began. `startedAt`: when the first step began — the screen shows one clock
+ * for the whole setup, counted from it, rather than restarting at each step.
  */
 export interface HostSetupStage {
   step: 'creating' | 'connecting' | 'signingIn'
   since: number
+  startedAt: number
   attempt?: number
   of?: number
 }
@@ -237,6 +239,7 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
         stage: {
           step: event.step,
           since,
+          startedAt: was?.startedAt ?? event.now,
           ...(event.attempt !== undefined ? { attempt: event.attempt } : {}),
           ...(event.of !== undefined ? { of: event.of } : {}),
         },

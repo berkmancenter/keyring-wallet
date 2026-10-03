@@ -272,7 +272,8 @@ describe("an agent host's setup, step by step", () => {
     const creating = reduceLink(hostWaiting, { type: 'hostStage', step: 'creating', now: 10 })
     expect(creating).toMatchObject({ kind: 'awaitingGrant', via: 'host', stage: { step: 'creating', since: 10 } })
     const connecting = reduceLink(creating, { type: 'hostStage', step: 'connecting', now: 40 })
-    expect(connecting).toMatchObject({ stage: { step: 'connecting', since: 40 } })
+    // One clock for the whole setup: it keeps counting from the first step.
+    expect(connecting).toMatchObject({ stage: { step: 'connecting', since: 40, startedAt: 10 } })
   })
 
   it('a repeated step changes nothing, so the screen does not re-render on every poll', () => {

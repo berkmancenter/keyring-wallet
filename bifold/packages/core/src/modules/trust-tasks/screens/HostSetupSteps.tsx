@@ -3,7 +3,7 @@
  * current one has taken. It used to be one fixed sentence ("Waiting for your
  * agent…") for anything up to several minutes, while the phone knew all along
  * whether the host was still creating the agent, or the phone was signing in,
- * and which of its 24 tries that was.
+ * and which try that was. One clock runs from the first step.
  *
  * @module trust-tasks/screens/HostSetupSteps
  */
@@ -23,7 +23,7 @@ export interface HostSetupRow {
   key: 'creating' | 'connecting'
   label: string
   state: 'done' | 'current' | 'pending'
-  /** How long the current step has taken, as m:ss. */
+  /** How long the whole setup has taken, as m:ss: one clock, shown beside the current step. */
   elapsed?: string
 }
 
@@ -37,10 +37,12 @@ export function elapsedClock(ms: number): string {
 export function hostSetupRows(stage: HostSetupStage | undefined, now: number, t: TFunction): HostSetupRow[] {
   if (!stage) return []
   const creating = stage.step === 'creating'
-  const elapsed = elapsedClock(now - stage.since)
+  const elapsed = elapsedClock(now - stage.startedAt)
+  // A retry says it is still trying, and which try — never out of how many,
+  // which read as a countdown to failure. The last try's failure says so itself.
   const connectingLabel =
-    stage.step === 'signingIn' && stage.attempt && stage.of
-      ? (t('VtaLink.Host.Steps.SigningIn', { attempt: stage.attempt, of: stage.of }) as string)
+    stage.step === 'signingIn' && stage.attempt
+      ? (t('VtaLink.Host.Steps.SigningIn', { attempt: stage.attempt }) as string)
       : (t('VtaLink.Host.Steps.Connecting') as string)
   return [
     {
