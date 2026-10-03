@@ -52,7 +52,8 @@ export function resolveWitnessMediatorInvitationUrl() {
   );
 }
 
-export const APP_ID = "asml.bkc.harvard.wallet";
+// E2E_APP_ID: a build installed under another id (the push-test build, asml.bkc.harvard.wallet.pushtest).
+export const APP_ID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 export const TEST_ID_PREFIX = "com.ariesbifold:id/";
 export const APPIUM_PORT = Number(process.env.APPIUM_PORT || 4723);
 export const PIN = process.env.E2E_PIN || "123456";

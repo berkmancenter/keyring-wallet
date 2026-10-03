@@ -516,7 +516,9 @@ try {
 
   // 0 — a person starting over: a community refuses to invite a current member
   // (VTI-6), so if this phone already holds a membership, forget it first.
-  if (process.env.E2E_FRESH_COMMUNITY === "1" || keepState) {
+  // E2E_KEEP_MEMBERSHIP=1: joining a SECOND community on the same phone (bifold
+  // #265), where the first membership is the point and must not be left.
+  if ((process.env.E2E_FRESH_COMMUNITY === "1" || keepState) && process.env.E2E_KEEP_MEMBERSHIP !== "1") {
     // The person's own Leave community (UI/UX plan U1), not the Developer screen.
     await leaveCommunityInApp(driver);
   }
