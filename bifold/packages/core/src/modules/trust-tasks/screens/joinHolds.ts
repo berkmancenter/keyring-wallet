@@ -11,15 +11,21 @@ import type { Agent } from '@credo-ts/core'
 
 import type { JoinHolds } from '../module/joinManifest'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 export async function readJoinHolds(agent: Agent, communityDid: string): Promise<JoinHolds> {
-  const [invitations, application] = await Promise.all([
+  const [invitations, application, persona] = await Promise.all([
     new GenericRecordsCommunityStore(agent).listInvitations().catch(() => []),
     new GenericRecordsVettingStore(agent).getApplication(communityDid).catch(() => undefined),
+    new GenericRecordsIdentityStore(agent).getPersona(communityDid).catch(() => undefined),
   ])
+  // Statements count only for the identity they were gathered for: an earlier
+  // identity's, kept after a removal, would read a vetting way as met for a
+  // request that carries none of them (IN-104).
+  const ownApplication = application && persona && application.joinDid === persona.did ? application : undefined
   return {
     invitation: invitations.some((invitation) => invitation.communityDid === communityDid),
-    statements: (application?.requests ?? []).filter((request) => request.status === 'attested').length,
+    statements: (ownApplication?.requests ?? []).filter((request) => request.status === 'attested').length,
   }
 }

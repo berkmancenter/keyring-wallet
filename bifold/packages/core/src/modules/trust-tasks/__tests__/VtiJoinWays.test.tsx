@@ -252,6 +252,28 @@ describe('Join, at manifest 0.3', () => {
     })
   })
 
+  // IN-104: a removed member's "Join again" read the ways with what the earlier
+  // identity held, and was offered "Join, admitted straight away".
+  it('"Join again" after a removal reads the ways as a new identity holding nothing', async () => {
+    mockHolds.mockImplementation(async () => ({ statements: 1 }))
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'removed', membership: {}, at: '2026-10-03T01:20:00Z' }))
+    mockJoinAsks.mockReturnValue(defaults)
+    const tree = render(
+      <BasicAppContext>
+        <VtiJoin config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.StandingRemoved/)
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), { statements: 1 })
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), {})
+    // The ways are shown again, with what a new identity can do.
+    expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+  })
+
   it('invitation only, no invitation: no Start; the way to "I was invited"', async () => {
     const tree = await toAsks({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
     expect(tree.queryByTestId(id('JoinStart'))).toBeNull()

@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -83,6 +83,9 @@ export interface Asks {
 
 const INVITATION = /invit/i
 
+/** What a new identity holds towards a community: nothing yet. */
+const NOTHING_HELD: JoinHolds = {}
+
 export function asksFrom(manifest: VtiManifest): Asks {
   const criteria = manifest.criteria
   const invitationAdmits =
@@ -138,7 +141,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [asks, setAsks] = useState<Asks>()
   // From manifest 0.3 the community states its ways in and what follows each
   // (joinWays.ts); at 0.2 this reads as `legacy` and `asks` above is shown.
-  const [offer, setOffer] = useState<JoinAsks>()
+  const [manifest, setManifest] = useState<VtiManifest>()
   const [holds, setHolds] = useState<JoinHolds>({})
   // The community answers no join version this app speaks.
   const [unsupported, setUnsupported] = useState<string>()
@@ -176,7 +179,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!communityDid) return
     let live = true
     setAsks(undefined)
-    setOffer(undefined)
+    setManifest(undefined)
     setUnsupported(undefined)
     // No session needed: a community answers the join manifest over REST, which
     // is how an applicant reads what is asked of them before any channel
@@ -192,7 +195,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         if (!live) return
         setAsks(asksFrom(m))
         setHolds(held)
-        setOffer(joinAsks(m, held))
+        setManifest(m)
       })
       .catch((e) => {
         if (!live) return
@@ -215,7 +218,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   }, [communityDid])
 
   // What the card shows at 0.3: each way, the one this phone meets, the button.
-  const card = offer ? joinCard(offer, holds) : undefined
+  // After "Join again" the request goes out under a new identity, which holds
+  // nothing yet: what the earlier one gathered (statements, an invitation to
+  // it) does not meet a way for it. Read as held, a removed member was offered
+  // "Join", admitted straight away, for a request that carried nothing (IN-104).
+  const heldNow = again ? NOTHING_HELD : holds
+  const offer = useMemo<JoinAsks | undefined>(
+    () => (manifest ? joinAsks(manifest, heldNow) : undefined),
+    [manifest, heldNow]
+  )
+  const card = offer ? joinCard(offer, heldNow) : undefined
   const ways = card?.mode === 'ways' ? card : undefined
   // A request this screen sends itself: a way the phone meets that needs no
   // invitation (those go through "I was invited"). Chosen by the button the

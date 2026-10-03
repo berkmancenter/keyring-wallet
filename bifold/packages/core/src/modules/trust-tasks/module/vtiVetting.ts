@@ -437,6 +437,8 @@ export interface VtiVettingStore {
   saveProfile(profile: VettingVetterProfile): Promise<void>
   getApplication(communityDid: string): Promise<VettingApplication | undefined>
   saveApplication(application: VettingApplication): Promise<void>
+  /** The application alone, leaving a vetter's desk, tickets and profile for that community. */
+  forgetApplication?(communityDid: string): Promise<void>
   forget(communityDid: string): Promise<void>
 }
 
@@ -498,6 +500,14 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
   async saveApplication(a: VettingApplication) {
     await this.put('application', a.communityDid, { ...a })
     emitCommunityChanged(a.communityDid, 'application')
+  }
+  async forgetApplication(communityDid: string) {
+    const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'application' })
+    for (const r of rs) {
+      if ((r.content as { communityDid?: string }).communityDid === communityDid)
+        await this.agent.genericRecords.delete(r)
+    }
+    emitCommunityChanged(communityDid, 'application')
   }
   async forget(communityDid: string) {
     const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE })
@@ -1508,7 +1518,11 @@ export class VtiApplicant {
    * `VettingRequirementsError` rather than being gathered against by guess.
    */
   async start(manifest: VtiManifest, claims: Record<string, string>): Promise<VettingApplication> {
-    const existing = await this.store.getApplication(this.persona.communityDid)
+    const found = await this.store.getApplication(this.persona.communityDid)
+    // An application gathered by an earlier identity for this community (one
+    // a removal ended) is not this one's: its statements name that identity.
+    // Joining again starts a new one (IN-104).
+    const existing = found && found.joinDid === this.persona.did ? found : undefined
     const published = manifest.criteria.map((c) => (c as { vetting?: unknown }).vetting).find(Boolean)
     if (published !== undefined) {
       const shape = checkVettingRequirements(published)

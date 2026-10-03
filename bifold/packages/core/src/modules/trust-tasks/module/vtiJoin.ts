@@ -264,9 +264,15 @@ export async function readJoinState(
   const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
 
   const membership = await store.getMembership(communityDid).catch(() => undefined)
+  let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
+  // A request sent after the membership ended is where the person stands now:
+  // "removed you" above a request that went out hid it (IN-104).
+  const sentSince = (at: string | undefined) =>
+    Boolean(submission && at && Date.parse(submission.sentAt) > Date.parse(at))
   // The community said so in a signed notice: removed, whatever the card says.
-  if (membership?.removal) return { kind: 'removed', membership, at: membership.removal.decidedAt }
-  if (membership) {
+  if (membership?.removal && !sentSince(membership.removal.decidedAt))
+    return { kind: 'removed', membership, at: membership.removal.decidedAt }
+  if (membership && !membership.removal) {
     const cardStatus =
       options.cardStatus ??
       (async (m: VtiMembership) => {
@@ -280,10 +286,11 @@ export async function readJoinState(
         return result.state === 'revoked' ? { revoked: true, at: result.checkedAt } : { revoked: false }
       })
     const card = await cardStatus(membership).catch(() => ({ revoked: false, at: undefined }))
-    return card.revoked ? { kind: 'removed', membership, at: card.at } : { kind: 'member', membership }
+    if (!card.revoked) return { kind: 'member', membership }
+    // Revoked: a request sent since the membership began is the person asking again.
+    if (!sentSince(membership.grantedAt)) return { kind: 'removed', membership, at: card.at }
   }
 
-  let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
   // Left on this phone, and nothing sent since: "You left", not "Join".
   const departure = await store.getDeparture?.(communityDid).catch(() => undefined)
   if (departure && (!submission || submission.sentAt <= departure.at)) {

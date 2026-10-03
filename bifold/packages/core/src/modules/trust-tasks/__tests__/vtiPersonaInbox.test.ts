@@ -66,9 +66,15 @@ jest.mock('../module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: jest.
 const mockReceiveIssue = jest.fn()
 jest.mock('../module/vtiInbox', () => ({ receiveIssue: (...a: unknown[]) => mockReceiveIssue(...a) }))
 const mockReceiveStatement = jest.fn(async () => undefined)
+const mockForgetApplication = jest.fn(async () => undefined)
 jest.mock('../module/vtiVetting', () => ({
-  GenericRecordsVettingStore: jest.fn(),
+  GenericRecordsVettingStore: jest.fn().mockImplementation(() => ({ forgetApplication: mockForgetApplication })),
   VtiApplicant: jest.fn().mockImplementation(() => ({ receiveStatement: mockReceiveStatement })),
+}))
+const mockReceiveNotice = jest.fn(async (): Promise<string> => 'ignored')
+jest.mock('../module/vtiCommunityNotices', () => ({
+  ...jest.requireActual('../module/vtiCommunityNotices'),
+  receiveCommunityNotice: (...a: unknown[]) => mockReceiveNotice(...(a as [])),
 }))
 
 import { startPersonaInbox as start, VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
@@ -216,6 +222,23 @@ describe('startPersonaInbox', () => {
     expect(seen).toEqual([{ communityDid: mockPersona.communityDid, kinds: ['vetter-grant'] }])
     sub.remove()
     stop()
+  })
+
+  // IN-104: an application gathered by the removed identity read, on joining
+  // again, as statements held — "Join, admitted straight away" for a request
+  // that carried none. A removal ends the application with the membership.
+  it('a removal notice clears the vetting application for that community; a join receipt does not', async () => {
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    await flush()
+    mockForgetApplication.mockClear()
+    mockReceiveNotice.mockResolvedValueOnce('acknowledged')
+    mockHandlers[0]({ type: 'https://trusttasks.org/spec/vtc/join-requests/submit-receipt/0.1' })
+    await flush()
+    expect(mockForgetApplication).not.toHaveBeenCalled()
+    mockReceiveNotice.mockResolvedValueOnce('removed')
+    mockHandlers[0]({ type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1' })
+    await flush()
+    expect(mockForgetApplication).toHaveBeenCalledWith(mockPersona.communityDid)
   })
 
   it("hands a vetter's statement to the applicant's full check, never storing it itself", async () => {
