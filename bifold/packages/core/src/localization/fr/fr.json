@@ -932,6 +932,7 @@
     "Credentials": "Justificatifs",
     "CredentialDetails": "Détails des attestations",
     "Notifications": "Notifications",
+    "PushNotifications": "Notifications",
     "CredentialOffer": "Offre d'attestation",
     "ProofChangeCredential": "Changer l'attestation",
     "ProofRequest": "Demande de preuve",
