@@ -139,7 +139,9 @@ export function androidCaps(avd = ANDROID_AVD) {
     // debug build can reach metro on the host
     "appium:autoLaunch": false,
     "appium:newCommandTimeout": 300,
-    "appium:autoGrantPermissions": true,
+    // E2E_NO_AUTOGRANT=1: install without granting runtime permissions, so a
+    // permission the app asks for shows the system dialog (wallet #300's row).
+    "appium:autoGrantPermissions": process.env.E2E_NO_AUTOGRANT !== "1",
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
     ...ANDROID_SETTINGS,
