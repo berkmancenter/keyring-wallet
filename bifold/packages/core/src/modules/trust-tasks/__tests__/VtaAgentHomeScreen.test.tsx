@@ -176,7 +176,7 @@ describe('Your agent — after linking', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentApprovalCard'))).toBeNull()
   })
 
-  it('says an approval is waiting on every segment, and shows it in Manage with what it is and when it expires', async () => {
+  it('says a request is waiting on every segment, and the banner opens the Requests screen', async () => {
     controller.set({
       approvals: [
         {
@@ -189,26 +189,15 @@ describe('Your agent — after linking', () => {
       ],
     })
     const tree = await renderHome([])
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
     expect(tree.getByTestId(testIdWithKey('AgentApprovalBanner'))).toHaveTextContent(/VtaLink\.ApprovalsWaiting/)
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentApprovalBanner')))
-    expect(tree.getByTestId(testIdWithKey('AgentSegment_manage')).props.accessibilityState).toEqual({ selected: true })
-    const card = tree.getByTestId(testIdWithKey('AgentApprovalCard'))
-    // The task, not its URI; the requester short, not entire.
-    expect(card).toHaveTextContent(/MyAgent\.ApprovalAsks/)
-    expect(card).toHaveTextContent(/MyAgent\.ApprovalExpires/)
-    // The task URI is ours to read, not the person's.
-    expect(card).not.toHaveTextContent(/trusttasks\.org/)
-    expect(tree.getByTestId(testIdWithKey('ApproveConsentButton'))).toBeTruthy()
-    expect(tree.getByTestId(testIdWithKey('DenyConsentButton'))).toBeTruthy()
-    // Nothing said what it would do: the card says it could not tell, never "no effects".
-    expect(tree.getByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toHaveTextContent(
-      /MyAgent\.ApprovalOutcomeUnknown/
-    )
-    expect(tree.queryByTestId(testIdWithKey('ApprovalMatchCode'))).toBeNull()
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaRequests)
     controller.set({ approvals: [] })
   })
 
-  it('shows what approving would do and the code to compare', async () => {
+  it('Manage has no request cards: a row leads to Requests and says how many wait', async () => {
     controller.set({
       approvals: [
         {
@@ -217,19 +206,28 @@ describe('Your agent — after linking', () => {
           taskType: 'https://trusttasks.org/spec/keys/export-secret/0.1',
           expiresAt: '2026-09-23T04:30:00Z',
           status: 'pending',
-          matchCode: 'abcdef',
-          outcome: { from: 'effects', lines: ['Hands a copy of the signing key to the requester'] },
         },
       ],
     })
     const tree = await renderHome([])
-    fireEvent.press(tree.getByTestId(testIdWithKey('AgentApprovalBanner')))
-    const outcome = tree.getByTestId(testIdWithKey('ApprovalOutcome'))
-    expect(outcome).toHaveTextContent(/MyAgent\.ApprovalWouldDo/)
-    expect(outcome).toHaveTextContent(/Hands a copy of the signing key to the requester/)
-    expect(tree.queryByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toBeNull()
-    expect(tree.getByTestId(testIdWithKey('ApprovalMatchCode'))).toHaveTextContent('abcdef')
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSegment_manage')))
+    expect(tree.queryByTestId(testIdWithKey('AgentApprovalCard'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('ApproveConsentButton'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('AgentRequestsRowCount'))).toHaveTextContent(/Requests\.RowWaiting/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentRequestsRow')))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaRequests)
     controller.set({ approvals: [] })
+  })
+
+  it('the Requests row is there with nothing waiting, and a task of this phone waiting on someone else stays in Manage', async () => {
+    controller.set({ approvals: [], awaitingConsentFor: 'https://trusttasks.org/spec/vta/contexts/list/1.0' })
+    const tree = await renderHome([])
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSegment_manage')))
+    expect(tree.getByTestId(testIdWithKey('AgentRequestsRowCount'))).toHaveTextContent(/Requests\.RowNone/)
+    expect(tree.getByTestId(testIdWithKey('AgentAwaitingConsent'))).toHaveTextContent(/MyAgent\.AwaitingConsent/)
+    controller.set({ awaitingConsentFor: undefined })
   })
 
   // 228 lab check of #199: after Approve the card said "Approved" under a banner

@@ -70,12 +70,12 @@ describe('the approvals link a push notification opens', () => {
     expect(keyringAgentLinkKind('keyring://vta/approvals?x=1')).toBeUndefined()
   })
 
-  it('goes to the agent home, where approvals wait, and does nothing else', async () => {
+  it('goes to the Requests screen, where what waits is decided, and does nothing else', async () => {
     const navigate = jest.fn()
     await routeKeyringAgentLink(APPROVALS_LINK, {} as never, navigate)
     expect(navigate).toHaveBeenCalledTimes(1)
-    expect(navigate).toHaveBeenCalledWith('VtaAgent')
-    expect(MY_AGENT_SCREEN.VtaAgent).toBe(Screens.VtaAgent)
+    expect(navigate).toHaveBeenCalledWith('VtaRequests')
+    expect(MY_AGENT_SCREEN.VtaRequests).toBe(Screens.VtaRequests)
   })
 })
 

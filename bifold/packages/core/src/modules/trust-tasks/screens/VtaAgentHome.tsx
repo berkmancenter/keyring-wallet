@@ -46,14 +46,12 @@ import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { useWaitingRequestsCount } from '../module/waitingRequests'
-import { ApprovalDetails } from './ApprovalDetails'
 import { CommunityCard } from './CommunityCard'
-import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
-import { DidDetails } from './DidDetails'
+import { communityHeadingOf, communityLabelOf } from './communityName'
 import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
+import { shortTask } from './RequestCard'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
-import { localDateTime } from './localTime'
 
 interface Holdings {
   personas: VtiPersona[]
@@ -136,19 +134,6 @@ const VtaAgentHome: React.FC = () => {
   }, [unlinkOpen])
   const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [deciding, setDeciding] = useState<string>()
-  const onDecide = useCallback(async (id: string, decision: 'approve' | 'deny') => {
-    setDeciding(id)
-    try {
-      await vtaAgent.decide(id, decision)
-    } catch {
-      // the failure is recorded on the approval itself, by the controller
-    } finally {
-      setDeciding(undefined)
-    }
-  }, [])
-  /** The task URI without the part every task shares. */
-  const shortTask = (uri: string) => uri.replace('https://trusttasks.org/spec/', '')
   const [introPanel, setIntroPanel] = useState(0)
 
   const [segment, setSegment] = useState<AgentSegment>(sessionSegment)
@@ -593,7 +578,7 @@ const VtaAgentHome: React.FC = () => {
         {pendingApprovals > 0 ? (
           <Pressable
             style={[styles.card, styles.row]}
-            onPress={() => chooseSegment('manage')}
+            onPress={() => go(Screens.VtaRequests)}
             accessibilityRole="button"
             testID={testIdWithKey('AgentApprovalBanner')}
           >
@@ -753,66 +738,34 @@ const VtaAgentHome: React.FC = () => {
         ) : null}
         {segment === 'manage' ? (
           <>
-            {/* Something your agent needs you to allow. It has an expiry, so the
-            banner above says so on every segment; here it is decided. It is
-            absent entirely when there is nothing to decide, rather than
-            sitting here saying "no approvals" (report #11). */}
-            {state.awaitingConsentFor || state.approvals.length > 0 ? (
-              <View style={styles.card} testID={testIdWithKey('AgentApprovals')}>
-                <ThemedText variant="labelTitle">{t('MyAgent.Approvals')}</ThemedText>
-                {state.awaitingConsentFor ? (
-                  <View style={styles.row}>
-                    <ActivityIndicator color={ColorPalette.brand.primary} />
-                    <ThemedText testID={testIdWithKey('AgentAwaitingConsent')}>
-                      {t('MyAgent.AwaitingConsent', {
-                        task: shortTask(state.awaitingConsentFor),
-                        interpolation: { escapeValue: false },
-                      })}
-                    </ThemedText>
-                  </View>
-                ) : null}
-                {state.approvals.map((approval) => (
-                  <View key={approval.id} testID={testIdWithKey('AgentApprovalCard')}>
-                    <ThemedText>
-                      {t('MyAgent.ApprovalAsks', {
-                        requester: partyLabelStartOf(approval.requester, t),
-                        task: shortTask(approval.taskType),
-                        interpolation: { escapeValue: false },
-                      })}
-                    </ThemedText>
-                    <ThemedText style={styles.muted}>
-                      {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
-                    </ThemedText>
-                    <ApprovalDetails approval={approval} />
-                    <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
-                    {approval.status === 'pending' ? (
-                      <View style={styles.row}>
-                        <Button
-                          title={t('MyAgent.Approve')}
-                          buttonType={ButtonType.Primary}
-                          disabled={deciding !== undefined}
-                          onPress={() => void onDecide(approval.id, 'approve')}
-                          testID={testIdWithKey('ApproveConsentButton')}
-                        />
-                        <Button
-                          title={t('MyAgent.Deny')}
-                          buttonType={ButtonType.Secondary}
-                          disabled={deciding !== undefined}
-                          onPress={() => void onDecide(approval.id, 'deny')}
-                          testID={testIdWithKey('DenyConsentButton')}
-                        />
-                      </View>
-                    ) : (
-                      <ThemedText style={styles.muted} testID={testIdWithKey('AgentApprovalDecided')}>
-                        {approval.status === 'approved'
-                          ? t('MyAgent.Approved')
-                          : approval.status === 'denied'
-                            ? t('MyAgent.Denied')
-                            : (approval.error ?? approval.status)}
-                      </ThemedText>
-                    )}
-                  </View>
-                ))}
+            {/* What waits for the person's decision has its own screen (Requests);
+            this row is the way to it from here, and is always there, so a
+            person learns where requests are before one arrives. */}
+            <Pressable
+              style={[styles.card, styles.row]}
+              onPress={() => go(Screens.VtaRequests)}
+              accessibilityRole="button"
+              testID={testIdWithKey('AgentRequestsRow')}
+            >
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="bold">{t('Requests.Row')}</ThemedText>
+                <ThemedText style={styles.muted} testID={testIdWithKey('AgentRequestsRowCount')}>
+                  {pendingApprovals > 0 ? t('Requests.RowWaiting', { count: pendingApprovals }) : t('Requests.RowNone')}
+                </ThemedText>
+              </View>
+              <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+            </Pressable>
+            {/* A task of this phone's that waits on someone else's consent:
+            not a decision for this person, so it stays here. */}
+            {state.awaitingConsentFor ? (
+              <View style={[styles.card, styles.row]}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <ThemedText style={{ flex: 1 }} testID={testIdWithKey('AgentAwaitingConsent')}>
+                  {t('MyAgent.AwaitingConsent', {
+                    task: shortTask(state.awaitingConsentFor),
+                    interpolation: { escapeValue: false },
+                  })}
+                </ThemedText>
               </View>
             ) : null}
 
