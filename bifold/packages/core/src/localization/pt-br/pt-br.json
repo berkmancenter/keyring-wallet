@@ -772,6 +772,23 @@
     "OneMinute": "One Minute (PT-BR)",
     "Never": "Never (PT-BR)"
   },
+  "Requests": {
+    "Loading": "Buscando seus pedidos com seu agente…",
+    "Empty": "Nada espera por você. Um pedido pode ter sido tratado em outro dispositivo, ou pode ter expirado.",
+    "DoneApproved": "Aprovado. Seu agente continua.",
+    "DoneDeclined": "Recusado. Nada foi feito.",
+    "More_one": "Mais 1 pedido espera por você",
+    "More_other": "Mais {{count}} pedidos esperam por você",
+    "Expired": "Este pedido expirou. Nada foi feito.",
+    "Unreachable": "O Keyring não conseguiu falar com seu agente. Verifique se este telefone está online.",
+    "TryAgain": "Tentar de novo",
+    "BackToAgent": "Voltar ao seu agente",
+    "Earlier": "Antes",
+    "Row": "Pedidos",
+    "RowWaiting_one": "1 aguardando",
+    "RowWaiting_other": "{{count}} aguardando",
+    "RowNone": "Nada aguardando"
+  },
   "TabStack": {
     "Messages": "Mensagens",
     "Home": "Notificações",
@@ -876,6 +893,7 @@
     "Vetting": "Verificação",
     "VtaLink": "Vincular seu agente",
     "VtaAgent": "Seu agente",
+    "VtaRequests": "Pedidos",
     "Invited": "Entrar por convite",
     "Join": "Entrar em uma comunidade"
   },
@@ -1471,9 +1489,9 @@
     "NoApprovals": "Nada para aprovar. Quando seu agente precisar do seu consentimento, ele pede aqui.",
     "ApprovalAsks": "{{requester}} pede ao seu agente para executar {{task}}",
     "Approve": "Aprovar",
-    "Deny": "Negar",
+    "Deny": "Recusar",
     "Approved": "Aprovado",
-    "Denied": "Negado",
+    "Denied": "Recusado",
     "ApprovalExpires": "Expira {{when}}",
     "ApprovalWouldDo": "Se você aprovar:",
     "ApprovalOutcomeUnknown": "O Keyring não conseguiu saber o que isso faria. Aprove apenas se souber por que foi pedido.",
