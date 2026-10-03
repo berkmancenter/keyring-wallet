@@ -7,7 +7,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -50,6 +50,8 @@ export interface CommunityCardProps {
   linkedAt?: string
   onOpen: (communityDid: string) => void
   onPrimary: (action: CommunityCardPrimary, communityDid: string) => void
+  /** Told the card's next step whenever it changes, so "Your agent" can lead with it. */
+  onNextStep?: (communityDid: string, primary: CommunityCardPrimary | undefined) => void
 }
 
 const primaryLabel: Record<CommunityCardPrimary, string> = {
@@ -68,6 +70,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   linkedAt,
   onOpen,
   onPrimary,
+  onNextStep,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
@@ -84,6 +87,9 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       : undefined)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
   const key = communityCardKey(communityDid)
+  useEffect(() => {
+    onNextStep?.(communityDid, model.primary)
+  }, [onNextStep, communityDid, model.primary])
   // Named, or at least told apart from the other cards — never a host.
   const community = communityHeadingOf(communityDid, t)
   const words = (k: string) => t(k, { community, interpolation: { escapeValue: false } })

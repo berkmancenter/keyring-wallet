@@ -550,9 +550,9 @@ describe('Your agent — after linking', () => {
     expect(tree.getByTestId(testIdWithKey('AgentShareIdentity'))).toBeTruthy()
   })
 
-  it('a member: the journey says "Joined" and names the community', async () => {
+  it('a member: a status line names the community, in place of the step bar', async () => {
     const tree = await renderHome([persona, membership])
-    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent('✓ VtaLink.JourneyJoined')
+    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent(/VtaLink\.StatusMemberOf/)
     expect(tree.queryByTestId(testIdWithKey('AgentJourneyJoin'))).toBeNull()
   })
 
@@ -660,7 +660,7 @@ describe('Your agent — after linking', () => {
    * member's only way to a community. Both now start here, so a linked phone
    * never needs the panel.
    */
-  it('an applicant can carry on with vetting from the line that says why', async () => {
+  it('an applicant can carry on with vetting from the next-step card', async () => {
     const navigate = useNavigation().navigate as jest.Mock
     navigate.mockClear()
     const tree = await renderHome([persona])
