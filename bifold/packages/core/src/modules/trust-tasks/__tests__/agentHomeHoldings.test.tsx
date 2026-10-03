@@ -241,8 +241,8 @@ describe('a community heading, where several stand side by side', () => {
   it('with no path, tells communities apart by the end of the SCID — not the host', () => {
     const one = communityHeadingOf('did:webvh:QmFirstOne111:vtc.example.org', t)
     const two = communityHeadingOf('did:webvh:QmSecondTwo222:vtc.example.org', t)
-    expect(one).toBe('Community.UnnamedRef(ref=One111)')
-    expect(two).toBe('Community.UnnamedRef(ref=Two222)')
+    expect(one).toBe('Community.UnnamedRef(ref=…One111)')
+    expect(two).toBe('Community.UnnamedRef(ref=…Two222)')
     expect(one).not.toContain('example')
   })
 })

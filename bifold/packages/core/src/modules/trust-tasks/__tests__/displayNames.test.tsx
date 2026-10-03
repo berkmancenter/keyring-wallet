@@ -47,22 +47,28 @@ describe('a community, named in passing', () => {
     expect(communityLabelOf(webvh, t)).toBe('Keyring Lab Community')
   })
 
-  it('unnamed: "a community", never its host — a host read as a name and merged communities on one host (IN-26)', () => {
+  it('unnamed: said to be, with the end of its SCID — never its host, which merged communities on one host (IN-26)', () => {
     const label = communityLabelOf(webvh, t)
-    expect(label).toBe('Community.Unnamed')
+    expect(label).toBe('Community.UnnamedRef(ref=…munity)')
     expect(label).not.toContain('vtc.example.org')
+  })
+
+  it("unnamed with a path: the operator's handle tells it apart", () => {
+    expect(communityLabelOf('did:webvh:QmCommunity:vtc.example.org:keyring-test-vtc', t)).toBe(
+      'Community.UnnamedRef(ref=keyring-test-vtc)'
+    )
   })
 
   it('unnamed and without a host: words, never the DID', () => {
     const label = communityLabelOf(peer, t)
-    expect(label).toBe('Community.Unnamed')
+    expect(label).toBe('Community.UnnamedRef(ref=…uvwxyz)')
     expect(label).not.toMatch(/did:/)
   })
 
   it('at the start of a sentence, capitalised', () => {
-    const start = communityLabelStartOf(webvh, ((key: string) =>
-      key === 'Community.Unnamed' ? 'a community' : key) as unknown as TFunction)
-    expect(start).toBe('A community')
+    const start = communityLabelStartOf(webvh, ((key: string, values?: { ref?: string }) =>
+      key === 'Community.UnnamedRef' ? `an unnamed community (${values?.ref})` : key) as unknown as TFunction)
+    expect(start).toBe('An unnamed community (…munity)')
   })
 })
 

@@ -139,12 +139,15 @@ describe('I want to join a community', () => {
   /**
    * A tester was offered "Join keyring-vti-vtc.ngrok.app" by a community that
    * had published no name (report #14). A hostname where a name belongs reads
-   * as a name, so the card says there is none and names the host as the host.
+   * as a name, so the card says there is none and shows the full DID as the
+   * identifier it is.
    */
   it('does not pass a hostname off as the suggested community\u2019s name', async () => {
     const tree = await renderJoin()
     expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Join.Unnamed')
-    expect(tree.getByTestId(testIdWithKey('JoinSuggestedWhere'))).toHaveTextContent('vtc.suggested.example')
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedWhere'))).toHaveTextContent(
+      'did:webvh:QmSuggested:vtc.suggested.example'
+    )
     // and the button cannot be "Join <hostname>" either
     expect(tree.getByTestId(testIdWithKey('JoinThisCommunity'))).toHaveTextContent('Join.JoinSuggested')
     // nothing claimed a name, so there is nothing to caveat

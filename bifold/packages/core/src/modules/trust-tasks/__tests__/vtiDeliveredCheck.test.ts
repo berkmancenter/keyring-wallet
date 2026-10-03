@@ -97,7 +97,7 @@ describe('the words a person reads', () => {
 
   it('starts a sentence with an unnamed community in capitals', () => {
     expect(refusedCardWords('revoked', COMMUNITY, t)).toBe(
-      "A community has withdrawn a card it sent, so Keyring didn't keep it."
+      "An unnamed community (keyring-test-vtc) has withdrawn a card it sent, so Keyring didn't keep it."
     )
   })
 })
