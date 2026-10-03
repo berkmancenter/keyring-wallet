@@ -1,36 +1,45 @@
 {
   "project_info": {
-    "project_number": "1008044298583",
-    "project_id": "bc-wallet-mobile",
-    "storage_bucket": "bc-wallet-mobile.appspot.com"
+    "project_number": "336844734698",
+    "project_id": "hls-asml-identity-ba68",
+    "storage_bucket": "hls-asml-identity-ba68.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1008044298583:android:56bf7c25b882152a44ae12",
+        "mobilesdk_app_id": "1:336844734698:android:32ba871274f5283ede5793",
         "android_client_info": {
           "package_name": "asml.bkc.harvard.wallet"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "1008044298583-12lpkisi403oa5bc5hs0800o48cl4nhj.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB9TMILh7AQmEGCdwvvmDeN-WG4G345p9I"
+          "current_key": "AIzaSyD4IYMS9Bq-lDz5S6ytBO_1VBDTI3nsThI"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "1008044298583-12lpkisi403oa5bc5hs0800o48cl4nhj.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:336844734698:android:4b88800f72f8d6c5de5793",
+        "android_client_info": {
+          "package_name": "asml.bkc.harvard.wallet.pushtest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4IYMS9Bq-lDz5S6ytBO_1VBDTI3nsThI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
       }
     }

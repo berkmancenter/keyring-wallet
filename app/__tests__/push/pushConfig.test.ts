@@ -18,6 +18,7 @@ function deps(overrides: Partial<PushConfigDeps> = {}) {
     requestPermission: jest.fn(async () => 'granted' as const),
     enableWake: jest.fn(async () => ({ status: 'off' as const })),
     clearWake: jest.fn(async () => ({ pushCapable: false })),
+    stopPlatformPush: jest.fn(async () => undefined),
     log: jest.fn(),
     ...overrides,
   }
@@ -33,6 +34,7 @@ describe("a tester's build, which names no push gateway", () => {
       expect(d.requestPermission).not.toHaveBeenCalled()
       expect(d.enableWake).not.toHaveBeenCalled()
       expect(d.clearWake).not.toHaveBeenCalled()
+      expect(d.stopPlatformPush).not.toHaveBeenCalled()
     }
   })
 })
@@ -51,6 +53,7 @@ describe('a build that names a push gateway', () => {
     await pushNotificationsConfig(d)!.toggle(true, agent)
     expect(d.enableWake).toHaveBeenCalledWith(agent)
     expect(d.clearWake).not.toHaveBeenCalled()
+    expect(d.stopPlatformPush).not.toHaveBeenCalled()
     expect(d.log).toHaveBeenCalledWith('push wake: enable', { status: 'notLinked' })
   })
 
@@ -59,6 +62,27 @@ describe('a build that names a push gateway', () => {
     await pushNotificationsConfig(d)!.toggle(false, agent)
     expect(d.clearWake).toHaveBeenCalledWith(agent)
     expect(d.enableWake).not.toHaveBeenCalled()
+  })
+
+  it('withdraws the platform token when the switch is turned off, even if the agent cannot be told', async () => {
+    const d = deps({
+      clearWake: jest.fn(async () => {
+        throw new Error('agent unreachable')
+      }),
+    })
+    await expect(pushNotificationsConfig(d)!.toggle(false, agent)).resolves.toBeUndefined()
+    expect(d.stopPlatformPush).toHaveBeenCalledTimes(1)
+    expect(d.log).toHaveBeenCalledWith('push wake: failed', { enable: false, error: 'agent unreachable' })
+  })
+
+  it('logs a failure to withdraw the platform token instead of throwing into Settings', async () => {
+    const d = deps({
+      stopPlatformPush: jest.fn(async () => {
+        throw new Error('no network')
+      }),
+    })
+    await expect(pushNotificationsConfig(d)!.toggle(false, agent)).resolves.toBeUndefined()
+    expect(d.log).toHaveBeenCalledWith('push platform: stop failed', { error: 'no network' })
   })
 
   it('logs a refusal from the gateway or the agent instead of throwing into Settings', async () => {

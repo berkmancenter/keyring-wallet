@@ -37,11 +37,13 @@ const BCLogger = new RemoteLogger(logOptions)
  * always given a code to share, even when the network/Loki is unavailable.
  *
  * @param error - the error being reported
+ * @param shown - what the screen said, when it is not the error's own description
  * @returns the reference code to surface to the user
  */
-export const reportProblem = (error: BifoldError): string => {
+export const reportProblem = (error: BifoldError, shown?: string): string => {
   const referenceCode = generateReferenceCode()
-  const { title, description, code, message, stack } = error
+  const { title, code, message, stack } = error
+  const description = shown ?? error.description
 
   try {
     if (logOptions.lokiUrl) {

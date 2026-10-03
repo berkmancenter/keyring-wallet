@@ -20,6 +20,7 @@ import BCLogger from '@/utils/logger'
 
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
+import { startPlatformPush, stopPlatformPush } from './pushPlatform'
 import { enablePushWake, type PushWakeDeps } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
@@ -27,17 +28,21 @@ function apnsEnvironment(): 'sandbox' | 'production' {
   return Config.PUSH_APNS_ENVIRONMENT === 'production' ? 'production' : 'sandbox'
 }
 
-/** This phone's platform push token, or undefined without permission or a token. */
+/**
+ * This phone's platform push token, or undefined without permission or a token.
+ * Reached only when the person turns notifications on: it is what first lets
+ * the platform push service issue this install a token (pushPlatform.ts).
+ */
 export async function platformPushRegistration(): Promise<PushRegistration | undefined> {
   const m = messaging()
   const status = await m.hasPermission()
   if (status !== messaging.AuthorizationStatus.AUTHORIZED && status !== messaging.AuthorizationStatus.PROVISIONAL) {
     return undefined
   }
+  await startPlatformPush(Platform.OS, m)
   if (Platform.OS === 'ios') {
     // The gateway sends to APNs directly with Keyring's own key, so it needs
     // the APNs device token, not Firebase's.
-    await m.registerDeviceForRemoteMessages()
     const token = await m.getAPNSToken()
     return token ? { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() } : undefined
   }
@@ -92,6 +97,7 @@ export function appPushNotificationsConfig(): PushNotificationsConfig | undefine
     requestPermission: requestNotificationPermission,
     enableWake: (agent) => enablePushWake(appPushWakeDeps(agent)),
     clearWake: (agent) => vtaAgent.clearThisDeviceWake(agent),
+    stopPlatformPush: () => stopPlatformPush(Platform.OS, messaging()),
     log: (message, data) => BCLogger.info(message, data),
   })
 }

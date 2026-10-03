@@ -1,4 +1,6 @@
-• Joining works with communities on the new join format, and on the earlier one.
-• The Join screen shows each way in, and whether you're admitted straight away or an administrator reviews your request.
-• Includes the fix for scanning your hosting service's code from Set up a new agent.
-Known: Keyring can't present a held credential to join yet. Notifications are off.
+• Notifications: when your agent needs your approval, your phone tells you. Tap to open the request.
+• A Requests screen, and a count on the My Agent tab while requests wait.
+• "You're now a member of …" while the app is open.
+• Join screen: buttons sit under their way; after a removal, "Join again" offers vetting again.
+• No contact with Google's notification service before you turn notifications on.
+Known: notifications need your agent's policy enforcement on.
