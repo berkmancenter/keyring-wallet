@@ -166,8 +166,8 @@ const TrustTaskApprovalCard: React.FC<TrustTaskApprovalCardProps> = ({
       <View style={styles.actions}>
         <View style={styles.actionButton}>
           <Button
-            title="Deny"
-            accessibilityLabel="Deny"
+            title="Decline"
+            accessibilityLabel="Decline"
             testID={testIdWithKey('TrustTaskDeny')}
             buttonType={ButtonType.Secondary}
             onPress={onDeny}

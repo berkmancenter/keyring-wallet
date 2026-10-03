@@ -13,6 +13,7 @@ import VtiInvited from '../modules/trust-tasks/screens/VtiInvited'
 import VtiJoin from '../modules/trust-tasks/screens/VtiJoin'
 import EditRCard from '../modules/vrc/screens/EditRCard'
 import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
+import VtaRequests from '../modules/trust-tasks/screens/VtaRequests'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
 import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
 import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
@@ -118,6 +119,12 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaAgent}
         component={VtaAgentHome}
         options={{ title: t('Screens.VtaAgent'), ...ScreenOptionsDictionary[Screens.VtaAgent] }}
+      />
+      {/* What waits for the person's decision: opened by a notification, the banner and Manage. */}
+      <Stack.Screen
+        name={Screens.VtaRequests}
+        component={VtaRequests}
+        options={{ title: t('Screens.VtaRequests'), ...ScreenOptionsDictionary[Screens.VtaRequests] }}
       />
     </Stack.Navigator>
   )

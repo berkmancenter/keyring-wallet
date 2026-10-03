@@ -840,6 +840,23 @@
     "Never": "Never (FR)",
     "Preview": "{{autoLockTime}} min (FR)"
   },
+  "Requests": {
+    "Loading": "Récupération de vos demandes auprès de votre agent…",
+    "Empty": "Rien ne vous attend. Une demande a peut-être été traitée sur un autre appareil, ou elle a expiré.",
+    "DoneApproved": "Approuvé. Votre agent poursuit.",
+    "DoneDeclined": "Refusé. Rien n'a été fait.",
+    "More_one": "1 autre demande vous attend",
+    "More_other": "{{count}} autres demandes vous attendent",
+    "Expired": "Cette demande a expiré. Rien n'a été fait.",
+    "Unreachable": "Keyring n'a pas pu joindre votre agent. Vérifiez que ce téléphone est en ligne.",
+    "TryAgain": "Réessayer",
+    "BackToAgent": "Retour à votre agent",
+    "Earlier": "Plus tôt",
+    "Row": "Demandes",
+    "RowWaiting_one": "1 en attente",
+    "RowWaiting_other": "{{count}} en attente",
+    "RowNone": "Rien en attente"
+  },
   "TabStack": {
     "Messages": "Messages",
     "Home": "Notifications",
@@ -957,6 +974,7 @@
     "Vetting": "Vérification",
     "VtaLink": "Relier votre agent",
     "VtaAgent": "Votre agent",
+    "VtaRequests": "Demandes",
     "Invited": "Rejoindre sur invitation",
     "Join": "Rejoindre une communauté"
   },
