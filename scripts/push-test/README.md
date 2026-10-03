@@ -41,6 +41,13 @@ scripts/push-test/build-ios.sh       # then: xcrun devicectl device install app 
 Both are full native release builds: declare them before running on a shared
 Mac, one heavy build at a time.
 
+On a fresh checkout the Android build can fail in CMake, on React Native
+codegen output that does not exist yet. Generate it once, then build again:
+
+```sh
+(cd app/android && ./gradlew generateCodegenArtifactsFromSchema)
+```
+
 `build-ios.sh` edits the tracked `project.pbxproj` for the length of one build.
 It refuses to start if that file has changes, restores it on any exit, ctrl-C
 or kill signal, and ends by showing it is clean. The one case it cannot catch
