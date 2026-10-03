@@ -661,6 +661,11 @@ export class VtaAgentController {
     this.set({ addingAgent: true, addedAgent: undefined })
   }
 
+  /** The person keeps the agent just added: the question is answered. */
+  acknowledgeAdded(): void {
+    this.set({ addedAgent: undefined })
+  }
+
   /** Back to the agent that was current before "Add another agent". */
   async stopAddingAgent(agent: Agent): Promise<void> {
     const from = this.addingFrom
