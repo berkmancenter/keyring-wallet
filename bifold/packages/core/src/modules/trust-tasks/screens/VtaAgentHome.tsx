@@ -47,6 +47,7 @@ import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { useWaitingRequestsCount } from '../module/waitingRequests'
 import { CommunityCard } from './CommunityCard'
+import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
 import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
@@ -135,6 +136,10 @@ const VtaAgentHome: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [introPanel, setIntroPanel] = useState(0)
+  const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
+  const onCardStep = useCallback((communityDid: string, primary: CommunityCardPrimary | undefined) => {
+    setCardSteps((prev) => (prev[communityDid] === primary ? prev : { ...prev, [communityDid]: primary }))
+  }, [])
 
   const [segment, setSegment] = useState<AgentSegment>(sessionSegment)
   const chooseSegment = useCallback((next: AgentSegment) => {
@@ -405,6 +410,18 @@ const VtaAgentHome: React.FC = () => {
           .sort((a, b) => String(b.removal?.decidedAt ?? '').localeCompare(String(a.removal?.decidedAt ?? '')))[0]
       : undefined
   const lapsed = holdings?.lapsed ?? []
+  const memberOf = Array.from(new Set(currentMemberships.map((m) => m.communityDid)))
+  // The next step is the one a community's card offers (its model knows where
+  // a join stands), led with here: an invitation first, then a vetting.
+  const held = holdings ? communitiesHeld(holdings) : []
+  const stepOf = (kind: CommunityCardPrimary) => held.find((did) => cardSteps[did] === kind)
+  const invitationFor = stepOf('acceptInvitation')
+  const vettingFor = stepOf('continueVetting')
+  const nextStep: { kind: 'invitation' | 'vetting'; communityDid: string } | undefined = invitationFor
+    ? { kind: 'invitation', communityDid: invitationFor }
+    : vettingFor
+      ? { kind: 'vetting', communityDid: vettingFor }
+      : undefined
   const day = (iso: string) => new Date(iso).toLocaleDateString()
   const lapsedText = (communityDid: string, grant: Holdings['lapsed'][number]['grant']) => {
     const community = communityLabelOf(communityDid, t)
@@ -505,66 +522,47 @@ const VtaAgentHome: React.FC = () => {
                   )}
             </ThemedText>
           ) : null}
-          {/* An applicant's way back to vetting. It used to be the operator
-              panel's vetting card, the only way in once "I want to join" had
-              been used; here it follows the line that says why it is needed. */}
-          {isApplicant ? (
-            <Pressable
-              style={styles.row}
-              onPress={() => go(Screens.VtiVetting)}
-              accessibilityRole="link"
-              testID={testIdWithKey('AgentContinueVetting')}
-            >
-              <ThemedText style={[styles.link, { flex: 1 }]}>{t('VtaLink.ContinueVetting')}</ThemedText>
-              <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
-            </Pressable>
-          ) : null}
-          {/* Where the phone is, per community it belongs to: a finished step
-              says so ("Joined", not "Join") and names the community. */}
-          <View testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
-            {(isMember ? Array.from(new Set(currentMemberships.map((m) => m.communityDid))) : [undefined]).map(
-              (communityDid) => (
-                <View key={communityDid ?? 'none'} style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
-                  {[
-                    { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },
-                    communityDid
-                      ? {
-                          key: 'Joined',
-                          // The membership is the community's own answer: a name
-                          // that only a link gave is not qualified here, where
-                          // "(not confirmed …)" read as if the joining were.
-                          label: t('VtaLink.JourneyJoined', {
-                            community: communityHeadingOf(communityDid, t, { claim: 'plain' }),
-                            interpolation: { escapeValue: false },
-                          }),
-                          done: true,
-                          now: false,
-                        }
-                      : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
-                    { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
-                  ].map((stop, i) => (
+          {/* The step bar teaches the first setup, so it shows only until the
+              first membership. After that a status line says where this agent
+              stands, and the next-step card below says what, if anything, needs
+              the person now (233). */}
+          {holdings && everMemberOf.size > 0 ? (
+            isMember ? (
+              // The id the vetting e2e has always read as "this phone is a member".
+              <ThemedText variant="bold" testID={testIdWithKey('AgentJourneyJoined')}>
+                {memberOf.length === 1
+                  ? t('VtaLink.StatusMemberOf', {
+                      community: communityHeadingOf(memberOf[0], t, { claim: 'plain' }),
+                      interpolation: { escapeValue: false },
+                    })
+                  : t('VtaLink.StatusMemberOfMany', { count: memberOf.length })}
+              </ThemedText>
+            ) : null
+          ) : (
+            <View testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
+              <View style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
+                {[
+                  { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },
+                  { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
+                  { key: 'Member', label: t('VtaLink.JourneyMember'), done: false, now: false },
+                ].map((stop, i) => (
+                  <View key={stop.key} style={styles.stopGroup} testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}>
+                    {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
                     <View
-                      key={stop.key}
-                      style={styles.stopGroup}
-                      testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}
+                      style={[styles.stop, stop.now ? styles.stopNow : undefined]}
+                      accessibilityState={{ selected: stop.now }}
+                      testID={testIdWithKey(`AgentJourney${stop.key}`)}
                     >
-                      {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
-                      <View
-                        style={[styles.stop, stop.now ? styles.stopNow : undefined]}
-                        accessibilityState={{ selected: stop.now }}
-                        testID={testIdWithKey(`AgentJourney${stop.key}`)}
-                      >
-                        <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
-                          {stop.done ? '✓ ' : ''}
-                          {stop.label}
-                        </ThemedText>
-                      </View>
+                      <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
+                        {stop.done ? '✓ ' : ''}
+                        {stop.label}
+                      </ThemedText>
                     </View>
-                  ))}
-                </View>
-              )
-            )}
-          </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
           <Pressable
             onPress={() => vtaAgent.showIntro()}
             accessibilityRole="link"
@@ -588,6 +586,36 @@ const VtaAgentHome: React.FC = () => {
             </ThemedText>
             <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
           </Pressable>
+        ) : null}
+        {/* One next step, only when there is one: an invitation waiting, else
+            a vetting to continue. A request to decide has the banner above. */}
+        {nextStep ? (
+          <View style={[styles.card, styles.tip]} testID={testIdWithKey('AgentNextStep')}>
+            <ThemedText variant="labelTitle" style={styles.muted}>
+              {t('VtaLink.NextStep')}
+            </ThemedText>
+            <ThemedText variant="bold" testID={testIdWithKey('AgentNextStepText')}>
+              {nextStep.kind === 'invitation'
+                ? t('VtaLink.InvitationWaiting', {
+                    community: communityHeadingOf(nextStep.communityDid, t),
+                    interpolation: { escapeValue: false },
+                  })
+                : t('VtaLink.NextVetting', {
+                    community: communityHeadingOf(nextStep.communityDid, t),
+                    interpolation: { escapeValue: false },
+                  })}
+            </ThemedText>
+            <Button
+              title={t(nextStep.kind === 'invitation' ? 'VtaLink.NextInvitationAction' : 'VtaLink.ContinueVetting')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                // The invitation and vetting screens work on the chosen community.
+                communityTarget.choose(nextStep.communityDid)
+                go(nextStep.kind === 'invitation' ? Screens.VtiInvited : Screens.VtiVetting)
+              }}
+              testID={testIdWithKey(nextStep.kind === 'invitation' ? 'AgentNextInvitation' : 'AgentContinueVetting')}
+            />
+          </View>
         ) : null}
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
         {/* Three places, always the same three (IN-20c). Devices stay above
@@ -720,6 +748,7 @@ const VtaAgentHome: React.FC = () => {
                     vetter={holdings.vetterFor.includes(communityDid)}
                     linkedAt={link.linkedAt}
                     onOpen={goToCommunity}
+                    onNextStep={onCardStep}
                     onPrimary={(action, did) => {
                       // The vetting and invitation screens work on the chosen community.
                       communityTarget.choose(did)

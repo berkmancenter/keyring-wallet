@@ -434,7 +434,7 @@ describe('Your agent — after linking', () => {
     })
 
     it("another agent never shows the last one's reading", async () => {
-      (await renderHome([persona, membership])).unmount()
+      ;(await renderHome([persona, membership])).unmount()
       controller.set({
         link: {
           kind: 'linked',
@@ -468,7 +468,7 @@ describe('Your agent — after linking', () => {
     })
 
     it('a refresh that fails keeps the reading and says it could not refresh', async () => {
-      (await renderHome([persona, membership])).unmount()
+      ;(await renderHome([persona, membership])).unmount()
       const failing = fakeAgent([persona, membership])
       failing.agent.genericRecords.findAllByQuery = async () => {
         throw new Error('storage unavailable')
@@ -539,9 +539,9 @@ describe('Your agent — after linking', () => {
     expect(tree.getByTestId(testIdWithKey('AgentShareIdentity'))).toBeTruthy()
   })
 
-  it('a member: the journey says "Joined" and names the community', async () => {
+  it('a member: a status line names the community, in place of the step bar', async () => {
     const tree = await renderHome([persona, membership])
-    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent('✓ VtaLink.JourneyJoined')
+    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent(/VtaLink\.StatusMemberOf/)
     expect(tree.queryByTestId(testIdWithKey('AgentJourneyJoin'))).toBeNull()
   })
 
@@ -649,7 +649,7 @@ describe('Your agent — after linking', () => {
    * member's only way to a community. Both now start here, so a linked phone
    * never needs the panel.
    */
-  it('an applicant can carry on with vetting from the line that says why', async () => {
+  it('an applicant can carry on with vetting from the next-step card', async () => {
     const navigate = useNavigation().navigate as jest.Mock
     navigate.mockClear()
     const tree = await renderHome([persona])
