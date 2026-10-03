@@ -57,8 +57,6 @@ messaging().setBackgroundMessageHandler(async (message) =>
   onPushWake('background', message, (m, d) => BCLogger.info(m, d))
 )
 messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
-// Tapping the wake notification opens the waiting approvals, after unlocking.
-openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), () => openAppLink(APPROVALS_LINK))
 
 const App = () => {
   const { t } = useTranslation()
@@ -85,6 +83,14 @@ const App = () => {
     // that our RN version can be displayed.
     SplashScreen.hide()
   }, [])
+
+  // Tapping the wake notification opens the waiting approvals, after unlocking.
+  // Registered once the app has mounted, not at module load: on Android, Firebase
+  // reads a tap that launched the app from the current activity's intent, and at
+  // module load there is no activity yet, so that tap was dropped and a cold
+  // start landed on My Agent instead of Requests (232, Android). iOS reports its
+  // taps through the app delegate and is unaffected.
+  useEffect(() => openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), () => openAppLink(APPROVALS_LINK)), [])
 
   /**
    * Leaving a screen that failed. The boundary calls this before it renders
