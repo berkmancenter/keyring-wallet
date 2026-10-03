@@ -137,7 +137,10 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // The community removed this persona, or received its join request: applied
     // once checked (vtiCommunityNotices), and nothing else to do with it.
     if (message.type === REMOVAL_NOTICE || message.type === SUBMIT_RECEIPT) {
-      return receiveCommunityNotice(agent, community, target.did, message).then((outcome) => {
+      return receiveCommunityNotice(agent, community, target.did, message).then(async (outcome) => {
+        // A removal ends what was gathered to join, too: joining again is a new
+        // identity, and a new application (IN-104).
+        if (outcome === 'removed') await vetting.forgetApplication(target.communityDid).catch(() => undefined)
         if (outcome === 'removed' || outcome === 'acknowledged')
           DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
             communityDid: target.communityDid,

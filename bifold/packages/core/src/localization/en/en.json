@@ -1556,7 +1556,7 @@
     "StandingReason": "It said: “{{reason}}”",
     "StandingWithdrawn": "You withdrew your request to {{community}}.",
     "StandingLeft": "You left {{community}}.",
-    "StandingAgain": "You can ask to join again. You'll get a new identity for it.",
+    "StandingAgain": "You can ask to join again.",
     "Open": "Open {{community}}",
     "CheckAgain": "Check again",
     "JoinAgain": "Join again",

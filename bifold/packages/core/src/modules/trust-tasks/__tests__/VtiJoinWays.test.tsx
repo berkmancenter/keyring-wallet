@@ -215,6 +215,48 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
+    // IN-104 path B: under the removed standing the row buttons were still
+    // there, and "Meet a vetter" went on under the old identity without
+    // "Join again". Under where the person stands, the ways are only shown.
+    /** The screen as a link opens it: straight on the community's ways. */
+    const openedByLink = async (state: unknown) => {
+      mockReadJoinState.mockImplementation(async () => state)
+      mockJoinAsks.mockReturnValue(vettingCommunity)
+      communityTarget.set({ communityDid: community, name: 'Keyring Lab Community' })
+      const tree = render(
+        <BasicAppContext>
+          <VtiJoin config={config} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+
+    it.each([
+      ['removed', { kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' }],
+      ['a member', { kind: 'member', membership: {} }],
+      ['a request open', { kind: 'pending', submission: { withInvitation: false } }],
+    ])(
+      'under %s: the ways are shown, with no "Meet a vetter" or "Ask to join" and nothing saying "use this now"',
+      async (_, state) => {
+        const tree = await openedByLink(state)
+        expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+        expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+        for (const key of ['JoinStart', 'JoinAsk', 'JoinWayStart_vetted-member', 'JoinWaySuggested']) {
+          expect(tree.queryByTestId(id(key))).toBeNull()
+        }
+      }
+    )
+
+    it('after "Join again" from the removed standing, the two buttons are back', async () => {
+      const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
+      expect(tree.getByTestId(id('JoinAsk'))).toBeTruthy()
+    })
+
     it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {
       const tree = await toAsks(vettingCommunity)
       await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
@@ -250,6 +292,30 @@ describe('Join, at manifest 0.3', () => {
       expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
       expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
     })
+  })
+
+  // IN-104: a removed member's "Join again" read the ways with what the earlier
+  // identity held, and was offered "Join, admitted straight away".
+  it('"Join again" after a removal reads the ways as a new identity holding nothing', async () => {
+    mockHolds.mockImplementation(async () => ({ statements: 1 }))
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'removed', membership: {}, at: '2026-10-03T01:20:00Z' }))
+    mockJoinAsks.mockReturnValue(defaults)
+    const tree = render(
+      <BasicAppContext>
+        <VtiJoin config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.StandingRemoved/)
+    // A removal says "You can ask to join again." itself: not said twice, and no new identity promised.
+    expect(tree.queryByTestId(id('JoinStandingAgain'))).toBeNull()
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), { statements: 1 })
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), {})
+    // The ways are shown again, with what a new identity can do.
+    expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
   })
 
   it('invitation only, no invitation: no Start; the way to "I was invited"', async () => {

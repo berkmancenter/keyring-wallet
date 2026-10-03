@@ -61,7 +61,12 @@ export const JoinWaysCard: React.FC<{
    * that way, rather than both under the whole list.
    */
   rowAction?: (row: JoinWayRow) => React.ReactNode
-}> = ({ card, community, rowAction }) => {
+  /**
+   * The ways shown for reading only, under where the person already stands (a
+   * member, a request open, a removal): nothing says "use this now".
+   */
+  readOnly?: boolean
+}> = ({ card, community, rowAction, readOnly = false }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
@@ -95,10 +100,10 @@ export const JoinWaysCard: React.FC<{
           {row.credentialNotYet ? (
             <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText>
           ) : null}
-          {row.suggested ? (
+          {row.suggested && !readOnly ? (
             <ThemedText testID={testIdWithKey('JoinWaySuggested')}>{t('Join.Ways.Suggested')}</ThemedText>
           ) : null}
-          {row.canStartVetting ? (
+          {row.canStartVetting && !readOnly ? (
             <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
           ) : null}
           {rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}

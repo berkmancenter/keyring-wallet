@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -83,6 +83,9 @@ export interface Asks {
 
 const INVITATION = /invit/i
 
+/** What a new identity holds towards a community: nothing yet. */
+const NOTHING_HELD: JoinHolds = {}
+
 export function asksFrom(manifest: VtiManifest): Asks {
   const criteria = manifest.criteria
   const invitationAdmits =
@@ -138,7 +141,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [asks, setAsks] = useState<Asks>()
   // From manifest 0.3 the community states its ways in and what follows each
   // (joinWays.ts); at 0.2 this reads as `legacy` and `asks` above is shown.
-  const [offer, setOffer] = useState<JoinAsks>()
+  const [manifest, setManifest] = useState<VtiManifest>()
   const [holds, setHolds] = useState<JoinHolds>({})
   // The community answers no join version this app speaks.
   const [unsupported, setUnsupported] = useState<string>()
@@ -176,7 +179,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!communityDid) return
     let live = true
     setAsks(undefined)
-    setOffer(undefined)
+    setManifest(undefined)
     setUnsupported(undefined)
     // No session needed: a community answers the join manifest over REST, which
     // is how an applicant reads what is asked of them before any channel
@@ -192,7 +195,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         if (!live) return
         setAsks(asksFrom(m))
         setHolds(held)
-        setOffer(joinAsks(m, held))
+        setManifest(m)
       })
       .catch((e) => {
         if (!live) return
@@ -215,7 +218,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   }, [communityDid])
 
   // What the card shows at 0.3: each way, the one this phone meets, the button.
-  const card = offer ? joinCard(offer, holds) : undefined
+  // After "Join again" the request goes out under a new identity, which holds
+  // nothing yet: what the earlier one gathered (statements, an invitation to
+  // it) does not meet a way for it. Read as held, a removed member was offered
+  // "Join", admitted straight away, for a request that carried nothing (IN-104).
+  const heldNow = again ? NOTHING_HELD : holds
+  const offer = useMemo<JoinAsks | undefined>(
+    () => (manifest ? joinAsks(manifest, heldNow) : undefined),
+    [manifest, heldNow]
+  )
+  const card = offer ? joinCard(offer, heldNow) : undefined
   const ways = card?.mode === 'ways' ? card : undefined
   // A request this screen sends itself: a way the phone meets that needs no
   // invitation (those go through "I was invited"). Chosen by the button the
@@ -391,6 +403,15 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   let body: React.ReactNode
   let actions: React.ReactNode
   const current: Step = !communityDid ? 'which' : step
+  const mayJoinAgain =
+    standing?.kind === 'rejected' ||
+    standing?.kind === 'withdrawn' ||
+    standing?.kind === 'left' ||
+    standing?.kind === 'removed'
+  // Where the person stands overrides the way in, except once "Join again" is chosen.
+  const standingShown = Boolean(
+    communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)
+  )
 
   switch (current) {
     case 'which':
@@ -583,8 +604,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             <JoinWaysCard
               card={ways}
               community={name}
+              readOnly={standingShown}
+              // Under where the person stands (a member, a request open, a
+              // removal) the ways are shown, not offered: their buttons sat in
+              // the rows, out of reach of the standing card that replaces the
+              // buttons below, and a removed member pressed "Meet a vetter"
+              // under the old identity without "Join again" (IN-104, path B).
               rowAction={
-                ways.alsoAsk
+                ways.alsoAsk && !standingShown
                   ? (row) => (row.id === vettingRow ? mainButton : row.suggested ? askButton : null)
                   : undefined
               }
@@ -719,15 +746,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       break
   }
 
-  // Where the person stands overrides the way in, except once "Join again" is chosen.
   const tp = (key: string, values: Record<string, unknown> = {}) =>
     t(key, { community: name, ...values, interpolation: { escapeValue: false } }) as string
-  const mayJoinAgain =
-    standing?.kind === 'rejected' ||
-    standing?.kind === 'withdrawn' ||
-    standing?.kind === 'left' ||
-    standing?.kind === 'removed'
-  if (communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)) {
+  if (standingShown && communityDid && standing) {
     const withInvitation =
       (standing.kind === 'sent' || standing.kind === 'pending') && standing.submission.withInvitation
     const standingCard = (
@@ -770,7 +791,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {tp('Join.StandingReason', { reason: standing.reason })}
           </ThemedText>
         ) : null}
-        {mayJoinAgain ? <ThemedText style={styles.muted}>{t('Join.StandingAgain')}</ThemedText> : null}
+        {/* No promise of a new identity: asking again makes one, and the
+            vetting path was seen to carry on with the earlier one (IN-104).
+            A removal already says "You can ask to join again." itself. */}
+        {mayJoinAgain && standing.kind !== 'removed' ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingAgain')}>
+            {t('Join.StandingAgain')}
+          </ThemedText>
+        ) : null}
       </View>
     )
     body = (
