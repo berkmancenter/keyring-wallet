@@ -4,8 +4,9 @@
  * session (one live connection per DID at a mediator), the background, and
  * retries.
  */
-import { AppState } from 'react-native'
+import { AppState, DeviceEventEmitter } from 'react-native'
 
+import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 type Guard = (did: string) => Promise<void>
@@ -211,6 +212,32 @@ describe('the listeners', () => {
     sharedMoves({ did: 'did:webvh:somebody-else', connected: true })
     await flush()
     expect(failing).toHaveBeenCalledTimes(2)
+  })
+
+  it("a listener that failed for want of its key is tried at once when that identity's keys are held", async () => {
+    const clock = 1_000_000
+    let keyHeld = false
+    const opening = jest.fn(async (p: VtiPersona): Promise<ListenerSession> => {
+      if (!keyHeld) throw new Error(`Key with key id 'vta-copy:${p.did}' not found`)
+      return open(p)
+    })
+    const a = persona('a')
+    const stop = startIdentityListeners({ config: { logger: {} } } as never, {
+      open: opening,
+      personas: async () => [a],
+      intervalMs: 3_600_000,
+      now: () => clock,
+    })
+    stops.push(stop)
+    await flush()
+    expect(opening).toHaveBeenCalledTimes(1)
+    expect(live(a.did)).toBe(false)
+    // The keys come back well inside the wait.
+    keyHeld = true
+    DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: a.did })
+    await flush()
+    expect(opening).toHaveBeenCalledTimes(2)
+    expect(live(a.did)).toBe(true)
   })
 
   it('stopping closes them all and removes the sign-in guard', async () => {

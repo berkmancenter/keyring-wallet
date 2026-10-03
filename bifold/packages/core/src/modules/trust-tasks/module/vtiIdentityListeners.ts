@@ -200,8 +200,14 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     void reconcile()
   })
   const stopWatchingLink = vtaAgent.subscribe(() => void reconcile())
-  // A new identity, or its keys back after an unlock.
-  const keysHeld = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, () => void reconcile())
+  // A new identity, or its keys back after an unlock. A listener that failed
+  // because its key was not held yet is tried at once, not after its wait: on a
+  // simulator it otherwise came up about 50 s after the keys did (233 build 2).
+  const keysHeld = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, (e?: { did?: string }) => {
+    if (e?.did) failures.delete(e.did)
+    else failures.clear()
+    void reconcile()
+  })
   // A socket frozen in the background looks like a duplicate when it resumes:
   // close them all before the app suspends, and open them again when it is back.
   const appState = AppState.addEventListener('change', (state) => {
