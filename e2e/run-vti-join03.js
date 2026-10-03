@@ -118,6 +118,66 @@ try {
     if (MODE === "view") printSuccess(`JOIN 0.3 — the card: suggested "${card.JoinWaySuggested}", button "${card.JoinStart}"`);
   }
 
+  if (MODE === "joinagain") {
+    // A REMOVED member opens the community: press "Join again" and record
+    // what follows, screen by screen, and what the community decided.
+    const standing = await text(d, "JoinStandingText");
+    log(`standing before: "${standing}"`);
+    const before = new Set((admin("join-list").items ?? []).map((r) => r.id));
+    if (await existsTestId(d, "JoinAgain", 3000)) {
+      await (await waitForTestId(d, "JoinAgain", 10000)).click();
+      log("pressed Join again");
+      await sleep(4000);
+    } else if (!process.env.PRESS_JOIN) throw new Error("no Join again button on the removed member's card");
+    if (process.env.PRESS_ASK === "1") {
+      // After Join again: the plain request, as the person would send it.
+      await scrollToTestId(d, "JoinAsk", 4, ABOVE_BUTTONS).catch(() => undefined);
+      const start = await text(d, "JoinStart");
+      const ask = await text(d, "JoinAsk");
+      await screenshot(d, `join03-${TAG}-before-ask`);
+      await dumpSource(d, `join03-${TAG}-before-ask`);
+      log(`buttons after Join again: JoinStart "${start}", JoinAsk "${ask}"`);
+      if (ask === null) throw new Error("no Ask to join (JoinAsk) after Join again");
+      await (await waitForTestId(d, "JoinAsk", 10000)).click();
+      log("pressed Ask to join");
+    }
+    if (process.env.PRESS_JOIN === "1") {
+      // The button the card then offers: press it, as the person would.
+      await scrollToTestId(d, "JoinStart", 4, ABOVE_BUTTONS).catch(() => undefined);
+      const label = await text(d, "JoinStart");
+      if (label === null) throw new Error("no JoinStart button to press after Join again");
+      await screenshot(d, `join03-${TAG}-before-press`);
+      log(`pressing JoinStart "${label}"`);
+      await (await waitForTestId(d, "JoinStart", 10000)).click();
+    }
+    const seen = [];
+    const ids = ["JoinMakeIdentity", "JoinAsContinue", "JoinStanding", "JoinWays", "JoinStart", "JoinAsk", "JoinError", "VettingTitle", "VettingStep_name", "VettingNameInput"];
+    for (const until = Date.now() + 90000; Date.now() < until; await sleep(2000)) {
+      const now = [];
+      for (const id of ids) if (await existsTestId(d, id, 300)) now.push(id);
+      const line = `${now.join(",")} | standing "${(await text(d, "JoinStandingText")) ?? ""}"`;
+      if (seen.at(-1) !== line) {
+        seen.push(line);
+        log(`screen: ${line}`);
+        await screenshot(d, `join03-${TAG}-after-join-again-${seen.length}`);
+        await dumpSource(d, `join03-${TAG}-after-join-again-${seen.length}`);
+      }
+      if (now.includes("JoinAsContinue") && !process.env.NO_CONTINUE) {
+        const tapped = await tapTestIdByCoordinates(d, "JoinAsContinue", 3000).then(() => true, () => false);
+        if (tapped) {
+          await handleBiometricConfirmIfPresent(d);
+          log("tapped Continue on the identity step");
+        } else log("Continue was gone before the tap (no tap sent)");
+      }
+    }
+    const fresh = (admin("join-list").items ?? []).filter((r) => !before.has(r.id));
+    for (const r of fresh) log(`community: new request ${r.id} status=${r.status} applicant=…${String(r.applicantDid).slice(-20)} decision=${JSON.stringify(r.decision ?? null).slice(0, 300)}`);
+    if (!fresh.length) log("community: no new join request after Join again");
+    const members = (admin("members").items ?? []).map((m) => String(m.did).split(":").pop());
+    log(`community members now: ${members.join(", ")}`);
+    printSuccess("JOIN 0.3 — Join again recorded (see the screen lines)");
+  }
+
   if (MODE === "plain") {
     if (!/review/i.test(card.ways.review?.follows ?? "")) throw new Error(`the review way does not say an administrator decides: "${card.ways.review?.follows}"`);
     const before = new Set((admin("join-list").items ?? []).map((r) => r.id));
@@ -147,6 +207,40 @@ try {
     if (request.status !== "pending") throw new Error(`the request is "${request.status}" at the community, not pending`);
     if ((admin("members").items ?? []).some((m) => m.did === request.applicantDid)) throw new Error("the applicant is already a member before any approval");
 
+    if (process.env.MEMBER_TOAST === "1") {
+      // The person has left the Join screen and is on Contacts, app in the
+      // foreground; the membership card arriving shows a toast once
+      // ("You're now a member of <name>.", testID ToastTitle, ~8 s).
+      await tapTestIdByCoordinates(d, "Contacts").catch(() => undefined);
+      await sleep(1500);
+      await screenshot(d, `join03-${TAG}-on-contacts`);
+      const approvedAt = Date.now();
+      admin("join-decide", request.id, "approved");
+      log("admin approved; waiting for the toast on Contacts");
+      let toast = null;
+      for (const until = Date.now() + 120000; Date.now() < until && toast === null; ) toast = await text(d, "ToastTitle");
+      const at = ((Date.now() - approvedAt) / 1000).toFixed(1);
+      if (toast !== null) {
+        await screenshot(d, `join03-${TAG}-toast`);
+        await dumpSource(d, `join03-${TAG}-toast`);
+      }
+      log(`toast ${toast === null ? "NOT seen within 120 s" : `after ${at} s: "${toast}"`}`);
+      const want = `You're now a member of ${NAME}.`;
+      if (toast === null) throw new Error("no member toast on Contacts within 120 s of the approval");
+      if (toast !== want && toast.replace(/[’]/g, "'") !== want) throw new Error(`toast text "${toast}", expected "${want}"`);
+      // Once: it must not come back.
+      await sleep(10000);
+      const again = [];
+      for (const until = Date.now() + 30000; Date.now() < until; await sleep(1000)) if ((await text(d, "ToastTitle")) !== null) again.push(new Date().toISOString().slice(11, 19));
+      await screenshot(d, `join03-${TAG}-after-toast`);
+      log(`toast seen again in the 30 s after it went: ${again.length ? again.join(", ") : "no"}`);
+      if (again.length) throw new Error("the member toast came back");
+      const member = (admin("members").items ?? []).find((m) => m.did === request.applicantDid);
+      if (!member) throw new Error("the community does not list the applicant as a member after the approval");
+      log(`community: member ${String(member.did).slice(-24)} role=${member.role}`);
+      printSuccess(`JOIN 0.3 — member toast on Contacts ${at} s after the approval, once, with the community's name`);
+      throw Object.assign(new Error("done"), { done: true });
+    }
     // The administrator approves.
     const decided = admin("join-decide", request.id, "approved");
     log(`admin approved: ${JSON.stringify(decided).slice(0, 160)}`);
@@ -167,12 +261,13 @@ try {
     printSuccess("JOIN 0.3 — plain request: referred, approved by an administrator, member on the screen and at the community");
   }
 } catch (err) {
-  printFailure("vti-join03", err);
-  if (d) {
+  if (err?.done) process.exitCode = 0;
+  else printFailure("vti-join03", err);
+  if (d && !err?.done) {
     await screenshot(d, `join03-${TAG}-failure`).catch(() => undefined);
     await dumpSource(d, `join03-${TAG}-failure`).catch(() => undefined);
   }
-  process.exitCode = 1;
+  if (!err?.done) process.exitCode = 1;
 } finally {
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();

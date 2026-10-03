@@ -369,7 +369,11 @@ try {
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");
     await checkVettingStep(vetter, "desk, ticket issued");
-    await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
+    // APPLICANT_NO_RESET=1: the person comes as they are (e.g. removed by the
+    // community, still holding its card) — no Leave first, so the Join screen
+    // shows what such a person sees.
+    if (process.env.APPLICANT_NO_RESET === "1") console.log("[e2e] applicant reset skipped (APPLICANT_NO_RESET): the wallet comes as it is");
+    else await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
     await roles.applicant.start(
       applicant,
       {

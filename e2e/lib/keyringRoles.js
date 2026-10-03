@@ -574,11 +574,21 @@ export const applicant = {
           const again = await scrollToTestId(d, "JoinAgain", 2).catch(() => undefined);
           if (again) {
             await again.click();
+            console.log(`[e2e] ${d.e2ePlatform}: pressed Join again`);
             await sleep(1500);
+            if (process.env.JOIN_SCREEN_RECORD) {
+              await screenshot(d, `join-after-join-again-${process.env.JOIN_SCREEN_RECORD}`);
+              await dumpSource(d, `join-after-join-again-${process.env.JOIN_SCREEN_RECORD}`);
+            }
           }
         }
         await (await waitForTestId(d, "JoinStart", 30000)).click();
         await waitForTestId(d, "JoinMakeIdentity", 30000);
+        if (process.env.JOIN_SCREEN_RECORD) {
+          // The identity step as shown: which identity it offers.
+          await screenshot(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
+          await dumpSource(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
+        }
         await tapTestIdByCoordinates(d, "JoinAsContinue");
         await handleBiometricConfirmIfPresent(d);
         // "Your agent didn't answer. Tap Continue to try again": do what the
