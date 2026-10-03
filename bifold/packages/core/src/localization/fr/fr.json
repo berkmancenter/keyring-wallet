@@ -1479,6 +1479,7 @@
       "CannotUse": "Keyring ne sait pas encore utiliser cette façon.",
       "ButtonJoin": "Rejoindre {{community}}",
       "ButtonAsk": "Demander à rejoindre",
+      "NoVetting": "Aucune de ces façons ne demande à un vérificateur de confirmer qui vous êtes.",
       "ButtonVetting": "Rencontrer un vérificateur",
       "SentForReview": "Une personne qui administre {{community}} va examiner votre demande. La réponse s'affichera ici.",
       "TypeMembership": "d'adhésion"

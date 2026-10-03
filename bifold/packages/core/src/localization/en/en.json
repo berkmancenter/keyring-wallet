@@ -1541,6 +1541,7 @@
       "CannotUse": "Keyring can't use this way yet.",
       "ButtonJoin": "Join {{community}}",
       "ButtonAsk": "Ask to join",
+      "NoVetting": "None of these ways asks a vetter to check who you are.",
       "ButtonVetting": "Meet a vetter",
       "SentForReview": "An administrator at {{community}} will review your request. The answer shows here.",
       "TypeMembership": "membership"

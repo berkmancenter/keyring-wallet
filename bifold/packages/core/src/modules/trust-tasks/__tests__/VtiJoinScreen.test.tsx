@@ -293,6 +293,9 @@ describe('I want to join a community', () => {
       const tree = await standAt({ kind: 'member', membership: {} })
       expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
       expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      // IN-102: opened on a community a link named, a member had only "Open"
+      // and no way to another community.
+      expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenCommunity'))))
       expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
     })

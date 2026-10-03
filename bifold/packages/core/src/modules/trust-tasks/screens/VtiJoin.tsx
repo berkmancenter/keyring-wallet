@@ -402,6 +402,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
 
   let body: React.ReactNode
   let actions: React.ReactNode
+  // Whether "A different community" is already in the body (the ways card has it).
+  let differentInBody = false
   const current: Step = !communityDid ? 'which' : step
   const mayJoinAgain =
     standing?.kind === 'rejected' ||
@@ -594,7 +596,24 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         // what follows that way. Both under the list made a fixed area tall
         // enough to cover the last way's lines on a phone — the line that says
         // an administrator decides among them (the Farm run of 2026-10-02).
-        const vettingRow = ways.alsoAsk ? ways.rows.find((row) => row.canStartVetting)?.id : undefined
+        const vettingRow = ways.rows.find((row) => row.canStartVetting)?.id
+        // One thing to do sits under its way too, so no fixed button covers the
+        // last way's lines on a small phone (IN-104): "Start" under the vetting
+        // way, "Join" / "Ask to join" under the way the phone meets, "I was
+        // invited" under the invitation way. Below the list only when no way
+        // is its own (it then stays fixed, as before).
+        const mainRow =
+          ways.button === 'start'
+            ? vettingRow
+            : ways.button === 'join' || ways.button === 'ask'
+              ? ways.rows.find((row) => row.suggested)?.id
+              : ways.button === 'invited'
+                ? ways.rows.find((row) => row.needs.some((need) => need.kind === 'invitation'))?.id
+                : undefined
+        const buttonsInRows = !standingShown && (ways.alsoAsk || mainRow !== undefined)
+        // A community whose ways never ask a vetter: said, so nobody looks for
+        // vetting that is not there (IN-104).
+        const noVetting = !ways.rows.some((row) => row.needs.some((need) => need.kind === 'vetting'))
         body = (
           <>
             {waysTitle}
@@ -611,18 +630,32 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               // buttons below, and a removed member pressed "Meet a vetter"
               // under the old identity without "Join again" (IN-104, path B).
               rowAction={
-                ways.alsoAsk && !standingShown
-                  ? (row) => (row.id === vettingRow ? mainButton : row.suggested ? askButton : null)
+                buttonsInRows
+                  ? (row) =>
+                      ways.alsoAsk
+                        ? row.id === vettingRow
+                          ? mainButton
+                          : row.suggested
+                            ? askButton
+                            : null
+                        : row.id === mainRow
+                          ? mainButton
+                          : null
                   : undefined
               }
             />
+            {noVetting ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey('JoinNoVetting')}>
+                {t('Join.Ways.NoVetting', named)}
+              </ThemedText>
+            ) : null}
             {ways.button === 'start' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
             {/* With the list, not under the buttons, so the fixed area stays short. */}
             {different}
           </>
         )
-        actions = ways.alsoAsk ? (
+        actions = buttonsInRows ? (
           errorLine
         ) : (
           <>
@@ -630,6 +663,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {mainButton}
           </>
         )
+        differentInBody = true
         break
       }
       body = (
@@ -807,8 +841,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         {body}
       </>
     )
+    // "A different community" is always in reach, from the community a person
+    // is already in too: a member's card used to offer only "Open" (IN-102).
     const different =
-      current === 'which' ? (
+      current === 'which' || !differentInBody ? (
         <Button
           title={t('Join.Different')}
           buttonType={ButtonType.Secondary}

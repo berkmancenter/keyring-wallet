@@ -175,6 +175,17 @@ class CommunityTarget {
     keep(link)
   }
 
+  /**
+   * Stop showing the community a link named. "Join community" from Your agent
+   * starts from the beginning, not on the last community a link opened, which
+   * a member then saw with only "Open" (IN-102).
+   */
+  clearViewing(): void {
+    if (!this.viewing) return
+    this.viewing = undefined
+    this.notify()
+  }
+
   clear(): void {
     if (!this.viewing && !this.chosen && this.published.size === 0) return
     this.viewing = undefined

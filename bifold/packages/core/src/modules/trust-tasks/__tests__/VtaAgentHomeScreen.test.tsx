@@ -14,6 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
@@ -434,7 +435,7 @@ describe('Your agent — after linking', () => {
     })
 
     it("another agent never shows the last one's reading", async () => {
-      (await renderHome([persona, membership])).unmount()
+      ;(await renderHome([persona, membership])).unmount()
       controller.set({
         link: {
           kind: 'linked',
@@ -468,7 +469,7 @@ describe('Your agent — after linking', () => {
     })
 
     it('a refresh that fails keeps the reading and says it could not refresh', async () => {
-      (await renderHome([persona, membership])).unmount()
+      ;(await renderHome([persona, membership])).unmount()
       const failing = fakeAgent([persona, membership])
       failing.agent.genericRecords.findAllByQuery = async () => {
         throw new Error('storage unavailable')
@@ -501,6 +502,16 @@ describe('Your agent — after linking', () => {
     expect(tree.getByTestId(testIdWithKey('AgentJoinCommunity'))).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('AgentVetterCard'))).toBeNull()
+  })
+
+  // IN-102: "Join community" opened on the last community a link named, where a
+  // member saw only "Open". It starts from the beginning now.
+  it('"Join community" starts from the beginning, not on the last community a link opened', async () => {
+    communityTarget.set({ communityDid: 'did:webvh:QmLinked:vtc.linked.example', name: 'Linked' })
+    const tree = await renderHome([])
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentJoinCommunity'))))
+    expect(communityTarget.getViewing()).toBeUndefined()
+    expect(useNavigation().navigate).toHaveBeenCalledWith(Screens.VtiJoin)
   })
 
   it('a grant that stands shows "You can now vet people" with the desk', async () => {
