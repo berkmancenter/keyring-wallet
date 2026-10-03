@@ -401,12 +401,16 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     }
   })
 
-  it('says so when it has no persona for the chosen community', async () => {
+  // IN-102: the session signed in as another of this phone's identities (a
+  // community other than the chosen one) used to drop what came for it, as
+  // "no persona". It is kept for that identity now.
+  it('keeps what comes for another of this phone’s identities while the session is signed in as it', async () => {
     const warn = jest.fn()
     const logged = { config: { logger: { warn, info: jest.fn(), debug: jest.fn() } } } as never
     startPersonaInbox(logged, { communityDid: 'did:webvh:other:host' })
     await flush()
-    mockAgentState.isConnected = true // a session this phone holds, for an identity of another community
+    mockReceiveNotice.mockClear()
+    mockAgentState.isConnected = true // the session is this phone's identity for another community
     mockHandlers.forEach((h) =>
       h({
         type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
@@ -415,7 +419,13 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
       })
     )
     await flush()
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*no persona/))
+    expect(mockReceiveNotice).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      mockPersona.did,
+      expect.anything()
+    )
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice/))
   })
 })
 

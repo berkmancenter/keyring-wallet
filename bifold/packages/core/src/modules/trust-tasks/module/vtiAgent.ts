@@ -383,6 +383,8 @@ class VtiAgentController {
   private state: VtiAgentState = { status: 'disconnected' }
   private listeners = new Set<Listener>()
   private session?: VtiMediatorSession
+  /** Run before the session signs in as a DID (see `beforeSignIn`). */
+  private readonly signInGuards = new Set<(did: string) => Promise<void>>()
   private mediator?: VtiMediatorEndpoints
   private agent?: Agent
   /**
@@ -838,6 +840,9 @@ class VtiAgentController {
             }
           : {}),
       })
+      // Whatever else holds a connection for this DID lets go first: a mediator
+      // keeps one live connection per DID (vtiIdentityListeners).
+      for (const guard of [...this.signInGuards]) await guard(did).catch(() => undefined)
       step(`signing in as ${didPrefix(did)} (challenge, then the socket)`)
       this.set({ signingInAs: did })
       await session.start()
@@ -939,6 +944,18 @@ class VtiAgentController {
 
   get isConnected(): boolean {
     return this.session?.isOpen === true
+  }
+
+  /**
+   * Run `guard` before every sign-in, with the DID about to sign in, and wait
+   * for it: a listener holding its own connection for that DID closes it first.
+   * Returns the function that removes the guard.
+   */
+  beforeSignIn(guard: (did: string) => Promise<void>): () => void {
+    this.signInGuards.add(guard)
+    return () => {
+      this.signInGuards.delete(guard)
+    }
   }
 
   /** The DID this session presents. */
