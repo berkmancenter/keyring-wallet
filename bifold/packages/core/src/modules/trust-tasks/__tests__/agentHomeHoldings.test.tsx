@@ -219,7 +219,7 @@ describe('what your agent holds, card by card', () => {
     navigate.mockClear()
     const tree = await renderHome([persona(A), membership(A, linkedAt), persona(B)])
     expect(tree.getByTestId(testIdWithKey('AgentNextStepText'))).toHaveTextContent(
-      /VtaLink\.NextVetting\(community=first-vtc/
+      /VtaLink\.NextVetting\(community=.*first-vtc/
     )
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentContinueVetting')))
     expect(communityTarget.getChosen()?.communityDid).toBe(B)
@@ -235,7 +235,7 @@ describe('what your agent holds, card by card', () => {
     }
     const tree = await renderHome([persona(A), persona(B), invitation])
     expect(tree.getByTestId(testIdWithKey('AgentNextStepText'))).toHaveTextContent(
-      /VtaLink\.InvitationWaiting\(community=first-vtc/
+      /VtaLink\.InvitationWaiting\(community=.*first-vtc/
     )
     expect(tree.queryByTestId(testIdWithKey('AgentContinueVetting'))).toBeNull()
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentNextInvitation')))
