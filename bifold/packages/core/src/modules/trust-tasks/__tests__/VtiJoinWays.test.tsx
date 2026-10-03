@@ -215,6 +215,48 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
+    // IN-104 path B: under the removed standing the row buttons were still
+    // there, and "Meet a vetter" went on under the old identity without
+    // "Join again". Under where the person stands, the ways are only shown.
+    /** The screen as a link opens it: straight on the community's ways. */
+    const openedByLink = async (state: unknown) => {
+      mockReadJoinState.mockImplementation(async () => state)
+      mockJoinAsks.mockReturnValue(vettingCommunity)
+      communityTarget.set({ communityDid: community, name: 'Keyring Lab Community' })
+      const tree = render(
+        <BasicAppContext>
+          <VtiJoin config={config} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+
+    it.each([
+      ['removed', { kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' }],
+      ['a member', { kind: 'member', membership: {} }],
+      ['a request open', { kind: 'pending', submission: { withInvitation: false } }],
+    ])(
+      'under %s: the ways are shown, with no "Meet a vetter" or "Ask to join" and nothing saying "use this now"',
+      async (_, state) => {
+        const tree = await openedByLink(state)
+        expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+        expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+        for (const key of ['JoinStart', 'JoinAsk', 'JoinWayStart_vetted-member', 'JoinWaySuggested']) {
+          expect(tree.queryByTestId(id(key))).toBeNull()
+        }
+      }
+    )
+
+    it('after "Join again" from the removed standing, the two buttons are back', async () => {
+      const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
+      expect(tree.getByTestId(id('JoinAsk'))).toBeTruthy()
+    })
+
     it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {
       const tree = await toAsks(vettingCommunity)
       await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))

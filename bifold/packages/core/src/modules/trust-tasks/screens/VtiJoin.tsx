@@ -403,6 +403,15 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   let body: React.ReactNode
   let actions: React.ReactNode
   const current: Step = !communityDid ? 'which' : step
+  const mayJoinAgain =
+    standing?.kind === 'rejected' ||
+    standing?.kind === 'withdrawn' ||
+    standing?.kind === 'left' ||
+    standing?.kind === 'removed'
+  // Where the person stands overrides the way in, except once "Join again" is chosen.
+  const standingShown = Boolean(
+    communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)
+  )
 
   switch (current) {
     case 'which':
@@ -595,8 +604,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             <JoinWaysCard
               card={ways}
               community={name}
+              readOnly={standingShown}
+              // Under where the person stands (a member, a request open, a
+              // removal) the ways are shown, not offered: their buttons sat in
+              // the rows, out of reach of the standing card that replaces the
+              // buttons below, and a removed member pressed "Meet a vetter"
+              // under the old identity without "Join again" (IN-104, path B).
               rowAction={
-                ways.alsoAsk
+                ways.alsoAsk && !standingShown
                   ? (row) => (row.id === vettingRow ? mainButton : row.suggested ? askButton : null)
                   : undefined
               }
@@ -731,15 +746,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       break
   }
 
-  // Where the person stands overrides the way in, except once "Join again" is chosen.
   const tp = (key: string, values: Record<string, unknown> = {}) =>
     t(key, { community: name, ...values, interpolation: { escapeValue: false } }) as string
-  const mayJoinAgain =
-    standing?.kind === 'rejected' ||
-    standing?.kind === 'withdrawn' ||
-    standing?.kind === 'left' ||
-    standing?.kind === 'removed'
-  if (communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)) {
+  if (standingShown && communityDid && standing) {
     const withInvitation =
       (standing.kind === 'sent' || standing.kind === 'pending') && standing.submission.withInvitation
     const standingCard = (
