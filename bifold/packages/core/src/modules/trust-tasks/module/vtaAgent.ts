@@ -143,6 +143,12 @@ export interface VtaAgentState {
   agentNames?: Readonly<Record<string, AgentLabel>>
   /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
   ownsAgent?: boolean
+  /** Every agent this phone is linked to, oldest first; `link` is the current one's. */
+  agents?: ReadonlyArray<{ vtaDid: string; label: string; owner?: boolean }>
+  /** "Add another agent" is under way: the current agent was left until it ends. */
+  addingAgent?: boolean
+  /** An agent was just added: the person chooses to use it or keep the one before. */
+  addedAgent?: { from: string; added: string }
   /**
    * Whether the saved link has been read at start-up (`restore`). Until then
    * `link` reads "not linked" on every phone, linked or not, so a screen that
@@ -381,6 +387,8 @@ export class VtaAgentController {
   private namesAsked = new Set<string>()
   /** The agent the current link attempt is creating from this phone ("Create my agent"), if it is one. */
   private ownerFor?: string
+  /** The agent that was current when "Add another agent" began: the way back. */
+  private addingFrom?: string
 
   /** Replace I/O for tests; production uses the defaults. */
   configure(deps: VtaAgentDeps) {
@@ -572,7 +580,93 @@ export class VtaAgentController {
       .catch(() => undefined)
     this.dispatch({ type: 'restored', link, now: this.now() })
     this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true, linkRestored: true })
+    await this.refreshAgents(agent)
     if (link) void this.ensureOnline(agent)
+  }
+
+  /** Read the list of linked agents into the state (the switcher's rows). */
+  private async refreshAgents(agent: Agent): Promise<void> {
+    const store = this.linkStore(agent)
+    let links = await Promise.resolve(store.list?.()).catch(() => undefined)
+    if (!links) {
+      const one = await store.get().catch(() => undefined)
+      links = one ? [one] : []
+    }
+    this.set({ agents: links.map(({ vtaDid, label, owner }) => ({ vtaDid, label, ...(owner ? { owner } : {}) })) })
+  }
+
+  /**
+   * Stop acting with the current agent: its session closes and what was live
+   * for it goes, but nothing stored is forgotten (switching, adding another).
+   */
+  private async leaveCurrent(): Promise<void> {
+    this.attemptToken++
+    this.offer = undefined
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    await this.reset()
+    this.set({
+      status: 'disconnected',
+      vtaDid: undefined,
+      managerDid: undefined,
+      approvals: [],
+      awaitingConsentFor: undefined,
+      error: undefined,
+      reconnectGaveUp: false,
+      ownsAgent: false,
+    })
+    this.dispatch({ type: 'unlinked' })
+  }
+
+  /** Bring the store's current agent up as this phone's agent: its link, then a session. */
+  private async takeUpCurrent(agent: Agent, options: { not?: string } = {}): Promise<void> {
+    const found = await this.linkStore(agent)
+      .get()
+      .catch(() => undefined)
+    // Never the agent just unlinked, even when its record failed to go.
+    const link = found && found.vtaDid !== options.not ? found : undefined
+    if (link) this.dispatch({ type: 'restored', link, now: this.now() })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true })
+    await this.refreshAgents(agent)
+    if (link) void this.ensureOnline(agent)
+  }
+
+  /**
+   * Act with another linked agent (several agents, step 2): the current one's
+   * session closes, the other becomes current and connects. Only the current
+   * agent is connected; the others' messages wait at their mediators.
+   */
+  async useAgent(agent: Agent, vtaDid: string): Promise<void> {
+    const link = this.state.link
+    if (link.kind === 'linked' && link.vtaDid === vtaDid) return
+    await this.linkStore(agent).use?.(vtaDid)
+    await this.leaveCurrent()
+    this.set({ addedAgent: undefined })
+    await this.takeUpCurrent(agent)
+  }
+
+  /**
+   * "Add another agent": the current agent is left (not forgotten) so the link
+   * flow can run for a new one. A link that succeeds makes the new agent current
+   * and asks the person which to keep; one that is cancelled goes back.
+   */
+  async startAddingAgent(): Promise<void> {
+    const link = this.state.link
+    if (link.kind !== 'linked' && link.kind !== 'revoked') return
+    this.addingFrom = link.vtaDid
+    await this.leaveCurrent()
+    this.set({ addingAgent: true, addedAgent: undefined })
+  }
+
+  /** Back to the agent that was current before "Add another agent". */
+  async stopAddingAgent(agent: Agent): Promise<void> {
+    const from = this.addingFrom
+    this.addingFrom = undefined
+    this.set({ addingAgent: false })
+    if (from) await this.useAgent(agent, from)
   }
 
   /**
@@ -616,6 +710,8 @@ export class VtaAgentController {
     this.hostOffer = undefined
     this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
+    // Adding another agent, given up: back to the one before.
+    if (this.addingFrom && this.agent) void this.stopAddingAgent(this.agent)
   }
 
   /** After a failure or a revocation, back to a phone with no agent. */
@@ -663,6 +759,8 @@ export class VtaAgentController {
     })
     this.dispatch({ type: 'unlinked' })
     this.note('unlinked')
+    // Another linked agent is now current (the store's oldest): it comes up.
+    await this.takeUpCurrent(agent, { not: vtaDid })
   }
 
   /**
@@ -1000,6 +1098,13 @@ export class VtaAgentController {
     // every linked agent, and a link no longer replaces another one's record.
     await links.use?.(vtaDid)
     this.set({ ownsAgent: owner })
+    if (this.addingFrom && this.addingFrom !== vtaDid) {
+      this.set({ addingAgent: false, addedAgent: { from: this.addingFrom, added: vtaDid } })
+    } else if (this.state.addingAgent) {
+      this.set({ addingAgent: false })
+    }
+    this.addingFrom = undefined
+    await this.refreshAgents(agent)
     if (rotate) {
       this.dispatch({ type: 'rotating' })
       try {

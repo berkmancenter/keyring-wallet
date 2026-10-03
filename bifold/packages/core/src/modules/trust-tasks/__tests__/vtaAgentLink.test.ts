@@ -9,6 +9,7 @@ import {
   UNLINK_TELL_QUEUE_MS,
   VtaAgentController,
 } from '../module/vtaAgent'
+import { currentAgentDid } from '../module/currentAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 
@@ -1052,5 +1053,78 @@ describe('unlinking this phone from its agent', () => {
     await vta.unlink({} as never)
     await vta.startManualLink({} as never, 'did:webvh:Qm:another', 'another host')
     expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: 'did:webvh:Qm:another' })
+  })
+})
+
+// Several agents, step 2: the phone keeps every linked agent and acts with one.
+describe('several agents', () => {
+  const HOME = { vtaDid: 'did:webvh:home-vta', label: 'Home', linkedAt: '2026-10-01T00:00:00Z' }
+  const WORK = { vtaDid: 'did:webvh:work-vta', label: 'Work', linkedAt: '2026-10-02T00:00:00Z' }
+
+  /** An in-memory store of several links, one current, as GenericRecordsVtaLinkStore keeps them. */
+  function twoAgents() {
+    let links = [HOME, WORK] as Array<typeof HOME & Record<string, unknown>>
+    let current: string | undefined = HOME.vtaDid
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({
+        get: async () => links.find((l) => l.vtaDid === current) as never,
+        set: async (l) => {
+          links = [...links.filter((x) => x.vtaDid !== l.vtaDid), l as never]
+        },
+        clear: async () => {
+          links = links.filter((x) => x.vtaDid !== current)
+          current = links[0]?.vtaDid
+        },
+        list: async () => links as never,
+        current: async () => current,
+        use: async (did: string) => {
+          current = did
+        },
+        remove: async (did: string) => {
+          links = links.filter((x) => x.vtaDid !== did)
+          if (current === did) current = links[0]?.vtaDid
+        },
+      }),
+      identityStore: () => ({ setManager: async () => undefined, forgetManager: async () => undefined }) as never,
+    })
+    return { vta, current: () => current }
+  }
+
+  it('lists every agent and switches to another, which becomes current and connects', async () => {
+    const { vta, current } = twoAgents()
+    await vta.restore({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+    expect(vta.getState().agents?.map((a) => a.vtaDid)).toEqual([HOME.vtaDid, WORK.vtaDid])
+
+    await vta.useAgent({} as never, WORK.vtaDid)
+    expect(current()).toBe(WORK.vtaDid)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
+    expect(currentAgentDid()).toBe(WORK.vtaDid)
+    // The agent before was left, not forgotten.
+    expect(vta.getState().agents).toHaveLength(2)
+    await vta.useAgent({} as never, HOME.vtaDid)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+  })
+
+  it('unlinking the current agent brings up the next one, not "no agent"', async () => {
+    const { vta } = twoAgents()
+    await vta.restore({} as never)
+    await vta.unlink({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
+    expect(vta.getState().agents?.map((a) => a.vtaDid)).toEqual([WORK.vtaDid])
+  })
+
+  it('adding another agent leaves the current one until the link ends; given up, it goes back', async () => {
+    const { vta } = twoAgents()
+    await vta.restore({} as never)
+    await vta.startAddingAgent()
+    expect(vta.getState()).toMatchObject({ addingAgent: true, link: { kind: 'notLinked' } })
+    vta.scanOffer(offer)
+    expect(vta.getState().link.kind).toBe('confirming')
+    vta.cancelLink()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState()).toMatchObject({ addingAgent: false, link: { kind: 'linked', vtaDid: HOME.vtaDid } })
   })
 })
