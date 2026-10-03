@@ -105,6 +105,12 @@ export interface JoinSubmission {
   needs?: string[]
   /** The community's refusal, while `rejected`: a stable `code`, its own words, when it decided. */
   rejection?: { code: string; reason?: string; decidedAt?: string }
+  /**
+   * When the person was told, once, that this request was turned down
+   * (`VTI_TURNED_DOWN_EVENT`). Set with the refusal; a new request starts
+   * without it.
+   */
+  rejectionSaidAt?: string
 }
 
 /** A member leaving a community from this phone. */

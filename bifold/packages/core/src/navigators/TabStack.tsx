@@ -37,6 +37,7 @@ import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbo
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
+import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
@@ -99,6 +100,8 @@ const TabStack: React.FC = () => {
   useVtiRemovedNotice()
   // …and a community making this phone a member.
   useVtiJoinedNotice()
+  // …and a community turning a request down, once, when the app first learns it.
+  useVtiTurnedDownNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
