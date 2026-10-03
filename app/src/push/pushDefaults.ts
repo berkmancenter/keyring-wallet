@@ -20,7 +20,7 @@ import BCLogger from '@/utils/logger'
 
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
-import { startPlatformPush, stopPlatformPush } from './pushPlatform'
+import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
 import { enablePushWake, type PushWakeDeps } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
@@ -42,8 +42,9 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
   await startPlatformPush(Platform.OS, m)
   if (Platform.OS === 'ios') {
     // The gateway sends to APNs directly with Keyring's own key, so it needs
-    // the APNs device token, not Firebase's.
-    const token = await m.getAPNSToken()
+    // the APNs device token, not Firebase's. On a first registration it can
+    // arrive just after registering returns: wait for it.
+    const token = await waitForApnsToken(() => m.getAPNSToken())
     return token ? { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() } : undefined
   }
   const token = await m.getToken()

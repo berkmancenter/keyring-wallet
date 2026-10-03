@@ -43,6 +43,34 @@ export async function startPlatformPush(os: PushOs, messaging: PlatformMessaging
   await messaging.setAutoInitEnabled(true)
 }
 
+/** How long {@link waitForApnsToken} waits for Apple's token, and how often it looks. */
+export const APNS_TOKEN_WAIT_MS = 10_000
+export const APNS_TOKEN_POLL_MS = 250
+
+/**
+ * The APNs device token, waiting for it when Apple has not handed it over yet.
+ *
+ * On a first registration `registerDeviceForRemoteMessages` can resolve before
+ * the token reaches the app. Measured on an iPhone 11 (TestFlight 235): the app
+ * read the token 11 ms before it arrived, found none, and the first switch-on
+ * registered nothing, while a second switch-on worked. So a missing token is
+ * looked for again until it arrives or {@link APNS_TOKEN_WAIT_MS} has passed.
+ */
+export async function waitForApnsToken(
+  getToken: () => Promise<string | null>,
+  opts: { waitMs?: number; pollMs?: number; sleep?: (ms: number) => Promise<void> } = {}
+): Promise<string | null> {
+  const waitMs = opts.waitMs ?? APNS_TOKEN_WAIT_MS
+  const pollMs = opts.pollMs ?? APNS_TOKEN_POLL_MS
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  let token = await getToken()
+  for (let waited = 0; !token && waited < waitMs; waited += pollMs) {
+    await sleep(pollMs)
+    token = await getToken()
+  }
+  return token
+}
+
 /**
  * The person turned notifications off: withdraw what {@link startPlatformPush}
  * set up. What stops the wakes is the agent clearing this device's channel;
