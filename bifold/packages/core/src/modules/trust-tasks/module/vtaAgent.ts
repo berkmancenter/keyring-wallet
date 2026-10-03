@@ -776,8 +776,23 @@ export class VtaAgentController {
           })
           return did
         },
-        onAccepted: () => {
-          if (live()) this.dispatch({ type: 'submitted', code: '' })
+        onAccepted: (accepted) => {
+          if (!live()) return
+          this.dispatch({ type: 'submitted', code: '' })
+          this.dispatch({
+            type: 'hostStage',
+            step: accepted.status === 'provisioning' ? 'creating' : 'connecting',
+            now: this.now(),
+          })
+        },
+        onStatus: (status) => {
+          if (live()) {
+            this.dispatch({
+              type: 'hostStage',
+              step: status === 'provisioning' ? 'creating' : 'connecting',
+              now: this.now(),
+            })
+          }
         },
         link: async () => {
           if (!live()) throw new AgentHostConnectionError('cancelled')
@@ -820,6 +835,12 @@ export class VtaAgentController {
     let last: unknown
     for (let attempt = 0; attempt < HOST_SIGN_IN_TRIES; attempt++) {
       if (!live()) throw new AgentHostConnectionError('cancelled')
+      // The first try is "connecting this phone"; a retry says which try it is.
+      this.dispatch(
+        attempt === 0
+          ? { type: 'hostStage', step: 'connecting', now: this.now() }
+          : { type: 'hostStage', step: 'signingIn', attempt: attempt + 1, of: HOST_SIGN_IN_TRIES, now: this.now() }
+      )
       await this.reset()
       const client = this.client(agent, vtaDid, identities)
       this.set({ status: 'connecting', error: undefined })

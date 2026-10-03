@@ -148,6 +148,32 @@ describe('an agent host’s automatic connection', () => {
     expect(vta.getState().link.kind).toBe('linked')
   })
 
+  it('names each step as it happens: creating, connecting, then which sign-in try', async () => {
+    let tries = 0
+    mockClient.whoAmI.mockImplementation(async () => {
+      if (++tries < 3) throw new Error('not in ACL')
+      return { roles: ['admin'] }
+    })
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host)
+    const stages: string[] = []
+    const off = vta.subscribe(() => {
+      const link = vta.getState().link
+      if (link.kind !== 'awaitingGrant' || !link.stage) return
+      const named = link.stage.attempt ? `${link.stage.step} ${link.stage.attempt}/${link.stage.of}` : link.stage.step
+      if (stages.at(-1) !== named) stages.push(named)
+    })
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    off?.()
+    expect(stages).toEqual(['creating', 'connecting', 'signingIn 2/24', 'signingIn 3/24'])
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
   it('signs in again while the restarted agent does not know this phone yet', async () => {
     let tries = 0
     mockClient.whoAmI.mockImplementation(async () => {

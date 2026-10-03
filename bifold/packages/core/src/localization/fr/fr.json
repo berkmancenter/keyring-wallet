@@ -1220,6 +1220,11 @@
       "SettingUpTitle": "Préparation de votre agent",
       "SettingUpBody": "L'hébergeur de votre agent le prépare pour ce téléphone. Cela peut prendre quelques minutes. Gardez Keyring ouvert.",
       "SettingUpWaiting": "En attente de votre agent…",
+      "Steps": {
+        "Creating": "Votre hébergeur crée votre agent",
+        "Connecting": "Connexion de ce téléphone",
+        "SigningIn": "Connexion, essai {{attempt}} sur {{of}}"
+      },
       "Failed": {
         "badKey": "L'hébergeur de votre agent n'a pas accepté le code de ce téléphone. Créez un nouveau code et réessayez, ou utilisez l'option Admin DID sur sa page.",
         "badRequest": "Keyring et l'hébergeur de votre agent ne se sont pas compris. Utilisez plutôt l'option Admin DID sur sa page.",

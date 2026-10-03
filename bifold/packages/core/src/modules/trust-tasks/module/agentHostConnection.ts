@@ -108,6 +108,8 @@ export interface AgentHostDeps {
   now?: () => number
   /** Checked before every call after the first: true ends the attempt as `cancelled`. */
   shouldStop?: () => boolean
+  /** Each status the host reports while the phone waits for the agent, for a screen to name. */
+  onStatus?: (status: 'provisioning' | 'awaiting_mobile' | 'connected') => void
 }
 
 const AGENT_DID = /^did:webvh:[^\s]+:[^\s]+$/
@@ -290,6 +292,13 @@ export async function waitUntilAgentReady(
     failures = 0
     if (answer!.status !== 200) stopFor(answer, { 401: 'notAccepted', 404: 'gone', 410: 'timedOut' })
     const connection = (answer!.body.connection ?? {}) as Record<string, unknown>
+    if (
+      connection.status === 'provisioning' ||
+      connection.status === 'awaiting_mobile' ||
+      connection.status === 'connected'
+    ) {
+      deps.onStatus?.(connection.status)
+    }
     switch (connection.status) {
       case 'awaiting_mobile':
       case 'connected':

@@ -1126,6 +1126,11 @@
       "SettingUpTitle": "Preparando o seu agente",
       "SettingUpBody": "O provedor do seu agente está preparando o agente para este telefone. Isso pode levar alguns minutos. Mantenha o Keyring aberto.",
       "SettingUpWaiting": "Aguardando o seu agente…",
+      "Steps": {
+        "Creating": "Seu provedor está criando seu agente",
+        "Connecting": "Conectando este telefone",
+        "SigningIn": "Entrando, tentativa {{attempt}} de {{of}}"
+      },
       "Failed": {
         "badKey": "O provedor do seu agente não aceitou o código deste telefone. Crie um novo código e tente de novo, ou use a opção Admin DID na página dele.",
         "badRequest": "O Keyring e o provedor do seu agente não se entenderam. Use a opção Admin DID na página dele.",
