@@ -198,6 +198,19 @@ describe('linking through the controller', () => {
 describe('a linked phone after a restart', () => {
   const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0' }
 
+  // 233: until the saved link is read, "not linked" is not an answer yet.
+  it('says when the saved link has been read, whether or not there was one', async () => {
+    const withLink = controller({ linked }).vta
+    expect(withLink.getState().linkRestored).toBe(false)
+    expect(withLink.getState().link.kind).toBe('notLinked')
+    await withLink.restore({} as never)
+    expect(withLink.getState()).toMatchObject({ linkRestored: true, link: { kind: 'linked' } })
+
+    const none = controller({}).vta
+    await none.restore({} as never)
+    expect(none.getState()).toMatchObject({ linkRestored: true, link: { kind: 'notLinked' } })
+  })
+
   it('comes back offline and reconnects on its own', async () => {
     const { vta } = controller({ linked })
     await vta.restore({} as never)

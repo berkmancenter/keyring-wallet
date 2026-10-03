@@ -106,4 +106,9 @@ describe('nothing waiting', () => {
   it('a phone not linked to an agent has nothing to show', () => {
     expect(view({ link: { kind: 'notLinked' } as VtaLinkState }).mode).toBe('notLinked')
   })
+
+  it('before the saved link is read, "not linked" is not known yet: still loading', () => {
+    expect(view({ link: { kind: 'notLinked' } as VtaLinkState, linkRestored: false }).mode).toBe('loading')
+    expect(view({ link: { kind: 'notLinked' } as VtaLinkState, linkRestored: true }).mode).toBe('notLinked')
+  })
 })

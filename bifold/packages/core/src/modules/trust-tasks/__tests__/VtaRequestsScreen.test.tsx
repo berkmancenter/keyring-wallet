@@ -59,7 +59,7 @@ describe('Requests', () => {
     navigation.getState = jest.fn(() => ({ index: 1 }))
     navigation.replace.mockClear()
     navigation.goBack.mockClear()
-    controller.set({ link: link({ kind: 'online' }), approvals: [], reconnectGaveUp: false })
+    controller.set({ link: link({ kind: 'online' }), approvals: [], reconnectGaveUp: false, linkRestored: true })
     // The controller's own work, stood in for: sending the answer marks the request decided.
     decide = jest.spyOn(vtaAgent, 'decide').mockImplementation(async (rid: string, decision: 'approve' | 'deny') => {
       controller.set({
@@ -232,8 +232,34 @@ describe('Requests', () => {
   })
 
   it('a phone not linked to an agent is sent to My Agent', async () => {
-    controller.set({ link: { kind: 'notLinked' } })
+    controller.set({ link: { kind: 'notLinked' }, linkRestored: true })
     await show()
+    expect(navigation.replace).toHaveBeenCalledWith(Screens.MyAgent)
+  })
+
+  // 233, Android: a notification tap that cold-started the app opened Requests
+  // before the saved link was read, and "not linked" sent the phone to My Agent.
+  it('opened before the saved link is read, it waits for it instead of leaving for My Agent', async () => {
+    controller.set({ link: { kind: 'notLinked' }, linkRestored: false })
+    const tree = await show()
+    expect(navigation.replace).not.toHaveBeenCalled()
+    expect(tree.getByTestId(id('Requests'))).toBeTruthy()
+    // The read finds the link: the screen stays, and never leaves.
+    await act(async () => {
+      controller.set({ link: link({ kind: 'online' }), linkRestored: true })
+      jest.advanceTimersByTime(10)
+    })
+    expect(navigation.replace).not.toHaveBeenCalled()
+  })
+
+  it('and when the read finds no link, it then goes to My Agent', async () => {
+    controller.set({ link: { kind: 'notLinked' }, linkRestored: false })
+    await show()
+    expect(navigation.replace).not.toHaveBeenCalled()
+    await act(async () => {
+      controller.set({ linkRestored: true })
+      jest.advanceTimersByTime(10)
+    })
     expect(navigation.replace).toHaveBeenCalledWith(Screens.MyAgent)
   })
 

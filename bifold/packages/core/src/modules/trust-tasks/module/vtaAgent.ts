@@ -142,6 +142,14 @@ export interface VtaAgentState {
   agentNames?: Readonly<Record<string, AgentLabel>>
   /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
   ownsAgent?: boolean
+  /**
+   * Whether the saved link has been read at start-up (`restore`). Until then
+   * `link` reads "not linked" on every phone, linked or not, so a screen that
+   * acts on "not linked" waits for this first: a notification tap that cold-
+   * started the app opened Requests before the read, which took the phone for
+   * an unlinked one and left for My Agent (233, Android).
+   */
+  linkRestored?: boolean
 }
 
 /**
@@ -345,6 +353,7 @@ export class VtaAgentController {
     link: initialLinkState,
     introSeen: true,
     activity: [],
+    linkRestored: false,
   }
   private listeners = new Set<Listener>()
   private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent }
@@ -556,7 +565,7 @@ export class VtaAgentController {
       .get()
       .catch(() => undefined)
     this.dispatch({ type: 'restored', link, now: this.now() })
-    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true, linkRestored: true })
     if (link) void this.ensureOnline(agent)
   }
 
