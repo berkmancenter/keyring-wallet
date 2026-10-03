@@ -115,13 +115,22 @@ EOF
   # fresh setup advertises DIDComm only (bob's #tsp entry was added this way).
   "$VTA_BIN" --config "$TWIN_DIR/config.toml" services tsp enable --mediator-did "$med" 2>&1 | strip_ansi | grep -iE "tsp|rror" | head -5 || true
   # ...and the runtime switch, as bob's config.toml has it.
-  sed -i '' '/^\[services\]/,/^\[/ s/^tsp = false/tsp = true/' "$TWIN_DIR/config.toml"
+  sed -i.bak '/^\[services\]/,/^\[/ s/^tsp = false/tsp = true/' "$TWIN_DIR/config.toml"
+  rm -f "$TWIN_DIR/config.toml.bak"
   printf 'TWIN_SLUG=%s\nTWIN_VTA_DID=%s\nTWIN_VTA_URL=https://%s\nTWIN_PORT=%s\nTWIN_DIR=%s\nMEDIATOR_DID=%s\n' \
     "$TWIN" "$did" "$TWIN_HOST" "$TWIN_PORT" "$TWIN_DIR" "$med" > "$TWIN_ENV"
 }
 
+# pnm's profile list: macOS keeps it under Application Support, Linux under the
+# XDG config dir (dirs::config_dir()). PNM_CONFIG_FILE overrides either.
+pnm_config_file() {
+  if [ -n "${PNM_CONFIG_FILE:-}" ]; then echo "$PNM_CONFIG_FILE"
+  elif [ "$(uname)" = "Linux" ]; then echo "${XDG_CONFIG_HOME:-$HOME/.config}/pnm/config.toml"
+  else echo "$HOME/Library/Application Support/pnm/config.toml"; fi
+}
+
 pnm_has_profile() {
-  grep -q "^\[vtas\.$TWIN\]" "$HOME/Library/Application Support/pnm/config.toml" 2>/dev/null
+  grep -q "^\[vtas\.$TWIN\]" "$(pnm_config_file)" 2>/dev/null
 }
 
 harness_admin() {
@@ -129,7 +138,7 @@ harness_admin() {
     echo "  pnm profile $TWIN already set up"
     return 0
   fi
-  local cfg="$HOME/Library/Application Support/pnm/config.toml" default_before default_after
+  local cfg="$(pnm_config_file)" default_before default_after
   default_before=$(grep '^default_vta' "$cfg" 2>/dev/null || true)
   # Phase 1: mint the harness's admin did:key (pnm keeps it in the login
   # keychain, service pnm-cli, account vta:<slug>). JSON on stdout.
