@@ -11,6 +11,8 @@
  * @module trust-tasks/module/joinSubmission
  */
 
+import { DeviceEventEmitter } from 'react-native'
+
 import type { JoinSubmission, VtiCommunityStore } from './VtiCommunityStore'
 import { VtiRefusal, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 
@@ -113,6 +115,19 @@ export async function recordAnswer(
 }
 
 /** Record a poll of the community's status task. */
+/**
+ * Emitted with `{ communityDid, reason? }` the first time a stored request is
+ * learned to be turned down. A community does not push a refusal: the app
+ * learns it when it asks for the request's status, wherever that happens (the
+ * Join screen, the community card, the vetting desk), so it is said here, once
+ * per request — the stored `rejectionSaidAt` is the mark. A refusal the
+ * person saw as the answer to their own submit is not news and is not said.
+ */
+export const VTI_TURNED_DOWN_EVENT = 'vti:request-turned-down'
+
+/** Requests already said this launch: two screens can ask at the same moment, before either mark is stored. */
+const turnedDownSaid = new Set<string>()
+
 export async function recordStatus(
   store: VtiCommunityStore,
   communityDid: string,
@@ -135,6 +150,15 @@ export async function recordStatus(
         ? { code: polled.code ?? 'rejected', reason: polled.reason, decidedAt: polled.decidedAt }
         : undefined,
   }
+  // First learned now: it was open, and nobody has been told.
+  const key = `${communityDid} ${current.sentAt}`
+  const firstRefusal =
+    status === 'rejected' && current.status !== 'rejected' && !current.rejectionSaidAt && !turnedDownSaid.has(key)
+  // Claimed before the save is awaited, so a read running alongside sees it.
+  if (firstRefusal) turnedDownSaid.add(key)
+  next.rejectionSaidAt =
+    status === 'rejected' ? (firstRefusal ? now.toISOString() : current.rejectionSaidAt) : undefined
   await store.saveSubmission?.(next)
+  if (firstRefusal) DeviceEventEmitter.emit(VTI_TURNED_DOWN_EVENT, { communityDid, reason: next.rejection?.reason })
   return next
 }
