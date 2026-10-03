@@ -4,6 +4,9 @@
  * device starts acting as the same agent.
  */
 import { AGENT_DEVICE_TASK, type AgentDevicePort } from '../module/vtaDevices'
+import { forgetAllVersions } from '../module/taskVersions'
+
+beforeEach(() => forgetAllVersions())
 import { AgentPresence, isLinkOnline } from '../module/vtaPresence'
 import { VtiRefusal } from '../module/vtiAgent'
 
@@ -26,6 +29,9 @@ function world(opts: { otherSeenAt?: () => string | undefined; registered?: bool
         registered = true
         return {} as T
       }
+      // An agent at v0.52.0: acl/* at 0.1 only.
+      if (type === AGENT_DEVICE_TASK.aclList02)
+        throw new VtiRefusal('unsupportedVersion', 'unsupported version', { servedVersions: [AGENT_DEVICE_TASK.aclList] })
       if (type === AGENT_DEVICE_TASK.aclList)
         return {
           entries: [
@@ -79,6 +85,7 @@ describe('telling the agent this phone is here', () => {
         task: async <T>(type: string) => {
           sent.push(type)
           if (type === AGENT_DEVICE_TASK.register) throw new VtiRefusal('invalid', 'displayName too long')
+          if (type === AGENT_DEVICE_TASK.aclList02) throw new VtiRefusal('unsupportedVersion', 'unsupported version')
           if (type === AGENT_DEVICE_TASK.aclList) return { entries: [] } as T
           if (type === AGENT_DEVICE_TASK.list) return { devices: [] } as T
           return {} as T
