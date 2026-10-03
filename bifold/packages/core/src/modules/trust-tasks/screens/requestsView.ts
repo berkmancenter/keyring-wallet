@@ -56,6 +56,8 @@ export interface RequestsInput {
   onlineSince?: number
   /** The decision the person just made on this screen, if any. */
   decided?: 'approved' | 'denied'
+  /** False while the saved link is still being read at start-up: not read yet is not "not linked". */
+  linkRestored?: boolean
 }
 
 export function requestsView(input: RequestsInput): RequestsView {
@@ -69,7 +71,9 @@ export function requestsView(input: RequestsInput): RequestsView {
   )
   const lists = { waiting, expired, earlier, ...(decided ? { decided } : {}) }
 
-  if (link.kind !== 'linked') return { mode: 'notLinked', ...lists }
+  if (link.kind !== 'linked') {
+    return input.linkRestored === false ? { mode: 'loading', ...lists } : { mode: 'notLinked', ...lists }
+  }
   if (waiting.length > 0) return { mode: 'waiting', ...lists }
   if (decided) return { mode: 'done', ...lists }
   if (expired.length > 0) return { mode: 'expired', ...lists }

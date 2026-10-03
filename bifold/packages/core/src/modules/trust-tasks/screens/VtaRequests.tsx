@@ -80,6 +80,7 @@ const VtaRequests: React.FC = () => {
     now,
     onlineSince: onlineSince.current,
     decided,
+    linkRestored: state.linkRestored,
   })
 
   // Whether a screen of this stack is under this one. Not `canGoBack()`: that
