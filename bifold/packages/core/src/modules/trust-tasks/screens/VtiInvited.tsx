@@ -17,7 +17,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -107,6 +107,24 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [copied, setCopied] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  // Another community brought here ("A different community"): what this screen
+  // did for the last one is not where the person stands with this one. Without
+  // this, a join just done showed "You're a member of" the new community.
+  const shownFor = useRef(communityDid)
+  useEffect(() => {
+    if (shownFor.current === communityDid) return
+    shownFor.current = communityDid
+    setStep('intro')
+    setNeeds([])
+    setLoaded(false)
+    setPersona(undefined)
+    setInvitation(undefined)
+    setError(undefined)
+    setErrorOpen(false)
+    setCopied(false)
+    setShowQr(false)
+    setDetailsOpen(false)
+  }, [communityDid])
   const joinAs = useJoinAsChoice(navigation)
 
   const styles = StyleSheet.create({
@@ -678,9 +696,28 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       break
   }
 
+  // An invitation from another community is always in reach: once this phone
+  // had a community, the screen only ever showed that one, so a member invited
+  // somewhere else had no way to say so (233). The link brought back from the
+  // scanner returns here, for that community.
+  const different = (
+    <Button
+      title={t('Join.Different')}
+      buttonType={ButtonType.Tertiary}
+      onPress={() => {
+        communityLinkReturn.toInvited()
+        scan()
+      }}
+      testID={testIdWithKey('InvitedDifferentCommunity')}
+    />
+  )
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
+      <ScrollView contentContainerStyle={styles.content}>
+        {body}
+        {different}
+      </ScrollView>
       {actions ? <View style={styles.actions}>{actions}</View> : null}
     </SafeAreaView>
   )
