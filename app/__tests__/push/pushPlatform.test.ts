@@ -17,7 +17,6 @@ function fakeMessaging() {
     setAutoInitEnabled: jest.fn(async (enabled: boolean) => void calls.push(`setAutoInitEnabled(${enabled})`)),
     deleteToken: jest.fn(async () => void calls.push('deleteToken')),
     registerDeviceForRemoteMessages: jest.fn(async () => void calls.push('registerDeviceForRemoteMessages')),
-    unregisterDeviceForRemoteMessages: jest.fn(async () => void calls.push('unregisterDeviceForRemoteMessages')),
   }
   return { m, calls }
 }
@@ -79,10 +78,10 @@ describe('turning notifications off', () => {
     expect(calls).toEqual(['deleteToken', 'setAutoInitEnabled(false)'])
   })
 
-  it('on iOS unregisters from remote notifications', async () => {
+  it('on iOS leaves the Apple registration alone, so turning them on again works', async () => {
     const { m, calls } = fakeMessaging()
     await stopPlatformPush('ios', m)
-    expect(calls).toEqual(['unregisterDeviceForRemoteMessages'])
+    expect(calls).toEqual([])
   })
 })
 

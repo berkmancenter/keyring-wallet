@@ -21,7 +21,6 @@ export interface PlatformMessaging {
   setAutoInitEnabled(enabled: boolean): Promise<void>
   deleteToken(): Promise<void>
   registerDeviceForRemoteMessages(): Promise<void>
-  unregisterDeviceForRemoteMessages(): Promise<void>
 }
 
 export type PushOs = 'ios' | 'android' | string
@@ -46,13 +45,19 @@ export async function startPlatformPush(os: PushOs, messaging: PlatformMessaging
 
 /**
  * The person turned notifications off: withdraw what {@link startPlatformPush}
- * set up, so the platform service holds no live token for this install.
+ * set up. What stops the wakes is the agent clearing this device's channel;
+ * this step only withdraws the platform token where that can be undone.
+ *
+ * - Android: delete the Firebase token and turn auto-initialisation off. Turning
+ *   notifications on again issues a fresh token.
+ * - iOS: nothing. Unregistering from Apple cannot be undone reliably: on a
+ *   device that turned notifications off and on again, Apple accepted every
+ *   wake for the token the app registered and the phone dropped each one,
+ *   because iOS no longer held that token. Apple's own guidance is to
+ *   unregister only when the app will never take remote notifications again.
  */
 export async function stopPlatformPush(os: PushOs, messaging: PlatformMessaging): Promise<void> {
-  if (os === 'ios') {
-    await messaging.unregisterDeviceForRemoteMessages()
-    return
-  }
+  if (os === 'ios') return
   await messaging.deleteToken()
   await messaging.setAutoInitEnabled(false)
 }
