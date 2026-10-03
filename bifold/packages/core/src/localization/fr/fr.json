@@ -542,20 +542,23 @@
     "Credential": "attestation"
   },
   "PushNotifications": {
-    "EnableNotifications": "Activer les Notifications pour recevoir des alertes instantanées",
-    "BeNotified": "Soyez averti lorsque vous recevez :",
+    "EnableNotifications": "Sachez quand votre agent a besoin de vous",
+    "BeNotified": "Votre agent a parfois besoin de votre accord avant d'agir pour vous. Avec les notifications, Keyring vous prévient quand une demande attend, même quand l'application est fermée.",
     "ReceiveNotifications": "Recevoir des notifications",
-    "BulletFour": "nouveaux messages",
-    "BulletOne": "novelles offres d'attestations",
-    "BulletThree": "mettre à jour vos attestations",
-    "BulletTwo": "nouvelles demandes de preuve",
-    "NotificationsOffMessage": "Soyez averti lorsque vous recevez de nouvelles offres d'attestations, des demandes de preuve, des mises à jour de vos attestations, de nouveaux messages et plus encore.",
+    "BulletFour": "",
+    "BulletOne": "",
+    "BulletThree": "",
+    "BulletTwo": "",
+    "NotificationsOffMessage": "Activez-les pour savoir quand votre agent a besoin de votre accord, même quand l'application est fermée.",
     "NotificationsOffTitle": "Les notifications pour Keyring sont désactivées",
     "NotificationsInstructionTitle": "Pour activer les notifications :",
     "InstructionsOne": "Ouvrez les paramètres de l'application",
     "InstructionsTwo": "Pressez Notifications",
     "InstructionsThree": "Activer les notifications",
-    "OpenSettings": "Ouvrir les paramètres"
+    "OpenSettings": "Ouvrir les paramètres",
+    "WhatItSays": "Une notification dit seulement que quelque chose attend. Ce que c'est reste dans Keyring, derrière votre code.",
+    "TurnOn": "Activer les notifications",
+    "ChangeLater": "Vous pourrez changer cela plus tard dans les paramètres."
   },
   "CredentialDetails": {
     "Id": "Identifiant :",
