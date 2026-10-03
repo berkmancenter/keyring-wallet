@@ -207,12 +207,31 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
     })
 
-    it('one thing to do keeps its button fixed under the list, as before', async () => {
+    // IN-104: one fixed button under the list covered the last way on a
+    // small phone. It sits under the way it acts on, as two do.
+    it('one thing to do sits under its way too: "Ask to join" under the way the phone meets', async () => {
       const tree = await toAsks(defaults)
-      const fixed = within(tree.getByTestId(id('JoinActions')))
-      expect(fixed.getByTestId(id('JoinStart'))).toBeTruthy()
-      expect(fixed.queryByTestId(id('JoinScanCommunity'))).toBeNull()
+      expect(within(tree.getByTestId(id('JoinWay_review'))).getByTestId(id('JoinStart'))).toHaveTextContent(
+        /Join\.Ways\.ButtonAsk/
+      )
+      expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
       expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
+    })
+
+    it('"Start" under the vetting way, and "I was invited" under the invitation way', async () => {
+      const vettingOnly = await toAsks({ wire: '0.3', accepting: true, ways: [vetted] })
+      expect(within(vettingOnly.getByTestId(id('JoinWay_vetted-member'))).getByTestId(id('JoinStart'))).toBeTruthy()
+      vettingOnly.unmount()
+      const invitationOnly = await toAsks({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
+      expect(within(invitationOnly.getByTestId(id('JoinWay_invited'))).getByTestId(id('JoinGoInvited'))).toBeTruthy()
+    })
+
+    it('a community whose ways never ask a vetter says so; one that has a vetting way does not', async () => {
+      const none = await toAsks(defaults)
+      expect(none.getByTestId(id('JoinNoVetting'))).toHaveTextContent(/Join\.Ways\.NoVetting/)
+      none.unmount()
+      const withVetting = await toAsks(vettingCommunity)
+      expect(withVetting.queryByTestId(id('JoinNoVetting'))).toBeNull()
     })
 
     // IN-104 path B: under the removed standing the row buttons were still

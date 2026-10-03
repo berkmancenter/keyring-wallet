@@ -685,7 +685,11 @@ const VtaAgentHome: React.FC = () => {
               </Pressable>
               <Pressable
                 style={[styles.door, isMember ? undefined : styles.doorNext]}
-                onPress={() => go(Screens.VtiJoin)}
+                onPress={() => {
+                  // From the beginning: which community, not the last one a link opened.
+                  communityTarget.clearViewing()
+                  go(Screens.VtiJoin)
+                }}
                 accessibilityRole="button"
                 testID={testIdWithKey('AgentJoinCommunity')}
               >
