@@ -36,6 +36,7 @@ import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
+import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
@@ -57,6 +58,8 @@ const TabStack: React.FC = () => {
     TOKENS.COMPONENT_APP_GLOBAL_LISTENER,
   ])
   const { t } = useTranslation()
+  // Bottom toasts sit clear of the tab bar (aboveTabBar).
+  const toastBottomOffset = useToastAboveTabBar()
   const Tab = createBottomTabNavigator<TabStackParams>()
   const { assertNetworkConnected } = useNetwork()
   const { TabTheme, TextTheme, Assets, NavigationTheme, GradientTheme } = useTheme()
@@ -150,7 +153,7 @@ const TabStack: React.FC = () => {
                 ),
               (notice: KeyringLinkNotice) => {
                 if (notice.kind === 'unusable') logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)
-                const toast = linkNoticeToast(notice, t)
+                const toast = linkNoticeToast(notice, t, toastBottomOffset)
                 if (toast === 'hide') Toast.hide()
                 else Toast.show(toast)
               }
@@ -209,6 +212,7 @@ const TabStack: React.FC = () => {
       store.preferences.walletName,
       t,
       dispatch,
+      toastBottomOffset,
     ]
   )
 

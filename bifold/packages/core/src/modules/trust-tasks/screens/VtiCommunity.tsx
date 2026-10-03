@@ -36,6 +36,7 @@ import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } fro
 import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
+import { useToastAboveTabBar } from './aboveTabBar'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
 const detailOf = (err: unknown): string => {
@@ -45,6 +46,8 @@ const detailOf = (err: unknown): string => {
 
 const VtiCommunity: React.FC = () => {
   const { t } = useTranslation()
+  // Bottom toasts sit clear of the tab bar (aboveTabBar).
+  const toastBottomOffset = useToastAboveTabBar()
   const { ColorPalette, TextTheme } = useTheme()
   const { params } = useRoute<RouteProp<MyAgentStackParams, Screens.VtiCommunity>>()
   const communityDid = params.communityDid
@@ -139,6 +142,8 @@ const VtiCommunity: React.FC = () => {
         ),
         visibilityTime: 6000,
         position: 'bottom',
+        // It is read on the screen this goes back to, over the tabs.
+        bottomOffset: toastBottomOffset,
       })
       navigation.goBack()
     } catch (err) {
@@ -157,7 +162,7 @@ const VtiCommunity: React.FC = () => {
       setLeaving(false)
       setConfirmingLeave(false)
     }
-  }, [agent, communityDid, navigation, keep, t])
+  }, [agent, communityDid, navigation, keep, t, toastBottomOffset])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
