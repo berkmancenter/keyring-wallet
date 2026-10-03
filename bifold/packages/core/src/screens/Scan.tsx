@@ -19,6 +19,7 @@ import { BifoldError, QrCodeScanError } from '../types/error'
 import { ConnectStackParams } from '../types/navigators'
 import { PermissionContract } from '../types/permissions'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 
 export type ScanProps = StackScreenProps<ConnectStackParams>
 
@@ -36,6 +37,8 @@ export function scanErrorOf(value: string, e: unknown, invalidQrCode: string): Q
 const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
   const { agent } = useAgent()
   const { t } = useTranslation()
+  // Bottom toasts sit clear of the tab bar (aboveTabBar).
+  const toastBottomOffset = useToastAboveTabBar()
   const [store] = useStore()
   const [loading, setLoading] = useState<boolean>(true)
   const [showDisclosureModal, setShowDisclosureModal] = useState<boolean>(true)
@@ -132,12 +135,13 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
           text2: (error as Error)?.message || t('Error.Unknown'),
           visibilityTime: 2000,
           position: 'bottom',
+          bottomOffset: toastBottomOffset,
         })
       }
 
       return false
     },
-    [t]
+    [t, toastBottomOffset]
   )
 
   const requestCameraUse = async (rationale?: Rationale): Promise<boolean> => {

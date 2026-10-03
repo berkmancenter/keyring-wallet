@@ -52,11 +52,24 @@ export async function openKeyringLink(
  */
 export const UNUSABLE_TOAST_MS = 12_000
 
-/** The toast for a notice, or 'hide' to clear the "reading" one. */
-export function linkNoticeToast(notice: KeyringLinkNotice, t: TFunction): ToastShowParams | 'hide' {
+/**
+ * The toast for a notice, or 'hide' to clear the "reading" one. `bottomOffset`
+ * puts it clear of the tab bar (`useToastAboveTabBar`).
+ */
+export function linkNoticeToast(
+  notice: KeyringLinkNotice,
+  t: TFunction,
+  bottomOffset?: number
+): ToastShowParams | 'hide' {
   switch (notice.kind) {
     case 'reading':
-      return { type: ToastType.Info, text1: t('Scan.ReadingCode'), visibilityTime: 15_000, position: 'bottom' }
+      return {
+        type: ToastType.Info,
+        text1: t('Scan.ReadingCode'),
+        visibilityTime: 15_000,
+        position: 'bottom',
+        bottomOffset,
+      }
     case 'opened':
       return 'hide'
     case 'unusable':
@@ -66,6 +79,7 @@ export function linkNoticeToast(notice: KeyringLinkNotice, t: TFunction): ToastS
         text2: notice.message ?? t('Scan.CodeNotRead'),
         visibilityTime: UNUSABLE_TOAST_MS,
         position: 'bottom',
+        bottomOffset,
         onPress: () => Toast.hide(),
       }
   }

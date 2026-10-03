@@ -18,6 +18,7 @@ import { EventTypes } from '../constants'
 import Toast from 'react-native-toast-message'
 import { ToastType } from '../components/toast/BaseToast'
 import { OpenIDNotificationCard } from '../modules/openid/features/notifications/OpenIDNotificationCard'
+import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 
 type HomeProps = StackScreenProps<HomeStackParams, Screens.Home>
 
@@ -41,6 +42,8 @@ const Home: React.FC<HomeProps> = () => {
   ])
   const notifications = useNotifications({})
   const { t } = useTranslation()
+  // Bottom toasts sit clear of the tab bar (aboveTabBar).
+  const toastBottomOffset = useToastAboveTabBar()
   const { ColorPalette } = useTheme()
   const [store, dispatch] = useStore()
   const { start, stop } = useTour()
@@ -162,6 +165,7 @@ const Home: React.FC<HomeProps> = () => {
         text2: t('Toast.OpenIDCredRefreshing.Message'),
         visibilityTime: 4000,
         position: 'bottom',
+        bottomOffset: toastBottomOffset,
       })
 
       // Run once after 4 seconds
@@ -174,7 +178,7 @@ const Home: React.FC<HomeProps> = () => {
       sub.remove()
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
     }
-  }, [screenIsFocused, orchestrator, t])
+  }, [screenIsFocused, orchestrator, t, toastBottomOffset])
 
   return (
     <>
