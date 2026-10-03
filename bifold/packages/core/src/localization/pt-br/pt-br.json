@@ -1103,7 +1103,7 @@
     "ClaimedName": "{{name}} (não confirmado pela comunidade)",
     "UnnamedAt": "uma comunidade sem nome ({{host}})",
     "Unnamed": "uma comunidade",
-    "UnnamedRef": "uma comunidade (…{{ref}})",
+    "UnnamedRef": "uma comunidade sem nome ({{ref}})",
     "Another": "outra comunidade",
     "SomeoneAt": "Alguém em {{host}}",
     "Someone": "Alguém",

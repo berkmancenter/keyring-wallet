@@ -15,7 +15,7 @@ describe('naming a community', () => {
     expect(communityName(did, { communityDid: did, name: 'Keyring Lab Community', published: true })).toEqual({
       name: 'Keyring Lab Community',
       claimed: false,
-      technical: 'keyring-vti-vtc.ngrok.app',
+      technical: '…QeMPJB',
     })
   })
 

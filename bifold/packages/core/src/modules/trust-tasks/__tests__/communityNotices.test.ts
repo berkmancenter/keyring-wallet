@@ -137,7 +137,9 @@ describe('an applied notice', () => {
     await expect(receiveCommunityNotice(logged, st, PERSONA, notice(), { now: NOW, verify: verified })).resolves.toBe(
       'removed'
     )
-    expect(info).toHaveBeenCalledWith(expect.stringMatching(/^\[VTI\] applied a removal notice from did:webvh:QmCommunity:vt…/))
+    expect(info).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[VTI\] applied a removal notice from did:webvh:QmCommunity:vt…/)
+    )
     expect(String(info.mock.calls[0][0])).not.toContain(COMMUNITY)
     expect(String(info.mock.calls[0][0])).not.toContain(PERSONA)
   })
@@ -230,6 +232,8 @@ describe('the words a removed person reads', () => {
   })
 
   it('says only that, when the community gave no reason', () => {
-    expect(removedWords(COMMUNITY, undefined, t)).toBe('A community removed you. You can ask to join again.')
+    expect(removedWords(COMMUNITY, undefined, t)).toBe(
+      'An unnamed community (keyring-test-vtc) removed you. You can ask to join again.'
+    )
   })
 })

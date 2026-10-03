@@ -138,8 +138,8 @@ describe('what your agent holds, card by card', () => {
     const tree = await renderHome([persona(A), membership(A, linkedAt), persona(B), membership(B, linkedAt)])
     const a = tree.getByTestId(testIdWithKey(`AgentCommunityName_${keyOf(A)}`))
     const b = tree.getByTestId(testIdWithKey(`AgentCommunityName_${keyOf(B)}`))
-    expect(a).toHaveTextContent('keyring-test-vtc')
-    expect(b).toHaveTextContent('first-vtc')
+    expect(a).toHaveTextContent('Community.UnnamedRef(ref=keyring-test-vtc)')
+    expect(b).toHaveTextContent('Community.UnnamedRef(ref=first-vtc)')
     expect(tree.getByTestId(testIdWithKey('AgentHolds'))).not.toHaveTextContent(/vtc\.example\.org/)
   })
 
@@ -279,8 +279,9 @@ describe('a community heading, where several stand side by side', () => {
     expect(didPathName('did:peer:2.Ez6LSabc')).toBeUndefined()
   })
 
-  it('prefers a published name, then a claimed one, then the path', () => {
-    expect(communityHeadingOf(A, t)).toBe('keyring-test-vtc')
+  it('prefers a published name, then a claimed one, then says it is unnamed, with its path', () => {
+    // A bare path as a card's title read as the community's name (#12, IN-26).
+    expect(communityHeadingOf(A, t)).toBe('Community.UnnamedRef(ref=keyring-test-vtc)')
     communityTarget.set({ communityDid: A, name: 'Claimed' })
     expect(communityHeadingOf(A, t)).toBe('Community.ClaimedName(name=Claimed)')
     expect(communityHeadingOf(A, t, { claim: 'plain' })).toBe('Claimed')
@@ -291,8 +292,8 @@ describe('a community heading, where several stand side by side', () => {
   it('with no path, tells communities apart by the end of the SCID — not the host', () => {
     const one = communityHeadingOf('did:webvh:QmFirstOne111:vtc.example.org', t)
     const two = communityHeadingOf('did:webvh:QmSecondTwo222:vtc.example.org', t)
-    expect(one).toBe('Community.UnnamedRef(ref=One111)')
-    expect(two).toBe('Community.UnnamedRef(ref=Two222)')
+    expect(one).toBe('Community.UnnamedRef(ref=…One111)')
+    expect(two).toBe('Community.UnnamedRef(ref=…Two222)')
     expect(one).not.toContain('example')
   })
 })

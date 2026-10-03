@@ -95,12 +95,12 @@ describe('a community card as the Wallet reads it', () => {
 
   it('names the membership card for the community, issued by the community by name', () => {
     const d = communityCardDisplay(membershipCard, t)!
-    // Unnamed so far: the community is called by its DID's path, never its host.
-    expect(d.name).toBe('Community.CardMemberOf(community=keyring-test-vtc)')
-    expect(d.issuerName).toBe('keyring-test-vtc')
+    // Unnamed so far: said to be, with its DID's path to tell it apart, never its host.
+    expect(d.name).toBe('Community.CardMemberOf(community=Community.UnnamedRef(ref=keyring-test-vtc))')
+    expect(d.issuerName).toBe('Community.UnnamedRef(ref=keyring-test-vtc)')
     expect(JSON.stringify(d)).not.toMatch(/vtc\.example|did:webvh/)
     expect(d.attributes).toEqual({
-      'Community.CardCommunity': 'keyring-test-vtc',
+      'Community.CardCommunity': 'Community.UnnamedRef(ref=keyring-test-vtc)',
       // In the phone's time zone, month named (IN-58).
       'Community.CardSince': localDate('2026-09-26T09:00:00Z'),
       'Community.CardUntil': localDate('2026-10-26T09:00:00Z'),
@@ -109,9 +109,11 @@ describe('a community card as the Wallet reads it', () => {
 
   it('a role card and a vetter grant say which role, in words rather than the raw role', () => {
     expect(communityCardDisplay(roleCard, t)!.name).toBe(
-      'Community.CardRoleIn(community=keyring-test-vtc,role=Community.RoleMember)'
+      'Community.CardRoleIn(community=Community.UnnamedRef(ref=keyring-test-vtc),role=Community.RoleMember)'
     )
-    expect(communityCardDisplay(vetterGrant, t)!.name).toBe('Community.CardVetterFor(community=keyring-test-vtc)')
+    expect(communityCardDisplay(vetterGrant, t)!.name).toBe(
+      'Community.CardVetterFor(community=Community.UnnamedRef(ref=keyring-test-vtc))'
+    )
     expect(communityCardDisplay(vetterGrant, t)!.attributes?.['Community.CardRole']).toBe('Community.RoleVetter')
   })
 
@@ -124,7 +126,7 @@ describe('a community card as the Wallet reads it', () => {
       },
     }
     const d = communityCardDisplay(custom, t)!
-    expect(d.name).toBe('Community.CardRoleIn(community=keyring-test-vtc,role=Senior vetter)')
+    expect(d.name).toBe('Community.CardRoleIn(community=Community.UnnamedRef(ref=keyring-test-vtc),role=Senior vetter)')
     expect(d.attributes?.['Community.CardRole']).toBe('Senior vetter')
   })
 

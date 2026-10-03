@@ -1278,12 +1278,47 @@ class VtiAgentController {
    * app learns what a community calls itself; teaching the target here rather
    * than at each screen means a published name cannot be missed by whichever
    * screen happened to fetch.
+   *
+   * A manifest carries a name only when the operator has set branding, which a
+   * fresh community has not. Its public profile has a `name` of its own, so
+   * without branding that is read instead — in the background, since a screen
+   * that subscribes to `communityTarget` picks the name up whenever it lands.
    */
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
     if (manifest.wire) this.joinWireByCommunity.set(communityDid, manifest.wire)
-    communityTarget.publishedName(communityDid, manifest.branding?.displayName)
-    rememberCommunityName(agent, communityDid, manifest.branding?.displayName)
+    const branded = manifest.branding?.displayName?.trim()
+    if (branded) {
+      communityTarget.publishedName(communityDid, branded)
+      rememberCommunityName(agent, communityDid, branded)
+    } else {
+      this.profileNameRead = this.learnProfileName(communityDid, agent)
+    }
     return manifest
+  }
+
+  /** The last public-profile read `learnManifest` started, for a caller (a test) to wait on. */
+  profileNameRead: Promise<void> = Promise.resolve()
+
+  /**
+   * The name a community gives itself in its public profile, learned as its
+   * published name. Read from the same `VTCRest` endpoint as the manifest; a
+   * community with no profile, an empty name or no reachable endpoint is
+   * simply left unnamed.
+   */
+  private async learnProfileName(communityDid: string, agent: Agent | undefined): Promise<void> {
+    if (!agent) return
+    try {
+      const doc = await agent.dids.resolveDidDocument(communityDid)
+      const service = doc.service?.find((s) => s.type === 'VTCRest')
+      const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+      if (!base) return
+      const name = await readPublicProfileName(base, communityDid)
+      if (!name) return
+      communityTarget.publishedName(communityDid, name)
+      rememberCommunityName(agent, communityDid, name)
+    } catch {
+      // Only the name is lost: the community is shown as unnamed.
+    }
   }
 
   /**
@@ -1581,4 +1616,36 @@ function rememberCommunityName(agent: Agent | undefined, communityDid: string, n
 export function vtcRestUrl(base: string, path: string): string {
   const root = base.replace(/\/+$/, '')
   return `${/\/v1$/.test(root) ? root : `${root}/v1`}/${path.replace(/^\/+/, '')}`
+}
+
+/**
+ * The `name` a community's public profile gives it — `GET
+ * {VTCRest}/community/public-profile`, unauthenticated and Trust-Task-exempt
+ * (vtc-service `routes/community/profile.rs`, `PublicCommunityProfile`).
+ *
+ * Undefined unless the profile is answered, is about this very community
+ * (`communityDid`: communities share hosts, and one service must not name
+ * another), and has a non-empty name — a community's profile is created with
+ * an empty one (`CommunityProfile::new(did, "")` at bootstrap).
+ */
+export async function readPublicProfileName(
+  base: string,
+  communityDid: string,
+  doFetch: typeof fetch = fetch
+): Promise<string | undefined> {
+  try {
+    const response = await fetchWaitingIfBusy(
+      doFetch,
+      vtcRestUrl(base, 'community/public-profile'),
+      { method: 'GET', headers: { accept: 'application/json' } },
+      undefined,
+      3_000
+    )
+    if (!response.ok) return undefined
+    const body = (await response.json()) as { communityDid?: unknown; name?: unknown } | undefined
+    if (body?.communityDid !== communityDid || typeof body.name !== 'string') return undefined
+    return body.name.trim() || undefined
+  } catch {
+    return undefined
+  }
 }

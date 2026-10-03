@@ -37,7 +37,7 @@ import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
-import { communityName } from './communityName'
+import { communityName, unnamedCommunityLabel } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { claimWords, joinNeedWords } from './claimWords'
@@ -133,7 +133,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const called = communityName(communityDid ?? '', community)
   // The phone remembers a community it joined; the build merely suggests one.
   const remembered = Boolean(communityDid && chosenBefore?.communityDid === communityDid)
-  const name = called.name ?? called.technical
+  // In a sentence, an unnamed community is said to be one — never its host,
+  // which communities share (communityName).
+  const name = called.name ?? unnamedCommunityLabel(communityDid ?? '', t)
 
   // A community named by a link goes straight to what it asks; the build's
   // suggestion is offered first, beside "a different community".
@@ -427,7 +429,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <hostname>", which read as the community's name when nothing had
               named it at all (tester report #14). A name is shown only when
               something actually gave one; otherwise the card says so and the
-              DID's host stands as the identifier, not as a name. */}
+              DID's handle stands as the identifier, not as a name; the full DID
+              waits behind Details. */}
           {communityDid ? (
             <View style={styles.card} testID={testIdWithKey('JoinSuggested')}>
               <View style={styles.row}>
@@ -469,6 +472,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedWhere')}>
                 {called.technical}
               </ThemedText>
+              <DidDetails did={communityDid} testIdStem="JoinSuggested" />
             </View>
           ) : null}
         </>

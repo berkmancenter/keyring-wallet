@@ -195,9 +195,9 @@ describe("a community's published name survives a relaunch", () => {
     expect(records.filter((r) => r.tags.kind === 'community-name')).toHaveLength(1)
   })
 
-  it('with no name known, a community is "a community", never its host', () => {
+  it('with no name known, a community is said to be unnamed, never named by its host', () => {
     const label = communityLabelOf('did:webvh:QmNoName:dids.ic3.dev:no-name', t)
-    expect(label).toBe('Community.Unnamed')
+    expect(label).toBe('Community.UnnamedRef')
     expect(label).not.toContain('dids.ic3.dev')
   })
 })
