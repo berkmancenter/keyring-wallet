@@ -1399,7 +1399,7 @@
     "StandingReason": "Disse: “{{reason}}”",
     "StandingWithdrawn": "Você retirou seu pedido a {{community}}.",
     "StandingLeft": "Você saiu de {{community}}.",
-    "StandingAgain": "Você pode pedir para entrar de novo. Você terá uma nova identidade para ela.",
+    "StandingAgain": "Você pode pedir para entrar de novo.",
     "Open": "Abrir {{community}}",
     "CheckAgain": "Verificar de novo",
     "JoinAgain": "Entrar de novo",

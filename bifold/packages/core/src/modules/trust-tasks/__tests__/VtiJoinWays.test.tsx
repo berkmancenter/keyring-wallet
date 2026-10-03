@@ -267,6 +267,8 @@ describe('Join, at manifest 0.3', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.StandingRemoved/)
+    // A removal says "You can ask to join again." itself: not said twice, and no new identity promised.
+    expect(tree.queryByTestId(id('JoinStandingAgain'))).toBeNull()
     expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), { statements: 1 })
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
     expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), {})

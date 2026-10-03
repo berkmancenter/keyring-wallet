@@ -10,6 +10,9 @@ import { joinAsks, readManifest, type VtiManifest } from '../module/joinManifest
 import { readJoinState } from '../module/vtiJoin'
 import { VtiApplicant, type VettingApplication, type VtiVettingStore } from '../module/vtiVetting'
 import { joinCard } from '../screens/joinWays'
+import en from '../../../localization/en/en.json'
+import fr from '../../../localization/fr/fr.json'
+import ptBr from '../../../localization/pt-br/pt-br.json'
 
 import vettingCommunity from './fixtures/join-0.3/vetting-community-manifest.json'
 
@@ -144,5 +147,15 @@ describe('where a removed member stands once they ask again', () => {
         poll: false,
       })
     ).resolves.toMatchObject({ kind: 'member' })
+  })
+})
+
+describe('what the screen promises about joining again', () => {
+  it('says the person can ask again, and promises no new identity, in every language', () => {
+    for (const words of [en, fr, ptBr]) {
+      const again = (words.Join as Record<string, unknown>).StandingAgain as string
+      expect(again).toEqual(expect.any(String))
+      expect(again).not.toMatch(/identit/i)
+    }
   })
 })

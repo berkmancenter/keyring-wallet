@@ -782,7 +782,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {tp('Join.StandingReason', { reason: standing.reason })}
           </ThemedText>
         ) : null}
-        {mayJoinAgain ? <ThemedText style={styles.muted}>{t('Join.StandingAgain')}</ThemedText> : null}
+        {/* No promise of a new identity: asking again makes one, and the
+            vetting path was seen to carry on with the earlier one (IN-104).
+            A removal already says "You can ask to join again." itself. */}
+        {mayJoinAgain && standing.kind !== 'removed' ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingAgain')}>
+            {t('Join.StandingAgain')}
+          </ThemedText>
+        ) : null}
       </View>
     )
     body = (
