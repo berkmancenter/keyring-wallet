@@ -133,7 +133,15 @@ try {
   log(`after Approve: "${decided}"`);
   if (!/approved/i.test(decided)) throw new Error(`the phone did not show the approval as given: "${decided}"`);
   await sleep(1500);
+  // Since keyring-bifold #260 the card sits on its own Requests screen, where
+  // the banner never is: go back to Your agent before checking it went away.
+  if (await existsTestId(d, "Requests", 1500)) {
+    await tapTestId(d, "RequestsBackToAgent", 10000);
+    await sleep(1000);
+    log("back from Requests to Your agent");
+  }
   await scrollToTestId(d, "AgentHomeTitle", 6).catch(() => undefined);
+  if (!(await existsTestId(d, "AgentHomeTitle", 5000))) throw new Error("not on Your agent: the banner check below would prove nothing");
   if (await existsTestId(d, "AgentApprovalBanner", 1500)) throw new Error('the "requests wait" banner is still shown after the decision');
 
   // The same request again: it must now pass the consent gate.

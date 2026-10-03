@@ -174,16 +174,27 @@ try {
   await must(driver, "AgentDetailsToggle", "status");
   await mustNot(driver, "AgentDetails", "status (before opening Details)");
 
+  // Where the banner leads: Manage's approvals card before keyring-bifold #260,
+  // the Requests screen since (then back to Your agent, where the banner stays
+  // while the request waits).
+  let requestsScreen = false;
   if (banner) {
     await must(driver, "AgentApprovalBanner", "status");
     await tapTestId(driver, "AgentApprovalBanner", 5000);
-    await must(driver, "AgentApprovals", "the banner's Manage");
+    requestsScreen = await existsTestId(driver, "Requests", 8000);
+    if (requestsScreen) {
+      await must(driver, "AgentApprovalCard", "the banner's Requests screen");
+      await tapTestId(driver, "RequestsBackToAgent", 10000);
+      await must(driver, "AgentApprovalBanner", "Your agent, back from Requests");
+    } else {
+      await must(driver, "AgentApprovals", "the banner's Manage");
+    }
   }
 
   // Away and back: the segment stays (Manage's Unlink, or Status's activity).
   await tapTestId(driver, "Contacts", 10000);
   await openAgentHome(driver);
-  await must(driver, banner ? "AgentUnlink" : "AgentActivity", "after a tab switch");
+  await must(driver, banner && !requestsScreen ? "AgentUnlink" : "AgentActivity", "after a tab switch");
   await screenshot(driver, `segments-${person}-after-tab-switch`);
   console.log(`✅  segments walked for ${person} on ${platform}`);
 } finally {
