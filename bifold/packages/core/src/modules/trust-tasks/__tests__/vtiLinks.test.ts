@@ -6,6 +6,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import {
   APPROVALS_LINK,
   MY_AGENT_SCREEN,
+  myAgentLinkParams,
   KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
@@ -76,6 +77,32 @@ describe('the approvals link a push notification opens', () => {
     expect(navigate).toHaveBeenCalledTimes(1)
     expect(navigate).toHaveBeenCalledWith('VtaRequests')
     expect(MY_AGENT_SCREEN.VtaRequests).toBe(Screens.VtaRequests)
+  })
+})
+
+describe('the My Agent screen a link opens', () => {
+  type Setter = { set(next: Record<string, unknown>): void }
+  const setLink = (kind: string) =>
+    (vtaAgent as unknown as Setter).set({
+      link:
+        kind === 'linked'
+          ? { kind, vtaDid: 'did:webvh:example:vta', linkedAt: '', connection: { kind: 'online' } }
+          : { kind },
+    })
+  afterEach(() => setLink('notLinked'))
+
+  it('keeps "Your agent" under it, so the way back lands there (233)', () => {
+    setLink('linked')
+    expect(myAgentLinkParams('VtiJoin')).toEqual({ screen: Screens.VtiJoin, initial: false })
+    expect(myAgentLinkParams('VtaRequests')).toEqual({ screen: Screens.VtaRequests, initial: false })
+  })
+
+  it("opens the stack's first screen as itself, never on top of itself", () => {
+    setLink('linked')
+    expect(myAgentLinkParams('VtaAgent')).toEqual({ screen: Screens.VtaAgent })
+    setLink('notLinked')
+    expect(myAgentLinkParams('MyAgent')).toEqual({ screen: Screens.MyAgent })
+    expect(myAgentLinkParams('VtaLink')).toEqual({ screen: Screens.VtaLink, initial: false })
   })
 })
 

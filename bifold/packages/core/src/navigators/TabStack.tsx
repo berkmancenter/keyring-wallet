@@ -27,7 +27,7 @@ import { myAgentTabBadge, useWaitingRequestsCount } from '../modules/trust-tasks
 import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
 import { StepUpAskHost } from '../modules/trust-tasks/screens/StepUpAskHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
-import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
+import { keyringAgentLinkKind, myAgentLinkParams } from '../modules/trust-tasks/module/vtiLinks'
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
@@ -146,7 +146,7 @@ const TabStack: React.FC = () => {
               (destination) =>
                 (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
                   Stacks.TabStack,
-                  { screen: TabStacks.MyAgentStack, params: { screen: MY_AGENT_SCREEN[destination] } }
+                  { screen: TabStacks.MyAgentStack, params: myAgentLinkParams(destination) }
                 ),
               (notice: KeyringLinkNotice) => {
                 if (notice.kind === 'unusable') logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)

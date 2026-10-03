@@ -21,7 +21,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
-import { APPROVALS_LINK, MY_AGENT_SCREEN, routeKeyringAgentLink, type MyAgentDestination } from '../module/vtiLinks'
+import { APPROVALS_LINK, myAgentLinkParams, routeKeyringAgentLink, type MyAgentDestination } from '../module/vtiLinks'
 import { QUIET_MS } from '../screens/requestsView'
 import VtaRequests from '../screens/VtaRequests'
 
@@ -50,6 +50,9 @@ const AgentHome = () => {
   )
 }
 
+/** Join, as far as the way back goes: a screen with no back of its own. */
+const Join = () => <Text testID="JoinScreen">join</Text>
+
 const Tabs = createBottomTabNavigator()
 const AgentStack = createStackNavigator()
 const Root = createStackNavigator()
@@ -57,6 +60,7 @@ const MyAgent = () => (
   <AgentStack.Navigator initialRouteName={Screens.VtaAgent}>
     <AgentStack.Screen name={Screens.VtaAgent} component={AgentHome} />
     <AgentStack.Screen name={Screens.VtaRequests} component={VtaRequests} />
+    <AgentStack.Screen name={Screens.VtiJoin} component={Join} />
   </AgentStack.Navigator>
 )
 const TabStack = () => (
@@ -87,7 +91,7 @@ const tabOf = (root: any): string => {
 /** A link's navigation, as TabStack.tsx does it. */
 const openLink = (navRef: React.RefObject<any>) =>
   routeKeyringAgentLink(APPROVALS_LINK, {} as never, (destination: MyAgentDestination) =>
-    navRef.current.navigate('TabStack', { screen: 'MyAgent', params: { screen: MY_AGENT_SCREEN[destination] } })
+    navRef.current.navigate('TabStack', { screen: 'MyAgent', params: myAgentLinkParams(destination) })
   )
 
 beforeEach(() => {
@@ -139,7 +143,7 @@ test('the notification link, from another tab: opens Requests, and its way back 
   expect(tree.queryByTestId('ContactsScreen')).toBeNull()
 })
 
-test('the notification link gives the header a back button, which also lands on "Your agent"', async () => {
+test('the notification link opens Requests on top of "Your agent", so the header\'s own back lands there', async () => {
   const navRef = React.createRef<any>()
   const tree = render(<App navRef={navRef} />)
   await settle()
@@ -147,7 +151,13 @@ test('the notification link gives the header a back button, which also lands on 
     await openLink(navRef)
   })
   await settle()
-  await act(async () => fireEvent.press(tree.getByTestId(id('RequestsHeaderBack'))))
+  const agentStack = navRef.current.getRootState().routes[0].state.routes.find((r: any) => r.name === 'MyAgent').state
+  expect(agentStack.routes.map((r: any) => r.name)).toEqual([Screens.VtaAgent, Screens.VtaRequests])
+  // Something is under it, so the screen's own fallback back is not drawn.
+  expect(tree.queryByTestId(id('RequestsHeaderBack'))).toBeNull()
+  await act(async () => {
+    navRef.current.goBack()
+  })
   await settle()
   const root = navRef.current.getRootState()
   expect(focused(root)).toBe(Screens.VtaAgent)
@@ -194,4 +204,27 @@ test('the link while already on "Your agent": Requests opens on top of it, and b
   await act(async () => fireEvent.press(tree.getByTestId(id('RequestsBackToAgent'))))
   await settle()
   expect(focused(navRef.current.getRootState())).toBe(Screens.VtaAgent)
+})
+
+// 233: a community link opened Join as the stack's only route, with no back.
+test('a community link from another tab opens Join on top of "Your agent", and back lands there', async () => {
+  const navRef = React.createRef<any>()
+  render(<App navRef={navRef} />)
+  await settle()
+  expect(focused(navRef.current.getRootState())).toBe('Contacts')
+  await act(async () => {
+    navRef.current.navigate('TabStack', { screen: 'MyAgent', params: myAgentLinkParams('VtiJoin') })
+  })
+  await settle()
+  let root = navRef.current.getRootState()
+  expect(focused(root)).toBe(Screens.VtiJoin)
+  const agentStack = root.routes[0].state.routes.find((r: any) => r.name === 'MyAgent').state
+  expect(agentStack.routes.map((r: any) => r.name)).toEqual([Screens.VtaAgent, Screens.VtiJoin])
+  await act(async () => {
+    navRef.current.goBack()
+  })
+  await settle()
+  root = navRef.current.getRootState()
+  expect(focused(root)).toBe(Screens.VtaAgent)
+  expect(tabOf(root)).toBe('MyAgent')
 })

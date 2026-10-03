@@ -22,6 +22,7 @@ import {
 } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
+import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
@@ -205,6 +206,19 @@ export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtiVetting: Screens.VtiVetting,
   VtiJoin: Screens.VtiJoin,
   VtiInvited: Screens.VtiInvited,
+}
+
+/**
+ * The My Agent stack's params for a link's destination. `initial: false` keeps
+ * the stack's own first screen ("Your agent") under the screen a link opens.
+ * Every tab unmounts on blur, so a link that arrived from another tab made that
+ * screen the stack's only route: Join opened by a community link had no back,
+ * and a press on the My Agent tab stayed on it (233). The first screen itself
+ * goes without it, or it would sit on top of itself.
+ */
+export function myAgentLinkParams(destination: MyAgentDestination): { screen: Screens; initial?: false } {
+  const screen = MY_AGENT_SCREEN[destination]
+  return screen === agentHomeScreen() ? { screen } : { screen, initial: false }
 }
 
 /**
