@@ -221,13 +221,22 @@ async function openInvitedFlow(d) {
 /** The person's own door (INVITE_VIA=door): send the identity, be invited, join. */
 async function inviteByDoor(d) {
   await openInvitedFlow(d);
+  // A second community on this phone (E2E_KEEP_MEMBERSHIP=1): "I was invited"
+  // shows the community already chosen, and offers "A different community"
+  // (bifold #274, 233) for an invitation from another.
+  const another = process.env.E2E_KEEP_MEMBERSHIP === "1" && (await existsTestId(d, "InvitedDifferentCommunity", 8000));
+  if (process.env.E2E_KEEP_MEMBERSHIP === "1" && !another) throw new Error('"I was invited" offers no "A different community" (InvitedDifferentCommunity)');
   // A build that names no community (the store build: testers bring their
   // own) first asks which community invited them. Bring it the way a person
   // does — its code through the scanner's paste — as the community's bare DID.
-  if (await existsTestId(d, "InvitedWhichCommunity", 8000)) {
+  if (another || (await existsTestId(d, "InvitedWhichCommunity", 8000))) {
     const bare = process.env.KEYRING_COMMUNITY_DID;
     if (!bare) throw new Error("this build names no community: set KEYRING_COMMUNITY_DID to the one that invites");
-    await tapTestId(d, "InvitedScanCommunity", 15000);
+    if (another) {
+      await scrollToTestId(d, "InvitedDifferentCommunity", 4).catch(() => undefined);
+      await tapTestId(d, "InvitedDifferentCommunity", 15000);
+      console.log(`[e2e] ${d.e2ePlatform}: I was invited → A different community`);
+    } else await tapTestId(d, "InvitedScanCommunity", 15000);
     for (let i = 0; i < 3 && !(await existsTestId(d, "PasteUrlButton", 5000)); i++) {
       if (await existsTestId(d, "Continue", 3000)) await tapTestId(d, "Continue");
     }

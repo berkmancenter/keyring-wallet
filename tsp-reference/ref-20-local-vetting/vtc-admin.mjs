@@ -373,7 +373,7 @@ const COMMANDS = {
       // decide/0.1 is { id, decision, reason? } (additionalProperties: false);
       // the member's role comes from the invitation or the policy, not here.
       if (role && role !== "member") console.error(`[ref-20] join-decide: role ${role} ignored — decide/0.1 carries no role`);
-      return send(TASK.joinDecide, { id, decision: decision ?? "approved", reason: "ref-20: seed the vetter" });
+      return send(TASK.joinDecide, { id, decision: decision ?? "approved", reason: process.env.JOIN_DECIDE_REASON ?? "ref-20: seed the vetter" });
     },
   },
   // Read as the same signed document an applicant sends (admin-ui plugins/vetting/api.ts fetchManifest).
