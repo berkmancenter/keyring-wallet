@@ -36,6 +36,8 @@ jest.mock('../module/vtiAgent', () => ({
       return () => mockGuards.delete(g)
     },
   },
+  // The real one: what a listener keeps must be what the shared session keeps.
+  unwrapBindingEnvelope: jest.requireActual('../module/vtiAgent').unwrapBindingEnvelope,
 }))
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
@@ -48,7 +50,9 @@ jest.mock('../module/VtiMediatorTransport', () => ({}))
 jest.mock('../module/vtiTsp', () => ({}))
 jest.mock('../module/VtiIdentityStore', () => ({ GenericRecordsIdentityStore: jest.fn() }))
 
+import { keepForPersona } from '../module/vtiPersonaInbox'
 import {
+  keepFromListener,
   LISTENER_RETRY_MS,
   listenerTargets,
   startIdentityListeners,
@@ -240,6 +244,31 @@ describe('the listeners', () => {
     expect(live(a.did)).toBe(true)
   })
 
+  // 233 candidate, 06:50:20Z: between the shared session's tries, a keys-held
+  // retry reopened a listener for the identity it was signing in as.
+  it('an identity handed to the shared session gets no listener between its tries, until it goes for another', async () => {
+    const a = persona('a')
+    const b = persona('b')
+    sharedMoves({ did: a.did, connected: true })
+    start([a, b])
+    await flush()
+    expect(live(b.did)).toBe(true)
+    // The shared session goes for b: b's listener steps aside.
+    for (const guard of mockGuards) await guard(b.did)
+    // Its first try fails: neither signed in nor signing in, as b or anyone.
+    sharedMoves({ did: undefined, signingInAs: undefined, connected: false })
+    DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: b.did })
+    await flush()
+    expect(live(b.did)).toBe(false)
+    expect(live(a.did)).toBe(true)
+    // It goes for a instead: b is free again.
+    for (const guard of mockGuards) await guard(a.did)
+    sharedMoves({ did: a.did, connected: true })
+    await flush()
+    expect(live(b.did)).toBe(true)
+    expect(live(a.did)).toBe(false)
+  })
+
   it('stopping closes them all and removes the sign-in guard', async () => {
     const a = persona('a')
     const b = persona('b')
@@ -249,5 +278,37 @@ describe('the listeners', () => {
     await stop()
     expect(live(a.did) || live(b.did)).toBe(false)
     expect(mockGuards.size).toBe(0)
+  })
+})
+
+describe('what a listener keeps', () => {
+  // 233 candidate: a removal notice arrived in the binding envelope, matched
+  // nothing by its outer type, and was neither applied nor reported.
+  it('a Trust Task in the binding envelope is kept as the task itself, as the shared session keeps it', async () => {
+    const keep = keepForPersona as jest.Mock
+    keep.mockClear()
+    const a = persona('a')
+    const envelope = {
+      id: 'm1',
+      type: 'https://trusttasks.org/binding/didcomm/0.1/envelope',
+      body: { type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1', payload: { did: a.did } },
+    }
+    await keepFromListener({ config: { logger: {} } } as never, a, envelope as never, 'didcomm')
+    expect(keep).toHaveBeenCalledWith(
+      expect.anything(),
+      a,
+      expect.objectContaining({
+        type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
+        body: envelope.body,
+      })
+    )
+  })
+
+  it('a message not in the envelope is kept as it came', async () => {
+    const keep = keepForPersona as jest.Mock
+    keep.mockClear()
+    const plain = { id: 'm2', type: 'https://example.org/plain', body: {} }
+    await keepFromListener({ config: { logger: {} } } as never, persona('a'), plain as never, 'tsp')
+    expect(keep).toHaveBeenCalledWith(expect.anything(), expect.anything(), plain)
   })
 })
