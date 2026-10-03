@@ -39,6 +39,23 @@ const mustNot = async (driver, id, where) => {
 };
 
 /** The My Agent tab lands on "Your agent" once linked (as run-vta-link opens it). */
+/**
+ * From the Requests screen back to Your agent. Its own button shows only when nothing
+ * waits, last in the list (scroll to it); else the header back, which is a plain stack
+ * back to Your agent (RequestsHeaderBack when the screen was opened from a link).
+ */
+async function backFromRequests(driver) {
+  const own = await scrollToTestId(driver, "RequestsBackToAgent", 4).catch(() => undefined);
+  if (own) return own.click();
+  // Opened from a notification link the screen has its own header back.
+  if (await existsTestId(driver, "RequestsHeaderBack", 1000)) return tapTestId(driver, "RequestsHeaderBack", 5000);
+  if (driver.e2ePlatform === "ios") {
+    const back = driver.$('-ios predicate string:type == "XCUIElementTypeButton" AND (name == "Back" OR label == "Back")');
+    if (await back.isExisting().catch(() => false)) return back.click();
+  }
+  return driver.back();
+}
+
 async function openAgentHome(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click();
   await sleep(1500);
@@ -184,7 +201,7 @@ try {
     requestsScreen = await existsTestId(driver, "Requests", 8000);
     if (requestsScreen) {
       await must(driver, "AgentApprovalCard", "the banner's Requests screen");
-      await tapTestId(driver, "RequestsBackToAgent", 10000);
+      await backFromRequests(driver);
       await must(driver, "AgentApprovalBanner", "Your agent, back from Requests");
     } else {
       await must(driver, "AgentApprovals", "the banner's Manage");

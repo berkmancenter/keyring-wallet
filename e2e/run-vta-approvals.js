@@ -70,6 +70,23 @@ function rules() {
   return parsed.rules ?? [];
 }
 
+/**
+ * From the Requests screen back to Your agent. Its own button shows only when nothing
+ * waits, last in the list (scroll to it); else the header back, which is a plain stack
+ * back to Your agent (RequestsHeaderBack when the screen was opened from a link).
+ */
+async function backFromRequests(d) {
+  const own = await scrollToTestId(d, "RequestsBackToAgent", 4).catch(() => undefined);
+  if (own) return own.click();
+  // Opened from a notification link the screen has its own header back.
+  if (await existsTestId(d, "RequestsHeaderBack", 1000)) return tapTestId(d, "RequestsHeaderBack", 5000);
+  if (d.e2ePlatform === "ios") {
+    const back = d.$('-ios predicate string:type == "XCUIElementTypeButton" AND (name == "Back" OR label == "Back")');
+    if (await back.isExisting().catch(() => false)) return back.click();
+  }
+  return d.back();
+}
+
 let d;
 let failed = true;
 let approver;
@@ -136,7 +153,7 @@ try {
   // Since keyring-bifold #260 the card sits on its own Requests screen, where
   // the banner never is: go back to Your agent before checking it went away.
   if (await existsTestId(d, "Requests", 1500)) {
-    await tapTestId(d, "RequestsBackToAgent", 10000);
+    await backFromRequests(d);
     await sleep(1000);
     log("back from Requests to Your agent");
   }
