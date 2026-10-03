@@ -339,6 +339,33 @@ describe('I was invited', () => {
     expect(again.tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
   })
 
+  // 233: a member of one community, invited by another, only ever saw the first.
+  test('a member can bring an invitation from a different community, whose link comes back here', async () => {
+    communityLinkReturn.take()
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    const { tree } = await renderInvited([personaRecord])
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedDifferentCommunity'))))
+    expect(communityLinkReturn.take()).toBe(true)
+  })
+
+  test('after joining one community here, another brought here starts at its own beginning', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockResolvedValue({ membership: {} })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+    // The other community has nothing stored, and no identity yet.
+    mockReadJoinState.mockResolvedValue({ kind: 'none' })
+    await act(async () => {
+      communityTarget.set({ communityDid: 'did:webvh:QmOther:vtc.example.org:other' })
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+    communityTarget.clear()
+  })
+
   // Android, 2026-09-26 (1 run in 2): the join saves its request as it sends
   // it; the store announces that, and the screen turned into "Sent — deciding"
   // mid-join, its Withdraw reading "Withdrawing…" though nobody had tapped it.
