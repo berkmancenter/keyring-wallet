@@ -37,7 +37,7 @@ import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
 import { vtaAgent } from './vtaAgent'
-import { vtiAgent } from './vtiAgent'
+import { unwrapBindingEnvelope, vtiAgent } from './vtiAgent'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import {
   advertisedMediatorDid,
@@ -115,6 +115,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   let stopped = false
   let paused = AppState.currentState === 'background'
   let reconciling: Promise<void> | undefined
+  /** The identity the shared session last went for (its sign-in guard ran for it). */
+  let sharedTarget: string | undefined
   let again = false
 
   const stopOne = async (did: string) => {
@@ -154,7 +156,12 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   }
 
   const reconcileOnce = async () => {
-    const wanted = stopped || paused ? [] : listenerTargets(await personas().catch(() => []), sharedNow(), vtaDidNow())
+    const wanted =
+      stopped || paused
+        ? []
+        : listenerTargets(await personas().catch(() => []), sharedNow(), vtaDidNow()).filter(
+            (p) => p.did !== sharedTarget
+          )
     const wantedDids = new Set(wanted.map((p) => p.did))
     await Promise.all([...running.keys()].filter((did) => !wantedDids.has(did)).map(stopOne))
     if (stopped || paused) return
@@ -186,6 +193,11 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   // Before the shared session signs in as an identity, its listener steps
   // aside, and the sign-in waits for that (one live connection per DID).
   const stopGuard = vtiAgent.beforeSignIn(async (did) => {
+    // Reserved for the shared session from here until it goes for another
+    // identity: between its tries it is neither signed in nor signing in, and
+    // a listener reopened in that gap (a keys-held retry) became a second live
+    // connection for the same DID (233 candidate, 06:50:20Z).
+    sharedTarget = did
     if (running.has(did)) {
       releaseWarn(`[VTI] listener for ${didPrefix(did)}: handing over to the shared session`)
       await stopOne(did)
@@ -231,6 +243,34 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
 }
 
 /**
+ * Keep what a listener received, as the shared session keeps it: a Trust Task
+ * in the binding envelope is presented as the task itself first
+ * (`unwrapBindingEnvelope`, as `vtiAgent.deliver` does). Without it a removal
+ * notice reached a listener and matched nothing — its type was the envelope's —
+ * so it was neither applied nor reported (233 candidate, Prague lane row).
+ * What arrived and what failed are said in the Release log.
+ */
+export async function keepFromListener(
+  agent: Agent,
+  persona: VtiPersona,
+  received: DidCommV2PlaintextMessage,
+  via: 'didcomm' | 'tsp'
+): Promise<void> {
+  const who = didPrefix(persona.did)
+  const message = unwrapBindingEnvelope(received)
+  const kind = String(message.type ?? 'a message')
+  releaseWarn(`[VTI] listener for ${who}: received ${kind} (${via})`)
+  try {
+    await keepForPersona(agent, persona, message)
+  } catch (error) {
+    releaseWarn(
+      `[VTI] listener for ${who}: ${kind} not kept (${error instanceof Error ? error.message : String(error)})`
+    )
+    throw error
+  }
+}
+
+/**
  * A listen-only session for one identity, opened the way the shared session
  * opens one (`vtiAgent.connectNow`): the mediator the identity's own document
  * names, else the configured one; the borrowed key-agreement key; and, when the
@@ -250,17 +290,8 @@ export function defaultListenerFactory(agent: Agent, configuredMediatorDid: stri
     // What a listener receives, said in the Release log as the shared session
     // says it: without it a notice that never showed could not be told from a
     // notice that never came (233 two-community row, a removal).
-    const keep = async (plaintext: DidCommV2PlaintextMessage, via: 'didcomm' | 'tsp') => {
-      releaseWarn(`[VTI] listener for ${who}: received ${String(plaintext.type ?? 'a message')} (${via})`)
-      try {
-        await keepForPersona(agent, persona, plaintext)
-      } catch (error) {
-        releaseWarn(
-          `[VTI] listener for ${who}: ${String(plaintext.type ?? 'a message')} not kept (${error instanceof Error ? error.message : String(error)})`
-        )
-        throw error
-      }
-    }
+    const keep = (plaintext: DidCommV2PlaintextMessage, via: 'didcomm' | 'tsp') =>
+      keepFromListener(agent, persona, plaintext, via)
     return new VtiMediatorSession(agent, identity, mediator, {
       onError: (error) =>
         agent.config?.logger?.warn?.(`[VTI] listener for ${didPrefix(persona.did)}: ${error.message}`),
