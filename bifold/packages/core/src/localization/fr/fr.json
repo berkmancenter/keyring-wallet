@@ -1466,6 +1466,7 @@
       "TypeMembership": "d'adhésion"
     },
     "StandingMember": "Vous êtes membre de {{community}}.",
+    "NowMember": "Vous êtes maintenant membre de {{community}}.",
     "StandingRemoved": "{{community}} vous a retiré. Vous pouvez demander à la rejoindre à nouveau.",
     "StandingSent": "Envoyé — en attente de la réponse de {{community}}.",
     "StandingPending": "{{community}} a reçu votre demande et décide.",

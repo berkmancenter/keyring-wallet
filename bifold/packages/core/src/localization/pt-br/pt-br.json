@@ -1372,6 +1372,7 @@
       "TypeMembership": "de membro"
     },
     "StandingMember": "Você é membro de {{community}}.",
+    "NowMember": "Agora você é membro de {{community}}.",
     "StandingRemoved": "{{community}} removeu você. Você pode pedir para entrar de novo.",
     "StandingSent": "Enviado — aguardando a resposta de {{community}}.",
     "StandingPending": "{{community}} recebeu seu pedido e está decidindo.",
