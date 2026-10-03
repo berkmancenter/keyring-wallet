@@ -996,6 +996,9 @@ export class VtaAgentController {
     const owner = this.ownerFor === vtaDid
     this.ownerFor = undefined
     await links.set({ vtaDid, label, linkedAt, ...(owner ? { owner: true } : {}) })
+    // The agent just linked is the one this phone acts with: the store keeps
+    // every linked agent, and a link no longer replaces another one's record.
+    await links.use?.(vtaDid)
     this.set({ ownsAgent: owner })
     if (rotate) {
       this.dispatch({ type: 'rotating' })

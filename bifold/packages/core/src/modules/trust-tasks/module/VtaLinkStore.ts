@@ -37,14 +37,36 @@ export interface VtaLink {
 }
 
 export interface VtaLinkStore {
+  /** The current agent's link (the one this phone acts with), if any. */
   get(): Promise<VtaLink | undefined>
+  /**
+   * Keep a link: updates the one for the same agent, never another agent's.
+   * The first agent kept becomes current; a later one waits for `use`.
+   */
   set(link: VtaLink): Promise<void>
+  /** Take the current agent's link out (unlinking); the oldest remaining becomes current. */
   clear(): Promise<void>
+  /** Every linked agent, oldest first. Optional: a store without it holds one. */
+  list?(): Promise<VtaLink[]>
+  /** The current agent's DID. */
+  current?(): Promise<string | undefined>
+  /** Make a linked agent the current one. */
+  use?(vtaDid: string): Promise<void>
+  /** Take one agent's link out; if it was current, the oldest remaining becomes current. */
+  remove?(vtaDid: string): Promise<void>
 }
 
 const RECORD_TYPE = 'keyring.vta-link'
+/** Which agent is current: one record, its DID. */
+const CURRENT_TYPE = 'keyring.vta-link.current'
 
-/** One record, the current link, in the wallet's encrypted store. */
+const oldestFirst = (a: VtaLink, b: VtaLink) => String(a.linkedAt).localeCompare(String(b.linkedAt))
+
+/**
+ * Every linked agent, one record each, in the wallet's encrypted store, and a
+ * record naming the current one. A phone from before kept one record and no
+ * marker: it reads as a list of one, current.
+ */
 export class GenericRecordsVtaLinkStore implements VtaLinkStore {
   constructor(private readonly agent: Agent) {}
 
@@ -52,23 +74,71 @@ export class GenericRecordsVtaLinkStore implements VtaLinkStore {
     return this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE })
   }
 
+  private async marker() {
+    const [record] = await this.agent.genericRecords.findAllByQuery({ recordType: CURRENT_TYPE })
+    return record
+  }
+
+  private async mark(vtaDid: string | undefined) {
+    const record = await this.marker()
+    if (!vtaDid) {
+      if (record) await this.agent.genericRecords.delete(record)
+      return
+    }
+    if (record) {
+      record.content = { vtaDid }
+      await this.agent.genericRecords.update(record)
+      return
+    }
+    await this.agent.genericRecords.save({ content: { vtaDid }, tags: { recordType: CURRENT_TYPE } })
+  }
+
+  async list(): Promise<VtaLink[]> {
+    return (await this.records()).map((r) => r.content as unknown as VtaLink).sort(oldestFirst)
+  }
+
+  async current(): Promise<string | undefined> {
+    const links = await this.list()
+    const marked = (await this.marker())?.content?.vtaDid as string | undefined
+    if (marked && links.some((l) => l.vtaDid === marked)) return marked
+    // No marker (a phone from before), or one naming a link that is gone: the oldest.
+    return links[0]?.vtaDid
+  }
+
   async get(): Promise<VtaLink | undefined> {
-    const [record] = await this.records()
-    return record?.content as unknown as VtaLink | undefined
+    const current = await this.current()
+    return (await this.list()).find((l) => l.vtaDid === current)
   }
 
   async set(link: VtaLink): Promise<void> {
-    const [existing] = await this.records()
+    const records = await this.records()
     const content = { ...link } as Record<string, unknown>
-    if (existing) {
-      existing.content = content
-      await this.agent.genericRecords.update(existing)
-      return
+    const same = records.find((r) => (r.content as unknown as VtaLink).vtaDid === link.vtaDid)
+    if (same) {
+      same.content = content
+      await this.agent.genericRecords.update(same)
+    } else {
+      await this.agent.genericRecords.save({ content, tags: { recordType: RECORD_TYPE, vtaDid: link.vtaDid } })
     }
-    await this.agent.genericRecords.save({ content, tags: { recordType: RECORD_TYPE } })
+    // The first agent kept is the current one; a later one waits for `use`.
+    if (records.length === 0) await this.mark(link.vtaDid)
+  }
+
+  async use(vtaDid: string): Promise<void> {
+    if (!(await this.list()).some((l) => l.vtaDid === vtaDid)) throw new Error('no link to that agent')
+    await this.mark(vtaDid)
+  }
+
+  async remove(vtaDid: string): Promise<void> {
+    const wasCurrent = (await this.current()) === vtaDid
+    for (const record of await this.records()) {
+      if ((record.content as unknown as VtaLink).vtaDid === vtaDid) await this.agent.genericRecords.delete(record)
+    }
+    if (wasCurrent) await this.mark((await this.list())[0]?.vtaDid)
   }
 
   async clear(): Promise<void> {
-    for (const record of await this.records()) await this.agent.genericRecords.delete(record)
+    const current = await this.current()
+    if (current) await this.remove(current)
   }
 }
