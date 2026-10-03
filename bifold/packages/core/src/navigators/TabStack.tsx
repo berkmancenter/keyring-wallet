@@ -35,6 +35,7 @@ import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
+import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
@@ -96,6 +97,8 @@ const TabStack: React.FC = () => {
   useAgentPresence(presencePort, presenceFailed, presenceLog)
   // A community's removal notice is said in plain words when it arrives.
   useVtiRemovedNotice()
+  // …and a community making this phone a member.
+  useVtiJoinedNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
