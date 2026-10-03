@@ -74,6 +74,25 @@ exports[`PushNotifications Screen Push notification screen renders correctly in 
       >
         PushNotifications.BeNotified
       </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "marginTop": 20,
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/PushNotificationWhatItSays"
+      >
+        PushNotifications.WhatItSays
+      </Text>
       <View
         style={
           Object {
@@ -271,79 +290,181 @@ exports[`PushNotifications Screen Push notification screen renders correctly in 
     }
   >
     <View
-      accessibilityLabel="Global.Continue"
-      accessibilityRole="button"
-      accessibilityState={
-        Object {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": false,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        Object {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         Object {
-          "backgroundColor": "#42803E",
-          "borderRadius": 4,
-          "opacity": 1,
-          "padding": 16,
+          "gap": 12,
         }
       }
-      testID="com.ariesbifold:id/PushNotificationContinue"
     >
       <View
-        style={
+        accessibilityLabel="PushNotifications.TurnOn"
+        accessibilityRole="button"
+        accessibilityState={
           Object {
-            "alignItems": "center",
-            "flexDirection": "row",
-            "justifyContent": "center",
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": false,
+            "expanded": undefined,
+            "selected": undefined,
           }
         }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "backgroundColor": "#42803E",
+            "borderRadius": 4,
+            "opacity": 1,
+            "padding": 16,
+          }
+        }
+        testID="com.ariesbifold:id/PushNotificationContinue"
       >
-        <Text
-          maxFontSizeMultiplier={2}
+        <View
           style={
-            Array [
-              Object {
-                "color": "#FFFFFF",
-                "fontSize": 18,
-                "fontWeight": "normal",
-              },
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "justifyContent": "center",
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
               Array [
                 Object {
                   "color": "#FFFFFF",
                   "fontSize": 18,
-                  "fontWeight": "bold",
-                  "textAlign": "center",
+                  "fontWeight": "normal",
                 },
-                false,
-                false,
-              ],
-            ]
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                  },
+                  false,
+                  false,
+                ],
+              ]
+            }
+          >
+            PushNotifications.TurnOn
+          </Text>
+        </View>
+      </View>
+      <View
+        accessibilityLabel="Global.NotNow"
+        accessibilityRole="button"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": false,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "borderColor": "#42803E",
+            "borderRadius": 4,
+            "borderWidth": 2,
+            "opacity": 1,
+            "padding": 16,
+          }
+        }
+        testID="com.ariesbifold:id/PushNotificationNotNow"
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "justifyContent": "center",
+            }
           }
         >
-          Global.Continue
-        </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "color": "#42803E",
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                  },
+                  false,
+                  false,
+                ],
+              ]
+            }
+          >
+            Global.NotNow
+          </Text>
+        </View>
       </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "textAlign": "center",
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/PushNotificationChangeLater"
+      >
+        PushNotifications.ChangeLater
+      </Text>
     </View>
   </View>
 </RNCSafeAreaView>

@@ -74,6 +74,25 @@ exports[`TogglePushNotification Screen Push notification screen renders correctl
       >
         PushNotifications.BeNotified
       </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "marginTop": 20,
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/PushNotificationWhatItSays"
+      >
+        PushNotifications.WhatItSays
+      </Text>
       <View
         style={
           Object {

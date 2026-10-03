@@ -2,17 +2,21 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, View } from 'react-native'
 import { useTheme } from '../../contexts/theme'
+import { testIdWithKey } from '../../utils/testable'
 import { ThemedText } from '../texts/ThemedText'
 
 const PushNotificationsContent: React.FC = () => {
   const { t } = useTranslation()
-  const { TextTheme, Assets } = useTheme()
+  const { TextTheme, Assets, ColorPalette } = useTheme()
+  // A bullet with no words is left out: Keyring's notifications carry one
+  // kind of thing, said in the body, not a list.
   const list = [
     t('PushNotifications.BulletOne'),
     t('PushNotifications.BulletTwo'),
     t('PushNotifications.BulletThree'),
     t('PushNotifications.BulletFour'),
-  ]
+  ].filter((item) => item.trim().length > 0)
+  const whatItSays = t('PushNotifications.WhatItSays')
 
   const style = StyleSheet.create({
     image: {
@@ -38,6 +42,15 @@ const PushNotificationsContent: React.FC = () => {
         {t('PushNotifications.EnableNotifications')}
       </ThemedText>
       <ThemedText>{t('PushNotifications.BeNotified')}</ThemedText>
+      {/* What a notification shows: only that something waits; the rest stays behind the PIN. */}
+      {whatItSays.trim() ? (
+        <ThemedText
+          style={{ marginTop: 20, color: ColorPalette.grayscale.mediumGrey }}
+          testID={testIdWithKey('PushNotificationWhatItSays')}
+        >
+          {whatItSays}
+        </ThemedText>
+      ) : null}
       {list.map((item, index) => (
         <View style={{ flexDirection: 'row', marginTop: 20 }} key={index}>
           <ThemedText>{'\u2022'}</ThemedText>

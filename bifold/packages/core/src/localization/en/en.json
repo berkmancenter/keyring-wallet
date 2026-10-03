@@ -576,20 +576,23 @@
     "Credential": "credential"
   },
   "PushNotifications": {
-    "EnableNotifications": "Enable Notifications to get instant alerts",
-    "BeNotified": "Be notified when you receive:",
+    "EnableNotifications": "Know when your agent needs you",
+    "BeNotified": "Sometimes your agent needs your approval before it acts for you. With notifications on, Keyring tells you when a request is waiting, even when the app is closed.",
     "ReceiveNotifications": "Receive notifications",
-    "BulletFour": "new messages",
-    "BulletOne": "new credential offers",
-    "BulletThree": "updates to your credentials",
-    "BulletTwo": "new proof requests",
-    "NotificationsOffMessage": "Be notified when you receive new credential offers, proof requests, updates to your credentials, new messages and more.",
+    "BulletFour": "",
+    "BulletOne": "",
+    "BulletThree": "",
+    "BulletTwo": "",
+    "NotificationsOffMessage": "Turn them on to hear when your agent needs your approval, even when the app is closed.",
     "NotificationsOffTitle": "Notifications for Keyring are turned off",
     "NotificationsInstructionTitle": "To enable notifications:",
     "InstructionsOne": "Open the app's settings",
     "InstructionsTwo": "Tap Notifications",
     "InstructionsThree": "Enable notifications",
-    "OpenSettings": "Open settings"
+    "OpenSettings": "Open settings",
+    "WhatItSays": "A notification only says that something is waiting. What it is stays in Keyring, behind your PIN.",
+    "TurnOn": "Turn on notifications",
+    "ChangeLater": "You can change this later in Settings."
   },
   "CredentialDetails": {
     "Id": "Id:",

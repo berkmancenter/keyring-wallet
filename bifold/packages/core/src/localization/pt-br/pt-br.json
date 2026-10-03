@@ -485,20 +485,23 @@
     "Credential": "credencial"
   },
   "PushNotifications": {
-    "EnableNotifications": "Enable Notifications to get instant alerts (PT-BR)",
-    "BeNotified": "Be notified when you receive: (PT-BR)",
+    "EnableNotifications": "Saiba quando seu agente precisa de você",
+    "BeNotified": "Às vezes seu agente precisa da sua aprovação antes de agir por você. Com as notificações ativadas, o Keyring avisa quando um pedido está esperando, mesmo com o app fechado.",
     "ReceiveNotifications": "Receive notifications (PT-BR)",
-    "BulletFour": "new messages (PT-BR)",
-    "BulletOne": "new credential offers (PT-BR)",
-    "BulletThree": "updates to your credentials (PT-BR)",
-    "BulletTwo": "new proof requests (PT-BR)",
-    "NotificationsOffMessage": "Be notified when you receive new credential offers, proof requests, updates to your credentials, new messages and more. (PT-BR)",
+    "BulletFour": "",
+    "BulletOne": "",
+    "BulletThree": "",
+    "BulletTwo": "",
+    "NotificationsOffMessage": "Ative-as para saber quando seu agente precisa da sua aprovação, mesmo com o app fechado.",
     "NotificationsOffTitle": "Notifications for Keyring are turned off (PT-BR)",
     "NotificationsInstructionTitle": "To enable notifications: (PT-BR)",
     "InstructionsOne": "Open the app's settings (PT-BR)",
     "InstructionsTwo": "Tap Notifications (PT-BR)",
     "InstructionsThree": "Enable notifications (PT-BR)",
-    "OpenSettings": "Open settings (PT-BR)"
+    "OpenSettings": "Open settings (PT-BR)",
+    "WhatItSays": "Uma notificação só diz que algo está esperando. O que é fica no Keyring, protegido pelo seu PIN.",
+    "TurnOn": "Ativar notificações",
+    "ChangeLater": "Você pode mudar isso depois nas Configurações."
   },
   "CredentialDetails": {
     "Id": "Id:",
