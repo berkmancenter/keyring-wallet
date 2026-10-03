@@ -260,3 +260,41 @@ describe('a first link whose key swap is unsettled', () => {
     expect(reduceLink(linked, { type: 'resumed', ...agent })).toBe(linked)
   })
 })
+
+/**
+ * An agent host's setup used to read as one sentence for minutes; the phone
+ * knows the step it is at, and each move is a transition here.
+ */
+describe("an agent host's setup, step by step", () => {
+  const hostWaiting = run([{ ...offerScanned, via: 'host' }, { type: 'confirmed' }, { type: 'submitted', code: '' }])
+
+  it('names the step and when it began', () => {
+    const creating = reduceLink(hostWaiting, { type: 'hostStage', step: 'creating', now: 10 })
+    expect(creating).toMatchObject({ kind: 'awaitingGrant', via: 'host', stage: { step: 'creating', since: 10 } })
+    const connecting = reduceLink(creating, { type: 'hostStage', step: 'connecting', now: 40 })
+    // One clock for the whole setup: it keeps counting from the first step.
+    expect(connecting).toMatchObject({ stage: { step: 'connecting', since: 40, startedAt: 10 } })
+  })
+
+  it('a repeated step changes nothing, so the screen does not re-render on every poll', () => {
+    const creating = reduceLink(hostWaiting, { type: 'hostStage', step: 'creating', now: 10 })
+    expect(reduceLink(creating, { type: 'hostStage', step: 'creating', now: 13 })).toBe(creating)
+  })
+
+  it('each sign-in try is counted, and the step keeps the time it began', () => {
+    const first = reduceLink(hostWaiting, { type: 'hostStage', step: 'signingIn', attempt: 2, of: 24, now: 50 })
+    const third = reduceLink(first, { type: 'hostStage', step: 'signingIn', attempt: 3, of: 24, now: 55 })
+    expect(third).toMatchObject({ stage: { step: 'signingIn', attempt: 3, of: 24, since: 50 } })
+  })
+
+  it('moves nothing but a host connection that is waiting', () => {
+    const coded = run([offerScanned, { type: 'confirmed' }, { type: 'submitted', code: 'ABCD-EFGH' }])
+    expect(reduceLink(coded, { type: 'hostStage', step: 'creating', now: 1 })).toBe(coded)
+    expect(reduceLink(linked, { type: 'hostStage', step: 'creating', now: 1 })).toBe(linked)
+  })
+
+  it('is left behind once the phone is granted', () => {
+    const stepped = reduceLink(hostWaiting, { type: 'hostStage', step: 'connecting', now: 1 })
+    expect(reduceLink(stepped, { type: 'granted' })).not.toHaveProperty('stage')
+  })
+})

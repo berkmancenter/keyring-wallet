@@ -206,6 +206,19 @@ const acceptedRequest: HostConnectionAccepted = {
 }
 
 describe('2. waiting for the agent', () => {
+  it('tells the caller each status the host reports, for the screen to name', async () => {
+    const statuses: string[] = []
+    const host = mockHost({
+      [PROGRESS]: [progress('provisioning'), progress('provisioning'), progress('awaiting_mobile')],
+    })
+    await waitUntilAgentReady(acceptedRequest, {
+      fetch: host.fetch,
+      ...noSleep,
+      onStatus: (s) => void statuses.push(s),
+    })
+    expect(statuses).toEqual(['provisioning', 'provisioning', 'awaiting_mobile'])
+  })
+
   it('polls about every three seconds with the bearer token until awaiting_mobile', async () => {
     const sleeps: number[] = []
     const host = mockHost({

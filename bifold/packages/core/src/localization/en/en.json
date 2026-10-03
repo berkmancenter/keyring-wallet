@@ -1282,6 +1282,11 @@
       "SettingUpTitle": "Setting up your agent",
       "SettingUpBody": "Your agent host is getting your agent ready for this phone. This can take a few minutes. Keep Keyring open.",
       "SettingUpWaiting": "Waiting for your agent…",
+      "Steps": {
+        "Creating": "Your agent host is creating your agent",
+        "Connecting": "Connecting this phone",
+        "SigningIn": "Signing in… still trying ({{attempt}})"
+      },
       "Failed": {
         "badKey": "Your agent host didn't accept this phone's code. Make a new code and try again, or use the Admin DID option on its page.",
         "badRequest": "Keyring and your agent host didn't understand each other. Use the Admin DID option on its page instead.",

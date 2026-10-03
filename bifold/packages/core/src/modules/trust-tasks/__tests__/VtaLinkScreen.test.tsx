@@ -556,6 +556,21 @@ describe("an agent host's automatic connection", () => {
     expect(tree.getByTestId(testIdWithKey('VtaLinkCancel'))).toBeTruthy()
   })
 
+  test('names the step the setup is at, and how long the whole setup has taken', () => {
+    at('awaitingGrant', {
+      code: '',
+      stage: { step: 'signingIn', attempt: 3, of: 24, since: Date.now() - 5_000, startedAt: Date.now() - 65_000 },
+    })
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostStep_creating'))).toHaveTextContent(
+      /VtaLink\.Host\.Steps\.Creating/
+    )
+    // The current step carries the screen's state line, which the runners read.
+    expect(tree.getByTestId(testIdWithKey('VtaLinkState'))).toHaveTextContent(/VtaLink\.Host\.Steps\.SigningIn/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostStepElapsed'))).toHaveTextContent(/^1:0[56]$/)
+    expect(tree.getByTestId(testIdWithKey('VtaLinkHostSettingUp'))).not.toHaveTextContent(/SettingUpWaiting/)
+  })
+
   test.each([
     'badKey',
     'badRequest',

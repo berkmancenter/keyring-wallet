@@ -9,6 +9,10 @@
  *       │                                         │ rotated
  *       └──── relink ◀── revoked ◀── linked ◀─────┘
  *
+ *   an agent host's automatic connection waits in awaitingGrant (via host)
+ *   and names where it has got to: hostStage creating → connecting →
+ *   signingIn(try n of 24), each with the time it began (VtaLink shows it).
+ *
  *   without a QR (plan §5.1 fallback): notLinked ─keyShown─▶ showingKey
  *   ─granted─▶ linking — the admin pastes the key into their own console.
  *
@@ -62,7 +66,15 @@ export type VtaLinkState =
   | ({ kind: 'confirming'; offerUrl: string; exp: number; via?: 'host' } & VtaIdentityOfAgent)
   | ({ kind: 'submitting'; offerUrl: string; exp: number; via?: 'host' } & VtaIdentityOfAgent)
   /** `host`: an agent host's automatic connection — no code to compare; the host sets the agent up. */
-  | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string; via?: 'host' } & VtaIdentityOfAgent)
+  | ({
+      kind: 'awaitingGrant'
+      offerUrl: string
+      exp: number
+      code: string
+      via?: 'host'
+      /** Where the host's setup has got to, once the phone knows (`hostStage`). */
+      stage?: HostSetupStage
+    } & VtaIdentityOfAgent)
   | ({
       kind: 'showingKey'
       did: string
@@ -89,6 +101,23 @@ export function revocationCause(reason: string): RevocationCause {
   return /has been wiped/i.test(reason) ? 'wiped' : 'notInAcl'
 }
 
+/**
+ * Where an agent host's setup has got to, for the screen to name.
+ * `creating`: the host says `provisioning`. `connecting`: it says the agent is
+ * ready for this phone (`awaiting_mobile`) and the first sign-in is under way.
+ * `signingIn`: that sign-in is being tried again (`attempt` of `of`), as the
+ * agent may take a moment to answer after its restart. `since`: when this step
+ * began. `startedAt`: when the first step began — the screen shows one clock
+ * for the whole setup, counted from it, rather than restarting at each step.
+ */
+export interface HostSetupStage {
+  step: 'creating' | 'connecting' | 'signingIn'
+  since: number
+  startedAt: number
+  attempt?: number
+  of?: number
+}
+
 /** Why a link attempt ended, in a form a screen can word for a person. */
 export interface VtaLinkFailure {
   reason: 'expired' | 'refused' | 'unreachable' | 'rejected' | 'failed'
@@ -103,6 +132,8 @@ export type VtaLinkEvent =
   | { type: 'confirmed' }
   | { type: 'cancelled' }
   | { type: 'submitted'; code: string }
+  /** An agent host's setup moved on (VtaAgentController, agentHostConnection). */
+  | { type: 'hostStage'; step: HostSetupStage['step']; attempt?: number; of?: number; now: number }
   | { type: 'granted' }
   | { type: 'rotating' }
   /**
@@ -195,6 +226,25 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
 
     case 'submitted':
       return state.kind === 'submitting' ? { ...state, kind: 'awaitingGrant', code: event.code } : state
+
+    case 'hostStage': {
+      if (state.kind !== 'awaitingGrant' || state.via !== 'host') return state
+      const was = state.stage
+      // A repeat of the same step (each poll says `provisioning` again) changes
+      // nothing, so the screen's snapshot stays the same object.
+      if (was && was.step === event.step && was.attempt === event.attempt) return state
+      const since = was && was.step === event.step ? was.since : event.now
+      return {
+        ...state,
+        stage: {
+          step: event.step,
+          since,
+          startedAt: was?.startedAt ?? event.now,
+          ...(event.attempt !== undefined ? { attempt: event.attempt } : {}),
+          ...(event.of !== undefined ? { of: event.of } : {}),
+        },
+      }
+    }
 
     case 'granted':
       return state.kind === 'awaitingGrant' || state.kind === 'showingKey'

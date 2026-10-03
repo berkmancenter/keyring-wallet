@@ -43,6 +43,7 @@ import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
 import { DeviceNameField } from './DeviceNamePrompt'
+import { HostSetupSteps } from './HostSetupSteps'
 import { defaultNameOf } from './deviceWords'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
@@ -316,12 +317,18 @@ const VtaLink: React.FC = () => {
               {t('VtaLink.Host.SettingUpTitle')}
             </ThemedText>
             <ThemedText>{t('VtaLink.Host.SettingUpBody')}</ThemedText>
-            <View style={styles.row}>
-              <ActivityIndicator color={ColorPalette.brand.primary} />
-              <ThemedText style={{ flex: 1 }} testID={testIdWithKey('VtaLinkState')}>
-                {t('VtaLink.Host.SettingUpWaiting')}
-              </ThemedText>
-            </View>
+            {/* Named steps once the phone knows where the host has got to
+                (HostSetupSteps); the one sentence only until then. */}
+            {link.stage ? (
+              <HostSetupSteps stage={link.stage} />
+            ) : (
+              <View style={styles.row}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <ThemedText style={{ flex: 1 }} testID={testIdWithKey('VtaLinkState')}>
+                  {t('VtaLink.Host.SettingUpWaiting')}
+                </ThemedText>
+              </View>
+            )}
           </View>
         )
         actions = (
