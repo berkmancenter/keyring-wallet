@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message'
 import { ToastType } from '../../../components/toast/BaseToast'
 import { VTI_REMOVED_EVENT } from '../module/vtiCommunityNotices'
 
+import { useToastAboveTabBar } from './aboveTabBar'
 import { communityLabelStartOf } from './communityName'
 
 /** The words, with the community's reason when it gave one. */
@@ -30,6 +31,7 @@ export function removedWords(communityDid: string, reason: string | undefined, t
 /** Show the words whenever a community's removal notice is applied. */
 export function useVtiRemovedNotice(): void {
   const { t } = useTranslation()
+  const bottomOffset = useToastAboveTabBar()
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(VTI_REMOVED_EVENT, (e: { communityDid?: string; reason?: string }) => {
       if (!e?.communityDid) return
@@ -38,8 +40,10 @@ export function useVtiRemovedNotice(): void {
         text1: removedWords(e.communityDid, e.reason, t),
         visibilityTime: 8000,
         position: 'bottom',
+        // Clear of the tab bar, so the tabs stay in reach while it shows.
+        bottomOffset,
       })
     })
     return () => sub.remove()
-  }, [t])
+  }, [t, bottomOffset])
 }

@@ -14,6 +14,7 @@ import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { CREDENTIAL_EXCHANGE_ISSUE, receiveIssue, VTI_JOINED_EVENT } from '../module/vtiInbox'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { joinedWords, useVtiJoinedNotice } from '../screens/joinedNotice'
 import { membership } from '../../../../__tests__/helpers/cardVault'
 
@@ -121,6 +122,8 @@ describe('the pop-up', () => {
     DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: COMMUNITY })
     expect(show).toHaveBeenCalledTimes(1)
     expect(show.mock.calls[0][0]).toMatchObject({ type: 'success', position: 'bottom', text1: expect.any(String) })
+    // Clear of the tab bar: the library's own offset put it on the tabs for 8 s.
+    expect((show.mock.calls[0][0] as { bottomOffset?: number }).bottomOffset).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
     unmount()
     DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: COMMUNITY })
     expect(show).toHaveBeenCalledTimes(1)

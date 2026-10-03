@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message'
 import { ToastType } from '../../../components/toast/BaseToast'
 import { VTI_JOINED_EVENT } from '../module/vtiInbox'
 
+import { useToastAboveTabBar } from './aboveTabBar'
 import { communityLabelOf } from './communityName'
 
 /** The words, naming the community as the rest of the app does. */
@@ -28,6 +29,7 @@ export function joinedWords(communityDid: string, t: TFunction): string {
 /** Show the words whenever a membership card makes this phone a member. */
 export function useVtiJoinedNotice(): void {
   const { t } = useTranslation()
+  const bottomOffset = useToastAboveTabBar()
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(VTI_JOINED_EVENT, (e: { communityDid?: string }) => {
       if (!e?.communityDid) return
@@ -36,8 +38,10 @@ export function useVtiJoinedNotice(): void {
         text1: joinedWords(e.communityDid, t),
         visibilityTime: 8000,
         position: 'bottom',
+        // Clear of the tab bar, so the tabs stay in reach while it shows.
+        bottomOffset,
       })
     })
     return () => sub.remove()
-  }, [t])
+  }, [t, bottomOffset])
 }
