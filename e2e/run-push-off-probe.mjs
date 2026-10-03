@@ -61,7 +61,9 @@ try {
       console.log("PUSH_ON FAIL — Settings has no Notifications row: this build names no push gateway");
       process.exitCode = 3;
     } else {
-      // The row must lead to the push switch, not just exist.
+      // The row must lead to the push switch, not just exist. On iOS it can
+      // exist in the tree below the fold: bring it on screen before the tap.
+      await scrollToTestId(driver, "Notifications", 8).catch(() => undefined);
       await tapTestId(driver, "Notifications", 15000);
       const toggle = await existsTestId(driver, "PushNotificationSwitch", 15000);
       await screenshot(driver, `push-on-switch-${PLATFORM}`);
