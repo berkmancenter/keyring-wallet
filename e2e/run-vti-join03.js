@@ -118,6 +118,56 @@ try {
     if (MODE === "view") printSuccess(`JOIN 0.3 — the card: suggested "${card.JoinWaySuggested}", button "${card.JoinStart}"`);
   }
 
+  /** Under a standing (member, request open, removed): the ways are for reading only — no way to start or ask. */
+  const readOnly = (c) => {
+    const starts = Object.entries(c.ways).filter(([, w]) => w.start !== null).map(([id]) => `JoinWayStart_${id}`);
+    const buttons = [c.JoinStart !== null && "JoinStart", c.JoinAsk !== null && "JoinAsk", ...starts].filter(Boolean);
+    return buttons;
+  };
+  if (MODE === "standing") {
+    // A person who already stands somewhere with the community opens its link.
+    const standing = await text(d, "JoinStandingText");
+    const again = await existsTestId(d, "JoinAgain", 1500);
+    const offered = readOnly(card);
+    log(`standing: "${standing}" · Join again: ${again} · start/ask controls: ${offered.length ? offered.join(", ") : "none"}`);
+    if (process.env.EXPECT_STANDING && !new RegExp(process.env.EXPECT_STANDING, "i").test(standing ?? "")) throw new Error(`standing "${standing}" does not match /${process.env.EXPECT_STANDING}/`);
+    if (offered.length) throw new Error(`under the standing the card still offers ${offered.join(", ")}`);
+    if (process.env.EXPECT_JOIN_AGAIN && String(again) !== process.env.EXPECT_JOIN_AGAIN) throw new Error(`Join again ${again ? "shown" : "absent"}, expected ${process.env.EXPECT_JOIN_AGAIN === "true" ? "shown" : "absent"}`);
+    printSuccess(`JOIN 0.3 — under the standing the ways are for reading only ("${standing}")`);
+  }
+  if (MODE === "askonly") {
+    // Ask to join, leave the request open, open the link again: the open request's standing, no way to ask twice.
+    const before = new Set((admin("join-list").items ?? []).map((r) => r.id));
+    await scrollToTestId(d, "JoinAsk", 4, ABOVE_BUTTONS).catch(() => undefined);
+    const askId = (await existsTestId(d, "JoinAsk", 1500)) ? "JoinAsk" : "JoinStart";
+    await (await waitForTestId(d, askId, 15000)).click();
+    await waitForTestId(d, "JoinMakeIdentity", 30000);
+    await tapTestIdByCoordinates(d, "JoinAsContinue");
+    await handleBiometricConfirmIfPresent(d);
+    await waitForTestId(d, "JoinStanding", 240000);
+    log(`after the ask: "${await text(d, "JoinStandingText")}"`);
+    let request;
+    for (const until = Date.now() + 60000; Date.now() < until && !request; await sleep(3000)) request = (admin("join-list").items ?? []).find((r) => !before.has(r.id));
+    if (!request) throw new Error("the community lists no new join request");
+    log(`community: request ${request.id} ${request.status}`);
+    await tapTestIdByCoordinates(d, "Contacts").catch(() => undefined);
+    await sleep(2000);
+    await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(DID)}&n=${encodeURIComponent(NAME)}`);
+    await waitForTestId(d, "JoinWaysTitle", 90000);
+    const again = await readCard(d);
+    await scrollToTestId(d, "JoinWaysTitle", 6, ABOVE_BUTTONS).catch(() => undefined);
+    await screenshot(d, `join03-${TAG}-request-open`);
+    await dumpSource(d, `join03-${TAG}-request-open`);
+    const standing = await text(d, "JoinStandingText");
+    const offered = readOnly(again);
+    log(`reopened with the request open: standing "${standing}" · start/ask controls: ${offered.length ? offered.join(", ") : "none"}`);
+    admin("join-decide", request.id, "rejected");
+    log("test request rejected (cleanup)");
+    if (offered.length) throw new Error(`with a request open the card still offers ${offered.join(", ")}`);
+    if (!/review/i.test(standing ?? "")) throw new Error(`the standing does not say the request is under review: "${standing}"`);
+    printSuccess("JOIN 0.3 — with a request open the ways are for reading only and the standing says it is under review");
+  }
+
   if (MODE === "joinagain") {
     // A REMOVED member opens the community: press "Join again" and record
     // what follows, screen by screen, and what the community decided.
