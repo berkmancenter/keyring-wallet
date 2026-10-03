@@ -25,7 +25,7 @@ const REASON = 'Approve disclosing 2 attributes to did:web:shop.example'
 const DEVICES_ADD = 'https://trusttasks.org/spec/acl/grant/0.1'
 
 const approveRequest = (
-  version: '0.1' | '0.2' = '0.2',
+  version: '0.1' | '0.2' | '0.4' = '0.2',
   payload: Record<string, unknown> = {},
   envelope: Record<string, unknown> = {}
 ) => ({
@@ -40,7 +40,10 @@ const approveRequest = (
     challenge: CHALLENGE,
     reason: REASON,
     targetAcr: 'aal2',
-    acceptableEvidence: version === '0.1' ? ['did-signed', 'webauthn'] : ['didSigned', 'webauthn'],
+    // 0.4 names the evidence it takes in `accepts` (required); 0.1/0.2 in `acceptableEvidence`.
+    ...(version === '0.4'
+      ? { accepts: ['didSigned', 'webauthn'] }
+      : { acceptableEvidence: version === '0.1' ? ['did-signed', 'webauthn'] : ['didSigned', 'webauthn'] }),
     ttl: 300,
     ...payload,
   },
@@ -66,8 +69,43 @@ describe('reading a step-up refusal', () => {
         challenge: CHALLENGE,
         reason: REASON,
         targetAcr: 'aal2',
+        responseType: STEP_UP_TASK.approveResponse,
       },
     })
+  })
+
+  it('reads a 0.4 approve-request ahead of the agent, and answers it with approve-response 0.6', () => {
+    expect(stepUpRequestOf(stepUpRefusal(approveRequest('0.4')), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: true,
+      request: {
+        issuer: VTA,
+        subject: PHONE,
+        sessionId: 'session-7',
+        challenge: CHALLENGE,
+        reason: REASON,
+        targetAcr: 'aal2',
+        responseType: 'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+      },
+    })
+  })
+
+  it('does not answer a 0.4 request that takes no DID-signed evidence, or names none', () => {
+    const webauthnOnly = approveRequest('0.4', { accepts: ['webauthn'] })
+    expect(stepUpRequestOf(stepUpRefusal(webauthnOnly), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: false,
+      why: 'evidenceUnsupported',
+    })
+    // 0.4 dropped `acceptableEvidence` for a REQUIRED `accepts` (approve-request/0.4 schema:41-50).
+    const oldSpelling = approveRequest('0.4', { accepts: undefined, acceptableEvidence: ['didSigned'] })
+    expect(stepUpRequestOf(stepUpRefusal(oldSpelling), { vtaDid: VTA, me: PHONE })).toEqual({
+      ok: false,
+      why: 'malformed',
+    })
+  })
+
+  it('leaves a 0.4 step-up bound to one operation (no sessionId) to be answered elsewhere', () => {
+    const bound = approveRequest('0.4', { sessionId: undefined, boundTo: 'sha256:op' })
+    expect(stepUpRequestOf(stepUpRefusal(bound), { vtaDid: VTA, me: PHONE })).toEqual({ ok: false, why: 'boundStepUp' })
   })
 
   it('reads a 0.1 approve-request, whose evidence is spelled did-signed', () => {
@@ -211,6 +249,29 @@ describe('a task that needs a step-up', () => {
       evidence: { kind: 'didSigned' },
     })
     expect(STEP_UP_TASK.approveResponse).toBe('https://trusttasks.org/spec/auth/step-up/approve-response/0.2')
+  })
+
+  it('answers a 0.4 approve-request with approve-response 0.6, the same members', async () => {
+    const ask = jest.fn(async () => 'approve' as const)
+    const { vta, send } = client(ask)
+    send
+      .mockRejectedValueOnce(stepUpRefusal(approveRequest('0.4')))
+      .mockResolvedValueOnce({ status: 'elevated' })
+      .mockResolvedValueOnce({ granted: true })
+
+    await expect(vta.task(DEVICES_ADD, {})).resolves.toEqual({ granted: true })
+    expect(send.mock.calls.map((c) => c[0])).toEqual([
+      DEVICES_ADD,
+      'https://trusttasks.org/spec/auth/step-up/approve-response/0.6',
+      DEVICES_ADD,
+    ])
+    expect(send.mock.calls[1][1]).toEqual({
+      subject: PHONE,
+      sessionId: 'session-7',
+      challenge: CHALLENGE,
+      decision: 'approved',
+      evidence: { kind: 'didSigned' },
+    })
   })
 
   it('sends a signed denial when the person says no, and does not re-submit', async () => {

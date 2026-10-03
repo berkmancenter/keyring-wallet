@@ -45,6 +45,7 @@ import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona }
 import { VtiRefusal } from './vtiAgent'
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
 import { isDigestMultibase } from './vettingShape'
+import { TaskVersions } from './taskVersions'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 import { purposeForDocumentType } from './proofPurpose'
@@ -80,6 +81,8 @@ export const VTA_TASK = {
   serversList: 'https://trusttasks.org/spec/vta/webvh/servers/list/1.0',
   consentRequest: 'https://trusttasks.org/spec/task-consent/request/0.1',
   consentDecision: 'https://trusttasks.org/spec/task-consent/decision/0.1',
+  /** decision/0.2 adds only OPTIONAL members; a 0.1 decision re-typed as 0.2 means the same (trust-tasks-tf ce07a039 task-consent/decision/0.2 spec.md:122-124). */
+  consentDecision02: 'https://trusttasks.org/spec/task-consent/decision/0.2',
   consentGranted: 'https://trusttasks.org/spec/task-consent/granted/0.1',
   aclSwapKey: 'https://trusttasks.org/spec/acl/swap-key/0.1',
   // The canonical ACL family (vta-sdk trust_tasks.rs:222-260), each gated by
@@ -88,6 +91,37 @@ export const VTA_TASK = {
   aclGrant: 'https://trusttasks.org/spec/acl/grant/0.1',
   aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
   aclUpdate: 'https://trusttasks.org/spec/acl/update/0.1',
+  // acl/*/0.2 (trust-tasks-tf ce07a039, released in #715), asked first and
+  // stepped down from on `unsupportedVersion` (taskVersions.ts). vta-service
+  // v0.52.0 serves only 0.1 (trust_tasks/mod.rs:2245-2256).
+  aclList02: 'https://trusttasks.org/spec/acl/list/0.2',
+  aclGrant02: 'https://trusttasks.org/spec/acl/grant/0.2',
+  aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
+  aclUpdate02: 'https://trusttasks.org/spec/acl/update/0.2',
+} as const
+
+/** Each family this client speaks in more than one version, newest first. */
+export const VTA_TASK_VERSIONS = {
+  aclList: [VTA_TASK.aclList02, VTA_TASK.aclList],
+  aclGrant: [VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
+  aclRevoke: [VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
+  aclUpdate: [VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
+  consentDecision: [VTA_TASK.consentDecision02, VTA_TASK.consentDecision],
+} as const
+
+/** Is this one of the 0.2 access-list URIs (where a revoke may answer `entry: null`)? */
+const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.2$/.test(uri)
+
+/**
+ * A full administrator's authority as an `acl/_shared/0.2` entry spells it:
+ * every context, every key, up to the granter's own ceiling — what a 0.1 admin
+ * entry with no scopes and no allowedKeys meant (acl/_shared/0.2 CONVENTIONS.md
+ * §8, lines 175-189). 0.2 makes all three REQUIRED (acl-entry.schema.json:12-18).
+ */
+export const FULL_ADMIN_AUTHORITY_02 = {
+  act: { scope: 'all' },
+  keys: { scope: 'all' },
+  capabilities: { scope: 'ceiling' },
 } as const
 
 /** What a VTA sends an approver: the request document's payload (`consent_request.rs`). */
@@ -350,6 +384,7 @@ const UNSOLICITED = new Set<string>([
   VTA_TASK.consentGranted,
   STEP_UP_TASK.approveRequest01,
   STEP_UP_TASK.approveRequest02,
+  STEP_UP_TASK.approveRequest04,
 ])
 
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
@@ -499,6 +534,10 @@ export class VtaClient {
 
   /** Grants this client is waiting for, by the payload digest the VTA names. */
   private grantWaiters = new Map<string, () => void>()
+  /** Which version of each family this agent was found to serve (taskVersions.ts). */
+  private readonly versions = new TaskVersions((family, from, to) =>
+    this.agent.config.logger.info(`${LOG_PREFIX} ${this.vtaDid} does not serve ${from}; asking ${to} (${family})`)
+  )
 
   constructor(
     private readonly agent: Agent,
@@ -714,7 +753,7 @@ export class VtaClient {
     }
     const answer = await ask(stepUp.request, { taskType })
     const decision = answer === 'approve' ? 'approved' : 'denied'
-    await this.sendTask(STEP_UP_TASK.approveResponse, approveResponsePayload(stepUp.request, decision), 30000)
+    await this.sendTask(stepUp.request.responseType, approveResponsePayload(stepUp.request, decision), 30000)
     if (decision === 'denied') throw new StepUpDeclined()
     return resubmit()
   }
@@ -899,12 +938,15 @@ export class VtaClient {
       return Promise.reject(
         new Error(`${LOG_PREFIX} the consent request's payloadDigest is not a digestMultibase; not deciding it`)
       )
-    return this.task<{ status?: string }>(VTA_TASK.consentDecision, {
+    const payload = {
       challenge: request.challenge,
       payloadDigest: request.payloadDigest,
       decision,
       ...(reason ? { reason } : {}),
-    })
+    }
+    return this.versions
+      .ask('consentDecision', VTA_TASK_VERSIONS.consentDecision, (type) => this.task<{ status?: string }>(type, payload))
+      .then(({ answer }) => answer)
   }
 
   /** `timeoutMs` bounds the wait for the VTA's answer, counted from the send (`onSent`). */
@@ -1077,7 +1119,9 @@ export class VtaClient {
    * `direction`, trust_tasks/acl.rs:42-48), so callers filter here.
    */
   async listAcl(): Promise<VtaAclEntry[]> {
-    const answer = await this.task<{ entries?: unknown; truncated?: unknown }>(VTA_TASK.aclList, {})
+    const { answer } = await this.versions.ask('aclList', VTA_TASK_VERSIONS.aclList, (uri) =>
+      this.task<{ entries?: unknown; truncated?: unknown }>(uri, {})
+    )
     if (answer?.truncated === true) {
       this.agent.config.logger.warn(
         `${LOG_PREFIX} ${this.vtaDid} answered a partial access list; showing the first page`
@@ -1099,10 +1143,17 @@ export class VtaClient {
    */
   async grantAdmin(did: string, options: { label?: string } = {}): Promise<VtaAclEntry> {
     const label = options.label?.trim().slice(0, ACL_LABEL_MAX)
-    const answer = await this.task(VTA_TASK.aclGrant, {
-      entry: { subject: did, role: 'admin', ...(label ? { label } : {}) },
-    })
-    return answeredEntry(VTA_TASK.aclGrant, answer)
+    const { uri, answer } = await this.versions.ask('aclGrant', VTA_TASK_VERSIONS.aclGrant, (type) =>
+      this.task(type, {
+        entry: {
+          subject: did,
+          role: 'admin',
+          ...(label ? { label } : {}),
+          ...(isAcl02(type) ? FULL_ADMIN_AUTHORITY_02 : {}),
+        },
+      })
+    )
+    return answeredEntry(uri, answer)
   }
 
   /**
@@ -1111,9 +1162,16 @@ export class VtaClient {
    * revoke is refused, operations/acl.rs:1104-1126). The VTA refuses a caller
    * removing itself (operations/acl.rs:792-796). Answers the entry as it stood.
    */
-  async revokeSubject(did: string): Promise<VtaAclEntry> {
-    const answer = await this.task(VTA_TASK.aclRevoke, { subject: did })
-    return answeredEntry(VTA_TASK.aclRevoke, answer)
+  async revokeSubject(did: string): Promise<VtaAclEntry | undefined> {
+    // 0.2 makes the narrowing explicit: `revocation: {kind: "entry"}` is a full
+    // removal, and leaving it out is invalid (acl/revoke/0.2
+    // payload.invalid-examples.json:3-4). Its answer's `entry` is null for a
+    // removal (payload.schema.json:71); 0.1 answered the entry as it stood.
+    const { uri, answer } = await this.versions.ask('aclRevoke', VTA_TASK_VERSIONS.aclRevoke, (type) =>
+      this.task(type, isAcl02(type) ? { subject: did, revocation: { kind: 'entry' } } : { subject: did })
+    )
+    if (isAcl02(uri) && (answer as { entry?: unknown } | undefined)?.entry === null) return undefined
+    return answeredEntry(uri, answer)
   }
 
   /**
@@ -1123,8 +1181,10 @@ export class VtaClient {
    * its own included (vta-service operations/acl.rs:517-545).
    */
   async labelAclEntry(did: string, label: string): Promise<VtaAclEntry> {
-    const answer = await this.task(VTA_TASK.aclUpdate, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
-    return answeredEntry(VTA_TASK.aclUpdate, answer)
+    const { uri, answer } = await this.versions.ask('aclUpdate', VTA_TASK_VERSIONS.aclUpdate, (type) =>
+      this.task(type, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
+    )
+    return answeredEntry(uri, answer)
   }
 
   async listContexts(): Promise<VtaContext[]> {
