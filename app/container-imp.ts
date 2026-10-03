@@ -39,9 +39,9 @@ import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
+import PushLinkListener from '@/push/PushLinkListener'
+import { appPushNotificationsConfig } from '@/push/pushDefaults'
 import { offerFeedbackReport } from '@/utils/problemReport'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { activate, deactivate, setup, status } from '@utils/PushNotificationsHelper'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
 import AddCredentialButton from './src/keyring-theme/components/AddCredentialButton'
@@ -252,18 +252,10 @@ export class AppContainer implements Container {
       showDetailsInfo: true,
       contactHideList: ['BCAttestationService'],
       proofTemplateBaseUrl: Config.PROOF_TEMPLATE_URL,
-      // DISABLED: Push notifications disabled — no server backend yet
-      // enablePushNotifications: {
-      //   status: status,
-      //   setup: setup,
-      //   toggle: async (state: boolean, agent: Agent) => {
-      //     if (state) {
-      //       await activate(agent)
-      //     } else {
-      //       await deactivate(agent)
-      //     }
-      //   },
-      // },
+      // Push wake-ups (docs/plans/push-notifications-plan.md): undefined unless
+      // the build names a push gateway, so a tester's build has no prompt, no
+      // Settings switch and no registration.
+      enablePushNotifications: appPushNotificationsConfig(),
       appUpdateConfig: {
         appleAppStoreUrl,
         googlePlayStoreUrl,
@@ -274,6 +266,9 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.COMPONENT_CRED_LIST_OPTIONS, AddCredentialSlider)
     this._container.registerInstance(TOKENS.COMPONENT_HOME_HEADER, HomeHeaderView)
     this._container.registerInstance(TOKENS.COMPONENT_HOME_FOOTER, HomeFooterView)
+    // Rendered with the main tabs: makes the phone wakeable after a new agent
+    // link when notifications were turned on before it (push/pushAfterLink.ts).
+    this._container.registerInstance(TOKENS.COMPONENT_APP_GLOBAL_LISTENER, PushLinkListener)
     this._container.registerInstance(TOKENS.COMPONENT_CRED_EMPTY_LIST, EmptyList)
     this._container.registerInstance(TOKENS.COMPONENT_RECORD, Record)
     this._container.registerInstance(TOKENS.CACHE_CRED_DEFS, [

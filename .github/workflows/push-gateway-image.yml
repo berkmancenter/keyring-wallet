@@ -1,0 +1,296 @@
+name: Push gateway image
+
+# Builds the vti-push-gateway image in deploy/keyring-messaging/ on a GitHub
+# runner, runs the package README's "First run" checks against it (health, a
+# served agent's registration accepted, any other agent's refused), and uploads
+# the image as this run's artifact. Nothing is pushed to a registry.
+#
+#   gh run download <run-id> -R berkmancenter/keyring-wallet -n vti-push-gateway-image-arm64
+#   docker load -i vti-push-gateway.tar
+#
+# One job per architecture on a native runner: arm64 for Apple-silicon Macs,
+# amd64 for servers. Emulated Rust builds take far longer.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/keyring-messaging/**"
+      - ".github/workflows/push-gateway-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gateway-tests:
+    # The gateway's own test suite at the pinned commit, with Keyring's patches
+    # applied (deploy/keyring-messaging/gateway/patches/), so a patch that stops
+    # applying or breaks a test fails here and not in an image build.
+    name: Gateway tests with patches
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dependencies (as upstream's CI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
+
+      - name: Check out the pinned gateway and apply the patches
+        run: |
+          commit=$(sed -n 's/^GATEWAY_COMMIT=//p' deploy/keyring-messaging/.env.example)
+          git init -q gw
+          git -C gw remote add origin https://github.com/OpenVTC/vti-push-gateway.git
+          git -C gw fetch -q --depth 1 origin "$commit"
+          git -C gw checkout -q FETCH_HEAD
+          for p in deploy/keyring-messaging/gateway/patches/*.patch; do
+            [ -e "$p" ] || continue
+            echo "applying $p"
+            git -C gw apply --index "$PWD/$p"
+          done
+
+      - name: cargo test
+        working-directory: gw
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo test --locked --all-targets
+
+  image:
+    name: Gateway image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: deploy/keyring-messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned gateway commit and image tag
+        id: pin
+        run: |
+          commit=$(sed -n 's/^GATEWAY_COMMIT=//p' .env.example)
+          if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::GATEWAY_COMMIT in .env.example is not a full SHA: '$commit'"; exit 1
+          fi
+          # The tag carries the patch set: a patch changes the image but not
+          # the commit, and a host that already has an image under a tag keeps
+          # running it. So the tag must move with every added or removed patch.
+          patches=$(find gateway/patches -maxdepth 1 -name '*.patch' | wc -l | tr -d ' ')
+          if [ "$patches" -gt 0 ]; then want="$commit-p$patches"; else want="$commit"; fi
+          tag=$(sed -n 's/^GATEWAY_IMAGE_TAG=//p' .env.example)
+          if [ "$tag" != "$want" ]; then
+            echo "::error::GATEWAY_IMAGE_TAG in .env.example is '$tag' but gateway/patches has $patches patch(es): it must be '$want'"; exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=keyring-messaging/vti-push-gateway:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Compose file is valid, and names the image by its tag
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+          COMMIT: ${{ steps.pin.outputs.commit }}
+        run: |
+          cp .env.example .env
+          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/; s/^MEDIATOR_HOST=$/MEDIATOR_HOST=localhost/' .env
+          docker compose config --quiet
+          got=$(docker compose config --format json | jq -r '.services.gateway.image')
+          if [ "$got" != "$IMAGE" ]; then
+            echo "::error::compose names the gateway image '$got', expected '$IMAGE'"; exit 1
+          fi
+          # A deployment whose .env predates GATEWAY_IMAGE_TAG (or leaves it
+          # empty) must keep resolving to the bare-commit tag it already runs.
+          for blank in 's/^GATEWAY_IMAGE_TAG=.*$/GATEWAY_IMAGE_TAG=/' '/^GATEWAY_IMAGE_TAG=/d'; do
+            sed "$blank" .env > .env.legacy
+            got=$(docker compose --env-file .env.legacy config --format json | jq -r '.services.gateway.image')
+            if [ "$got" != "keyring-messaging/vti-push-gateway:$COMMIT" ]; then
+              echo "::error::without GATEWAY_IMAGE_TAG compose names '$got', expected the bare commit tag"; exit 1
+            fi
+          done
+          rm -f .env.legacy
+
+      - name: Build the gateway image
+        run: |
+          docker build \
+            --build-arg GATEWAY_COMMIT="${{ steps.pin.outputs.commit }}" \
+            -t "${{ steps.pin.outputs.image }}" gateway
+
+      - name: First-run checks (echo sender, no keys)
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+          SERVED: did:web:ci.invalid:served-agent
+          OTHER: did:web:ci.invalid:other-agent
+        run: |
+          # Empty GATEWAY_IDENTITY_FILE also checks the entrypoint unsets empty
+          # variables (the gateway fails to read an empty path otherwise).
+          docker run -d --name gw -p 8300:8300 \
+            -e GATEWAY_DEV_ECHO_SENDER=1 \
+            -e GATEWAY_ALLOWED_CONTROLLERS="$SERVED" \
+            -e GATEWAY_ADDR=http://localhost:8300 \
+            -e GATEWAY_IDENTITY_FILE= \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8300/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8300/healthz
+
+          register() {
+            curl -sS http://localhost:8300/trust-tasks -H 'content-type: application/json' -d '{
+              "id": "urn:uuid:'"$(cat /proc/sys/kernel/random/uuid)"'",
+              "type": "https://trusttasks.org/spec/push/register/0.2",
+              "payload": { "registration": { "platform": "fcm", "token": "ci-first-run" },
+                           "controllerVtaDid": "'"$1"'" } }'
+          }
+
+          accepted=$(register "$SERVED")
+          echo "served agent: $accepted"
+          handle=$(printf '%s' "$accepted" | jq -r '.payload.wakeHandle.handle // empty')
+          if [ -z "$handle" ]; then
+            echo "::error::a served agent's registration returned no wake handle"; docker logs gw; exit 1
+          fi
+
+          refused=$(register "$OTHER")
+          echo "other agent: $refused"
+          if ! printf '%s' "$refused" | grep -q permissionDenied; then
+            echo "::error::an unlisted agent's registration was not refused with permissionDenied"; docker logs gw; exit 1
+          fi
+
+          docker inspect --format '{{.State.Health.Status}}' gw || true
+          docker logs gw
+          docker rm -f gw
+
+      - name: The image carries the patches (DID-host allowlist, patch 0002)
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+        run: |
+          # The tag says which patches are in the image; this checks the image
+          # itself. With no DID listed and one host allowed, an agent on that
+          # host is served and an agent on another host is refused. An image
+          # without patch 0002 ignores the setting and refuses both.
+          docker run -d --name gwh -p 8300:8300 \
+            -e GATEWAY_DEV_ECHO_SENDER=1 \
+            -e GATEWAY_ALLOWED_CONTROLLER_HOSTS=hosts.ci-check.invalid \
+            -e GATEWAY_ADDR=http://localhost:8300 \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8300/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8300/healthz
+
+          register() {
+            curl -sS http://localhost:8300/trust-tasks -H 'content-type: application/json' -d '{
+              "id": "urn:uuid:'"$(cat /proc/sys/kernel/random/uuid)"'",
+              "type": "https://trusttasks.org/spec/push/register/0.2",
+              "payload": { "registration": { "platform": "fcm", "token": "ci-host-check" },
+                           "controllerVtaDid": "'"$1"'" } }'
+          }
+
+          on_host=$(register did:web:hosts.ci-check.invalid:agent)
+          echo "agent on the allowed host: $on_host"
+          if [ -z "$(printf '%s' "$on_host" | jq -r '.payload.wakeHandle.handle // empty')" ]; then
+            echo "::error::an agent on an allowed DID host was not served: the image lacks patch 0002"; docker logs gwh; exit 1
+          fi
+          off_host=$(register did:web:other.ci-check.invalid:agent)
+          echo "agent on another host: $off_host"
+          if ! printf '%s' "$off_host" | grep -q permissionDenied; then
+            echo "::error::an agent on another DID host was not refused"; docker logs gwh; exit 1
+          fi
+          docker logs gwh 2>&1 | grep 'controller allowlist'
+          docker rm -f gwh
+
+      - name: Save the image
+        run: docker save -o vti-push-gateway.tar "${{ steps.pin.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vti-push-gateway-image-${{ matrix.arch }}
+          path: deploy/keyring-messaging/vti-push-gateway.tar
+          retention-days: 14
+          if-no-files-found: error
+
+  mediator:
+    # The mediator the gateway receives wake-ups through, exactly as an operator
+    # brings it up: build the image, create its identity with
+    # mediator/setup-identity.sh, start it with Redis, and check it is healthy.
+    name: Mediator image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: deploy/keyring-messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned mediator commit
+        id: pin
+        run: |
+          commit=$(sed -n 's/^MEDIATOR_COMMIT=//p' .env.example)
+          if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::MEDIATOR_COMMIT in .env.example is not a full SHA: '$commit'"; exit 1
+          fi
+          echo "image=keyring-messaging/messaging-mediator:$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Build the mediator image
+        run: |
+          cp .env.example .env
+          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/; s/^MEDIATOR_HOST=$/MEDIATOR_HOST=localhost/' .env
+          docker compose build mediator
+
+      - name: Create the mediator's identity (setup-identity.sh)
+        run: |
+          sudo ./mediator/setup-identity.sh | tee setup.out
+          grep '^MEDIATOR_DID=did:peer:2' setup.out >> .env
+          grep '^MEDIATOR_ADMIN_DID=did:' setup.out >> .env
+          sudo ls -ln secrets/mediator
+          if sudo ./mediator/setup-identity.sh; then
+            echo "::error::setup-identity.sh overwrote an existing identity"; exit 1
+          fi
+
+      - name: Boot the mediator with Redis
+        run: |
+          if ! docker compose up -d --wait --wait-timeout 120 redis mediator; then
+            docker compose logs mediator; exit 1
+          fi
+          docker compose exec -T mediator curl -fsS http://127.0.0.1:7037/mediator/v1/livez
+          echo
+          docker compose exec -T mediator curl -sS http://127.0.0.1:7037/mediator/v1/readyz || true
+          echo
+          docker compose logs mediator | tail -n 60
+          # The account tool is in the image and runs (usage, exit 1).
+          out=$(docker compose run --rm --no-deps --entrypoint mediator-account mediator 2>&1 || true)
+          echo "$out"
+          printf '%s' "$out" | grep -q 'usage: mediator-account'
+          # Not an open relay: a stranger's authcrypted forward, naming a
+          # third party as the next hop and posted with no token, is refused.
+          docker compose run --rm -T --no-deps --entrypoint mediator-account mediator \
+            --profile /run/secrets/mediator/admin-monitor.json \
+            --check-relay did:web:relay-check.invalid \
+            --inbound http://mediator:7037/mediator/v1/inbound
+          docker compose logs mediator 2>&1 | grep -E 'send_forwarded|refused|relay' | tail -n 5 || true
+          docker compose down
+
+      - name: Save the image
+        run: docker save -o messaging-mediator.tar "${{ steps.pin.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: messaging-mediator-image-${{ matrix.arch }}
+          path: deploy/keyring-messaging/messaging-mediator.tar
+          retention-days: 14
+          if-no-files-found: error

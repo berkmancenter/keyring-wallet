@@ -19,7 +19,7 @@ NGROK_API="${NGROK_API:-http://127.0.0.1:4040/api}"
 
 VTI_SRC="${VTI_SRC:-$HOME/Documents/vti-main}"
 VTA_BIN="${VTA_BIN:-$VTI_SRC/target/debug/vta}"
-PNM_BIN="${PNM_BIN:-$VTI_SRC/target/debug/pnm}"
+PNM_BIN="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"   # signed, stable (sign-lab-tool.sh)
 HERE_TWIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PNM_LOCKED="$HERE_TWIN/../pnm-locked"
 export RUST_MIN_STACK="${RUST_MIN_STACK:-33554432}"

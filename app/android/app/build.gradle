@@ -114,6 +114,18 @@ android {
 
     defaultConfig {
         applicationId "asml.bkc.harvard.wallet"
+        // The push-test variant (scripts/push-test/build-android.sh,
+        // docs/plans/push-notifications-plan.md §6): only a build run with
+        // -PkeyringPushTest gets its own application ID and installs beside the
+        // release app. Every other build is unchanged.
+        if (project.hasProperty("keyringPushTest")) {
+            applicationIdSuffix ".pushtest"
+            // react-native-config finds BuildConfig by the application ID. With
+            // the suffix that class does not exist (BuildConfig stays in the
+            // namespace), and every Config value reads as empty: no mediator,
+            // no push gateway. Name the package it is really in.
+            resValue "string", "build_config_package", "asml.bkc.harvard.wallet"
+        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode System.getenv("VERSION_CODE") ? System.getenv("VERSION_CODE").toInteger() : 4

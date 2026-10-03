@@ -214,6 +214,8 @@ const translation = {
     "Tip14": "Even revoked or expired credentials can be usable if the organisation doesn't request for it (PT-BR)",
   },
   "Init": {
+    "MessageServiceTitle": "O Keyring não conseguiu falar com o seu serviço de mensagens",
+    "MessageServiceBody": "Sua carteira e tudo o que há nela estão bem. O serviço que transporta as mensagens do Keyring não respondeu. Verifique se este telefone está online e tente de novo. Se estiver, o serviço pode ficar fora do ar por um tempo.",
     "Retry": "Retry (PT-BR)",
     "Starting": "Starting... (PT-BR)",
     "FetchingPreferences": "Fetching preferences... (PT-BR)",

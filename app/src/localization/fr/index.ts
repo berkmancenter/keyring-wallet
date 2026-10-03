@@ -214,6 +214,8 @@ const translation = {
     "Tip14": "Même les identifiants révoqués ou expirés peuvent être utilisables si l'organisation ne les demande pas.",
   },
   "Init": {
+    "MessageServiceTitle": "Keyring n'a pas pu joindre son service de messagerie",
+    "MessageServiceBody": "Votre portefeuille et tout ce qu'il contient vont bien. Le service qui transporte les messages de Keyring n'a pas répondu. Vérifiez que ce téléphone est en ligne, puis réessayez. S'il l'est, le service est peut-être indisponible pour un moment.",
     "Retry": "Réessayer",
     "Starting": "Démarrage...",
     "FetchingPreferences": "Récupération des préférences...",

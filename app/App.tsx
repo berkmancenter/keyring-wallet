@@ -1,6 +1,7 @@
 import {
   animatedComponents,
   AnimatedComponentsProvider,
+  APPROVALS_LINK,
   AuthProvider,
   ContainerProvider,
   ErrorModal,
@@ -9,6 +10,7 @@ import {
   MainContainer,
   NavContainer,
   NetworkProvider,
+  openAppLink,
   StoreProvider,
   Stacks,
   ThemeProvider,
@@ -33,6 +35,8 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
+import { onPushWake, openApprovalsOnTap } from '@/push/pushHandlers'
+import PushStartup from '@/push/PushStartup'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
@@ -43,11 +47,16 @@ import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
 
-// Do nothing with push notifications received while the app is in the background
-messaging().setBackgroundMessageHandler(async () => {})
-
-// Do nothing with push notifications received while the app is in the foreground
-messaging().onMessage(async () => {})
+// A push is a contentless wake-up (docs/plans/push-notifications-plan.md §2):
+// log it, never open the agent from here. None arrive unless the build names a
+// push gateway and the person turned notifications on. Registering these
+// handlers contacts nobody: Firebase's automatic start is off (firebase.json),
+// and the platform push service first hears of this install when the person
+// turns notifications on (src/push/pushPlatform.ts).
+messaging().setBackgroundMessageHandler(async (message) =>
+  onPushWake('background', message, (m, d) => BCLogger.info(m, d))
+)
+messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
 
 const App = () => {
   const { t } = useTranslation()
@@ -75,6 +84,14 @@ const App = () => {
     SplashScreen.hide()
   }, [])
 
+  // Tapping the wake notification opens the waiting approvals, after unlocking.
+  // Registered once the app has mounted, not at module load: on Android, Firebase
+  // reads a tap that launched the app from the current activity's intent, and at
+  // module load there is no activity yet, so that tap was dropped and a cold
+  // start landed on My Agent instead of Requests (232, Android). iOS reports its
+  // taps through the app delegate and is unaffected.
+  useEffect(() => openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), () => openAppLink(APPROVALS_LINK)), [])
+
   /**
    * Leaving a screen that failed. The boundary calls this before it renders
    * the app again, so what comes back is not the thing that just threw — a
@@ -93,6 +110,7 @@ const App = () => {
     <ErrorBoundaryWrapper logger={BCLogger} onEscape={leaveFailedScreen}>
       <ContainerProvider value={bcwContainer}>
         <StoreProvider initialState={initialState} reducer={reducer}>
+          <PushStartup />
           <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>
             <NavContainer navigationRef={navigationRef}>
               <AnimatedComponentsProvider value={animatedComponents}>

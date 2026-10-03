@@ -1,0 +1,660 @@
+From 04d7330c9e1c827fdca62d0e445d55cac2a89183 Mon Sep 17 00:00:00 2001
+From: Alberto L <alberto_leon@seas.harvard.edu>
+Date: Mon, 28 Sep 2026 22:29:28 -0600
+Subject: [PATCH] feat(sender): optional visible alert mode for interactive
+ wakes
+
+By default every wake is a silent background push (APNs
+content-available, FCM data-only). On iOS that is best effort: Apple
+throttles background notifications ("don't try to send more than two or
+three per hour") and "If something force quits or kills the app, the
+system discards the held notification". A wake a person is waiting on,
+such as an approval, cannot depend on that.
+
+With GATEWAY_ALERT_LOC_KEY set, an interactive wake is sent as a
+notification the platform displays itself: an APNs alert push (priority
+10, apns-collapse-id, aps.alert.loc-key) and an FCM notification message
+(android.notification.body_loc_key, collapse_key). It stays contentless:
+the payload names a localisation key, never text, and the device shows
+its own string for it; the wake's hint fields ride along unchanged.
+Background wakes, and every wake with the mode unset, are unchanged.
+
+- sender: VisibleAlert (validated keys; collapse id at most 64 bytes),
+  the pure request builders apns_request and fcm_message, and
+  with_visible_alert on the APNs and FCM senders
+- main: GATEWAY_ALERT_LOC_KEY, GATEWAY_ALERT_TITLE_LOC_KEY,
+  GATEWAY_ALERT_COLLAPSE_ID (default "wake"),
+  GATEWAY_FCM_ANDROID_CHANNEL_ID; an invalid value stops startup
+- README: the mode, with Apple's reasons
+- tests: key validation; with the mode unset both payloads are
+  unchanged; an interactive wake names only the key and flags; a
+  background wake stays silent with the mode on; the title key; the FCM
+  notification form
+
+Signed-off-by: Alberto L <alberto_leon@seas.harvard.edu>
+---
+ README.md     |  47 ++++++
+ src/main.rs   |  32 +++-
+ src/sender.rs | 417 ++++++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 449 insertions(+), 47 deletions(-)
+
+diff --git a/README.md b/README.md
+index e4f055b..4a99c22 100644
+--- a/README.md
++++ b/README.md
+@@ -238,6 +238,14 @@ cargo run
+ # GATEWAY_APNS_TEAM_ID=DEF456GHIJ   the Apple Developer Team ID (JWT `iss`)
+ # GATEWAY_FCM_SERVICE_ACCOUNT_FILE=./service-account.json   Google service
+ #                       account (Firebase) → enables the FCM sender
++# GATEWAY_ALERT_LOC_KEY=KEYRING_WAKE   optional visible alert mode (see
++#                       "Visible alert mode"): an interactive wake is sent as a
++#                       notification the platform shows from the app's own
++#                       string for this key. Unset = every wake silent.
++# GATEWAY_ALERT_TITLE_LOC_KEY=   optional title key for that notification
++# GATEWAY_ALERT_COLLAPSE_ID=wake   merges repeated wakes (apns-collapse-id,
++#                       FCM collapse_key/tag); at most 64 characters
++# GATEWAY_FCM_ANDROID_CHANNEL_ID=   Android notification channel to show it on
+ # GATEWAY_STORE_FILE=./gateway-store.json   persist the handle registry to this
+ #                       JSON snapshot (survives restart). Omit = in-memory.
+ #                       Written owner-only (0600); it holds raw push tokens.
+@@ -324,6 +332,45 @@ the identity and serves `push/*` over TSP and DIDComm as well as HTTPS, with
+ the same authorisation on all three; without it there is no gateway DID to address documents
+ to, so only `push/register` (over HTTPS) is served. See `src/identity.rs` for the identity file shape.
+ 
++## Visible alert mode (optional)
++
++By default every wake is a silent background push (APNs `content-available`,
++FCM data-only) and the device wakes to drain its mediator. On iOS that is best
++effort:
++
++> "the system may throttle the delivery of background notifications if the
++> total number becomes excessive. The number of background notifications
++> allowed by the system depends on current conditions, but don't try to send
++> more than two or three per hour."
++>
++> "If something force quits or kills the app, the system discards the held
++> notification."
++>
++> — Apple, [Pushing background updates to your App](https://developer.apple.com/documentation/usernotifications/pushing-background-updates-to-your-app)
++
++A wake that a person is waiting on, such as an approval, cannot depend on that.
++With `GATEWAY_ALERT_LOC_KEY` set, an **interactive** wake (`urgency:
++interactive`) is sent as a notification the platform displays itself, in any
++app state:
++
++| | Silent (default, and every background wake) | Visible (interactive wake, mode on) |
++| --- | --- | --- |
++| APNs | `apns-push-type: background`, priority 5, `aps.content-available` | `apns-push-type: alert`, priority 10, `apns-collapse-id`, `aps.alert.loc-key` (+ `title-loc-key`), `sound`, `thread-id`, still `content-available` |
++| FCM | data-only, `android.priority: high` | the same data, plus `android.notification` (`body_loc_key`, `title_loc_key`, `channel_id`, `tag`) and `android.collapse_key` |
++
++It stays contentless in the binding's sense: the payload names a
++**localisation key**, never text, and the device shows its own string for it.
++Apple: "If the text of your notification messages is predetermined, you can
++store your message strings in the Localizable.strings file of your app bundle
++and use the title-loc-key, subtitle-loc-key, and loc-key payload keys"
++([Generating a remote notification](https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification)).
++On Android, `body_loc_key` names a string resource in the app. The wake's hint
++fields ride along unchanged, and no app extension is needed. Using one key for
++every wake means the push services see a wake, not what kind it was.
++
++Keys, the collapse id and the channel id must be `[A-Za-z0-9._-]`; an invalid
++value stops startup.
++
+ ## Testing Web Push end-to-end
+ 
+ The wake loop spans the gateway, a VTA + mediator, and the browser plugin. A
+diff --git a/src/main.rs b/src/main.rs
+index 688122e..08f7745 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -34,7 +34,8 @@ use vti_push_gateway::identity::GatewayIdentity;
+ use vti_push_gateway::limits::Limits;
+ use vti_push_gateway::secretfile;
+ use vti_push_gateway::sender::{
+-    generate_vapid_keypair, ApnsSender, EchoSender, FcmSender, PushSender, WebPushSender,
++    generate_vapid_keypair, ApnsSender, EchoSender, FcmSender, PushSender, VisibleAlert,
++    WebPushSender,
+ };
+ use vti_push_gateway::store::{Store, StoreLimits};
+ 
+@@ -143,6 +144,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+     // `apns` — each enabled only when its credentials are configured; the echo
+     // sender (handles every platform) is the fallback for anything left (fcm,
+     // or apns/webpush with no credentials).
++    // Optional visible alert mode (sender::VisibleAlert): with GATEWAY_ALERT_LOC_KEY
++    // set, an interactive wake is sent as a notification the platform displays
++    // from the app's own string for that key (APNs alert, FCM notification);
++    // background wakes stay silent. Unset = every wake silent, as before. An
++    // invalid value stops startup.
++    let visible_alert = match std::env::var("GATEWAY_ALERT_LOC_KEY") {
++        Ok(k) if !k.trim().is_empty() => {
++            let opt = |key: &str| {
++                std::env::var(key)
++                    .ok()
++                    .map(|v| v.trim().to_string())
++                    .filter(|v| !v.is_empty())
++            };
++            let alert = VisibleAlert::new(
++                k.trim().to_string(),
++                opt("GATEWAY_ALERT_TITLE_LOC_KEY"),
++                opt("GATEWAY_ALERT_COLLAPSE_ID").unwrap_or_else(|| "wake".into()),
++                opt("GATEWAY_FCM_ANDROID_CHANNEL_ID"),
++            )?;
++            tracing::warn!(
++                loc_key = %alert.loc_key, collapse_id = %alert.collapse_id,
++                "visible alert mode: interactive wakes are shown as notifications"
++            );
++            Some(alert)
++        }
++        _ => None,
++    };
+     let mut senders: Vec<Box<dyn PushSender>> = Vec::new();
+     if let Ok(pem_path) = std::env::var("GATEWAY_VAPID_KEY_FILE") {
+         let pem = secretfile::read_secret_file(Path::new(&pem_path), "VAPID private key")?;
+@@ -186,6 +214,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+             // a mismatch is the usual cause of `InvalidProviderToken`.
+             match ApnsSender::new(p8, key_id.clone(), team_id.clone()) {
+                 Ok(s) => {
++                    let s = s.with_visible_alert(visible_alert.clone());
+                     tracing::warn!(
+                         key_id = %key_id, team_id = %team_id,
+                         "APNs sender enabled (verify these match the Apple Developer portal)"
+@@ -201,6 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+         let sa = secretfile::read_secret_file(Path::new(&sa_path), "FCM service-account key")?;
+         match FcmSender::new(&sa) {
+             Ok(s) => {
++                let s = s.with_visible_alert(visible_alert.clone());
+                 tracing::warn!("FCM (Firebase Cloud Messaging) sender enabled");
+                 senders.push(Box::new(s));
+             }
+diff --git a/src/sender.rs b/src/sender.rs
+index 16c93c4..c8bf9dd 100644
+--- a/src/sender.rs
++++ b/src/sender.rs
+@@ -54,6 +54,207 @@ fn b64url(bytes: &[u8]) -> String {
+     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+ }
+ 
++// ── Visible alert mode (optional) ───────────────────────────────────────────
++
++/// Optional **visible alert mode** for the APNs and FCM senders.
++///
++/// By default a wake is a silent background push (APNs `content-available`,
++/// FCM data-only), and the device wakes and drains its mediator. On iOS that
++/// is best effort: Apple says the system "may throttle the delivery of
++/// background notifications if the total number becomes excessive", advises
++/// "don't try to send more than two or three per hour", and "If something force
++/// quits or kills the app, the system discards the held notification"
++/// (*Pushing background updates to your App*). A wake that a person is waiting
++/// on — an approval — cannot depend on that.
++///
++/// With this mode configured, an **interactive** wake is sent as a notification
++/// the platform displays itself, whatever state the app is in: an APNs `alert`
++/// push and an FCM notification message. It stays contentless in the binding's
++/// sense: the payload names a **localisation key**, never text, and the device
++/// shows its own string for that key ("store your message strings in the
++/// Localizable.strings file of your app bundle and use the … loc-key payload
++/// keys", *Generating a remote notification*; FCM `body_loc_key` names an app
++/// string resource). The wake's hint fields ride along as before. Background
++/// wakes are unchanged.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct VisibleAlert {
++    /// The one line shown: APNs `aps.alert.loc-key`, FCM
++    /// `android.notification.body_loc_key`.
++    pub loc_key: String,
++    /// Optional title: APNs `aps.alert.title-loc-key`, FCM `title_loc_key`.
++    pub title_loc_key: Option<String>,
++    /// Merges repeated wakes into one notification: `apns-collapse-id`, FCM
++    /// `android.collapse_key` and `android.notification.tag`; also the APNs
++    /// `thread-id`.
++    pub collapse_id: String,
++    /// Android notification channel for the displayed notification.
++    pub android_channel_id: Option<String>,
++}
++
++/// Upper bound on a localisation key or channel id we pass through.
++const MAX_ALERT_KEY_LEN: usize = 128;
++/// APNs rejects an `apns-collapse-id` longer than 64 bytes.
++const MAX_COLLAPSE_ID_LEN: usize = 64;
++
++fn is_alert_key(s: &str, max: usize) -> bool {
++    !s.is_empty()
++        && s.len() <= max
++        && s.bytes()
++            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
++}
++
++impl VisibleAlert {
++    /// Validate the operator's configuration: every key is 1–128 characters of
++    /// `[A-Za-z0-9._-]`, and the collapse id at most 64.
++    pub fn new(
++        loc_key: String,
++        title_loc_key: Option<String>,
++        collapse_id: String,
++        android_channel_id: Option<String>,
++    ) -> Result<Self, String> {
++        if !is_alert_key(&loc_key, MAX_ALERT_KEY_LEN) {
++            return Err("alert loc-key must be 1-128 characters of [A-Za-z0-9._-]".into());
++        }
++        if let Some(t) = &title_loc_key {
++            if !is_alert_key(t, MAX_ALERT_KEY_LEN) {
++                return Err(
++                    "alert title loc-key must be 1-128 characters of [A-Za-z0-9._-]".into(),
++                );
++            }
++        }
++        if !is_alert_key(&collapse_id, MAX_COLLAPSE_ID_LEN) {
++            return Err("alert collapse id must be 1-64 characters of [A-Za-z0-9._-]".into());
++        }
++        if let Some(c) = &android_channel_id {
++            if !is_alert_key(c, MAX_ALERT_KEY_LEN) {
++                return Err("Android channel id must be 1-128 characters of [A-Za-z0-9._-]".into());
++            }
++        }
++        Ok(Self {
++            loc_key,
++            title_loc_key,
++            collapse_id,
++            android_channel_id,
++        })
++    }
++}
++
++/// The alert to show for this wake: only an interactive wake is made visible.
++fn visible_for<'a>(
++    alert: Option<&'a VisibleAlert>,
++    payload: &WakePayload,
++) -> Option<&'a VisibleAlert> {
++    alert.filter(|_| matches!(payload.urgency, Some(Urgency::Interactive)))
++}
++
++/// The APNs request for a wake: its push-type / priority / collapse headers and
++/// its JSON body. The wake's hint fields ride as custom keys (binding §2).
++fn apns_request(
++    payload: &WakePayload,
++    alert: Option<&VisibleAlert>,
++) -> (Vec<(&'static str, String)>, serde_json::Value) {
++    let mut body = match serde_json::to_value(payload) {
++        Ok(serde_json::Value::Object(m)) => m,
++        _ => serde_json::Map::new(),
++    };
++    match visible_for(alert, payload) {
++        None => {
++            // Contentless background push: the `aps` content-available flag
++            // wakes the app. Background pushes MUST be priority 5.
++            body.insert(
++                "aps".to_string(),
++                serde_json::json!({ "content-available": 1 }),
++            );
++            (
++                vec![
++                    ("apns-push-type", "background".to_string()),
++                    ("apns-priority", "5".to_string()),
++                ],
++                serde_json::Value::Object(body),
++            )
++        }
++        Some(a) => {
++            let mut shown = serde_json::Map::new();
++            shown.insert("loc-key".to_string(), a.loc_key.clone().into());
++            if let Some(t) = &a.title_loc_key {
++                shown.insert("title-loc-key".to_string(), t.clone().into());
++            }
++            // Displayed by the system from the app's own strings; still
++            // `content-available`, so a running app is told as before.
++            body.insert(
++                "aps".to_string(),
++                serde_json::json!({
++                    "alert": serde_json::Value::Object(shown),
++                    "sound": "default",
++                    "thread-id": a.collapse_id,
++                    "content-available": 1,
++                }),
++            );
++            (
++                vec![
++                    ("apns-push-type", "alert".to_string()),
++                    ("apns-priority", "10".to_string()),
++                    ("apns-collapse-id", a.collapse_id.clone()),
++                ],
++                serde_json::Value::Object(body),
++            )
++        }
++    }
++}
++
++/// The FCM HTTP v1 `message` for a wake. `data` values MUST be strings, so the
++/// hint fields are stringified (binding §2: no task content, no handle, no task
++/// type); `android.priority: high` wakes a backgrounded app.
++fn fcm_message(
++    token: &str,
++    payload: &WakePayload,
++    alert: Option<&VisibleAlert>,
++) -> serde_json::Value {
++    let mut data = serde_json::Map::new();
++    data.insert("v".to_string(), payload.v.to_string().into());
++    if let Some(m) = &payload.mediator {
++        data.insert("mediator".to_string(), m.clone().into());
++    }
++    if let Some(c) = payload.count {
++        data.insert("count".to_string(), c.to_string().into());
++    }
++    if let Some(u) = payload.urgency {
++        let s = match u {
++            Urgency::Interactive => "interactive",
++            Urgency::Background => "background",
++        };
++        data.insert("urgency".to_string(), s.into());
++    }
++    let mut android = serde_json::Map::new();
++    // High priority so a backgrounded app is woken now (the doorbell).
++    android.insert("priority".to_string(), "high".into());
++    if let Some(a) = visible_for(alert, payload) {
++        // A notification message: the system tray shows it from the app's
++        // string resource while the app is in the background or closed.
++        let mut notification = serde_json::Map::new();
++        notification.insert("body_loc_key".to_string(), a.loc_key.clone().into());
++        if let Some(t) = &a.title_loc_key {
++            notification.insert("title_loc_key".to_string(), t.clone().into());
++        }
++        if let Some(c) = &a.android_channel_id {
++            notification.insert("channel_id".to_string(), c.clone().into());
++        }
++        notification.insert("tag".to_string(), a.collapse_id.clone().into());
++        android.insert("collapse_key".to_string(), a.collapse_id.clone().into());
++        android.insert(
++            "notification".to_string(),
++            serde_json::Value::Object(notification),
++        );
++    }
++    serde_json::json!({
++        "message": {
++            "token": token,
++            "data": data,
++            "android": serde_json::Value::Object(android),
++        }
++    })
++}
++
+ /// Decode a base64url subscription field, tolerating optional padding.
+ pub(crate) fn b64url_decode(s: &str) -> Option<Vec<u8>> {
+     base64::engine::general_purpose::URL_SAFE_NO_PAD
+@@ -373,6 +574,8 @@ pub struct ApnsSender {
+     client: reqwest::Client,
+     /// Cached provider token, refreshed on a timer (see [`APNS_TOKEN_REFRESH_SECS`]).
+     token: Mutex<Option<CachedToken>>,
++    /// Optional [`VisibleAlert`] mode for interactive wakes.
++    visible_alert: Option<VisibleAlert>,
+ }
+ 
+ impl ApnsSender {
+@@ -390,9 +593,17 @@ impl ApnsSender {
+             signing_key,
+             client,
+             token: Mutex::new(None),
++            visible_alert: None,
+         })
+     }
+ 
++    /// Send interactive wakes as visible alerts ([`VisibleAlert`]); `None`
++    /// keeps every wake a silent background push.
++    pub fn with_visible_alert(mut self, alert: Option<VisibleAlert>) -> Self {
++        self.visible_alert = alert;
++        self
++    }
++
+     /// The current APNs provider token (JWT), regenerating it when the cached
+     /// one is missing or older than [`APNS_TOKEN_REFRESH_SECS`]. The header
+     /// carries `kid`; the claims carry `iss` (team id) + `iat`, per Apple's
+@@ -465,29 +676,19 @@ impl PushSender for ApnsSender {
+             return SendOutcome::TransientFailure;
+         };
+ 
+-        // Contentless background push (binding §2): the `aps` content-available
+-        // flag wakes the app; the WakePayload hint fields ride as custom keys —
+-        // never task content.
+-        let mut body = match serde_json::to_value(payload) {
+-            Ok(serde_json::Value::Object(m)) => m,
+-            _ => serde_json::Map::new(),
+-        };
+-        body.insert(
+-            "aps".to_string(),
+-            serde_json::json!({ "content-available": 1 }),
+-        );
+-
+-        let resp = self
++        // Contentless (binding §2): a background push, or — for an interactive
++        // wake with the visible alert mode configured — an alert naming a
++        // localisation key. The hint fields ride as custom keys either way.
++        let (headers, body) = apns_request(payload, self.visible_alert.as_ref());
++        let mut req = self
+             .client
+             .post(&url)
+             .header(AUTHORIZATION, format!("bearer {jwt}"))
+-            .header("apns-topic", topic)
+-            .header("apns-push-type", "background")
+-            // Background (content-available) pushes MUST be priority 5.
+-            .header("apns-priority", "5")
+-            .json(&body)
+-            .send()
+-            .await;
++            .header("apns-topic", topic);
++        for (name, value) in headers {
++            req = req.header(name, value);
++        }
++        let resp = req.json(&body).send().await;
+ 
+         match resp {
+             Ok(r) if r.status().is_success() => SendOutcome::Delivered,
+@@ -570,6 +771,8 @@ pub struct FcmSender {
+     signing_key: aws_lc_rs::signature::RsaKeyPair,
+     client: reqwest::Client,
+     token: tokio::sync::Mutex<Option<CachedAccessToken>>,
++    /// Optional [`VisibleAlert`] mode for interactive wakes.
++    visible_alert: Option<VisibleAlert>,
+ }
+ 
+ impl FcmSender {
+@@ -589,9 +792,17 @@ impl FcmSender {
+             signing_key,
+             client,
+             token: tokio::sync::Mutex::new(None),
++            visible_alert: None,
+         })
+     }
+ 
++    /// Send interactive wakes as notification messages ([`VisibleAlert`]);
++    /// `None` keeps every wake data-only.
++    pub fn with_visible_alert(mut self, alert: Option<VisibleAlert>) -> Self {
++        self.visible_alert = alert;
++        self
++    }
++
+     /// Mint the service-account assertion JWT (RS256) for the OAuth2 exchange.
+     fn assertion_jwt(&self, now: u64) -> Option<String> {
+         let header = b64url(br#"{"alg":"RS256","typ":"JWT"}"#);
+@@ -674,36 +885,11 @@ impl PushSender for FcmSender {
+             return SendOutcome::TransientFailure;
+         };
+ 
+-        // FCM `data` values MUST be strings — stringify the contentless hint
+-        // fields (binding §2: no task content, no handle, no task type).
+-        let mut data = serde_json::Map::new();
+-        data.insert("v".to_string(), payload.v.to_string().into());
+-        if let Some(m) = &payload.mediator {
+-            data.insert("mediator".to_string(), m.clone().into());
+-        }
+-        if let Some(c) = payload.count {
+-            data.insert("count".to_string(), c.to_string().into());
+-        }
+-        if let Some(u) = payload.urgency {
+-            let s = match u {
+-                Urgency::Interactive => "interactive",
+-                Urgency::Background => "background",
+-            };
+-            data.insert("urgency".to_string(), s.into());
+-        }
+-
+         let url = format!(
+             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
+             self.project_id
+         );
+-        let body = serde_json::json!({
+-            "message": {
+-                "token": token,
+-                "data": data,
+-                // High priority so a backgrounded app is woken now (the doorbell).
+-                "android": { "priority": "high" },
+-            }
+-        });
++        let body = fcm_message(token, payload, self.visible_alert.as_ref());
+ 
+         let resp = self
+             .client
+@@ -1208,4 +1394,143 @@ JIdgVjmcJ6J16mUbDYosCYI=
+             SendOutcome::TransientFailure
+         );
+     }
++
++    // ── Visible alert mode ──────────────────────────────────────────────────
++
++    fn alert() -> VisibleAlert {
++        VisibleAlert::new(
++            "KEYRING_WAKE".into(),
++            None,
++            "keyring-wake".into(),
++            Some("wake".into()),
++        )
++        .unwrap()
++    }
++
++    fn interactive() -> WakePayload {
++        WakePayload {
++            v: 1,
++            mediator: Some("did:web:mediator.example".into()),
++            count: None,
++            urgency: Some(Urgency::Interactive),
++        }
++    }
++
++    fn header<'a>(headers: &'a [(&'static str, String)], name: &str) -> Option<&'a str> {
++        headers
++            .iter()
++            .find(|(n, _)| *n == name)
++            .map(|(_, v)| v.as_str())
++    }
++
++    #[test]
++    fn visible_alert_rejects_unsafe_keys() {
++        assert!(VisibleAlert::new("".into(), None, "c".into(), None).is_err());
++        assert!(VisibleAlert::new("has space".into(), None, "c".into(), None).is_err());
++        assert!(VisibleAlert::new("K".into(), Some("{x}".into()), "c".into(), None).is_err());
++        assert!(VisibleAlert::new("K".into(), None, "c".repeat(65), None).is_err());
++        assert!(VisibleAlert::new("K".into(), None, "c".into(), Some("a/b".into())).is_err());
++        assert!(VisibleAlert::new("K".into(), None, "c".repeat(64), None).is_ok());
++    }
++
++    #[test]
++    fn apns_without_the_mode_is_the_unchanged_background_push() {
++        let (headers, body) = apns_request(&interactive(), None);
++        assert_eq!(header(&headers, "apns-push-type"), Some("background"));
++        assert_eq!(header(&headers, "apns-priority"), Some("5"));
++        assert_eq!(header(&headers, "apns-collapse-id"), None);
++        assert_eq!(body["aps"], serde_json::json!({ "content-available": 1 }));
++        assert_eq!(body["mediator"], "did:web:mediator.example");
++    }
++
++    #[test]
++    fn apns_interactive_wake_is_a_visible_alert_naming_only_a_key() {
++        let (headers, body) = apns_request(&interactive(), Some(&alert()));
++        assert_eq!(header(&headers, "apns-push-type"), Some("alert"));
++        assert_eq!(header(&headers, "apns-priority"), Some("10"));
++        assert_eq!(header(&headers, "apns-collapse-id"), Some("keyring-wake"));
++        // Only the key and flags: no text, no handle, no task content.
++        assert_eq!(
++            body["aps"],
++            serde_json::json!({
++                "alert": { "loc-key": "KEYRING_WAKE" },
++                "sound": "default",
++                "thread-id": "keyring-wake",
++                "content-available": 1,
++            })
++        );
++        let keys: Vec<&String> = body.as_object().unwrap().keys().collect();
++        assert_eq!(keys.len(), 4, "aps + the wake's hint fields only: {keys:?}");
++    }
++
++    #[test]
++    fn apns_background_wake_stays_silent_even_with_the_mode() {
++        let mut p = interactive();
++        p.urgency = Some(Urgency::Background);
++        let (headers, body) = apns_request(&p, Some(&alert()));
++        assert_eq!(header(&headers, "apns-push-type"), Some("background"));
++        assert_eq!(body["aps"], serde_json::json!({ "content-available": 1 }));
++        // A wake with no urgency is not made visible either.
++        p.urgency = None;
++        let (headers, _) = apns_request(&p, Some(&alert()));
++        assert_eq!(header(&headers, "apns-push-type"), Some("background"));
++    }
++
++    #[test]
++    fn apns_alert_carries_the_title_key_when_configured() {
++        let a = VisibleAlert::new(
++            "KEYRING_WAKE".into(),
++            Some("KEYRING_WAKE_TITLE".into()),
++            "keyring-wake".into(),
++            None,
++        )
++        .unwrap();
++        let (_, body) = apns_request(&interactive(), Some(&a));
++        assert_eq!(
++            body["aps"]["alert"],
++            serde_json::json!({ "loc-key": "KEYRING_WAKE", "title-loc-key": "KEYRING_WAKE_TITLE" })
++        );
++    }
++
++    #[test]
++    fn fcm_without_the_mode_is_the_unchanged_data_message() {
++        let m = fcm_message("tok", &interactive(), None);
++        assert_eq!(
++            m["message"]["android"],
++            serde_json::json!({ "priority": "high" })
++        );
++        assert_eq!(m["message"]["data"]["urgency"], "interactive");
++        assert!(m["message"].get("notification").is_none());
++    }
++
++    #[test]
++    fn fcm_interactive_wake_is_a_notification_naming_only_a_key() {
++        let m = fcm_message("tok", &interactive(), Some(&alert()));
++        assert_eq!(
++            m["message"]["android"],
++            serde_json::json!({
++                "priority": "high",
++                "collapse_key": "keyring-wake",
++                "notification": {
++                    "body_loc_key": "KEYRING_WAKE",
++                    "channel_id": "wake",
++                    "tag": "keyring-wake",
++                },
++            })
++        );
++        // The data hints are still there for the app, and nothing else is added.
++        assert_eq!(m["message"]["data"]["v"], "1");
++        assert!(m["message"].get("notification").is_none());
++    }
++
++    #[test]
++    fn fcm_background_wake_stays_data_only_even_with_the_mode() {
++        let mut p = interactive();
++        p.urgency = Some(Urgency::Background);
++        let m = fcm_message("tok", &p, Some(&alert()));
++        assert_eq!(
++            m["message"]["android"],
++            serde_json::json!({ "priority": "high" })
++        );
++    }
+ }
+-- 
+2.50.1 (Apple Git-155)
+
