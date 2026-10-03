@@ -40,7 +40,7 @@ import { BifoldLogger } from '../services/logger'
 import { Role } from '../types/chat'
 import { BifoldError } from '../types/error'
 import { Screens, Stacks, TabStacks } from '../types/navigators'
-import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
+import { keyringAgentLinkKind, myAgentLinkParams, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 import {
   CredentialDataForProof,
   ProofCredentialAttributes,
@@ -1309,7 +1309,7 @@ export const connectFromScanOrDeepLink = async (
     await routeKeyringAgentLink(uri, agent, (destination) =>
       navigation.navigate(Stacks.TabStack as any, {
         screen: TabStacks.MyAgentStack,
-        params: { screen: MY_AGENT_SCREEN[destination] },
+        params: myAgentLinkParams(destination),
       })
     )
     return
@@ -1347,7 +1347,13 @@ export const connectFromScanOrDeepLink = async (
     }
 
     const aUrl = processBetaUrlIfRequired(uri)
-    const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection, walletLabel)
+    const receivedInvitation = await connectFromInvitation(
+      aUrl,
+      agent,
+      implicitInvitations,
+      reuseConnection,
+      walletLabel
+    )
 
     if (receivedInvitation?.id) {
       watchDidExchangeProgress(agent, receivedInvitation.id, logger)
