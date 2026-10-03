@@ -46,7 +46,7 @@ import {
   vtiClientIdentityFromPersona,
 } from './VtiMediatorTransport'
 import { keepForPersona } from './vtiPersonaInbox'
-import { tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
+import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiTsp'
 
 /** One listener's session, as the manager needs it. */
 export interface ListenerSession {
@@ -246,18 +246,42 @@ export function defaultListenerFactory(agent: Agent, configuredMediatorDid: stri
     const mediator = await resolveVtiMediator(agent, mediatorDid)
     const identity = await vtiClientIdentityFromPersona(agent, persona.did, kaKmsKeyId)
     const tspSession = persona.kmsKeyIds?.signing ? await tspSessionForPersona(agent, persona) : undefined
-    const keep = (plaintext: DidCommV2PlaintextMessage) => keepForPersona(agent, persona, plaintext)
+    const who = didPrefix(persona.did)
+    // What a listener receives, said in the Release log as the shared session
+    // says it: without it a notice that never showed could not be told from a
+    // notice that never came (233 two-community row, a removal).
+    const keep = async (plaintext: DidCommV2PlaintextMessage, via: 'didcomm' | 'tsp') => {
+      releaseWarn(`[VTI] listener for ${who}: received ${String(plaintext.type ?? 'a message')} (${via})`)
+      try {
+        await keepForPersona(agent, persona, plaintext)
+      } catch (error) {
+        releaseWarn(
+          `[VTI] listener for ${who}: ${String(plaintext.type ?? 'a message')} not kept (${error instanceof Error ? error.message : String(error)})`
+        )
+        throw error
+      }
+    }
     return new VtiMediatorSession(agent, identity, mediator, {
       onError: (error) =>
         agent.config?.logger?.warn?.(`[VTI] listener for ${didPrefix(persona.did)}: ${error.message}`),
-      onMessage: keep,
+      onMessage: (plaintext: DidCommV2PlaintextMessage) => keep(plaintext, 'didcomm'),
       ...(tspSession
         ? {
             onTspFrame: async (bytes: Uint8Array) => {
               // Throwing withholds the acknowledgement: a frame this identity
               // cannot open stays on the mediator.
-              const result = await unpackTrustTaskFromPeer(tspSession, bytes, persona.did)
-              if (result) await keep(result.plaintext)
+              let result: Awaited<ReturnType<typeof unpackTrustTaskFromPeer>>
+              try {
+                result = await unpackTrustTaskFromPeer(tspSession, bytes, persona.did)
+              } catch (error) {
+                releaseWarn(
+                  `[VTI] listener for ${who}: TSP frame not opened (${error instanceof Error ? error.message.slice(0, 160) : String(error)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, left on the mediator`
+                )
+                throw error
+              }
+              if (result) await keep(result.plaintext, 'tsp')
+              else
+                releaseWarn(`[VTI] listener for ${who}: TSP frame opened but carried no Trust Task envelope; ignored`)
             },
           }
         : {}),
