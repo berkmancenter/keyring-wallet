@@ -427,7 +427,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <hostname>", which read as the community's name when nothing had
               named it at all (tester report #14). A name is shown only when
               something actually gave one; otherwise the card says so and the
-              full DID stands as the identifier, not as a name. */}
+              DID's handle stands as the identifier, not as a name; the full DID
+              waits behind Details. */}
           {communityDid ? (
             <View style={styles.card} testID={testIdWithKey('JoinSuggested')}>
               <View style={styles.row}>
@@ -469,6 +470,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedWhere')}>
                 {called.technical}
               </ThemedText>
+              <DidDetails did={communityDid} testIdStem="JoinSuggested" />
             </View>
           ) : null}
         </>

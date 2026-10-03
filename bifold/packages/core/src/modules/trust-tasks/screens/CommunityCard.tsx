@@ -22,7 +22,7 @@ import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { CardKeptRow } from './CardKeptRow'
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
-import { communityHeadingOf } from './communityName'
+import { asTitle, communityHeadingOf } from './communityName'
 import { shareIdentity } from './identityShare'
 import { didHashKey, didLabelKey } from './testIdKey'
 import { localDate } from './localTime'
@@ -118,7 +118,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         <Icon name="account-group-outline" size={22} color={TextTheme.normal.color} />
         <View style={{ flex: 1 }}>
           <ThemedText variant="bold" testID={testIdWithKey(`AgentCommunityName_${key}`)}>
-            {community}
+            {asTitle(community)}
           </ThemedText>
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentCommunityStatus_${key}`)}>
             {status}

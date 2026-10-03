@@ -16,7 +16,7 @@
  *              communities share: "Join keyring-vti-vtc.ngrok.app" was offered
  *              to a person as if it were a name (tester report #14,
  *              2026-09-22), and one host made several communities look like
- *              one (IN-26). The full DID is the technical line, for Details.
+ *              one (IN-26). The full DID stays behind Details.
  *
  * Every fresh community publishes no branding until its admin sets some, so
  * the nameless case is the common one on a maintainer's first day, not an
@@ -36,7 +36,7 @@ export interface CommunityName {
   name?: string
   /** The name is only what a link's author called it, not the community's own. */
   claimed: boolean
-  /** The community in the terms it can be checked in: its full DID, for Details. */
+  /** A short identifier that tells it apart (`unnamedRef`); the full DID is behind Details. */
   technical: string
 }
 
@@ -55,7 +55,7 @@ export function communityName(did: string, link?: CommunityLink): CommunityName 
   return {
     name: named,
     claimed: Boolean(named) && !link?.published,
-    technical: did,
+    technical: unnamedRef(did),
   }
 }
 
@@ -146,23 +146,25 @@ export function didPathName(did: string): string | undefined {
  * "Your agent", one per community — so that two unnamed ones never both read
  * "a community" (2026-09-26, a vetter holding two).
  *
- * As `communityLabelOf` while a name is known. Without one: the DID's path
- * segment on its own, as a card's title; else "an unnamed community (…<end of
- * its SCID>)", a hash rather than a host, to tell it apart. `claim: 'plain'`
- * drops the "(not confirmed …)" qualifier, for a line about a membership the
- * community itself issued, where the qualifier read as if the membership were
- * unconfirmed.
+ * As `communityLabelOf`: without a name it is "an unnamed community (<ref>)",
+ * whose ref already tells two apart. It used to be the bare path segment, which
+ * as a card's title read as the community's name — what #12 and IN-26 took
+ * away. `claim: 'plain'` drops the "(not confirmed …)" qualifier, for a line
+ * about a membership the community itself issued, where the qualifier read as
+ * if the membership were unconfirmed.
  */
 export function communityHeadingOf(did: string, t: TFunction, opts: { claim?: 'qualified' | 'plain' } = {}): string {
-  const named = opts.claim === 'plain' ? communityLabelAnsweredOf(did, t) : communityLabelOf(did, t)
-  if (named !== unnamedCommunityLabel(did, t)) return named
-  return didPathName(did) ?? named
+  return opts.claim === 'plain' ? communityLabelAnsweredOf(did, t) : communityLabelOf(did, t)
+}
+
+/** A label standing alone, as a title: its first letter in capitals. */
+export function asTitle(label: string): string {
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 /** The same, for where it starts a sentence or stands alone: "An unnamed community (…)". */
 export function communityLabelStartOf(did: string, t: TFunction): string {
-  const label = communityLabelOf(did, t)
-  return label.charAt(0).toUpperCase() + label.slice(1)
+  return asTitle(communityLabelOf(did, t))
 }
 
 /**
