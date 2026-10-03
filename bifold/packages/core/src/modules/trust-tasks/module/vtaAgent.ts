@@ -27,6 +27,7 @@ import {
 import type { AgentLabel } from './agentLabel'
 import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
+import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
 import {
@@ -457,6 +458,11 @@ export class VtaAgentController {
 
   private set(next: Partial<VtaAgentState>) {
     this.state = { ...this.state, ...next }
+    // The stores answer "this community's identity" for the agent this phone
+    // acts with: the linked one, or the one that removed it (whose identities
+    // the person can still erase).
+    const { link } = this.state
+    setCurrentAgentDid(link.kind === 'linked' || link.kind === 'revoked' ? link.vtaDid : undefined)
     this.listeners.forEach((l) => l())
   }
 
@@ -723,7 +729,7 @@ export class VtaAgentController {
           if (keyId) await forgetKeyCopy(agent, keyId)
         }
         await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
-        await identities.forgetPersona(persona.communityDid).catch(() => undefined)
+        await identities.forgetPersona(persona.communityDid, persona.vtaDid).catch(() => undefined)
       }
     }
     await this.unlink(agent)

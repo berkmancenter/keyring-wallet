@@ -731,7 +731,8 @@ describe("erasing this phone's copy of its agent", () => {
       'kms-s-did:c:mine',
     ])
     expect(forgetPersona).toHaveBeenCalledTimes(1)
-    expect(forgetPersona).toHaveBeenCalledWith('did:c:mine')
+    // Under its own agent: another agent's identity for the same community stays.
+    expect(forgetPersona).toHaveBeenCalledWith('did:c:mine', 'did:webvh:Qm:alice')
     expect(forgetCommunity).toHaveBeenCalledWith('did:c:mine')
     expect(forgetCommunity).not.toHaveBeenCalledWith('did:c:other')
     expect(forgetManager).toHaveBeenCalledWith(offer.vta)
