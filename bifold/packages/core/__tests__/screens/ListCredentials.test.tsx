@@ -104,6 +104,20 @@ describe('CredentialList Screen', () => {
    * And the holder has accepted the credential offer
    * Then the credentials are ordered to most recent to least recent (top to bottom)
    */
+  // The empty Wallet sat under the header while Messages and Contacts centre
+  // theirs: the screen's root did not fill the tab, so the list (and its empty
+  // state) was only as tall as its content.
+  test('the list fills the tab, so an empty Wallet is centred like the other tabs', async () => {
+    const tree = render(
+      <BasicAppContext>
+        <ListCredentials />
+      </BasicAppContext>,
+    )
+    await act(async () => {
+      expect(tree.getByTestId('ListCredentialsRoot').props.style).toMatchObject({ flex: 1 })
+    })
+  })
+
   test('credentials should display in descending order of issued date', async () => {
     const tree = render(
       <BasicAppContext>

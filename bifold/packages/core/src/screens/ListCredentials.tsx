@@ -262,7 +262,10 @@ const ListCredentials: React.FC = () => {
   }
 
   return (
-    <View>
+    // flex: 1 as Messages and Contacts have it: without it the list was only as
+    // tall as its content, so the empty state sat under the header instead of
+    // in the middle of the screen, unlike the other tabs (device, 10-05).
+    <View style={{ flex: 1 }} testID="ListCredentialsRoot">
       <FlatList
         style={{ backgroundColor: ColorPalette.brand.primaryBackground }}
         // flexGrow lets ListEmptyComponent fill the viewport. The empty state
