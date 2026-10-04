@@ -50,14 +50,19 @@ const PushLinkListener: React.FC = () => {
     return watchPushPermission(
       {
         optedIn: () => optedIn.current,
-        linked: () => Boolean(vtaAgent.agentAddress()),
+        // Linked and online: the wake channel is changed over the link.
+        linked: () => {
+          const link = vtaAgent.getState().link
+          return link.kind === 'linked' && link.connection.kind === 'online'
+        },
         permission: notificationsAllowedNow,
         clearedForDenial,
         clearWake: () => vtaAgent.clearThisDeviceWake(agent),
         enableWake: () => enablePushWake(appPushWakeDeps(agent)),
         log: (message, data) => BCLogger.info(message, data),
       },
-      AppState
+      AppState,
+      vtaAgent.subscribe
     )
   }, [agent])
 

@@ -138,3 +138,34 @@ describe('when the check runs', () => {
     expect(d.log).toHaveBeenCalledWith('push wake: permission check failed', { error: 'storage' })
   })
 })
+
+describe('when the agent link comes up', () => {
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+  const noAppState: AppStateSource = { addEventListener: () => ({ remove: () => undefined }) }
+
+  it('checks again, so a cold start after a block clears on that first open (measured on Android, 10-04)', async () => {
+    let linked = false
+    const listeners = new Set<() => void>()
+    const { d } = deps({ permission: 'denied' })
+    d.linked.mockImplementation(() => linked)
+    const stop = watchPushPermission(d, noAppState, (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    })
+    await flush()
+    expect(d.clearWake).not.toHaveBeenCalled()
+
+    linked = true
+    listeners.forEach((l) => l())
+    await flush()
+    expect(d.clearWake).toHaveBeenCalledTimes(1)
+
+    // Other changes while it stays up do not check again.
+    listeners.forEach((l) => l())
+    await flush()
+    expect(d.permission).toHaveBeenCalledTimes(1)
+
+    stop()
+    expect(listeners.size).toBe(0)
+  })
+})

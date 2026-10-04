@@ -23,7 +23,7 @@ export type OsPermission = 'granted' | 'denied' | 'unknown'
 export interface PermissionWatchDeps {
   /** Whether the person has Keyring's notifications switch on. */
   optedIn(): boolean
-  /** Whether this phone is linked to an agent. */
+  /** Whether this phone is linked to an agent, with the link up. */
   linked(): boolean
   /** The phone's notification permission, without asking. */
   permission(): Promise<OsPermission>
@@ -78,11 +78,26 @@ export interface AppStateSource {
   addEventListener(type: 'change', listener: (state: string) => void): { remove(): void }
 }
 
+/** Changes to the agent link (bifold's `vtaAgent.subscribe`). */
+export type LinkChanges = (listener: () => void) => () => void
+
 /**
- * Reconcile now and every time the app becomes active; returns the
- * unsubscribe. A check still running when the next one is due is not doubled.
+ * Reconcile now, every time the app becomes active, and every time the agent
+ * link comes up (`linked()` turns true); returns the unsubscribe. A check still
+ * running when the next one is due is not doubled.
+ *
+ * The link matters at a cold start. Android kills Keyring when notifications
+ * are switched off in its settings, so the next open is a cold start, and there
+ * the first check runs before the saved link is restored: not linked yet,
+ * nothing done. Measured on an Android emulator (10-04): the clear came only on
+ * the next background-foreground. Checking again when the link comes up clears
+ * it on that first open.
  */
-export function watchPushPermission(deps: PermissionWatchDeps, appState: AppStateSource): () => void {
+export function watchPushPermission(
+  deps: PermissionWatchDeps,
+  appState: AppStateSource,
+  linkChanges?: LinkChanges
+): () => void {
   let running = false
   const check = () => {
     if (running) return
@@ -98,6 +113,15 @@ export function watchPushPermission(deps: PermissionWatchDeps, appState: AppStat
   const subscription = appState.addEventListener('change', (state) => {
     if (state === 'active') check()
   })
+  let wasLinked = deps.linked()
+  const unsubscribeLink = linkChanges?.(() => {
+    const linked = deps.linked()
+    if (linked && !wasLinked) check()
+    wasLinked = linked
+  })
   check()
-  return () => subscription.remove()
+  return () => {
+    subscription.remove()
+    unsubscribeLink?.()
+  }
 }
