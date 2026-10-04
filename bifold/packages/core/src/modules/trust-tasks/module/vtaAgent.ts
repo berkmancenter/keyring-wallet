@@ -1028,6 +1028,8 @@ export class VtaAgentController {
       }
       // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
       await client.whoAmI().catch(() => undefined)
+      // Approval rules that name the swapped-out key follow this phone onto the new one.
+      void this.carryApprovers(agent, vtaDid)
       // In the background: a slow or silent answer must not hold the link up.
       void this.labelOwnEntry(agent, client)
     }
@@ -1525,6 +1527,22 @@ export class VtaAgentController {
    * Never throws; an identity whose keys cannot be fetched is tried again at
    * the next session, or when it is next used.
    */
+  /**
+   * After a key swap, keep this phone on the agent's approval rules: they
+   * name its key, and the swap retired that key (VtaClient.carryApproversAcrossSwap).
+   * Best effort and logged; a session that could not do it leaves it to the next.
+   */
+  private async carryApprovers(agent: Agent, vtaDid: string): Promise<void> {
+    try {
+      const outcome = await this.client(agent, vtaDid).carryApproversAcrossSwap()
+      if (outcome !== 'none') releaseWarn(`[VTI] approval rules after the key swap: ${outcome}`)
+    } catch (error) {
+      agent.config?.logger?.warn?.(
+        `[VTA] approval rules after the key swap: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
   private async holdPersonaKeys(agent: Agent, vtaDid: string): Promise<void> {
     // An install from before memory-only custody moves its stored copies first
     // (plan part E); a persona whose agent will not hand its keys over keeps
@@ -1692,6 +1710,7 @@ export class VtaAgentController {
       this.dispatch({ type: 'sessionOpened' })
       void this.noteReached(agent, link.vtaDid)
       void this.holdPersonaKeys(agent, link.vtaDid)
+      void this.carryApprovers(agent, link.vtaDid)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {

@@ -886,6 +886,79 @@ describe('creating an agent', () => {
   })
 })
 
+describe('VtaClient: approval rules follow a key swap', () => {
+  const OLD = 'did:key:z6MkRetiredLinkingKey'
+  const CREATE = CONTEXTS_CREATE
+  const OLD_SET = `keyring-phone:${OLD}`
+  const NEW_SET = `keyring-phone:${PHONE}`
+  const rule = (set: string) => ({
+    taskType: CREATE,
+    requires: 'consent',
+    approverSet: set,
+    minApprovals: 1,
+    excludeRequester: false,
+  })
+  async function afterSwap(record: Partial<VtiManagerIdentity> = { approversFrom: OLD }) {
+    let held: VtiManagerIdentity = { ...linkedManager, ...record }
+    const store = {
+      getManager: jest.fn(async () => held),
+      setManager: jest.fn(async (m: VtiManagerIdentity) => void (held = m)),
+    }
+    const client = new VtaClient(agent, VTA, store as never, { connectDrainMs: 0 })
+    await client.connect()
+    mockVta.asked = []
+    return { client, record: () => held }
+  }
+  const seed = (version: number) => {
+    mockVta.policy = {
+      version,
+      module: 'before',
+      ext: { 'openvtc.approvals': [rule(OLD_SET)], 'openvtc.approver-sets': { [OLD_SET]: [OLD] } },
+    }
+  }
+
+  it('moves the rules onto the new key, written against the version read, then forgets the old key', async () => {
+    seed(3)
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('moved')
+    expect(sentOf(POLICY_UPSERT)[0].payload).toMatchObject({ id: 'approvals', expectedVersion: 3 })
+    expect(mockVta.policy?.ext['openvtc.approvals']).toEqual([rule(NEW_SET)])
+    expect(mockVta.policy?.ext['openvtc.approver-sets']).toEqual({ [NEW_SET]: [PHONE] })
+    expect(record().approversFrom).toBeUndefined()
+    // Done once: the next session sends nothing.
+    mockVta.asked = []
+    expect(await client.carryApproversAcrossSwap()).toBe('none')
+    expect(sentOf(POLICY_UPSERT)).toEqual([])
+    await client.disconnect()
+  })
+
+  it('no rule names the old key: nothing is written, and the old key is forgotten', async () => {
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('unchanged')
+    expect(sentOf(POLICY_UPSERT)).toEqual([])
+    expect(record().approversFrom).toBeUndefined()
+    await client.disconnect()
+  })
+
+  it('a phone that may not change the rules hears so once, and stops asking', async () => {
+    seed(2)
+    mockVta.whoami = { ...mockVta.whoami, scopes: ['some-context'] }
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('notAllowed')
+    expect(mockVta.policy?.ext['openvtc.approvals']).toEqual([rule(OLD_SET)])
+    expect(record().approversFrom).toBeUndefined()
+    await client.disconnect()
+  })
+
+  it('no swap pending: asks nothing', async () => {
+    seed(1)
+    const { client } = await afterSwap({})
+    expect(await client.carryApproversAcrossSwap()).toBe('none')
+    expect(sentOf(POLICY_GET)).toEqual([])
+    await client.disconnect()
+  })
+})
+
 describe('"Ask me before…": the agent\'s approval rules', () => {
   const CREATE = CONTEXTS_CREATE
   const REVOKE_KEY = 'https://trusttasks.org/spec/keys/revoke/0.1'
