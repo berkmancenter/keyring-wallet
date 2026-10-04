@@ -1560,6 +1560,8 @@
       "TypeMembership": "membership"
     },
     "StandingMember": "You're a member of {{community}}.",
+    "CheckNow": "Check now",
+    "Checking": "Checking…",
     "NowMember": "You're now a member of {{community}}.",
     "StandingRemoved": "{{community}} removed you. You can ask to join again.",
     "StandingSent": "Sent — waiting for {{community}} to answer.",

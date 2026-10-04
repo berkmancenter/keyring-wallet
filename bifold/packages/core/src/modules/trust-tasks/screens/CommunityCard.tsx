@@ -7,7 +7,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -18,6 +18,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { useCommunityJourney } from '../module/communityJourney'
 import { isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
+import { vtiAgent } from '../module/vtiAgent'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { CardKeptRow } from './CardKeptRow'
@@ -74,7 +75,15 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
-  const { journey } = useCommunityJourney(agent, communityDid)
+  // The shared session already signed in as this card's identity can ask the
+  // community where its request stands at no cost, so this card asks on focus.
+  // Any other open request is asked about when the person says so ("Check
+  // now"): asking signs the shared session in as that identity. A community
+  // pushes no refusal, so this is how one is learned off the Join screen (#269).
+  const sharedDid = useSyncExternalStore(vtiAgent.subscribe, () => vtiAgent.getState().did)
+  const heldByShared = Boolean(persona && sharedDid === persona.did)
+  const { journey, check } = useCommunityJourney(agent, communityDid, { poll: heldByShared })
+  const [checking, setChecking] = useState(false)
   // Until the journey is read, a held membership already says "member".
   // A membership the community removed says so from the start (#166).
   const removal = membership && !isCurrentMembership(membership) ? membership.removal : undefined
@@ -133,6 +142,23 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         </View>
         <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
       </Pressable>
+      {(join?.kind === 'sent' || join?.kind === 'pending' || join?.kind === 'deferred') && !heldByShared ? (
+        <Pressable
+          style={styles.row}
+          disabled={checking}
+          onPress={() => {
+            setChecking(true)
+            void check().finally(() => setChecking(false))
+          }}
+          accessibilityRole="button"
+          testID={testIdWithKey(`AgentCommunityCheck_${key}`)}
+        >
+          <Icon name="refresh" size={18} color={ColorPalette.brand.link} />
+          <ThemedText style={{ color: ColorPalette.brand.link }}>
+            {t(checking ? 'Join.Checking' : 'Join.CheckNow')}
+          </ThemedText>
+        </Pressable>
+      ) : null}
 
       {/* What the agent holds for this community, under it. */}
       {membership ? (

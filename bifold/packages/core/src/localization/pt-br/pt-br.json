@@ -1405,6 +1405,8 @@
       "TypeMembership": "de membro"
     },
     "StandingMember": "Você é membro de {{community}}.",
+    "CheckNow": "Verificar agora",
+    "Checking": "Verificando…",
     "NowMember": "Agora você é membro de {{community}}.",
     "StandingRemoved": "{{community}} removeu você. Você pode pedir para entrar de novo.",
     "StandingSent": "Enviado — aguardando a resposta de {{community}}.",
