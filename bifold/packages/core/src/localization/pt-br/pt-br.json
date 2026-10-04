@@ -1310,6 +1310,7 @@
     "JourneyLinked": "Vinculado",
     "JourneyJoin": "Entrar",
     "JourneyJoined": "Entrou em {{community}}",
+    "UnlinkOtherBody": "Este telefone não vai mais funcionar com {{agent}}.\n\nSuas identidades e participações em comunidades ficam com {{agent}}. Vincule-o de novo para usá-las neste telefone.\n\n{{agent}} ainda pode listar este telefone até o administrador removê-lo, mas essa entrada não pode ser usada: este telefone esquece a chave.",
     "OtherWaiting_one": "{{agent}} tem 1 pedido esperando",
     "OtherWaiting_other": "{{agent}} tem {{count}} pedidos esperando",
     "SwitcherWaiting_one": "Não conectado agora · 1 pedido esperando",

@@ -1089,9 +1089,11 @@ describe('several agents', () => {
           if (current === did) current = links[0]?.vtaDid
         },
       }),
-      identityStore: () => ({ setManager: async () => undefined, forgetManager: async () => undefined }) as never,
+      identityStore:
+        (extra.identityStore as never) ??
+        ((() => ({ setManager: async () => undefined, forgetManager: async () => undefined })) as never),
     })
-    return { vta, current: () => current }
+    return { vta, current: () => current, links: () => links.map((l) => l.vtaDid) }
   }
 
   it('lists every agent and switches to another, which becomes current and connects', async () => {
@@ -1195,6 +1197,61 @@ describe('several agents', () => {
     expect(vta.getState().approvals.map((a) => a.id)).toEqual(['r1'])
     expect(vta.getState().otherRequests?.[HOME.vtaDid]?.approvals.map((a) => a.id)).toEqual(['h1'])
     expect(vta.getState().otherRequests?.[WORK.vtaDid]).toBeUndefined()
+  })
+  // Step 4: unlink one of several.
+  const telling = (opts: { fail?: boolean } = {}) => {
+    jest.useRealTimers()
+    const told: string[] = []
+    const lookClient = (_a: unknown, vtaDid: string) => ({
+      connect: async () => {
+        if (opts.fail) throw new Error('unreachable')
+      },
+      disconnect: async () => undefined,
+      task: async (type: string) => {
+        told.push(`${vtaDid} ${type}`)
+        return {}
+      },
+    })
+    return { told, lookClient }
+  }
+
+  it('unlinking another agent tells it, forgets it and what was seen there, and leaves the current one', async () => {
+    const { told, lookClient } = telling()
+    const forgetManager = jest.fn(async () => undefined)
+    const { vta, links } = twoAgents({
+      lookClient,
+      identityStore: () => ({ setManager: async () => undefined, forgetManager }),
+    })
+    await vta.restore({} as never)
+    ;(vta as unknown as { set(n: object): void }).set({
+      otherRequests: { [WORK.vtaDid]: { approvals: [], reachable: true, at: 0 } },
+    })
+    await vta.unlinkAgent({} as never, WORK.vtaDid)
+    expect(told.map((t) => t.split(' ')[1])).toEqual([
+      'https://trusttasks.org/spec/device/set-wake/0.2',
+      'https://trusttasks.org/spec/auth/revoke-session/0.2',
+    ])
+    expect(links()).toEqual([HOME.vtaDid])
+    expect(forgetManager).toHaveBeenCalledWith(WORK.vtaDid)
+    expect(vta.getState().otherRequests?.[WORK.vtaDid]).toBeUndefined()
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+    expect(vta.getState().agents?.map((a) => a.vtaDid)).toEqual([HOME.vtaDid])
+  })
+
+  it('an agent that cannot be reached is still unlinked from this phone', async () => {
+    const { lookClient } = telling({ fail: true })
+    const { vta, links } = twoAgents({ lookClient })
+    await vta.restore({} as never)
+    await vta.unlinkAgent({} as never, WORK.vtaDid)
+    expect(links()).toEqual([HOME.vtaDid])
+  })
+
+  it('unlinking the current agent this way brings up the next', async () => {
+    const { lookClient } = telling()
+    const { vta } = twoAgents({ lookClient })
+    await vta.restore({} as never)
+    await vta.unlinkAgent({} as never, HOME.vtaDid)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
   })
 })
 

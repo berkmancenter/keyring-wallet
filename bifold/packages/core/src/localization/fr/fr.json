@@ -1404,6 +1404,7 @@
     "JourneyLinked": "Lié",
     "JourneyJoin": "Rejoindre",
     "JourneyJoined": "Rejoint : {{community}}",
+    "UnlinkOtherBody": "Ce téléphone ne fonctionnera plus avec {{agent}}.\n\nVos identités et adhésions aux communautés restent chez {{agent}}. Liez-le à nouveau pour les utiliser sur ce téléphone.\n\n{{agent}} peut encore lister ce téléphone jusqu’à ce que son administrateur le retire, mais cette entrée ne peut pas servir : ce téléphone oublie sa clé.",
     "OtherWaiting_one": "{{agent}} a 1 demande en attente",
     "OtherWaiting_other": "{{agent}} a {{count}} demandes en attente",
     "SwitcherWaiting_one": "Non connecté pour le moment · 1 demande en attente",

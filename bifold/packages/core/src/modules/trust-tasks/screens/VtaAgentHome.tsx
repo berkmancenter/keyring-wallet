@@ -138,6 +138,8 @@ const VtaAgentHome: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [introPanel, setIntroPanel] = useState(0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  /** The other agent the person asked to unlink, awaiting their confirmation. */
+  const [unlinkTarget, setUnlinkTarget] = useState<string>()
   const otherWaiting = useOtherAgentsWaiting()
   const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
   const onCardStep = useCallback((communityDid: string, primary: CommunityCardPrimary | undefined) => {
@@ -512,7 +514,22 @@ const VtaAgentHome: React.FC = () => {
                             : t('VtaLink.SwitcherNotConnected')}
                       </ThemedText>
                     </View>
-                    {isCurrent ? <Icon name="check" size={22} color={ColorPalette.brand.primary} /> : null}
+                    {isCurrent ? (
+                      <Icon name="check" size={22} color={ColorPalette.brand.primary} />
+                    ) : (
+                      <Pressable
+                        onPress={() => setUnlinkTarget(a.vtaDid)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('VtaLink.UnlinkTitle', {
+                          agent: agentDisplayName(withAgentName(a, state.agentNames), t),
+                          interpolation: { escapeValue: false },
+                        })}
+                        hitSlop={8}
+                        testID={testIdWithKey(`AgentSwitcherUnlink_${i}`)}
+                      >
+                        <ThemedText style={styles.link}>{t('VtaLink.UnlinkConfirm')}</ThemedText>
+                      </Pressable>
+                    )}
                   </Pressable>
                 )
               })}
@@ -528,6 +545,32 @@ const VtaAgentHome: React.FC = () => {
                 <Icon name="plus" size={22} color={ColorPalette.brand.link} />
                 <ThemedText style={[styles.link, { flex: 1 }]}>{t('VtaLink.SwitcherAdd')}</ThemedText>
               </Pressable>
+            </View>
+          ) : null}
+          {unlinkTarget ? (
+            <View style={{ gap: 8 }} testID={testIdWithKey('AgentUnlinkOtherCard')}>
+              <ThemedText variant="labelTitle" accessibilityRole="header">
+                {t('VtaLink.UnlinkTitle', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
+              </ThemedText>
+              <ThemedText>
+                {t('VtaLink.UnlinkOtherBody', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
+              </ThemedText>
+              <Button
+                title={t('VtaLink.UnlinkConfirm')}
+                buttonType={ButtonType.Critical}
+                onPress={() => {
+                  const target = unlinkTarget
+                  setUnlinkTarget(undefined)
+                  if (agent && target) void vtaAgent.unlinkAgent(agent, target)
+                }}
+                testID={testIdWithKey('AgentUnlinkOtherConfirm')}
+              />
+              <Button
+                title={t('Global.Cancel')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => setUnlinkTarget(undefined)}
+                testID={testIdWithKey('AgentUnlinkOtherCancel')}
+              />
             </View>
           ) : null}
           <VtaStatusLine connection={link.connection} now={now} />

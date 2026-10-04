@@ -1465,6 +1465,7 @@
     "JourneyLinked": "Linked",
     "JourneyJoin": "Join",
     "JourneyJoined": "Joined {{community}}",
+    "UnlinkOtherBody": "This phone will no longer work with {{agent}}.\n\nYour community identities and memberships stay with {{agent}}. Link it again to use them on this phone.\n\n{{agent}} may still list this phone until its admin removes it, but that entry can't be used: this phone forgets its key.",
     "OtherWaiting_one": "{{agent}} has 1 request waiting",
     "OtherWaiting_other": "{{agent}} has {{count}} requests waiting",
     "SwitcherWaiting_one": "Not connected now · 1 request waiting",

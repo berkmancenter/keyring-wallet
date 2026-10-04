@@ -203,7 +203,7 @@ export interface VtaAgentDeps {
     vtaDid: string,
     store: VtiIdentityStore,
     options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void }
-  ) => Pick<VtaClient, 'connect' | 'disconnect'>
+  ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
   /** Whether the agent's address exists: its DID host says `notFound`, it resolves (`found`), or no one could tell. */
   agentAddress?: (agent: Agent, vtaDid: string) => Promise<'notFound' | 'found' | 'unknown'>
   identityStore?: (agent: Agent) => VtiIdentityStore
@@ -412,6 +412,22 @@ function stillWaiting(approvals: VtiApproval[], now: number): VtiApproval[] {
 /** A look at another agent: how long after the last message it ends, and at most. */
 export const LOOK_QUIET_MS = 3_000
 export const LOOK_MAX_MS = 12_000
+
+/**
+ * Tell an agent this phone is leaving it: stop waking it (`device/set-wake`
+ * with no handle), then end its sessions (`auth/revoke-session`, all). Best-
+ * effort: a refusal or a silence changes nothing. `sent` runs when the first
+ * task leaves the phone, so a deadline can count from there.
+ */
+export async function tellAgentLeaving(
+  client: Pick<VtaClient, 'task'>,
+  sent: () => void = () => undefined
+): Promise<void> {
+  await client.task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, sent).catch(() => undefined)
+  await client
+    .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
+    .catch(() => undefined)
+}
 
 export class VtaAgentController {
   private state: VtaAgentState = {
@@ -803,6 +819,46 @@ export class VtaAgentController {
     this.set({ addingAgent: true, addedAgent: undefined })
   }
 
+  /**
+   * Unlink one of several agents (several agents, step 4). The current one
+   * unlinks as always, and the next comes up. Another is told first, best-
+   * effort, through a session of its own (only the current agent is connected),
+   * within the same deadline as an unlink of the current one; then this phone
+   * forgets its link, its own key for it and what a look found there. As with
+   * any unlink, the agent keeps this phone's key on its list until removed from
+   * another device (VTI-Q23), and identities and memberships stay recorded.
+   */
+  async unlinkAgent(agent: Agent, vtaDid: string): Promise<void> {
+    const link = this.state.link
+    if ((link.kind === 'linked' || link.kind === 'revoked') && link.vtaDid === vtaDid) return this.unlink(agent)
+    const client = (this.deps.lookClient ?? ((a, did, store, options) => new VtaClient(a, did, store, options)))(
+      agent,
+      vtaDid,
+      this.identityStore(agent),
+      { onInbound: () => undefined }
+    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, UNLINK_TELL_QUEUE_MS)
+    })
+    await Promise.race([
+      (async () => {
+        await client.connect()
+        await tellAgentLeaving(client)
+      })().catch(() => undefined),
+      deadline,
+    ])
+    clearTimeout(timer)
+    await client.disconnect().catch(() => undefined)
+    await Promise.resolve(this.linkStore(agent).remove?.(vtaDid)).catch(() => undefined)
+    await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+    this.namesAsked.delete(vtaDid)
+    const others = { ...(this.state.otherRequests ?? {}) }
+    delete others[vtaDid]
+    this.set({ otherRequests: others })
+    await this.refreshAgents(agent)
+  }
+
   /** The person keeps the agent just added: the question is answered. */
   acknowledgeAdded(): void {
     this.set({ addedAgent: undefined })
@@ -935,18 +991,9 @@ export class VtaAgentController {
       giveUp = resolve
       timers.push(setTimeout(resolve, UNLINK_TELL_QUEUE_MS))
     })
-    const tell = (async () => {
-      // `set-wake` with no handle clears the wake channel (clearThisDeviceWake),
-      // sent here directly to know when it leaves the phone.
-      await client
-        .task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, () => {
-          timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
-        })
-        .catch(() => undefined)
-      await client
-        .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
-        .catch(() => undefined)
-    })()
+    const tell = tellAgentLeaving(client, () => {
+      timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
+    })
     await Promise.race([tell, deadline])
     timers.forEach((timer) => clearTimeout(timer))
   }
