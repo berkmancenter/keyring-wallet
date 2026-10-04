@@ -7,7 +7,13 @@
 import fs from 'fs'
 import path from 'path'
 
-import { resumePlatformPush, startPlatformPush, stopPlatformPush, type PlatformMessaging } from '@/push/pushPlatform'
+import {
+  resumePlatformPush,
+  startPlatformPush,
+  stopPlatformPush,
+  waitForApnsToken,
+  type PlatformMessaging,
+} from '@/push/pushPlatform'
 
 const APP = path.join(__dirname, '..', '..')
 
@@ -117,5 +123,27 @@ describe('a later launch', () => {
       resumePlatformPush({ gatewayUrl: 'https://push.example.org', optedIn: true, os: 'android' }, m)
     ).resolves.toBe(false)
     expect(calls).toEqual([])
+  })
+})
+
+describe("reading Apple's token after registering", () => {
+  const noSleep = jest.fn(async () => undefined)
+
+  it('returns it at once when it is already there', async () => {
+    const get = jest.fn(async () => 'apns-token')
+    await expect(waitForApnsToken(get, { sleep: noSleep })).resolves.toBe('apns-token')
+    expect(get).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for it when it arrives just after registering (first switch-on, measured on an iPhone 11)', async () => {
+    const get = jest.fn<Promise<string | null>, []>().mockResolvedValueOnce(null).mockResolvedValue('apns-token')
+    await expect(waitForApnsToken(get, { sleep: noSleep })).resolves.toBe('apns-token')
+    expect(get).toHaveBeenCalledTimes(2)
+  })
+
+  it('gives up after the wait, so a phone Apple never answers still finishes', async () => {
+    const get = jest.fn(async () => null)
+    await expect(waitForApnsToken(get, { waitMs: 1000, pollMs: 250, sleep: noSleep })).resolves.toBeNull()
+    expect(get).toHaveBeenCalledTimes(5)
   })
 })

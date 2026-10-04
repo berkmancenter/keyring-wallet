@@ -1,6 +1,5 @@
-• Notifications: when your agent needs your approval, your phone tells you. Tap to open the request.
-• A Requests screen, and a count on the My Agent tab while requests wait.
-• "You're now a member of …" while the app is open.
-• Join screen: buttons sit under their way; after a removal, "Join again" offers vetting again.
-• No contact with Google's notification service before you turn notifications on.
-Known: notifications need your agent's policy enforcement on.
+• Fixed: phones that first installed Keyring in mid-September or earlier no longer get stuck at "Something went wrong" after an update.
+• Onboarding offers notifications; the first switch-on works.
+• Tapping a notification with Keyring closed opens the request.
+• Join or accept an invitation from a second community while already a member.
+• New Requests count, setup progress, and a notice when a request is turned down.

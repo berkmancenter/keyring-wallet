@@ -33,6 +33,7 @@ import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
+import { chooseMediator } from '@/utils/mediatorPreference'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
 /**
@@ -281,7 +282,22 @@ const useBCAgentSetup = () => {
 
   const initializeAgent = useCallback(
     async (walletSecret: WalletSecret): Promise<void> => {
-      const mediatorUrl = store.preferences.selectedMediator
+      // The stored mediator outlives the build that chose it: one an older
+      // build baked in can be retired, or unreadable to this Credo, and then
+      // every start fails in 'onInitializeContext' (7MCB-MF6G). Use the
+      // build's mediator instead, and store that choice (mediatorPreference).
+      const mediator = chooseMediator(
+        store.preferences.selectedMediator,
+        Config.MEDIATOR_URL,
+        store.preferences.availableMediators
+      )
+      if (mediator.replaced) {
+        logger.warn(
+          `Stored mediator can't be used (${mediator.replaced}); using this build's mediator and resetting the stored one`
+        )
+        dispatch({ type: DispatchAction.RESET_MEDIATORS })
+      }
+      const mediatorUrl = mediator.url
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
         const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
@@ -365,6 +381,8 @@ const useBCAgentSetup = () => {
     },
     [
       store.preferences.selectedMediator,
+      store.preferences.availableMediators,
+      dispatch,
       store.developer.enableTspCarriage,
       store.developer.enableDidCommV2,
       logger,
