@@ -70,6 +70,8 @@ describe('Biometry Screen', () => {
     )
 
     await tree.findByText('Biometry.EnabledText1')
+    // Onboarding says, under the switch, that turning it on is recommended and why.
+    expect(tree.getByTestId(testIdWithKey('BiometryRecommended'))).toHaveTextContent('Biometry.Recommended')
     expect(tree).toMatchSnapshot()
   })
 
@@ -84,6 +86,7 @@ describe('Biometry Screen', () => {
     )
 
     await tree.findByText('Biometry.NotEnabledText1')
+    expect(tree.queryByTestId(testIdWithKey('BiometryRecommended'))).toBeNull()
     expect(tree).toMatchSnapshot()
   })
 

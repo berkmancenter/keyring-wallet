@@ -324,6 +324,7 @@
     "NotEnabledText2": "If you wish to enable this feature turn biometrics on in the device settings and then return to this screen.",
     "Warning": "Ensure only you have access to your wallet.",
     "UseToUnlock": "Use biometrics to unlock wallet?",
+    "Recommended": "Recommended. It's quicker than your PIN, and you type your PIN less often where others might see it.",
     "UnlockPromptTitle": "Wallet Unlock",
     "UnlockPromptDescription": "Use biometrics to unlock your wallet",
     "AllowBiometricsTitle": "Enable biometrics",

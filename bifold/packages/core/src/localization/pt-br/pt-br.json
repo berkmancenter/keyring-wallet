@@ -306,6 +306,7 @@
     "NotEnabledText2": "Se você deseja habilitar essa funcionalidade, habilite a biometria nas configurações do dispositivo e então volte para essa tela.",
     "Warning": "Tenha certeza que somente você tem acesso à sua carteira.",
     "UseToUnlock": "Utilizar biometria para destravar a carteira?",
+    "Recommended": "Recomendado. É mais rápido que o seu PIN, e você o digita menos vezes onde outras pessoas poderiam ver.",
     "NoBiometricsErrorTitle": "Sem biometria",
     "NoBiometricsErrorMessage": "Você não tem biometria habilitada neste dispositivo.",
     "NoBiometricsErrorDetails": "Para arrumar isso, habilite a biometria nas configurações do seu dispositivo.",

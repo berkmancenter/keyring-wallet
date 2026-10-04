@@ -361,6 +361,7 @@
     "NotEnabledText2": "Si vous souhaitez activer cette fonctionnalité, activez la biométrie dans les paramètres de l'appareil, puis revenez à cet écran.",
     "Warning": "\n\nAssurez-vous que vous seul avez accès à votre portefeuille.",
     "UseToUnlock": "Utiliser la biométrie pour déverrouiller le portefeuille ?",
+    "Recommended": "Recommandé. C'est plus rapide que votre code PIN, et vous le saisissez moins souvent là où d'autres pourraient le voir.",
     "UnlockPromptTitle": "Déverrouillage du portefeuille",
     "UnlockPromptDescription": "Utilisez la biométrie pour déverrouiller votre portefeuille",
     "AllowBiometricsTitle": "Activer la biométrie",
