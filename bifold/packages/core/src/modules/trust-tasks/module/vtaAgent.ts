@@ -29,6 +29,7 @@ import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
+import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
 import { VtiRefusal } from './vtiAgent'
 import {
@@ -1360,6 +1361,7 @@ export class VtaAgentController {
   async setApprovalRule(agent: Agent, taskType: string, on: boolean): Promise<ApprovalRulesState> {
     const vtaDid = this.linkedAgent()
     await this.confirmOwner('Change what your agent asks you about')
+    releaseWarn('[VTI] ask me before: owner confirmed; writing the rules')
     return this.withinOwnerDeadline(async () => {
       const client = await this.signedIn(agent, vtaDid)
       const managerDid = client.managerDid
@@ -1371,6 +1373,7 @@ export class VtaAgentController {
             throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
           const next = withPhoneRule(model, taskType, on, managerDid)
           const version = await client.writeApprovals(next, model.version)
+          releaseWarn(`[VTI] ask me before: rules written, version ${model.version} → ${version}`)
           const held = { ...next, version, unreadable: false }
           return { model: held, view: approvalsView(held, managerDid), canChange: true }
         } catch (error) {

@@ -50,7 +50,9 @@ describe('Ask me before…', () => {
   test('a switch per offered task, off; no test request until contexts/create is on', async () => {
     jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(EMPTY_APPROVALS))
     const tree = await show()
-    expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.value).toBe(false)
+    const row = tree.getByTestId(id('AskMeSwitch_contextsCreate'))
+    expect(row.props.accessibilityRole).toBe('switch')
+    expect(row.props.accessibilityState).toMatchObject({ checked: false, disabled: false })
     expect(tree.getByTestId(id('AskMeSwitch_keysRevoke'))).toBeTruthy()
     expect(tree.getByTestId(id('AskMeEnforcement'))).toBeTruthy()
     expect(tree.queryByTestId(id('AskMeTest'))).toBeNull()
@@ -61,11 +63,13 @@ describe('Ask me before…', () => {
     const on = { ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME), version: 1 }
     const set = jest.spyOn(vtaAgent, 'setApprovalRule').mockResolvedValue(stateOf(on))
     const tree = await show()
+    // A press on the row, the way a person (and the device check) taps it. On
+    // the #285 device check a tap on the bare Switch changed nothing.
     await act(async () => {
-      fireEvent(tree.getByTestId(id('AskMeSwitch_contextsCreate')), 'valueChange', true)
+      fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsCreate')))
     })
     expect(set).toHaveBeenCalledWith({}, CREATE, true)
-    expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.value).toBe(true)
+    expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.accessibilityState).toMatchObject({ checked: true })
     expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
   })
 
@@ -96,7 +100,14 @@ describe('Ask me before…', () => {
     jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(EMPTY_APPROVALS, false))
     const tree = await show()
     expect(tree.getByTestId(id('AskMeReadOnly'))).toHaveTextContent('AskMe.OnlyAdmin')
-    expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.disabled).toBe(true)
+    expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    })
+    const set = jest.spyOn(vtaAgent, 'setApprovalRule')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsCreate')))
+    })
+    expect(set).not.toHaveBeenCalled()
   })
 
   test('a refusal is worded by reason', async () => {

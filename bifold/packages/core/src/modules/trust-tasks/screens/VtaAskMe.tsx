@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -26,6 +26,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { effectiveMinApprovals } from '../module/approvalsPolicy'
+import { releaseWarn } from '../module/releaseLog'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 
 import { deviceErrorWords } from './VtaDevices'
@@ -70,6 +71,9 @@ const VtaAskMe: React.FC = () => {
   )
 
   const onSwitch = async (taskType: string, on: boolean) => {
+    releaseWarn(
+      `[VTI] ask me before: ${on ? 'on' : 'off'} ${taskType.split('/spec/')[1] ?? taskType}${agent ? '' : ' (no agent)'}`
+    )
     if (!agent) return
     setError(undefined)
     setTested(undefined)
@@ -77,6 +81,11 @@ const VtaAskMe: React.FC = () => {
     try {
       setState(await vtaAgent.setApprovalRule(agent, taskType, on))
     } catch (e) {
+      releaseWarn(
+        `[VTI] ask me before: not changed (${(e as Error)?.name ?? 'error'}: ${(e as Error)?.message ?? e}${
+          (e as { detail?: string })?.detail ? ` — ${(e as { detail?: string }).detail}` : ''
+        })`
+      )
       setError(wordsFor(e))
       await load()
     } finally {
@@ -132,23 +141,35 @@ const VtaAskMe: React.FC = () => {
           </ThemedText>
         ) : null}
 
-        {state?.view.offered.map(({ key, taskType, on, elsewhere }) => (
-          <View key={key} style={[styles.card, styles.row]}>
-            <View style={styles.grow}>
-              <ThemedText>{t(`AskMe.Task.${key}`)}</ThemedText>
-              {elsewhere ? <ThemedText style={styles.muted}>{t('AskMe.SetElsewhereNamed')}</ThemedText> : null}
-              {details ? <ThemedText style={styles.mono}>{taskType}</ThemedText> : null}
-            </View>
-            {busy === taskType ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-            <Switch
-              value={on}
-              disabled={!canChange || elsewhere || busy !== undefined}
-              onValueChange={(next) => void onSwitch(taskType, next)}
+        {state?.view.offered.map(({ key, taskType, on, elsewhere }) => {
+          const still = !canChange || elsewhere || busy !== undefined
+          // The whole row is the switch, pressed like every button in the app: on
+          // the #285 device check the bare RN Switch never turned on under a tap,
+          // with no owner check, spinner or error (Android emulator, 10-04).
+          return (
+            <Pressable
+              key={key}
+              style={[styles.card, styles.row]}
+              onPress={() => void onSwitch(taskType, !on)}
+              disabled={still}
+              accessibilityRole="switch"
               accessibilityLabel={t(`AskMe.Task.${key}`)}
+              accessibilityState={{ checked: on, disabled: still, busy: busy === taskType }}
               testID={testIdWithKey(`AskMeSwitch_${key}`)}
-            />
-          </View>
-        ))}
+            >
+              <View style={styles.grow}>
+                <ThemedText>{t(`AskMe.Task.${key}`)}</ThemedText>
+                {elsewhere ? <ThemedText style={styles.muted}>{t('AskMe.SetElsewhereNamed')}</ThemedText> : null}
+                {details ? <ThemedText style={styles.mono}>{taskType}</ThemedText> : null}
+              </View>
+              {busy === taskType ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+              {/* Shown, never pressed: the row takes the press. */}
+              <View pointerEvents="none" importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                <Switch value={on} disabled={still} />
+              </View>
+            </Pressable>
+          )
+        })}
 
         {state?.view.canTest ? (
           <View style={styles.card}>
