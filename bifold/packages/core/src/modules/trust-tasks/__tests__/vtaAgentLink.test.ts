@@ -1112,6 +1112,24 @@ describe('several agents', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
   })
 
+  // The several-agents device check: a switch took about 20 s with nothing on
+  // screen, and a second tap meanwhile was easy to make.
+  it('a switch says where it is going while it lasts; a second one meanwhile starts nothing', async () => {
+    const { vta } = twoAgents()
+    await vta.restore({} as never)
+    const seen: (string | undefined)[] = []
+    const stop = vta.subscribe(() => seen.push(vta.getState().switchingTo))
+    const first = vta.useAgent({} as never, WORK.vtaDid)
+    expect(vta.getState().switchingTo).toBe(WORK.vtaDid)
+    await vta.useAgent({} as never, HOME.vtaDid)
+    await first
+    stop()
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
+    expect(vta.getState().switchingTo).toBeUndefined()
+    expect(seen).toContain(WORK.vtaDid)
+    expect(seen).not.toContain(HOME.vtaDid)
+  })
+
   it('unlinking the current agent brings up the next one, not "no agent"', async () => {
     const { vta } = twoAgents()
     await vta.restore({} as never)

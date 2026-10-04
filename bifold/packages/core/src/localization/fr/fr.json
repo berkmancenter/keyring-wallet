@@ -1413,6 +1413,7 @@
     "SwitcherOnlyCurrent": "Seul votre agent actuel est connecté. Les messages de vos autres agents attendent que vous passiez à eux.",
     "SwitcherCurrent": "Actuel",
     "SwitcherNotConnected": "Non connecté pour le moment",
+    "Switching": "Passage à {{agent}}…",
     "SwitcherAdd": "Ajouter un autre agent",
     "AddedLinked": "{{agent}} est lié.",
     "AddedUseNow": "L’utiliser maintenant",
