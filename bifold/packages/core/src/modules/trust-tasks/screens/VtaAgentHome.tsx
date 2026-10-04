@@ -483,8 +483,9 @@ const VtaAgentHome: React.FC = () => {
           <Pressable
             style={styles.row}
             onPress={() => setSwitcherOpen(!switcherOpen)}
+            disabled={Boolean(state.switchingTo)}
             accessibilityRole="button"
-            accessibilityState={{ expanded: switcherOpen }}
+            accessibilityState={{ expanded: switcherOpen, busy: Boolean(state.switchingTo) }}
             accessibilityHint={t('VtaLink.SwitcherTitle')}
             testID={testIdWithKey('AgentSwitcherOpen')}
           >
@@ -493,6 +494,25 @@ const VtaAgentHome: React.FC = () => {
             </ThemedText>
             <Icon name={switcherOpen ? 'chevron-up' : 'chevron-down'} size={22} color={TextTheme.normal.color} />
           </Pressable>
+          {/* A switch leaves one agent and signs in to the next (about 20 s on the
+              device check): said while it lasts, so it is not tapped again. */}
+          {state.switchingTo ? (
+            <View style={styles.row} testID={testIdWithKey('AgentSwitching')}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <ThemedText style={styles.muted}>
+                {t('VtaLink.Switching', {
+                  agent: agentDisplayName(
+                    withAgentName(
+                      agents.find((a) => a.vtaDid === state.switchingTo) ?? { vtaDid: state.switchingTo },
+                      state.agentNames
+                    ),
+                    t
+                  ),
+                  interpolation: { escapeValue: false },
+                })}
+              </ThemedText>
+            </View>
+          ) : null}
           {switcherOpen ? (
             <View style={{ gap: 4 }} testID={testIdWithKey('AgentSwitcher')}>
               <ThemedText variant="labelTitle" accessibilityRole="header">

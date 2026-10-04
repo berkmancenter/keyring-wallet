@@ -17,6 +17,8 @@ import { DeviceEventEmitter, Platform } from 'react-native'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { agentGoneVerdict, type AgentGoneWhy } from './agentGone'
+import { didPrefix } from './didPrefix'
+import { releaseWarn } from './releaseLog'
 import {
   AGENT_HOST_QR_LIFETIME_MS,
   AgentHostConnectionError,
@@ -149,6 +151,12 @@ export interface VtaAgentState {
   addingAgent?: boolean
   /** An agent was just added: the person chooses to use it or keep the one before. */
   addedAgent?: { from: string; added: string }
+  /**
+   * A switch to this agent is under way. It leaves the current agent and signs
+   * in to the next, which took about 20 s on the several-agents device check,
+   * with nothing on screen meanwhile.
+   */
+  switchingTo?: string
   /**
    * Requests for this phone's decision from the agents that are not current,
    * as last seen by a look at each (several agents, step 3), with whether the
@@ -720,6 +728,28 @@ export class VtaAgentController {
   async useAgent(agent: Agent, vtaDid: string): Promise<void> {
     const link = this.state.link
     if (link.kind === 'linked' && link.vtaDid === vtaDid) return
+    if (this.state.switchingTo) {
+      releaseWarn(
+        `[VTI] agent switch: to ${didPrefix(vtaDid)} not started, one to ${didPrefix(this.state.switchingTo)} is under way`
+      )
+      return
+    }
+    const started = this.now()
+    releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)}`)
+    this.set({ switchingTo: vtaDid })
+    try {
+      await this.switchTo(agent, vtaDid)
+      releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)} done in ${this.now() - started} ms`)
+    } catch (e) {
+      releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)} failed (${(e as Error)?.message ?? e})`)
+      throw e
+    } finally {
+      this.set({ switchingTo: undefined })
+    }
+  }
+
+  private async switchTo(agent: Agent, vtaDid: string): Promise<void> {
+    const link = this.state.link
     // Requests are acknowledged where they were seen, so the mediator will not
     // deliver them again: the leaving agent's waiting ones are kept as its
     // "other" requests, and the one switched to brings its looked-at ones in.

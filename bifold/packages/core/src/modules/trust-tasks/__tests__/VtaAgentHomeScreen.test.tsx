@@ -133,6 +133,16 @@ describe('Your agent — after linking', () => {
     again.mockRestore()
   })
 
+  // The several-agents device check: a switch took about 20 s with nothing on screen.
+  it('says which agent it is switching to while a switch lasts, and the list stays shut', async () => {
+    controller.set({ switchingTo: 'did:webvh:home-screen:other-vta' })
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentSwitching'))).toHaveTextContent(/VtaLink\.Switching/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherOpen')))
+    expect(tree.queryByTestId(testIdWithKey('AgentSwitcher'))).toBeNull()
+    controller.set({ switchingTo: undefined })
+  })
+
   // 228 agent-gone: an agent that no longer exists is said so, with a new one as the way on.
   it('says the agent cannot be found and why, and Link a new agent confirms unlinking in words for a gone agent', async () => {
     const { link } = controller.getState()
