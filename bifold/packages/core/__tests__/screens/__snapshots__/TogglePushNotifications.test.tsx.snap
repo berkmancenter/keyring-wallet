@@ -39,6 +39,7 @@ exports[`TogglePushNotification Screen Push notification screen renders correctl
             "marginBottom": 20,
           }
         }
+        testID="com.ariesbifold:id/PushNotificationImage"
       >
         < />
       </View>
