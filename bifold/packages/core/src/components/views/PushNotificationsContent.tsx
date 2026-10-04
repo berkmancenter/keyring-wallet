@@ -1,9 +1,12 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useTheme } from '../../contexts/theme'
 import { testIdWithKey } from '../../utils/testable'
 import { ThemedText } from '../texts/ThemedText'
+
+/** Below this height (pt) a screen counts as short. */
+export const SHORT_SCREEN_PT = 700
 
 const PushNotificationsContent: React.FC = () => {
   const { t } = useTranslation()
@@ -18,9 +21,15 @@ const PushNotificationsContent: React.FC = () => {
   ].filter((item) => item.trim().length > 0)
   const whatItSays = t('PushNotifications.WhatItSays')
 
+  // On a short phone (an iPhone SE is 667 pt tall) a 200 pt picture pushed
+  // "A notification only says that something is waiting" below the buttons,
+  // out of sight: the picture shrinks there, so what a notification shows is
+  // read before the choice (234, SE look).
+  const { height } = useWindowDimensions()
+  const imageHeight = height < SHORT_SCREEN_PT ? 120 : 200
   const style = StyleSheet.create({
     image: {
-      height: 200,
+      height: imageHeight,
       marginBottom: 20,
     },
     heading: {
@@ -35,7 +44,7 @@ const PushNotificationsContent: React.FC = () => {
 
   return (
     <>
-      <View style={style.image}>
+      <View style={style.image} testID={testIdWithKey('PushNotificationImage')}>
         <Assets.svg.pushNotificationImg />
       </View>
       <ThemedText variant="headingThree" style={style.heading}>

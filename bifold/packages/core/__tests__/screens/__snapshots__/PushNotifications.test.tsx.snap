@@ -39,6 +39,7 @@ exports[`PushNotifications Screen Push notification screen renders correctly in 
             "marginBottom": 20,
           }
         }
+        testID="com.ariesbifold:id/PushNotificationImage"
       >
         < />
       </View>
