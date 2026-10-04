@@ -488,7 +488,7 @@
     "EnableNotifications": "Saiba quando seu agente precisa de você",
     "BeNotified": "Às vezes seu agente precisa da sua aprovação antes de agir por você. Com as notificações ativadas, o Keyring avisa quando um pedido está esperando, mesmo com o app fechado.",
     "ReceiveNotifications": "Receive notifications (PT-BR)",
-    "BlockedByApprovalRule": "Uma regra de aprovação no seu agente cobre a configuração de notificações deste telefone, então ela não pode ser alterada a partir deste telefone. Remova essa regra onde ela foi definida: ela aparece em Meu agente → Pergunte antes…, em Definido em outro dispositivo.",
+    "BlockedByApprovalRule": "Seu agente espera uma aprovação antes que este telefone possa ativar ou desativar as notificações, por causa de uma regra de aprovação definida em outro dispositivo. Remova essa regra onde ela foi definida: ela aparece em Meu agente → Gerenciar → Pergunte antes…, em \"Definido em outro dispositivo\".",
     "BulletFour": "",
     "BulletOne": "",
     "BulletThree": "",
