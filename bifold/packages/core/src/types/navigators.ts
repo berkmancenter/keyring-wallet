@@ -85,6 +85,7 @@ export enum Screens {
   VtaNewPhoneOffer = 'Your other phones',
   VtaAgent = 'Your agent',
   VtaRequests = 'Requests',
+  VtaAskMe = 'Ask me before',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
 }
@@ -152,6 +153,7 @@ export type MyAgentStackParams = {
   [Screens.VtaLink]: { withoutQr?: boolean } | undefined
   [Screens.VtaAgent]: undefined
   [Screens.VtaRequests]: undefined
+  [Screens.VtaAskMe]: undefined
   [Screens.VtiInvited]: undefined
   [Screens.VtaCreateAgent]: { addDevice?: boolean } | undefined
   [Screens.VtaDevices]: undefined
