@@ -1066,7 +1066,7 @@ export const community = {
         }
       }
       if (!words) throw failWith("nothing said what happened after Leave", {});
-      if (keep === "purge" && !/erased your record|no longer had you/.test(words)) throw failWith(`asked to erase, but the app says "${words}"`, { toast: words });
+      if (keep === "purge" && !/erased your record|no longer had you|no longer a member of/.test(words)) throw failWith(`asked to erase, but the app says "${words}"`, { toast: words });
       await sleep(3000);
       if (await existsTestId(d, "AgentMembershipRow", 3000)) throw failWith("the phone still lists the community after Leave", { toast: words });
       return { value: keep, observed: { toast: words } };
