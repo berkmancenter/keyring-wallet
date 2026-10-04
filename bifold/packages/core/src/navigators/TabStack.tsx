@@ -31,6 +31,7 @@ import { keyringAgentLinkKind, myAgentLinkParams } from '../modules/trust-tasks/
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
+import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames'
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
@@ -89,6 +90,8 @@ const TabStack: React.FC = () => {
   useVtiCardVault(agent)
   // …and shown in the Wallet while they stand, copied from the community store.
   useVtiWalletCards(agent)
+  // …each saying which agent holds it, when there are several.
+  useCardAgentNames(agent)
   // A delivered card the inbox did not keep is said in plain words.
   useVtiRefusedCardNotice()
   // This phone tells its agent it is here, from unlock (#10): registered once,

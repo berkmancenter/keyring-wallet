@@ -47,6 +47,17 @@ export function roleWords(role: string, t: TFunction): string {
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : role
 }
 
+/**
+ * The agent that holds each identity, by the identity's DID, when the phone has
+ * several agents (else empty): a card then says whose it is, "Member of X ·
+ * Personal", since two agents' identities can each be a member of one
+ * community (Alberto, 10-04). Kept by `useCardAgentNames`.
+ */
+let cardAgentNames: ReadonlyMap<string, string> = new Map()
+export function setCardAgentNames(names: ReadonlyMap<string, string>): void {
+  cardAgentNames = names
+}
+
 /** The display of a community card, or undefined for any other credential. */
 export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction): W3cDisplayOverride | undefined {
   if (!isCommunityCard(vc)) return undefined
@@ -80,6 +91,8 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   if (typeof name !== 'string' || typeof community !== 'string' || labels.some((l) => typeof l !== 'string')) {
     return undefined
   }
+  const subject = (vc.credentialSubject as { id?: unknown } | undefined)?.id
+  const agentName = typeof subject === 'string' ? cardAgentNames.get(subject) : undefined
   const [communityLabel, roleLabel, sinceLabel, untilLabel] = labels as string[]
   // Standing alone (the issuer, the Community row), it reads as a title.
   const attributes: Record<string, string> = { [communityLabel]: asTitle(community) }
@@ -88,7 +101,7 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   const until = day(vc.validUntil ?? vc.expiryDate)
   if (from) attributes[sinceLabel] = from
   if (until) attributes[untilLabel] = until
-  return { name, issuerName: asTitle(community), attributes }
+  return { name: agentName ? `${name} · ${agentName}` : name, issuerName: asTitle(community), attributes }
 }
 
 let registered: (() => void) | undefined
