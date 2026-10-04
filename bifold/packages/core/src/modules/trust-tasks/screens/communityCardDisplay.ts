@@ -20,7 +20,7 @@ import type { W3cCredentialJson } from '../../openid/types'
 import { classifyCredential, roleNameOf } from '../module/vtiInbox'
 import { isCommunityCard } from '../module/vtiWalletCards'
 
-import { asTitle, communityHeadingOf } from './communityName'
+import { communityHeadingOf, communityTitle } from './communityName'
 import { localDate } from './localTime'
 
 const day = (iso: unknown): string | undefined =>
@@ -82,13 +82,13 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   }
   const [communityLabel, roleLabel, sinceLabel, untilLabel] = labels as string[]
   // Standing alone (the issuer, the Community row), it reads as a title.
-  const attributes: Record<string, string> = { [communityLabel]: asTitle(community) }
+  const attributes: Record<string, string> = { [communityLabel]: communityTitle(community, communityDid, t) }
   if (kind !== 'membership' && role) attributes[roleLabel] = role
   const from = day(vc.validFrom ?? vc.issuanceDate)
   const until = day(vc.validUntil ?? vc.expiryDate)
   if (from) attributes[sinceLabel] = from
   if (until) attributes[untilLabel] = until
-  return { name, issuerName: asTitle(community), attributes }
+  return { name, issuerName: communityTitle(community, communityDid, t), attributes }
 }
 
 let registered: (() => void) | undefined

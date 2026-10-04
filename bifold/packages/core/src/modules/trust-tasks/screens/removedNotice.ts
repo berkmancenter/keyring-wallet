@@ -15,12 +15,12 @@ import { ToastType } from '../../../components/toast/BaseToast'
 import { VTI_REMOVED_EVENT } from '../module/vtiCommunityNotices'
 
 import { useToastAboveTabBar } from './aboveTabBar'
-import { communityLabelStartOf } from './communityName'
+import { communityLabelOf } from './communityName'
 
 /** The words, with the community's reason when it gave one. */
 export function removedWords(communityDid: string, reason: string | undefined, t: TFunction): string {
   const said = t('Join.StandingRemoved', {
-    community: communityLabelStartOf(communityDid, t),
+    community: communityLabelOf(communityDid, t),
     interpolation: { escapeValue: false },
   }) as string
   return reason

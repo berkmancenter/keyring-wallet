@@ -65,10 +65,16 @@ describe('a community, named in passing', () => {
     expect(label).not.toMatch(/did:/)
   })
 
-  it('at the start of a sentence, capitalised', () => {
+  it("at the start of a sentence: a name in capitals, an unnamed community's handle as written", () => {
     const start = communityLabelStartOf(webvh, ((key: string, values?: { ref?: string }) =>
-      key === 'Community.UnnamedRef' ? `an unnamed community (${values?.ref})` : key) as unknown as TFunction)
-    expect(start).toBe('An unnamed community (…munity)')
+      key === 'Community.UnnamedRef' ? `${values?.ref} (no name published yet)` : key) as unknown as TFunction)
+    expect(start).toBe('…munity (no name published yet)')
+    const handle = 'did:webvh:QmCommunity:vtc.example.org:al-community2-vtc'
+    const tUnnamed = ((key: string, values?: { ref?: string }) =>
+      key === 'Community.UnnamedRef' ? `${values?.ref} (no name published yet)` : key) as unknown as TFunction
+    expect(communityLabelStartOf(handle, tUnnamed)).toBe('al-community2-vtc (no name published yet)')
+    communityTarget.publishedName(handle, 'lab community')
+    expect(communityLabelStartOf(handle, tUnnamed)).toBe('Lab community')
   })
 })
 
