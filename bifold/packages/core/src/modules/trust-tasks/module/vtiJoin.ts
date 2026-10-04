@@ -168,7 +168,7 @@ export async function joinCommunity(
         // The card comes by delivery, not inline: give the outbox a moment.
         for (let i = 0; i < 20 && !membership; i++) {
           await new Promise((resolve) => setTimeout(resolve, 1500))
-          membership = await deps.communityStore.getMembership(deps.communityDid)
+          membership = await deps.communityStore.getMembership(deps.communityDid, persona.did)
         }
       }
       if (membership) {
@@ -420,11 +420,11 @@ export async function leaveCommunity(
   }
   // What the community no longer holds, the phone no longer shows. Each step
   // on its own: one store failing must not leave the others half-cleared.
-  await deps.communityStore.forgetCommunity(communityDid).catch(() => undefined)
+  await deps.communityStore.forgetCommunity(communityDid, persona.did).catch(() => undefined)
   await deps.vettingStore?.forget(communityDid).catch(() => undefined)
   await deps.identityStore.forgetPersona(communityDid).catch(() => undefined)
   await deps.communityStore
-    .saveDeparture?.({ communityDid, disposition, at: new Date().toISOString() })
+    .saveDeparture?.({ communityDid, personaDid: persona.did, disposition, at: new Date().toISOString() })
     .catch(() => undefined)
   return { disposition, alreadyGone }
 }

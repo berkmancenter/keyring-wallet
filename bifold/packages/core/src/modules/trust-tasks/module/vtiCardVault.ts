@@ -253,7 +253,7 @@ export async function recoverCardsFromAgent(
       continue
     }
     if (item.kind === 'membership') {
-      const found = await store.getMembership(item.communityDid)
+      const found = await store.getMembership(item.communityDid, persona.did)
       // The very card the community ended does not bring the membership back.
       if (found && !isCurrentMembership(found) && found.vmc?.id === credential.id) continue
       // A membership the community ended lends nothing to a new one.
@@ -269,7 +269,7 @@ export async function recoverCardsFromAgent(
         via: existing?.via ?? 'unknown',
       })
     } else if (item.kind === 'role') {
-      const existing = await store.getMembership(item.communityDid)
+      const existing = await store.getMembership(item.communityDid, persona.did)
       const role = String(roleNameOf(credential) ?? 'member')
       if (existing) await store.saveMembership({ ...existing, role, roleVec: credential })
       else await store.saveHeldCredential({ ...item, kind: 'role' })

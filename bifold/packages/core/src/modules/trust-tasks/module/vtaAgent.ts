@@ -1020,7 +1020,7 @@ export class VtaAgentController {
         for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
           if (keyId) await forgetKeyCopy(agent, keyId)
         }
-        await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
+        await communities.forgetCommunity(persona.communityDid, persona.did).catch(() => undefined)
         await identities.forgetPersona(persona.communityDid, persona.vtaDid).catch(() => undefined)
       }
     }
