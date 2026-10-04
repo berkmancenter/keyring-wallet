@@ -222,7 +222,21 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return pendingVettingTicket.subscribe(takePending)
   }, [])
 
+  // A ticket for this community, once there is an application to keep it
+  // with, outlives the screen (see VettingApplication.pendingTicket).
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!ticket || !application || !communityDid || application.pendingTicket === ticket) return
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void applicantRef.current?.keepTicket(ticket).catch(() => undefined)
+  }, [ticketLink, application, communityDid])
+
+  // Step 2's own "Scan": a ticket that comes back from it is asked with at
+  // once, as a scan acts elsewhere in Keyring. A pasted link still waits for
+  // "Use this link" (TestFlight 236).
+  const scanAsked = useRef(false)
   const onScanTicket = useCallback(() => {
+    scanAsked.current = true
     openScanner(navigation)
   }, [navigation])
   const [checklist, setChecklist] = useState<{
@@ -503,6 +517,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         applicantRef.current.listen()
         const a = await stores.vetting.getApplication(persona.communityDid)
         setApplication(a)
+        // A ticket kept from an earlier visit (camera, link, paste) is still here.
+        if (a?.pendingTicket) setTicketLink((v) => v || a.pendingTicket!)
         if (a) {
           setLegalName((v) => v || a.claims['name.legal'] || '')
           setChecklist(await applicantRef.current.checklist())
@@ -540,6 +556,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     },
     [bump, ticketWords]
   )
+
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!scanAsked.current || !ticket || !application || !communityDid || busy) return
+    scanAsked.current = false
+    // A ticket for another community is not asked with: the field shows why.
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void run('request', () => applicantRef.current!.requestVetter({ link: ticket }))
+  }, [ticketLink, application, communityDid, busy, run])
 
   // Say what is missing and offer the way to it — a store build names neither.
   if (!vtaDid || !communityDid) {
@@ -1317,7 +1342,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     run('start', async () => {
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       setManifest(m)
-                      await applicantRef.current!.start(m, { 'name.legal': legalName.trim() })
+                      await applicantRef.current!.start(
+                        m,
+                        { 'name.legal': legalName.trim() },
+                        { ticket: ticketLink.trim() || undefined }
+                      )
                     })
                   }
                 >

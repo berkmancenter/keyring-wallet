@@ -424,6 +424,13 @@ export interface VettingApplication {
   startedAt: string
   /** The join request this application produced, once submitted. */
   submission?: VettingSubmission
+  /**
+   * A vetter's ticket this phone holds but has not asked with yet — scanned with
+   * the camera, opened from a link or pasted. Kept with the application so
+   * leaving the vetting screen does not lose it: it lived only in the screen,
+   * and Step 2 asked for it again (TestFlight 236). Cleared once asked.
+   */
+  pendingTicket?: string
 }
 
 export interface VtiVettingStore {
@@ -1517,7 +1524,11 @@ export class VtiApplicant {
    * that break their published shape cannot be evaluated, and throw
    * `VettingRequirementsError` rather than being gathered against by guess.
    */
-  async start(manifest: VtiManifest, claims: Record<string, string>): Promise<VettingApplication> {
+  async start(
+    manifest: VtiManifest,
+    claims: Record<string, string>,
+    options: { ticket?: string } = {}
+  ): Promise<VettingApplication> {
     const found = await this.store.getApplication(this.persona.communityDid)
     // An application gathered by an earlier identity for this community (one
     // a removal ended) is not this one's: its statements name that identity.
@@ -1574,9 +1585,20 @@ export class VtiApplicant {
     application.maxStatementAge = vetting?.maxStatementAge
     application.independence = vetting?.independence
     application.claims = { ...application.claims, ...claims }
+    if (options.ticket?.trim()) application.pendingTicket = options.ticket.trim()
     await this.store.saveApplication(application)
     this.onChange?.()
     return application
+  }
+
+  /** Keep a ticket with the application until it is asked with (see `pendingTicket`). */
+  async keepTicket(link: string): Promise<void> {
+    const application = await this.store.getApplication(this.persona.communityDid)
+    const ticket = link.trim()
+    if (!application || application.joinDid !== this.persona.did || !ticket || application.pendingTicket === ticket)
+      return
+    await this.store.saveApplication({ ...application, pendingTicket: ticket })
+    this.onChange?.()
   }
 
   listen(): () => void {
@@ -1685,6 +1707,8 @@ export class VtiApplicant {
       updatedAt: new Date().toISOString(),
     }
     application.requests = [...application.requests.filter((r) => r.vetterDid !== vetterDid), request]
+    // Asked with: nothing is held any more for a later visit.
+    delete application.pendingTicket
     await this.store.saveApplication(application)
     this.onChange?.()
     return request
