@@ -8,7 +8,13 @@ import { act, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
-import { COMMUNITY, membership, membershipCard, roleCard, seedCardVaultState } from '../../../../__tests__/helpers/cardVault'
+import {
+  COMMUNITY,
+  membership,
+  membershipCard,
+  roleCard,
+  seedCardVaultState,
+} from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
 import { resetCardVaultCache } from '../module/vtiCardVault'
 import { CardKeptRow } from '../screens/CardKeptRow'
@@ -80,16 +86,49 @@ describe("the community's card on Your agent", () => {
         />
       </BasicAppContext>
     )
-    expect(tree.getByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toHaveTextContent(/VtaLink\.YourMembershipCard/)
+    expect(tree.getByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toHaveTextContent(
+      /VtaLink\.YourMembershipCard/
+    )
     expect(keptLine(tree, 'membership')).toHaveTextContent('VtaLink.CardKept')
     expect(tree.getByTestId(testIdWithKey(`AgentCard_role_${key}`))).toHaveTextContent(/VtaLink\.YourRoleCard/)
     expect(keptLine(tree, 'role')).toHaveTextContent('VtaLink.CardPhoneOnlyProofSet')
   })
 
+  // The row read "Member of …" to a screen reader on every card, a request
+  // turned down included (several-agents device check, 10-04).
+  it('the row reads its name and where the person stands, as the screen shows them', () => {
+    for (const held of [undefined, membership]) {
+      const tree = render(
+        <BasicAppContext>
+          <CommunityCard
+            communityDid={COMMUNITY}
+            membership={held}
+            invited={false}
+            vetter={false}
+            onOpen={jest.fn()}
+            onPrimary={jest.fn()}
+          />
+        </BasicAppContext>
+      )
+      const row = tree.getByTestId(testIdWithKey(held ? 'AgentMembershipRow' : `AgentCommunityOpen_${key}`))
+      const name = tree.getByTestId(testIdWithKey(`AgentCommunityName_${key}`)).props.children
+      const status = tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`)).props.children[0]
+      expect(row.props.accessibilityLabel).toBe(`${name}, ${status}`)
+      expect(row.props.accessibilityLabel).not.toMatch(/VtaLink\.MemberOf/)
+      tree.unmount()
+    }
+  })
+
   it('without a membership there is no card to show', () => {
     const tree = render(
       <BasicAppContext>
-        <CommunityCard communityDid={COMMUNITY} invited={false} vetter={false} onOpen={jest.fn()} onPrimary={jest.fn()} />
+        <CommunityCard
+          communityDid={COMMUNITY}
+          invited={false}
+          vetter={false}
+          onOpen={jest.fn()}
+          onPrimary={jest.fn()}
+        />
       </BasicAppContext>
     )
     expect(tree.queryByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toBeNull()
