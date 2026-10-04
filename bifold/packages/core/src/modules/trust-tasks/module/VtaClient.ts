@@ -1270,6 +1270,11 @@ export class VtaClient {
    * this phone among them. `letThrough`: the agent created it, so it enforces
    * no rules where it is hosted; the context is deleted again, best effort
    * (`cleanedUp` says whether that worked).
+   *
+   * It goes through `enqueue`, never `task()` or `createContext()`: `task()`
+   * waits for the grant and re-submits, and the first re-submit after an
+   * approval consumes the grant and runs the task — the test would then create
+   * the context it promised not to.
    */
   async sendTestRequest(): Promise<{ kind: 'held' } | { kind: 'letThrough'; cleanedUp: boolean }> {
     const id = `keyring-test-request-${Date.now()}`
