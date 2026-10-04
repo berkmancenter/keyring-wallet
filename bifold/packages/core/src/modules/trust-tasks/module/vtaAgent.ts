@@ -18,7 +18,6 @@ import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { agentGoneVerdict, type AgentGoneWhy } from './agentGone'
 import { didPrefix } from './didPrefix'
-import { releaseWarn } from './releaseLog'
 import {
   AGENT_HOST_QR_LIFETIME_MS,
   AgentHostConnectionError,
@@ -32,6 +31,7 @@ import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
+import { releaseWarn } from './releaseLog'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
