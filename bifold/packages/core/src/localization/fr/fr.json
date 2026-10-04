@@ -1682,6 +1682,8 @@
     "YourFace": "Votre visage",
     "LegalName": "Nom légal",
     "LegalNamePlaceholder": "Comme sur votre passeport ou pièce d'identité",
+    "LegalNameWhy": "Saisissez-le comme sur votre pièce d'identité : le nom de votre profil peut être différent.",
+    "UseProfileName": "Utiliser « {{name}} »",
     "FaceNote": "C'est ce que le vérificateur verra et comparera à votre document.",
     "Connecting": "Connexion de votre identité…",
     "Discounted_one": "1 attestation ne comptera pas — l'habilitation du vérificateur ne couvrait pas le moment de la signature, ou a été révoquée depuis.",

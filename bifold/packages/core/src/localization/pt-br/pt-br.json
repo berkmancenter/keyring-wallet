@@ -1588,6 +1588,8 @@
     "YourFace": "Seu rosto",
     "LegalName": "Nome legal",
     "LegalNamePlaceholder": "Como no seu passaporte ou identidade",
+    "LegalNameWhy": "Digite como no seu documento: o nome do seu perfil pode ser diferente.",
+    "UseProfileName": "Usar “{{name}}”",
     "FaceNote": "É isto que o verificador verá e comparará com o seu documento.",
     "Connecting": "Conectando sua identidade…",
     "Discounted_one": "1 declaração não valerá — a outorga do verificador não cobria o momento da assinatura, ou foi revogada depois.",

@@ -1734,6 +1734,8 @@
     "YourFace": "Your face",
     "LegalName": "Legal name",
     "LegalNamePlaceholder": "As on your passport or ID",
+    "LegalNameWhy": "Type it as on your ID: the name on your profile may be different.",
+    "UseProfileName": "Use “{{name}}”",
     "FaceNote": "This is what the vetter will see and check against your document.",
     "Connecting": "Connecting your identity…",
     "Discounted_one": "1 statement will not count — the vetter's grant did not cover the moment they signed, or has since been revoked.",
