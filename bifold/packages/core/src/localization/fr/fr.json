@@ -1431,6 +1431,8 @@
     "NextVetting": "Votre vérification pour {{community}} n’est pas terminée.",
     "NextInvitationAction": "Voir l’invitation",
     "SegmentManage": "Gérer",
+    "JoinCorner": "Rejoindre",
+    "AgentSettings": "Réglages de l’agent",
     "SegmentStatus": "État",
     "ApprovalsWaiting_one": "1 demande vous attend",
     "ApprovalsWaiting_other": "{{count}} demandes vous attendent",

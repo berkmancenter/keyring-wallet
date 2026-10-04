@@ -1492,6 +1492,8 @@
     "NextVetting": "Your vetting for {{community}} is not finished.",
     "NextInvitationAction": "See the invitation",
     "SegmentManage": "Manage",
+    "JoinCorner": "Join",
+    "AgentSettings": "Agent settings",
     "SegmentStatus": "Status",
     "ApprovalsWaiting_one": "1 request waits for you",
     "ApprovalsWaiting_other": "{{count}} requests wait for you",
