@@ -54,15 +54,23 @@ const VtaAskMe: React.FC = () => {
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
-  const load = useCallback(async () => {
-    if (!agent) return
-    setError(undefined)
-    try {
-      setState(await vtaAgent.approvalRules(agent))
-    } catch (e) {
-      setError(wordsFor(e))
-    }
-  }, [agent, wordsFor])
+  /**
+   * Read the rules again. After a change that was refused, `keepError` keeps
+   * its words on screen: clearing them here wiped "set a screen lock" the
+   * moment it was set, and the switch just did nothing (#285 device check).
+   */
+  const load = useCallback(
+    async (options: { keepError?: boolean } = {}) => {
+      if (!agent) return
+      if (!options.keepError) setError(undefined)
+      try {
+        setState(await vtaAgent.approvalRules(agent))
+      } catch (e) {
+        setError(wordsFor(e))
+      }
+    },
+    [agent, wordsFor]
+  )
 
   useFocusEffect(
     useCallback(() => {
@@ -87,7 +95,7 @@ const VtaAskMe: React.FC = () => {
         })`
       )
       setError(wordsFor(e))
-      await load()
+      await load({ keepError: true })
     } finally {
       setBusy(undefined)
     }

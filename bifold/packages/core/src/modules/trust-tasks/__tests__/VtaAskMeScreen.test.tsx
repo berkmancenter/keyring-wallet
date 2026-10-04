@@ -14,7 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { EMPTY_APPROVALS, approvalsView, withPhoneRule, type ApprovalsModel } from '../module/approvalRules'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
-import { DeviceActionRefused } from '../module/vtaOwner'
+import { DeviceActionRefused, OwnerNotConfirmed } from '../module/vtaOwner'
 import VtaAskMe from '../screens/VtaAskMe'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -108,6 +108,19 @@ describe('Ask me before…', () => {
       fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsCreate')))
     })
     expect(set).not.toHaveBeenCalled()
+  })
+
+  test('a change the phone cannot confirm says why, and the words stay after the rules are read again', async () => {
+    // The #285 device check: an emulator with no screen lock refused the owner
+    // check at once, and the screen showed nothing.
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(EMPTY_APPROVALS))
+    jest.spyOn(vtaAgent, 'setApprovalRule').mockRejectedValue(new OwnerNotConfirmed('unavailable'))
+    const tree = await show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AskMeSwitch_contextsCreate')))
+    })
+    expect(vtaAgent.approvalRules).toHaveBeenCalledTimes(2)
+    expect(tree.getByTestId(id('AskMeError'))).toHaveTextContent(/CreateAgent\.NeedsScreenLock(Android|Ios)/)
   })
 
   test('a refusal is worded by reason', async () => {
