@@ -742,7 +742,11 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.label}>{t('MyAgent.EnrolHint')}</Text>
           </View>
         ) : null}
-        {failure ? <SaidFailure said={failure} testID="MyAgentError" style={styles.error} /> : null}
+        {/* A removed phone's card already says what happened and what to do; the
+            failed sign-in behind it is that removal, not a second, unknown failure. */}
+        {failure && vta.link.kind !== 'revoked' ? (
+          <SaidFailure said={failure} testID="MyAgentError" style={styles.error} />
+        ) : null}
         {/* Only when there is an agent to connect to — a linked one or one the
             build names. With neither, "Link your agent" above is the way in,
             and this could only fail. */}

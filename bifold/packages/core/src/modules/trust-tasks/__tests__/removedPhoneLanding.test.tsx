@@ -11,6 +11,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import MyAgent from '../screens/MyAgent'
 import VtaAgentHome from '../screens/VtaAgentHome'
 
@@ -100,4 +101,18 @@ describe.each([
     })
     expect(erase).toHaveBeenCalledTimes(1)
   })
+})
+
+// 233 final gate (iPhone SE): under the removed-phone card, My Agent also said
+// "That didn't work, and the app doesn't know why" — the refused sign-in behind
+// the removal, said a second time as an unknown failure.
+test('My Agent says a removal once: no generic failure line under the removed-phone card', async () => {
+  removed()
+  // The shared session's sign-in failed after the removal: its error is what the panel said.
+  const shared = vtiAgent as unknown as { set(next: Record<string, unknown>): void }
+  shared.set({ error: "Key with key id 'vta-copy:…' not found" })
+  const tree = await show(<MyAgent />)
+  expect(tree.getByText('VtaLink.RevokedTitle')).toBeTruthy()
+  expect(tree.queryByTestId(id('MyAgentError'))).toBeNull()
+  shared.set({ error: undefined })
 })
