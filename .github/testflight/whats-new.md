@@ -6,14 +6,32 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
-• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
-• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
-• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
-• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
-• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
-• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
-• Screens stay above the keyboard when you type or paste a code.
-• The demo collector card and approval demo are gone; contacts show the regular list.
-• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
-• Update over your current version; there's no need to reinstall.
+What's new
+• Fixed: if you first installed Keyring in mid-September or earlier, a recent update could stop it starting, showing "Something went wrong" each time it opened. Keyring now switches to the current messaging service by itself and starts normally, with no reinstall needed.
+• Onboarding now offers notifications: "Turn on notifications", or "Not now" and turn them on later in Settings → Notifications.
+• Turning notifications on works the first time on iPhone. On 232/235 it sometimes needed switching off and on once.
+• On Android, tapping a notification when Keyring was closed opens the request, not My Agent.
+• Messages for each community you're in can now arrive, not just for the one you last chose. If one doesn't arrive, closing and reopening Keyring picks it up.
+• You can join a second community, or accept its invitation, while already a member of another.
+• If a community offers no vetting, the Join screen says so, and every way in stays visible on small phones.
+• Setting up an agent through your agent host shows each step as it happens.
+• "Your agent" shows "Member of …" and a next step when something needs you, after your first membership.
+• A community without a name shows a short ID instead of "a community".
+• "<Community> turned down your request" appears once if a request is refused.
+• A link that opens Join or Requests now has a way back to Your agent.
+• New notifications picture and screen title in Keyring's style; bottom messages no longer cover the tab bar.
+
+Please test
+• Fresh install: onboarding's notifications step, both "Turn on notifications" and "Not now".
+• Join a second community while already a member, by invitation and by vetting.
+• With Keyring closed, tap a notification: it should open the request.
+
+Known issues
+• Messages for a community other than the one you last chose are best-effort in this build: if Keyring couldn't listen for it at start-up, it may wait until you close and reopen the app.
+• Notifications only arrive if your agent has policy enforcement on and an approval rule naming your phone (see the how-to in the group).
+• If you block Keyring's notifications in your phone's settings, your agent still thinks the phone is reachable until you next open the app.
+• Notifications cover approval requests only; a membership change shows while the app is open.
+• Keyring can't present a credential you already hold to join a community yet.
+• A vetter using the openvtc terminal app needs v0.3.1 or later.
+• If you installed before mid-September: contacts or connections set up through the old messaging service may need setting up again.
+• Update over your current version; your memberships carry over.
