@@ -306,3 +306,57 @@ describe('a join records what it sent, and what came back', () => {
     expect((d.identityStore as unknown as { forgetPersona: jest.Mock }).forgetPersona).toHaveBeenCalledWith(COMMUNITY)
   })
 })
+
+// The several-agents device check (R5, 10-04): the store keeps one membership
+// and one request per community. With B current, A's membership read "You're a
+// member" and hid the request B sent and the community refused.
+describe("another agent's records are not the current agent's standing", () => {
+  const OTHER = 'did:webvh:Qm:vta-a.example:p'
+  const persona = (did: string) => ({ getPersona: jest.fn(async () => ({ did, communityDid: COMMUNITY })) })
+  const plainAgent = {} as never
+  const refused = sent({
+    acknowledgedAt: '2026-09-24T04:59:30Z',
+    status: 'rejected',
+    rejection: { code: 'rejected', reason: 'no', decidedAt: '2026-09-24T04:59:40Z' },
+  } as Partial<JoinSubmission>)
+
+  it("another identity's membership does not hide this identity's refused request", async () => {
+    const { store } = memoryStore({ membership: { ...card, personaDid: OTHER }, submission: refused })
+    const state = await readJoinState(plainAgent, COMMUNITY, {
+      communityStore: store,
+      identityStore: persona(PERSONA) as never,
+      poll: false,
+    })
+    expect(state.kind).toBe('rejected')
+  })
+
+  it("another identity's request is not this agent's", async () => {
+    const { store } = memoryStore({ submission: sent({ personaDid: OTHER }) })
+    const state = await readJoinState(plainAgent, COMMUNITY, {
+      communityStore: store,
+      identityStore: persona(PERSONA) as never,
+      poll: false,
+    })
+    expect(state.kind).toBe('none')
+  })
+
+  it("this identity's own membership is still its standing", async () => {
+    const { store } = memoryStore({ membership: card })
+    const state = await readJoinState(plainAgent, COMMUNITY, {
+      communityStore: store,
+      identityStore: persona(PERSONA) as never,
+      cardStatus: async () => ({ revoked: false }),
+    })
+    expect(state.kind).toBe('member')
+  })
+
+  it('with no identity of its own here, what the phone kept is shown as before', async () => {
+    const { store } = memoryStore({ membership: { ...card, personaDid: OTHER } })
+    const state = await readJoinState(plainAgent, COMMUNITY, {
+      communityStore: store,
+      identityStore: { getPersona: jest.fn(async () => undefined) } as never,
+      cardStatus: async () => ({ revoked: false }),
+    })
+    expect(state.kind).toBe('member')
+  })
+})

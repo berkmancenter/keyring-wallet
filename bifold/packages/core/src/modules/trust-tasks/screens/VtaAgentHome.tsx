@@ -75,6 +75,24 @@ const SEGMENT_LABEL: Record<AgentSegment, string> = {
 let sessionSegment: AgentSegment = 'communities'
 
 /** Every community this phone knows: an identity, a membership or a waiting invitation — each once. */
+/**
+ * This agent's identities and memberships only: another agent's are its own,
+ * shown when it is current (several-agents device check, R5: B's home said
+ * "Member of" a community only A had joined). Only what is known to be another
+ * agent's is left out, so a phone with one agent sees what it saw before.
+ */
+export function ownHoldings(
+  personas: VtiPersona[],
+  memberships: VtiMembership[],
+  agentDid: string | undefined
+): { personas: VtiPersona[]; memberships: VtiMembership[] } {
+  const others = new Set(personas.filter((p) => p.vtaDid && p.vtaDid !== agentDid).map((p) => p.did))
+  return {
+    personas: personas.filter((p) => !others.has(p.did)),
+    memberships: memberships.filter((m) => !others.has(m.personaDid)),
+  }
+}
+
 export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'memberships' | 'invited'>): string[] =>
   Array.from(
     new Set([
@@ -224,12 +242,13 @@ const VtaAgentHome: React.FC = () => {
     if (!agent) return
     try {
       const communities = new GenericRecordsCommunityStore(agent)
-      const [personas, memberships, invitations, names] = await Promise.all([
+      const [allPersonas, allMemberships, invitations, names] = await Promise.all([
         new GenericRecordsIdentityStore(agent).listPersonas(),
         communities.listMemberships(),
         communities.listInvitations(),
         communities.listCommunityNames().catch(() => []),
       ])
+      const { personas, memberships } = ownHoldings(allPersonas, allMemberships, agentKey)
       // Names the communities published, kept from their manifests, so a
       // relaunch still says what each is called (IN-26).
       for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)

@@ -263,8 +263,19 @@ export async function readJoinState(
 ): Promise<CommunityJoinState> {
   const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
 
-  const membership = await store.getMembership(communityDid).catch(() => undefined)
+  let membership = await store.getMembership(communityDid).catch(() => undefined)
   let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
+  // The store keeps one membership and one request per community, not per
+  // agent. When the current agent holds an identity here, what was kept for a
+  // different identity is another agent's standing, not this one's: with B
+  // current, A's membership read "You're a member" and hid B's refused
+  // request (several-agents device check, R5, 10-04).
+  const mine = await (options.identityStore ?? new GenericRecordsIdentityStore(agent))
+    .getPersona(communityDid)
+    .catch(() => undefined)
+  const anotherIdentity = (personaDid: string | undefined) => Boolean(mine && personaDid && personaDid !== mine.did)
+  if (membership && anotherIdentity(membership.personaDid)) membership = undefined
+  if (submission && anotherIdentity(submission.personaDid)) submission = undefined
   // A request sent after the membership ended is where the person stands now:
   // "removed you" above a request that went out hid it (IN-104).
   const sentSince = (at: string | undefined) =>
