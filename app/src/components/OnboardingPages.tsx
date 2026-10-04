@@ -2,6 +2,7 @@ import { ITheme, createStyles, GenericFn, Link } from '@bifold/core'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import OnboardingIcon from '../assets/img/onboarding-handshake.svg'
 import PassIcon from '../assets/img/onboarding-pass.svg'
@@ -93,6 +94,11 @@ const WelcomePage = (theme: ITheme['OnboardingTheme'], iconStrokeProps?: Record<
   )
 }
 
+/** The My Agent tab's own icon, drawn at the size and colour of the other slides' icons. */
+const AgentIcon: React.FC<{ fill?: string; width?: number }> = ({ fill, width = ICON_SIZE }) => (
+  <Icon name="shield-account-outline" size={width} color={fill} />
+)
+
 const strokeProps = (viewBoxSize: number, fill: string) => ({
   stroke: fill,
   strokeWidth: 0.8 * (viewBoxSize / ICON_SIZE),
@@ -118,6 +124,8 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
       NetworkIcon,
       strokeProps(536, fill)
     ),
+    // After trusted connections: the agent that acts for the person (Alberto, 10-05).
+    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon),
     CreatePage(
       'Onboarding.SecurityHeading',
       'Onboarding.SecurityParagraph',

@@ -72,6 +72,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Crie conexões confiáveis",
     "ConnectionsParagraph": "Construa relacionamentos diretos e mútuos com pessoas que você conhece. Ao contrário de seguir nas redes sociais, ambas as partes confirmam a conexão.\n\nSuas conexões ficam no seu dispositivo, sob seu controle — não gerenciadas por nenhuma plataforma.",
+    // Page 3b: Agent
+    "AgentHeading": "Seu próprio agente",
+    "AgentParagraph": "Seu agente trabalha por você online, mesmo com o telefone desligado. Ele guarda suas identidades e seus cartões, e pode perguntar a você antes de fazer algo importante.",
     // Page 4: Security
     "SecurityHeading": "Proteja sua carteira",
     "SecurityParagraph": "Sua carteira é protegida por um PIN que você cria. Para conveniência, você também pode habilitar Face ID ou Touch ID para desbloquear sua carteira rapidamente e verificar ações como criar novas conexões.\n\nSeus dados biométricos nunca saem do seu dispositivo — são usados apenas para desbloquear o acesso e confirmar suas ações. Você pode habilitar ou desabilitar a qualquer momento nas Configurações.",
