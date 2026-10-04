@@ -150,6 +150,12 @@ export interface VtaAgentState {
   /** An agent was just added: the person chooses to use it or keep the one before. */
   addedAgent?: { from: string; added: string }
   /**
+   * Requests for this phone's decision from the agents that are not current,
+   * as last seen by a look at each (several agents, step 3), with whether the
+   * look reached it. Carried into `approvals` when the person switches to it.
+   */
+  otherRequests?: Readonly<Record<string, { approvals: VtiApproval[]; reachable: boolean; at: number }>>
+  /**
    * Whether the saved link has been read at start-up (`restore`). Until then
    * `link` reads "not linked" on every phone, linked or not, so a screen that
    * acts on "not linked" waits for this first: a notification tap that cold-
@@ -188,6 +194,16 @@ const ACTIVITY_LIMIT = 20
 export interface VtaAgentDeps {
   fetch?: typeof fetch
   linkStore?: (agent: Agent) => VtaLinkStore
+  /** For tests: a look's quiet window and its most (LOOK_QUIET_MS, LOOK_MAX_MS). */
+  lookQuietMs?: number
+  lookMaxMs?: number
+  /** For tests: the client a look at another agent signs in with. */
+  lookClient?: (
+    agent: Agent,
+    vtaDid: string,
+    store: VtiIdentityStore,
+    options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void }
+  ) => Pick<VtaClient, 'connect' | 'disconnect'>
   /** Whether the agent's address exists: its DID host says `notFound`, it resolves (`found`), or no one could tell. */
   agentAddress?: (agent: Agent, vtaDid: string) => Promise<'notFound' | 'found' | 'unknown'>
   identityStore?: (agent: Agent) => VtiIdentityStore
@@ -353,6 +369,50 @@ export async function withDeadline(work: Promise<unknown>, ms = GRANT_CHECK_DEAD
 
 type Listener = () => void
 
+/**
+ * What a manager session keeps of a message it receives with no request of
+ * ours waiting: a consent request (a request for this phone's decision) and a
+ * consent-granted notice. Everything else is ignored. One function for the
+ * live session and for a look at another agent (several agents, step 3), so
+ * neither keeps or drops anything the other would not.
+ */
+export function keepManagerMessage(
+  plaintext: DidCommV2PlaintextMessage,
+  now: number
+): { approval: VtiApproval } | { granted: true } | undefined {
+  const body = plaintext.body as { id?: string; type?: string; payload?: VtaConsentRequest } | undefined
+  if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
+    return {
+      approval: {
+        ...body.payload,
+        id: String(body.id ?? body.payload.challenge),
+        receivedAt: new Date(now).toISOString(),
+        status: 'pending',
+        matchCode: consentMatchCode(body.payload.payloadDigest),
+        outcome: consentOutcome(body.payload),
+      },
+    }
+  }
+  if (body?.type === VTA_TASK.consentGranted) return { granted: true }
+  return undefined
+}
+
+/**
+ * The requests still waiting at `now`: pending, and not past an expiry that can
+ * be read (the rule `waitingRequests` uses; kept here, as that module imports this one).
+ */
+function stillWaiting(approvals: VtiApproval[], now: number): VtiApproval[] {
+  return approvals.filter((a) => {
+    if (a.status !== 'pending') return false
+    const expiry = Date.parse(String(a.expiresAt ?? ''))
+    return !Number.isFinite(expiry) || expiry > now
+  })
+}
+
+/** A look at another agent: how long after the last message it ends, and at most. */
+export const LOOK_QUIET_MS = 3_000
+export const LOOK_MAX_MS = 12_000
+
 export class VtaAgentController {
   private state: VtaAgentState = {
     status: 'disconnected',
@@ -389,6 +449,8 @@ export class VtaAgentController {
   private ownerFor?: string
   /** The agent that was current when "Add another agent" began: the way back. */
   private addingFrom?: string
+  /** The look at the other agents under way, if any. */
+  private looking?: Promise<void>
 
   /** Replace I/O for tests; production uses the defaults. */
   configure(deps: VtaAgentDeps) {
@@ -642,10 +704,90 @@ export class VtaAgentController {
   async useAgent(agent: Agent, vtaDid: string): Promise<void> {
     const link = this.state.link
     if (link.kind === 'linked' && link.vtaDid === vtaDid) return
+    // Requests are acknowledged where they were seen, so the mediator will not
+    // deliver them again: the leaving agent's waiting ones are kept as its
+    // "other" requests, and the one switched to brings its looked-at ones in.
+    const now = this.now()
+    const leaving = link.kind === 'linked' || link.kind === 'revoked' ? link.vtaDid : undefined
+    const others = { ...(this.state.otherRequests ?? {}) }
+    if (leaving) {
+      others[leaving] = { approvals: stillWaiting(this.state.approvals, now), reachable: true, at: now }
+    }
+    const carried = stillWaiting(others[vtaDid]?.approvals ?? [], now)
+    delete others[vtaDid]
     await this.linkStore(agent).use?.(vtaDid)
     await this.leaveCurrent()
-    this.set({ addedAgent: undefined })
+    this.set({ addedAgent: undefined, otherRequests: others })
     await this.takeUpCurrent(agent)
+    if (carried.length) {
+      const have = new Set(this.state.approvals.map((a) => a.id))
+      this.set({ approvals: [...carried.filter((a) => !have.has(a.id)), ...this.state.approvals] })
+    }
+  }
+
+  /**
+   * Look at every linked agent that is not current, for requests that wait on
+   * this phone (several agents, step 3): sign in as this phone's manager there,
+   * keep what arrives as the live session keeps it (`keepManagerMessage`) until
+   * it has been quiet for {@link LOOK_QUIET_MS}, and close. One look at a time.
+   */
+  async lookAtOtherAgents(agent: Agent): Promise<void> {
+    if (this.looking) return this.looking
+    this.looking = (async () => {
+      const store = this.linkStore(agent)
+      const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
+      const current = this.state.link.kind === 'linked' ? this.state.link.vtaDid : undefined
+      for (const { vtaDid } of links.filter((l) => l.vtaDid !== current)) {
+        const seen = await this.lookAt(agent, vtaDid)
+        const now = this.now()
+        const before = this.state.otherRequests?.[vtaDid]?.approvals ?? []
+        const byId = new Map([...before, ...(seen ?? [])].map((a) => [a.id, a]))
+        this.set({
+          otherRequests: {
+            ...(this.state.otherRequests ?? {}),
+            [vtaDid]: { approvals: stillWaiting([...byId.values()], now), reachable: seen !== undefined, at: now },
+          },
+        })
+      }
+    })().finally(() => {
+      this.looking = undefined
+    })
+    return this.looking
+  }
+
+  /** One look: the requests seen, or undefined when the agent could not be reached. */
+  private async lookAt(agent: Agent, vtaDid: string): Promise<VtiApproval[] | undefined> {
+    const seen: VtiApproval[] = []
+    // Time since the last message, counted in the look's own sleeps: not the
+    // clock, which a phone (or a test) can move under it.
+    let sinceLast = 0
+    const client = (this.deps.lookClient ?? ((a, did, store, options) => new VtaClient(a, did, store, options)))(
+      agent,
+      vtaDid,
+      this.identityStore(agent),
+      {
+        onInbound: (plaintext: DidCommV2PlaintextMessage) => {
+          sinceLast = 0
+          const kept = keepManagerMessage(plaintext, this.now())
+          if (kept && 'approval' in kept && !seen.some((a) => a.id === kept.approval.id)) seen.push(kept.approval)
+        },
+      }
+    )
+    try {
+      await client.connect()
+      const quiet = this.deps.lookQuietMs ?? LOOK_QUIET_MS
+      const most = this.deps.lookMaxMs ?? LOOK_MAX_MS
+      const step = Math.min(250, quiet)
+      for (let waited = 0; sinceLast < quiet && waited < most; waited += step) {
+        await new Promise((resolve) => setTimeout(resolve, step))
+        sinceLast += step
+      }
+      return seen
+    } catch {
+      return undefined
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
   }
 
   /**
@@ -1884,25 +2026,15 @@ export class VtaAgentController {
   }
 
   private inbound(plaintext: DidCommV2PlaintextMessage) {
-    const body = plaintext.body as { id?: string; type?: string; payload?: VtaConsentRequest } | undefined
-    if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
-      const id = String(body.id ?? body.payload.challenge)
-      if (this.state.approvals.some((a) => a.id === id)) return
-      const approval: VtiApproval = {
-        ...body.payload,
-        id,
-        receivedAt: new Date().toISOString(),
-        status: 'pending',
-        matchCode: consentMatchCode(body.payload.payloadDigest),
-        outcome: consentOutcome(body.payload),
-      }
+    const kept = keepManagerMessage(plaintext, Date.now())
+    if (kept && 'approval' in kept) {
+      const { approval } = kept
+      if (this.state.approvals.some((a) => a.id === approval.id)) return
       this.set({ approvals: [approval, ...this.state.approvals] })
-      void this.checkRequest(id, body as unknown as Record<string, unknown>)
+      void this.checkRequest(approval.id, plaintext.body as unknown as Record<string, unknown>)
       return
     }
-    if (body?.type === VTA_TASK.consentGranted) {
-      this.set({ awaitingConsentFor: undefined })
-    }
+    if (kept && 'granted' in kept) this.set({ awaitingConsentFor: undefined })
   }
 
   /** Check a consent request against the linked agent and this phone, and log the verdict (log-only). */

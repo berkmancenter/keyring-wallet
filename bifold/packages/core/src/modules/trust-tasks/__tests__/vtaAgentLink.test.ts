@@ -8,6 +8,7 @@ import {
   UNLINK_TELL_DEADLINE_MS,
   UNLINK_TELL_QUEUE_MS,
   VtaAgentController,
+  keepManagerMessage,
 } from '../module/vtaAgent'
 import { currentAgentDid } from '../module/currentAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
@@ -1062,11 +1063,12 @@ describe('several agents', () => {
   const WORK = { vtaDid: 'did:webvh:work-vta', label: 'Work', linkedAt: '2026-10-02T00:00:00Z' }
 
   /** An in-memory store of several links, one current, as GenericRecordsVtaLinkStore keeps them. */
-  function twoAgents() {
+  function twoAgents(extra: Record<string, unknown> = {}) {
     let links = [HOME, WORK] as Array<typeof HOME & Record<string, unknown>>
     let current: string | undefined = HOME.vtaDid
     const vta = new VtaAgentController()
     vta.configure({
+      ...extra,
       now: () => 1_000,
       linkStore: () => ({
         get: async () => links.find((l) => l.vtaDid === current) as never,
@@ -1126,5 +1128,96 @@ describe('several agents', () => {
     vta.cancelLink()
     await new Promise((resolve) => setImmediate(resolve))
     expect(vta.getState()).toMatchObject({ addingAgent: false, link: { kind: 'linked', vtaDid: HOME.vtaDid } })
+  })
+
+  // Step 3: a look at the agents that are not current, for requests.
+  const request = (id: string) => ({
+    id: `m-${id}`,
+    type: 'https://didcomm.org/x',
+    body: {
+      id,
+      type: 'https://trusttasks.org/spec/task-consent/request/0.1',
+      payload: {
+        challenge: `c-${id}`,
+        payloadDigest: 'd',
+        taskType: 'https://trusttasks.org/spec/vta/contexts/create/1.0',
+      },
+    },
+  })
+  const lookDelivering = (messages: unknown[], opts: { fail?: boolean } = {}) => {
+    // A look waits for quiet on the wall clock: real timers, whatever a test before left on.
+    jest.useRealTimers()
+    const looked: string[] = []
+    const lookClient = (_a: unknown, vtaDid: string, _s: unknown, o: { onInbound: (p: unknown) => void }) => ({
+      connect: async () => {
+        looked.push(vtaDid)
+        if (opts.fail) throw new Error('unreachable')
+        for (const m of messages) o.onInbound(m)
+      },
+      disconnect: async () => undefined,
+    })
+    return { looked, deps: { lookClient, lookQuietMs: 20, lookMaxMs: 200 } }
+  }
+
+  it("a look keeps the other agent's requests, as the live session would, and leaves the current agent alone", async () => {
+    const { looked, deps } = lookDelivering([
+      request('r1'),
+      { id: 'x', type: 'other', body: { type: 'https://example.org/else' } },
+    ])
+    const { vta } = twoAgents(deps)
+    await vta.restore({} as never)
+    await vta.lookAtOtherAgents({} as never)
+    expect(looked).toEqual([WORK.vtaDid])
+    expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ reachable: true, approvals: [{ id: 'r1' }] })
+    expect(vta.getState().approvals).toEqual([])
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: HOME.vtaDid })
+  })
+
+  it('an agent the look cannot reach is said unreachable, not "nothing waits"', async () => {
+    const { deps } = lookDelivering([], { fail: true })
+    const { vta } = twoAgents(deps)
+    await vta.restore({} as never)
+    await vta.lookAtOtherAgents({} as never)
+    expect(vta.getState().otherRequests?.[WORK.vtaDid]).toMatchObject({ reachable: false, approvals: [] })
+  })
+
+  it('a request seen only in a look is carried over when the person switches, and the one left keeps its own', async () => {
+    const { deps } = lookDelivering([request('r1')])
+    const { vta } = twoAgents(deps)
+    await vta.restore({} as never)
+    await vta.lookAtOtherAgents({} as never)
+    // Home has a request of its own, received on its live session.
+    ;(vta as unknown as { set(n: object): void }).set({
+      approvals: [{ id: 'h1', status: 'pending', receivedAt: 't', challenge: 'c' }],
+    })
+    await vta.useAgent({} as never, WORK.vtaDid)
+    // The live session delivers nothing again: the look acknowledged it.
+    expect(vta.getState().approvals.map((a) => a.id)).toEqual(['r1'])
+    expect(vta.getState().otherRequests?.[HOME.vtaDid]?.approvals.map((a) => a.id)).toEqual(['h1'])
+    expect(vta.getState().otherRequests?.[WORK.vtaDid]).toBeUndefined()
+  })
+})
+
+describe('what a manager session keeps', () => {
+  it('a consent request as a request, a granted notice as granted, anything else not at all', () => {
+    const consent = {
+      id: 'm',
+      type: 't',
+      body: {
+        id: 'r',
+        type: 'https://trusttasks.org/spec/task-consent/request/0.1',
+        payload: { challenge: 'c', payloadDigest: 'd' },
+      },
+    }
+    expect(keepManagerMessage(consent as never, 0)).toMatchObject({ approval: { id: 'r', status: 'pending' } })
+    expect(
+      keepManagerMessage(
+        { id: 'g', type: 't', body: { type: 'https://trusttasks.org/spec/task-consent/granted/0.1' } } as never,
+        0
+      )
+    ).toEqual({ granted: true })
+    expect(
+      keepManagerMessage({ id: 'o', type: 't', body: { type: 'https://example.org/else' } } as never, 0)
+    ).toBeUndefined()
   })
 })
