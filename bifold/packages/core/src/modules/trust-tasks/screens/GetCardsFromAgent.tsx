@@ -156,6 +156,11 @@ export const GetCardsFromAgent: React.FC<{ agent: Agent; personas: VtiPersona[];
         onPress={() => void start()}
         testID={testIdWithKey('AgentGetCardsButton')}
       />
+      {/* When to use it: it copies the agent's cards back to this phone, and
+          nothing else (Alberto, K7, 10-04). */}
+      <ThemedText style={styles.muted} testID={testIdWithKey('AgentGetCardsHint')}>
+        {t('VtaLink.GetCardsHint')}
+      </ThemedText>
     </View>
   )
 }
