@@ -22,7 +22,7 @@ import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { CardKeptRow } from './CardKeptRow'
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
-import { asTitle, communityHeadingOf } from './communityName'
+import { communityHeadingOf, communityTitle } from './communityName'
 import { shareIdentity } from './identityShare'
 import { didHashKey, didLabelKey } from './testIdKey'
 import { localDate } from './localTime'
@@ -119,7 +119,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         // The row's name and where the person stands, as it reads on screen.
         // It said "Member of" on every card, a request turned down included
         // (several-agents device check, 10-04).
-        accessibilityLabel={`${asTitle(community)}, ${status}`}
+        accessibilityLabel={`${communityTitle(community, communityDid, t)}, ${status}`}
         // Kept for the runners that open a member's community from this row.
         testID={testIdWithKey(membership ? 'AgentMembershipRow' : `AgentCommunityOpen_${key}`)}
         onPress={() => onOpen(communityDid)}
@@ -127,7 +127,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         <Icon name="account-group-outline" size={22} color={TextTheme.normal.color} />
         <View style={{ flex: 1 }}>
           <ThemedText variant="bold" testID={testIdWithKey(`AgentCommunityName_${key}`)}>
-            {asTitle(community)}
+            {communityTitle(community, communityDid, t)}
           </ThemedText>
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentCommunityStatus_${key}`)}>
             {status}
