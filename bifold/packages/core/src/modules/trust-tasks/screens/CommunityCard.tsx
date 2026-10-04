@@ -116,7 +116,10 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       <Pressable
         style={styles.row}
         accessibilityRole="button"
-        accessibilityLabel={words('VtaLink.MemberOf')}
+        // The row's name and where the person stands, as it reads on screen.
+        // It said "Member of" on every card, a request turned down included
+        // (several-agents device check, 10-04).
+        accessibilityLabel={`${asTitle(community)}, ${status}`}
         // Kept for the runners that open a member's community from this row.
         testID={testIdWithKey(membership ? 'AgentMembershipRow' : `AgentCommunityOpen_${key}`)}
         onPress={() => onOpen(communityDid)}
