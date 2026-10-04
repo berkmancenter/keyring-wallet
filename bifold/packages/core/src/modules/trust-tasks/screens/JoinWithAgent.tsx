@@ -91,8 +91,10 @@ export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = (
         {t('Join.WithWhichAgent', { community: name, interpolation: { escapeValue: false } })}
       </ThemedText>
       {suggested ? (
-        <View style={{ gap: 8 }} testID={testIdWithKey('JoinAgentSuggested')}>
-          <ThemedText>
+        <View style={{ gap: 8 }}>
+          {/* The id on the words themselves, so a screen reader and a test find
+              them under it (the device check read an empty container). */}
+          <ThemedText testID={testIdWithKey('JoinAgentSuggested')}>
             {t('Join.AgentHasIdentity', { agent: nameOf(suggested), interpolation: { escapeValue: false } })}
           </ThemedText>
           <Button
