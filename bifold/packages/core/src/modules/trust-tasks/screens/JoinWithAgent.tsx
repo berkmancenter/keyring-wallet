@@ -30,18 +30,27 @@ export function suggestedAgent(current: string | undefined, holders: string[]): 
   return holders[0]
 }
 
-export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = ({ communityDid, name }) => {
-  const { t } = useTranslation()
+/**
+ * The agents on this phone that hold an identity in `communityDid`, and the
+ * current one. `onlyOthers`: some do, and the current agent does not — what the
+ * phone knows of this community (a membership, a request) is then another
+ * agent's, not the current one's (the community store keeps one entry per
+ * community, not per agent).
+ */
+export function useAgentsHoldingIdentity(communityDid: string | undefined): {
+  holders: string[]
+  current?: string
+  onlyOthers: boolean
+} {
   const { agent } = useAgent()
-  const { ColorPalette, TextTheme } = useTheme()
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
-  const agents = state.agents ?? []
   const current = state.link.kind === 'linked' ? state.link.vtaDid : undefined
+  const several = (state.agents ?? []).length > 1
   const [holders, setHolders] = useState<string[]>([])
   const [tick, setTick] = useState(0)
   useCommunityChanged(() => setTick((n) => n + 1))
   useEffect(() => {
-    if (!agent) return
+    if (!agent || !communityDid) return
     let live = true
     void new GenericRecordsIdentityStore(agent)
       .listPersonas()
@@ -52,7 +61,17 @@ export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = (
     return () => {
       live = false
     }
-  }, [agent, communityDid, tick])
+  }, [agent, communityDid, tick, current])
+  return { holders, current, onlyOthers: several && !!current && holders.length > 0 && !holders.includes(current) }
+}
+
+export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = ({ communityDid, name }) => {
+  const { t } = useTranslation()
+  const { agent } = useAgent()
+  const { ColorPalette, TextTheme } = useTheme()
+  const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const agents = state.agents ?? []
+  const { holders, current } = useAgentsHoldingIdentity(communityDid)
 
   if (agents.length < 2) return null
   const styles = StyleSheet.create({
