@@ -84,6 +84,32 @@ const sharedNow = () => {
 export const LISTENER_RETRY_MS = 15_000
 export const LISTENER_RETRY_MAX_MS = 5 * 60_000
 
+/**
+ * The longest any one step of the listener manager may take. Reconciles run one
+ * at a time, so a step that never finished held every later one, the 60 s
+ * safety net included: on the 233 candidate a listener that failed once was
+ * never tried again (17 min, Prague lane row 6).
+ */
+export const LISTENER_DEADLINES = { personasMs: 10_000, openMs: 30_000, startMs: 30_000, stopMs: 5_000 }
+/** A reconcile that takes longer than this says so in the Release log, naming its step. */
+export const RECONCILE_SLOW_MS = 10_000
+
+class ListenerDeadline extends Error {
+  constructor(step: string, ms: number) {
+    super(`${step} took longer than ${Math.round(ms / 1000)} s`)
+    this.name = 'ListenerDeadline'
+  }
+}
+
+/** `work`, or a ListenerDeadline after `ms`; the timer never outlives the work. */
+function withDeadline<T>(work: Promise<T>, ms: number, step: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ListenerDeadline(step, ms)), ms)
+  })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
+
 export interface IdentityListenersOptions {
   /** Fallback only: an identity is reached through the mediator its own DID document names. */
   mediatorDid?: string
@@ -96,6 +122,10 @@ export interface IdentityListenersOptions {
   /** How often to reconcile even when nothing said to (a safety net). */
   intervalMs?: number
   now?: () => number
+  /** For tests: the steps' deadlines ({@link LISTENER_DEADLINES}). */
+  deadlines?: Partial<typeof LISTENER_DEADLINES>
+  /** For tests: a failed listener's first wait ({@link LISTENER_RETRY_MS}). */
+  retryMs?: number
 }
 
 /** Start the listeners; returns the function that stops them all. */
@@ -109,6 +139,11 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
       return link.kind === 'linked' ? link.vtaDid : undefined
     })
   const now = options.now ?? Date.now
+  const deadline = { ...LISTENER_DEADLINES, ...(options.deadlines ?? {}) }
+  /** A failed listener's own retry, at the end of its wait: it needs no other trigger. */
+  const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** What the reconcile under way is doing, for the slow-reconcile line. */
+  let step = 'idle'
 
   const running = new Map<string, { session?: ListenerSession; starting?: Promise<void> }>()
   const failures = new Map<string, { count: number; until: number }>()
@@ -123,8 +158,12 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     const entry = running.get(did)
     if (!entry) return
     running.delete(did)
-    await entry.starting?.catch(() => undefined)
-    await entry.session?.stop().catch(() => undefined)
+    // An open still under way finishes on its own and stops what it opened
+    // (startOne sees it is no longer running); it is not waited on past the deadline.
+    if (entry.starting)
+      await withDeadline(entry.starting, deadline.stopMs, `stopping ${didPrefix(did)}`).catch(() => undefined)
+    if (entry.session)
+      await withDeadline(entry.session.stop(), deadline.stopMs, `stopping ${didPrefix(did)}`).catch(() => undefined)
   }
 
   const startOne = (persona: VtiPersona) => {
@@ -132,23 +171,45 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
     running.set(persona.did, entry)
     entry.starting = (async () => {
       try {
-        const session = await open(persona)
+        const opening = open(persona)
+        // A session that opens after its deadline is stopped, never left listening unseen.
+        const session = await withDeadline(opening, deadline.openMs, `opening ${didPrefix(persona.did)}`).catch(
+          (error) => {
+            void opening.then((late) => late.stop()).catch(() => undefined)
+            throw error
+          }
+        )
         // Stopped, or handed to the shared session, while it was opening.
         if (running.get(persona.did) !== entry) return void (await session.stop().catch(() => undefined))
         entry.session = session
-        await session.start()
+        await withDeadline(session.start(), deadline.startMs, `starting ${didPrefix(persona.did)}`)
         failures.delete(persona.did)
+        clearTimeout(retryTimers.get(persona.did))
+        retryTimers.delete(persona.did)
         releaseWarn(`[VTI] listener for ${didPrefix(persona.did)} (${didPrefix(persona.communityDid)}): listening`)
       } catch (error) {
         const prior = failures.get(persona.did)?.count ?? 0
-        const wait = Math.min(LISTENER_RETRY_MS * 2 ** prior, LISTENER_RETRY_MAX_MS)
+        const wait = Math.min((options.retryMs ?? LISTENER_RETRY_MS) * 2 ** prior, LISTENER_RETRY_MAX_MS)
         failures.set(persona.did, { count: prior + 1, until: now() + wait })
         if (prior === 0)
           releaseWarn(
             `[VTI] listener for ${didPrefix(persona.did)} did not open (${error instanceof Error ? error.message : String(error)}); retried in ${Math.round(wait / 1000)} s`
           )
         if (running.get(persona.did) === entry) running.delete(persona.did)
-        await entry.session?.stop().catch(() => undefined)
+        if (entry.session) await withDeadline(entry.session.stop(), deadline.stopMs, 'stopping').catch(() => undefined)
+        // Tried again at the end of its wait, whatever else happens or does not.
+        clearTimeout(retryTimers.get(persona.did))
+        if (!stopped)
+          retryTimers.set(
+            persona.did,
+            setTimeout(() => {
+              retryTimers.delete(persona.did)
+              // The wait is over when its timer says so, whatever the clock reads now.
+              const failed = failures.get(persona.did)
+              if (failed) failures.set(persona.did, { ...failed, until: 0 })
+              void reconcile()
+            }, wait)
+          )
       } finally {
         entry.starting = undefined
       }
@@ -156,14 +217,23 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   }
 
   const reconcileOnce = async () => {
+    let all: VtiPersona[] = []
+    if (!stopped && !paused) {
+      step = 'reading identities'
+      const read = await withDeadline(personas(), deadline.personasMs, step).catch((error) => {
+        releaseWarn(`[VTI] listeners: identities not read (${error instanceof Error ? error.message : String(error)})`)
+        return undefined
+      })
+      // Not read: keep the listeners as they are, rather than stopping them all.
+      if (!read) return
+      all = read
+    }
     const wanted =
-      stopped || paused
-        ? []
-        : listenerTargets(await personas().catch(() => []), sharedNow(), vtaDidNow()).filter(
-            (p) => p.did !== sharedTarget
-          )
+      stopped || paused ? [] : listenerTargets(all, sharedNow(), vtaDidNow()).filter((p) => p.did !== sharedTarget)
     const wantedDids = new Set(wanted.map((p) => p.did))
+    step = 'stopping listeners no longer wanted'
     await Promise.all([...running.keys()].filter((did) => !wantedDids.has(did)).map(stopOne))
+    step = 'starting listeners'
     if (stopped || paused) return
     for (const persona of wanted) {
       if (running.has(persona.did)) continue
@@ -179,13 +249,22 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
       again = true
       return reconciling
     }
+    const started = Date.now()
+    const slow = setTimeout(
+      () => releaseWarn(`[VTI] listeners: a reconcile has run ${Math.round(RECONCILE_SLOW_MS / 1000)} s (${step})`),
+      RECONCILE_SLOW_MS
+    )
     reconciling = (async () => {
       do {
         again = false
         await reconcileOnce()
       } while (again)
     })().finally(() => {
+      clearTimeout(slow)
+      step = 'idle'
       reconciling = undefined
+      const took = Date.now() - started
+      if (took > RECONCILE_SLOW_MS) releaseWarn(`[VTI] listeners: a reconcile took ${Math.round(took / 1000)} s`)
     })
     return reconciling
   }
@@ -233,6 +312,8 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   return async () => {
     stopped = true
     clearInterval(timer)
+    for (const t of retryTimers.values()) clearTimeout(t)
+    retryTimers.clear()
     stopGuard()
     stopWatchingShared()
     stopWatchingLink()
