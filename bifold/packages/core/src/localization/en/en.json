@@ -931,7 +931,10 @@
     "Row": "Requests",
     "RowWaiting_one": "1 waiting",
     "RowWaiting_other": "{{count}} waiting",
-    "RowNone": "Nothing waiting"
+    "RowNone": "Nothing waiting",
+    "AskMeRow": "Ask me before…",
+    "AskMeRowHint": "Choose what your agent checks with you first",
+    "AskMeEmpty": "Your agent hasn't asked you about anything yet. Choose what it should ask about."
   },
   "TabStack": {
     "Messages": "Message",
@@ -1046,6 +1049,7 @@
     "VtaLink": "Link your agent",
     "VtaAgent": "Your agent",
     "VtaRequests": "Requests",
+    "VtaAskMe": "Ask me before…",
     "Invited": "Join by invitation",
     "Join": "Join a community",
     "VtaCreateAgent": "Set up a new agent",
@@ -1984,6 +1988,33 @@
     },
     "ShareCodeTitle": "Keyring owner code",
     "ShareCodeMessage": "My Keyring owner code — add it as an owner (admin) of my agent:"
+  },
+  "AskMe": {
+    "Intro": "Your agent can wait for your approval before it does some things. It asks you on this phone.",
+    "Enforcement": "Your agent only asks you if approvals are switched on where it is hosted.",
+    "Loading": "Reading your agent's rules…",
+    "OnlyAdmin": "Only an administrator of your agent can change this.",
+    "Unreadable": "Your agent has rules Keyring can't read in full, so Keyring won't change them. Change them where they were set.",
+    "Task": {
+      "contextsCreate": "Creating a context (a group of identities)",
+      "contextsDelete": "Deleting a context",
+      "didsDelete": "Deleting an identity's DID",
+      "keysRevoke": "Deleting a key"
+    },
+    "SetElsewhereNamed": "Already set from another device",
+    "SetElsewhereTitle": "Set from another device",
+    "HoldsThisPhone": "Your agent waits for an approval before it lets this phone do this, so notifications or devices may stop working. Change it where it was set.",
+    "RuleConsent_one": "Needs 1 approval",
+    "RuleConsent_other": "Needs {{count}} approvals",
+    "RuleReauth": "Needs a fresh sign-in",
+    "Test": "Send me a test request",
+    "TestHint": "Asks your agent to create a context. It asks you first, and nothing is created whatever you answer.",
+    "TestHeld": "Sent. Your agent is asking you now: look in Requests.",
+    "TestLetThrough": "Your agent didn't ask: approvals aren't switched on where it is hosted. The context it created was deleted again.",
+    "TestLetThroughKept": "Your agent didn't ask: approvals aren't switched on where it is hosted. It created a context called \"Keyring test request\", which Keyring couldn't delete.",
+    "Nudge": "Requests always wait in Keyring; a notification is a nudge, not a promise.",
+    "Details": "Details",
+    "HideDetails": "Hide details"
   },
   "Devices": {
     "Title": "My devices",

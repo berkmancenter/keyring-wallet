@@ -1,0 +1,131 @@
+{
+  "vti": "afcf2470",
+  "generatedBy": "scripts/openvtc/gen-approvals-fixtures.sh",
+  "cases": [
+    {
+      "name": "no rules: an abstaining module",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n",
+      "rules": []
+    },
+    {
+      "name": "one reauth rule",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireStepUp\",\n} if input.request.typeUri == \"https://trusttasks.org/spec/acl/grant/0.1\"\n",
+      "rules": [
+        {
+          "requires": "reauth",
+          "taskType": "https://trusttasks.org/spec/acl/grant/0.1"
+        }
+      ]
+    },
+    {
+      "name": "one consent rule, defaults",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"ops\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/create/1.0\"\n",
+      "rules": [
+        {
+          "approverSet": "ops",
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/create/1.0"
+        }
+      ]
+    },
+    {
+      "name": "consent with every field",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"ops\", \"minApprovals\": 2, \"excludeRequester\": true},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/webvh/dids/update/1.0\"\n",
+      "rules": [
+        {
+          "approverSet": "ops",
+          "excludeRequester": true,
+          "minApprovals": 2,
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/webvh/dids/update/1.0"
+        }
+      ]
+    },
+    {
+      "name": "minApprovals 0 is floored at 1",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"ops\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/delete/1.0\"\n",
+      "rules": [
+        {
+          "approverSet": "ops",
+          "minApprovals": 0,
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/delete/1.0"
+        }
+      ]
+    },
+    {
+      "name": "scoped to contexts",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"ops\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if {\n\tinput.request.typeUri == \"https://trusttasks.org/spec/keys/revoke/0.1\"\n\tinput.contextId in {\"openvtc\", \"default\"}\n}\n\ndecision := {\n\t\"decision\": \"requireStepUp\",\n} if {\n\tinput.request.typeUri == \"https://trusttasks.org/spec/acl/grant/0.1\"\n\tinput.contextId in {\"openvtc\"}\n}\n",
+      "rules": [
+        {
+          "approverSet": "ops",
+          "contexts": ["openvtc", "default"],
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/keys/revoke/0.1"
+        },
+        {
+          "contexts": ["openvtc"],
+          "requires": "reauth",
+          "taskType": "https://trusttasks.org/spec/acl/grant/0.1"
+        }
+      ]
+    },
+    {
+      "name": "several rules keep their order",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"b\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/webvh/dids/delete/1.0\"\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"a\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/create/1.0\"\n\ndecision := {\n\t\"decision\": \"requireStepUp\",\n} if input.request.typeUri == \"https://trusttasks.org/spec/acl/grant/0.1\"\n",
+      "rules": [
+        {
+          "approverSet": "b",
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/webvh/dids/delete/1.0"
+        },
+        {
+          "approverSet": "a",
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/create/1.0"
+        },
+        {
+          "requires": "reauth",
+          "taskType": "https://trusttasks.org/spec/acl/grant/0.1"
+        }
+      ]
+    },
+    {
+      "name": "quotes, backslashes and control characters are escaped",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"x\\\", \\\"decision\\\": \\\"allow\\\\\\n\\r\\t\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if {\n\tinput.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/create/1.0\"\n\tinput.contextId in {\"a\\\"b\", \"c\\\\d\"}\n}\n",
+      "rules": [
+        {
+          "approverSet": "x\", \"decision\": \"allow\\\n\r\t",
+          "contexts": ["a\"b", "c\\d"],
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/create/1.0"
+        }
+      ]
+    },
+    {
+      "name": "non-ASCII is kept as is",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"téléphone\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if {\n\tinput.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/create/1.0\"\n\tinput.contextId in {\"café ☕\"}\n}\n",
+      "rules": [
+        {
+          "approverSet": "téléphone",
+          "contexts": ["café ☕"],
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/create/1.0"
+        }
+      ]
+    },
+    {
+      "name": "what Keyring's screen writes: this phone approves creating a context",
+      "rego": "package vta.policy\n\nimport rego.v1\n\n# Generated from the declarative approvals rules — do not hand-edit.\n#\n# The VTA re-derives this module from ext[\"openvtc.approvals\"] on every upsert\n# and refuses the write if the two disagree, so an edit here is not a way to\n# change behaviour: change the rules instead.\n\ndecision := {\n\t\"decision\": \"requireConsent\",\n\t\"requireConsent\": {\"approverSet\": \"keyring-this-phone\", \"minApprovals\": 1, \"excludeRequester\": false},\n} if input.request.typeUri == \"https://trusttasks.org/spec/vta/contexts/create/1.0\"\n",
+      "rules": [
+        {
+          "approverSet": "keyring-this-phone",
+          "excludeRequester": false,
+          "minApprovals": 1,
+          "requires": "consent",
+          "taskType": "https://trusttasks.org/spec/vta/contexts/create/1.0"
+        }
+      ]
+    }
+  ]
+}

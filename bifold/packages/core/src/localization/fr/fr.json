@@ -858,7 +858,10 @@
     "Row": "Demandes",
     "RowWaiting_one": "1 en attente",
     "RowWaiting_other": "{{count}} en attente",
-    "RowNone": "Rien en attente"
+    "RowNone": "Rien en attente",
+    "AskMeRow": "Me demander avant…",
+    "AskMeRowHint": "Choisissez ce que votre agent vérifie d'abord avec vous",
+    "AskMeEmpty": "Votre agent ne vous a encore rien demandé. Choisissez ce qu'il doit vous demander."
   },
   "TabStack": {
     "Messages": "Messages",
@@ -979,6 +982,7 @@
     "VtaLink": "Relier votre agent",
     "VtaAgent": "Votre agent",
     "VtaRequests": "Demandes",
+    "VtaAskMe": "Me demander avant…",
     "Invited": "Rejoindre sur invitation",
     "Join": "Rejoindre une communauté"
   },
@@ -1920,6 +1924,33 @@
     },
     "ShareCodeTitle": "Code propriétaire Keyring",
     "ShareCodeMessage": "Mon code propriétaire Keyring — ajoutez-le comme propriétaire (admin) de mon agent :"
+  },
+  "AskMe": {
+    "Intro": "Votre agent peut attendre votre accord avant de faire certaines choses. Il vous le demande sur ce téléphone.",
+    "Enforcement": "Votre agent ne vous demande rien si les approbations ne sont pas activées là où il est hébergé.",
+    "Loading": "Lecture des règles de votre agent…",
+    "OnlyAdmin": "Seul un administrateur de votre agent peut modifier ceci.",
+    "Unreadable": "Votre agent a des règles que Keyring ne peut pas lire entièrement, donc Keyring ne les modifiera pas. Modifiez-les là où elles ont été définies.",
+    "Task": {
+      "contextsCreate": "Créer un contexte (un groupe d'identités)",
+      "contextsDelete": "Supprimer un contexte",
+      "didsDelete": "Supprimer le DID d'une identité",
+      "keysRevoke": "Supprimer une clé"
+    },
+    "SetElsewhereNamed": "Déjà défini depuis un autre appareil",
+    "SetElsewhereTitle": "Défini depuis un autre appareil",
+    "HoldsThisPhone": "Votre agent attend une approbation avant de laisser ce téléphone faire ceci, donc les notifications ou les appareils peuvent cesser de fonctionner. Modifiez-le là où il a été défini.",
+    "RuleConsent_one": "1 approbation requise",
+    "RuleConsent_other": "{{count}} approbations requises",
+    "RuleReauth": "Nouvelle connexion requise",
+    "Test": "M'envoyer une demande de test",
+    "TestHint": "Demande à votre agent de créer un contexte. Il vous le demande d'abord, et rien n'est créé quelle que soit votre réponse.",
+    "TestHeld": "Envoyé. Votre agent vous le demande maintenant : regardez dans Demandes.",
+    "TestLetThrough": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Le contexte créé a été supprimé.",
+    "TestLetThroughKept": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Il a créé un contexte nommé « Keyring test request » que Keyring n'a pas pu supprimer.",
+    "Nudge": "Les demandes attendent toujours dans Keyring ; une notification est un rappel, pas une promesse.",
+    "Details": "Détails",
+    "HideDetails": "Masquer les détails"
   },
   "Devices": {
     "Title": "Mes appareils",
