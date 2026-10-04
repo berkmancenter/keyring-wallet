@@ -129,6 +129,18 @@ describe('EditRCard Screen', () => {
     expect(getByTestId(testIdWithKey('RCardOrganizationInput')).props.defaultValue).toBe('Work')
   })
 
+  // Alberto (TestFlight 236): the profile's name under the photo, not above it.
+  test('the photo comes first, the profile name under it, then the other fields', () => {
+    const tree = renderScreen(profileA.id)
+    const ids = tree.root
+      .findAll((n) => typeof n.props.testID === 'string' && typeof n.type === 'string')
+      .map((n) => n.props.testID as string)
+    const at = (id: string) => ids.indexOf(testIdWithKey(id))
+    expect(at('RCardPhotoInput')).toBeGreaterThanOrEqual(0)
+    expect(at('RCardPhotoInput')).toBeLessThan(at('RCardLabelInput'))
+    expect(at('RCardLabelInput')).toBeLessThan(at('RCardFirstNameInput'))
+  })
+
   test('pre-fills the profile-name (label) field with the profile\'s own organizing tag', () => {
     const tree = renderScreen(profileA.id)
     expect(tree.getByTestId(testIdWithKey('RCardLabelInput')).props.defaultValue).toBe(profileA.label)
