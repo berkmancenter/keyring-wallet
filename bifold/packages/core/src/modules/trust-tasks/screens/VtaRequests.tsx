@@ -162,18 +162,18 @@ const VtaRequests: React.FC = () => {
         {view.mode === 'empty' ? (
           <View style={styles.card} testID={testIdWithKey('RequestsEmpty')}>
             <ThemedText>{t('Requests.Empty')}</ThemedText>
-            {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
-            {state.approvals.length === 0 ? (
-              <>
-                <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
-                <Button
-                  title={t('Requests.AskMeRow')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => navigation.navigate(Screens.VtaAskMe)}
-                  testID={testIdWithKey('RequestsAskMe')}
-                />
-              </>
-            ) : null}
+          </View>
+        ) : null}
+        {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
+        {view.mode === 'empty' && state.approvals.length === 0 ? (
+          <View style={styles.card} testID={testIdWithKey('RequestsAskMeCard')}>
+            <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
+            <Button
+              title={t('Requests.AskMeRow')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => navigation.navigate(Screens.VtaAskMe)}
+              testID={testIdWithKey('RequestsAskMe')}
+            />
           </View>
         ) : null}
 
