@@ -1516,6 +1516,11 @@
       "TypeMembership": "d'adhésion"
     },
     "StandingMember": "Vous êtes membre de {{community}}.",
+    "WithWhichAgent": "Rejoindre {{community}} avec quel agent ?",
+    "AgentHasIdentity": "{{agent}} a déjà une identité dans cette communauté.",
+    "UseAgent": "Utiliser {{agent}}",
+    "JoiningWithThis": "Vous rejoignez avec celui-ci",
+    "AlreadyHasIdentity": "A déjà une identité ici",
     "NowMember": "Vous êtes maintenant membre de {{community}}.",
     "StandingRemoved": "{{community}} vous a retiré. Vous pouvez demander à la rejoindre à nouveau.",
     "StandingSent": "Envoyé — en attente de la réponse de {{community}}.",

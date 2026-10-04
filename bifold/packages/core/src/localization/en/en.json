@@ -1577,6 +1577,11 @@
       "TypeMembership": "membership"
     },
     "StandingMember": "You're a member of {{community}}.",
+    "WithWhichAgent": "Join {{community}} with which agent?",
+    "AgentHasIdentity": "{{agent}} already has an identity in this community.",
+    "UseAgent": "Use {{agent}}",
+    "JoiningWithThis": "Joining with this one",
+    "AlreadyHasIdentity": "Already has an identity here",
     "NowMember": "You're now a member of {{community}}.",
     "StandingRemoved": "{{community}} removed you. You can ask to join again.",
     "StandingSent": "Sent — waiting for {{community}} to answer.",

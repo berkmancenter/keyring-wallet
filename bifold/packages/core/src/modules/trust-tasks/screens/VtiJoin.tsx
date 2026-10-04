@@ -46,6 +46,7 @@ import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
 import { joinCard } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
+import { JoinWithAgent } from './JoinWithAgent'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 import { useTakingLong } from './useTakingLong'
@@ -902,7 +903,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Several agents: which one joins (step 3); not over where the person already stands. */}
+        {communityDid && !standingShown ? <JoinWithAgent communityDid={communityDid} name={name} /> : null}
+        {body}
+      </ScrollView>
       {actions ? (
         <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
           {actions}

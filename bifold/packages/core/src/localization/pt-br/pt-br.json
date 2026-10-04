@@ -1422,6 +1422,11 @@
       "TypeMembership": "de membro"
     },
     "StandingMember": "Você é membro de {{community}}.",
+    "WithWhichAgent": "Entrar em {{community}} com qual agente?",
+    "AgentHasIdentity": "{{agent}} já tem uma identidade nesta comunidade.",
+    "UseAgent": "Usar {{agent}}",
+    "JoiningWithThis": "Entrando com este",
+    "AlreadyHasIdentity": "Já tem uma identidade aqui",
     "NowMember": "Agora você é membro de {{community}}.",
     "StandingRemoved": "{{community}} removeu você. Você pode pedir para entrar de novo.",
     "StandingSent": "Enviado — aguardando a resposta de {{community}}.",
