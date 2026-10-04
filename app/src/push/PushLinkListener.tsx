@@ -14,7 +14,7 @@ import { Config } from 'react-native-config'
 import BCLogger from '@/utils/logger'
 
 import { watchLinkForPush } from './pushAfterLink'
-import { appPushWakeDeps, notificationPermissionStatus } from './pushDefaults'
+import { appPushWakeDeps, notificationsAllowedNow } from './pushDefaults'
 import { watchPushPermission } from './pushPermissionWatch'
 import { enablePushWake } from './pushWake'
 
@@ -51,7 +51,7 @@ const PushLinkListener: React.FC = () => {
       {
         optedIn: () => optedIn.current,
         linked: () => Boolean(vtaAgent.agentAddress()),
-        permission: notificationPermissionStatus,
+        permission: notificationsAllowedNow,
         clearedForDenial,
         clearWake: () => vtaAgent.clearThisDeviceWake(agent),
         enableWake: () => enablePushWake(appPushWakeDeps(agent)),
