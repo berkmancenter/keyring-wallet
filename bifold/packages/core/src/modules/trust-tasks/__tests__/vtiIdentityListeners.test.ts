@@ -71,8 +71,9 @@ const persona = (name: string, over: Partial<VtiPersona> = {}): VtiPersona =>
     ...over,
   }) as VtiPersona
 
+// Enough turns for each step's deadline wrapper (a race and a finally) to settle.
 const flush = async () => {
-  for (let i = 0; i < 10; i++) await Promise.resolve()
+  for (let i = 0; i < 50; i++) await Promise.resolve()
 }
 const sharedMoves = (next: Partial<typeof mockShared>) => {
   Object.assign(mockShared, next)
@@ -267,6 +268,71 @@ describe('the listeners', () => {
     await flush()
     expect(live(b.did)).toBe(true)
     expect(live(a.did)).toBe(false)
+  })
+
+  // 233 head, Prague lane row 6: a listener that failed once was never tried
+  // again for 17 min. Reconciles run one at a time, so one step that never
+  // finished held every later one. Every step now has a deadline, and a failed
+  // listener schedules its own retry.
+  const realSleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  it('an identities read that never answers does not hold up the reconciles after it', async () => {
+    const a = persona('a')
+    let calls = 0
+    const stop = startIdentityListeners({ config: { logger: {} } } as never, {
+      open,
+      personas: () => (++calls === 1 ? new Promise<VtiPersona[]>(() => undefined) : Promise.resolve([a])),
+      intervalMs: 3_600_000,
+      deadlines: { personasMs: 30 },
+    })
+    stops.push(stop)
+    await realSleep(60)
+    // The next trigger reconciles at once, past the read that never answered.
+    sharedMoves({ did: 'did:webvh:elsewhere', connected: true })
+    await realSleep(20)
+    expect(calls).toBeGreaterThanOrEqual(2)
+    expect(live(a.did)).toBe(true)
+  })
+
+  it('a listener that failed is tried again at the end of its wait, with nothing else happening', async () => {
+    const a = persona('a')
+    let tries = 0
+    const flaky = jest.fn(async (p: VtiPersona): Promise<ListenerSession> => {
+      if (++tries === 1) throw new Error('key not held yet')
+      return open(p)
+    })
+    const stop = startIdentityListeners({ config: { logger: {} } } as never, {
+      open: flaky,
+      personas: async () => [a],
+      intervalMs: 3_600_000,
+      retryMs: 30,
+    })
+    stops.push(stop)
+    await realSleep(10)
+    expect(live(a.did)).toBe(false)
+    await realSleep(80)
+    expect(flaky).toHaveBeenCalledTimes(2)
+    expect(live(a.did)).toBe(true)
+  })
+
+  it('an open that never answers counts as failed after its deadline, and is tried again', async () => {
+    const a = persona('a')
+    let tries = 0
+    const hanging = jest.fn((p: VtiPersona): Promise<ListenerSession> => {
+      if (++tries === 1) return new Promise<ListenerSession>(() => undefined)
+      return open(p)
+    })
+    const stop = startIdentityListeners({ config: { logger: {} } } as never, {
+      open: hanging,
+      personas: async () => [a],
+      intervalMs: 3_600_000,
+      retryMs: 20,
+      deadlines: { openMs: 30 },
+    })
+    stops.push(stop)
+    await realSleep(120)
+    expect(hanging).toHaveBeenCalledTimes(2)
+    expect(live(a.did)).toBe(true)
   })
 
   it('stopping closes them all and removes the sign-in guard', async () => {
