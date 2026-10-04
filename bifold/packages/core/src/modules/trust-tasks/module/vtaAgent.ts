@@ -37,6 +37,7 @@ import {
   SwapDoneSignInFailed,
   VTA_TASK,
   VtaClient,
+  consentPendingOf,
   resolveVtaMediator,
   type VtaAclEntry,
   type VtaConsentRequest,
@@ -54,6 +55,7 @@ import {
   renameThisDevice,
   setThisDeviceWake,
   type AgentDevice,
+  type AgentDevicePort,
   type PushPlatform,
   type WakeChannel,
   type WakeHandle,
@@ -120,6 +122,13 @@ export interface VtaAgentState {
   approvals: VtiApproval[]
   /** A task of ours the VTA is holding for someone else's consent. */
   awaitingConsentFor?: string
+  /**
+   * The agent holds this phone's own `device/set-wake` for consent: an
+   * approval rule covers the notification setting, so switching notifications
+   * cannot take effect from this phone. Settings → Notifications says so.
+   * Cleared by the next set-wake the agent accepts.
+   */
+  wakeBlockedByRule?: boolean
   /**
    * The agent asks this phone to confirm it is the person before it does a
    * task (a step-up): its own reason, shown as sent, and the task. Answered
@@ -663,6 +672,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      wakeBlockedByRule: undefined,
       error: undefined,
       ownsAgent: false,
     })
@@ -699,9 +709,17 @@ export class VtaAgentController {
       // `set-wake` with no handle clears the wake channel (clearThisDeviceWake),
       // sent here directly to know when it leaves the phone.
       await client
-        .task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, () => {
-          timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
-        })
+        .task(
+          AGENT_DEVICE_TASK.setWake,
+          {},
+          UNLINK_TELL_DEADLINE_MS,
+          {},
+          () => {
+            timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
+          },
+          // A rule holding set-wake is refused at once, not waited on (wakePort).
+          { waitForConsent: false }
+        )
         .catch(() => undefined)
       await client
         .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
@@ -1443,17 +1461,42 @@ export class VtaAgentController {
     opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
   ): Promise<WakeChannel> {
     const client = await this.signedIn(agent, this.linkedAgent())
-    return setThisDeviceWake(client, wake, opts).catch((error: unknown) => {
-      throw this.refused(error)
-    })
+    return this.wakeOutcome(setThisDeviceWake(this.wakePort(client), wake, opts))
   }
 
   /** Stop this phone's agent waking it: sent before the phone unlinks (plan §8). */
   async clearThisDeviceWake(agent: Agent): Promise<WakeChannel> {
     const client = await this.signedIn(agent, this.linkedAgent())
-    return clearThisDeviceWake(client).catch((error: unknown) => {
+    return this.wakeOutcome(clearThisDeviceWake(this.wakePort(client)))
+  }
+
+  /**
+   * `device/set-wake` without waiting for consent. A rule that holds it names
+   * approvers that may include this very phone, so waiting would never end:
+   * switching notifications looked like it hung (approvalRules.ts, the trap
+   * the "Ask me before…" screen never offers). Refused at once instead.
+   */
+  private wakePort(client: VtaClient): AgentDevicePort {
+    return {
+      managerDid: client.managerDid,
+      task: <T>(type: string, payload: Record<string, unknown>) =>
+        client.task<T>(type, payload, undefined, {}, undefined, { waitForConsent: false }),
+    }
+  }
+
+  /** The agent's answer to set-wake, with whether an approval rule is holding it. */
+  private async wakeOutcome(sent: Promise<WakeChannel>): Promise<WakeChannel> {
+    try {
+      const channel = await sent
+      if (this.state.wakeBlockedByRule) this.set({ wakeBlockedByRule: false })
+      return channel
+    } catch (error) {
+      if (consentPendingOf(error)) {
+        releaseWarn('[VTI] notifications: device/set-wake is held by an approval rule on the agent')
+        this.set({ wakeBlockedByRule: true })
+      }
       throw this.refused(error)
-    })
+    }
   }
 
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */

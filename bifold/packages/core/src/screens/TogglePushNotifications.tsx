@@ -1,5 +1,5 @@
 import { useAgent } from '@bifold/react-hooks'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppState, Linking, StyleSheet, Switch, View } from 'react-native'
 
@@ -11,6 +11,7 @@ import { TOKENS, useServices } from '../container-api'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
+import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { testIdWithKey } from '../utils/testable'
 import ScreenWrapper from '../components/views/ScreenWrapper'
 
@@ -24,12 +25,17 @@ const TogglePushNotifications: React.FC = () => {
   const [{ enablePushNotifications }] = useServices([TOKENS.CONFIG])
   const [notificationState, setNotificationState] = useState<boolean>(store.preferences.usePushNotifications)
   const [notificationStatus, setNotificationStatus] = useState<'denied' | 'granted' | 'unknown'>('unknown')
+  // The agent holds this phone's own notification setting for an approval
+  // (vtaAgent wakeBlockedByRule): say so, rather than look as if nothing happened.
+  const { wakeBlockedByRule } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
 
   if (!enablePushNotifications) {
     throw new Error('Push notification configuration not found')
   }
 
   const styles = StyleSheet.create({
+    controls: { gap: Spacing.md },
+    blocked: { color: ColorPalette.semantic.error },
     toggleContainer: {
       display: 'flex',
       flexDirection: 'row',
@@ -77,18 +83,25 @@ const TogglePushNotifications: React.FC = () => {
       onPress={() => Linking.openSettings()}
     />
   ) : (
-    <View style={styles.toggleContainer}>
-      <ThemedText>{t('PushNotifications.ReceiveNotifications')}</ThemedText>
-      <Switch
-        trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-        thumbColor={notificationState ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-        ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-        onValueChange={toggleSwitch}
-        accessibilityLabel={t('PushNotifications.ReceiveNotifications')}
-        accessibilityRole="switch"
-        testID={testIdWithKey('PushNotificationSwitch')}
-        value={notificationState}
-      />
+    <View style={styles.controls}>
+      {wakeBlockedByRule ? (
+        <ThemedText style={styles.blocked} testID={testIdWithKey('PushNotificationBlockedByRule')}>
+          {t('PushNotifications.BlockedByApprovalRule')}
+        </ThemedText>
+      ) : null}
+      <View style={styles.toggleContainer}>
+        <ThemedText>{t('PushNotifications.ReceiveNotifications')}</ThemedText>
+        <Switch
+          trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+          thumbColor={notificationState ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+          ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+          onValueChange={toggleSwitch}
+          accessibilityLabel={t('PushNotifications.ReceiveNotifications')}
+          accessibilityRole="switch"
+          testID={testIdWithKey('PushNotificationSwitch')}
+          value={notificationState}
+        />
+      </View>
     </View>
   )
 
