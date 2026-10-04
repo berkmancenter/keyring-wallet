@@ -229,6 +229,24 @@ exports[`Biometry Screen renders correctly when biometry available 1`] = `
           </View>
         </View>
       </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/BiometryRecommended"
+      >
+        Biometry.Recommended
+      </Text>
     </View>
   </RCTScrollView>
   <View

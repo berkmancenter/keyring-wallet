@@ -19,10 +19,12 @@ const BIOMETRY_PERMISSION = PERMISSIONS.IOS.FACE_ID
 export interface BiometryControlProps {
   biometryEnabled: boolean
   onBiometryToggle: (newValue: boolean) => void
+  /** Onboarding: say, under the switch, that turning it on is recommended and why. */
+  recommend?: boolean
   children?: React.ReactNode
 }
 
-const BiometryControl: React.FC<BiometryControlProps> = ({ biometryEnabled, onBiometryToggle, children }) => {
+const BiometryControl: React.FC<BiometryControlProps> = ({ biometryEnabled, onBiometryToggle, recommend, children }) => {
   const { t } = useTranslation()
   const { isBiometricsActive } = useAuth()
   const [biometryAvailable, setBiometryAvailable] = useState(false)
@@ -210,6 +212,11 @@ const BiometryControl: React.FC<BiometryControlProps> = ({ biometryEnabled, onBi
             />
           </View>
         </View>
+        {recommend && biometryAvailable ? (
+          <ThemedText style={{ color: ColorPalette.grayscale.mediumGrey }} testID={testIdWithKey('BiometryRecommended')}>
+            {t('Biometry.Recommended')}
+          </ThemedText>
+        ) : null}
       </ScrollView>
       {children}
     </SafeAreaView>
