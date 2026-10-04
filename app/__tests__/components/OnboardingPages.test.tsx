@@ -31,9 +31,8 @@ describe('the first-run slides', () => {
     const at = headings.map((h) => tree.getByText(h))
     expect(at).toHaveLength(5)
     expect(tree.getByText('Onboarding.AgentParagraph')).toBeTruthy()
-    // In order, as the carousel shows them.
-    const all = tree.root.findAll((n) => typeof n.props.children === 'string' && headings.includes(n.props.children))
-    const order = [...new Set(all.map((n) => n.props.children as string))]
+    // In order, as the carousel shows them (the query returns tree order).
+    const order = tree.getAllByText(/^Onboarding\.[A-Za-z]+Heading$/).map((n) => n.props.children)
     expect(order).toEqual(headings)
   })
 })
