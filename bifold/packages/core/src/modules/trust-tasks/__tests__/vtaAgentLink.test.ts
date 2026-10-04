@@ -1096,6 +1096,39 @@ describe('several agents', () => {
     return { vta, current: () => current, links: () => links.map((l) => l.vtaDid) }
   }
 
+  // The several-agents device check (R6): after a relaunch the other agent read
+  // "your agent". Names were learned only from a live session, and only the
+  // current agent has one; a name learned is now kept with the agent's link.
+  it("another agent's name is kept with its link and read back at start-up", async () => {
+    const work = { ...WORK, agentName: { label: 'Work agent', source: 'agentName' as const } }
+    const stored: Record<string, unknown>[] = [HOME, work]
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({
+        get: async () => stored[0] as never,
+        set: async (l: Record<string, unknown>) => {
+          const at = stored.findIndex((x) => x.vtaDid === l.vtaDid)
+          stored[at] = l
+        },
+        clear: async () => undefined,
+        list: async () => stored as never,
+        current: async () => HOME.vtaDid,
+      }),
+      identityStore: (() => ({ setManager: async () => undefined, forgetManager: async () => undefined })) as never,
+    })
+    await vta.restore({} as never)
+    // Not connected, yet named.
+    expect(vta.getState().agentNames?.[WORK.vtaDid]?.label).toBe('Work agent')
+
+    // A name learned from a session is written to that agent's link.
+    await (vta as unknown as { keepAgentName(d: string, n: object): Promise<void> }).keepAgentName(HOME.vtaDid, {
+      label: 'Home agent',
+      source: 'vtaName',
+    })
+    expect(stored.find((l) => l.vtaDid === HOME.vtaDid)?.agentName).toEqual({ label: 'Home agent', source: 'vtaName' })
+  })
+
   it('lists every agent and switches to another, which becomes current and connects', async () => {
     const { vta, current } = twoAgents()
     await vta.restore({} as never)

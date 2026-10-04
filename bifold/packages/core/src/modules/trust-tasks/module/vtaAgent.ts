@@ -642,9 +642,22 @@ export class VtaAgentController {
       .then(() => client.agentLabel())
       .then((found) => {
         if (!found) this.namesAsked.delete(vtaDid)
-        else this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
+        else {
+          this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
+          void this.keepAgentName(vtaDid, found)
+        }
       })
       .catch(() => this.namesAsked.delete(vtaDid))
+  }
+
+  /** Keep an agent's name with its link, so it survives a restart while another agent is current. */
+  private async keepAgentName(vtaDid: string, name: AgentLabel): Promise<void> {
+    if (!this.agent) return
+    const store = this.linkStore(this.agent)
+    const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
+    const link = links.find((l) => l.vtaDid === vtaDid)
+    if (!link || (link.agentName?.label === name.label && link.agentName?.source === name.source)) return
+    await store.set({ ...link, agentName: name }).catch(() => undefined)
   }
 
   /**
@@ -678,7 +691,15 @@ export class VtaAgentController {
       const one = await store.get().catch(() => undefined)
       links = one ? [one] : []
     }
-    this.set({ agents: links.map(({ vtaDid, label, owner }) => ({ vtaDid, label, ...(owner ? { owner } : {}) })) })
+    // Names learned before, kept with each link: an agent not connected now
+    // still reads by its name. A name learned this run wins.
+    const kept = Object.fromEntries(
+      links.filter((l) => l.agentName?.label).map((l) => [l.vtaDid, l.agentName as AgentLabel])
+    )
+    this.set({
+      agents: links.map(({ vtaDid, label, owner }) => ({ vtaDid, label, ...(owner ? { owner } : {}) })),
+      ...(Object.keys(kept).length ? { agentNames: { ...kept, ...this.state.agentNames } } : {}),
+    })
   }
 
   /**

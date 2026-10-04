@@ -34,6 +34,13 @@ export interface VtaLink {
    */
   lastOnlineAt?: number
   notFoundAt?: number
+  /**
+   * What the agent said it is called, when last asked. Kept so an agent that
+   * is not the current one keeps its name across a restart: names were learned
+   * only from a live session, and after a relaunch the other agent read "your
+   * agent" (several-agents device check, R6, 10-04).
+   */
+  agentName?: AgentLabel
 }
 
 export interface VtaLinkStore {
@@ -55,6 +62,8 @@ export interface VtaLinkStore {
   /** Take one agent's link out; if it was current, the oldest remaining becomes current. */
   remove?(vtaDid: string): Promise<void>
 }
+
+import type { AgentLabel } from './agentLabel'
 
 const RECORD_TYPE = 'keyring.vta-link'
 /** Which agent is current: one record, its DID. */
