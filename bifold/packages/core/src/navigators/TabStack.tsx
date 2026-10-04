@@ -35,6 +35,7 @@ import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdentityListeners'
+import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
@@ -83,6 +84,7 @@ const TabStack: React.FC = () => {
   // …and every other identity this phone holds listens on its own, so what a
   // community sends any of them arrives, whichever is chosen (IN-102).
   useVtiIdentityListeners(agent, vti?.mediatorDid)
+  useLookAtOtherAgents(agent)
   // Each persona's cards are kept by its agent too, so a new phone can get them back (226).
   useVtiCardVault(agent)
   // …and shown in the Wallet while they stand, copied from the community store.

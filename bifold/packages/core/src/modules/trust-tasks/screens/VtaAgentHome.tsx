@@ -47,6 +47,7 @@ import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { useWaitingRequestsCount } from '../module/waitingRequests'
 import { CommunityCard } from './CommunityCard'
+import { OtherAgentsRequests, useOtherAgentsWaiting } from './OtherAgentsRequests'
 import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
 import { GetCardsFromAgent } from './GetCardsFromAgent'
@@ -137,6 +138,7 @@ const VtaAgentHome: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [introPanel, setIntroPanel] = useState(0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  const otherWaiting = useOtherAgentsWaiting()
   const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
   const onCardStep = useCallback((communityDid: string, primary: CommunityCardPrimary | undefined) => {
     setCardSteps((prev) => (prev[communityDid] === primary ? prev : { ...prev, [communityDid]: primary }))
@@ -501,7 +503,13 @@ const VtaAgentHome: React.FC = () => {
                         style={styles.muted}
                         testID={testIdWithKey(isCurrent ? 'AgentSwitcherCurrent' : `AgentSwitcherOther_${i}`)}
                       >
-                        {t(isCurrent ? 'VtaLink.SwitcherCurrent' : 'VtaLink.SwitcherNotConnected')}
+                        {isCurrent
+                          ? t('VtaLink.SwitcherCurrent')
+                          : (otherWaiting.find((o) => o.vtaDid === a.vtaDid)?.count ?? 0) > 0
+                            ? t('VtaLink.SwitcherWaiting', {
+                                count: otherWaiting.find((o) => o.vtaDid === a.vtaDid)?.count,
+                              })
+                            : t('VtaLink.SwitcherNotConnected')}
                       </ThemedText>
                     </View>
                     {isCurrent ? <Icon name="check" size={22} color={ColorPalette.brand.primary} /> : null}
@@ -523,6 +531,7 @@ const VtaAgentHome: React.FC = () => {
             </View>
           ) : null}
           <VtaStatusLine connection={link.connection} now={now} />
+          <OtherAgentsRequests shape="line" />
           {link.connection.kind === 'gone' ? (
             // Gone for good (agentGone.ts): said plainly, with the way on — a new agent.
             // Unlinking is still confirmed, in Manage, with words for an agent that is gone.

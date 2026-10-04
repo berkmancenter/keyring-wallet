@@ -893,4 +893,23 @@ describe('Your agent — several agents', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
     expect(tree.getByTestId(testIdWithKey('AgentUnlinkNext'))).toHaveTextContent('VtaLink.UnlinkNext')
   })
+
+  it("another agent's waiting requests show as a line under the name, and in its switcher row", async () => {
+    controller.set({
+      otherRequests: {
+        [WORK]: {
+          approvals: [{ id: 'w1', status: 'pending', receivedAt: 't', challenge: 'c' }],
+          reachable: true,
+          at: 0,
+        },
+      },
+    })
+    const use = jest.spyOn(vtaAgent, 'useAgent').mockResolvedValue(undefined)
+    const tree = await renderHome()
+    fireEvent.press(tree.getByTestId(testIdWithKey(`AgentOtherWaiting_${WORK}`)))
+    expect(use).toHaveBeenCalledWith(expect.anything(), WORK)
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherOpen')))
+    expect(tree.getByTestId(testIdWithKey('AgentSwitcherOther_1'))).toHaveTextContent('VtaLink.SwitcherWaiting')
+    controller.set({ otherRequests: undefined })
+  })
 })
