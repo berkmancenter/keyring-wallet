@@ -600,8 +600,15 @@ try {
     if (!communityDid) throw new Error("APPLICANT_DOOR=link needs KEYRING_COMMUNITY_DID");
     const name = process.env.KEYRING_COMMUNITY_NAME || "keyring-test";
     await pasteLinkFromHome(applicant, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(name)}`);
-    await waitForTestId(applicant, "JoinAsks", 60000);
-    const asks = await textOf(applicant, "JoinAsks").catch(() => "");
+    // A community with one way in shows what it asks (JoinAsks); one with
+    // several shows its ways in (JoinWays). Start is the same button.
+    let card = "";
+    for (const until = Date.now() + 60000; !card && Date.now() < until; ) {
+      if (await existsTestId(applicant, "JoinAsks", 1500)) card = "JoinAsks";
+      else if (await existsTestId(applicant, "JoinWays", 1500)) card = "JoinWays";
+    }
+    if (!card) throw new Error(`${applicant.e2ePlatform}: neither JoinAsks nor JoinWays on the community's Join screen`);
+    const asks = card === "JoinAsks" ? await textOf(applicant, "JoinAsks").catch(() => "") : "ways in (JoinWays)";
     console.log(`[e2e] ${applicant.e2ePlatform}: the community asks — ${asks.replace(/\s+/g, " ").slice(0, 160)}`);
     // What the "what it asks" screen is made of, for a before/after comparison
     // of the screen itself: which of its parts are there, and a picture.
