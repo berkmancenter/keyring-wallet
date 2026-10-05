@@ -577,12 +577,26 @@ const VtaCreateAgent: React.FC = () => {
       </View>
     )
     actions = (
-      <Button
-        title={t('Global.Next')}
-        buttonType={ButtonType.Primary}
-        onPress={() => setStep('backupCode')}
-        testID={testIdWithKey('AgentBackupNext')}
-      />
+      <>
+        {/* A computer or another app (pnm, the browser plugin) does not scan
+            this: it shows its own code to enter, so that way is said here
+            rather than found only after Next (IN-123). */}
+        <ThemedText style={styles.muted} testID={testIdWithKey('AgentBackupOtherKinds')}>
+          {t('CreateAgent.BackupOtherKinds')}
+        </ThemedText>
+        <Button
+          title={t('Global.Next')}
+          buttonType={ButtonType.Primary}
+          onPress={() => setStep('backupCode')}
+          testID={testIdWithKey('AgentBackupNext')}
+        />
+        <Button
+          title={t('CreateAgent.BackupEnterCode')}
+          buttonType={ButtonType.Secondary}
+          onPress={() => setStep('backupCode')}
+          testID={testIdWithKey('AgentBackupEnterCode')}
+        />
+      </>
     )
   } else if (screen === 'backupCode') {
     body = (

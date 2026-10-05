@@ -50,7 +50,7 @@ const show = () =>
   )
 
 beforeEach(() => {
-  (useAgent as jest.Mock).mockReturnValue({ agent: {} })
+  ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
   controller.set({ link: { kind: 'notLinked' } })
   jest.restoreAllMocks()
   ;(confirmOwner as jest.Mock).mockReset()
@@ -283,6 +283,18 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(tree.getByTestId(id('AgentCreateReady'))).toBeTruthy()
     expect(tree.queryByTestId(id('AgentBackupAddressQr'))).toBeNull()
     expect(tree.getByTestId(id('AgentBackupNone'))).toHaveTextContent('CreateAgent.BackupLater')
+  })
+
+  // IN-123: a computer or another app (pnm) does not scan the agent's code;
+  // the way to enter its code is said on the first step, not found after Next.
+  test('a computer or another app: said on the first step, with "Enter its code" straight to the code', () => {
+    linked()
+    asAddDevice()
+    const tree = show()
+    expect(tree.getByTestId(id('AgentBackupOtherKinds'))).toHaveTextContent('CreateAgent.BackupOtherKinds')
+    fireEvent.press(tree.getByTestId(id('AgentBackupEnterCode')))
+    expect(tree.getByTestId(id('AgentBackupScanCode'))).toHaveTextContent(/CreateAgent\.BackupNowScanBody/)
+    expect(tree.getByTestId(id('AgentBackupCodeInput'))).toBeTruthy()
   })
 
   const toBackupCode = async () => {
