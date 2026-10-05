@@ -253,12 +253,12 @@ export async function receiveIssue(
     if (item.kind === 'membership') {
       // The very card the community ended, delivered again, does not bring
       // the membership back.
-      const ended = await store.getMembership(item.communityDid)
+      const ended = await store.getMembership(item.communityDid, personaDid)
       if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
     }
     kept.push(item)
     if (item.kind === 'membership') {
-      const found = await store.getMembership(item.communityDid)
+      const found = await store.getMembership(item.communityDid, personaDid)
       // Joining again after a removal starts afresh: the ended membership's
       // role, role card and way in are not this one's.
       const existing = found && isCurrentMembership(found) ? found : undefined
@@ -277,7 +277,7 @@ export async function receiveIssue(
       })
       if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
     } else if (item.kind === 'role') {
-      const existing = await store.getMembership(item.communityDid)
+      const existing = await store.getMembership(item.communityDid, personaDid)
       const role = String(roleNameOf(item.credential) ?? 'member')
       if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
       else await store.saveHeldCredential({ ...item, kind: 'role' })

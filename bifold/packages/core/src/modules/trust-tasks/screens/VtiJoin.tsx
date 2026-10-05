@@ -46,6 +46,7 @@ import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
 import { joinCard } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
+import { JoinWithAgent, useAgentsHoldingIdentity } from './JoinWithAgent'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 import { useTakingLong } from './useTakingLong'
@@ -154,6 +155,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // holds, at once, then what the community says while a request is open. It
   // used to say only "You joined this one before", whatever had happened since.
   const [standing, setStanding] = useState<CommunityJoinState>()
+  const holding = useAgentsHoldingIdentity(communityDid)
   const [checking, setChecking] = useState(false)
   // "Join again" was chosen: the next identity for this community is a new one.
   const [again, setAgain] = useState(false)
@@ -412,9 +414,18 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     standing?.kind === 'withdrawn' ||
     standing?.kind === 'left' ||
     standing?.kind === 'removed'
-  // Where the person stands overrides the way in, except once "Join again" is chosen.
+  // Where the person stands overrides the way in, except once "Join again" is
+  // chosen — and except when that standing is another agent's: with several
+  // agents, a membership or request held by an identity of another agent is
+  // not the current agent's, and Join offers that agent instead (#280 device
+  // check: on B it said "You're a member", which only A was).
   const standingShown = Boolean(
-    communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)
+    communityDid &&
+      standing &&
+      standing.kind !== 'none' &&
+      current !== 'as' &&
+      !(again && mayJoinAgain) &&
+      !holding.onlyOthers
   )
 
   switch (current) {
@@ -902,7 +913,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Several agents: which one joins (step 3); not over where the person already stands. */}
+        {communityDid && !standingShown ? <JoinWithAgent communityDid={communityDid} name={name} /> : null}
+        {body}
+      </ScrollView>
       {actions ? (
         <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
           {actions}

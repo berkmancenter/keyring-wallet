@@ -22,6 +22,7 @@ import type { Agent } from '@credo-ts/core'
 
 import { changeOfHeldCredential, emitCommunityChanged } from './communityChanged'
 import { getKeyed, listKeyed, putKeyed } from './keyedRecords'
+import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 
 export interface VtiInvitation {
   /** The invitation credential's own id. */
@@ -116,6 +117,8 @@ export interface JoinSubmission {
 /** A member leaving a community from this phone. */
 export interface VtiDeparture {
   communityDid: string
+  /** The identity that left. Absent on departures kept before identities were told apart. */
+  personaDid?: string
   /** What the community applied: `purge` erased the record, `tombstone` kept a marker. */
   disposition: 'purge' | 'tombstone' | 'historical' | (string & {})
   at: string
@@ -124,19 +127,29 @@ export interface VtiDeparture {
 export interface VtiCommunityStore {
   listInvitations(): Promise<VtiInvitation[]>
   saveInvitation(invitation: VtiInvitation): Promise<void>
-  getMembership(communityDid: string): Promise<VtiMembership | undefined>
+  /**
+   * The membership one identity holds in a community. `personaDid` names the
+   * identity; without it, the current agent's identity there (or, with none,
+   * the one membership the phone has for that community).
+   */
+  getMembership(communityDid: string, personaDid?: string): Promise<VtiMembership | undefined>
+  /** Every identity's memberships, across agents. */
   listMemberships(): Promise<VtiMembership[]>
   saveMembership(membership: VtiMembership): Promise<void>
-  /** Drop the membership and every invitation for a community — a person starting over. */
-  forgetCommunity(communityDid: string): Promise<void>
+  /**
+   * Drop what the phone holds for a community — a person starting over: the
+   * membership, the invitations and the delivered credentials. With
+   * `personaDid`, only that identity's; another agent's identity there keeps its own.
+   */
+  forgetCommunity(communityDid: string, personaDid?: string): Promise<void>
   /** Credentials a community or a vetter delivered that are not the membership itself. */
   saveHeldCredential(item: VtiHeldCredential): Promise<void>
   listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string): Promise<VtiHeldCredential[]>
   /** That this phone's member left a community, and how — so its screens say "You left", not "Join". */
-  getDeparture?(communityDid: string): Promise<VtiDeparture | undefined>
+  getDeparture?(communityDid: string, personaDid?: string): Promise<VtiDeparture | undefined>
   saveDeparture?(departure: VtiDeparture): Promise<void>
   /** The last join request sent to a community. Optional: a store without it records none. */
-  getSubmission?(communityDid: string): Promise<JoinSubmission | undefined>
+  getSubmission?(communityDid: string, personaDid?: string): Promise<JoinSubmission | undefined>
   saveSubmission?(submission: JoinSubmission): Promise<void>
 }
 
@@ -170,6 +183,21 @@ export function heldCredentialKey(item: Pick<VtiHeldCredential, 'kind' | 'commun
   return `${item.kind}:${item.communityDid}:${hash.toString(16)}`
 }
 
+/** The key of a record kept for one identity in one community. */
+const identityKey = (personaDid: string, communityDid: string) => `${personaDid}|${communityDid}`
+
+/**
+ * One record per identity and community. A write interrupted between storing
+ * the identity-keyed record and removing the one kept by community alone
+ * leaves both; they are the same identity's, either serves, and the next
+ * write removes the old one.
+ */
+function onePerIdentity<T extends { communityDid: string; personaDid?: string }>(records: T[]): T[] {
+  const byIdentity = new Map<string, T>()
+  for (const r of records) byIdentity.set(r.personaDid ? identityKey(r.personaDid, r.communityDid) : r.communityDid, r)
+  return [...byIdentity.values()]
+}
+
 /** Credo generic records, one per invitation or membership, tagged for lookup. */
 export class GenericRecordsCommunityStore implements VtiCommunityStore {
   constructor(private readonly agent: Agent) {}
@@ -192,17 +220,57 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     emitCommunityChanged(invitation.communityDid, 'invitation')
   }
 
-  async getMembership(communityDid: string) {
-    return getKeyed<VtiMembership>(this.agent, RECORD_TYPE, 'membership', communityDid)
+  async getMembership(communityDid: string, personaDid?: string) {
+    return this.ofIdentity<VtiMembership>('membership', communityDid, personaDid)
   }
 
-  listMemberships() {
-    return this.list<VtiMembership>('membership')
+  async listMemberships() {
+    return onePerIdentity(await this.list<VtiMembership>('membership'))
   }
 
   async saveMembership(membership: VtiMembership) {
-    await this.put('membership', membership.communityDid, { ...membership })
+    await this.putForIdentity('membership', membership)
     emitCommunityChanged(membership.communityDid, 'membership')
+  }
+
+  /**
+   * Memberships, join requests and departures are kept per identity — its
+   * DID and the community — so two agents' identities in one community each
+   * keep their own: one record per community let a second agent's join
+   * overwrite the first's membership (several-agents device check, 10-04).
+   * Records kept by community alone, before, are still read, and move under
+   * their identity at the next write.
+   */
+  private async ofIdentity<T extends { communityDid: string; personaDid?: string }>(
+    kind: string,
+    communityDid: string,
+    personaDid?: string
+  ): Promise<T | undefined> {
+    const here = onePerIdentity((await this.list<T>(kind)).filter((r) => r.communityDid === communityDid))
+    if (here.length === 0) return undefined
+    if (personaDid) return here.find((r) => r.personaDid === personaDid)
+    const mine = await new GenericRecordsIdentityStore(this.agent).getPersona(communityDid).catch(() => undefined)
+    if (mine) return here.find((r) => r.personaDid === mine.did) ?? here.find((r) => !r.personaDid)
+    // No identity of the current agent's here: what the phone has, as before.
+    return here.length === 1 ? here[0] : undefined
+  }
+
+  private async putForIdentity(kind: string, record: { communityDid: string; personaDid?: string }) {
+    if (!record.personaDid) {
+      await this.put(kind, record.communityDid, { ...record })
+      return
+    }
+    await this.put(kind, identityKey(record.personaDid, record.communityDid), { ...record })
+    // The same identity's record kept by community alone is now kept under it.
+    const kept = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind,
+      key: record.communityDid,
+    })
+    for (const r of kept) {
+      const owner = (r.content as { personaDid?: string }).personaDid
+      if (!owner || owner === record.personaDid) await this.agent.genericRecords.delete(r)
+    }
   }
 
   /**
@@ -223,18 +291,24 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return this.list<{ communityDid: string; name: string }>('community-name')
   }
 
-  async forgetCommunity(communityDid: string) {
-    const memberships = await this.agent.genericRecords.findAllByQuery({
-      recordType: RECORD_TYPE,
-      kind: 'membership',
-      key: communityDid,
+  async forgetCommunity(communityDid: string, personaDid?: string) {
+    const ofIdentity = (owner: string | undefined) => !personaDid || !owner || owner === personaDid
+    const memberships = (
+      await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'membership' })
+    ).filter((r) => {
+      const m = r.content as unknown as VtiMembership
+      return m.communityDid === communityDid && ofIdentity(m.personaDid)
     })
-    const invitations = (await this.listInvitationRecords()).filter(
-      (r) => (r.content as unknown as VtiInvitation).communityDid === communityDid
-    )
+    const invitations = (await this.listInvitationRecords()).filter((r) => {
+      const i = r.content as unknown as VtiInvitation
+      return i.communityDid === communityDid && ofIdentity(i.subjectDid)
+    })
     const held = (
       await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'credential' })
-    ).filter((r) => (r.content as unknown as VtiHeldCredential).communityDid === communityDid)
+    ).filter((r) => {
+      const c = r.content as unknown as VtiHeldCredential
+      return c.communityDid === communityDid && ofIdentity(c.subjectDid)
+    })
     for (const record of [...memberships, ...invitations, ...held]) await this.agent.genericRecords.delete(record)
     emitCommunityChanged(communityDid, 'forgotten')
   }
@@ -243,21 +317,21 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'invitation' })
   }
 
-  async getSubmission(communityDid: string) {
-    return getKeyed<JoinSubmission>(this.agent, RECORD_TYPE, 'submission', communityDid)
+  async getSubmission(communityDid: string, personaDid?: string) {
+    return this.ofIdentity<JoinSubmission>('submission', communityDid, personaDid)
   }
 
-  async getDeparture(communityDid: string) {
-    return getKeyed<VtiDeparture>(this.agent, RECORD_TYPE, 'departure', communityDid)
+  async getDeparture(communityDid: string, personaDid?: string) {
+    return this.ofIdentity<VtiDeparture>('departure', communityDid, personaDid)
   }
 
   async saveDeparture(departure: VtiDeparture) {
-    await this.put('departure', departure.communityDid, { ...departure })
+    await this.putForIdentity('departure', departure)
     emitCommunityChanged(departure.communityDid, 'departure')
   }
 
   async saveSubmission(submission: JoinSubmission) {
-    await this.put('submission', submission.communityDid, { ...submission })
+    await this.putForIdentity('submission', submission)
     emitCommunityChanged(submission.communityDid, 'submission')
   }
 

@@ -87,6 +87,49 @@ describe('Requests', () => {
     return tree
   }
 
+  // Several agents, step 3: the other agents' requests, decided after switching.
+  describe('other agents', () => {
+    const WORK = 'did:webvh:example:requests-work-vta'
+    const pendingAt = (id: string) => ({ id, status: 'pending', receivedAt: 't', challenge: 'c' })
+    afterEach(() => controller.set({ agents: undefined, otherRequests: undefined }))
+
+    it('opening Requests looks at the other agents', async () => {
+      const look = jest.spyOn(vtaAgent, 'lookAtOtherAgents').mockResolvedValue(undefined)
+      await show()
+      expect(look).toHaveBeenCalled()
+    })
+
+    it("another agent's waiting requests show as a row, with a way to switch to it", async () => {
+      jest.spyOn(vtaAgent, 'lookAtOtherAgents').mockResolvedValue(undefined)
+      const use = jest.spyOn(vtaAgent, 'useAgent').mockResolvedValue(undefined)
+      controller.set({
+        agents: [
+          { vtaDid: 'did:webvh:example:vta', label: 'Home' },
+          { vtaDid: WORK, label: 'Work' },
+        ],
+        otherRequests: { [WORK]: { approvals: [pendingAt('w1'), pendingAt('w2')], reachable: true, at: 0 } },
+      })
+      const tree = await show()
+      expect(tree.getByTestId(id(`RequestsOther_${WORK}`))).toHaveTextContent(/Requests\.OtherWaiting/)
+      fireEvent.press(tree.getByTestId(id(`RequestsSwitch_${WORK}`)))
+      expect(use).toHaveBeenCalledWith(expect.anything(), WORK)
+    })
+
+    it('an agent a look could not reach is said so, with nothing to switch for', async () => {
+      jest.spyOn(vtaAgent, 'lookAtOtherAgents').mockResolvedValue(undefined)
+      controller.set({
+        agents: [
+          { vtaDid: 'did:webvh:example:vta', label: 'Home' },
+          { vtaDid: WORK, label: 'Work' },
+        ],
+        otherRequests: { [WORK]: { approvals: [], reachable: false, at: 0 } },
+      })
+      const tree = await show()
+      expect(tree.getByTestId(id(`RequestsOther_${WORK}`))).toHaveTextContent('Requests.OtherUnreachable')
+      expect(tree.queryByTestId(id(`RequestsSwitch_${WORK}`))).toBeNull()
+    })
+  })
+
   it('shows a waiting request in full, with no extra tap: what it is, the code to compare, Approve and Decline', async () => {
     controller.set({ approvals: [request('a')] })
     const tree = await show()
