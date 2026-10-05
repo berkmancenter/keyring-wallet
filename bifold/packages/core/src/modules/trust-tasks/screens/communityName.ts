@@ -71,7 +71,13 @@ export function unnamedRef(did: string): string {
   return `…${(parts[1] === 'webvh' && parts[2] ? parts[2] : did).slice(-6)}`
 }
 
-/** "an unnamed community (<ref>)" — said so, and still told apart from the next one. */
+/**
+ * "<ref> (no name published yet)": the handle that tells it apart, then that
+ * the community has not named itself. It read "an unnamed community (<ref>)",
+ * and "unnamed" beside a handle that looks like a name read as a contradiction
+ * (TestFlight 236). Never capitalised: the ref is the operator's handle as
+ * written (see {@link communityTitle}).
+ */
 export function unnamedCommunityLabel(did: string, t: TFunction): string {
   return t('Community.UnnamedRef', { ref: unnamedRef(did), interpolation: { escapeValue: false } }) as string
 }
@@ -162,9 +168,19 @@ export function asTitle(label: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-/** The same, for where it starts a sentence or stands alone: "An unnamed community (…)". */
+/**
+ * A community's label where it stands alone or starts a sentence: a name in
+ * capitals, but an unnamed one exactly as written, since it begins with the
+ * operator's handle ("al-community2-vtc (no name published yet)"), which is
+ * not ours to capitalise.
+ */
+export function communityTitle(label: string, did: string, t: TFunction): string {
+  return label === unnamedCommunityLabel(did, t) ? label : asTitle(label)
+}
+
+/** The same, for where it starts a sentence or stands alone. */
 export function communityLabelStartOf(did: string, t: TFunction): string {
-  return asTitle(communityLabelOf(did, t))
+  return communityTitle(communityLabelOf(did, t), did, t)
 }
 
 /**

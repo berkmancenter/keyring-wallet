@@ -46,8 +46,11 @@ const MAX_TIMER_MS = 2 ** 31 - 1
  */
 export function useWaitingRequestsCount(clock: () => number = Date.now): number {
   const approvals = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().approvals)
+  // Every linked agent's: the current one's, and what a look found at the others.
+  const others = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().otherRequests)
   const [, look] = useState(0)
-  const waiting = waitingRequests(approvals, clock())
+  const all = others ? [...approvals, ...Object.values(others).flatMap((o) => o.approvals)] : approvals
+  const waiting = waitingRequests(all, clock())
   const next = nextExpiry(waiting)
   useEffect(() => {
     if (next === undefined) return

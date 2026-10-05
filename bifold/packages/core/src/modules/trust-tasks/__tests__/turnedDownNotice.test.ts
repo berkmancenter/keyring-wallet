@@ -141,15 +141,15 @@ describe('the words', () => {
   it('name the community by the name it published, with its reason when it gave one', () => {
     communityTarget.publishedName(COMMUNITY, 'Keyring Lab Community')
     expect(turnedDownWords(COMMUNITY, 'Not this season', t)).toBe(
-      'Keyring Lab Community turned down your request. The reason given: Not this season'
+      'Your request was turned down by Keyring Lab Community. The reason given: Not this season'
     )
-    expect(turnedDownWords(COMMUNITY, undefined, t)).toBe('Keyring Lab Community turned down your request.')
+    expect(turnedDownWords(COMMUNITY, undefined, t)).toBe('Your request was turned down by Keyring Lab Community.')
   })
 
   it('never by its DID or host when no name is known', () => {
     const words = turnedDownWords(COMMUNITY, undefined, t)
     expect(words).not.toMatch(/did:|vtc\.example/)
-    expect(words).toMatch(/turned down your request\.$/)
+    expect(words).toBe('Your request was turned down by keyring-test-vtc (no name published yet).')
   })
 
   it('exist in every language', () => {

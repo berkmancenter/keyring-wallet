@@ -68,6 +68,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityJourney } from '../module/communityJourney'
 import { joinSeed } from '../module/vtiJoinSeed'
+import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
@@ -181,6 +182,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   useEffect(() => {
     if (seed?.legalName) setLegalName((v) => v || seed.legalName)
   }, [seed?.legalName])
+  // Opened from a vetter's ticket there is no "Join as", so nothing seeds the
+  // name: the field was empty and the profile from onboarding nowhere ("I don't
+  // see my profile", TestFlight 231). A profile's name is how the person shows
+  // up, not necessarily their legal name, so it is offered, never filled in.
+  const { options: profileOptions, defaultId: profileDefault } = useJoinAsOptions()
+  const offeredName = offeredProfileName(seed, profileOptions, profileDefault)
+  const [usedOffered, setUsedOffered] = useState(false)
   const [ticketLink, setTicketLink] = useState('')
   const navigation = useNavigation()
   const { width } = useWindowDimensions()
@@ -214,7 +222,21 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return pendingVettingTicket.subscribe(takePending)
   }, [])
 
+  // A ticket for this community, once there is an application to keep it
+  // with, outlives the screen (see VettingApplication.pendingTicket).
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!ticket || !application || !communityDid || application.pendingTicket === ticket) return
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void applicantRef.current?.keepTicket(ticket).catch(() => undefined)
+  }, [ticketLink, application, communityDid])
+
+  // Step 2's own "Scan": a ticket that comes back from it is asked with at
+  // once, as a scan acts elsewhere in Keyring. A pasted link still waits for
+  // "Use this link" (TestFlight 236).
+  const scanAsked = useRef(false)
   const onScanTicket = useCallback(() => {
+    scanAsked.current = true
     openScanner(navigation)
   }, [navigation])
   const [checklist, setChecklist] = useState<{
@@ -495,6 +517,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         applicantRef.current.listen()
         const a = await stores.vetting.getApplication(persona.communityDid)
         setApplication(a)
+        // A ticket kept from an earlier visit (camera, link, paste) is still here.
+        if (a?.pendingTicket) setTicketLink((v) => v || a.pendingTicket!)
         if (a) {
           setLegalName((v) => v || a.claims['name.legal'] || '')
           setChecklist(await applicantRef.current.checklist())
@@ -532,6 +556,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     },
     [bump, ticketWords]
   )
+
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!scanAsked.current || !ticket || !application || !communityDid || busy) return
+    scanAsked.current = false
+    // A ticket for another community is not asked with: the field shows why.
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void run('request', () => applicantRef.current!.requestVetter({ link: ticket }))
+  }, [ticketLink, application, communityDid, busy, run])
 
   // Say what is missing and offer the way to it — a store build names neither.
   if (!vtaDid || !communityDid) {
@@ -1037,8 +1070,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       <View key={r.requestId} style={styles.card} testID={testIdWithKey('VettingDeskFinishedRequest')}>
                         <Text style={styles.label}>
                           {/* Status.attested is the applicant's "Statement received". */}
-                          {r.status === 'attested' ? t('Vetting.StatementIssued') : t(`Vetting.Status.${r.status}`)} ·{' '}
-                          {whenShown(r.receivedAt)}
+                          {r.status === 'attested'
+                            ? t('Vetting.StatementIssued')
+                            : t(`Vetting.Status.${r.status}`)} · {whenShown(r.receivedAt)}
                         </Text>
                       </View>
                     ))}
@@ -1207,12 +1241,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       testID={testIdWithKey(`VettingApplicantStep_${applicantStep}`)}
     >
       <KeyboardAvoidingView
-          ref={keyboard.ref}
-          onLayout={keyboard.onLayout}
-          style={styles.fill}
-          behavior="padding"
-          keyboardVerticalOffset={keyboard.offset}
-        >
+        ref={keyboard.ref}
+        onLayout={keyboard.onLayout}
+        style={styles.fill}
+        behavior="padding"
+        keyboardVerticalOffset={keyboard.offset}
+      >
         <KeyboardAwareScrollView {...keyboardAware}>
           {applicantStep === 'member' ? null : seatBanner('applicant', applicantStep === 'match')}
 
@@ -1272,6 +1306,32 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       : t('Join.FromYourProfile')}
                   </Text>
                 ) : null}
+                {offeredName && !legalName.trim() ? (
+                  <>
+                    <Text style={styles.label} testID={testIdWithKey('VettingLegalNameWhy')}>
+                      {t('Vetting.LegalNameWhy')}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        setLegalName(offeredName.legalName)
+                        setUsedOffered(true)
+                      }}
+                      accessibilityRole="button"
+                      testID={testIdWithKey('VettingUseProfileName')}
+                    >
+                      <Text style={[styles.label, { color: ColorPalette.brand.link, textDecorationLine: 'underline' }]}>
+                        {tp('Vetting.UseProfileName', { name: offeredName.legalName })}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {usedOffered && offeredName && legalName.trim() === offeredName.legalName ? (
+                  <Text style={styles.label} testID={testIdWithKey('VettingNameFromProfile')}>
+                    {offeredName.profileLabel
+                      ? tp('Join.FromProfile', { profile: offeredName.profileLabel })
+                      : t('Join.FromYourProfile')}
+                  </Text>
+                ) : null}
                 <Text style={styles.label}>{t('Vetting.FaceNote')}</Text>
                 <Pressable
                   style={look('VettingStartButton', applicantPrimaryId).button}
@@ -1282,7 +1342,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     run('start', async () => {
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       setManifest(m)
-                      await applicantRef.current!.start(m, { 'name.legal': legalName.trim() })
+                      await applicantRef.current!.start(
+                        m,
+                        { 'name.legal': legalName.trim() },
+                        { ticket: ticketLink.trim() || undefined }
+                      )
                     })
                   }
                 >

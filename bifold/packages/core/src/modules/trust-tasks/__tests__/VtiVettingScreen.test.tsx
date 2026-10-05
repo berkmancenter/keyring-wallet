@@ -20,7 +20,8 @@ import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 import * as grantState from '../module/vtiGrantState'
-import { VtiVetterDesk } from '../module/vtiVetting'
+import { VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
+import { routeKeyringAgentLink } from '../module/vtiLinks'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The desk's attest asks for a face or fingerprint first; here it is given.
@@ -315,6 +316,49 @@ describe('Vetting — one filled button per step', () => {
     } as never)
     fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
     expect(filled(tree)).toEqual(['VettingRequestButton'])
+  })
+
+  // TestFlight 236: a ticket scanned with the Camera app lived only in the
+  // screen, so leaving it after "Start my application" lost the ticket.
+  test('a ticket kept with the application is back in Step 2 when the screen opens again', async () => {
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    const kept = { ...application, content: { ...(application.content as object), pendingTicket: ticket } }
+    const tree = await renderWith([persona, kept])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    expect(tree.getByTestId(testIdWithKey('VettingTicketInput')).props.value).toBe(ticket)
+    expect(filled(tree)).toEqual(['VettingRequestButton'])
+  })
+
+  // TestFlight 236: a scan on Step 2 put the link in the field and waited for
+  // "Use this link"; a scan acts at once elsewhere in Keyring.
+  test('a ticket scanned from Step 2 asks the vetter at once; a pasted one still waits', async () => {
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(ask).not.toHaveBeenCalled()
+
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), '')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingScanTicketButton')))
+    await act(async () => {
+      await routeKeyringAgentLink(ticket, {} as never, jest.fn())
+      jest.advanceTimersByTime(10)
+    })
+    expect(ask).toHaveBeenCalledWith({ link: ticket })
+    ask.mockRestore()
   })
 
   test('a link for another community does not become the step', async () => {

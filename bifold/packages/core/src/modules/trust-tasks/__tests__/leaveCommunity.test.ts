@@ -86,7 +86,8 @@ describe('leaving a community', () => {
       alreadyGone: false,
     })
     expect(vtiAgent.connect).toHaveBeenCalledWith(s.deps.agent, undefined, expect.objectContaining({ persona }))
-    expect(s.communityStore.forgetCommunity).toHaveBeenCalledWith(COMMUNITY)
+    // Only this identity's: another agent's identity there keeps its own.
+    expect(s.communityStore.forgetCommunity).toHaveBeenCalledWith(COMMUNITY, persona.did)
     expect(s.vettingStore.forget).toHaveBeenCalledWith(COMMUNITY)
     expect(s.identityStore.forgetPersona).toHaveBeenCalledWith(COMMUNITY)
     expect(s.departure()).toMatchObject({ communityDid: COMMUNITY, disposition: 'tombstone' })
@@ -130,7 +131,8 @@ describe('leaving a community', () => {
       alreadyGone: false,
     })
     expect(ask).toHaveBeenCalledTimes(2)
-    expect(s.communityStore.forgetCommunity).toHaveBeenCalledWith(COMMUNITY)
+    // Only this identity's: another agent's identity there keeps its own.
+    expect(s.communityStore.forgetCommunity).toHaveBeenCalledWith(COMMUNITY, persona.did)
     expect(s.identityStore.forgetPersona).toHaveBeenCalledWith(COMMUNITY)
   })
 

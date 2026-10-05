@@ -452,7 +452,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           {vetsEveryone ? (
             <ThemedText testID={testIdWithKey('InvitedVetsNote')}>
               {t('Invited.IntroVets', {
-                community: communityLabelStartOf(communityDid, t),
+                community: communityLabelOf(communityDid, t),
                 interpolation: { escapeValue: false },
               })}
             </ThemedText>

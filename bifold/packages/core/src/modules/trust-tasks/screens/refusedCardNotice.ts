@@ -19,7 +19,7 @@ import type { VtiCardCheckRefusal } from '../module/vtiDeliveredCheck'
 import { VTI_CARD_REFUSED_EVENT } from '../module/vtiInbox'
 
 import { useToastAboveTabBar } from './aboveTabBar'
-import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { communityLabelOf } from './communityName'
 
 const KEYS: Record<VtiCardCheckRefusal, string> = {
   proof: 'Community.CardNotKeptProof',
@@ -31,7 +31,7 @@ const KEYS: Record<VtiCardCheckRefusal, string> = {
 /** The sentence for a card that was not kept. */
 export function refusedCardWords(refusal: VtiCardCheckRefusal, communityDid: string, t: TFunction): string {
   // The withdrawn sentence starts with the community ("A community has…").
-  const community = refusal === 'revoked' ? communityLabelStartOf(communityDid, t) : communityLabelOf(communityDid, t)
+  const community = communityLabelOf(communityDid, t)
   return t(KEYS[refusal] ?? KEYS.proof, {
     community,
     interpolation: { escapeValue: false },

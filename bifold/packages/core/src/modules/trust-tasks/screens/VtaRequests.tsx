@@ -29,6 +29,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 
 import { agentHomeScreen } from './agentHome'
+import { OtherAgentsRequests } from './OtherAgentsRequests'
 import { RequestCard } from './RequestCard'
 import { requestsView } from './requestsView'
 
@@ -46,6 +47,10 @@ const VtaRequests: React.FC = () => {
   const { ColorPalette } = useTheme()
   const navigation = useNavigation() as unknown as Nav
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  // Opening Requests looks at the other agents too: a request there waits on this phone as well.
+  useEffect(() => {
+    if (agent) void vtaAgent.lookAtOtherAgents(agent)
+  }, [agent])
 
   // The clock: a request expires, and "quiet long enough" arrives, with nothing else happening.
   const [now, setNow] = useState(() => Date.now())
@@ -200,6 +205,9 @@ const VtaRequests: React.FC = () => {
             />
           </View>
         ))}
+
+        {/* The other agents' requests, decided after switching (several agents, step 3). */}
+        <OtherAgentsRequests shape="rows" />
 
         {view.expired.map((approval) => (
           <View key={approval.id} style={styles.card}>

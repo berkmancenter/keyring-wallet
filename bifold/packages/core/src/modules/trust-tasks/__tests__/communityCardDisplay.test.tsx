@@ -30,8 +30,10 @@ import { CommunityCardDetails, communityCardOf } from '../screens/CommunityCardD
 import {
   communityCardDisplay,
   registerCommunityCardDisplay,
+  setCardAgentNames,
   unregisterCommunityCardDisplay,
 } from '../screens/communityCardDisplay'
+import { cardAgentNamesOf } from '../screens/cardAgentNames'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -238,5 +240,35 @@ describe('what happened to a card that no longer stands, on the community card',
     expect(tree.getByTestId(testIdWithKey(`AgentCardHistory_membership_${key}`))).toHaveTextContent(
       /VtaLink\.CardMembershipEnded/
     )
+  })
+})
+
+// Alberto (10-04): with several agents, each card says whose it is, since two
+// agents' identities can each be a member of one community.
+describe('whose card it is, with several agents', () => {
+  afterEach(() => setCardAgentNames(new Map()))
+
+  it('the agent that holds the identity follows the name; with one agent, nothing does', () => {
+    const subject = (membershipCard.credentialSubject as { id: string }).id
+    const plain = communityCardDisplay(membershipCard, t)!.name
+    setCardAgentNames(new Map([[subject, 'Personal']]))
+    expect(communityCardDisplay(membershipCard, t)!.name).toBe(`${plain} · Personal`)
+    setCardAgentNames(new Map())
+    expect(communityCardDisplay(membershipCard, t)!.name).toBe(plain)
+  })
+
+  it('names each identity by the agent holding it, only when there are several agents', () => {
+    const personas = [
+      { did: 'did:me:a', vtaDid: 'did:vta:a' },
+      { did: 'did:me:b', vtaDid: 'did:vta:b' },
+    ]
+    const nameOf = (a: { vtaDid: string }) => (a.vtaDid === 'did:vta:a' ? 'Personal' : 'Work')
+    expect(cardAgentNamesOf(personas, [{ vtaDid: 'did:vta:a' }], nameOf as never).size).toBe(0)
+    expect([
+      ...cardAgentNamesOf(personas, [{ vtaDid: 'did:vta:a' }, { vtaDid: 'did:vta:b' }], nameOf as never),
+    ]).toEqual([
+      ['did:me:a', 'Personal'],
+      ['did:me:b', 'Work'],
+    ])
   })
 })

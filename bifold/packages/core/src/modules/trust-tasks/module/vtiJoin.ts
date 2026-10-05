@@ -168,7 +168,7 @@ export async function joinCommunity(
         // The card comes by delivery, not inline: give the outbox a moment.
         for (let i = 0; i < 20 && !membership; i++) {
           await new Promise((resolve) => setTimeout(resolve, 1500))
-          membership = await deps.communityStore.getMembership(deps.communityDid)
+          membership = await deps.communityStore.getMembership(deps.communityDid, persona.did)
         }
       }
       if (membership) {
@@ -263,8 +263,19 @@ export async function readJoinState(
 ): Promise<CommunityJoinState> {
   const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
 
-  const membership = await store.getMembership(communityDid).catch(() => undefined)
+  let membership = await store.getMembership(communityDid).catch(() => undefined)
   let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
+  // The store keeps one membership and one request per community, not per
+  // agent. When the current agent holds an identity here, what was kept for a
+  // different identity is another agent's standing, not this one's: with B
+  // current, A's membership read "You're a member" and hid B's refused
+  // request (several-agents device check, R5, 10-04).
+  const mine = await (options.identityStore ?? new GenericRecordsIdentityStore(agent))
+    .getPersona(communityDid)
+    .catch(() => undefined)
+  const anotherIdentity = (personaDid: string | undefined) => Boolean(mine && personaDid && personaDid !== mine.did)
+  if (membership && anotherIdentity(membership.personaDid)) membership = undefined
+  if (submission && anotherIdentity(submission.personaDid)) submission = undefined
   // A request sent after the membership ended is where the person stands now:
   // "removed you" above a request that went out hid it (IN-104).
   const sentSince = (at: string | undefined) =>
@@ -409,11 +420,11 @@ export async function leaveCommunity(
   }
   // What the community no longer holds, the phone no longer shows. Each step
   // on its own: one store failing must not leave the others half-cleared.
-  await deps.communityStore.forgetCommunity(communityDid).catch(() => undefined)
+  await deps.communityStore.forgetCommunity(communityDid, persona.did).catch(() => undefined)
   await deps.vettingStore?.forget(communityDid).catch(() => undefined)
   await deps.identityStore.forgetPersona(communityDid).catch(() => undefined)
   await deps.communityStore
-    .saveDeparture?.({ communityDid, disposition, at: new Date().toISOString() })
+    .saveDeparture?.({ communityDid, personaDid: persona.did, disposition, at: new Date().toISOString() })
     .catch(() => undefined)
   return { disposition, alreadyGone }
 }

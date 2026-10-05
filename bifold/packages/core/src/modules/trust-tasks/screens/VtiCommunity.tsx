@@ -137,8 +137,7 @@ const VtiCommunity: React.FC = () => {
               ? 'Community.LeftTombstone'
               : left.disposition === 'historical'
                 ? 'Community.LeftHistorical'
-                : 'Community.LeftPurge',
-          left.alreadyGone
+                : 'Community.LeftPurge'
         ),
         visibilityTime: 6000,
         position: 'bottom',
@@ -345,7 +344,7 @@ const VtiCommunity: React.FC = () => {
           <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
             <Text style={styles.value}>
               {t('Community.LeaveExplains', {
-                community: communityLabelStartOf(communityDid, t),
+                community: communityLabelOf(communityDid, t),
                 interpolation: { escapeValue: false },
               })}
             </Text>

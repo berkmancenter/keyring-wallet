@@ -72,6 +72,8 @@ export interface UseCommunityJourney {
   /** Undefined until the first reading lands. */
   journey?: CommunityJourney
   refresh: () => void
+  /** Ask the community where a request stands now; resolves when the reading lands. */
+  check: () => Promise<void>
 }
 
 /**
@@ -99,19 +101,21 @@ export function useCommunityJourney(
   }, [])
 
   const read = useCallback(
-    (withPoll: boolean) => {
-      if (!agent || !communityDid) return
+    (withPoll: boolean): Promise<void> => {
+      if (!agent || !communityDid) return Promise.resolve()
       // Only the newest reading may land: an older one finishing late must not
       // put back a state the phone has already moved past.
       const seq = ++latest.current
-      void readCommunityJourney(agent, communityDid, { poll: withPoll, readers: readersRef.current }).then((j) => {
+      return readCommunityJourney(agent, communityDid, { poll: withPoll, readers: readersRef.current }).then((j) => {
         if (mounted.current && seq === latest.current) setJourney(j)
       })
     },
     [agent, communityDid]
   )
 
-  const refresh = useCallback(() => read(false), [read])
+  const refresh = useCallback(() => void read(false), [read])
+  /** Ask the community where a request stands now (the person's "Check now"). */
+  const check = useCallback(() => read(true), [read])
 
   // A different community is a different journey: never show the old one's.
   useEffect(() => {
@@ -127,5 +131,5 @@ export function useCommunityJourney(
 
   useCommunityChanged(refresh, communityDid)
 
-  return { journey, refresh }
+  return { journey, refresh, check }
 }

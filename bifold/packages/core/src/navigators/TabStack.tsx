@@ -31,10 +31,12 @@ import { keyringAgentLinkKind, myAgentLinkParams } from '../modules/trust-tasks/
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
+import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames'
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdentityListeners'
+import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
@@ -83,10 +85,13 @@ const TabStack: React.FC = () => {
   // …and every other identity this phone holds listens on its own, so what a
   // community sends any of them arrives, whichever is chosen (IN-102).
   useVtiIdentityListeners(agent, vti?.mediatorDid)
+  useLookAtOtherAgents(agent)
   // Each persona's cards are kept by its agent too, so a new phone can get them back (226).
   useVtiCardVault(agent)
   // …and shown in the Wallet while they stand, copied from the community store.
   useVtiWalletCards(agent)
+  // …each saying which agent holds it, when there are several.
+  useCardAgentNames(agent)
   // A delivered card the inbox did not keep is said in plain words.
   useVtiRefusedCardNotice()
   // This phone tells its agent it is here, from unlock (#10): registered once,
