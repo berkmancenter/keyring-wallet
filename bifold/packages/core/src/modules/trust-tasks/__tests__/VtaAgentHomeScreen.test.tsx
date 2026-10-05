@@ -138,9 +138,26 @@ describe('Your agent — after linking', () => {
     controller.set({ switchingTo: 'did:webvh:home-screen:other-vta' })
     const tree = await renderHome([])
     expect(tree.getByTestId(testIdWithKey('AgentSwitching'))).toHaveTextContent(/VtaLink\.Switching/)
+    // While it lasts, and only then, a screen reader hears it is busy.
+    expect(tree.getByTestId(testIdWithKey('AgentSwitcherOpen')).props.accessibilityState).toMatchObject({ busy: true })
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherOpen')))
     expect(tree.queryByTestId(testIdWithKey('AgentSwitcher'))).toBeNull()
     controller.set({ switchingTo: undefined })
+  })
+
+  // 234 final gate: Android read the `busy` key even when false, and said "busy" in place of the agent's name.
+  it('names the agent to a screen reader, and says busy only while switching', async () => {
+    const tree = await renderHome([])
+    const open = tree.getByTestId(testIdWithKey('AgentSwitcherOpen'))
+    expect(open.props.accessibilityLabel).toBe(tree.getByTestId(testIdWithKey('AgentHomeName')).props.children)
+    expect(open.props.accessibilityLabel).toEqual(expect.any(String))
+    // No `busy` key at all: Android reads the key, not its value.
+    expect(open.props.accessibilityState).toEqual({ disabled: false, expanded: false })
+    fireEvent.press(open)
+    expect(tree.getByTestId(testIdWithKey('AgentSwitcherOpen')).props.accessibilityState).toEqual({
+      disabled: false,
+      expanded: true,
+    })
   })
 
   // 228 agent-gone: an agent that no longer exists is said so, with a new one as the way on.
