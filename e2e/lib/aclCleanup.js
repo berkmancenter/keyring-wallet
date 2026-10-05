@@ -17,6 +17,13 @@
  * (the rotated key, and whatever that key created), are removed. Anything else
  * that is new is logged as "not mine, left alone".
  *
+ * A manual (no-QR) link breaks that chain: the runner's own admin key grants
+ * the temporary key, and the key the phone rotates onto is recorded as created
+ * by that same admin key, not by the temporary one. So a manual run names its
+ * rotated key itself — `heirOf`, read right after the rotation — and passes it
+ * as `heirs`, another root of what is this run's (10-05: a manual link's keys
+ * were all "not mine, left alone", and 23 were found left on a Farm runner).
+ *
  * DIDs are compared in full, from `pnm acl list --json`: the table view
  * truncates a ~350-character did:peer:2, and a prefix is not an identity.
  *
@@ -84,8 +91,8 @@ export function snapshotAcl({ slug, pnmHome }) {
  * This run's entries among `entries`: `tempDid` itself, and everything whose
  * createdBy chain reaches it. Pure — exported for its test.
  */
-export function ownedBy(entries, tempDid) {
-  const mine = new Set([tempDid]);
+export function ownedBy(entries, tempDid, heirs = []) {
+  const mine = new Set([tempDid, ...heirs].filter(Boolean));
   for (let grew = true; grew; ) {
     grew = false;
     for (const e of entries) {
@@ -102,7 +109,7 @@ export function ownedBy(entries, tempDid) {
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
-export function removeRunKeys({ slug, pnmHome, before, tempDid, failed = false, log = console.log }) {
+export function removeRunKeys({ slug, pnmHome, before, tempDid, heirs = [], failed = false, log = console.log }) {
   try {
     if (!tempDid) {
       log("[acl] no temporary key recorded for this run — nothing to clean up");
@@ -110,7 +117,7 @@ export function removeRunKeys({ slug, pnmHome, before, tempDid, failed = false, 
     }
     const entries = listAcl({ slug, pnmHome });
     const added = entries.filter((e) => !before?.has(e.subject));
-    const mine = ownedBy(added, tempDid);
+    const mine = ownedBy(added, tempDid, heirs);
     for (const e of added) {
       if (!mine.includes(e)) log(`[acl] not mine, left alone: ${e.subject.slice(0, 40)}… (${e.label ?? "-"}, created by ${e.createdBy.slice(0, 30)}…)`);
     }
@@ -136,6 +143,20 @@ export function removeRunKeys({ slug, pnmHome, before, tempDid, failed = false, 
   } catch (err) {
     log(`[acl] cleanup skipped: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
   }
+}
+
+/**
+ * The key a phone rotated onto after a manual grant: the earliest entry that is
+ * new since `before` and was created at or after `since` (an ISO time taken just
+ * before the grant), excluding `taken` (heirs this run already named). Read it
+ * right after the rotation, while no other run is linking on this VTA; a run
+ * that cannot tell returns undefined and cleans up by its chain alone.
+ */
+export function heirOf({ slug, pnmHome, before, since, taken = [] }) {
+  const fresh = listAcl({ slug, pnmHome })
+    .filter((e) => !before?.has(e.subject) && !taken.includes(e.subject) && String(e.createdAt) >= since)
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return fresh[0]?.subject;
 }
 
 /**

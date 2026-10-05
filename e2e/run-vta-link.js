@@ -52,7 +52,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 
 const platform = process.env.PLATFORM || "android";
@@ -326,6 +326,7 @@ async function linkManually(driver) {
   } else {
     console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
   }
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
   execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
   await tapTestId(driver, "VtaLinkCheckGrant", 15000);
   await waitForTestId(driver, "VtaLinkDone", 180000);
@@ -334,6 +335,19 @@ async function linkManually(driver) {
   await screenshot(driver, "link-m2-linked");
   if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
   console.log("[e2e] the temporary key is no longer in the ACL");
+  // The admin key that granted the temporary key is also the recorded creator of
+  // the rotated one, so the cleanup's chain cannot find it: name it now (aclCleanup.js).
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
   await tapTestId(driver, "VtaLinkContinue", 15000);
   await passNewPhoneOfferIfShown(driver);
   return temporaryDid;
@@ -878,12 +892,12 @@ async function openLinkFlow(driver, link) {
  * Leave this run's keys in place — the phone stays linked for the next step —
  * and hand what the chain's last step needs to remove them.
  */
-function keepForNextStep({ before, tempDid }) {
+function keepForNextStep({ before, tempDid, heirs = [] }) {
   try {
     const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts", "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, before: [...before], at: new Date().toISOString() }, null, 2));
-    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid);
+    writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
+    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);
     console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
     for (const e of mine) console.log(`  ${PNM_HOME ? `PNM_HOME=${PNM_HOME} ` : ''}${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
   } catch (e) {
@@ -898,6 +912,8 @@ let page;
 let aclBefore;
 /** Every temporary key this run showed, in order: a relink adds a second. */
 const runTempDids = [];
+/** The keys a manual link rotated onto, named at link time (heirOf). */
+const runHeirs = [];
 let runFailed = false;
 try {
   // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
@@ -1013,10 +1029,10 @@ try {
     if (runFailed || JOURNEY || mode === "always" || mode === "never") {
       // Each link's chain by its own temporary key: an unlinked phone's key
       // stays on the agent's list (VTI-Q23), and the relink adds another.
-      for (const tempDid of runTempDids) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, failed: runFailed });
+      for (const [i, tempDid] of runTempDids.entries()) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, heirs: i === runTempDids.length - 1 ? runHeirs : [], failed: runFailed });
       if (!runTempDids.length) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: undefined, failed: runFailed });
     } else if (runTempDids.length) {
-      keepForNextStep({ before: aclBefore, tempDid: runTempDids[runTempDids.length - 1] });
+      keepForNextStep({ before: aclBefore, tempDid: runTempDids[runTempDids.length - 1], heirs: runHeirs });
     }
   }
   if (driver) await driver.deleteSession().catch(() => undefined);
