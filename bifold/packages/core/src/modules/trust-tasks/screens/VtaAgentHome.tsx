@@ -495,7 +495,13 @@ const VtaAgentHome: React.FC = () => {
             onPress={() => setSwitcherOpen(!switcherOpen)}
             disabled={Boolean(state.switchingTo)}
             accessibilityRole="button"
-            accessibilityState={{ expanded: switcherOpen, busy: Boolean(state.switchingTo) }}
+            // The agent's name is what a screen reader says. `busy` is set only
+            // while a switch lasts: Android reads the key itself, false or not,
+            // and said "busy" in place of the name (234 final gate).
+            accessibilityLabel={agentDisplayName(withAgentName(link, state.agentNames), t)}
+            accessibilityState={
+              state.switchingTo ? { expanded: switcherOpen, busy: true, disabled: true } : { expanded: switcherOpen }
+            }
             accessibilityHint={t('VtaLink.SwitcherTitle')}
             testID={testIdWithKey('AgentSwitcherOpen')}
           >
