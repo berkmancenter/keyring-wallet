@@ -89,6 +89,10 @@ const VtaLink: React.FC = () => {
   const [manualEntry, setManualEntry] = useState(askedWithoutQr)
   const [agentAddress, setAgentAddress] = useState('')
   const [copied, setCopied] = useState(false)
+  // The code was handed out (Copy or Share): "I've been added" becomes the
+  // one main button; before that, handing it out is (IN-125).
+  const [shared, setShared] = useState(false)
+  const handedOut = copied || shared
   const [keyShown, setKeyShown] = useState(false)
   // #30: a phone showing its code to another phone checks by itself whether it
   // has been added — in view, in the foreground, inside the window.
@@ -491,9 +495,11 @@ const VtaLink: React.FC = () => {
           </ThemedText>
           <Button
             title={t('VtaLink.ShareKey')}
-            buttonType={ButtonType.Primary}
+            buttonType={handedOut ? ButtonType.Secondary : ButtonType.Primary}
             onPress={() =>
-              void Share.share(shareableKey(t, agentDisplayName(link, t), link.did)).catch(() => undefined)
+              void Share.share(shareableKey(t, agentDisplayName(link, t), link.did))
+                .then(() => setShared(true))
+                .catch(() => undefined)
             }
             testID={testIdWithKey('VtaLinkShareKey')}
           />
@@ -553,7 +559,9 @@ const VtaLink: React.FC = () => {
           ) : null}
           <Button
             title={link.checking ? t('VtaLink.Checking') : link.noAnswer ? t('VtaLink.TryAgain') : t('VtaLink.ImAdded')}
-            buttonType={ButtonType.Primary}
+            buttonType={
+              handedOut || link.checking || link.notYet || link.noAnswer ? ButtonType.Primary : ButtonType.Secondary
+            }
             onPress={onCheckGrant}
             disabled={link.checking}
             testID={testIdWithKey('VtaLinkCheckGrant')}

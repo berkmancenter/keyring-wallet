@@ -204,19 +204,22 @@ const VtaCreateAgent: React.FC = () => {
   // The other device's name on this agent (IN-123): a plain default by the
   // kind of code until the person types their own.
   const [deviceName, setDeviceName] = useState<string | undefined>()
+  const [addressCopied, setAddressCopied] = useState(false)
   const defaultDeviceName = (code: string) =>
     deviceCodeIn(code)?.startsWith('did:key:') || code.trim().startsWith('did:key:')
       ? t('Devices.ShortComputer')
       : t('Devices.ShortPhone')
   const nameForCode = deviceName ?? defaultDeviceName(backupCode)
 
-  const onAddBackup = async () => {
+  /** `scanned`: a code the scanner just read, added straight away (IN-125); Face ID still asks first. */
+  const onAddBackup = async (scanned?: string) => {
     if (!agent) return
     setError(undefined)
     setBusy(true)
     try {
-      const code = deviceCodeIn(backupCode) ?? backupCode.trim()
-      const label = nameForCode.trim() || t('CreateAgent.BackupLabel')
+      const raw = scanned ?? backupCode
+      const code = deviceCodeIn(raw) ?? raw.trim()
+      const label = (deviceName ?? defaultDeviceName(raw)).trim() || t('CreateAgent.BackupLabel')
       const device = await vtaAgent.addBackupDevice(agent, code, label)
       setBackupAdded(device.label ?? label)
       // Back to My devices, which reads the list again on focus.
@@ -241,7 +244,9 @@ const VtaCreateAgent: React.FC = () => {
    */
   const onAddressScanned = (scanned: ScannedAgent) => {
     if (scanned.kind === 'address') {
+      // Read: on to the next step straight away, with no Continue to press (IN-125).
       setAddress(scanned.vtaDid)
+      void onAddressContinue(scanned.vtaDid)
       return
     }
     vtaAgent.scanHostOffer(scanned.offer)
@@ -249,9 +254,9 @@ const VtaCreateAgent: React.FC = () => {
   }
 
   /** Step 2 → 3: resolve the agent and make this phone's key (it names the agent's mediator). */
-  const onAddressContinue = async () => {
+  const onAddressContinue = async (scanned?: string) => {
     setError(undefined)
-    const did = address.trim()
+    const did = (scanned ?? address).trim()
     if (!looksLikeAgentAddress(did)) {
       setError(t('CreateAgent.NotAnAddress'))
       return
@@ -444,7 +449,7 @@ const VtaCreateAgent: React.FC = () => {
         <Button
           title={t('Global.Continue')}
           buttonType={ButtonType.Primary}
-          onPress={onAddressContinue}
+          onPress={() => void onAddressContinue()}
           disabled={busy || !address.trim()}
           testID={testIdWithKey('AgentCreateAddressContinue')}
         >
@@ -594,6 +599,27 @@ const VtaCreateAgent: React.FC = () => {
             {agentDid}
           </ThemedText>
         ) : null}
+        {/* One tap to hand the address to a computer (Universal Clipboard,
+            AirDrop) rather than reading it off the QR (IN-126). */}
+        {agentDid ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button
+              title={addressCopied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => {
+                Clipboard.setString(agentDid)
+                setAddressCopied(true)
+              }}
+              testID={testIdWithKey('AgentBackupCopyAddress')}
+            />
+            <Button
+              title={t('VtaLink.ShareKey')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => void Share.share({ message: agentDid }).catch(() => undefined)}
+              testID={testIdWithKey('AgentBackupShareAddress')}
+            />
+          </View>
+        ) : null}
       </View>
     )
     actions = (
@@ -649,7 +675,11 @@ const VtaCreateAgent: React.FC = () => {
           buttonType={backupCode.trim() ? ButtonType.Secondary : ButtonType.Primary}
           onPress={() => {
             setError(undefined)
-            deviceCodeScan.request((code) => setBackupCode(code))
+            // Read: added straight away (IN-125); the owner check is the only stop.
+            deviceCodeScan.request((code) => {
+              setBackupCode(code)
+              void onAddBackup(code)
+            })
             openScanner(navigation)
           }}
           disabled={busy}
@@ -668,7 +698,7 @@ const VtaCreateAgent: React.FC = () => {
           <Button
             title={t('CreateAgent.AddThisPhone')}
             buttonType={ButtonType.Primary}
-            onPress={onAddBackup}
+            onPress={() => void onAddBackup()}
             disabled={busy}
             testID={testIdWithKey('AgentBackupAdd')}
           >
