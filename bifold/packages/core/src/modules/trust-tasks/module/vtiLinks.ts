@@ -138,6 +138,22 @@ export function otherDidMessage(did: string): string {
 const didHost = (did: string) => did.split(':')[3] ?? did
 
 /**
+ * An agent scanned on a phone already linked to one: added beside it, as My
+ * Agent's "Add another agent" does (several agents). The scan refused it
+ * outright before, though the phone can hold several agents (feedback,
+ * 10-05). The current agent is left, not forgotten; a link given up goes back
+ * to it (`cancelLink`). One this phone already has is said so instead.
+ */
+async function makeRoomForAgent(vtaDid: string): Promise<void> {
+  const { link, agents } = vtaAgent.getState()
+  if (link.kind !== 'linked') return
+  if (link.vtaDid === vtaDid || (agents ?? []).some((a) => a.vtaDid === vtaDid)) {
+    throw new KeyringLinkError('This phone is already linked to this agent. Switch to it on My Agent.')
+  }
+  await vtaAgent.startAddingAgent()
+}
+
+/**
  * A bare DID, classified by what its document advertises and routed: an agent
  * to linking, a community to Join (or back to "I was invited", when that is
  * where the person came from). Anything else says, in words, why there is
@@ -157,9 +173,7 @@ async function routeBareDid(
       navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
     case 'agent':
-      if (vtaAgent.getState().link.kind === 'linked') {
-        throw new KeyringLinkError('This phone is already linked to an agent.')
-      }
+      await makeRoomForAgent(did)
       // Scanned or pasted: usually another phone's "Add another phone" code, so
       // this phone shows its own code for that phone to scan (#30).
       await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
@@ -275,9 +289,6 @@ export async function routeKeyringAgentLink(
   const trimmed = text.trim()
   switch (keyringAgentLinkKind(trimmed)) {
     case 'agentHost': {
-      if (vtaAgent.getState().link.kind === 'linked') {
-        throw new KeyringLinkError('This phone is already linked to an agent.')
-      }
       let offer
       try {
         offer = parseAgentHostQr(trimmed)
@@ -291,6 +302,7 @@ export async function routeKeyringAgentLink(
       }
       if (!offer)
         throw new KeyringLinkError("This agent host's code couldn't be read. Make a new one and scan it again.")
+      await makeRoomForAgent(offer.vtaDid)
       vtaAgent.scanHostOffer(offer)
       navigate('VtaLink')
       return

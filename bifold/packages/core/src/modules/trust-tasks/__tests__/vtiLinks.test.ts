@@ -325,21 +325,47 @@ describe('a bare DID, scanned or pasted', () => {
     expect(navigate).toHaveBeenCalledWith('VtaLink')
   })
 
-  it('an agent on a phone already linked says so, and starts nothing', async () => {
-    const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
-    controller.set({
-      link: {
-        kind: 'linked',
-        vtaDid: 'did:webvh:Qm:other',
-        label: 'x',
-        linkedAt: '2026-09-23T00:00:00Z',
-        connection: { kind: 'online', since: 0 },
-      },
+  // Feedback 10-05: scanning a second agent said "already linked", though the
+  // phone holds several. It is added beside the current one now.
+  describe('on a phone already linked to another agent', () => {
+    const linkedTo = (vtaDid: string) =>
+      controller.set({
+        link: {
+          kind: 'linked',
+          vtaDid,
+          label: 'x',
+          linkedAt: '2026-09-23T00:00:00Z',
+          connection: { kind: 'online', since: 0 },
+        },
+        agents: [{ vtaDid, label: 'x' }],
+      })
+    afterEach(() => controller.set({ agents: undefined }))
+
+    it('adds the scanned agent beside it: the current one is left first, then the link starts', async () => {
+      linkedTo('did:webvh:Qm:other')
+      const order: string[] = []
+      jest.spyOn(vtaAgent, 'startAddingAgent').mockImplementation(async () => {
+        order.push('add')
+      })
+      jest.spyOn(vtaAgent, 'startManualLink').mockImplementation(async () => {
+        order.push('link')
+      })
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest'])), navigate)
+      expect(order).toEqual(['add', 'link'])
+      expect(navigate).toHaveBeenCalledWith('VtaLink')
     })
-    await expect(routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest'])), jest.fn())).rejects.toThrow(
-      /already linked/
-    )
-    expect(start).not.toHaveBeenCalled()
+
+    it('one this phone already has is said so, and nothing starts', async () => {
+      linkedTo(agentDid)
+      const add = jest.spyOn(vtaAgent, 'startAddingAgent').mockResolvedValue(undefined)
+      const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+      await expect(routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest'])), jest.fn())).rejects.toThrow(
+        /already linked to this agent/
+      )
+      expect(add).not.toHaveBeenCalled()
+      expect(start).not.toHaveBeenCalled()
+    })
   })
 
   it('anything else is explained in words, never routed', async () => {
@@ -461,20 +487,59 @@ describe("an agent host's automatic-connection QR", () => {
     ).rejects.toBeInstanceOf(KeyringLinkError)
   })
 
-  it('on a phone already linked, says so and starts nothing', async () => {
-    const scan = jest.spyOn(vtaAgent, 'scanHostOffer')
-    controller.set({
-      link: {
-        kind: 'linked',
-        vtaDid: 'did:webvh:Qm:other',
-        label: 'x',
-        linkedAt: '2026-10-01T00:00:00Z',
-        connection: { kind: 'online', since: 0 },
-      },
+  describe('on a phone already linked to another agent', () => {
+    const linkedTo = (did: string) =>
+      controller.set({
+        link: {
+          kind: 'linked',
+          vtaDid: did,
+          label: 'x',
+          linkedAt: '2026-10-01T00:00:00Z',
+          connection: { kind: 'online', since: 0 },
+        },
+        agents: [{ vtaDid: did, label: 'x' }],
+      })
+    afterEach(() => controller.set({ agents: undefined }))
+
+    it("adds the host's agent beside it: the current one is left first, then the person is asked", async () => {
+      linkedTo('did:webvh:Qm:other')
+      const order: string[] = []
+      jest.spyOn(vtaAgent, 'startAddingAgent').mockImplementation(async () => {
+        order.push('add')
+        controller.set({ link: { kind: 'notLinked' } })
+      })
+      const scan = jest.spyOn(vtaAgent, 'scanHostOffer').mockImplementation(() => {
+        order.push('ask')
+      })
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback }), {} as never, navigate)
+      expect(order).toEqual(['add', 'ask'])
+      expect(scan).toHaveBeenCalledWith({ vtaDid, callbackUrl: callback, host: 'vtafarm-api.ic3.dev' })
+      expect(navigate).toHaveBeenCalledWith('VtaLink')
     })
-    await expect(
-      routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback }), {} as never, jest.fn())
-    ).rejects.toThrow(/already linked/)
-    expect(scan).not.toHaveBeenCalled()
+
+    it('a code for the agent this phone already has is said so, and nothing starts', async () => {
+      linkedTo(vtaDid)
+      const add = jest.spyOn(vtaAgent, 'startAddingAgent').mockResolvedValue(undefined)
+      const scan = jest.spyOn(vtaAgent, 'scanHostOffer')
+      await expect(
+        routeKeyringAgentLink(qr({ vta_did: vtaDid, callback_url: callback }), {} as never, jest.fn())
+      ).rejects.toThrow(/already linked to this agent/)
+      expect(add).not.toHaveBeenCalled()
+      expect(scan).not.toHaveBeenCalled()
+    })
+
+    it('a code from a site Keyring does not connect to leaves the current agent where it was', async () => {
+      linkedTo('did:webvh:Qm:other')
+      const add = jest.spyOn(vtaAgent, 'startAddingAgent').mockResolvedValue(undefined)
+      await expect(
+        routeKeyringAgentLink(
+          qr({ vta_did: vtaDid, callback_url: 'https://vtafarm-api.example.com/cb/x' }),
+          {} as never,
+          jest.fn()
+        )
+      ).rejects.toBeInstanceOf(KeyringLinkError)
+      expect(add).not.toHaveBeenCalled()
+    })
   })
 })
