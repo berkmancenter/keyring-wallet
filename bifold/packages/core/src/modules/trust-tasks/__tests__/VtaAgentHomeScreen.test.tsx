@@ -133,6 +133,14 @@ describe('Your agent — after linking', () => {
     again.mockRestore()
   })
 
+  // 234 known issue: after a refused request, Android's SwipeRefreshLayout
+  // behind pull-to-refresh took every tap on the switcher's rows. My Agent has
+  // no pull-to-refresh; it reads again on focus.
+  it('has no pull-to-refresh', async () => {
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentHome')).props.refreshControl).toBeUndefined()
+  })
+
   // The several-agents device check: a switch took about 20 s with nothing on screen.
   it('says which agent it is switching to while a switch lasts, and the list stays shut', async () => {
     controller.set({ switchingTo: 'did:webvh:home-screen:other-vta' })
