@@ -715,8 +715,11 @@ describe('Your agent — after linking', () => {
     // Requests, unlinking and status are closed until asked for.
     expect(tree.queryByTestId(testIdWithKey('AgentUnlink'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('AgentActivity'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('AgentAskMeRow'))).toBeNull()
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentSettings')))
     expect(tree.getByTestId(testIdWithKey('AgentRequestsRow'))).toBeTruthy()
+    // "Ask me before…" (#285) lives here too.
+    expect(tree.getByTestId(testIdWithKey('AgentAskMeRow'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentUnlink'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentActivity'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentDetailsToggle'))).toBeTruthy()
