@@ -6,17 +6,17 @@
  *
  * @module trust-tasks/screens/JoinWaysCard
  */
-import React from 'react'
+import React, { useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, TextStyle, View } from 'react-native'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
 import { claimWords } from './claimWords'
-import type { JoinCard, JoinNeed, JoinWayRow } from './joinWays'
+import type { JoinCannotUse, JoinCard, JoinNeed, JoinWayRow } from './joinWays'
 
 type WaysCard = Extract<JoinCard, { mode: 'ways' }>
 
@@ -50,6 +50,45 @@ function needLines(need: JoinNeed, community: string, t: TFunction): string[] {
     default:
       return [t('Join.Ways.NeedsNothing') as string]
   }
+}
+
+const CANNOT_USE_KEY: Record<JoinCannotUse, string> = {
+  incomplete: 'Join.Ways.CannotUseIncomplete',
+  unreadable: 'Join.Ways.CannotUseUnreadable',
+  changed: 'Join.Ways.CannotUseChanged',
+}
+
+/**
+ * Why a way cannot be used, in the person's words, with the reader's own
+ * fault under Details: worth something to the community's administrator,
+ * never the sentence a person reads.
+ */
+const CannotUse: React.FC<{ row: JoinWayRow; community: string; muted: TextStyle }> = ({ row, community, muted }) => {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const named = { community, interpolation: { escapeValue: false } }
+  return (
+    <>
+      <ThemedText style={muted} testID={testIdWithKey(`JoinWayCannotUse_${row.id}`)}>
+        {row.cannotUseBecause ? t(CANNOT_USE_KEY[row.cannotUseBecause], named) : t('Join.Ways.CannotUse')}
+      </ThemedText>
+      {row.cannotUseDetail ? (
+        <Pressable
+          onPress={() => setOpen((was) => !was)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          testID={testIdWithKey(`JoinWayDetailsToggle_${row.id}`)}
+        >
+          <ThemedText style={muted}>{t('Errors.ShowDetails')}</ThemedText>
+        </Pressable>
+      ) : null}
+      {open && row.cannotUseDetail ? (
+        <ThemedText style={muted} selectable testID={testIdWithKey(`JoinWayDetail_${row.id}`)}>
+          {row.cannotUseDetail}
+        </ThemedText>
+      ) : null}
+    </>
+  )
 }
 
 export const JoinWaysCard: React.FC<{
@@ -96,7 +135,7 @@ export const JoinWaysCard: React.FC<{
               {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}
             </ThemedText>
           ) : null}
-          {row.cannotUse ? <ThemedText style={styles.muted}>{t('Join.Ways.CannotUse')}</ThemedText> : null}
+          {row.cannotUse ? <CannotUse row={row} community={community} muted={styles.muted} /> : null}
           {row.credentialNotYet ? (
             <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText>
           ) : null}
@@ -109,6 +148,9 @@ export const JoinWaysCard: React.FC<{
           {rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
         </View>
       ))}
+      {card.noneUsable ? (
+        <ThemedText testID={testIdWithKey('JoinWaysNoneUsable')}>{t('Join.Ways.NoneUsable', named)}</ThemedText>
+      ) : null}
       {card.missing.length ? (
         <View style={styles.way} testID={testIdWithKey('JoinWaysMissing')}>
           <ThemedText>{t('Join.Ways.MissingInvitation', named)}</ThemedText>
