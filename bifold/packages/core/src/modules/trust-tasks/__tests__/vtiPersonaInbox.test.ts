@@ -41,6 +41,8 @@ jest.mock('../module/vtiAgent', () => ({
     }),
   },
 }))
+/** What listPersonas returns, when a test sets it: every agent's identities on this phone. */
+let mockPersonas: Array<typeof mockPersona> | undefined
 const mockPersona = {
   did: 'did:webvh:p:host:craft-fatal',
   communityDid: 'did:webvh:c:host',
@@ -50,7 +52,7 @@ const mockPersona = {
 jest.mock('../module/VtiIdentityStore', () => ({
   GenericRecordsIdentityStore: jest.fn().mockImplementation(() => ({
     getPersona: async (c: string) => (c === mockPersona.communityDid ? mockPersona : null),
-    listPersonas: async () => [mockPersona],
+    listPersonas: async () => mockPersonas ?? [mockPersona],
   })),
 }))
 const mockSaveInvitation = jest.fn(async () => undefined)
@@ -77,6 +79,7 @@ jest.mock('../module/vtiCommunityNotices', () => ({
   receiveCommunityNotice: (...a: unknown[]) => mockReceiveNotice(...(a as [])),
 }))
 
+import { setCurrentAgentDid } from '../module/currentAgent'
 import { startPersonaInbox as start, VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { vtiAgent } from '../module/vtiAgent'
@@ -199,6 +202,46 @@ describe('startPersonaInbox', () => {
     expect(mockOrder).toEqual(['listen', 'connect'])
     expect((vtiAgent.connect as jest.Mock).mock.calls[0][2].persona.did).toBe(mockPersona.did)
     stop()
+  })
+
+  // IN-114 (237): a second agent current, the inbox signed in as the first
+  // agent's newer persona, whose key is borrowed only while that agent is
+  // connected — "key not found", then "no persona yet".
+  describe('with identities under two agents', () => {
+    const A = 'did:webvh:a:host:vta-a'
+    const B = 'did:webvh:b:host:vta-b'
+    const olderUnderA = {
+      ...mockPersona,
+      did: 'did:webvh:p:host:under-a',
+      vtaDid: A,
+      createdAt: '2026-09-01T00:00:00Z',
+    }
+    const newerUnderB = {
+      ...mockPersona,
+      did: 'did:webvh:p:host:under-b',
+      vtaDid: B,
+      createdAt: '2026-10-01T00:00:00Z',
+    }
+    afterEach(() => {
+      mockPersonas = undefined
+      setCurrentAgentDid(undefined)
+    })
+
+    it("signs in as the current agent's latest identity, never another agent's newer one", async () => {
+      mockPersonas = [olderUnderA, newerUnderB]
+      setCurrentAgentDid(A)
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      expect((vtiAgent.connect as jest.Mock).mock.calls[0][2].persona.did).toBe(olderUnderA.did)
+    })
+
+    it('signs in as nobody when the current agent holds no identity on this phone', async () => {
+      mockPersonas = [newerUnderB]
+      setCurrentAgentDid(A)
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      expect(vtiAgent.connect).not.toHaveBeenCalled()
+    })
   })
 
   it('stores a grant and announces it', async () => {
