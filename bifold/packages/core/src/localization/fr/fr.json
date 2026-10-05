@@ -861,6 +861,7 @@
     "Expired": "Cette demande a expiré. Rien n'a été fait.",
     "Unreachable": "Keyring n'a pas pu joindre votre agent. Vérifiez que ce téléphone est en ligne.",
     "TryAgain": "Réessayer",
+    "NotTaken": "Votre agent n'a pas pris en compte votre réponse. Réessayez.",
     "BackToAgent": "Retour à votre agent",
     "Earlier": "Plus tôt",
     "Row": "Demandes",

@@ -40,11 +40,20 @@ function agentServing(served: string[], answer: (type: string, payload: Record<s
       }
       return answer(t, payload as Record<string, unknown>)
     })
-  return { vta, sent: () => send.mock.calls.map((c) => ({ type: String(c[0]), payload: c[1] as Record<string, unknown> })) }
+  return {
+    vta,
+    sent: () => send.mock.calls.map((c) => ({ type: String(c[0]), payload: c[1] as Record<string, unknown> })),
+  }
 }
 
 const V01 = [VTA_TASK.aclList, VTA_TASK.aclGrant, VTA_TASK.aclRevoke, VTA_TASK.aclUpdate, VTA_TASK.consentDecision]
-const V02 = [VTA_TASK.aclList02, VTA_TASK.aclGrant02, VTA_TASK.aclRevoke02, VTA_TASK.aclUpdate02, VTA_TASK.consentDecision02]
+const V02 = [
+  VTA_TASK.aclList02,
+  VTA_TASK.aclGrant02,
+  VTA_TASK.aclRevoke02,
+  VTA_TASK.aclUpdate02,
+  VTA_TASK.consentDecision02,
+]
 
 describe('the version step-down', () => {
   it('is taken only on unsupportedVersion or unsupportedType', () => {
@@ -173,25 +182,40 @@ describe('the access list, against an agent that serves 0.2', () => {
 })
 
 describe('a consent decision', () => {
-  it('is sent as decision/0.2 first and, refused as unsupported, as 0.1 with the same members', async () => {
+  // al-phone, 10-05: vta-service 0.53.1 serves only decision/0.1, and its
+  // refusal of a 0.2 decision never reached the phone over TSP, so Approve
+  // hung. 0.1 goes first: one message, answered, on every agent in use.
+  it('is sent as decision/0.1 first, in one message, to an agent that serves only 0.1', async () => {
     const { vta, sent } = agentServing(V01, () => ({ status: 'granted' }))
     await expect(vta.decideConsent({ challenge: 'c'.repeat(32), payloadDigest: DIGEST }, 'approve')).resolves.toEqual({
       status: 'granted',
     })
-    const [first, second] = sent()
-    expect(first.type).toBe(VTA_TASK.consentDecision02)
-    expect(second.type).toBe(VTA_TASK.consentDecision)
-    expect(second.payload).toEqual(first.payload)
-    expect(second.payload).toEqual({ challenge: 'c'.repeat(32), payloadDigest: DIGEST, decision: 'approve' })
+    expect(sent()).toEqual([
+      {
+        type: VTA_TASK.consentDecision,
+        payload: { challenge: 'c'.repeat(32), payloadDigest: DIGEST, decision: 'approve' },
+      },
+    ])
   })
 
-  it('is not re-sent in 0.1 when the agent refuses the decision itself', async () => {
-    const { vta, sent } = agentServing(V02, () => {
+  it('an agent that refuses 0.1 as unsupported is asked in 0.2, with the same members', async () => {
+    const { vta, sent } = agentServing(V02, () => ({ status: 'granted' }))
+    await expect(vta.decideConsent({ challenge: 'c'.repeat(32), payloadDigest: DIGEST }, 'approve')).resolves.toEqual({
+      status: 'granted',
+    })
+    const [first, second] = sent()
+    expect(first.type).toBe(VTA_TASK.consentDecision)
+    expect(second.type).toBe(VTA_TASK.consentDecision02)
+    expect(second.payload).toEqual(first.payload)
+  })
+
+  it('is not re-sent in another version when the agent refuses the decision itself', async () => {
+    const { vta, sent } = agentServing(V01, () => {
       throw new VtiRefusal('task-consent/decision:challengeExpired', 'expired')
     })
     await expect(
       vta.decideConsent({ challenge: 'c'.repeat(32), payloadDigest: DIGEST }, 'deny', 'not me')
     ).rejects.toThrow('expired')
-    expect(sent().map((s) => s.type)).toEqual([VTA_TASK.consentDecision02])
+    expect(sent().map((s) => s.type)).toEqual([VTA_TASK.consentDecision])
   })
 })

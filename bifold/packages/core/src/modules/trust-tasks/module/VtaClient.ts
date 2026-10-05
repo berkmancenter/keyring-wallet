@@ -115,13 +115,21 @@ export const VTA_TASK = {
   policyUpsert: 'https://trusttasks.org/spec/policy/upsert/0.2',
 } as const
 
-/** Each family this client speaks in more than one version, newest first. */
+/**
+ * Each family this client speaks in more than one version, in the order to
+ * ask: newest first, except where agents in use serve only the older one.
+ */
 export const VTA_TASK_VERSIONS = {
   aclList: [VTA_TASK.aclList02, VTA_TASK.aclList],
   aclGrant: [VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
   aclRevoke: [VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
   aclUpdate: [VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
-  consentDecision: [VTA_TASK.consentDecision02, VTA_TASK.consentDecision],
+  // 0.1 first: vta-service 0.53.1 serves only task-consent/decision/0.1
+  // (trust_tasks/mod.rs, TASK_TASK_CONSENT_DECISION_0_1), and its refusal of
+  // a 0.2 decision never reached the phone over TSP, so the step-down never
+  // ran and an Approve hung (al-phone, 10-05). This client sends only 0.1's
+  // members; 0.2 is asked if an agent ever refuses 0.1.
+  consentDecision: [VTA_TASK.consentDecision, VTA_TASK.consentDecision02],
 } as const
 
 /** Is this one of the 0.2 access-list URIs (where a revoke may answer `entry: null`)? */

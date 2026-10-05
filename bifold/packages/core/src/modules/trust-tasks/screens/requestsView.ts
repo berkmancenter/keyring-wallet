@@ -64,11 +64,11 @@ export function requestsView(input: RequestsInput): RequestsView {
   const { link, approvals, now, decided } = input
   const waiting = waitingRequests(approvals, now)
   const expired = approvals.filter(
-    (approval) => (approval.status === 'pending' && !waiting.includes(approval)) || approval.status === 'expired'
+    (approval) =>
+      ((approval.status === 'pending' || approval.status === 'failed') && !waiting.includes(approval)) ||
+      approval.status === 'expired'
   )
-  const earlier = approvals.filter(
-    (approval) => approval.status === 'approved' || approval.status === 'denied' || approval.status === 'failed'
-  )
+  const earlier = approvals.filter((approval) => approval.status === 'approved' || approval.status === 'denied')
   const lists = { waiting, expired, earlier, ...(decided ? { decided } : {}) }
 
   if (link.kind !== 'linked') {

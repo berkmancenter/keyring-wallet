@@ -195,16 +195,27 @@ describe('Requests', () => {
     expect(tree.getAllByTestId(id('ApproveConsentButton'))).toHaveLength(1)
   })
 
-  it('an answer that could not be sent is not called done: the request shows its failure', async () => {
+  // al-phone, 10-05: the agent never took the Approve; the buttons stayed
+  // dimmed, nothing was said, and the request left the list.
+  it('an answer that did not go through is said in words, with the reason behind Details, and can be sent again', async () => {
     controller.set({ approvals: [request('a')] })
-    decide.mockImplementation(async () => {
-      controller.set({ approvals: [request('a', { status: 'failed', error: 'could not send' })] })
-      throw new Error('could not send')
+    decide.mockImplementationOnce(async () => {
+      controller.set({
+        approvals: [request('a', { status: 'failed', error: 'the VTA did not take the decision within 15 s' })],
+      })
+      throw new Error('the VTA did not take the decision within 15 s')
     })
     const tree = await show()
     await act(async () => fireEvent.press(tree.getByTestId(id('ApproveConsentButton'))))
     expect(tree.queryByTestId(id('RequestsDone'))).toBeNull()
-    expect(tree.getByTestId(id('AgentApprovalDecided'))).toHaveTextContent('could not send')
+    expect(tree.getByTestId(id('RequestNotTaken'))).toHaveTextContent('Requests.NotTaken')
+    expect(tree.queryByTestId(id('RequestNotTakenDetail'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('RequestNotTakenDetailsToggle')))
+    expect(tree.getByTestId(id('RequestNotTakenDetail'))).toHaveTextContent(/did not take the decision/)
+    // Live again: the person answers once more.
+    expect(tree.getByTestId(id('ApproveConsentButton')).props.accessibilityState?.disabled).toBeFalsy()
+    await act(async () => fireEvent.press(tree.getByTestId(id('ApproveConsentButton'))))
+    expect(decide).toHaveBeenCalledTimes(2)
   })
 
   it('a request past its expiry says so and has no buttons; it expires on screen with nothing else happening', async () => {

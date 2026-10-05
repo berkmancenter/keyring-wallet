@@ -793,6 +793,7 @@
     "Expired": "Este pedido expirou. Nada foi feito.",
     "Unreachable": "O Keyring não conseguiu falar com seu agente. Verifique se este telefone está online.",
     "TryAgain": "Tentar de novo",
+    "NotTaken": "Seu agente não recebeu sua resposta. Tente de novo.",
     "BackToAgent": "Voltar ao seu agente",
     "Earlier": "Antes",
     "Row": "Pedidos",

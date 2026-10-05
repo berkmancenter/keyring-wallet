@@ -934,6 +934,7 @@
     "Expired": "This request expired. Nothing was done.",
     "Unreachable": "Keyring couldn't reach your agent. Check that this phone is online.",
     "TryAgain": "Try again",
+    "NotTaken": "Your agent didn't take your answer. Try again.",
     "BackToAgent": "Back to your agent",
     "Earlier": "Earlier",
     "Row": "Requests",

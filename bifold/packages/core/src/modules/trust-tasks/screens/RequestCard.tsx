@@ -13,9 +13,9 @@
  *
  * @module trust-tasks/screens/RequestCard
  */
-import React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -57,6 +57,7 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const handle = requestHandle(approval)
+  const [detailOpen, setDetailOpen] = useState(false)
   return (
     <View testID={testIdWithKey(`AgentApprovalCard_${handle}`)}>
       <View style={styles.card} testID={testIdWithKey('AgentApprovalCard')}>
@@ -80,6 +81,33 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
             <ApprovalDetails approval={approval} />
             <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
           </>
+        ) : null}
+        {/* The answer did not go through: said in words, the agent's own
+            reason behind Details, and the buttons are live to answer again
+            (al-phone, 10-05: they stayed dimmed and nothing was said). */}
+        {shows === 'waiting' && approval.status === 'failed' ? (
+          <View style={{ gap: 4 }} testID={testIdWithKey(`RequestNotTaken_${handle}`)}>
+            <ThemedText style={{ color: ColorPalette.semantic.error }} testID={testIdWithKey('RequestNotTaken')}>
+              {t('Requests.NotTaken')}
+            </ThemedText>
+            {approval.error ? (
+              <>
+                <Pressable
+                  onPress={() => setDetailOpen(!detailOpen)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: detailOpen }}
+                  testID={testIdWithKey('RequestNotTakenDetailsToggle')}
+                >
+                  <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+                </Pressable>
+                {detailOpen ? (
+                  <ThemedText style={styles.muted} selectable testID={testIdWithKey('RequestNotTakenDetail')}>
+                    {approval.error}
+                  </ThemedText>
+                ) : null}
+              </>
+            ) : null}
+          </View>
         ) : null}
         {shows === 'waiting' ? (
           <View style={styles.row}>
