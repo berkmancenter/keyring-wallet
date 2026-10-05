@@ -2074,6 +2074,7 @@
     "Removed": "Removed: {{device}}. It can't use your agent any more.",
     "OnlyThisPhone": "Only this phone runs your agent. Add another device so a lost phone isn't a lost agent.",
     "AddAnother": "Add another device",
+    "ListNoAnswer": "Your agent didn't answer. Try again.",
     "BrowserPlugin": "Browser plugin",
     "AComputer": "A computer or other app",
     "AKeyringPhone": "A Keyring phone",
@@ -2095,6 +2096,8 @@
     "RemovedWiped": "Removed: {{device}}. It can't use your agent any more, and it's asked to erase its copy.",
     "Rename": "Rename",
     "NameTitle": "Name this phone",
+    "NameOtherTitle": "Name this device",
+    "NameOtherHint": "What My devices calls it. You can rename it there any time.",
     "NameHint": "Your other devices show this name.",
     "NameSave": "Save",
     "OfferTitle": "Your other devices",
@@ -2111,7 +2114,8 @@
     "DefaultName": "{{platform}} · added {{date}}",
     "ShortIos": "iPhone",
     "ShortAndroid": "Android",
-    "ShortPhone": "Phone"
+    "ShortPhone": "Phone",
+    "ShortComputer": "Computer"
   },
   "AgentKeys": {
     "LostTitle": "Lost a phone?",

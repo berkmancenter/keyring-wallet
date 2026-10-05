@@ -118,6 +118,9 @@ export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView 
     status: deviceStatusOf(device),
     thisPhone: device.isThisPhone,
     phone: device.kind === 'keyring' || device.did.startsWith('did:peer:'),
+    // A device that registered a name shows it whatever its label says, so
+    // only one that does not is renamed from here (IN-123).
+    namesItself: Boolean(readable(device.displayName)),
   }
 }
 

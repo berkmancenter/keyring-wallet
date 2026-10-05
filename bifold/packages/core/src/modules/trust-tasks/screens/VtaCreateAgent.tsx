@@ -51,6 +51,7 @@ import { agentAddressScan, type ScannedAgent } from '../module/agentAddressScan'
 import { deviceCodeScan } from '../module/deviceCodeScan'
 import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
+import { DeviceNameField } from './DeviceNamePrompt'
 import { openScanner } from './openScanner'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
@@ -200,14 +201,24 @@ const VtaCreateAgent: React.FC = () => {
   const refusalLine = (reason: DeviceRefusalReason) => t(`CreateAgent.Device.${reason}`)
 
   /** Backup, last turn: this phone approves the other phone's code (plan §4). */
+  // The other device's name on this agent (IN-123): a plain default by the
+  // kind of code until the person types their own.
+  const [deviceName, setDeviceName] = useState<string | undefined>()
+  const defaultDeviceName = (code: string) =>
+    deviceCodeIn(code)?.startsWith('did:key:') || code.trim().startsWith('did:key:')
+      ? t('Devices.ShortComputer')
+      : t('Devices.ShortPhone')
+  const nameForCode = deviceName ?? defaultDeviceName(backupCode)
+
   const onAddBackup = async () => {
     if (!agent) return
     setError(undefined)
     setBusy(true)
     try {
       const code = deviceCodeIn(backupCode) ?? backupCode.trim()
-      const device = await vtaAgent.addBackupDevice(agent, code, t('CreateAgent.BackupLabel'))
-      setBackupAdded(device.label ?? t('CreateAgent.BackupLabel'))
+      const label = nameForCode.trim() || t('CreateAgent.BackupLabel')
+      const device = await vtaAgent.addBackupDevice(agent, code, label)
+      setBackupAdded(device.label ?? label)
       // Back to My devices, which reads the list again on focus.
       if (addDevice) navigation.goBack()
       else setStep('ready')
@@ -625,6 +636,8 @@ const VtaCreateAgent: React.FC = () => {
           }}
           testID={testIdWithKey('AgentBackupCodeInput')}
         />
+        {/* Its name, as My devices will show it; renamed later beside Remove. */}
+        {backupCode.trim() ? <DeviceNameField value={nameForCode} onChange={setDeviceName} other /> : null}
       </View>
     )
     actions = (

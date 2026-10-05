@@ -1916,6 +1916,7 @@
     "Removed": "Removido: {{device}}. Ele não pode mais usar seu agente.",
     "OnlyThisPhone": "Só este telefone roda seu agente. Adicione outro dispositivo para que um telefone perdido não seja um agente perdido.",
     "AddAnother": "Adicionar outro dispositivo",
+    "ListNoAnswer": "Seu agente não respondeu. Tente de novo.",
     "BrowserPlugin": "Extensão de navegador",
     "AComputer": "Um computador ou outro app",
     "AKeyringPhone": "Um telefone Keyring",
@@ -1937,6 +1938,8 @@
     "RemovedWiped": "Removido: {{device}}. Ele não pode mais usar seu agente, e foi pedido que apague sua cópia.",
     "Rename": "Renomear",
     "NameTitle": "Dê um nome a este celular",
+    "NameOtherTitle": "Dê um nome a este dispositivo",
+    "NameOtherHint": "O nome que aparece em Meus dispositivos. Você pode renomeá-lo lá quando quiser.",
     "NameHint": "Seus outros dispositivos mostram este nome.",
     "NameSave": "Salvar",
     "OfferTitle": "Seus outros dispositivos",
@@ -1953,7 +1956,8 @@
     "DefaultName": "{{platform}} · adicionado em {{date}}",
     "ShortIos": "iPhone",
     "ShortAndroid": "Android",
-    "ShortPhone": "Celular"
+    "ShortPhone": "Celular",
+    "ShortComputer": "Computador"
   },
   "AgentKeys": {
     "LostTitle": "Perdeu um celular?",

@@ -257,6 +257,8 @@ export interface VtaAgentDeps {
    * as `noAnswer` instead of leaving the screen waiting (IN-53). Tests shorten it.
    */
   ownerActDeadlineMs?: number
+  /** How long My devices waits for the agent's list before saying it didn't answer (IN-124). */
+  deviceListDeadlineMs?: number
   /**
    * Whether this phone has a screen lock or biometrics, so an owner key made
    * on it is protected (plan §3). Unset, "Create my agent" refuses with
@@ -353,6 +355,12 @@ export const UNLINK_TELL_QUEUE_MS = 10000
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
  */
 export const OWNER_ACT_DEADLINE_MS = 45000
+/**
+ * My devices' list, bounded (IN-124: "a spinner that never loads"). Reading it
+ * signs in through `connect`, which has no deadline of its own and shares a
+ * sign-in already in flight, so one stuck sign-in held the list forever.
+ */
+export const DEVICE_LIST_DEADLINE_MS = 15000
 /** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
 export const MAX_RECONNECT_TRIES = 5
 
@@ -1747,18 +1755,54 @@ export class VtaAgentController {
   }
 
   /**
+   * Name another device on this agent (IN-123): its access-list label, the
+   * name My devices shows for a device that does not name itself (a
+   * computer, a CLI, a plugin). `acl/update/0.1` sets it; the agent refuses a
+   * caller's own entry (VTI acl.rs `refuse_self_modification`), so this phone
+   * names itself through {@link renameThisDevice} instead. An owner act: the
+   * person confirms first, and nothing is sent without it.
+   */
+  async renameAgentDevice(agent: Agent, did: string, label: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Rename a device on your agent')
+    await this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      await client.labelAclEntry(did, label).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    })
+  }
+
+  /**
    * Every device that runs this agent with its device binding where it has one
    * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
    * it must. Refuses with {@link DeviceActionRefused}.
    */
   async agentDevices(agent: Agent): Promise<AgentDevice[]> {
     const vtaDid = this.linkedAgent()
-    const client = await this.signedIn(agent, vtaDid)
-    const mine = await this.phoneKeys(agent, vtaDid)
-    const devices = await listAgentDevices(client).catch((error: unknown) => {
-      throw this.refused(error)
+    const read = async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const mine = await this.phoneKeys(agent, vtaDid)
+      const devices = await listAgentDevices(client).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+      return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+    }
+    const ms = this.deps.deviceListDeadlineMs ?? DEVICE_LIST_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new DeviceActionRefused('noAnswer')), ms)
     })
-    return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+    const reading = read()
+    // Abandoned at the deadline, a late failure is nobody's news.
+    void reading.catch(() => undefined)
+    try {
+      return await Promise.race([reading, late])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**

@@ -72,7 +72,8 @@ const VtaDevices: React.FC = () => {
   const [error, setError] = useState<string | undefined>()
   const [removed, setRemoved] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
-  const [renaming, setRenaming] = useState(false)
+  /** Whose name is being changed: this phone (its own record) or another device (its label). */
+  const [renaming, setRenaming] = useState<AgentDevice | undefined>()
   const [rotation, setRotation] = useState<RotationSupport | undefined>()
   const navigation = useNavigation()
 
@@ -85,15 +86,21 @@ const VtaDevices: React.FC = () => {
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
+  // The list's own failure, apart from an act's: it is what Try again re-reads.
+  const [listFailed, setListFailed] = useState(false)
   const load = useCallback(async () => {
     if (!agent) return
     setError(undefined)
+    setListFailed(false)
     try {
       setDevices(thisPhoneFirst(await vtaAgent.agentDevices(agent)))
     } catch (e) {
-      setError(wordsFor(e))
+      setListFailed(true)
+      // An agent that didn't answer in time is said plainly, with Try again
+      // (IN-124), as Restore cards says it.
+      setError(deviceRefusalOf(e).reason === 'noAnswer' ? t('Devices.ListNoAnswer') : wordsFor(e))
     }
-  }, [agent, wordsFor])
+  }, [agent, wordsFor, t])
 
   useFocusEffect(
     useCallback(() => {
@@ -146,24 +153,23 @@ const VtaDevices: React.FC = () => {
   }
 
   const onRename = async (name: string) => {
-    if (!agent) return
+    if (!agent || !renaming) return
     setError(undefined)
     setBusy('rename')
     try {
-      await vtaAgent.renameThisDevice(agent, name)
+      if (renaming.isThisPhone) await vtaAgent.renameThisDevice(agent, name)
+      else await vtaAgent.renameAgentDevice(agent, renaming.did, name)
       // Busy until the list read back shows it: closing first showed the old
       // name for a moment (226 gate). A failed read closes it all the same —
       // the name is saved, and load() says why the list is not there.
       await load()
-      setRenaming(false)
+      setRenaming(undefined)
     } catch (e) {
       setError(wordsFor(e))
     } finally {
       setBusy(undefined)
     }
   }
-
-  const here = devices?.find((d) => d.isThisPhone)
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -185,12 +191,22 @@ const VtaDevices: React.FC = () => {
             {error}
           </ThemedText>
         ) : null}
+        {listFailed && devices === undefined ? (
+          <Button
+            title={t('VtaLink.TryAgain')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => void load()}
+            testID={testIdWithKey('AgentDeviceListTryAgain')}
+          />
+        ) : null}
         {devices === undefined && !error ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-        {renaming && here ? (
+        {renaming ? (
           <DeviceNamePrompt
-            initial={deviceViewOf(here, t).name}
+            key={renaming.did}
+            initial={deviceViewOf(renaming, t).name}
             onSave={(name) => void onRename(name)}
             busy={busy === 'rename'}
+            other={!renaming.isThisPhone}
           />
         ) : null}
         {devices?.map((device) => (
@@ -198,7 +214,7 @@ const VtaDevices: React.FC = () => {
             key={device.did}
             device={deviceViewOf(device, t)}
             onRemove={() => void onRemove(device)}
-            onRename={() => setRenaming(true)}
+            onRename={() => setRenaming(device)}
             busy={busy === device.did}
             disabled={busy !== undefined}
           />

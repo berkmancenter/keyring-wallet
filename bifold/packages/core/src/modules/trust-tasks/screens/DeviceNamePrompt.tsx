@@ -22,11 +22,13 @@ const NAME_LIMIT = 40
  * The name field alone, for a screen whose own button saves it (the link
  * screen's Continue): one filled button per step.
  */
-export const DeviceNameField: React.FC<{ value: string; onChange: (name: string) => void; onSubmit?: () => void }> = ({
-  value,
-  onChange,
-  onSubmit,
-}) => {
+export const DeviceNameField: React.FC<{
+  value: string
+  onChange: (name: string) => void
+  onSubmit?: () => void
+  /** Another device's name, not this phone's (IN-123). */
+  other?: boolean
+}> = ({ value, onChange, onSubmit, other = false }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const styles = StyleSheet.create({
@@ -42,8 +44,8 @@ export const DeviceNameField: React.FC<{ value: string; onChange: (name: string)
   })
   return (
     <View style={{ gap: 8 }}>
-      <ThemedText variant="bold">{t('Devices.NameTitle')}</ThemedText>
-      <ThemedText style={styles.muted}>{t('Devices.NameHint')}</ThemedText>
+      <ThemedText variant="bold">{t(other ? 'Devices.NameOtherTitle' : 'Devices.NameTitle')}</ThemedText>
+      <ThemedText style={styles.muted}>{t(other ? 'Devices.NameOtherHint' : 'Devices.NameHint')}</ThemedText>
       <TextInput
         style={styles.input}
         value={value}
@@ -51,18 +53,19 @@ export const DeviceNameField: React.FC<{ value: string; onChange: (name: string)
         maxLength={NAME_LIMIT}
         returnKeyType="done"
         onSubmitEditing={onSubmit}
-        accessibilityLabel={t('Devices.NameTitle')}
+        accessibilityLabel={t(other ? 'Devices.NameOtherTitle' : 'Devices.NameTitle')}
         testID={testIdWithKey('DeviceNameInput')}
       />
     </View>
   )
 }
 
-export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string) => void; busy?: boolean }> = ({
-  initial,
-  onSave,
-  busy,
-}) => {
+export const DeviceNamePrompt: React.FC<{
+  initial: string
+  onSave: (name: string) => void
+  busy?: boolean
+  other?: boolean
+}> = ({ initial, onSave, busy, other = false }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const [name, setName] = useState(initial)
@@ -78,7 +81,7 @@ export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string
 
   return (
     <View style={styles.card}>
-      <DeviceNameField value={name} onChange={setName} onSubmit={save} />
+      <DeviceNameField value={name} onChange={setName} onSubmit={save} other={other} />
       <Button
         title={t('Devices.NameSave')}
         buttonType={ButtonType.Primary}
