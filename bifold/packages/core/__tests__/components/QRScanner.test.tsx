@@ -7,6 +7,7 @@ import { StoreProvider, defaultState } from '../../src/contexts/store'
 import { testIdWithKey } from '../../src/utils/testable'
 import { useNavigation } from '@react-navigation/native'
 import { BasicAppContext } from '../helpers/app'
+import { setCurrentAgentDid } from '../../src/modules/trust-tasks/module/currentAgent'
 import { buildRCardTemplate } from '../../src/modules/vrc/types/rcard'
 import * as vrcManager from '../../src/modules/vrc/vrc-manager'
 import * as rCardCredentialService from '../../src/modules/vrc/services/rCardCredential'
@@ -527,9 +528,22 @@ describe('QRScanner — what the codes are', () => {
     expect(tree.queryByTestId(testIdWithKey('MyQRIdentity'))).toBeNull()
   })
 
+  test("another agent's identity is not offered: only the current agent's", async () => {
+    setCurrentAgentDid('did:webvh:example:other-vta')
+    try {
+      mockedUseAgent.mockReturnValue(withPersona([personaRecord]))
+      const tree = await renderQr(true)
+      expect(tree.queryByTestId(testIdWithKey('MyQRIdentity'))).toBeNull()
+    } finally {
+      setCurrentAgentDid(undefined)
+    }
+  })
+
   test('with a community identity, the person can show it instead', async () => {
     mockedUseAgent.mockReturnValue(withPersona([personaRecord]))
     const tree = await renderQr(true)
+    // The tab says what it is in two words; the community is named in the title.
+    expect(await tree.findByTestId(testIdWithKey('MyQRIdentity'))).toHaveTextContent('Scan.CommunityIdentity')
     await act(async () => fireEvent.press(await tree.findByTestId(testIdWithKey('MyQRIdentity'))))
     expect(tree.getByTestId(testIdWithKey('MyQRIdentityCode'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('MyQRCodeTitle'))).toHaveTextContent('Scan.YourIdentityTitle')

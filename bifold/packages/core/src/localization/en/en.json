@@ -656,6 +656,7 @@
     "NotAnAgentAddress": "This isn't an agent's code. Scan the code your agent host shows for your agent.",
     "CodeNotRead": "This code couldn't be read.",
     "ContactCard": "Contact card",
+    "CommunityIdentity": "Community identity",
     "IdentityFor": "Identity for {{community}}",
     "YourQRCodeTitle": "Your contact code",
     "YourQRCodeInstruction": "Another Keyring user scans this to connect with you and exchange relationship cards. It is not for linking an agent or joining a community.",

@@ -564,6 +564,7 @@
     "NotAnAgentAddress": "Isto não é o código de um agente. Escaneie o código que o provedor do seu agente mostra para o seu agente.",
     "CodeNotRead": "Não foi possível ler este código.",
     "ContactCard": "Cartão de contato",
+    "CommunityIdentity": "Identidade na comunidade",
     "IdentityFor": "Identidade para {{community}}",
     "YourQRCodeTitle": "Seu código de contato",
     "YourQRCodeInstruction": "Outra pessoa que usa o Keyring escaneia este código para se conectar com você e trocar cartões de relacionamento. Ele não serve para vincular um agente nem para entrar em uma comunidade.",

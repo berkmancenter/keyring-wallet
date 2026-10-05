@@ -622,6 +622,7 @@
     "NotAnAgentAddress": "Ce n’est pas le code d’un agent. Scannez le code que l’hébergeur de votre agent affiche pour votre agent.",
     "CodeNotRead": "Ce code n'a pas pu être lu.",
     "ContactCard": "Carte de contact",
+    "CommunityIdentity": "Identité de communauté",
     "IdentityFor": "Identité pour {{community}}",
     "YourQRCodeTitle": "Votre code de contact",
     "YourQRCodeInstruction": "Un autre utilisateur de Keyring le scanne pour se connecter à vous et échanger des cartes de relation. Il ne sert pas à lier un agent ni à rejoindre une communauté.",
