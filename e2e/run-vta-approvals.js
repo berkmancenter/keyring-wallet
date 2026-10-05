@@ -124,7 +124,13 @@ try {
   d = await makeDriver({ platform: PLATFORM, udid: UDID, deviceName: process.env.IOS_DEVICE_NAME, keepState: true });
   await unlockToHome(d);
   await tapTestId(d, "MyAgent", 15000);
-  await tapTestId(d, "AgentSegment_manage", 15000).catch(() => undefined);
+  // Manage: a segment before bifold #297, the "Agent settings" row after.
+  if (await existsTestId(d, "AgentSegment_manage", 5000)) {
+    await tapTestId(d, "AgentSegment_manage", 5000);
+  } else if (!(await existsTestId(d, "AgentRequestsRow", 1500))) {
+    await scrollToTestId(d, "AgentSettings", 8).catch(() => undefined);
+    await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
+  }
 
   // The request: read the probe context, which the rule now holds for consent.
   const contextId = probeContext;
