@@ -258,6 +258,15 @@ const VtaCreateAgent: React.FC = () => {
     if (vtaAgent.getState().link.kind === 'notLinked') setError(t('CreateAgent.NoAgentThere'))
   }
 
+  // The agent turned out to serve a community (CommunityAgentRefused): said
+  // here, back on the address, since this screen has no failed step.
+  const refusedAsCommunity = link.kind === 'notLinked' && link.lastError?.reason === 'communityAgent'
+  useEffect(() => {
+    if (!refusedAsCommunity) return
+    setStep('address')
+    setError(t('VtaLink.FailedCommunityAgent'))
+  }, [refusedAsCommunity, t])
+
   const ownerKey = link.kind === 'showingKey' ? link.did : undefined
 
   const startWaiting = () => {

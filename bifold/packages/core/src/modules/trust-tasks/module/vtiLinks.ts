@@ -47,11 +47,17 @@ export class KeyringLinkError extends Error {
   constructor(
     message: string,
     /** For a vetter's ticket that cannot be used here: why, typed, so a screen can word it. */
-    readonly ticket?: VettingTicketError
+    readonly ticket?: VettingTicketError,
+    /** The words, as a localization key, for a screen that can translate; `message` stays the English. */
+    readonly messageKey?: string
   ) {
     super(message)
   }
 }
+
+/** A KeyringLinkError in the person's language where the screen can translate it, else as written. */
+export const keyringLinkErrorText = (e: KeyringLinkError, t?: (key: string) => string): string =>
+  e.messageKey && t ? t(e.messageKey) : e.message
 
 /**
  * The app's own link to the waiting approvals (the agent home). A push notification
@@ -181,7 +187,9 @@ async function routeBareDid(
       return
     case 'ambiguous':
       throw new KeyringLinkError(
-        'This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.'
+        'This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.',
+        undefined,
+        'Scan.BothAgentAndCommunity'
       )
     case 'relay':
       throw new KeyringLinkError(

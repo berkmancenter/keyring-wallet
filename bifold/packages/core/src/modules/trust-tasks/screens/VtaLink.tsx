@@ -218,6 +218,8 @@ const VtaLink: React.FC = () => {
         return t('VtaLink.FailedRefused')
       case 'unreachable':
         return t('VtaLink.FailedUnreachable')
+      case 'communityAgent':
+        return t('VtaLink.FailedCommunityAgent')
       default:
         // Say what was caught, in words, rather than "something went wrong":
         // an iOS link that authenticated but never opened its mediator socket

@@ -15,7 +15,7 @@ import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { ConnectStackParams } from '../types/navigators'
 import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
-import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
+import { KeyringLinkError, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
@@ -105,7 +105,7 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
       // said as it is, as the scanner does, instead of "URL not recognized"
       // for a link Keyring did recognize (keyring-bifold#139 gate).
       if (e instanceof KeyringLinkError) {
-        setErrorMessage({ title: t('Scan.CodeNotUsable'), message: e.message })
+        setErrorMessage({ title: t('Scan.CodeNotUsable'), message: keyringLinkErrorText(e, (k) => t(k)) })
         return
       }
       // Anything else: say what was read, so a clipboard that held something
