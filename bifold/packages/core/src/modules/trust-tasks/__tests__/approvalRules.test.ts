@@ -17,6 +17,7 @@ import {
   approvalsView,
   modelFromExt,
   phoneSetName,
+  withKeySwapped,
   withPhoneRule,
 } from '../module/approvalRules'
 import { synthesizeRego, validateApprovals } from '../module/approvalsPolicy'
@@ -188,5 +189,48 @@ describe('the phone never sends an offered task', () => {
       )
     // React's createContext is imported and called bare; a VTA client's is a method.
     expect(walk(src).filter((f) => /\.createContext\(/.test(readFileSync(f, 'utf8')))).toEqual([])
+  })
+})
+
+/**
+ * After this phone's key is swapped (acl/swap-key), the rules still named the
+ * retired key: the agent kept asking a key that can no longer answer, and the
+ * phone stopped being asked at all.
+ */
+describe('approval rules follow this phone through a key swap', () => {
+  const NEW = 'did:peer:2.swappedIn'
+
+  it("renames the phone's own set, swaps its member, and repoints the rules that use it", () => {
+    const before = { ...EMPTY_APPROVALS, ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME) }
+    const after = withKeySwapped(before, ME, NEW)
+    expect(after.changed).toBe(true)
+    expect(after.sets).toEqual({ [phoneSetName(NEW)]: [NEW] })
+    expect(after.rules).toEqual([expect.objectContaining({ taskType: CREATE, approverSet: phoneSetName(NEW) })])
+    // The screen recognises the rule as this phone's again, under its new key.
+    const view = approvalsView({ ...after, version: 1 }, NEW)
+    expect(view.offered.find((o) => o.taskType === CREATE)?.on).toBe(true)
+    expect(view.elsewhere).toEqual([])
+    expect(() => validateApprovals(after.rules, after.sets)).not.toThrow()
+  })
+
+  it('swaps the old key in a set made elsewhere, and leaves every other member, set and rule as it was', () => {
+    const model = {
+      rules: [{ taskType: REVOKE, requires: 'consent' as const, approverSet: 'ops', minApprovals: 1 }],
+      sets: { ops: [OTHER, ME], audit: [OTHER] },
+    }
+    const after = withKeySwapped(model, ME, NEW)
+    expect(after.changed).toBe(true)
+    expect(after.sets).toEqual({ ops: [OTHER, NEW], audit: [OTHER] })
+    expect(after.rules).toEqual(model.rules)
+  })
+
+  it('nothing to change when the old key appears nowhere', () => {
+    const model = { rules: [], sets: { ops: [OTHER] } }
+    expect(withKeySwapped(model, ME, NEW)).toEqual({ ...model, changed: false })
+  })
+
+  it('a set renamed onto one that already exists merges into it, each member once', () => {
+    const model = { rules: [], sets: { [phoneSetName(ME)]: [ME], [phoneSetName(NEW)]: [NEW] } }
+    expect(withKeySwapped(model, ME, NEW).sets).toEqual({ [phoneSetName(NEW)]: [NEW] })
   })
 })
