@@ -372,6 +372,15 @@ async function openJoinDoors(driver) {
   }
 }
 
+/** Join's "what it asks": one card (JoinAsks), or the ways in (JoinWays) when the community offers several. */
+async function waitForJoinAsks(driver, timeout) {
+  await driver
+    .waitUntil(async () => (await byTestId(driver, "JoinAsks").isExisting()) || (await byTestId(driver, "JoinWays").isExisting()), { timeout, interval: 500 })
+    .catch(() => {
+      throw new Error(`Join showed neither testID=JoinAsks nor testID=JoinWays in ${timeout}ms`);
+    });
+}
+
 async function unlinkAndRelink(driver) {
   await openAgentHome(driver);
   await openManage(driver);
@@ -507,7 +516,7 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: a pasted bare community DID opened Join${shows ? ` on "${shows}"` : ""}`);
     await assertNoDidShown(driver, "Join on a pasted bare community DID");
   }
-  await waitForTestId(driver, "JoinAsks", 15000);
+  await waitForJoinAsks(driver, 15000);
   await assertNoDidShown(driver, "Join: what the community asks");
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
@@ -736,7 +745,7 @@ async function testerJourney(driver) {
     const linkName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
     const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(linkName)}`;
     await pasteLinkFromHome(driver, link);
-    await waitForTestId(driver, "JoinAsks", 30000);
+    await waitForJoinAsks(driver, 30000);
     // What the screen shows is NOT necessarily the name in the link. A name a
     // community publishes about itself outranks one a link claims, on purpose:
     // anyone can write a link, and the community's own service is the
