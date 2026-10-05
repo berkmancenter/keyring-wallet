@@ -3,7 +3,7 @@
  * its one next step, as a table; and the communities, each once.
  */
 import { communityCardModel } from '../screens/communityCardModel'
-import { communitiesHeld } from '../screens/VtaAgentHome'
+import { communitiesHeld, ownHoldings } from '../screens/VtaAgentHome'
 import type { CommunityJoinState } from '../module/vtiJoin'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -57,5 +57,26 @@ describe('the communities on the page', () => {
         invited: [B, C],
       } as never)
     ).toEqual([A, B, C])
+  })
+})
+
+// The several-agents device check (R5, 10-04): B's home said "Member of" a
+// community only A had joined.
+describe("an agent's home holds only its own identities", () => {
+  const A = 'did:webvh:home:vta-a'
+  const B = 'did:webvh:home:vta-b'
+  const persona = (did: string, vtaDid?: string) => ({ did, communityDid: 'did:webvh:home:c', vtaDid }) as never
+  const membership = (personaDid: string) => ({ communityDid: 'did:webvh:home:c', personaDid }) as never
+
+  it("leaves out another agent's identity and its membership", () => {
+    const held = ownHoldings([persona('p-a', A), persona('p-b', B)], [membership('p-a')], B)
+    expect(held.personas.map((p) => p.did)).toEqual(['p-b'])
+    expect(held.memberships).toEqual([])
+  })
+
+  it('keeps identities kept before agents were told apart, and a membership of no known identity', () => {
+    const held = ownHoldings([persona('p-old')], [membership('p-old'), membership('p-unknown')], A)
+    expect(held.personas.map((p) => p.did)).toEqual(['p-old'])
+    expect(held.memberships).toHaveLength(2)
   })
 })

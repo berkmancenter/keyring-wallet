@@ -133,7 +133,7 @@ export async function receiveCommunityNotice(
     const removal = removalOf(doc)
     if (!removal) return log('malformed')
     if (doc.payload?.did !== personaDid) return log('about someone else')
-    const membership = await store.getMembership(community)
+    const membership = await store.getMembership(community, personaDid)
     if (!membership || membership.personaDid !== personaDid) return log('no membership for it')
     if (membership.removal) return log('already removed')
     // Decided before this membership was granted: about an earlier one.

@@ -277,6 +277,43 @@ describe('I want to join a community', () => {
     }
     afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
 
+    // The several-agents device check (R2): with B current, A's membership
+    // showed as B's ("You're a member"), and A was never offered.
+    it("another agent's membership is not the current agent's: Join offers that agent", async () => {
+      const A = 'did:webvh:join-screen:agent-a'
+      const B = 'did:webvh:join-screen:agent-b'
+      const personaOfA = {
+        tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: `${A}|${linked}` },
+        content: { did: 'did:webvh:me-at-a', communityDid: linked, vtaDid: A },
+      }
+      ;(useAgent as jest.Mock).mockReturnValue({
+        agent: {
+          config: { logger: { info: jest.fn(), error: jest.fn() } },
+          genericRecords: {
+            findAllByQuery: async (q: Record<string, string>) =>
+              [personaOfA].filter((r) =>
+                Object.entries(q).every(([k, v]) => (r.tags as Record<string, string>)[k] === v)
+              ),
+          },
+        },
+      })
+      ;(vtaAgent as unknown as Setter).set({
+        agents: [
+          { vtaDid: A, label: 'A' },
+          { vtaDid: B, label: 'B' },
+        ],
+        link: { kind: 'linked', vtaDid: B, label: 'B', linkedAt: 't', connection: { kind: 'online', since: 0 } },
+      })
+      const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('JoinAgentSuggested'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('JoinUseSuggestedAgent'))).toBeTruthy()
+      ;(vtaAgent as unknown as Setter).set({ agents: undefined })
+    })
+
     // The journey-state audit (F): the standing was read once, on mount.
     it('a membership stored while the screen is open shows at once, with no poll', async () => {
       const tree = await standAt({ kind: 'none' })
