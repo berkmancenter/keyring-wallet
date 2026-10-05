@@ -413,7 +413,15 @@ try {
     }
     await shot(d, "agents-r5-refusal");
     log(`R5: "Check now" ${hasCheck ? "tapped" : "ABSENT"} · refusal "${refused}" after ${((Date.now() - tc) / 1000).toFixed(1)} s · toast "${toast}"`);
-    row("R5 refusal via Check now", hasCheck && Boolean(refused), `${hasCheck ? "Check now shown" : "no Check now"}; "${refused}"`);
+    // Two ways a refusal reaches the card. With the session on this identity, the card learns it by itself and
+    // offers no "Check now"; with the session on another identity, "Check now" is the way. Either is a pass; the
+    // other is reported as not reached, not as a failure.
+    if (hasCheck) {
+      row("R5 refusal via Check now", Boolean(refused), `Check now shown; "${refused}"`);
+    } else {
+      row("R5 refusal on the card by itself", Boolean(refused), `no Check now needed; "${refused}"`);
+      console.log('NOT-REACHED R5 "Check now": the session held this identity, so the card learned the refusal by itself');
+    }
   }
 
   if (ROWS.includes("R3")) {
