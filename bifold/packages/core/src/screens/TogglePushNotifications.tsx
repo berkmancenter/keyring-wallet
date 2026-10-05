@@ -60,18 +60,25 @@ const TogglePushNotifications: React.FC = () => {
   const hasNotificationsDisabled = notificationStatus === 'denied' && store.onboarding.didConsiderPushNotifications
 
   const toggleSwitch = async () => {
-    if (!notificationState) {
+    const previous = notificationState
+    if (!previous) {
       const res = await enablePushNotifications.setup()
       if (res === 'denied') {
         return
       }
     }
 
-    dispatch({ type: DispatchAction.USE_PUSH_NOTIFICATIONS, payload: [!notificationState] })
+    dispatch({ type: DispatchAction.USE_PUSH_NOTIFICATIONS, payload: [!previous] })
+    setNotificationState(!previous)
 
-    enablePushNotifications.toggle(!notificationState, agent)
+    await enablePushNotifications.toggle(!previous, agent)
 
-    setNotificationState(!notificationState)
+    // An approval rule held the change: the agent kept what it had, so the
+    // switch (and the preference) go back to it rather than say otherwise.
+    if (vtaAgent.getState().wakeBlockedByRule) {
+      dispatch({ type: DispatchAction.USE_PUSH_NOTIFICATIONS, payload: [previous] })
+      setNotificationState(previous)
+    }
   }
 
   const controls = hasNotificationsDisabled ? (
