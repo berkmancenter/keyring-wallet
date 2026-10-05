@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -133,7 +133,6 @@ const VtaAgentHome: React.FC = () => {
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
     return () => clearTimeout(timer)
   }, [unlinkOpen])
-  const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [introPanel, setIntroPanel] = useState(0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -274,14 +273,6 @@ const VtaAgentHome: React.FC = () => {
     const timer = setInterval(() => void load(), VETTER_RECHECK_MS)
     return () => clearInterval(timer)
   }, [isFocused, seatedAsVetter, load])
-
-  const onRefresh = useCallback(async () => {
-    if (!agent) return
-    setRefreshing(true)
-    await vtaAgent.ensureOnline(agent)
-    await load()
-    setRefreshing(false)
-  }, [agent, load])
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
 
@@ -480,7 +471,11 @@ const VtaAgentHome: React.FC = () => {
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+        // No pull-to-refresh here (234 known issue, fixed in 235): after a
+        // refused request, Android's SwipeRefreshLayout behind it took every
+        // tap on the agent switcher's rows until the screen remounted (root
+        // touch target = the refresh layout, dumpsys at the miss). The screen
+        // reads again on focus, and a community card has its own Check now.
         testID={testIdWithKey('AgentHome')}
       >
         <View style={styles.card}>
