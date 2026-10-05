@@ -80,6 +80,20 @@ export async function notificationPermissionStatus(): Promise<PermissionState> {
   return fromAndroid((await checkNotifications()).status)
 }
 
+/**
+ * Whether the phone lets Keyring show notifications right now, for a person
+ * who has already turned them on. Not {@link notificationPermissionStatus}:
+ * on Android, react-native-permissions' `checkNotifications` never answers
+ * BLOCKED — it reads `areNotificationsEnabled()` and answers GRANTED or DENIED
+ * (RNPermissionsModuleImpl.checkNotifications) — and that function reads DENIED
+ * as "not asked yet". For someone who turned notifications on, DENIED can only
+ * mean they were switched off since.
+ */
+export async function notificationsAllowedNow(): Promise<PermissionState> {
+  if (Platform.OS === 'ios') return fromIos(await messaging().hasPermission())
+  return (await checkNotifications()).status === RESULTS.GRANTED ? 'granted' : 'denied'
+}
+
 /** Ask for the notification permission (Android 13+ and iOS show the system prompt). */
 export async function requestNotificationPermission(): Promise<PermissionState> {
   if (Platform.OS === 'ios') return fromIos(await messaging().requestPermission())

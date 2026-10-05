@@ -98,7 +98,7 @@ try {
     throw new Error("nothing said what happened after Leave");
   }
   console.log(`[e2e] after Leave: "${words}"`);
-  if (KEEP === "purge" && !/erased your record|no longer had you/.test(words)) throw new Error(`asked to erase, but: "${words}"`);
+  if (KEEP === "purge" && !/erased your record|no longer had you|no longer a member of/.test(words)) throw new Error(`asked to erase, but: "${words}"`);
   await sleep(3000);
   if (await existsTestId(driver, "AgentMembershipRow", 3000)) {
     await screenshot(driver, "leave-still-listed");

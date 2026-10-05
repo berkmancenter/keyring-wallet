@@ -7,31 +7,31 @@
 # App Store Connect allows at most 4000 characters.
 
 What's new
-• Fixed: if you first installed Keyring in mid-September or earlier, a recent update could stop it starting, showing "Something went wrong" each time it opened. Keyring now switches to the current messaging service by itself and starts normally, with no reinstall needed.
-• Onboarding now offers notifications: "Turn on notifications", or "Not now" and turn them on later in Settings → Notifications.
-• Turning notifications on works the first time on iPhone. On 232/235 it sometimes needed switching off and on once.
-• On Android, tapping a notification when Keyring was closed opens the request, not My Agent.
-• Messages for each community you're in can now arrive, not just for the one you last chose. If one doesn't arrive, closing and reopening Keyring picks it up.
-• You can join a second community, or accept its invitation, while already a member of another.
-• If a community offers no vetting, the Join screen says so, and every way in stays visible on small phones.
-• Setting up an agent through your agent host shows each step as it happens.
-• "Your agent" shows "Member of …" and a next step when something needs you, after your first membership.
-• A community without a name shows a short ID instead of "a community".
-• "<Community> turned down your request" appears once if a request is refused.
-• A link that opens Join or Requests now has a way back to Your agent.
-• New notifications picture and screen title in Keyring's style; bottom messages no longer cover the tab bar.
+• Several agents in one Keyring: link more than one agent, switch between them, see every agent's requests in one place, and unlink one. Wallet cards say which agent holds them.
+• My Agent is reorganised: your communities and what your agent holds come first, a "Join" button sits in the corner, and Manage, Status, "Ask me before…" and "Restore cards from your agent" are under Agent settings.
+• "Ask me before…": choose what your agent asks this phone about before it acts.
+• Approval rules keep asking this phone after its linking key is replaced.
+• If an approval rule covers turning notifications on or off, Settings says so within seconds, and the switch shows what your agent really has.
+• Turn Keyring's notifications off in your phone's settings, and your agent learns it the next time you open Keyring.
+• A second community's messages keep arriving even if listening for it failed at start-up.
+• My Agent learns that a request was turned down without you opening Join.
+• When a community's way in can't be used yet, Join says why in plain words, and says when nothing is wrong on your side.
+• Vetting: a vetter's ticket you scanned is kept until it's used, even after a relaunch, and scanning goes straight on. The legal-name step offers your profile name but never fills it in by itself.
+• One Wallet card per membership; a plain "member" role no longer shows a second card.
+• A community with no published name reads "<short ID> (no name published yet)".
+• "Get your cards" is now "Restore cards from your agent", with a line saying when to use it.
+• Onboarding has a slide about your own agent, and the biometrics step says why it's recommended.
+• Smaller fixes: the Wallet's empty message is centred, the R-Card name sits under the photo, a phone's removal shows once, and notification text stays visible on short phones.
 
 Please test
-• Fresh install: onboarding's notifications step, both "Turn on notifications" and "Not now".
-• Join a second community while already a member, by invitation and by vetting.
-• With Keyring closed, tap a notification: it should open the request.
+• Link a second agent, switch between them, and unlink one.
+• My Agent's new layout: Join in the corner, then Agent settings → Manage, Status, Ask me before…, Restore cards.
+• Vetting with a scanned ticket: open Menu during the application and come back. The ticket should still be there.
 
 Known issues
-• Messages for a community other than the one you last chose are best-effort in this build: if Keyring couldn't listen for it at start-up, it may wait until you close and reopen the app.
-• Notifications only arrive if your agent has policy enforcement on and an approval rule naming your phone (see the how-to in the group).
-• If you block Keyring's notifications in your phone's settings, your agent still thinks the phone is reachable until you next open the app.
-• Notifications cover approval requests only; a membership change shows while the app is open.
+• With more than one agent, after a community turns down a request, tapping the other agent in the switcher may do nothing. Leave My Agent (for example, open Contacts) and come back, then try again.
+• Communities set up before October whose ways in still ask for a credential show those ways as "can't be used yet". The community's admin needs to update them.
+• Notifications only arrive if your agent has policy enforcement on and an approval rule naming your phone.
+• Keyring can't take part in hidden (zero-knowledge) vetting yet. On a community that offers it, Keyring still joins the ordinary way, and a terminal-app vetter who has enrolled for hidden vetting can't vet a Keyring applicant.
 • Keyring can't present a credential you already hold to join a community yet.
-• A vetter using the openvtc terminal app needs v0.3.1 or later.
-• If you installed before mid-September: contacts or connections set up through the old messaging service may need setting up again.
 • Update over your current version; your memberships carry over.

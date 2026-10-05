@@ -42,7 +42,7 @@ const { values: a } = parseArgs({
 });
 for (const k of ['bin', 'version', 'slug', 'vta-did', 'profile', 'dir']) if (!a[k]) throw new Error(`--${k} is required`);
 // Runner agents only: the Farm runners, or the lab's runner bob. Never alice, a person's own agent.
-if (!/^(farm-runner-(prague|openvtc)|bob)$/.test(a.slug)) throw new Error(`refusing slug ${a.slug}: the fixture lives on a runner agent (farm-runner-openvtc, farm-runner-prague, or the lab's bob) only`);
+if (!/^(farm\d*-runner-(prague|openvtc)|bob)$/.test(a.slug)) throw new Error(`refusing slug ${a.slug}: the fixture lives on a runner agent (farm-runner-openvtc, farm-runner-prague, or the lab's bob) only`);
 if (existsSync(path.join(a.dir, `config-${a.profile}.json`))) throw new Error(`a fixture already exists at ${a.dir} for ${a.profile}; remove it first (farm-test-resources.md)`);
 mkdirSync(a.dir, { recursive: true });
 
@@ -86,10 +86,13 @@ try {
     await tui.pressEach([...a.context], 60);
     await tui.waitFor(`--id ${a.context}`, { step: 'setup.contextId', source: 'ui/pages/setup_flow/vta_acl_instructions.rs:129,261' });
   }
-  // The command the TUI prints (vta_acl_instructions.rs:258-263), run through the per-slug lock.
+  // The command the TUI prints (vta_acl_instructions.rs:258-263), run through the per-slug lock,
+  // plus --admin-handoff: VTI main refuses to roll an expiring setup entry with no one-time
+  // hand-off over to the permanent admin (VTI-ACL-053/054, provision_integration/mod.rs:1036-1062),
+  // and openvtc e49816c's printed command omits it.
   const out = execFileSync(
     PNM_LOCKED,
-    ['--vta', a.slug, 'contexts', 'create', '--id', a.context, '--name', 'OpenVTC', '--admin-did', setupDid, '--admin-expires', '1h', '--admin-holder'],
+    ['--vta', a.slug, 'contexts', 'create', '--id', a.context, '--name', 'OpenVTC', '--admin-did', setupDid, '--admin-expires', '1h', '--admin-holder', '--admin-handoff'],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 360000 }
   );
   say(`pnm contexts create: ${out.replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').slice(-3).join(' | ')}`);

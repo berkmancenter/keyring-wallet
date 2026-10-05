@@ -120,6 +120,8 @@ async function assertAgentNamed(driver, key, where) {
 
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
+  // An agent with other phones on it first offers "Your other phones"; keep them all.
+  if (await passNewPhoneOfferIfShown(driver, 8000)) console.log("[e2e] other-phones offer: kept them all (Done)");
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
@@ -349,7 +351,34 @@ async function linkManually(driver) {
  * (IN-20c); on a build without them it is on the page itself.
  */
 async function openManage(driver) {
-  if (await existsTestId(driver, "AgentSegment_manage", 3000)) await tapTestId(driver, "AgentSegment_manage", 5000);
+  // Before bifold #297: a Manage segment. After: one "Agent settings" row at
+  // the bottom that opens Manage's and Status's contents — tapped only when
+  // closed, since a second tap closes it.
+  if (await existsTestId(driver, "AgentSegment_manage", 3000)) {
+    await tapTestId(driver, "AgentSegment_manage", 5000);
+    return;
+  }
+  await scrollToTestId(driver, "AgentSettings", 8).catch(() => undefined);
+  if (!(await existsTestId(driver, "AgentRequestsRow", 1500)) && (await existsTestId(driver, "AgentSettings", 3000))) {
+    await tapTestId(driver, "AgentSettings", 5000);
+  }
+}
+
+/** Bring "Join another community" into reach: after #297 a member finds it behind the corner Join button. */
+async function openJoinDoors(driver) {
+  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
+    await tapTestId(driver, "AgentJoinCorner", 5000);
+  }
+}
+
+/** Join's "what it asks": one card (JoinAsks), or the ways in (JoinWays) when the community offers several. */
+async function waitForJoinAsks(driver, timeout) {
+  await driver
+    .waitUntil(async () => (await byTestId(driver, "JoinAsks").isExisting()) || (await byTestId(driver, "JoinWays").isExisting()), { timeout, interval: 500 })
+    .catch(() => {
+      throw new Error(`Join showed neither testID=JoinAsks nor testID=JoinWays in ${timeout}ms`);
+    });
 }
 
 async function unlinkAndRelink(driver) {
@@ -437,7 +466,7 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await openJoinDoors(driver);
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   // What the build's suggestion is called. A community that has published no
@@ -487,7 +516,7 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: a pasted bare community DID opened Join${shows ? ` on "${shows}"` : ""}`);
     await assertNoDidShown(driver, "Join on a pasted bare community DID");
   }
-  await waitForTestId(driver, "JoinAsks", 15000);
+  await waitForJoinAsks(driver, 15000);
   await assertNoDidShown(driver, "Join: what the community asks");
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
@@ -672,7 +701,7 @@ async function testerJourney(driver) {
   // choose the segment and scroll to them (the #10 lab run tapped blind and
   // timed out on an applicant's screen).
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await openJoinDoors(driver);
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
@@ -716,7 +745,7 @@ async function testerJourney(driver) {
     const linkName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
     const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(linkName)}`;
     await pasteLinkFromHome(driver, link);
-    await waitForTestId(driver, "JoinAsks", 30000);
+    await waitForJoinAsks(driver, 30000);
     // What the screen shows is NOT necessarily the name in the link. A name a
     // community publishes about itself outranks one a link claims, on purpose:
     // anyone can write a link, and the community's own service is the

@@ -42,7 +42,13 @@ const ARTIFACTS = path.resolve(here, "../artifacts");
 const LOW = { from: 0.86 };
 
 const isIos = (d) => d.e2ePlatform === "ios";
-export const textOf = async (d, key) => (await byTestId(d, key).getAttribute(isIos(d) ? "label" : "text")) || "";
+// An Android Button carries its words in content-desc, not text (the card's
+// "Open the vetting desk", 227 gate): fall back to it when text is empty.
+export const textOf = async (d, key) => {
+  const el = byTestId(d, key);
+  if (isIos(d)) return (await el.getAttribute("label")) || "";
+  return (await el.getAttribute("text")) || (await el.getAttribute("content-desc").catch(() => "")) || "";
+};
 
 // ---------------------------------------------------------------- the record
 
@@ -536,18 +542,53 @@ export const applicant = {
       if (door === "link") {
         if (!communityDid) throw new Error("door 'link' needs communityDid");
         await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(communityName)}`);
-        await waitForTestId(d, "JoinAsks", 60000);
-        const asks = await textOf(d, "JoinAsks").catch(() => "");
+        // A community on join 0.2 shows the card it always did (JoinAsks); one
+        // on join 0.3 shows its ways in (JoinWays). Start is the same button.
+        const until03 = Date.now() + 90000;
+        let card = "";
+        while (!card && Date.now() < until03) {
+          if (await existsTestId(d, "JoinAsks", 1500)) card = "JoinAsks";
+          else if (await existsTestId(d, "JoinWays", 1500)) card = "JoinWays";
+        }
+        if (!card) throw new Error("neither JoinAsks nor JoinWays on \"what it asks\"");
+        const asks = card === "JoinAsks" ? await textOf(d, "JoinAsks").catch(() => "") : `ways in (${card})`;
+        // What the "what it asks" screen is made of, for a before/after
+        // comparison of the screen itself: its parts, a picture, its source.
+        if (process.env.JOIN_SCREEN_RECORD) {
+          const parts = {};
+          for (const id of ["JoinAsks", "JoinStart", "JoinNoInvitationBypass", "JoinWays", "JoinWaysTitle"]) parts[id] = await existsTestId(d, id, 1500);
+          const start = parts.JoinStart ? await textOf(d, "JoinStart").catch(() => "") : "";
+          // On a community with a vetting way beside a review way: the second button and each row's own line.
+          const said = async (id) => ((await existsTestId(d, id, 1500)) ? (await textOf(d, id).catch(() => "")).replace(/\s+/g, " ").trim() : null);
+          const more = { JoinAsk: await said("JoinAsk") };
+          for (const way of (process.env.JOIN_WAYS || "").split(",").filter(Boolean)) {
+            more[`JoinWayFollows_${way}`] = await said(`JoinWayFollows_${way}`);
+            more[`JoinWayStart_${way}`] = await said(`JoinWayStart_${way}`);
+          }
+          console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" more=${JSON.stringify(more)} asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
+          await screenshot(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+          await dumpSource(d, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+        }
         // After a Leave the screen may lead with where the person stood.
         for (let i = 0; i < 20 && !(await existsTestId(d, "JoinStart", 1500)); i++) {
           const again = await scrollToTestId(d, "JoinAgain", 2).catch(() => undefined);
           if (again) {
             await again.click();
+            console.log(`[e2e] ${d.e2ePlatform}: pressed Join again`);
             await sleep(1500);
+            if (process.env.JOIN_SCREEN_RECORD) {
+              await screenshot(d, `join-after-join-again-${process.env.JOIN_SCREEN_RECORD}`);
+              await dumpSource(d, `join-after-join-again-${process.env.JOIN_SCREEN_RECORD}`);
+            }
           }
         }
         await (await waitForTestId(d, "JoinStart", 30000)).click();
         await waitForTestId(d, "JoinMakeIdentity", 30000);
+        if (process.env.JOIN_SCREEN_RECORD) {
+          // The identity step as shown: which identity it offers.
+          await screenshot(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
+          await dumpSource(d, `join-identity-step-${process.env.JOIN_SCREEN_RECORD}`);
+        }
         await tapTestIdByCoordinates(d, "JoinAsContinue");
         await handleBiometricConfirmIfPresent(d);
         // "Your agent didn't answer. Tap Continue to try again": do what the
@@ -895,7 +936,13 @@ export const vetter = {
         // Farm it took longer than 4 × 5 s (RC2 gate, 2026-09-25, the button
         // still spinning when the runner gave up). Wait for the answer before
         // tapping again; a second tap on a busy button does nothing.
-        await tapTestIdReliable(d, "VettingPublishProfileButton", () => byTestId(d, "VettingProfilePublished").isExisting().catch(() => false), {
+        // The "published" line sits under the button, below the fold on an
+        // Android phone, whose page leaves out what is off screen: look for it
+        // with a short scroll, not only where the screen is (227 gate).
+        const published = async () =>
+          (await byTestId(d, "VettingProfilePublished").isExisting().catch(() => false)) ||
+          Boolean(await scrollToTestId(d, "VettingProfilePublished", 2, { both: false }).catch(() => undefined));
+        await tapTestIdReliable(d, "VettingPublishProfileButton", published, {
           attempts: 3,
           settleMs: 30000,
         });
@@ -1019,7 +1066,7 @@ export const community = {
         }
       }
       if (!words) throw failWith("nothing said what happened after Leave", {});
-      if (keep === "purge" && !/erased your record|no longer had you/.test(words)) throw failWith(`asked to erase, but the app says "${words}"`, { toast: words });
+      if (keep === "purge" && !/erased your record|no longer had you|no longer a member of/.test(words)) throw failWith(`asked to erase, but the app says "${words}"`, { toast: words });
       await sleep(3000);
       if (await existsTestId(d, "AgentMembershipRow", 3000)) throw failWith("the phone still lists the community after Leave", { toast: words });
       return { value: keep, observed: { toast: words } };

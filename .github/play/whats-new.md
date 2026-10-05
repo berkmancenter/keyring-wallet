@@ -1,5 +1,6 @@
-• Fixed: phones that first installed Keyring in mid-September or earlier no longer get stuck at "Something went wrong" after an update.
-• Onboarding offers notifications; the first switch-on works.
-• Tapping a notification with Keyring closed opens the request.
-• Join or accept an invitation from a second community while already a member.
-• New Requests count, setup progress, and a notice when a request is turned down.
+• Several agents in one Keyring: link more, switch, unlink one.
+• New My Agent layout: communities first, Join in the corner, Agent settings.
+• "Ask me before…" approval rules; they keep working after a key change.
+• Clearer messages when a way in can't be used, or a rule blocks notifications.
+• Vetting keeps a scanned ticket, plus many small fixes.
+• Known issue: after a request is turned down, switching agents may need leaving My Agent and coming back.
