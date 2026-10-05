@@ -12,6 +12,7 @@ import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
 import { useConnectionByOutOfBandId } from '../../hooks/connections'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../../modules/trust-tasks/module/VtiIdentityStore'
+import { currentAgentDid } from '../../modules/trust-tasks/module/currentAgent'
 import { communityTarget } from '../../modules/trust-tasks/module/vtiCommunityLink'
 import { communityLabelOf } from '../../modules/trust-tasks/screens/communityName'
 import { useRCardCredential } from '../../modules/vrc/hooks/useRCardCredential'
@@ -82,7 +83,12 @@ const QRScanner: React.FC<Props> = ({
       .then((all) => {
         if (!live) return
         const chosen = communityTarget.getChosen()?.communityDid
-        const newest = [...all].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+        // Only the agent this phone acts with now: another agent's identity is
+        // not this one's to show (IN-114, the same "newest of every agent").
+        const vtaDid = currentAgentDid()
+        const newest = all
+          .filter((p) => !vtaDid || p.vtaDid === vtaDid)
+          .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
         setPersona(newest.find((p) => p.communityDid === chosen) ?? newest[0])
       })
       .catch(() => undefined)
@@ -430,12 +436,10 @@ const QRScanner: React.FC<Props> = ({
                       variant="bold"
                       style={{ color: showing === which ? ColorPalette.grayscale.white : ColorPalette.brand.primary }}
                     >
-                      {which === 'contact'
-                        ? t('Scan.ContactCard')
-                        : t('Scan.IdentityFor', {
-                            community: communityLabelOf(persona.communityDid, t),
-                            interpolation: { escapeValue: false },
-                          })}
+                      {/* Two short words each: the community's name, often long or
+                          not published yet, is said in the title under the code
+                          (feedback 10-05: the tab with it read clunky). */}
+                      {which === 'contact' ? t('Scan.ContactCard') : t('Scan.CommunityIdentity')}
                     </ThemedText>
                   </Pressable>
                 ))}
