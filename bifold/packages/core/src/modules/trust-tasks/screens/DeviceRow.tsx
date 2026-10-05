@@ -21,6 +21,8 @@ import { didHashKey } from './testIdKey'
 
 /** A device as the row shows it: its name already worded, its state already read. */
 export interface DeviceView {
+  /** It registered its own name: renamed on that device, not from here (IN-123). */
+  namesItself?: boolean
   did: string
   name: string
   platform?: string
@@ -86,15 +88,28 @@ export const DeviceRow: React.FC<{
           testID={testIdWithKey('AgentDeviceRename')}
         />
       ) : removed ? null : (
-        <Button
-          title={t(device.phone ? 'Devices.RemoveThisPhone' : 'Devices.Remove')}
-          buttonType={ButtonType.Secondary}
-          onPress={onRemove}
-          disabled={disabled}
-          testID={testIdWithKey(`AgentDeviceRemove_${key}`)}
-        >
-          {busy ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-        </Button>
+        <>
+          {/* Named from here only when it does not name itself: a computer, a
+              CLI, a plugin (IN-123). A phone renames itself. */}
+          {device.namesItself ? null : (
+            <Button
+              title={t('Devices.Rename')}
+              buttonType={ButtonType.Secondary}
+              onPress={onRename}
+              disabled={disabled}
+              testID={testIdWithKey(`AgentDeviceRename_${key}`)}
+            />
+          )}
+          <Button
+            title={t(device.phone ? 'Devices.RemoveThisPhone' : 'Devices.Remove')}
+            buttonType={ButtonType.Secondary}
+            onPress={onRemove}
+            disabled={disabled}
+            testID={testIdWithKey(`AgentDeviceRemove_${key}`)}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+          </Button>
+        </>
       )}
       <Pressable
         onPress={() => setDetails(!details)}

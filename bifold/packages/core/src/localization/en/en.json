@@ -2092,6 +2092,8 @@
     "RemovedWiped": "Removed: {{device}}. It can't use your agent any more, and it's asked to erase its copy.",
     "Rename": "Rename",
     "NameTitle": "Name this phone",
+    "NameOtherTitle": "Name this device",
+    "NameOtherHint": "What My devices calls it. You can rename it there any time.",
     "NameHint": "Your other devices show this name.",
     "NameSave": "Save",
     "OfferTitle": "Your other devices",
@@ -2108,7 +2110,8 @@
     "DefaultName": "{{platform}} · added {{date}}",
     "ShortIos": "iPhone",
     "ShortAndroid": "Android",
-    "ShortPhone": "Phone"
+    "ShortPhone": "Phone",
+    "ShortComputer": "Computer"
   },
   "AgentKeys": {
     "LostTitle": "Lost a phone?",

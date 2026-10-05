@@ -736,6 +736,41 @@ describe('removing a device', () => {
   })
 })
 
+// IN-123: a computer (pnm) added to the agent is named, and renamed later,
+// through its access-list label; the agent refuses a caller's own entry, so
+// this phone keeps its own rename (device/register).
+describe('renaming another device', () => {
+  it('asks the owner first, then sets the label on that device only', async () => {
+    mockVta.acl.set(BACKUP, { role: 'admin', label: 'Another device' })
+    const confirmOwner = confirmed()
+    const { vta } = await linkedPhone({ confirmOwner })
+    const before = sentOf(ACL_UPDATE).length
+    await vta.renameAgentDevice(agent, BACKUP, 'Work laptop (pnm)')
+
+    expect(mockVta.log.some((l) => /^confirmOwner: Rename a device/.test(l))).toBe(true)
+    const sent = sentOf(ACL_UPDATE)
+      .slice(before)
+      .map((a) => a.payload)
+    expect(sent).toEqual([expect.objectContaining({ label: 'Work laptop (pnm)' })])
+    expect(mockVta.acl.get(BACKUP)?.label).toBe('Work laptop (pnm)')
+  })
+
+  it('a cancelled owner check renames nothing', async () => {
+    mockVta.acl.set(BACKUP, { role: 'admin', label: 'Another device' })
+    const confirmOwner = jest.fn(async () => ({ ok: false, reason: 'cancelled' }) as OwnerConfirmation)
+    const { vta } = await linkedPhone({ confirmOwner })
+    await expect(vta.renameAgentDevice(agent, BACKUP, 'X')).rejects.toMatchObject({ name: 'OwnerNotConfirmed' })
+    expect(mockVta.acl.get(BACKUP)?.label).toBe('Another device')
+  })
+
+  it('this phone is refused before the owner or the agent is asked', async () => {
+    const confirmOwner = confirmed()
+    const { vta } = await linkedPhone({ confirmOwner })
+    await expect(vta.renameAgentDevice(agent, PHONE, 'X')).rejects.toMatchObject({ reason: 'thisPhone' })
+    expect(confirmOwner).not.toHaveBeenCalled()
+  })
+})
+
 describe('an agent that asks for more than the owner check (policy gate)', () => {
   it('a re-authentication (step-up) rule is reported once, not retried', async () => {
     // policy_gate.rs:213-221 → step_up.rs:1300-1308: taskFailed with the reason

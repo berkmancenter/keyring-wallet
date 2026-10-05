@@ -90,6 +90,8 @@ describe('a device as its row shows it', () => {
       status: 'active',
       thisPhone: false,
       phone: true,
+      // It named itself, so it is renamed on that phone, not from here (IN-123).
+      namesItself: true,
     })
   })
 

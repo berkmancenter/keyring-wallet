@@ -1668,6 +1668,27 @@ export class VtaAgentController {
   }
 
   /**
+   * Name another device on this agent (IN-123): its access-list label, the
+   * name My devices shows for a device that does not name itself (a
+   * computer, a CLI, a plugin). `acl/update/0.1` sets it; the agent refuses a
+   * caller's own entry (VTI acl.rs `refuse_self_modification`), so this phone
+   * names itself through {@link renameThisDevice} instead. An owner act: the
+   * person confirms first, and nothing is sent without it.
+   */
+  async renameAgentDevice(agent: Agent, did: string, label: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Rename a device on your agent')
+    await this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      await client.labelAclEntry(did, label).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    })
+  }
+
+  /**
    * Every device that runs this agent with its device binding where it has one
    * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
    * it must. Refuses with {@link DeviceActionRefused}.

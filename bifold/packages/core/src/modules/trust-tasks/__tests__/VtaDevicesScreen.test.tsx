@@ -181,6 +181,30 @@ describe('your devices', () => {
     expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent(/Sam’s phone/)
   })
 
+  // IN-123: a computer, a CLI or a plugin is named from here (its access-list
+  // label); a phone that names itself is renamed on that phone.
+  test('another device that does not name itself has Rename beside Remove, and saves through the agent', async () => {
+    const list = jest
+      .spyOn(vtaAgent, 'agentDevices')
+      .mockResolvedValueOnce([thisPhone, oldPhone, plugin])
+      .mockResolvedValueOnce([thisPhone, oldPhone, { ...plugin, label: 'Work laptop (pnm)' }])
+    const renameOther = jest.spyOn(vtaAgent, 'renameAgentDevice').mockResolvedValue(undefined)
+    const renameMine = jest.spyOn(vtaAgent, 'renameThisDevice').mockResolvedValue(undefined)
+    const tree = await show()
+    expect(tree.queryByTestId(id(`AgentDeviceRename_${deviceKey(OLD)}`))).toBeNull()
+    expect(tree.getByTestId(id(`AgentDeviceRemove_${deviceKey(PLUGIN)}`))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(id(`AgentDeviceRename_${deviceKey(PLUGIN)}`)))
+    expect(tree.getByTestId(id('DeviceNameInput')).props.value).toBe('Devices.BrowserPlugin')
+    fireEvent.changeText(tree.getByTestId(id('DeviceNameInput')), 'Work laptop (pnm)')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('DeviceNameSave')))
+    })
+    expect(renameOther).toHaveBeenCalledWith({}, PLUGIN, 'Work laptop (pnm)')
+    expect(renameMine).not.toHaveBeenCalled()
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(PLUGIN)}`))).toHaveTextContent(/Work laptop \(pnm\)/)
+  })
+
   // At the 226 gate the prompt closed as soon as the agent took the name, and
   // for about 2 s the list still showed the old one until it was read again.
   test('keeps the name prompt busy until the list read back from the agent shows the new name', async () => {

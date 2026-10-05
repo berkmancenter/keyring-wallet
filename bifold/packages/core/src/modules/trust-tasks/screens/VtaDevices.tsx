@@ -72,7 +72,8 @@ const VtaDevices: React.FC = () => {
   const [error, setError] = useState<string | undefined>()
   const [removed, setRemoved] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
-  const [renaming, setRenaming] = useState(false)
+  /** Whose name is being changed: this phone (its own record) or another device (its label). */
+  const [renaming, setRenaming] = useState<AgentDevice | undefined>()
   const [rotation, setRotation] = useState<RotationSupport | undefined>()
   const navigation = useNavigation()
 
@@ -146,24 +147,23 @@ const VtaDevices: React.FC = () => {
   }
 
   const onRename = async (name: string) => {
-    if (!agent) return
+    if (!agent || !renaming) return
     setError(undefined)
     setBusy('rename')
     try {
-      await vtaAgent.renameThisDevice(agent, name)
+      if (renaming.isThisPhone) await vtaAgent.renameThisDevice(agent, name)
+      else await vtaAgent.renameAgentDevice(agent, renaming.did, name)
       // Busy until the list read back shows it: closing first showed the old
       // name for a moment (226 gate). A failed read closes it all the same —
       // the name is saved, and load() says why the list is not there.
       await load()
-      setRenaming(false)
+      setRenaming(undefined)
     } catch (e) {
       setError(wordsFor(e))
     } finally {
       setBusy(undefined)
     }
   }
-
-  const here = devices?.find((d) => d.isThisPhone)
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -186,11 +186,13 @@ const VtaDevices: React.FC = () => {
           </ThemedText>
         ) : null}
         {devices === undefined && !error ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-        {renaming && here ? (
+        {renaming ? (
           <DeviceNamePrompt
-            initial={deviceViewOf(here, t).name}
+            key={renaming.did}
+            initial={deviceViewOf(renaming, t).name}
             onSave={(name) => void onRename(name)}
             busy={busy === 'rename'}
+            other={!renaming.isThisPhone}
           />
         ) : null}
         {devices?.map((device) => (
@@ -198,7 +200,7 @@ const VtaDevices: React.FC = () => {
             key={device.did}
             device={deviceViewOf(device, t)}
             onRemove={() => void onRemove(device)}
-            onRename={() => setRenaming(true)}
+            onRename={() => setRenaming(device)}
             busy={busy === device.did}
             disabled={busy !== undefined}
           />

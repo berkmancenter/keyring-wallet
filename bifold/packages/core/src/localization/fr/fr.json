@@ -2028,6 +2028,8 @@
     "RemovedWiped": "Retiré : {{device}}. Il ne peut plus utiliser votre agent, et il lui est demandé d'effacer sa copie.",
     "Rename": "Renommer",
     "NameTitle": "Nommer ce téléphone",
+    "NameOtherTitle": "Nommer cet appareil",
+    "NameOtherHint": "Son nom dans Mes appareils. Vous pourrez le renommer là à tout moment.",
     "NameHint": "Vos autres appareils affichent ce nom.",
     "NameSave": "Enregistrer",
     "OfferTitle": "Vos autres appareils",
@@ -2044,7 +2046,8 @@
     "DefaultName": "{{platform}} · ajouté le {{date}}",
     "ShortIos": "iPhone",
     "ShortAndroid": "Android",
-    "ShortPhone": "Téléphone"
+    "ShortPhone": "Téléphone",
+    "ShortComputer": "Ordinateur"
   },
   "AgentKeys": {
     "LostTitle": "Téléphone perdu ?",

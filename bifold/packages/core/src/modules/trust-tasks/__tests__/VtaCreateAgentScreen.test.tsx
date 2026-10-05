@@ -346,8 +346,27 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
     })
-    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'CreateAgent.BackupLabel')
+    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'Devices.ShortComputer')
     expect(navigation.goBack).toHaveBeenCalled()
+  })
+
+  // IN-123: named when added, as My devices will show it: a plain default by
+  // the kind of code, or the person's own name.
+  test('the name typed for the device is the one the agent keeps', async () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const add = jest
+      .spyOn(vtaAgent, 'addBackupDevice')
+      .mockResolvedValue({ did: 'did:key:z6MkBackup', role: 'admin', label: 'Work laptop', thisPhone: false })
+    const tree = await toBackupCode()
+    // The field shows the default for a computer's code before anything is typed.
+    expect(tree.getByTestId(id('DeviceNameInput')).props.value).toBe('Devices.ShortComputer')
+    fireEvent.changeText(tree.getByTestId(id('DeviceNameInput')), 'Work laptop (pnm)')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
+    })
+    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'Work laptop (pnm)')
   })
 
   // IN-52: the other phone's Share sends a sentence with the code on its own
@@ -368,7 +387,7 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
     })
-    expect(add).toHaveBeenCalledWith({}, 'did:peer:2.Vz6MkOther', 'CreateAgent.BackupLabel')
+    expect(add).toHaveBeenCalledWith({}, 'did:peer:2.Vz6MkOther', 'Devices.ShortPhone')
   })
 
   test('return on the code field adds the device: the button may be under the keyboard', async () => {
@@ -382,7 +401,7 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     await act(async () => {
       fireEvent(tree.getByTestId(id('AgentBackupCodeInput')), 'submitEditing')
     })
-    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'CreateAgent.BackupLabel')
+    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'Devices.ShortComputer')
   })
 
   test('adding a device is titled "Add a device", not "Claim your agent"', () => {
