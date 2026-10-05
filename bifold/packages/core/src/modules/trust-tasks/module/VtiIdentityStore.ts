@@ -45,6 +45,13 @@ export interface VtiManagerIdentity {
    * Absent on every record written before this existed, and once settled.
    */
   pendingNext?: { did: string; createdAt: string }
+  /**
+   * The key a completed swap retired, until the agent's approval rules have
+   * been moved onto `did` (`VtaClient.carryApproversAcrossSwap`). Set when a
+   * swap is seen to complete; cleared once the rules no longer name it, or
+   * when this phone may not change them.
+   */
+  approversFrom?: string
 }
 
 export interface VtiPersona {

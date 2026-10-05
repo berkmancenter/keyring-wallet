@@ -293,52 +293,60 @@ exports[`TogglePushNotification Screen Push notification screen renders correctl
     <View
       style={
         Object {
-          "alignItems": "center",
-          "display": "flex",
-          "flexDirection": "row",
           "gap": 16,
-          "justifyContent": "center",
         }
       }
     >
-      <Text
-        maxFontSizeMultiplier={2}
+      <View
         style={
-          Array [
-            Object {
-              "color": "#FFFFFF",
-              "fontSize": 18,
-              "fontWeight": "normal",
-            },
-            undefined,
-          ]
+          Object {
+            "alignItems": "center",
+            "display": "flex",
+            "flexDirection": "row",
+            "gap": 16,
+            "justifyContent": "center",
+          }
         }
       >
-        PushNotifications.ReceiveNotifications
-      </Text>
-      <RCTSwitch
-        accessibilityLabel="PushNotifications.ReceiveNotifications"
-        accessibilityRole="switch"
-        onChange={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        onTintColor="rgba(53, 130, 63, 0.35)"
-        style={
-          Array [
-            Object {
-              "alignSelf": "flex-start",
-            },
-            Object {
-              "backgroundColor": "#D3D3D3",
-              "borderRadius": 16,
-            },
-          ]
-        }
-        testID="com.ariesbifold:id/PushNotificationSwitch"
-        thumbTintColor="#606060"
-        tintColor="#D3D3D3"
-        value={false}
-      />
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          PushNotifications.ReceiveNotifications
+        </Text>
+        <RCTSwitch
+          accessibilityLabel="PushNotifications.ReceiveNotifications"
+          accessibilityRole="switch"
+          onChange={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          onTintColor="rgba(53, 130, 63, 0.35)"
+          style={
+            Array [
+              Object {
+                "alignSelf": "flex-start",
+              },
+              Object {
+                "backgroundColor": "#D3D3D3",
+                "borderRadius": 16,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/PushNotificationSwitch"
+          thumbTintColor="#606060"
+          tintColor="#D3D3D3"
+          value={false}
+        />
+      </View>
     </View>
   </View>
 </RNCSafeAreaView>

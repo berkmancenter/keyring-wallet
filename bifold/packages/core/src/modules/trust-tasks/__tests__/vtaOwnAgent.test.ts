@@ -291,6 +291,9 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           mockAnswer(this.record, `${ACL_UPDATE}#response`, { entry: mockWireEntry(subject, row) })
           return
         }
+        case 'https://trusttasks.org/spec/device/set-wake/0.2':
+          mockAnswer(this.record, `${body.type}#response`, { pushCapable: true })
+          return
         default:
           refuse({ code: 'unsupportedType', message: `no handler for ${body.type}` })
       }
@@ -883,6 +886,114 @@ describe('creating an agent', () => {
   it('the owned marker survives a restart', async () => {
     const { vta } = await linkedPhone()
     expect(vta.getState().ownsAgent).toBe(true)
+  })
+})
+
+describe("Settings → Notifications when an approval rule holds this phone's set-wake", () => {
+  const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
+  const WAKE = { gateway: 'did:web:gateway.example', handle: 'zHandle' }
+
+  it('is refused at once, never waited on, and the agent state says a rule is blocking it', async () => {
+    mockClientOptions.consentWaitMs = 60000
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    mockVta.asked = []
+    const started = Date.now()
+    await expect(vta.setThisDeviceWake(agent, WAKE)).rejects.toMatchObject({ reason: 'awaitingApproval' })
+    // A 60 s consent wait was not entered: one send, answered at once.
+    expect(Date.now() - started).toBeLessThan(5000)
+    expect(sentOf(SET_WAKE)).toHaveLength(1)
+    expect(vta.getState().wakeBlockedByRule).toBe(true)
+  })
+
+  it('clearing the wake channel is refused at once too', async () => {
+    mockClientOptions.consentWaitMs = 60000
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    await expect(vta.clearThisDeviceWake(agent)).rejects.toMatchObject({ reason: 'awaitingApproval' })
+    expect(vta.getState().wakeBlockedByRule).toBe(true)
+  })
+
+  it('once the rule no longer holds it, the next set-wake clears the warning', async () => {
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    await expect(vta.setThisDeviceWake(agent, WAKE)).rejects.toBeTruthy()
+    mockVta.consentFor.delete(SET_WAKE)
+    await expect(vta.setThisDeviceWake(agent, WAKE)).resolves.toMatchObject({ pushCapable: true })
+    expect(vta.getState().wakeBlockedByRule).toBe(false)
+  })
+})
+
+describe('VtaClient: approval rules follow a key swap', () => {
+  const OLD = 'did:key:z6MkRetiredLinkingKey'
+  const CREATE = CONTEXTS_CREATE
+  const OLD_SET = `keyring-phone:${OLD}`
+  const NEW_SET = `keyring-phone:${PHONE}`
+  const rule = (set: string) => ({
+    taskType: CREATE,
+    requires: 'consent',
+    approverSet: set,
+    minApprovals: 1,
+    excludeRequester: false,
+  })
+  async function afterSwap(record: Partial<VtiManagerIdentity> = { approversFrom: OLD }) {
+    let held: VtiManagerIdentity = { ...linkedManager, ...record }
+    const store = {
+      getManager: jest.fn(async () => held),
+      setManager: jest.fn(async (m: VtiManagerIdentity) => void (held = m)),
+    }
+    const client = new VtaClient(agent, VTA, store as never, { connectDrainMs: 0 })
+    await client.connect()
+    mockVta.asked = []
+    return { client, record: () => held }
+  }
+  const seed = (version: number) => {
+    mockVta.policy = {
+      version,
+      module: 'before',
+      ext: { 'openvtc.approvals': [rule(OLD_SET)], 'openvtc.approver-sets': { [OLD_SET]: [OLD] } },
+    }
+  }
+
+  it('moves the rules onto the new key, written against the version read, then forgets the old key', async () => {
+    seed(3)
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('moved')
+    expect(sentOf(POLICY_UPSERT)[0].payload).toMatchObject({ id: 'approvals', expectedVersion: 3 })
+    expect(mockVta.policy?.ext['openvtc.approvals']).toEqual([rule(NEW_SET)])
+    expect(mockVta.policy?.ext['openvtc.approver-sets']).toEqual({ [NEW_SET]: [PHONE] })
+    expect(record().approversFrom).toBeUndefined()
+    // Done once: the next session sends nothing.
+    mockVta.asked = []
+    expect(await client.carryApproversAcrossSwap()).toBe('none')
+    expect(sentOf(POLICY_UPSERT)).toEqual([])
+    await client.disconnect()
+  })
+
+  it('no rule names the old key: nothing is written, and the old key is forgotten', async () => {
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('unchanged')
+    expect(sentOf(POLICY_UPSERT)).toEqual([])
+    expect(record().approversFrom).toBeUndefined()
+    await client.disconnect()
+  })
+
+  it('a phone that may not change the rules hears so once, and stops asking', async () => {
+    seed(2)
+    mockVta.whoami = { ...mockVta.whoami, scopes: ['some-context'] }
+    const { client, record } = await afterSwap()
+    expect(await client.carryApproversAcrossSwap()).toBe('notAllowed')
+    expect(mockVta.policy?.ext['openvtc.approvals']).toEqual([rule(OLD_SET)])
+    expect(record().approversFrom).toBeUndefined()
+    await client.disconnect()
+  })
+
+  it('no swap pending: asks nothing', async () => {
+    seed(1)
+    const { client } = await afterSwap({})
+    expect(await client.carryApproversAcrossSwap()).toBe('none')
+    expect(sentOf(POLICY_GET)).toEqual([])
+    await client.disconnect()
   })
 })
 

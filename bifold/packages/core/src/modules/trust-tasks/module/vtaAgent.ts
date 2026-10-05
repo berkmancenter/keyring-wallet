@@ -39,6 +39,7 @@ import {
   SwapDoneSignInFailed,
   VTA_TASK,
   VtaClient,
+  consentPendingOf,
   resolveVtaMediator,
   type VtaAclEntry,
   type VtaConsentRequest,
@@ -56,6 +57,7 @@ import {
   renameThisDevice,
   setThisDeviceWake,
   type AgentDevice,
+  type AgentDevicePort,
   type PushPlatform,
   type WakeChannel,
   type WakeHandle,
@@ -122,6 +124,13 @@ export interface VtaAgentState {
   approvals: VtiApproval[]
   /** A task of ours the VTA is holding for someone else's consent. */
   awaitingConsentFor?: string
+  /**
+   * The agent holds this phone's own `device/set-wake` for consent: an
+   * approval rule covers the notification setting, so switching notifications
+   * cannot take effect from this phone. Settings → Notifications says so.
+   * Cleared by the next set-wake the agent accepts.
+   */
+  wakeBlockedByRule?: boolean
   /**
    * The agent asks this phone to confirm it is the person before it does a
    * task (a step-up): its own reason, shown as sent, and the task. Answered
@@ -441,7 +450,10 @@ export async function tellAgentLeaving(
   client: Pick<VtaClient, 'task'>,
   sent: () => void = () => undefined
 ): Promise<void> {
-  await client.task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, sent).catch(() => undefined)
+  // A rule holding set-wake is refused at once, not waited on (wakePort).
+  await client
+    .task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, sent, { waitForConsent: false })
+    .catch(() => undefined)
   await client
     .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
     .catch(() => undefined)
@@ -1018,6 +1030,7 @@ export class VtaAgentController {
       managerDid: undefined,
       approvals: [],
       awaitingConsentFor: undefined,
+      wakeBlockedByRule: undefined,
       error: undefined,
       ownsAgent: false,
     })
@@ -1386,6 +1399,8 @@ export class VtaAgentController {
       }
       // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
       await client.whoAmI().catch(() => undefined)
+      // Approval rules that name the swapped-out key follow this phone onto the new one.
+      void this.carryApprovers(agent, vtaDid)
       // In the background: a slow or silent answer must not hold the link up.
       void this.labelOwnEntry(agent, client)
     }
@@ -1801,17 +1816,42 @@ export class VtaAgentController {
     opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
   ): Promise<WakeChannel> {
     const client = await this.signedIn(agent, this.linkedAgent())
-    return setThisDeviceWake(client, wake, opts).catch((error: unknown) => {
-      throw this.refused(error)
-    })
+    return this.wakeOutcome(setThisDeviceWake(this.wakePort(client), wake, opts))
   }
 
   /** Stop this phone's agent waking it: sent before the phone unlinks (plan §8). */
   async clearThisDeviceWake(agent: Agent): Promise<WakeChannel> {
     const client = await this.signedIn(agent, this.linkedAgent())
-    return clearThisDeviceWake(client).catch((error: unknown) => {
+    return this.wakeOutcome(clearThisDeviceWake(this.wakePort(client)))
+  }
+
+  /**
+   * `device/set-wake` without waiting for consent. A rule that holds it names
+   * approvers that may include this very phone, so waiting would never end:
+   * switching notifications looked like it hung (approvalRules.ts, the trap
+   * the "Ask me before…" screen never offers). Refused at once instead.
+   */
+  private wakePort(client: VtaClient): AgentDevicePort {
+    return {
+      managerDid: client.managerDid,
+      task: <T>(type: string, payload: Record<string, unknown>) =>
+        client.task<T>(type, payload, undefined, {}, undefined, { waitForConsent: false }),
+    }
+  }
+
+  /** The agent's answer to set-wake, with whether an approval rule is holding it. */
+  private async wakeOutcome(sent: Promise<WakeChannel>): Promise<WakeChannel> {
+    try {
+      const channel = await sent
+      if (this.state.wakeBlockedByRule) this.set({ wakeBlockedByRule: false })
+      return channel
+    } catch (error) {
+      if (consentPendingOf(error)) {
+        releaseWarn('[VTI] notifications: device/set-wake is held by an approval rule on the agent')
+        this.set({ wakeBlockedByRule: true })
+      }
       throw this.refused(error)
-    })
+    }
   }
 
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
@@ -1883,6 +1923,22 @@ export class VtaAgentController {
    * Never throws; an identity whose keys cannot be fetched is tried again at
    * the next session, or when it is next used.
    */
+  /**
+   * After a key swap, keep this phone on the agent's approval rules: they
+   * name its key, and the swap retired that key (VtaClient.carryApproversAcrossSwap).
+   * Best effort and logged; a session that could not do it leaves it to the next.
+   */
+  private async carryApprovers(agent: Agent, vtaDid: string): Promise<void> {
+    try {
+      const outcome = await this.client(agent, vtaDid).carryApproversAcrossSwap()
+      if (outcome !== 'none') releaseWarn(`[VTI] approval rules after the key swap: ${outcome}`)
+    } catch (error) {
+      agent.config?.logger?.warn?.(
+        `[VTA] approval rules after the key swap: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
   private async holdPersonaKeys(agent: Agent, vtaDid: string): Promise<void> {
     // An install from before memory-only custody moves its stored copies first
     // (plan part E); a persona whose agent will not hand its keys over keeps
@@ -2050,6 +2106,7 @@ export class VtaAgentController {
       this.dispatch({ type: 'sessionOpened' })
       void this.noteReached(agent, link.vtaDid)
       void this.holdPersonaKeys(agent, link.vtaDid)
+      void this.carryApprovers(agent, link.vtaDid)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {

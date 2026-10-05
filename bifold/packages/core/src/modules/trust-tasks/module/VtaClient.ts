@@ -59,7 +59,7 @@ import {
   synthesizeRego,
   validateApprovals,
 } from './approvalsPolicy'
-import { EMPTY_APPROVALS, modelFromExt, ruleForWire, type ApprovalsModel } from './approvalRules'
+import { EMPTY_APPROVALS, modelFromExt, ruleForWire, withKeySwapped, type ApprovalsModel } from './approvalRules'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 
@@ -682,7 +682,14 @@ export class VtaClient {
     /** Members beside `payload` on the signed document itself — e.g. `idempotencyKey`. */
     documentExtras: Record<string, unknown> = {},
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
-    onSent?: () => void
+    onSent?: () => void,
+    /**
+     * `waitForConsent: false`: a task held for consent is refused at once, as
+     * held, instead of waiting for the grant — for a task this phone sends
+     * about itself, where the approver a rule names may be this phone, so the
+     * wait could never end (approvalRules.ts, PHONE_SENDS).
+     */
+    sendOptions: { waitForConsent?: boolean } = {}
   ): Promise<T> {
     return this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
@@ -696,7 +703,7 @@ export class VtaClient {
       // is single-use and consumed by re-submitting the same payload.
       const pending = consentPendingOf(error)
       const waitMs = this.options.consentWaitMs ?? 180000
-      if (!pending || waitMs <= 0) throw error
+      if (!pending || waitMs <= 0 || sendOptions.waitForConsent === false) throw error
       this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
       if (pending.omitted) {
         // Those approvers are reached only by the VTA's own push (vti #1680);
@@ -1049,6 +1056,8 @@ export class VtaClient {
       did: next,
       createdAt: new Date().toISOString(),
       stage: 'permanent',
+      // The approval rules still name `current`; moved at the next signed-in session.
+      approversFrom: current,
     })
     await this.disconnect()
     try {
@@ -1093,6 +1102,7 @@ export class VtaClient {
         did: next,
         createdAt: manager.pendingNext.createdAt,
         stage: 'permanent',
+        approversFrom: current,
       })
       log.info(`${LOG_PREFIX} the VTA knows the swapped-in key; adopted ${next}`)
       return next
@@ -1259,6 +1269,56 @@ export class VtaClient {
       ext: { [EXT_KEY_RULES]: rules, [EXT_KEY_APPROVER_SETS]: model.sets },
     })
     return typeof answer?.policy?.version === 'number' ? answer.policy.version : expectedVersion + 1
+  }
+
+  /**
+   * After a key swap, move the agent's approval rules from the retired key to
+   * this phone's key now ({@link withKeySwapped}), so the phone keeps being
+   * asked. Runs on a signed-in session while the identity record still names
+   * a retired key (`approversFrom`), and clears it once the rules no longer
+   * name that key — or when there is nothing this phone may change: an
+   * unreadable row (never written back), or any refusal to write (only a
+   * super-admin may, vta-service operations/policy.rs:159, answered as
+   * `permissionDenied`). A lost answer or a version clash leaves it for the
+   * next session. Answers what happened, for the log.
+   */
+  async carryApproversAcrossSwap(): Promise<'none' | 'moved' | 'unchanged' | 'notAllowed' | 'unreadable' | 'later'> {
+    const record = await this.store.getManager(this.vtaDid)
+    const from = record?.approversFrom
+    const to = record?.did
+    if (!record || !from || !to || from === to) return 'none'
+    const done = async () => {
+      const latest = await this.store.getManager(this.vtaDid)
+      if (latest?.approversFrom === from) {
+        const cleared = { ...latest }
+        delete cleared.approversFrom
+        await this.store.setManager(cleared)
+      }
+    }
+    try {
+      const model = await this.readApprovals()
+      if (model.unreadable) {
+        await done()
+        return 'unreadable'
+      }
+      const next = withKeySwapped(model, from, to)
+      if (!next.changed) {
+        await done()
+        return 'unchanged'
+      }
+      await this.writeApprovals(next, model.version)
+      await done()
+      return 'moved'
+    } catch (error) {
+      // No answer, or the row changed in between: try again at the next session.
+      if (!(error instanceof VtiRefusal)) return 'later'
+      if ((error.details as { reason?: unknown } | undefined)?.reason === 'conflict') return 'later'
+      // Any other answer is the agent's word (permissionDenied for a phone that
+      // is not super-admin, helpers.rs; a consent this phone must give itself):
+      // asking again each session would only hear it again.
+      await done()
+      return 'notAllowed'
+    }
   }
 
   /**
