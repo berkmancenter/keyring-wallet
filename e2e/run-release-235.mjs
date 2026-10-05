@@ -111,7 +111,12 @@ try {
   await ensureAppium();
   d = await makeDriver({ platform: "android", udid: UDID, keepState: true });
   await d.activateApp(E.E2E_APP_ID);
-  await unlockToHome(d);
+  // The PIN screen can submit itself on the last digit and be gone before the helper finds its Enter
+  // (21:56Z: "Enter not found", the app already on Contacts). Home is what counts.
+  await unlockToHome(d).catch(async (e) => {
+    if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
+    log(`unlock helper: ${e.message.split("\n")[0].slice(0, 80)} — but the app is unlocked (My Agent tab present)`);
+  });
 
   if (ROWS.includes("in124")) {
     await openDevices(d);
