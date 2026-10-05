@@ -198,13 +198,16 @@ const VtaCreateAgent: React.FC = () => {
         ? needsScreenLock()
         : t('CreateAgent.NotConfirmed')
 
-  const refusalLine = (reason: DeviceRefusalReason) => t(`CreateAgent.Device.${reason}`)
+  const refusalLine = (reason: DeviceRefusalReason, code?: string) =>
+    t(`CreateAgent.Device.${reason}`, { code: code ?? '' })
 
   /** Backup, last turn: this phone approves the other phone's code (plan §4). */
   // The other device's name on this agent (IN-123): a plain default by the
   // kind of code until the person types their own.
   const [deviceName, setDeviceName] = useState<string | undefined>()
   const [addressCopied, setAddressCopied] = useState(false)
+  const [errorDetail, setErrorDetail] = useState<string | undefined>()
+  const [errorDetailOpen, setErrorDetailOpen] = useState(false)
   const defaultDeviceName = (code: string) =>
     deviceCodeIn(code)?.startsWith('did:key:') || code.trim().startsWith('did:key:')
       ? t('Devices.ShortComputer')
@@ -215,6 +218,8 @@ const VtaCreateAgent: React.FC = () => {
   const onAddBackup = async (scanned?: string) => {
     if (!agent) return
     setError(undefined)
+    setErrorDetail(undefined)
+    setErrorDetailOpen(false)
     setBusy(true)
     try {
       const raw = scanned ?? backupCode
@@ -227,10 +232,11 @@ const VtaCreateAgent: React.FC = () => {
       else setStep('ready')
     } catch (e) {
       const refusal = deviceRefusalOf(e)
+      setErrorDetail(refusal.reason === 'refused' ? refusal.detail : undefined)
       setError(
         e instanceof Error && e.name === 'OwnerNotConfirmed'
           ? ownerFailureLine((e as { reason?: OwnerConfirmFailure }).reason)
-          : refusalLine(refusal.reason)
+          : refusalLine(refusal.reason, refusal.code)
       )
     } finally {
       setBusy(false)
@@ -367,9 +373,29 @@ const VtaCreateAgent: React.FC = () => {
 
   const errorLine = (key: string) =>
     error ? (
-      <ThemedText style={styles.error} testID={testIdWithKey(key)}>
-        {error}
-      </ThemedText>
+      <>
+        <ThemedText style={styles.error} testID={testIdWithKey(key)}>
+          {error}
+        </ThemedText>
+        {/* A refusal's own words, for whoever reads the report (al-phone, 10-05). */}
+        {errorDetail ? (
+          <>
+            <Pressable
+              onPress={() => setErrorDetailOpen(!errorDetailOpen)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: errorDetailOpen }}
+              testID={testIdWithKey(`${key}DetailsToggle`)}
+            >
+              <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+            </Pressable>
+            {errorDetailOpen ? (
+              <ThemedText style={styles.muted} selectable testID={testIdWithKey(`${key}Detail`)}>
+                {errorDetail}
+              </ThemedText>
+            ) : null}
+          </>
+        ) : null}
+      </>
     ) : null
 
   let body: React.ReactNode

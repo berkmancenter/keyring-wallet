@@ -104,6 +104,8 @@ export type DeviceRefusalReason =
   | 'noAnswer'
   | 'unreachable'
   | 'failed'
+  /** The agent answered with a refusal Keyring has no words of its own for: said as a refusal, with its code. */
+  | 'refused'
 
 const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   notLinked: 'This phone has no agent yet.',
@@ -120,13 +122,16 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   noAnswer: "Your agent didn't answer. Check the list before trying again.",
   unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
   failed: "Your agent couldn't do that.",
+  refused: 'Your agent refused this.',
 }
 
 /** A device action that did not happen. `message` is plain words; `detail` keeps the agent's own. */
 export class DeviceActionRefused extends Error {
   constructor(
     readonly reason: DeviceRefusalReason,
-    readonly detail?: string
+    readonly detail?: string,
+    /** For `refused`: the agent's own code, said beside the words. */
+    readonly code?: string
   ) {
     super(PLAIN_WORDS[reason])
     this.name = 'DeviceActionRefused'
@@ -184,5 +189,8 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   if (details.reason === 'conflict' && ALREADY_EXISTS.test(message)) return refusal('alreadyAdded')
   if (details.reason === 'not_found') return refusal('notFound')
   if (error.code === 'permissionDenied') return refusal('notPermitted')
-  return refusal('failed')
+  // A refusal that did arrive is never "didn't answer" (al-phone, 10-05: an
+  // add refused 422 four times read as silence): said as a refusal, with its
+  // code, and its own words kept for Details.
+  return new DeviceActionRefused('refused', message, error.code)
 }

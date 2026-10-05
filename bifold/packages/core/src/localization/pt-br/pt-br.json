@@ -1861,7 +1861,8 @@
       "awaitingApproval": "Seu agente está esperando a aprovação de outra pessoa. Tente de novo quando ela aprovar.",
       "noAnswer": "Seu agente não respondeu. Confira Meu agente antes de tentar de novo.",
       "unreachable": "O Keyring não conseguiu falar com seu agente. Confira sua conexão e tente de novo.",
-      "failed": "Seu agente não conseguiu fazer isso."
+      "failed": "Seu agente não conseguiu fazer isso.",
+      "refused": "Seu agente recusou ({{code}})."
     },
     "OpenHost": "Abrir o site do host do seu agente",
     "OwnerHowToggle": "Como?",

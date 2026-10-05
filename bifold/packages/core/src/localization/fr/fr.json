@@ -1955,7 +1955,8 @@
       "awaitingApproval": "Votre agent attend l'approbation de quelqu'un d'autre. Réessayez quand ce sera fait.",
       "noAnswer": "Votre agent n'a pas répondu. Vérifiez Mon agent avant de réessayer.",
       "unreachable": "Keyring n'a pas pu joindre votre agent. Vérifiez votre connexion et réessayez.",
-      "failed": "Votre agent n'a pas pu faire cela."
+      "failed": "Votre agent n'a pas pu faire cela.",
+      "refused": "Votre agent a refusé ({{code}})."
     },
     "OpenHost": "Ouvrir le site de l'hébergeur de votre agent",
     "OwnerHowToggle": "Comment ?",

@@ -2019,7 +2019,8 @@
       "awaitingApproval": "Your agent is waiting for someone else to approve this. Try again once they have.",
       "noAnswer": "Your agent didn't answer. Check My Agent before trying again.",
       "unreachable": "Keyring couldn't reach your agent. Check your connection and try again.",
-      "failed": "Your agent couldn't do that."
+      "failed": "Your agent couldn't do that.",
+      "refused": "Your agent refused this ({{code}})."
     },
     "OpenHost": "Open your agent host's website",
     "OwnerHowToggle": "How?",

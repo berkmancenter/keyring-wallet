@@ -97,7 +97,7 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v 
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, listAnswer] = await Promise.all([
     versionsFor(port.managerDid ?? port)
-      .ask('aclList', [AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList], (uri) =>
+      .ask('aclList', [AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList02], (uri) =>
         port.task<{ entries?: unknown }>(uri, {})
       )
       .then(({ answer }) => answer),
@@ -180,8 +180,10 @@ export async function removeAgentDevice(
         () => false
       )
   }
-  await versionsFor(port.managerDid ?? port).ask('aclRevoke', [AGENT_DEVICE_TASK.aclRevoke02, AGENT_DEVICE_TASK.aclRevoke], (uri) =>
-    port.task(uri, revokePayload(uri, device.did))
+  await versionsFor(port.managerDid ?? port).ask(
+    'aclRevoke',
+    [AGENT_DEVICE_TASK.aclRevoke, AGENT_DEVICE_TASK.aclRevoke02],
+    (uri) => port.task(uri, revokePayload(uri, device.did))
   )
   return { mode: wiped ? 'wiped' : 'revoked' }
 }

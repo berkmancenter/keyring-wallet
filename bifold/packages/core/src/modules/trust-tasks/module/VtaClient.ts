@@ -120,12 +120,16 @@ export const VTA_TASK = {
  * ask: newest first, except where agents in use serve only the older one.
  */
 export const VTA_TASK_VERSIONS = {
-  aclList: [VTA_TASK.aclList02, VTA_TASK.aclList],
-  aclGrant: [VTA_TASK.aclGrant02, VTA_TASK.aclGrant],
-  aclRevoke: [VTA_TASK.aclRevoke02, VTA_TASK.aclRevoke],
-  aclUpdate: [VTA_TASK.aclUpdate02, VTA_TASK.aclUpdate],
-  // 0.1 first: vta-service 0.53.1 serves only task-consent/decision/0.1
-  // (trust_tasks/mod.rs, TASK_TASK_CONSENT_DECISION_0_1), and its refusal of
+  // 0.1 first: vta-service 0.53.1 and 0.54.0 serve acl/{list,grant,update,
+  // revoke} only at 0.1 (trust_tasks/mod.rs:2245-2255 in both), and a refused
+  // 0.2 never reached the phone over TSP, so an add to My devices read as "no
+  // answer" (al-phone, 10-05). 0.2 is asked if an agent ever refuses 0.1.
+  aclList: [VTA_TASK.aclList, VTA_TASK.aclList02],
+  aclGrant: [VTA_TASK.aclGrant, VTA_TASK.aclGrant02],
+  aclRevoke: [VTA_TASK.aclRevoke, VTA_TASK.aclRevoke02],
+  aclUpdate: [VTA_TASK.aclUpdate, VTA_TASK.aclUpdate02],
+  // 0.1 first: vta-service 0.53.1 and 0.54.0 serve only task-consent/decision/0.1
+  // (trust_tasks/mod.rs:2242, TASK_TASK_CONSENT_DECISION_0_1), and its refusal of
   // a 0.2 decision never reached the phone over TSP, so the step-down never
   // ran and an Approve hung (al-phone, 10-05). This client sends only 0.1's
   // members; 0.2 is asked if an agent ever refuses 0.1.
