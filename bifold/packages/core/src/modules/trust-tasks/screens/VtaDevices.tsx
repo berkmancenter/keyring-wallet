@@ -46,7 +46,10 @@ export { deviceNameKey } from './deviceWords'
  * A device action's refusal in words: a cancelled Face ID says nothing, no
  * screen lock says how to set one, and the agent's refusals by reason.
  */
-export const deviceErrorWords = (e: unknown, t: (key: string) => string): string | undefined => {
+export const deviceErrorWords = (
+  e: unknown,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string | undefined => {
   if (e instanceof Error && e.name === 'OwnerNotConfirmed') {
     const reason = (e as { reason?: string }).reason
     return reason === 'cancelled'
@@ -55,7 +58,8 @@ export const deviceErrorWords = (e: unknown, t: (key: string) => string): string
         ? t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
         : t('CreateAgent.NotConfirmed')
   }
-  return t(`CreateAgent.Device.${deviceRefusalOf(e).reason}`)
+  const refusal = deviceRefusalOf(e)
+  return t(`CreateAgent.Device.${refusal.reason}`, { code: refusal.code ?? '' })
 }
 
 /** This phone first; the rest in the agent's order. */

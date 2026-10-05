@@ -52,8 +52,16 @@ describe('which requests wait', () => {
     expect(waitingRequests([one], Date.parse('2026-10-02T12:05:00Z'))).toEqual([])
   })
 
-  it.each(['approved', 'denied', 'expired', 'failed'] as const)('a request that is %s does not wait', (status) => {
+  it.each(['approved', 'denied', 'expired'] as const)('a request that is %s does not wait', (status) => {
     expect(waitingRequests([request('a', { status })], NOW)).toEqual([])
+  })
+
+  // al-phone, 10-05: an Approve the agent never took left the list and the
+  // badge, though the agent still held the request undecided.
+  it('a request whose answer did not go through still waits, until its expiry', () => {
+    const lost = request('a', { status: 'failed', error: 'not taken' })
+    expect(waitingRequests([lost], NOW)).toEqual([lost])
+    expect(waitingRequests([lost], Date.parse('2026-10-02T12:05:00Z'))).toEqual([])
   })
 
   it('a request whose expiry cannot be read is kept rather than hidden', () => {

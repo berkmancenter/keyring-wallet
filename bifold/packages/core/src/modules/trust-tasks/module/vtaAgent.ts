@@ -257,6 +257,8 @@ export interface VtaAgentDeps {
    * as `noAnswer` instead of leaving the screen waiting (IN-53). Tests shorten it.
    */
   ownerActDeadlineMs?: number
+  /** How long an Approve or Deny waits for the agent to take it (al-phone, 10-05). */
+  decisionDeadlineMs?: number
   /** How long My devices waits for the agent's list before saying it didn't answer (IN-124). */
   deviceListDeadlineMs?: number
   /**
@@ -355,6 +357,8 @@ export const UNLINK_TELL_QUEUE_MS = 10000
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
  */
 export const OWNER_ACT_DEADLINE_MS = 45000
+/** An Approve or Deny not taken by then is said so, and can be sent again. */
+export const DECISION_DEADLINE_MS = 15000
 /**
  * My devices' list, bounded (IN-124: "a spinner that never loads"). Reading it
  * signs in through `connect`, which has no deadline of its own and shares a
@@ -2411,13 +2415,22 @@ export class VtaAgentController {
     this.update(id, { requestCheck })
   }
 
-  /** Answer a consent request; the decision is signed by this phone's manager identity. */
+  /**
+   * Answer a consent request; the decision is signed by this phone's manager
+   * identity. Bounded (al-phone, 10-05: an agent's refusal never came back,
+   * and Approve and Deny stayed dimmed): past the deadline the answer counts
+   * as not taken, and the request waits to be answered again.
+   */
   async decide(id: string, decision: 'approve' | 'deny', reason?: string): Promise<void> {
     const client = this.current?.client
     const approval = this.state.approvals.find((a) => a.id === id)
     if (!client || !approval) return
     try {
-      await client.decideConsent(approval, decision, reason)
+      const ms = this.deps.decisionDeadlineMs ?? DECISION_DEADLINE_MS
+      const sending = client.decideConsent(approval, decision, reason)
+      if (!(await withDeadline(sending, ms))) {
+        throw new Error(`the VTA did not take the decision within ${ms / 1000} s`)
+      }
       this.update(id, { status: decision === 'approve' ? 'approved' : 'denied' })
       this.note(decision === 'approve' ? 'approved' : 'denied')
     } catch (error) {

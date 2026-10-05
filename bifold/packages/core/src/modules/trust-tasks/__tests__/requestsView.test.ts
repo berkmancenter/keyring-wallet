@@ -41,9 +41,10 @@ describe('what waits', () => {
     const lost = request('lost', { status: 'failed', error: 'could not send' })
     const shown = view({ approvals: [waits, late, yes, no, lost] })
     expect(shown.mode).toBe('waiting')
-    expect(shown.waiting).toEqual([waits])
+    // An answer that did not go through waits to be answered again.
+    expect(shown.waiting).toEqual([waits, lost])
     expect(shown.expired).toEqual([late])
-    expect(shown.earlier).toEqual([yes, no, lost])
+    expect(shown.earlier).toEqual([yes, no])
   })
 })
 

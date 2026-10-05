@@ -122,7 +122,9 @@ describe('removing one', () => {
     const { port, sent } = fakeAgent()
     const [, old] = await listAgentDevices(port)
     await expect(removeAgentDevice(port, old)).resolves.toEqual({ mode: 'wiped' })
-    const types = sent.map((s) => s.type).filter((t) => t === AGENT_DEVICE_TASK.wipe || t === AGENT_DEVICE_TASK.aclRevoke)
+    const types = sent
+      .map((s) => s.type)
+      .filter((t) => t === AGENT_DEVICE_TASK.wipe || t === AGENT_DEVICE_TASK.aclRevoke)
     expect(types).toEqual([AGENT_DEVICE_TASK.wipe, AGENT_DEVICE_TASK.aclRevoke])
     const wipe = sent.find((s) => s.type === AGENT_DEVICE_TASK.wipe)
     expect(wipe?.payload).toMatchObject({ deviceId: 'dev-old', scope: 'cacheAndKeys' })
@@ -286,37 +288,44 @@ describe('the device tasks this phone speaks', () => {
   })
 })
 
-describe('the access-list tasks, spoken ahead of the agent', () => {
-  it('asks acl/list in 0.2 first, steps down to 0.1 on unsupportedVersion, and remembers it', async () => {
+// vta-service 0.53.1 and 0.54.0 serve acl/list and acl/revoke only at 0.1, and
+// a refused 0.2 never reached the phone over TSP (al-phone, 10-05): 0.1 first.
+describe('the access-list tasks, asked in the version agents serve', () => {
+  it('asks acl/list in 0.1 first, in one message each time', async () => {
     const { port, sent } = fakeAgent()
     await listAgentDevices(port)
     await listAgentDevices(port)
     const acl = sent.map((s) => s.type).filter((t) => t.includes('/acl/'))
-    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList02, AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList])
+    expect(acl).toEqual([AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList])
   })
 
-  it('removes with acl/revoke/0.2 and its explicit full removal when the agent serves it', async () => {
+  it('an agent that refuses 0.1 as unsupported is asked in 0.2, and removes with its explicit full removal', async () => {
     const { port, sent } = fakeAgent({
+      [AGENT_DEVICE_TASK.aclList]: () => {
+        throw unsupported(AGENT_DEVICE_TASK.aclList, AGENT_DEVICE_TASK.aclList02)
+      },
       [AGENT_DEVICE_TASK.aclList02]: () => ({ entries: acl, truncated: false }),
+      [AGENT_DEVICE_TASK.aclRevoke]: () => {
+        throw unsupported(AGENT_DEVICE_TASK.aclRevoke, AGENT_DEVICE_TASK.aclRevoke02)
+      },
       [AGENT_DEVICE_TASK.aclRevoke02]: () => ({ entry: null }),
     })
     const devices = await listAgentDevices(port)
     const plugin = devices.find((d) => d.did === PLUGIN)!
     await removeAgentDevice(port, plugin)
-    expect(sent.some((s) => s.type === AGENT_DEVICE_TASK.aclList || s.type === AGENT_DEVICE_TASK.aclRevoke)).toBe(false)
     expect(sent.find((s) => s.type === AGENT_DEVICE_TASK.aclRevoke02)?.payload).toEqual({
       subject: PLUGIN,
       revocation: { kind: 'entry' },
     })
   })
 
-  it('does not ask again in 0.1 when the agent refuses for any other reason', async () => {
+  it('does not ask again in 0.2 when the agent refuses 0.1 for any other reason', async () => {
     const { port, sent } = fakeAgent({
-      [AGENT_DEVICE_TASK.aclList02]: () => {
+      [AGENT_DEVICE_TASK.aclList]: () => {
         throw new VtiRefusal('permissionDenied', 'not allowed')
       },
     })
     await expect(listAgentDevices(port)).rejects.toThrow('not allowed')
-    expect(sent.some((s) => s.type === AGENT_DEVICE_TASK.aclList)).toBe(false)
+    expect(sent.some((s) => s.type === AGENT_DEVICE_TASK.aclList02)).toBe(false)
   })
 })

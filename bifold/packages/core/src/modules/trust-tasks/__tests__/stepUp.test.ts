@@ -404,5 +404,11 @@ describe('asking the person', () => {
     expect(deviceRefusalOf(new StepUpDeclined()).reason).toBe('stepUpDeclined')
     expect(deviceRefusalOf(new OwnerNotConfirmed('failed')).reason).toBe('notConfirmed')
     expect(deviceRefusalOf(stepUpRefusal()).reason).toBe('stepUpRequired')
+    // A refusal Keyring has no words for is still a refusal, with its code (al-phone, 10-05).
+    expect(deviceRefusalOf(new VtiRefusal('validationFailed', 'payload member not allowed'))).toMatchObject({
+      reason: 'refused',
+      code: 'validationFailed',
+      detail: 'payload member not allowed',
+    })
   })
 })

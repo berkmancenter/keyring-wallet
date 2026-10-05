@@ -2,7 +2,10 @@
  * waitingRequests — the requests that wait for this phone's decision.
  *
  * A request the agent sent for consent waits while it is `pending` and its
- * expiry has not passed. Decided, failed and expired requests do not wait.
+ * expiry has not passed, and so does one whose answer did not go through
+ * (`failed`): the agent still holds it undecided, so the person can answer
+ * again (al-phone, 10-05: a failed Approve left the list, and the badge with
+ * it). Decided and expired requests do not wait.
  * This is the one count the app shows: the badge on the My Agent tab and the
  * "something waits" banner on "Your agent" read it from here, so they agree,
  * and neither needs the agent screen to have been opened.
@@ -25,7 +28,7 @@ const expiryOf = (approval: Pick<VtiApproval, 'expiresAt'>): number | undefined 
  */
 export function waitingRequests<T extends Pick<VtiApproval, 'status' | 'expiresAt'>>(approvals: T[], now: number): T[] {
   return approvals.filter((approval) => {
-    if (approval.status !== 'pending') return false
+    if (approval.status !== 'pending' && approval.status !== 'failed') return false
     const expiry = expiryOf(approval)
     return expiry === undefined || expiry > now
   })

@@ -23,6 +23,7 @@ import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import { agentAddressScan } from '../module/agentAddressScan'
+import { VtiRefusal } from '../module/vtiAgent'
 import { deviceCodeScan } from '../module/deviceCodeScan'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
@@ -327,6 +328,24 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     return tree
   }
 
+  // al-phone, 10-05: an add the agent refused (422) read as "didn't answer". A
+  // refusal that arrives is said as one, with its code and its own words behind Details.
+  test('a refusal from the agent is said as one, with its code and its words behind Details', async () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    jest
+      .spyOn(vtaAgent, 'addBackupDevice')
+      .mockRejectedValue(new VtiRefusal('validationFailed', 'payload member "authority" is not allowed'))
+    const tree = await toBackupCode()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.Device.refused')
+    fireEvent.press(tree.getByTestId(id('AgentCreateErrorDetailsToggle')))
+    expect(tree.getByTestId(id('AgentCreateErrorDetail'))).toHaveTextContent(/authority/)
+  })
+
   // #30: the other phone now shows its code as a QR; this phone scans it.
   // IN-125: a scanned code is added straight away; the owner check (inside
   // addBackupDevice) is the only stop, with no Add to press.
@@ -486,6 +505,7 @@ describe('setup ends at Ready; another device is added from My devices', () => {
       'noAnswer',
       'unreachable',
       'failed',
+      'refused',
     ]) {
       expect(typeof copy.CreateAgent.Device[reason]).toBe('string')
     }
