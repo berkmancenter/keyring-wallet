@@ -75,6 +75,18 @@ describe('a build that names a push gateway', () => {
     expect(d.log).toHaveBeenCalledWith('push wake: failed', { enable: false, error: 'agent unreachable' })
   })
 
+  it('keeps the platform token when an approval rule holds the change, since the agent kept the wake channel', async () => {
+    const d = deps({
+      clearWake: jest.fn(async () => {
+        throw Object.assign(new Error('Your agent is waiting for someone else to approve this.'), {
+          reason: 'awaitingApproval',
+        })
+      }),
+    })
+    await expect(pushNotificationsConfig(d)!.toggle(false, agent)).resolves.toBeUndefined()
+    expect(d.stopPlatformPush).not.toHaveBeenCalled()
+  })
+
   it('logs a failure to withdraw the platform token instead of throwing into Settings', async () => {
     const d = deps({
       stopPlatformPush: jest.fn(async () => {

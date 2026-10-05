@@ -40,6 +40,7 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
     toggle: async (state: boolean, agent: Agent) => {
       // A refusal from the gateway or the agent is logged, never thrown into
       // the Settings screen: push is optional and the app works without it.
+      let held = false
       try {
         if (state) {
           const outcome = await deps.enableWake(agent)
@@ -49,11 +50,14 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
           deps.log('push wake: cleared')
         }
       } catch (e) {
+        held = heldForApproval(e)
         deps.log('push wake: failed', { enable: state, error: e instanceof Error ? e.message : String(e) })
       }
       // Turned off: the platform push service forgets this install too, even
       // if the agent could not be told (it may be unreachable or unlinked).
-      if (!state) {
+      // Not when an approval rule held the change: the agent kept the wake
+      // channel, bifold puts the switch back on, and the token must still work.
+      if (!state && !held) {
         try {
           await deps.stopPlatformPush()
         } catch (e) {
@@ -62,4 +66,9 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
       }
     },
   }
+}
+
+/** The agent held set-wake for an approval (bifold's device refusal `awaitingApproval`). */
+function heldForApproval(error: unknown): boolean {
+  return (error as { reason?: unknown } | null)?.reason === 'awaitingApproval'
 }
