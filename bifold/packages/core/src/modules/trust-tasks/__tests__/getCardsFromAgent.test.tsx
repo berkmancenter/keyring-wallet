@@ -17,7 +17,11 @@ import { GetCardsFromAgent, getCardsFromAgent, type GetCardsDeps } from '../scre
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('react-i18next', () => {
   const t = (key: string, values?: Record<string, unknown>) =>
-    values ? `${key}(${Object.entries(values).map(([k, v]) => `${k}=${v}`).join(',')})` : key
+    values
+      ? `${key}(${Object.entries(values)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(',')})`
+      : key
   return {
     useTranslation: () => ({ t, i18n: { language: 'en', t, changeLanguage: () => new Promise(() => {}) } }),
     initReactI18next: { type: '3rdParty', init: jest.fn() },
@@ -26,15 +30,30 @@ jest.mock('react-i18next', () => {
 })
 
 const agent = {} as Agent
-const second: VtiPersona = { ...persona, communityDid: 'did:webvh:QmOther:vtc.example:first-vtc', did: 'did:webvh:QmP2:x' }
+const second: VtiPersona = {
+  ...persona,
+  communityDid: 'did:webvh:QmOther:vtc.example:first-vtc',
+  did: 'did:webvh:QmP2:x',
+}
 
-const deps = (answers: Record<string, 'down' | { found: number; restored: string[]; refused: { reason: 'failedCheck' | 'notOurs' | 'unreadable' }[] }>): GetCardsDeps => ({
+const deps = (
+  answers: Record<
+    string,
+    'down' | { found: number; restored: string[]; refused: { reason: 'failedCheck' | 'notOurs' | 'unreadable' }[] }
+  >
+): GetCardsDeps => ({
   store: () => ({}) as never,
   taskFor: async (_a, p) => {
     if (answers[p.did] === 'down') throw new Error('no answer')
     return (async () => ({})) as never
   },
-  recover: (async (_a: Agent, _s: unknown, p: VtiPersona, _t: unknown, o: { onProgress?: (x: { found: number; restored: number }) => void }) => {
+  recover: (async (
+    _a: Agent,
+    _s: unknown,
+    p: VtiPersona,
+    _t: unknown,
+    o: { onProgress?: (x: { found: number; restored: number }) => void }
+  ) => {
     const got = answers[p.did] as { found: number; restored: string[]; refused: never[] }
     o.onProgress?.({ found: got.found, restored: 0 })
     o.onProgress?.({ found: got.found, restored: got.restored.length })
@@ -86,10 +105,20 @@ describe('the Manage row', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentGetCards'))).toBeNull()
   })
 
+  // K7 (Alberto, 10-04): "Get your cards" did not say what it was for. It
+  // restores the agent's cards to this phone, and says when to use it.
+  it('says it restores from the agent, and when to use it', () => {
+    const tree = renderRow([persona], deps({}))
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsButton'))).toHaveTextContent('VtaLink.GetCardsButton')
+    expect(tree.getByTestId(testIdWithKey('AgentGetCardsHint'))).toHaveTextContent('VtaLink.GetCardsHint')
+  })
+
   it('says how many came back, and why the others did not, in words', async () => {
     const tree = renderRow(
       [persona],
-      deps({ [persona.did]: { found: 4, restored: ['a', 'b'], refused: [{ reason: 'failedCheck' }, { reason: 'notOurs' }] } })
+      deps({
+        [persona.did]: { found: 4, restored: ['a', 'b'], refused: [{ reason: 'failedCheck' }, { reason: 'notOurs' }] },
+      })
     )
     await act(async () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('AgentGetCardsButton')))

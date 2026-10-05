@@ -32,6 +32,8 @@ import { setCurrentAgentDid } from './currentAgent'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
 import { releaseWarn } from './releaseLog'
+import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
+import { VtiRefusal } from './vtiAgent'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
@@ -87,6 +89,14 @@ import {
   type DeviceCanOwn,
   type DeviceRefusalReason,
 } from './vtaOwner'
+
+/** The agent's approval rules as "Ask me before…" shows them. */
+export interface ApprovalRulesState {
+  model: ApprovalsModel & { unreadable: boolean }
+  view: ApprovalsView
+  /** This phone may write the rules: an unrestricted admin, and a row Keyring reads whole. */
+  canChange: boolean
+}
 
 export interface VtiApproval extends VtaConsentRequest {
   /** The request document's id. */
@@ -1670,6 +1680,73 @@ export class VtaAgentController {
     const client = await this.signedIn(agent, vtaDid)
     if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
     return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * What the agent asks this phone about ("Ask me before…"): its approval
+   * rules as this phone sees them, and whether this phone may change them —
+   * writing policy is super-admin only, an unrestricted admin (vti-common
+   * auth/extractor.rs:350, vta-service operations/policy.rs:159), which
+   * whoami shows as the admin role with no context scopes. Signs in if it
+   * must. Refuses with {@link DeviceActionRefused}.
+   */
+  async approvalRules(agent: Agent): Promise<ApprovalRulesState> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const managerDid = client.managerDid
+    if (!managerDid) throw new DeviceActionRefused('notLinked')
+    const [model, me] = await Promise.all([client.readApprovals(), client.whoAmI()]).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    const roles = me.roles ?? (me.role ? [me.role] : [])
+    const scoped = (me.scopes ?? []).length > 0 || (me.contexts ?? []).length > 0
+    return {
+      model,
+      view: approvalsView(model, managerDid),
+      canChange: roles.includes('admin') && !scoped && !model.unreadable,
+    }
+  }
+
+  /**
+   * Switch this phone's rule for an offered task on or off, on the row as the
+   * agent holds it now: read, change only this phone's rule, write against the
+   * version read. If the row changed in between (another device), read and
+   * apply once more; a second clash is left to the person ("try again").
+   * Asks the person to confirm first; nothing is sent without it. Answers the
+   * rules as now held.
+   */
+  async setApprovalRule(agent: Agent, taskType: string, on: boolean): Promise<ApprovalRulesState> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner('Change what your agent asks you about')
+    releaseWarn('[VTI] ask me before: owner confirmed; writing the rules')
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const managerDid = client.managerDid
+      if (!managerDid) throw new DeviceActionRefused('notLinked')
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const model = await client.readApprovals()
+          if (model.unreadable)
+            throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
+          const next = withPhoneRule(model, taskType, on, managerDid)
+          const version = await client.writeApprovals(next, model.version)
+          releaseWarn(`[VTI] ask me before: rules written, version ${model.version} → ${version}`)
+          const held = { ...next, version, unreadable: false }
+          return { model: held, view: approvalsView(held, managerDid), canChange: true }
+        } catch (error) {
+          const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
+          if (details?.reason === 'conflict' && attempt === 0) continue
+          throw this.refused(error)
+        }
+      }
+    })
+  }
+
+  /** "Send me a test request" ({@link VtaClient.sendTestRequest}). Signs in if it must. */
+  async sendTestRequest(agent: Agent): Promise<Awaited<ReturnType<VtaClient['sendTestRequest']>>> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return client.sendTestRequest().catch((error: unknown) => {
       throw this.refused(error)
     })
   }

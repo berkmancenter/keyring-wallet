@@ -356,27 +356,8 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
               <ThemedText style={{ textAlign: 'center', fontSize: 17, marginBottom: 16, lineHeight: 23 }}>
                 {legend}
               </ThemedText>
-              <ThemedText style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
-                <Text style={{ color: ColorPalette.brand.inlineError }}>*</Text>
-                {' Required'}
-              </ThemedText>
-              <LimitedTextInput
-                showLimitCounter={false}
-                label={t('RCardOnboarding.Fields.ProfileName')}
-                limit={40}
-                defaultValue={formState.label}
-                autoCapitalize="words"
-                handleChangeText={updateField('label')}
-                testID={testIdWithKey('RCardLabelInput')}
-                accessibilityLabel={t('RCardOnboarding.Fields.ProfileName')}
-                returnKeyType="next"
-              />
-              {/* The negative margin pulled this up against the field it
-                  explains, so it read as part of the input rather than as a
-                  note about it (report #20). */}
-              <ThemedText style={{ fontSize: 12, color: '#888', marginTop: 4, marginBottom: 16 }}>
-                {t('RCardOnboarding.Fields.ProfileNameHint')}
-              </ThemedText>
+              {/* The photo first, the profile's name under it, as a card reads
+                  (Alberto, TestFlight 236). */}
               <View style={styles.photoSection}>
                 <TouchableOpacity
                   onPress={handlePickPhoto}
@@ -407,6 +388,27 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
                   </ThemedText>
                 </TouchableOpacity>
               </View>
+              <ThemedText style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+                <Text style={{ color: ColorPalette.brand.inlineError }}>*</Text>
+                {' Required'}
+              </ThemedText>
+              <LimitedTextInput
+                showLimitCounter={false}
+                label={t('RCardOnboarding.Fields.ProfileName')}
+                limit={40}
+                defaultValue={formState.label}
+                autoCapitalize="words"
+                handleChangeText={updateField('label')}
+                testID={testIdWithKey('RCardLabelInput')}
+                accessibilityLabel={t('RCardOnboarding.Fields.ProfileName')}
+                returnKeyType="next"
+              />
+              {/* The negative margin pulled this up against the field it
+                  explains, so it read as part of the input rather than as a
+                  note about it (report #20). */}
+              <ThemedText style={{ fontSize: 12, color: '#888', marginTop: 4, marginBottom: 16 }}>
+                {t('RCardOnboarding.Fields.ProfileNameHint')}
+              </ThemedText>
               <View>
                 <LimitedTextInput
                   showLimitCounter={false}

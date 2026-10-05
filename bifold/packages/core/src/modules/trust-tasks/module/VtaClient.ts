@@ -50,6 +50,16 @@ import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
+import {
+  DECLARATIVE_POLICY_ID,
+  DECLARATIVE_POLICY_NAME,
+  DECLARATIVE_POLICY_PRIORITY,
+  EXT_KEY_APPROVER_SETS,
+  EXT_KEY_RULES,
+  synthesizeRego,
+  validateApprovals,
+} from './approvalsPolicy'
+import { EMPTY_APPROVALS, modelFromExt, ruleForWire, type ApprovalsModel } from './approvalRules'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 
@@ -98,6 +108,11 @@ export const VTA_TASK = {
   aclGrant02: 'https://trusttasks.org/spec/acl/grant/0.2',
   aclRevoke02: 'https://trusttasks.org/spec/acl/revoke/0.2',
   aclUpdate02: 'https://trusttasks.org/spec/acl/update/0.2',
+  // Only "Send me a test request" sends these (approvalRules.ts TEST_REQUEST_TASKS).
+  contextsDelete: 'https://trusttasks.org/spec/vta/contexts/delete/1.0',
+  // The approval rules' row (vta-sdk trust_tasks.rs:2048-2060). Writing is super-admin.
+  policyGet: 'https://trusttasks.org/spec/policy/get/0.1',
+  policyUpsert: 'https://trusttasks.org/spec/policy/upsert/0.2',
 } as const
 
 /** Each family this client speaks in more than one version, newest first. */
@@ -669,25 +684,7 @@ export class VtaClient {
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
     onSent?: () => void
   ): Promise<T> {
-    const ticket = ++this.tickets
-    const run = (): Promise<T> =>
-      ticket <= this.droppedThrough
-        ? Promise.reject(new VtaTaskDropped(type))
-        : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
-            this.inFlight = undefined
-          })
-    // One task at a time: one queued behind another says what it waits on, so a
-    // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
-    const ahead = this.inFlight
-    if (ahead) {
-      this.agent.config.logger.info(
-        `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
-      )
-    }
-    // Chain behind whatever is in flight, but do not let one failure poison the next.
-    const next = this.queue.then(run, run)
-    this.queue = next.catch(() => undefined)
-    return next.catch(async (error: unknown) => {
+    return this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
         return this.answerStepUp<T>(stepUp, error, type, () =>
@@ -732,6 +729,35 @@ export class VtaClient {
       }
       throw lastError instanceof Error ? lastError : new Error(String(lastError))
     })
+  }
+
+  /** One send in the queue, behind whatever is in flight — no step-up or consent handling. */
+  private enqueue<T>(
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+    documentExtras: Record<string, unknown>,
+    onSent?: () => void
+  ): Promise<T> {
+    const ticket = ++this.tickets
+    const run = (): Promise<T> =>
+      ticket <= this.droppedThrough
+        ? Promise.reject(new VtaTaskDropped(type))
+        : this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
+            this.inFlight = undefined
+          })
+    // One task at a time: one queued behind another says what it waits on, so a
+    // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
+    const ahead = this.inFlight
+    if (ahead) {
+      this.agent.config.logger.info(
+        `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
+      )
+    }
+    // Chain behind whatever is in flight, but do not let one failure poison the next.
+    const next = this.queue.then(run, run)
+    this.queue = next.catch(() => undefined)
+    return next
   }
 
   /**
@@ -945,7 +971,9 @@ export class VtaClient {
       ...(reason ? { reason } : {}),
     }
     return this.versions
-      .ask('consentDecision', VTA_TASK_VERSIONS.consentDecision, (type) => this.task<{ status?: string }>(type, payload))
+      .ask('consentDecision', VTA_TASK_VERSIONS.consentDecision, (type) =>
+        this.task<{ status?: string }>(type, payload)
+      )
       .then(({ answer }) => answer)
   }
 
@@ -1185,6 +1213,85 @@ export class VtaClient {
       this.task(type, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
     )
     return answeredEntry(uri, answer)
+  }
+
+  /**
+   * The agent's approval rules: the reserved `approvals` row read with
+   * `policy/get/0.1` (vta-sdk protocols/policy_management.rs GetPolicyBody →
+   * `{policy}`). An agent with no row yet answers `not_found`
+   * (vta-service operations/policy.rs:141), read as no rules at version 0 —
+   * the version an upsert expects for a row that does not exist (:203-209).
+   */
+  async readApprovals(): Promise<ReturnType<typeof modelFromExt>> {
+    try {
+      const answer = await this.task<{ policy?: { version?: unknown; ext?: unknown } }>(VTA_TASK.policyGet, {
+        id: DECLARATIVE_POLICY_ID,
+      })
+      const version = typeof answer?.policy?.version === 'number' ? answer.policy.version : 0
+      return modelFromExt(answer?.policy?.ext, version)
+    } catch (error) {
+      const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
+      if (details?.reason === 'not_found') return { ...EMPTY_APPROVALS, unreadable: false }
+      throw error
+    }
+  }
+
+  /**
+   * Write the approval rules: `policy/upsert/0.2` on the reserved row, its
+   * Rego generated from the rules exactly as the SDK does — the agent derives
+   * it again and refuses a write that differs, and refuses the reserved id
+   * without the rules in `ext` (operations/policy.rs:172-197). Validated here
+   * first, so a model the agent would refuse is refused in its words before
+   * anything is sent. `expectedVersion` is the version read: a row changed
+   * since is a `conflict` (:203-209), and nothing is overwritten. Writing is
+   * super-admin only (:159). Answers the version now held.
+   */
+  async writeApprovals(model: Pick<ApprovalsModel, 'rules' | 'sets'>, expectedVersion: number): Promise<number> {
+    const rules = model.rules.map(ruleForWire)
+    validateApprovals(rules, model.sets)
+    const answer = await this.task<{ policy?: { version?: unknown } }>(VTA_TASK.policyUpsert, {
+      id: DECLARATIVE_POLICY_ID,
+      name: DECLARATIVE_POLICY_NAME,
+      module: synthesizeRego(rules),
+      priority: DECLARATIVE_POLICY_PRIORITY,
+      enabled: true,
+      expectedVersion,
+      ext: { [EXT_KEY_RULES]: rules, [EXT_KEY_APPROVER_SETS]: model.sets },
+    })
+    return typeof answer?.policy?.version === 'number' ? answer.policy.version : expectedVersion + 1
+  }
+
+  /**
+   * "Send me a test request": ask the agent to create a context this phone's
+   * own rule holds, and do not wait for the grant. Approving a request does not
+   * run its task — the requester has to re-submit with the grant
+   * (vta-service consent_request.rs:41-42, 207-214) — and this never
+   * re-submits, so nothing is created. `held`: the agent asked its approvers,
+   * this phone among them. `letThrough`: the agent created it, so it enforces
+   * no rules where it is hosted; the context is deleted again, best effort
+   * (`cleanedUp` says whether that worked).
+   *
+   * It goes through `enqueue`, never `task()` or `createContext()`: `task()`
+   * waits for the grant and re-submits, and the first re-submit after an
+   * approval consumes the grant and runs the task — the test would then create
+   * the context it promised not to.
+   */
+  async sendTestRequest(): Promise<{ kind: 'held' } | { kind: 'letThrough'; cleanedUp: boolean }> {
+    const id = `keyring-test-request-${Date.now()}`
+    try {
+      await this.enqueue(VTA_TASK.contextsCreate, { id, name: 'Keyring test request' }, 30000, {})
+    } catch (error) {
+      const pending = consentPendingOf(error)
+      if (!pending) throw error
+      // A did:webvh approver hears of it only if the requester relays it (VtaClient.task).
+      await this.relayConsentRequests(pending.requests)
+      return { kind: 'held' }
+    }
+    const cleanedUp = await this.enqueue(VTA_TASK.contextsDelete, { id, force: true }, 30000, {}).then(
+      () => true,
+      () => false
+    )
+    return { kind: 'letThrough', cleanedUp }
   }
 
   async listContexts(): Promise<VtaContext[]> {

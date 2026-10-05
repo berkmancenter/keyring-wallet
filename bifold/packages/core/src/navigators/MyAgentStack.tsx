@@ -16,6 +16,7 @@ import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
 import VtaRequests from '../modules/trust-tasks/screens/VtaRequests'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
 import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
+import VtaAskMe from '../modules/trust-tasks/screens/VtaAskMe'
 import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
@@ -125,6 +126,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaRequests}
         component={VtaRequests}
         options={{ title: t('Screens.VtaRequests'), ...ScreenOptionsDictionary[Screens.VtaRequests] }}
+      />
+      <Stack.Screen
+        name={Screens.VtaAskMe}
+        component={VtaAskMe}
+        options={{ title: t('Screens.VtaAskMe'), ...ScreenOptionsDictionary[Screens.VtaAskMe] }}
       />
     </Stack.Navigator>
   )

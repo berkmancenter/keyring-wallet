@@ -36,6 +36,7 @@ import { DeviceEventEmitter } from 'react-native'
 
 import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { withKeyLock } from './keyedRecords'
+import { roleNameOf } from './vtiInbox'
 import { cardStandingOf, loadCardStanding, VTI_CARD_STANDING_EVENT } from './vtiCardStanding'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
 
@@ -74,21 +75,44 @@ export function walletCardKey(vc: Json): string | undefined {
   return `urn:keyring:card:${bytesToHex(sha256(utf8ToBytes(JSON.stringify(sortKeys(vc.proof)))))}`
 }
 
+/**
+ * A role card that says only "member" beside the membership card it goes
+ * with: the community issues both on admission (VTI vtc-service
+ * ceremony/execute.rs AdmitOutcome), and side by side they read as the same
+ * card twice, "Member of X" and "Member in X" (IN-109). The Wallet shows the
+ * membership card alone. The role card stays in the store and in the agent's
+ * vault, for proofs; a real role (admin, vetter, the community's own) keeps
+ * its own card.
+ */
+const isPlainMemberRole = (vc: Json) => roleNameOf(vc)?.replace(/^custom:/, '') === 'member'
+
 /** The cards the store holds that the Wallet shows, by `walletCardKey`. */
 async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<string, Json>> {
   const held = new Map<string, Json>()
   const add = (vc: Json | undefined) => {
     const key = vc ? walletCardKey(vc) : undefined
-    if (vc && key && isCommunityCard(vc) && cardStandingOf(vc, now).state === 'held') held.set(key, vc)
+    if (vc && key && isCommunityCard(vc) && cardStandingOf(vc, now).state === 'held') {
+      held.set(key, vc)
+      return true
+    }
+    return false
   }
+  const roleCards: { vc: Json; communityDid: string }[] = []
+  const withMembershipCard = new Set<string>()
   for (const m of await store.listMemberships()) {
     // A membership the community removed is not a card the person holds.
     if ((m as { removal?: unknown }).removal) continue
-    add(m.vmc)
-    add(m.roleVec)
+    if (add(m.vmc)) withMembershipCard.add(m.communityDid)
+    if (m.roleVec) roleCards.push({ vc: m.roleVec, communityDid: m.communityDid })
   }
-  for (const h of await store.listHeldCredentials())
-    if (h.kind === 'role' || h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
+  for (const h of await store.listHeldCredentials()) {
+    if (h.kind === 'role') roleCards.push({ vc: h.credential, communityDid: h.communityDid })
+    else if (h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
+  }
+  for (const { vc, communityDid } of roleCards) {
+    if (withMembershipCard.has(communityDid) && isPlainMemberRole(vc)) continue
+    add(vc)
+  }
   return held
 }
 

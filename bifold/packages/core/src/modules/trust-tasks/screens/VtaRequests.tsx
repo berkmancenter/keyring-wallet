@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 
@@ -35,6 +36,7 @@ import { requestsView } from './requestsView'
 type Nav = {
   getState: () => { index?: number } | undefined
   goBack: () => void
+  navigate: (name: string) => void
   replace: (name: string) => void
   setOptions: (options: object) => void
 }
@@ -165,6 +167,18 @@ const VtaRequests: React.FC = () => {
         {view.mode === 'empty' ? (
           <View style={styles.card} testID={testIdWithKey('RequestsEmpty')}>
             <ThemedText>{t('Requests.Empty')}</ThemedText>
+          </View>
+        ) : null}
+        {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
+        {view.mode === 'empty' && state.approvals.length === 0 ? (
+          <View style={styles.card} testID={testIdWithKey('RequestsAskMeCard')}>
+            <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
+            <Button
+              title={t('Requests.AskMeRow')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => navigation.navigate(Screens.VtaAskMe)}
+              testID={testIdWithKey('RequestsAskMe')}
+            />
           </View>
         ) : null}
 

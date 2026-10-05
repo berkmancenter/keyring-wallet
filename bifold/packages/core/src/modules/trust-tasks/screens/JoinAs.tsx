@@ -31,6 +31,21 @@ export interface JoinAsOption {
   photo?: string
 }
 
+/**
+ * The name to offer on vetting's legal-name step when nothing seeded it (opened
+ * from a vetter's ticket, with no "Join as"): the active profile's, else none.
+ * Offered, never filled in: a profile's name is how the person shows up, not
+ * necessarily their legal name.
+ */
+export function offeredProfileName(
+  seed: JoinSeed | undefined,
+  options: JoinAsOption[],
+  defaultId: string | undefined
+): JoinSeed | undefined {
+  if (seed?.legalName) return undefined
+  return options.find((o) => o.id === defaultId)?.seed
+}
+
 /** The person's profiles as join options, the active one first. */
 export function useJoinAsOptions(): { options: JoinAsOption[]; defaultId?: string } {
   const [store] = useStore()
@@ -112,9 +127,7 @@ export const JoinAs: React.FC<{
       <ThemedText>
         {/* A community that has published no name is not named by its host
             here either: the sentence simply stops naming it (report #16). */}
-        {community
-          ? t('Join.AsBody', { community, interpolation: { escapeValue: false } })
-          : t('Join.AsBodyUnnamed')}
+        {community ? t('Join.AsBody', { community, interpolation: { escapeValue: false } }) : t('Join.AsBodyUnnamed')}
       </ThemedText>
       {options.length === 0 ? (
         <ThemedText style={styles.muted} testID={testIdWithKey('JoinAsNoProfile')}>
@@ -130,7 +143,9 @@ export const JoinAs: React.FC<{
               onPress={() => onSelect(o.id)}
               accessibilityRole="radio"
               accessibilityState={{ checked: chosen }}
-              accessibilityLabel={o.seed.profileLabel ? `${o.seed.legalName}, ${o.seed.profileLabel}` : o.seed.legalName}
+              accessibilityLabel={
+                o.seed.profileLabel ? `${o.seed.legalName}, ${o.seed.profileLabel}` : o.seed.legalName
+              }
               testID={testIdWithKey('JoinAsOption')}
             >
               {o.photo ? (

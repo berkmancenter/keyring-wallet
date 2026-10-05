@@ -974,6 +974,19 @@ const VtaAgentHome: React.FC = () => {
               </View>
               <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
             </Pressable>
+            {/* Requests arrive only for what the agent has a rule on. */}
+            <Pressable
+              style={[styles.card, styles.row]}
+              onPress={() => go(Screens.VtaAskMe)}
+              accessibilityRole="button"
+              testID={testIdWithKey('AgentAskMeRow')}
+            >
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="bold">{t('Requests.AskMeRow')}</ThemedText>
+                <ThemedText style={styles.muted}>{t('Requests.AskMeRowHint')}</ThemedText>
+              </View>
+              <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+            </Pressable>
             {/* A task of this phone's that waits on someone else's consent:
             not a decision for this person, so it stays here. */}
             {state.awaitingConsentFor ? (
