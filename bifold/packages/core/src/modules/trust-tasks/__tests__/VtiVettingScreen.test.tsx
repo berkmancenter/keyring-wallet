@@ -581,6 +581,13 @@ describe('Vetting — the desk', () => {
     })
     const tree = await renderDesk(records)
     await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    // Its label wraps on a phone: inset from the button's edges, centred on each line.
+    const attest = tree.getByTestId(testIdWithKey('VettingAttestButton'))
+    expect(StyleSheet.flatten(attest.props.style)).toMatchObject({ paddingHorizontal: 16 })
+    expect(StyleSheet.flatten(within(attest).getByText('Vetting.Attest').props.style)).toMatchObject({
+      flexShrink: 1,
+      textAlign: 'center',
+    })
     await act(async () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
     })

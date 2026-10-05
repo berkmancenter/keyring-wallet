@@ -1764,7 +1764,7 @@
     "OpenSession": "Open session",
     "MatchCodeHint": "Read this code aloud — both screens must show the same one.",
     "CardReceived": "Their card",
-    "Attest": "I checked the person and their document — attest",
+    "Attest": "I checked them and their ID — attest",
     "StatementIssued": "Statement issued",
     "YourFace": "Your face",
     "LegalName": "Legal name",
