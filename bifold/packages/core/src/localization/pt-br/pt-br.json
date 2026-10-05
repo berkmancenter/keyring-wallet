@@ -1130,6 +1130,8 @@
     "RemovedReason": "Motivo informado: {{reason}}"
   },
   "VtaLink": {
+    "ShowIdentityCode": "Mostrar o código que eles veem",
+    "ShowIdentityCodeHint": "{{community}} e seus administradores veem este código para você. É o endereço desta identidade, não um segredo.",
     "Host": {
       "ConfirmTitle": "Conectar este telefone a {{label}}?",
       "ConfirmBody": "Este telefone passa a ser administrador deste agente. Continue apenas se você acabou de criar este código na página do provedor do seu agente.",
@@ -1569,6 +1571,10 @@
     "And": "e"
   },
   "Vetting": {
+    "YourIdentity": "Sua identidade nesta comunidade",
+    "YourIdentityHint": "Seu verificador e os administradores da comunidade veem este código para você. Não é um segredo.",
+    "TheirIdentity": "A identidade dessa pessoa nesta comunidade",
+    "TheirIdentityHint": "O código que a comunidade vê para essa pessoa. O telefone dela mostra o mesmo, para você comparar.",
     "EligibilityUnchecked": "Não foi possível confirmar a habilitação deste verificador. A declaração pode contar, mas pergunte à comunidade se tiver dúvidas.",
     "EligibilityReason": {
       "malformed": "A prova do papel dele não pôde ser lida.",

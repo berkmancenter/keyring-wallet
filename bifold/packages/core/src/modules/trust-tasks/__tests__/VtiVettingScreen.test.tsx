@@ -581,6 +581,13 @@ describe('Vetting — the desk', () => {
     })
     const tree = await renderDesk(records)
     await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    // IN-120: whom the statement will be about, as the community sees them,
+    // behind words and with Copy, beside the card being checked.
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantToggle'))).toHaveTextContent(/Vetting\.TheirIdentity$/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingCheckApplicantToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantDid'))).toHaveTextContent('did:key:z6MkApplicant')
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantHint'))).toHaveTextContent('Vetting.TheirIdentityHint')
+    expect(tree.getByTestId(testIdWithKey('VettingCheckApplicantCopy'))).toBeTruthy()
     // Its label wraps on a phone: inset from the button's edges, centred on each line.
     const attest = tree.getByTestId(testIdWithKey('VettingAttestButton'))
     expect(StyleSheet.flatten(attest.props.style)).toMatchObject({ paddingHorizontal: 16 })

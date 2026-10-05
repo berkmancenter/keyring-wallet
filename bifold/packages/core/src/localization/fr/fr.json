@@ -1224,6 +1224,8 @@
     "RemovedReason": "Motif indiqué : {{reason}}"
   },
   "VtaLink": {
+    "ShowIdentityCode": "Afficher le code qu’ils voient",
+    "ShowIdentityCodeHint": "{{community}} et ses administrateurs voient ce code pour vous. C’est l’adresse de cette identité, pas un secret.",
     "Host": {
       "ConfirmTitle": "Connecter ce téléphone à {{label}} ?",
       "ConfirmBody": "Ce téléphone devient administrateur de cet agent. Ne continuez que si vous venez de créer ce code sur la page de l'hébergeur de votre agent.",
@@ -1663,6 +1665,10 @@
     "And": "et"
   },
   "Vetting": {
+    "YourIdentity": "Votre identité dans cette communauté",
+    "YourIdentityHint": "Votre vérificateur et les administrateurs de la communauté voient ce code pour vous. Ce n’est pas un secret.",
+    "TheirIdentity": "Son identité dans cette communauté",
+    "TheirIdentityHint": "Le code que la communauté voit pour cette personne. Son téléphone affiche le même, pour comparer.",
     "EligibilityUnchecked": "L'habilitation de ce vérificateur n'a pas pu être contrôlée. Sa déclaration peut compter, mais demandez à la communauté en cas de doute.",
     "EligibilityReason": {
       "malformed": "La preuve de son rôle est illisible.",

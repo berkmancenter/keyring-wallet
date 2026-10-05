@@ -5,6 +5,7 @@
  * already holds, and offers "Check now" for any other open request (#269:
  * My Agent said "is deciding" for 14 min after a refusal).
  */
+import Clipboard from '@react-native-clipboard/clipboard'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
@@ -88,5 +89,23 @@ describe('learning where a request stands, from "Your agent"', () => {
     mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid: COMMUNITY } })
     const tree = await show()
     expect(tree.queryByTestId(testIdWithKey(`AgentCommunityCheck_${key}`))).toBeNull()
+  })
+})
+
+// IN-120: an admin saw a persona DID the person had never been shown.
+describe('the code the community sees for this identity', () => {
+  it('is behind "Show the code they see", with who sees it, and can be copied', async () => {
+    ;(Clipboard.setString as jest.Mock).mockClear()
+    const tree = await show()
+    const stem = `AgentCommunityIdentity_${key}`
+    expect(tree.getByTestId(testIdWithKey(`${stem}Toggle`))).toHaveTextContent(/VtaLink\.ShowIdentityCode/)
+    // Words first: the identifier is not on the card until asked for.
+    expect(tree.queryByTestId(testIdWithKey(`${stem}Did`))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey(`${stem}Toggle`)))
+    expect(tree.getByTestId(testIdWithKey(`${stem}Did`))).toHaveTextContent(ME)
+    expect(tree.getByTestId(testIdWithKey(`${stem}Hint`))).toHaveTextContent(/VtaLink\.ShowIdentityCodeHint/)
+    fireEvent.press(tree.getByTestId(testIdWithKey(`${stem}Copy`)))
+    expect(Clipboard.setString).toHaveBeenCalledWith(ME)
+    expect(tree.getByTestId(testIdWithKey(`${stem}Copy`))).toHaveTextContent(/VtaLink\.KeyCopied/)
   })
 })

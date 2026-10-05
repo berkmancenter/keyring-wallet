@@ -1285,6 +1285,8 @@
     "RemovedReason": "The reason given: {{reason}}"
   },
   "VtaLink": {
+    "ShowIdentityCode": "Show the code they see",
+    "ShowIdentityCodeHint": "{{community}} and its admins see this code for you. It is this identity's address, not a secret.",
     "Host": {
       "ConfirmTitle": "Connect this phone to {{label}}?",
       "ConfirmBody": "This phone becomes an administrator of this agent. Continue only if you just made this code on your agent host's page.",
@@ -1724,6 +1726,10 @@
     "And": "and"
   },
   "Vetting": {
+    "YourIdentity": "Your identity in this community",
+    "YourIdentityHint": "Your vetter and the community's admins see this code for you. It is not a secret.",
+    "TheirIdentity": "Their identity in this community",
+    "TheirIdentityHint": "The code the community sees for this person. Their phone shows the same one, so you can compare.",
     "EligibilityUnchecked": "This vetter's eligibility could not be checked. Their statement can still count, but ask the community if you are unsure.",
     "EligibilityReason": {
       "malformed": "The vetter's proof of their role could not be read.",
