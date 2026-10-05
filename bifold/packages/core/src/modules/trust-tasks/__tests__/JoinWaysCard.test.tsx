@@ -3,7 +3,7 @@
  * with what it needs and what follows. The screen renders keys here; the
  * sentences are checked in joinWays.test.ts.
  */
-import { render } from '@testing-library/react-native'
+import { fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
@@ -96,7 +96,45 @@ test('vetting keeps today’s lines: statements, and the legal name', () => {
 test('a way this app cannot use says so, and is not the one to use', () => {
   const odd = way({ id: 'odd', usable: false, unusableBecause: 'admissionUnknown', meets: 'no' })
   const tree = show({ wire: '0.3', accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
-  expect(tree.getByTestId(id('JoinWay_odd'))).toHaveTextContent(/Join\.Ways\.CannotUse/)
+  expect(tree.getByTestId(id('JoinWayCannotUse_odd'))).toHaveTextContent('Join.Ways.CannotUseUnreadable')
+  // A usable way beside it: no "nothing is wrong on your side".
+  expect(tree.queryByTestId(id('JoinWaysNoneUsable'))).toBeNull()
+})
+
+test("why a way can't be used is said plainly; the reader's fault waits behind Details", () => {
+  const odd = way({
+    id: 'invited-member',
+    usable: false,
+    unusableBecause: 'issuersMissing',
+    unusableDetail: 'query without credentialIssuers',
+    meets: 'no',
+  })
+  const tree = show({ wire: '0.3', accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
+  expect(tree.getByTestId(id('JoinWayCannotUse_invited-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+  expect(tree.getByTestId(id('JoinWay_invited-member'))).not.toHaveTextContent(/issuersMissing/)
+  expect(tree.queryByTestId(id('JoinWayDetail_invited-member'))).toBeNull()
+  fireEvent.press(tree.getByTestId(id('JoinWayDetailsToggle_invited-member')))
+  expect(tree.getByTestId(id('JoinWayDetail_invited-member'))).toHaveTextContent(
+    'issuersMissing: query without credentialIssuers'
+  )
+  fireEvent.press(tree.getByTestId(id('JoinWayDetailsToggle_invited-member')))
+  expect(tree.queryByTestId(id('JoinWayDetail_invited-member'))).toBeNull()
+})
+
+test('when no way can be used, the person is told nothing is wrong on their side', () => {
+  const invited = way({ id: 'invited-member', usable: false, unusableBecause: 'issuersMissing', meets: 'no' })
+  const vetted = way({ id: 'vetted-member', usable: false, unusableBecause: 'issuersMissing', meets: 'no' })
+  const tree = show({ wire: '0.3', accepting: true, ways: [invited, vetted] })
+  expect(tree.getByTestId(id('JoinWaysNoneUsable'))).toHaveTextContent('Join.Ways.NoneUsable')
+  expect(tree.getByTestId(id('JoinWayCannotUse_invited-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+  expect(tree.getByTestId(id('JoinWayCannotUse_vetted-member'))).toHaveTextContent('Join.Ways.CannotUseIncomplete')
+})
+
+test('a way with no reason given keeps the plain line and offers no Details', () => {
+  const odd = way({ id: 'odd', usable: false, meets: 'no' })
+  const tree = show({ wire: '0.3', accepting: true, ways: [odd, review], suggested: review, outcomeIfMet: 'reviewed' })
+  expect(tree.getByTestId(id('JoinWayCannotUse_odd'))).toHaveTextContent('Join.Ways.CannotUse')
+  expect(tree.queryByTestId(id('JoinWayDetailsToggle_odd'))).toBeNull()
 })
 
 test('a vetting way the person can start says so on its own row, beside a review way the phone meets', () => {

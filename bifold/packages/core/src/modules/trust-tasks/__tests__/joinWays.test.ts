@@ -319,16 +319,23 @@ describe('no way this phone meets', () => {
 
 describe('a way Keyring cannot read as published', () => {
   it.each([
-    'idMissing',
-    'admissionMissing',
-    'admissionUnknown',
-    'digestMissing',
-    'digestMismatch',
-    'issuersMissing',
-    'issuersUnknown',
-    'vettingUnreadable',
-  ])('%s: marked, never offered, never called "missing"', (unusableBecause) => {
-    const odd = way({ id: 'odd', usable: false, unusableBecause, meets: 'no', requires: { invitation: true } })
+    ['idMissing', 'incomplete'],
+    ['admissionMissing', 'incomplete'],
+    ['admissionUnknown', 'unreadable'],
+    ['digestMissing', 'incomplete'],
+    ['digestMismatch', 'changed'],
+    ['issuersMissing', 'incomplete'],
+    ['issuersUnknown', 'unreadable'],
+    ['vettingUnreadable', 'unreadable'],
+  ] as const)('%s: marked, never offered, never called "missing", said as %s', (unusableBecause, said) => {
+    const odd = way({
+      id: 'odd',
+      usable: false,
+      unusableBecause,
+      unusableDetail: 'what the reader saw',
+      meets: 'no',
+      requires: { invitation: true },
+    })
     const card = joinCard({
       wire: '0.3',
       accepting: true,
@@ -339,10 +346,33 @@ describe('a way Keyring cannot read as published', () => {
     if (card.mode !== 'ways') throw new Error('ways')
     expect(card.rows[0]).toMatchObject({ usable: false, cannotUse: true, suggested: false })
     expect(card.rows[1]).toMatchObject({ usable: true, cannotUse: false })
+    expect(card.rows[1].cannotUseBecause).toBeUndefined()
+    // The person reads why; the reader's own fault waits behind Details.
+    expect(card.rows[0].cannotUseBecause).toBe(said)
+    expect(card.rows[0].cannotUseDetail).toBe(`${unusableBecause}: what the reader saw`)
+    // A usable way beside it: the person has somewhere to go.
+    expect(card.noneUsable).toBe(false)
     const only = joinCard({ wire: '0.3', accepting: true, ways: [odd] })
     if (only.mode !== 'ways') throw new Error('ways')
     expect(only.missing).toEqual([])
     expect(only.button).toBe('none')
+    expect(only.noneUsable).toBe(true)
+  })
+
+  it('names the fault alone under Details when the reader gave no more', () => {
+    const odd = way({ id: 'odd', usable: false, unusableBecause: 'issuersMissing', meets: 'no' })
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [odd] })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.rows[0].cannotUseDetail).toBe('issuersMissing')
+  })
+
+  it('falls back to the plain line when the reader gave no reason', () => {
+    const odd = way({ id: 'odd', usable: false, meets: 'no' })
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [odd] })
+    if (card.mode !== 'ways') throw new Error('ways')
+    expect(card.rows[0]).toMatchObject({ cannotUse: true })
+    expect(card.rows[0].cannotUseBecause).toBeUndefined()
+    expect(card.rows[0].cannotUseDetail).toBeUndefined()
   })
 })
 
@@ -370,6 +400,10 @@ describe('the words', () => {
         'MissingInvitation',
         'CredentialNotYet',
         'CannotUse',
+        'CannotUseIncomplete',
+        'CannotUseUnreadable',
+        'CannotUseChanged',
+        'NoneUsable',
         'ButtonJoin',
         'ButtonAsk',
         'ButtonVetting',
@@ -408,6 +442,24 @@ describe('the words', () => {
     // Credentials are not evaluated, so "this phone doesn't hold one" would be a guess.
     for (const words of all) expect(ways(words).MissingCredential).toBeUndefined()
     expect(ways(enCopy).CredentialNotYet).not.toMatch(/doesn.t hold|does not hold|don.t have/i)
+  })
+
+  it("say why a way cannot be used in the person's terms, and put the fault on the community", () => {
+    const why = ['CannotUseIncomplete', 'CannotUseUnreadable', 'CannotUseChanged', 'NoneUsable']
+    for (const words of all) {
+      const w = ways(words)
+      for (const key of why) {
+        // The reader's vocabulary stays under Details.
+        expect(w[key]).not.toMatch(/digest|issuer|query|criteri|manifest|admission|Missing|Unknown|Unreadable/)
+      }
+      // A way the community left unfinished, or one that doesn't match, is theirs to fix.
+      for (const key of ['CannotUseIncomplete', 'CannotUseChanged', 'NoneUsable']) {
+        expect(w[key]).toContain('{{community}}')
+      }
+    }
+    expect(ways(enCopy).NoneUsable).toMatch(/Nothing is wrong on your side/)
+    expect(ways(frCopy).NoneUsable).toMatch(/de votre côté/)
+    expect(ways(ptBrCopy).NoneUsable).toMatch(/do seu lado/)
   })
 
   it('name no provider', () => {

@@ -20,7 +20,26 @@
  * @module trust-tasks/screens/joinWays
  */
 
-import type { JoinAsks, JoinCredentialIssuers, JoinHolds, JoinWay } from '../module/joinManifest'
+import type { JoinAsks, JoinCredentialIssuers, JoinHolds, JoinWay, JoinWayFault } from '../module/joinManifest'
+
+/**
+ * Why a way cannot be used, as the person is told it. Every fault is the
+ * community's description, never the person: `incomplete` (a member the
+ * format requires is missing), `unreadable` (a value this app does not know
+ * yet), `changed` (the way does not match the fingerprint published for it).
+ */
+export type JoinCannotUse = 'incomplete' | 'unreadable' | 'changed'
+
+const CANNOT_USE: Record<JoinWayFault, JoinCannotUse> = {
+  idMissing: 'incomplete',
+  admissionMissing: 'incomplete',
+  digestMissing: 'incomplete',
+  issuersMissing: 'incomplete',
+  admissionUnknown: 'unreadable',
+  issuersUnknown: 'unreadable',
+  vettingUnreadable: 'unreadable',
+  digestMismatch: 'changed',
+}
 
 /** One thing a way asks for. */
 export type JoinNeed =
@@ -45,6 +64,10 @@ export interface JoinWayRow {
   usable: boolean
   /** Keyring cannot read this way as published: said so, never offered. */
   cannotUse: boolean
+  /** With `cannotUse`: why, in the person's terms. Absent if the reader gave no reason. */
+  cannotUseBecause?: JoinCannotUse
+  /** With `cannotUse`: the reader's own fault and detail, for Details only. */
+  cannotUseDetail?: string
   /**
    * The way asks for a credential, and Keyring cannot present one to join yet
    * (nothing picks a held credential to answer a criterion's query): said so
@@ -78,6 +101,8 @@ export type JoinCard =
       alsoAsk: boolean
       /** With no way this phone meets: what the person can go and get. */
       missing: Array<'invitation'>
+      /** Not one way can be used as published: the person is told nothing is wrong on their side. */
+      noneUsable: boolean
     }
 
 const needsOf = (way: JoinWay): JoinNeed[] => {
@@ -122,6 +147,12 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
     canStartVetting: !joinsNow && startable(way),
     usable: way.usable,
     cannotUse: !way.usable,
+    ...(!way.usable && way.unusableBecause
+      ? {
+          cannotUseBecause: CANNOT_USE[way.unusableBecause],
+          cannotUseDetail: way.unusableDetail ? `${way.unusableBecause}: ${way.unusableDetail}` : way.unusableBecause,
+        }
+      : {}),
     credentialNotYet: way.usable && Boolean(way.requires.credentials),
   }))
 
@@ -142,5 +173,6 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
     button,
     alsoAsk: button === 'start' && Boolean(suggested),
     missing,
+    noneUsable: rows.every((row) => row.cannotUse),
   }
 }
