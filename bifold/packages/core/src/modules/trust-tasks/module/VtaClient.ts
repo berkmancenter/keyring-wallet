@@ -463,7 +463,7 @@ export class VtaClient {
   private tsp?: TspSessionIdentity
   /** §4.2's per-peer decision, taken once per session. */
   private readonly carriageByPeer = new Map<string, Carriage>()
-  /** Whether the VTA has been greeted (§7.2.2) this session. */
+  /** Whether the VTA has been greeted (§7.2.2) this session; cleared by an ask over TSP that got no answer. */
   private greeted = false
   private queue: Promise<unknown> = Promise.resolve()
   /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
@@ -858,13 +858,14 @@ export class VtaClient {
         Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS,
         { decided: this.carriageByPeer }
       )
+      const overTsp = carriage === 'tsp' && Boolean(this.tsp)
       if (carriage === 'tsp' && this.tsp) {
         if (!this.greeted) {
-          this.greeted = true
           // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
           const route = [this.mediator!.did, did]
           const invite = await tsp.packInviteRev3(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
           await session.sendTspFrame(invite.bytes)
+          this.greeted = true
           this.agent.config.logger.info(`${LOG_PREFIX} greeted ${this.vtaDid} with an XRFI invite`)
         }
         const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document)
@@ -893,7 +894,23 @@ export class VtaClient {
       this.cancelInFlight = undefined
       this.pending = undefined
       if (answer === 'dropped') throw new VtaTaskDropped(type)
-      if (!answer) throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
+      if (!answer) {
+        // A VTA that restarted may have forgotten the relationship, and a
+        // peer it does not know drops our frames in silence (§7.2.2): the
+        // session stays open, so nothing here would greet it again until the
+        // app relaunched (al-phone, 10-05). Greet again on the next ask —
+        // upstream's own reset on a reply-timeout (vta-service
+        // tsp_transport.rs `reset_relationship`). If the VTA kept the
+        // relationship, it takes the repeat invite as a no-op. This ask still
+        // fails: resending it could run it twice.
+        if (overTsp) {
+          this.greeted = false
+          this.agent.config.logger.info(
+            `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
+          )
+        }
+        throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
+      }
 
       // An auth/ACL refusal never reaches the task handler: the VTA answers
       // with a DIDComm problem-report (`app_err_to_response`, handlers.rs),
