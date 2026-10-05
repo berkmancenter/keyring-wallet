@@ -1357,6 +1357,7 @@
     "FailedRefused": "The admin did not grant access to this phone.",
     "FailedUnreachable": "The agent's page could not be reached. Check your connection and scan again.",
     "FailedCommunityAgent": "This is a community's agent. Link Keyring to your personal agent instead.",
+    "FailedCommunityAgentCleanup": "If you added this phone in that agent's settings, remove it there.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
     "LinkYourAgent": "Link your agent",
     "YourAgentFallback": "your agent",

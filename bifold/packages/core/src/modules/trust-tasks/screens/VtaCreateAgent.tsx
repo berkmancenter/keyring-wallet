@@ -264,7 +264,7 @@ const VtaCreateAgent: React.FC = () => {
   useEffect(() => {
     if (!refusedAsCommunity) return
     setStep('address')
-    setError(t('VtaLink.FailedCommunityAgent'))
+    setError(`${t('VtaLink.FailedCommunityAgent')} ${t('VtaLink.FailedCommunityAgentCleanup')}`)
   }, [refusedAsCommunity, t])
 
   const ownerKey = link.kind === 'showingKey' ? link.did : undefined

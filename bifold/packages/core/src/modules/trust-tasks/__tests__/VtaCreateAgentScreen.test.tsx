@@ -68,7 +68,9 @@ describe("create my agent: a community's own agent", () => {
     await act(async () => {
       controller.set({ link: { kind: 'notLinked', lastError: { reason: 'communityAgent' } } })
     })
-    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('VtaLink.FailedCommunityAgent')
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(
+      'VtaLink.FailedCommunityAgent VtaLink.FailedCommunityAgentCleanup'
+    )
     expect(tree.getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
   })
 })

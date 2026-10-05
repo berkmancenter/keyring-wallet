@@ -1296,6 +1296,7 @@
     "FailedRefused": "L'administrateur n'a pas accordé l'accès à ce téléphone.",
     "FailedUnreachable": "La page de l'agent est injoignable. Vérifiez votre connexion et scannez à nouveau.",
     "FailedCommunityAgent": "C’est l’agent d’une communauté. Liez plutôt Keyring à votre agent personnel.",
+    "FailedCommunityAgentCleanup": "Si vous avez ajouté ce téléphone dans les réglages de cet agent, retirez-le là-bas.",
     "FailedOther": "Un problème est survenu pendant la liaison. Scannez le code à nouveau.",
     "LinkYourAgent": "Relier votre agent",
     "YourAgentFallback": "votre agent",

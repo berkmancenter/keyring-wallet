@@ -631,6 +631,13 @@ const VtaLink: React.FC = () => {
                 {failureText(link.lastError)}
               </ThemedText>
             ) : null}
+            {/* The key this phone was granted stays on that agent's list: a VTA
+                refuses a self-delete, so its admin is the one to remove it. */}
+            {link.lastError?.reason === 'communityAgent' ? (
+              <ThemedText testID={testIdWithKey('VtaLinkCommunityAgentCleanup')}>
+                {t('VtaLink.FailedCommunityAgentCleanup')}
+              </ThemedText>
+            ) : null}
             {/* The original text, as Join and Invited keep it: for whoever reads
                 a report, one tap away and never on its own. */}
             {link.lastError?.detail ? (
