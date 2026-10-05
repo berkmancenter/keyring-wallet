@@ -17,12 +17,12 @@ import { ToastType } from '../../../components/toast/BaseToast'
 import { VTI_TURNED_DOWN_EVENT } from '../module/joinSubmission'
 
 import { useToastAboveTabBar } from './aboveTabBar'
-import { communityLabelStartOf } from './communityName'
+import { communityLabelOf } from './communityName'
 
 /** The words, with the community's reason when it gave one. */
 export function turnedDownWords(communityDid: string, reason: string | undefined, t: TFunction): string {
   const said = t('Join.StandingRejected', {
-    community: communityLabelStartOf(communityDid, t),
+    community: communityLabelOf(communityDid, t),
     interpolation: { escapeValue: false },
   }) as string
   return reason

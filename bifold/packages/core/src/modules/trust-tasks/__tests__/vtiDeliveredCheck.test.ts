@@ -95,9 +95,9 @@ describe('the words a person reads', () => {
     expect(words).not.toMatch(/did:|vtc\.example/)
   })
 
-  it('starts a sentence with an unnamed community in capitals', () => {
+  it('names an unnamed community mid-sentence, as its handle is written, never capitalised', () => {
     expect(refusedCardWords('revoked', COMMUNITY, t)).toBe(
-      "An unnamed community (keyring-test-vtc) has withdrawn a card it sent, so Keyring didn't keep it."
+      "A card from keyring-test-vtc (no name published yet) was withdrawn, so Keyring didn't keep it."
     )
   })
 })
