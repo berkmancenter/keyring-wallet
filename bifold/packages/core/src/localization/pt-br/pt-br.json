@@ -1338,6 +1338,8 @@
     "NextVetting": "Sua verificação para {{community}} ainda não terminou.",
     "NextInvitationAction": "Ver o convite",
     "SegmentManage": "Gerenciar",
+    "JoinCorner": "Entrar",
+    "AgentSettings": "Configurações do agente",
     "SegmentStatus": "Status",
     "ApprovalsWaiting_one": "1 pedido espera por você",
     "ApprovalsWaiting_other": "{{count}} pedidos esperam por você",
