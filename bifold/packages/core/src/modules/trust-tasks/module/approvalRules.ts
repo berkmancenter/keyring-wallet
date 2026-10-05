@@ -180,6 +180,41 @@ export function withPhoneRule(
 }
 
 /**
+ * The row after this phone's manager key was swapped (`acl/swap-key/0.1`):
+ * every approver set that names the old key names the new one instead, and
+ * this phone's own set — named after its key ({@link phoneSetName}) — is
+ * renamed with the rules that use it. Without this the agent keeps asking the
+ * retired key, which can no longer answer, so the phone stops being asked at
+ * all, and the screen no longer recognises the phone's own rules.
+ *
+ * Every other rule and set is kept as it was, in its order. `changed` is false
+ * when the old key appears nowhere, so nothing needs writing.
+ */
+export function withKeySwapped(
+  model: Pick<ApprovalsModel, 'rules' | 'sets'>,
+  oldDid: string,
+  newDid: string
+): Pick<ApprovalsModel, 'rules' | 'sets'> & { changed: boolean } {
+  const oldSet = phoneSetName(oldDid)
+  const newSet = phoneSetName(newDid)
+  let changed = false
+  const sets: ApproverSets = {}
+  for (const [name, members] of Object.entries(model.sets)) {
+    const renamed = name === oldSet ? newSet : name
+    const swapped = members.map((m) => (m === oldDid ? newDid : m))
+    if (renamed !== name || swapped.some((m, i) => m !== members[i])) changed = true
+    // A set renamed onto one that already exists merges into it, each member once.
+    sets[renamed] = [...new Set([...(sets[renamed] ?? []), ...swapped])]
+  }
+  const rules = model.rules.map((rule) => {
+    if (rule.approverSet !== oldSet) return rule
+    changed = true
+    return { ...rule, approverSet: newSet }
+  })
+  return { rules, sets, changed }
+}
+
+/**
  * A rule as the agent's strict reader takes it (`deny_unknown_fields`,
  * vta-sdk approvals/mod.rs:97): the known members only, absent ones left out.
  */
