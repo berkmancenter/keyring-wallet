@@ -52,7 +52,8 @@ export function resolveWitnessMediatorInvitationUrl() {
   );
 }
 
-export const APP_ID = "asml.bkc.harvard.wallet";
+// E2E_APP_ID: a build installed under another id (the push-test build, asml.bkc.harvard.wallet.pushtest).
+export const APP_ID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 export const TEST_ID_PREFIX = "com.ariesbifold:id/";
 export const APPIUM_PORT = Number(process.env.APPIUM_PORT || 4723);
 export const PIN = process.env.E2E_PIN || "123456";
@@ -139,7 +140,9 @@ export function androidCaps(avd = ANDROID_AVD) {
     // debug build can reach metro on the host
     "appium:autoLaunch": false,
     "appium:newCommandTimeout": 300,
-    "appium:autoGrantPermissions": true,
+    // E2E_NO_AUTOGRANT=1: install without granting runtime permissions, so a
+    // permission the app asks for shows the system dialog (wallet #300's row).
+    "appium:autoGrantPermissions": process.env.E2E_NO_AUTOGRANT !== "1",
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
     ...ANDROID_SETTINGS,

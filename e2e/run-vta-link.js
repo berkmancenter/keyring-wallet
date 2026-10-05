@@ -120,6 +120,8 @@ async function assertAgentNamed(driver, key, where) {
 
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
+  // An agent with other phones on it first offers "Your other phones"; keep them all.
+  if (await passNewPhoneOfferIfShown(driver, 8000)) console.log("[e2e] other-phones offer: kept them all (Done)");
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
