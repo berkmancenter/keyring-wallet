@@ -351,7 +351,25 @@ async function linkManually(driver) {
  * (IN-20c); on a build without them it is on the page itself.
  */
 async function openManage(driver) {
-  if (await existsTestId(driver, "AgentSegment_manage", 3000)) await tapTestId(driver, "AgentSegment_manage", 5000);
+  // Before bifold #297: a Manage segment. After: one "Agent settings" row at
+  // the bottom that opens Manage's and Status's contents — tapped only when
+  // closed, since a second tap closes it.
+  if (await existsTestId(driver, "AgentSegment_manage", 3000)) {
+    await tapTestId(driver, "AgentSegment_manage", 5000);
+    return;
+  }
+  await scrollToTestId(driver, "AgentSettings", 8).catch(() => undefined);
+  if (!(await existsTestId(driver, "AgentRequestsRow", 1500)) && (await existsTestId(driver, "AgentSettings", 3000))) {
+    await tapTestId(driver, "AgentSettings", 5000);
+  }
+}
+
+/** Bring "Join another community" into reach: after #297 a member finds it behind the corner Join button. */
+async function openJoinDoors(driver) {
+  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
+    await tapTestId(driver, "AgentJoinCorner", 5000);
+  }
 }
 
 async function unlinkAndRelink(driver) {
@@ -439,7 +457,7 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await openJoinDoors(driver);
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   // What the build's suggestion is called. A community that has published no
@@ -674,7 +692,7 @@ async function testerJourney(driver) {
   // choose the segment and scroll to them (the #10 lab run tapped blind and
   // timed out on an applicant's screen).
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await openJoinDoors(driver);
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
