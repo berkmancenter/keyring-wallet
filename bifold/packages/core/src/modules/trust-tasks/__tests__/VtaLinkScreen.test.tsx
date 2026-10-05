@@ -15,6 +15,7 @@ import { useAgent } from '@bifold/react-hooks'
 import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
+import Button, { ButtonType } from '../../../components/buttons/Button'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
@@ -343,6 +344,28 @@ describe('giving the code to an admin', () => {
         ...extra,
       },
     })
+
+  // IN-125: one main button at a time. Before the code is handed out, Share is
+  // it; once copied or shared, "I've been added" is.
+  test('one main button: Share until the code is handed out, then "I\'ve been added"', async () => {
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({ agent: {} })
+    showKey()
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    const typeOf = (key: string) =>
+      tree.UNSAFE_getAllByType(Button).find((b) => b.props.testID === testIdWithKey(key))?.props.buttonType
+    expect(typeOf('VtaLinkShareKey')).toBe(ButtonType.Primary)
+    expect(typeOf('VtaLinkCheckGrant')).toBe(ButtonType.Secondary)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkCopyKey')))
+    })
+    expect(typeOf('VtaLinkShareKey')).toBe(ButtonType.Secondary)
+    expect(typeOf('VtaLinkCheckGrant')).toBe(ButtonType.Primary)
+  })
 
   test('the two things to do come before the code, which starts hidden', () => {
     const mockUseAgent = useAgent as jest.Mock

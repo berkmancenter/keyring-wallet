@@ -121,16 +121,19 @@ describe('create my agent: the address comes first', () => {
 describe('create my agent: the address can be scanned', () => {
   afterEach(() => agentAddressScan.cancel())
 
-  test('Scan opens the scanner for an address; a scanned address fills the field', () => {
+  // IN-125: a scan that reads the address goes straight on, with no Continue to press.
+  test('Scan opens the scanner for an address; a scanned address fills the field and goes straight on', async () => {
     mockOpenScanner.mockClear()
+    const start = jest.spyOn(vtaAgent, 'startCreateAgent').mockResolvedValue(undefined)
     const tree = show()
     fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
     fireEvent.press(tree.getByTestId(id('AgentCreateScanAddress')))
     expect(mockOpenScanner).toHaveBeenCalled()
-    act(() => {
+    await act(async () => {
       expect(agentAddressScan.claim(VTA)).toEqual({ taken: true })
     })
     expect(tree.getByTestId(id('AgentCreateAddressInput')).props.value).toBe(VTA)
+    expect(start).toHaveBeenCalledWith({}, VTA, VTA)
   })
 
   test('the step says the address can be scanned as well as pasted, in every language', () => {
@@ -306,21 +309,36 @@ describe('setup ends at Ready; another device is added from My devices', () => {
   }
 
   // #30: the other phone now shows its code as a QR; this phone scans it.
-  test('Scan its code: the scanned code fills the field, and adding it becomes the main button', () => {
+  // IN-125: a scanned code is added straight away; the owner check (inside
+  // addBackupDevice) is the only stop, with no Add to press.
+  test('Scan its code: the scanned code is added straight away, named by its kind', async () => {
     linked()
     asAddDevice()
     jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const add = jest
+      .spyOn(vtaAgent, 'addBackupDevice')
+      .mockResolvedValue({ did: 'did:key:z6MkNewPhone', role: 'admin', label: 'Computer', thisPhone: false })
     mockOpenScanner.mockClear()
     const tree = show()
     fireEvent.press(tree.getByTestId(id('AgentBackupNext')))
     fireEvent.press(tree.getByTestId(id('AgentBackupScanButton')))
     expect(mockOpenScanner).toHaveBeenCalled()
-    act(() => {
+    await act(async () => {
       deviceCodeScan.claim('did:key:z6MkNewPhone')
     })
-    expect(tree.getByTestId(id('AgentBackupCodeInput')).props.value).toBe('did:key:z6MkNewPhone')
-    expect(tree.getByTestId(id('AgentBackupAdd'))).toHaveTextContent('CreateAgent.AddThisPhone')
+    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkNewPhone', 'Devices.ShortComputer')
     deviceCodeScan.cancel()
+  })
+
+  // IN-126: one tap hands the agent's address to a computer (Universal Clipboard, AirDrop).
+  test("the agent's address can be copied or shared from the first step", () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentBackupCopyAddress')))
+    expect(tree.getByTestId(id('AgentBackupCopyAddress'))).toHaveTextContent('VtaLink.KeyCopied')
+    expect(tree.getByTestId(id('AgentBackupShareAddress'))).toBeTruthy()
   })
 
   test("the agent's code can be shown as text, for an app with no camera", () => {
