@@ -1590,6 +1590,8 @@
     "UseAgent": "Use {{agent}}",
     "JoiningWithThis": "Joining with this one",
     "AlreadyHasIdentity": "Already has an identity here",
+    "CheckNow": "Check now",
+    "Checking": "Checking…",
     "NowMember": "You're now a member of {{community}}.",
     "StandingRemoved": "You were removed by {{community}}. You can ask to join again.",
     "StandingSent": "Sent — waiting for {{community}} to answer.",

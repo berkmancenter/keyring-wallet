@@ -1529,6 +1529,8 @@
     "UseAgent": "Utiliser {{agent}}",
     "JoiningWithThis": "Vous rejoignez avec celui-ci",
     "AlreadyHasIdentity": "A déjà une identité ici",
+    "CheckNow": "Vérifier maintenant",
+    "Checking": "Vérification…",
     "NowMember": "Vous êtes maintenant membre de {{community}}.",
     "StandingRemoved": "Votre adhésion a pris fin à l'initiative de {{community}}. Vous pouvez demander à la rejoindre à nouveau.",
     "StandingSent": "Envoyé — en attente de la réponse de {{community}}.",
