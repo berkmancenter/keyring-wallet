@@ -22,6 +22,7 @@ import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
 import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
+import { currentAgentDid } from './currentAgent'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { deliveredCardCheck } from './vtiDeliveredCheck'
@@ -50,7 +51,12 @@ export interface PersonaInboxOptions {
 async function personaFor(agent: Agent, communityDid?: string): Promise<VtiPersona | undefined> {
   const identity = new GenericRecordsIdentityStore(agent)
   if (communityDid) return (await identity.getPersona(communityDid)) ?? undefined
-  const all = await identity.listPersonas()
+  // The latest of the identities under the agent this phone acts with now, as
+  // getPersona answers for one community. Another agent's persona cannot sign
+  // in here: its key is borrowed only while that agent is connected (IN-114:
+  // the second agent current, the first agent's persona tried, key not found).
+  const vtaDid = currentAgentDid()
+  const all = (await identity.listPersonas()).filter((p) => !vtaDid || p.vtaDid === vtaDid)
   return all.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
 }
 
