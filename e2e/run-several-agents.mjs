@@ -595,6 +595,20 @@ try {
   if (d) await shot(d, "agents-failure");
   process.exitCode = 1;
 } finally {
+  // IN-114 (bifold #302): with several agents, the persona inbox signs in only with an identity under the
+  // agent the phone acts with now. Before the fix it tried another agent's persona and logged "key not found".
+  if (E.LOGCAT && ROWS.some((r) => ["R1", "R2", "R5", "R6"].includes(r))) {
+    try {
+      const lines = readFileSync(E.LOGCAT, "utf8").split("\n");
+      const notFound = lines.filter((l) => /ReactNativeJS/.test(l) && /key not found/i.test(l));
+      const signIns = lines.filter((l) => /\[VTI\] persona inbox .*signing in as the persona/.test(l));
+      log(`IN-114: ${signIns.length} persona-inbox sign-ins; ${notFound.length} "key not found" line(s)`);
+      for (const l of notFound.slice(0, 3)) log(`  ${l.slice(0, 200)}`);
+      row("IN-114 no \"key not found\" with several agents", notFound.length === 0, `${notFound.length} "key not found" line(s) in ${signIns.length} persona-inbox sign-ins`);
+    } catch (e) {
+      log(`IN-114 log check skipped: ${String(e.message).slice(0, 100)}`);
+    }
+  }
   if (PIN) {
     try {
       adb("shell", "locksettings", "clear", "--old", PIN);
