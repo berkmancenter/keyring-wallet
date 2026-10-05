@@ -1913,6 +1913,7 @@
     "Removed": "Removido: {{device}}. Ele não pode mais usar seu agente.",
     "OnlyThisPhone": "Só este telefone roda seu agente. Adicione outro dispositivo para que um telefone perdido não seja um agente perdido.",
     "AddAnother": "Adicionar outro dispositivo",
+    "ListNoAnswer": "Seu agente não respondeu. Tente de novo.",
     "BrowserPlugin": "Extensão de navegador",
     "AComputer": "Um computador ou outro app",
     "AKeyringPhone": "Um telefone Keyring",

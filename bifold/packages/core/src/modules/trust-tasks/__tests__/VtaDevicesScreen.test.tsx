@@ -181,6 +181,23 @@ describe('your devices', () => {
     expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent(/Sam’s phone/)
   })
 
+  // IN-124: an agent that doesn't answer is said plainly, with Try again, rather than a spinner for ever.
+  test("an agent that doesn't answer in time: said so, and Try again reads the list again", async () => {
+    const list = jest
+      .spyOn(vtaAgent, 'agentDevices')
+      .mockRejectedValueOnce(new DeviceActionRefused('noAnswer'))
+      .mockResolvedValueOnce([thisPhone])
+    const tree = await show()
+    expect(tree.getByTestId(id('AgentDeviceError'))).toHaveTextContent('Devices.ListNoAnswer')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentDeviceListTryAgain')))
+    })
+    expect(list).toHaveBeenCalledTimes(2)
+    expect(tree.queryByTestId(id('AgentDeviceError'))).toBeNull()
+    expect(tree.queryByTestId(id('AgentDeviceListTryAgain'))).toBeNull()
+    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toBeTruthy()
+  })
+
   // IN-123: a computer, a CLI or a plugin is named from here (its access-list
   // label); a phone that names itself is renamed on that phone.
   test('another device that does not name itself has Rename beside Remove, and saves through the agent', async () => {
@@ -229,9 +246,9 @@ describe('your devices', () => {
   })
 
   test('a list the agent refuses is said in words', async () => {
-    jest.spyOn(vtaAgent, 'agentDevices').mockRejectedValue(new DeviceActionRefused('noAnswer'))
+    jest.spyOn(vtaAgent, 'agentDevices').mockRejectedValue(new DeviceActionRefused('notPermitted'))
     const tree = await show()
-    expect(tree.getByTestId(id('AgentDeviceError'))).toHaveTextContent('CreateAgent.Device.noAnswer')
+    expect(tree.getByTestId(id('AgentDeviceError'))).toHaveTextContent('CreateAgent.Device.notPermitted')
   })
 
   test('a lost phone: remove it, then change the keys, offered when the agent can do it safely', async () => {

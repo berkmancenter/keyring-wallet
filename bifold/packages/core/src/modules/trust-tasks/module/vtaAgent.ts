@@ -256,6 +256,8 @@ export interface VtaAgentDeps {
    * as `noAnswer` instead of leaving the screen waiting (IN-53). Tests shorten it.
    */
   ownerActDeadlineMs?: number
+  /** How long My devices waits for the agent's list before saying it didn't answer (IN-124). */
+  deviceListDeadlineMs?: number
   /**
    * Whether this phone has a screen lock or biometrics, so an owner key made
    * on it is protected (plan §3). Unset, "Create my agent" refuses with
@@ -352,6 +354,12 @@ export const UNLINK_TELL_QUEUE_MS = 10000
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
  */
 export const OWNER_ACT_DEADLINE_MS = 45000
+/**
+ * My devices' list, bounded (IN-124: "a spinner that never loads"). Reading it
+ * signs in through `connect`, which has no deadline of its own and shares a
+ * sign-in already in flight, so one stuck sign-in held the list forever.
+ */
+export const DEVICE_LIST_DEADLINE_MS = 15000
 /** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
 export const MAX_RECONNECT_TRIES = 5
 
@@ -1695,12 +1703,27 @@ export class VtaAgentController {
    */
   async agentDevices(agent: Agent): Promise<AgentDevice[]> {
     const vtaDid = this.linkedAgent()
-    const client = await this.signedIn(agent, vtaDid)
-    const mine = await this.phoneKeys(agent, vtaDid)
-    const devices = await listAgentDevices(client).catch((error: unknown) => {
-      throw this.refused(error)
+    const read = async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const mine = await this.phoneKeys(agent, vtaDid)
+      const devices = await listAgentDevices(client).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+      return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+    }
+    const ms = this.deps.deviceListDeadlineMs ?? DEVICE_LIST_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new DeviceActionRefused('noAnswer')), ms)
     })
-    return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+    const reading = read()
+    // Abandoned at the deadline, a late failure is nobody's news.
+    void reading.catch(() => undefined)
+    try {
+      return await Promise.race([reading, late])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**

@@ -86,15 +86,21 @@ const VtaDevices: React.FC = () => {
 
   const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
+  // The list's own failure, apart from an act's: it is what Try again re-reads.
+  const [listFailed, setListFailed] = useState(false)
   const load = useCallback(async () => {
     if (!agent) return
     setError(undefined)
+    setListFailed(false)
     try {
       setDevices(thisPhoneFirst(await vtaAgent.agentDevices(agent)))
     } catch (e) {
-      setError(wordsFor(e))
+      setListFailed(true)
+      // An agent that didn't answer in time is said plainly, with Try again
+      // (IN-124), as Restore cards says it.
+      setError(deviceRefusalOf(e).reason === 'noAnswer' ? t('Devices.ListNoAnswer') : wordsFor(e))
     }
-  }, [agent, wordsFor])
+  }, [agent, wordsFor, t])
 
   useFocusEffect(
     useCallback(() => {
@@ -184,6 +190,14 @@ const VtaDevices: React.FC = () => {
           <ThemedText style={styles.error} testID={testIdWithKey('AgentDeviceError')}>
             {error}
           </ThemedText>
+        ) : null}
+        {listFailed && devices === undefined ? (
+          <Button
+            title={t('VtaLink.TryAgain')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => void load()}
+            testID={testIdWithKey('AgentDeviceListTryAgain')}
+          />
         ) : null}
         {devices === undefined && !error ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
         {renaming ? (

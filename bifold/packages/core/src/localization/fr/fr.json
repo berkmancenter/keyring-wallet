@@ -2007,6 +2007,7 @@
     "Removed": "Retiré : {{device}}. Il ne peut plus utiliser votre agent.",
     "OnlyThisPhone": "Seul ce téléphone fait fonctionner votre agent. Ajoutez un autre appareil pour qu'un téléphone perdu ne soit pas un agent perdu.",
     "AddAnother": "Ajouter un autre appareil",
+    "ListNoAnswer": "Votre agent n'a pas répondu. Réessayez.",
     "BrowserPlugin": "Extension de navigateur",
     "AComputer": "Un ordinateur ou une autre app",
     "AKeyringPhone": "Un téléphone Keyring",

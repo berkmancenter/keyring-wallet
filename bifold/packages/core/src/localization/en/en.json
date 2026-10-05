@@ -2071,6 +2071,7 @@
     "Removed": "Removed: {{device}}. It can't use your agent any more.",
     "OnlyThisPhone": "Only this phone runs your agent. Add another device so a lost phone isn't a lost agent.",
     "AddAnother": "Add another device",
+    "ListNoAnswer": "Your agent didn't answer. Try again.",
     "BrowserPlugin": "Browser plugin",
     "AComputer": "A computer or other app",
     "AKeyringPhone": "A Keyring phone",
