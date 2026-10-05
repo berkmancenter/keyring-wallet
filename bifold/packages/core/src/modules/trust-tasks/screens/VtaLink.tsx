@@ -218,6 +218,8 @@ const VtaLink: React.FC = () => {
         return t('VtaLink.FailedRefused')
       case 'unreachable':
         return t('VtaLink.FailedUnreachable')
+      case 'communityAgent':
+        return t('VtaLink.FailedCommunityAgent')
       default:
         // Say what was caught, in words, rather than "something went wrong":
         // an iOS link that authenticated but never opened its mediator socket
@@ -627,6 +629,13 @@ const VtaLink: React.FC = () => {
             {link.lastError ? (
               <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
                 {failureText(link.lastError)}
+              </ThemedText>
+            ) : null}
+            {/* The key this phone was granted stays on that agent's list: a VTA
+                refuses a self-delete, so its admin is the one to remove it. */}
+            {link.lastError?.reason === 'communityAgent' ? (
+              <ThemedText testID={testIdWithKey('VtaLinkCommunityAgentCleanup')}>
+                {t('VtaLink.FailedCommunityAgentCleanup')}
               </ThemedText>
             ) : null}
             {/* The original text, as Join and Invited keep it: for whoever reads

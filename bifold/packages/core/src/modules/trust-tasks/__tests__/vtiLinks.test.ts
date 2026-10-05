@@ -10,6 +10,7 @@ import {
   KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
+  keyringLinkErrorText,
   otherDidMessage,
   pendingVettingTicket,
   routeKeyringAgentLink,
@@ -366,6 +367,15 @@ describe('a bare DID, scanned or pasted', () => {
       expect(add).not.toHaveBeenCalled()
       expect(start).not.toHaveBeenCalled()
     })
+  })
+
+  it("a code that is both an agent and a community is explained in the person's language", async () => {
+    const route = routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest', 'VTCRest'])), jest.fn())
+    await expect(route).rejects.toMatchObject({ messageKey: 'Scan.BothAgentAndCommunity' })
+    const error = await route.catch((e: unknown) => e as KeyringLinkError)
+    expect(keyringLinkErrorText(error as KeyringLinkError, (k) => `t:${k}`)).toBe('t:Scan.BothAgentAndCommunity')
+    // Without a translator, the English as before.
+    expect(keyringLinkErrorText(error as KeyringLinkError)).toMatch(/belongs to both an agent and a community/)
   })
 
   it('anything else is explained in words, never routed', async () => {

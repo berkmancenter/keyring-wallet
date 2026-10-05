@@ -43,6 +43,8 @@ const mockClient = {
   ),
   /** Drops the tasks queued and not yet sent; unlink calls it before telling the agent. */
   dropQueued: jest.fn(),
+  /** What the agent holds; a community's own agent holds its VTC. */
+  listContexts: jest.fn(async (): Promise<{ id: string; name?: string; did?: string }[]> => []),
 }
 
 jest.mock('../module/VtaClient', () => ({
@@ -97,9 +99,70 @@ function controller(
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockClient.listContexts.mockImplementation(async () => [])
   mockClient.connect.mockImplementation(async () => undefined)
   mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
   mockClient.agentLabel.mockImplementation(async () => undefined)
+})
+
+// Alberto, 10-05: "block it". A full_stack agent's DID advertises only
+// VTARest (keyring-test), so the agent is asked, once signed in, before the
+// link is saved.
+describe("a community's own agent", () => {
+  const COMMUNITY = 'did:webvh:QmC:dids-keyring-test.ic3.dev:keyring-lab-community-vtc'
+  const resolving = (docs: Record<string, string[]>) =>
+    ({
+      dids: {
+        resolve: jest.fn(async (did: string) => ({
+          didDocument: { id: did, service: (docs[did] ?? []).map((type) => ({ type })) },
+        })),
+      },
+    }) as never
+
+  it('holding a context named "VTC": refused before anything is kept', async () => {
+    mockClient.listContexts.mockResolvedValue([
+      { id: 'vta', name: 'Verifiable Trust Agent', did: offer.vta },
+      { id: 'keyring-lab-community', name: 'VTC', did: COMMUNITY },
+    ])
+    const { vta, saved } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
+    expect(saved).toEqual([])
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+    expect(mockClient.disconnect).toHaveBeenCalled()
+  })
+
+  it("holding a context whose DID is a community's, whatever its name: refused", async () => {
+    mockClient.listContexts.mockResolvedValue([{ id: 'lab', name: 'Lab', did: COMMUNITY }])
+    const { vta, saved } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer(resolving({ [offer.vta]: ['VTARest'], [COMMUNITY]: ['VTCRest', 'VTCStatusList'] }))
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
+    expect(saved).toEqual([])
+  })
+
+  it("a person's own agent, holding their identities, links as before", async () => {
+    mockClient.listContexts.mockResolvedValue([
+      { id: 'vta', name: 'Verifiable Trust Agent', did: offer.vta },
+      { id: 'p1', name: 'Keyring Lab Community', did: 'did:webvh:QmP:dids.ic3.dev:p1' },
+    ])
+    const { vta, saved } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer(
+      resolving({ [offer.vta]: ['VTARest'], 'did:webvh:QmP:dids.ic3.dev:p1': ['DIDCommMessaging'] })
+    )
+    expect(vta.getState().link.kind).toBe('linked')
+    expect(saved).toHaveLength(1)
+  })
+
+  it('an agent that cannot say what it holds is not refused for it', async () => {
+    mockClient.listContexts.mockRejectedValue(new Error('the VTA did not answer'))
+    const { vta } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link.kind).toBe('linked')
+  })
 })
 
 describe('linking through the controller', () => {
@@ -321,6 +384,18 @@ describe('a linked phone after a restart', () => {
 })
 
 describe('linking without a QR through the controller', () => {
+  // Pasted, scanned as a bare DID, or from Create agent: all end in the same
+  // grant check, which asks the agent what it holds before keeping the link.
+  it("a community's own agent is refused once the grant is seen: nothing kept, the person told why", async () => {
+    mockClient.listContexts.mockResolvedValue([{ id: 'lab', name: 'VTC', did: 'did:webvh:QmC:host:lab-vtc' }])
+    const { vta, saved } = controller()
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
+    expect(saved).toEqual([])
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+  })
+
   it('shows the key, reports "not yet" while the agent refuses it, then links and rotates', async () => {
     const { vta, saved } = controller()
     await vta.startManualLink({} as never, offer.vta, 'alice host')

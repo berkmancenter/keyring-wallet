@@ -14,7 +14,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
 import { agentAddressScan } from '../modules/trust-tasks/module/agentAddressScan'
 import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
-import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
+import { KeyringLinkError, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
 import { BifoldError, QrCodeScanError } from '../types/error'
 import { ConnectStackParams } from '../types/navigators'
 import { PermissionContract } from '../types/permissions'
@@ -29,8 +29,16 @@ export type ScanProps = StackScreenProps<ConnectStackParams>
  * a mediator's code" — instead of "Invalid QR code" with the reason nowhere a
  * person could read it. Anything else keeps the generic headline.
  */
-export function scanErrorOf(value: string, e: unknown, invalidQrCode: string): QrCodeScanError {
-  if (e instanceof KeyringLinkError) return new QrCodeScanError(e.message, value, e.message)
+export function scanErrorOf(
+  value: string,
+  e: unknown,
+  invalidQrCode: string,
+  t?: (key: string) => string
+): QrCodeScanError {
+  if (e instanceof KeyringLinkError) {
+    const text = keyringLinkErrorText(e, t)
+    return new QrCodeScanError(text, value, text)
+  }
   return new QrCodeScanError(invalidQrCode, value, (e as Error)?.message)
 }
 
@@ -114,7 +122,7 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
         const uri = value
         await handleInvitation(uri)
       } catch (e: unknown) {
-        setQrCodeScanError(scanErrorOf(value, e, t('Scan.InvalidQrCode')))
+        setQrCodeScanError(scanErrorOf(value, e, t('Scan.InvalidQrCode'), (k) => t(k)))
       }
     },
     [handleInvitation, navigation, t]

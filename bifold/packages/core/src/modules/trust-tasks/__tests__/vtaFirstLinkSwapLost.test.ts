@@ -115,6 +115,12 @@ jest.mock('../module/VtiMediatorTransport', () => ({
         mockAnswer(this.record, `${WHOAMI}#response`, { roles: ['admin'] })
         return
       }
+      // A person's own agent: no VTC among what it holds (the link's check
+      // for a community's agent asks this before the link is kept).
+      if (body.type === 'https://trusttasks.org/spec/vta/contexts/list/1.0') {
+        mockAnswer(this.record, `${body.type}#response`, { contexts: [] })
+        return
+      }
       if (body.type === SWAP) {
         mockVta.onSwap?.()
         const newSubject = String(body.payload.newSubject)

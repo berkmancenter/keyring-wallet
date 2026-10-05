@@ -407,6 +407,22 @@ describe('a link that failed', () => {
     expect(tree.getByTestId(testIdWithKey('VtaLinkErrorDetail'))).toHaveTextContent(raw)
   })
 
+  // Alberto, 10-05: "block it" — and the admin is told to clean up the key.
+  test("a community's own agent: said so, with where to remove this phone's key", () => {
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({ agent: {} })
+    failed({ reason: 'communityAgent' })
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent('VtaLink.FailedCommunityAgent')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCommunityAgentCleanup'))).toHaveTextContent(
+      'VtaLink.FailedCommunityAgentCleanup'
+    )
+  })
+
   test('with nothing caught, the general sentence and no Details', () => {
     const mockUseAgent = useAgent as jest.Mock
     mockUseAgent.mockReturnValue({ agent: {} })

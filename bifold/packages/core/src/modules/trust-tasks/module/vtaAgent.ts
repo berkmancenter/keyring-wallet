@@ -43,6 +43,7 @@ import {
   resolveVtaMediator,
   type VtaAclEntry,
   type VtaConsentRequest,
+  type VtaContext,
 } from './VtaClient'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
@@ -458,6 +459,24 @@ export async function tellAgentLeaving(
     .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
     .catch(() => undefined)
 }
+
+/**
+ * The agent being linked serves a community: its own VTC lives there (a
+ * full_stack stack). Keyring links only to a person's own agent, so the link
+ * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
+ * says nothing (only VTARest), so the agent itself is asked, once signed in.
+ */
+export class CommunityAgentRefused extends Error {
+  constructor(readonly vtaDid: string) {
+    super("This is a community's agent. Link Keyring to your personal agent instead.")
+    this.name = 'CommunityAgentRefused'
+  }
+}
+
+/** At most this many of an agent's context DIDs are read to tell whether it serves a community. */
+const COMMUNITY_CONTEXTS_READ = 8
+/** How long the link waits for the agent to say what it holds. */
+const COMMUNITY_CHECK_MS = 10_000
 
 export class VtaAgentController {
   private state: VtaAgentState = {
@@ -1192,7 +1211,9 @@ export class VtaAgentController {
           ? hostFailure(error)
           : error instanceof DeviceCannotOwn
             ? { reason: 'refused' as const, detail: 'no screen lock', hostReason: 'needsScreenLock' as const }
-            : { reason: 'failed' as const, detail: error instanceof Error ? error.message : String(error) }
+            : error instanceof CommunityAgentRefused
+              ? { reason: 'communityAgent' as const, detail: error.message }
+              : { reason: 'failed' as const, detail: error instanceof Error ? error.message : String(error) }
       this.ownerFor = undefined
       this.set({ status: 'failed', error: failure.detail })
       this.dispatch({ type: 'failed', failure })
@@ -1274,7 +1295,15 @@ export class VtaAgentController {
       this.set({ status: 'failed', error: detail })
       this.dispatch({
         type: 'failed',
-        failure: { reason: error instanceof EnrolmentError ? error.reason : 'failed', detail },
+        failure: {
+          reason:
+            error instanceof EnrolmentError
+              ? error.reason
+              : error instanceof CommunityAgentRefused
+                ? 'communityAgent'
+                : 'failed',
+          detail,
+        },
       })
     } finally {
       if (live()) this.offer = undefined
@@ -1338,6 +1367,44 @@ export class VtaAgentController {
    * whose next connect settles which key the agent holds — never an unlinked
    * one whose agent holds a key it will not use again.
    */
+  /**
+   * Whether the agent just signed in to serves a community rather than a
+   * person. A full_stack agent's DID advertises only VTARest, so its own
+   * document cannot say (keyring-test, 10-05); what it holds can. In order:
+   * its DID read as a community's (or both); a context named "VTC", as VTC
+   * setup names it (vtc-service setup/wizard.rs); a context whose DID is a
+   * community's, reading at most a few. An answer it cannot give is not a
+   * reason to refuse a person their own agent.
+   */
+  private async servesACommunity(agent: Agent, client: VtaClient, vtaDid: string): Promise<boolean> {
+    const canResolve = typeof (agent as unknown as { dids?: { resolve?: unknown } })?.dids?.resolve === 'function'
+    const isCommunity = async (did: string) => {
+      if (!canResolve) return false
+      const kind = await classifyDid(agent as unknown as DidResolverAgent, did).catch(() => undefined)
+      return kind?.kind === 'community' || kind?.kind === 'ambiguous'
+    }
+    if (await isCommunity(vtaDid)) return true
+    // Bounded: an agent that does not answer this is not a reason to hold up
+    // the link a person asked for.
+    let contexts: VtaContext[] = []
+    const reading = Promise.resolve()
+      .then(() => client.listContexts())
+      .then((found) => {
+        contexts = found
+      })
+    await withDeadline(reading, COMMUNITY_CHECK_MS).catch(() => false)
+    if (contexts.some((c) => typeof c.name === 'string' && c.name.trim().toUpperCase() === 'VTC')) return true
+    const dids = [
+      ...new Set(
+        contexts
+          .map((c) => c.did)
+          .filter((d): d is string => typeof d === 'string' && d.startsWith('did:') && d !== vtaDid)
+      ),
+    ].slice(0, COMMUNITY_CONTEXTS_READ)
+    const found = await Promise.all(dids.map(isCommunity))
+    return found.some(Boolean)
+  }
+
   private async finishLink(
     agent: Agent,
     vtaDid: string,
@@ -1357,6 +1424,15 @@ export class VtaAgentController {
       await client.whoAmI()
     }
     if (!live()) return
+    if (await this.servesACommunity(agent, client, vtaDid)) {
+      // Nothing of this agent stays on the phone: not its link, not the
+      // temporary key made for it. The key this phone was granted stays on
+      // that agent's list until its admin removes it (a VTA refuses a
+      // self-delete).
+      await client.disconnect().catch(() => undefined)
+      await Promise.resolve(identities.forgetManager?.(vtaDid)).catch(() => undefined)
+      throw new CommunityAgentRefused(vtaDid)
+    }
     const linkedAt = new Date(this.now()).toISOString()
     const links = this.linkStore(agent)
     const owner = this.ownerFor === vtaDid
@@ -1581,7 +1657,10 @@ export class VtaAgentController {
         return
       }
       this.set({ status: 'failed', error: detail })
-      this.dispatch({ type: 'failed', failure: { reason: 'failed', detail } })
+      this.dispatch({
+        type: 'failed',
+        failure: { reason: error instanceof CommunityAgentRefused ? 'communityAgent' : 'failed', detail },
+      })
     }
   }
 

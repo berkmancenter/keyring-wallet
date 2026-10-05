@@ -50,10 +50,29 @@ const show = () =>
   )
 
 beforeEach(() => {
-  (useAgent as jest.Mock).mockReturnValue({ agent: {} })
+  ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
   controller.set({ link: { kind: 'notLinked' } })
   jest.restoreAllMocks()
   ;(confirmOwner as jest.Mock).mockReset()
+})
+
+// Alberto, 10-05: "block it". The grant check refuses a community's own
+// agent (CommunityAgentRefused); this screen says so, back on the address.
+describe("create my agent: a community's own agent", () => {
+  test('is said in words on the address step, where another address can be given', async () => {
+    controller.set({
+      link: { kind: 'showingKey', vtaDid: VTA, label: 'agents.example', did: 'did:key:z6MkOwner', checking: false },
+    })
+    jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    const tree = show()
+    await act(async () => {
+      controller.set({ link: { kind: 'notLinked', lastError: { reason: 'communityAgent' } } })
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(
+      'VtaLink.FailedCommunityAgent VtaLink.FailedCommunityAgentCleanup'
+    )
+    expect(tree.getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
+  })
 })
 
 describe('create my agent: the address comes first', () => {

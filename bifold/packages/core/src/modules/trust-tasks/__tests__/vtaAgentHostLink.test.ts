@@ -19,6 +19,7 @@ const mockClient = {
   holdPersonaKeys: jest.fn(async () => false),
   task: jest.fn(async () => ({})),
   dropQueued: jest.fn(),
+  listContexts: jest.fn(async (): Promise<{ id: string; name?: string; did?: string }[]> => []),
 }
 
 jest.mock('../module/VtaClient', () => ({
@@ -202,6 +203,27 @@ describe('an agent host’s automatic connection', () => {
     await vta.confirmOffer({} as never)
     expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason, hostReason } })
     expect(saved).toEqual([])
+  })
+
+  // Alberto, 10-05: "block it". The portal offers "Connect with Keyring" for
+  // a community's own agent too (a full_stack stack); its DID says only VTARest.
+  it("a community's own agent the host set up is refused once signed in: nothing kept, the host told nothing", async () => {
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('provisioning'), at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    mockClient.listContexts.mockResolvedValueOnce([
+      { id: 'vta', name: 'Verifiable Trust Agent', did: VTA },
+      { id: 'keyring-lab-community', name: 'VTC', did: 'did:webvh:QmC:dids-keyring-test.ic3.dev:lab-vtc' },
+    ])
+    const { vta, saved } = controller(host)
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
+    expect(saved).toEqual([])
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+    expect(host.calls.some((c) => c.url === COMPLETE)).toBe(false)
   })
 
   it('a host that could not set the agent up says so', async () => {
