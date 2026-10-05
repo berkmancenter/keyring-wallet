@@ -291,6 +291,9 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           mockAnswer(this.record, `${ACL_UPDATE}#response`, { entry: mockWireEntry(subject, row) })
           return
         }
+        case 'https://trusttasks.org/spec/device/set-wake/0.2':
+          mockAnswer(this.record, `${body.type}#response`, { pushCapable: true })
+          return
         default:
           refuse({ code: 'unsupportedType', message: `no handler for ${body.type}` })
       }
@@ -883,6 +886,41 @@ describe('creating an agent', () => {
   it('the owned marker survives a restart', async () => {
     const { vta } = await linkedPhone()
     expect(vta.getState().ownsAgent).toBe(true)
+  })
+})
+
+describe("Settings → Notifications when an approval rule holds this phone's set-wake", () => {
+  const SET_WAKE = 'https://trusttasks.org/spec/device/set-wake/0.2'
+  const WAKE = { gateway: 'did:web:gateway.example', handle: 'zHandle' }
+
+  it('is refused at once, never waited on, and the agent state says a rule is blocking it', async () => {
+    mockClientOptions.consentWaitMs = 60000
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    mockVta.asked = []
+    const started = Date.now()
+    await expect(vta.setThisDeviceWake(agent, WAKE)).rejects.toMatchObject({ reason: 'awaitingApproval' })
+    // A 60 s consent wait was not entered: one send, answered at once.
+    expect(Date.now() - started).toBeLessThan(5000)
+    expect(sentOf(SET_WAKE)).toHaveLength(1)
+    expect(vta.getState().wakeBlockedByRule).toBe(true)
+  })
+
+  it('clearing the wake channel is refused at once too', async () => {
+    mockClientOptions.consentWaitMs = 60000
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    await expect(vta.clearThisDeviceWake(agent)).rejects.toMatchObject({ reason: 'awaitingApproval' })
+    expect(vta.getState().wakeBlockedByRule).toBe(true)
+  })
+
+  it('once the rule no longer holds it, the next set-wake clears the warning', async () => {
+    mockVta.consentFor.add(SET_WAKE)
+    const { vta } = await linkedPhone()
+    await expect(vta.setThisDeviceWake(agent, WAKE)).rejects.toBeTruthy()
+    mockVta.consentFor.delete(SET_WAKE)
+    await expect(vta.setThisDeviceWake(agent, WAKE)).resolves.toMatchObject({ pushCapable: true })
+    expect(vta.getState().wakeBlockedByRule).toBe(false)
   })
 })
 

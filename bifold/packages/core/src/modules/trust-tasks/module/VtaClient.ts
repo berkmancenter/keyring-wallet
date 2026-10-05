@@ -682,7 +682,14 @@ export class VtaClient {
     /** Members beside `payload` on the signed document itself — e.g. `idempotencyKey`. */
     documentExtras: Record<string, unknown> = {},
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
-    onSent?: () => void
+    onSent?: () => void,
+    /**
+     * `waitForConsent: false`: a task held for consent is refused at once, as
+     * held, instead of waiting for the grant — for a task this phone sends
+     * about itself, where the approver a rule names may be this phone, so the
+     * wait could never end (approvalRules.ts, PHONE_SENDS).
+     */
+    sendOptions: { waitForConsent?: boolean } = {}
   ): Promise<T> {
     return this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
@@ -696,7 +703,7 @@ export class VtaClient {
       // is single-use and consumed by re-submitting the same payload.
       const pending = consentPendingOf(error)
       const waitMs = this.options.consentWaitMs ?? 180000
-      if (!pending || waitMs <= 0) throw error
+      if (!pending || waitMs <= 0 || sendOptions.waitForConsent === false) throw error
       this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
       if (pending.omitted) {
         // Those approvers are reached only by the VTA's own push (vti #1680);
