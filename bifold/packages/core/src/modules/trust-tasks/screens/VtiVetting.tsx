@@ -917,7 +917,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   <>
                     {stepHeader(stepNumber, 5, t('Vetting.SomeoneWantsVetting'))}
                     {/* Who, as an identifier, for whoever needs it — not as the line (#12). */}
-                    <DidDetails did={request.applicantDid} testIdStem="VettingDeskApplicant" />
+                    <DidDetails
+                      did={request.applicantDid}
+                      label={t('Vetting.TheirIdentity')}
+                      hint={t('Vetting.TheirIdentityHint')}
+                      copy
+                      testIdStem="VettingDeskApplicant"
+                    />
                     <Pressable
                       style={look('VettingOpenSessionButton', deskPrimaryId).button}
                       testID={testIdWithKey('VettingOpenSessionButton')}
@@ -981,6 +987,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                           {c.type}: {String(c.value)}
                         </Text>
                       ))}
+                      {/* Whom the statement will be about, as the community sees them. */}
+                      <DidDetails
+                        did={request.applicantDid}
+                        label={t('Vetting.TheirIdentity')}
+                        hint={t('Vetting.TheirIdentityHint')}
+                        copy
+                        testIdStem="VettingCheckApplicant"
+                      />
                     </View>
                     <Pressable
                       style={look('VettingAttestButton', deskPrimaryId).button}
@@ -1231,6 +1245,17 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           (keyring-bifold#125). A legacy acceptance is logged, never shown. */}
       <EligibilityNote request={r} style={styles.label} />
       <DidDetails did={r.vetterDid} testIdStem="VettingRequestVetter" />
+      {/* The identity this person is vetted as: the one the vetter and the
+          community's admins see (IN-120). */}
+      {persona ? (
+        <DidDetails
+          did={persona.did}
+          label={t('Vetting.YourIdentity')}
+          hint={t('Vetting.YourIdentityHint')}
+          copy
+          testIdStem="VettingRequestMine"
+        />
+      ) : null}
     </View>
   )
 

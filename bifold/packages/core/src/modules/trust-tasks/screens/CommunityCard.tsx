@@ -24,6 +24,7 @@ import type { VtiPersona } from '../module/VtiIdentityStore'
 import { CardKeptRow } from './CardKeptRow'
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityTitle } from './communityName'
+import { DidDetails } from './DidDetails'
 import { shareIdentity } from './identityShare'
 import { didHashKey, didLabelKey } from './testIdKey'
 import { localDate } from './localTime'
@@ -227,6 +228,19 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
             <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
           </Pressable>
         </View>
+      ) : null}
+      {/* The identifier the community and its admins see for this person, to
+          compare or give to an admin (IN-120: the admin saw a persona DID the
+          person had never been shown). This agent's identity: identities are
+          kept per agent. */}
+      {persona ? (
+        <DidDetails
+          did={persona.did}
+          label={t('VtaLink.ShowIdentityCode')}
+          hint={words('VtaLink.ShowIdentityCodeHint')}
+          copy
+          testIdStem={`AgentCommunityIdentity_${key}`}
+        />
       ) : null}
 
       {model.primary ? (
