@@ -520,6 +520,13 @@ const VtaAgentHome: React.FC = () => {
             }}
           />
           <VtaStatusLine connection={link.connection} now={now} />
+          {/* Replies have stopped reaching this phone (VtaClient's breaker): it is
+              catching up, and asks wait a few minutes rather than fail one by one. */}
+          {state.repliesStalled && link.connection.kind !== 'gone' ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey('AgentCatchingUp')}>
+              {t('VtaLink.CatchingUp')}
+            </ThemedText>
+          ) : null}
           {link.connection.kind === 'gone' ? (
             // Gone for good (agentGone.ts): said plainly, with the way on — a new agent.
             // Unlinking is still confirmed, in Agent settings, with words for an agent that is gone.

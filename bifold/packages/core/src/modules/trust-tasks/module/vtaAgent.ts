@@ -166,6 +166,12 @@ export interface VtaAgentState {
   /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
   ownsAgent?: boolean
   /**
+   * Replies from the agent are not reaching this phone: two asks in a row got
+   * no answer, and asks wait a few minutes before one probe (VtaClient's
+   * breaker, VTI #1978). "Your agent is catching up", not "didn't answer".
+   */
+  repliesStalled?: boolean
+  /**
    * The devices an agent's list named when last read, by DID: what a request
    * card calls the device that asked (Alberto's iPhone, 10-06: a request from
    * his computer read "Someone asks"). Filled by every read of the list.
@@ -652,6 +658,9 @@ export class VtaAgentController {
       onInbound: (plaintext) => this.inbound(plaintext),
       onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
       onStepUp: (request, context) => this.askStepUp(request, context),
+      onRepliesStalled: (stalled) => {
+        if (this.current?.client === client) this.set({ repliesStalled: stalled })
+      },
     })
     // The client replaced for the agent an unlock handed over keeps what the
     // screen shows: the new session opens quietly behind it.
@@ -659,6 +668,7 @@ export class VtaAgentController {
     this.handedOver = undefined
     this.current = { client, vtaDid, store: identityStore, agent }
     if (handedOver !== vtaDid) this.set({ vtaDid, status: 'disconnected', approvals: [] })
+    this.set({ repliesStalled: false })
     return client
   }
 

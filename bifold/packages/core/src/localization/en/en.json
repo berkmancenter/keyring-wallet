@@ -1520,6 +1520,7 @@
     "SwitcherNotConnected": "Not connected now",
     "Switching": "Switching to {{agent}}…",
     "SwitcherAdd": "Add another agent",
+    "CatchingUp": "Your agent is catching up — replies aren't reaching this phone yet.",
     "ChipUnnamed": "Agent {{n}}",
     "ChipAdd": "Add",
     "RequestDecide": "Decide",

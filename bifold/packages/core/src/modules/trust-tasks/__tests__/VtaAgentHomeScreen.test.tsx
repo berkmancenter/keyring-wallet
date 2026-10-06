@@ -136,6 +136,15 @@ describe('Your agent — after linking', () => {
   // 234 known issue: after a refused request, Android's SwipeRefreshLayout
   // behind pull-to-refresh took every tap on the switcher's rows. My Agent has
   // no pull-to-refresh; it reads again on focus.
+  // VTI #1978: replies stopped reaching the phone; asks wait, and the screen says why.
+  it('says the agent is catching up while replies are not reaching this phone, and not otherwise', async () => {
+    controller.set({ repliesStalled: true })
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentCatchingUp'))).toHaveTextContent('VtaLink.CatchingUp')
+    controller.set({ repliesStalled: false })
+    expect((await renderHome([])).queryByTestId(testIdWithKey('AgentCatchingUp'))).toBeNull()
+  })
+
   it('has no pull-to-refresh', async () => {
     const tree = await renderHome([])
     expect(tree.getByTestId(testIdWithKey('AgentHome')).props.refreshControl).toBeUndefined()
