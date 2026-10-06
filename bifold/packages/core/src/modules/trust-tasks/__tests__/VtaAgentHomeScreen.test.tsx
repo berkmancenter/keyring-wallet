@@ -805,6 +805,24 @@ describe('Your agent — after linking', () => {
     expect(header.getByTestId(testIdWithKey('AgentSettings'))).toBeTruthy()
   })
 
+  // Pixel, 10-06: "+ Join" in a pill was squeezed into the narrow corner,
+  // its letters stacked. Both corners are icons of one size; Join keeps its name for a screen reader.
+  it('the two corners are icon buttons of one size, each named for a screen reader', async () => {
+    await renderHome([persona, membership])
+    const header = corners()
+    const join = header.getByTestId(testIdWithKey('AgentJoinCorner'))
+    const gear = header.getByTestId(testIdWithKey('AgentSettings'))
+    expect(join.props.accessibilityLabel).toBe('VtaLink.JoinCorner')
+    expect(gear.props.accessibilityLabel).toBe('VtaLink.AgentSettings')
+    // No words in the corner: they did not fit.
+    expect(join).not.toHaveTextContent(/VtaLink\.JoinCorner/)
+    const box = (el: typeof join) => {
+      const { paddingHorizontal, paddingVertical } = StyleSheet.flatten(el.props.style)
+      return { paddingHorizontal, paddingVertical }
+    }
+    expect(box(join)).toEqual(box(gear))
+  })
+
   it('the introduction has no header corners', async () => {
     controller.set({ introSeen: false })
     await renderHome([])
