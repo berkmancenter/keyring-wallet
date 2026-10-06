@@ -60,8 +60,11 @@ jest.mock('@credo-ts/askar', () => ({
       await this.need(ctx, options.keyId)
       return { signature: new Uint8Array([1]) }
     }
-    public async decrypt(ctx: unknown, options: { keyAgreement: { keyId: string } }) {
-      await this.need(ctx, options.keyAgreement.keyId)
+    public async decrypt(
+      ctx: unknown,
+      options: { key?: { keyAgreement?: { keyId: string } }; keyAgreement?: { keyId: string } }
+    ) {
+      await this.need(ctx, (options.key?.keyAgreement ?? options.keyAgreement)?.keyId as string)
       return { data: new Uint8Array([2]) }
     }
     public async importKey(ctx: unknown, options: { privateJwk: { kid: string } }) {
@@ -152,6 +155,8 @@ describe('a copy not held when it is used is fetched first (TestFlight 239)', ()
     for (const use of [
       (kms: EphemeralKeyManagementService) => kms.sign(ctx, { keyId: KEY } as never),
       (kms: EphemeralKeyManagementService) => kms.decrypt(ctx, { keyAgreement: { keyId: KEY } } as never),
+      // Credo 0.7.1's shape, as the app ships it.
+      (kms: EphemeralKeyManagementService) => kms.decrypt(ctx, { key: { keyAgreement: { keyId: KEY } } } as never),
       (kms: EphemeralKeyManagementService) => kms.getPublicKey(ctx, KEY),
       (kms: EphemeralKeyManagementService) => kms.withKey(KEY, (key) => key),
     ]) {

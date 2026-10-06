@@ -244,8 +244,17 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
 /** How long a key whose fetch failed is left before it is asked for again. */
 export const FETCH_RETRY_MS = 30_000
 
-const keyAgreementKeyId = (options: { keyAgreement?: unknown }) =>
-  (options.keyAgreement as { keyId?: unknown } | undefined)?.keyId as string | undefined
+/**
+ * The key an encrypt or decrypt names, in either Credo's shape: 0.7.1 (the
+ * app's) passes `key: { keyId }` or `key: { keyAgreement: { keyId } }`, 0.6.3 a
+ * top-level `keyAgreement: { keyId }`.
+ */
+function keyAgreementKeyId(options: unknown): string | undefined {
+  type Named = { keyId?: unknown }
+  const o = options as { key?: Named & { keyAgreement?: Named }; keyAgreement?: Named } | undefined
+  const id = o?.key?.keyId ?? o?.key?.keyAgreement?.keyId ?? o?.keyAgreement?.keyId
+  return typeof id === 'string' ? id : undefined
+}
 
 /** This agent's in-memory backend, when it has one. */
 export function ephemeralKms(agent: Agent): EphemeralKeyManagementService | undefined {
