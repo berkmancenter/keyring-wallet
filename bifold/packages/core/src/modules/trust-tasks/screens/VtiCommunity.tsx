@@ -38,7 +38,7 @@ import { useAgentsHoldingIdentity } from './JoinWithAgent'
 import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
-import { useToastAboveTabBar } from './aboveTabBar'
+import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
 const detailOf = (err: unknown): string => {
@@ -47,6 +47,8 @@ const detailOf = (err: unknown): string => {
 }
 
 const VtiCommunity: React.FC = () => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   // Bottom toasts sit clear of the tab bar (aboveTabBar).
   const toastBottomOffset = useToastAboveTabBar()
@@ -171,7 +173,7 @@ const VtiCommunity: React.FC = () => {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 24, gap: 20 },
+    content: { padding: 24, paddingBottom: 24 + roomAboveTabBar, gap: 20 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 12, padding: 20, gap: 12 },
     label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
     value: { ...TextTheme.normal, color: TextTheme.normal.color },
@@ -219,7 +221,7 @@ const VtiCommunity: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('CommunityScroll')}>
         {/* What it is called, not what it is keyed by. The DID was the
             headline here; it is the only checkable thing on the screen, so it
             stays — one tap away, in the same place as every other detail. */}

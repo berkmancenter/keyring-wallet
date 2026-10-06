@@ -8,12 +8,14 @@
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
@@ -275,6 +277,13 @@ describe("a community known only through another agent's identity", () => {
     await act(async () => undefined)
     return tree
   }
+
+  it('leaves room at its foot for the tab bar, so the last button scrolls clear of it', async () => {
+    const tree = await open()
+    expect(
+      StyleSheet.flatten(tree.getByTestId(testIdWithKey('CommunityScroll')).props.contentContainerStyle).paddingBottom
+    ).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+  })
 
   it('says whose identity it is, with no "member", no Leave and no Apply', async () => {
     const tree = await open()

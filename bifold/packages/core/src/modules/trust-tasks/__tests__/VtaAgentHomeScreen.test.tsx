@@ -6,13 +6,14 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter } from 'react-native'
+import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { emitCommunityChanged } from '../module/communityChanged'
@@ -133,9 +134,6 @@ describe('Your agent — after linking', () => {
     again.mockRestore()
   })
 
-  // 234 known issue: after a refused request, Android's SwipeRefreshLayout
-  // behind pull-to-refresh took every tap on the switcher's rows. My Agent has
-  // no pull-to-refresh; it reads again on focus.
   // VTI #1978: replies stopped reaching the phone; asks wait, and the screen says why.
   it('says the agent is catching up while replies are not reaching this phone, and not otherwise', async () => {
     controller.set({ repliesStalled: true })
@@ -145,6 +143,17 @@ describe('Your agent — after linking', () => {
     expect((await renderHome([])).queryByTestId(testIdWithKey('AgentCatchingUp'))).toBeNull()
   })
 
+  // Gate 235 shots, iOS: My devices, the last row, sat half under the tab bar.
+  it('leaves room at its foot for the tab bar, so its last row scrolls clear of it', async () => {
+    const tree = await renderHome([])
+    expect(
+      StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentHome')).props.contentContainerStyle).paddingBottom
+    ).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+  })
+
+  // 234 known issue: after a refused request, Android's SwipeRefreshLayout
+  // behind pull-to-refresh took every tap on the switcher's rows. My Agent has
+  // no pull-to-refresh; it reads again on focus.
   it('has no pull-to-refresh', async () => {
     const tree = await renderHome([])
     expect(tree.getByTestId(testIdWithKey('AgentHome')).props.refreshControl).toBeUndefined()

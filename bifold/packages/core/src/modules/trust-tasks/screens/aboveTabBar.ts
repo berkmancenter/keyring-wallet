@@ -16,3 +16,12 @@ export const TAB_BAR_CLEARANCE = 96
 export function useToastAboveTabBar(): number {
   return useSafeAreaInsets().bottom + TAB_BAR_CLEARANCE
 }
+
+/**
+ * Room at the foot of a scrolling page so its last line can scroll clear of
+ * the tab bar, which draws over the page (gate 235 persona shots, iOS: the
+ * applicant's "Your identity in this community" sat under the tabs).
+ */
+export function useRoomAboveTabBar(): number {
+  return useSafeAreaInsets().bottom + TAB_BAR_CLEARANCE
+}

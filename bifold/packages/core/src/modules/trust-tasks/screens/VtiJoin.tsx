@@ -57,6 +57,7 @@ import { useVtaDid } from './VtaStatus'
  */
 export const identityWord = (did: string): string => `…${didPathName(did) ?? did.slice(-8)}`
 import { useTakingLong } from './useTakingLong'
+import { useRoomAboveTabBar } from './aboveTabBar'
 
 type Step = 'which' | 'asks' | 'as'
 
@@ -128,6 +129,8 @@ export interface VtiJoinProps {
 }
 
 const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
@@ -950,14 +953,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <ScrollView
+        contentContainerStyle={[styles.content, actions ? undefined : { paddingBottom: 20 + roomAboveTabBar }]}
+        testID={testIdWithKey('JoinScroll')}
+      >
         {/* Several agents: which one joins (step 3); not over where the person already stands. */}
         {communityDid && !standingShown ? <JoinWithAgent communityDid={communityDid} name={name} /> : null}
         {body}
       </ScrollView>
       {actions ? (
-        <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+        <View style={[styles.actions, { paddingBottom: 20 + roomAboveTabBar }]} testID={testIdWithKey('JoinActions')}>
           {actions}
         </View>
       ) : null}

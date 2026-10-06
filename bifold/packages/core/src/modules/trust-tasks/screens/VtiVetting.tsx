@@ -83,6 +83,7 @@ import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 import { applicantPrimary, deskPrimary, type ApplicantStep, type VetterStep } from './vettingPrimary'
+import { useRoomAboveTabBar } from './aboveTabBar'
 import { localDate } from './localTime'
 
 /**
@@ -126,6 +127,8 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const headerHeight = useSafeHeaderHeight()
   const keyboard = useMeasuredKeyboardOffset(headerHeight)
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   // i18next escapes interpolated values for HTML by default, and React Native
   // renders them as plain text — so a locale date reads "9&#x2F;21&#x2F;26" and a
@@ -276,7 +279,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     fill: { flex: 1 },
-    content: { padding: 24, gap: 18 },
+    content: { padding: 24, paddingBottom: 24 + roomAboveTabBar, gap: 18 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 12, padding: 18, gap: 8 },
     h: { ...TextTheme.headingFour, color: TextTheme.normal.color },
     label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
