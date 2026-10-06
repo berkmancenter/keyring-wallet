@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter, Dimensions, StyleSheet } from 'react-native'
+import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -767,7 +767,9 @@ describe('Your agent — after linking', () => {
     )
   }
 
-  it('after joining: the communities first, Join in the header with its two ways in, and a gear for settings', async () => {
+  // Alberto, 239: the header's Join menu said again what the page's cards
+  // say. A member joins another community from one row at the page's end.
+  it('after joining: the communities first, "Join another community" at the end, and a gear for settings', async () => {
     const navigate = useNavigation().navigate as jest.Mock
     const tree = await renderHome([persona, membership])
     expect(tree.getByTestId(testIdWithKey('AgentHomeTitle'))).toHaveTextContent('VtaLink.SwitcherTitle')
@@ -775,21 +777,30 @@ describe('Your agent — after linking', () => {
     expect(tree.getByTestId(testIdWithKey('AgentHolds'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentDevices'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentRequests'))).toBeTruthy()
-    // The doors are behind Join.
+    // The two doors give way to one row, after everything else.
     expect(tree.queryByTestId(testIdWithKey('AgentDoors'))).toBeNull()
+    const ids: string[] = []
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) return node.forEach(walk)
+      const n = node as { props?: { testID?: string }; children?: unknown[] }
+      if (n.props?.testID) ids.push(n.props.testID)
+      n.children?.forEach(walk)
+    }
+    walk(tree.toJSON())
+    expect(ids.indexOf(testIdWithKey('AgentJoinAnother'))).toBeGreaterThan(ids.indexOf(testIdWithKey('AgentDevices')))
+    expect(tree.getByTestId(testIdWithKey('AgentJoinAnother'))).toHaveTextContent(/VtaLink\.JoinAnother/)
     // Nothing of settings is on the page.
     for (const key of ['AgentSettings', 'AgentUnlink', 'AgentActivity', 'AgentDetailsToggle']) {
       expect(tree.queryByTestId(testIdWithKey(key))).toBeNull()
     }
 
-    const header = corners()
-    expect(header.queryByTestId(testIdWithKey('AgentJoinMenu'))).toBeNull()
-    fireEvent.press(header.getByTestId(testIdWithKey('AgentJoinCorner')))
-    expect(header.getByTestId(testIdWithKey('AgentJoinMenuJoin'))).toHaveTextContent(/VtaLink\.JoinAnother/)
     navigate.mockClear()
-    fireEvent.press(header.getByTestId(testIdWithKey('AgentJoinMenuInvited')))
-    expect(navigate).toHaveBeenCalledWith(Screens.VtiInvited)
-    expect(header.queryByTestId(testIdWithKey('AgentJoinMenu'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentJoinAnother')))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+
+    const header = corners()
+    expect(header.queryByTestId(testIdWithKey('AgentJoinCorner'))).toBeNull()
     fireEvent.press(header.getByTestId(testIdWithKey('AgentSettings')))
     expect(navigate).toHaveBeenCalledWith(Screens.VtaAgentSettings)
   })
@@ -820,68 +831,34 @@ describe('Your agent — after linking', () => {
     expect(rules[2]).toBeLessThan(at('AgentHolds'))
   })
 
-  it('before joining: the two doors lead the page, and Join is in the header too', async () => {
+  it('before joining: the two doors lead the page, and the header has only the gear', async () => {
     const tree = await renderHome([persona])
     expect(tree.getByTestId(testIdWithKey('AgentDoors'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentInvited'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('AgentJoinCommunity'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentJoinAnother'))).toBeNull()
     const header = corners()
-    fireEvent.press(header.getByTestId(testIdWithKey('AgentJoinCorner')))
-    expect(header.getByTestId(testIdWithKey('AgentJoinMenuJoin'))).toHaveTextContent(/VtaLink\.WantToJoin/)
+    expect(header.queryByTestId(testIdWithKey('AgentJoinCorner'))).toBeNull()
     expect(header.getByTestId(testIdWithKey('AgentSettings'))).toBeTruthy()
   })
 
-  // Pixel, 10-06: "+ Join" in a pill was squeezed into the narrow corner,
-  // its letters stacked. Both corners are icons of one size; Join keeps its name for a screen reader.
-  it('the two corners are icon buttons of one size, each named for a screen reader', async () => {
+  // As wide as the app's own header buttons (IconButton: the icon and 15 on
+  // the screen's side). With padding on both sides it was clipped at the
+  // edge (236, iPhone and Pixel).
+  it("the gear is an icon button the size of the app's own, named for a screen reader", async () => {
     await renderHome([persona, membership])
-    const header = corners()
-    const join = header.getByTestId(testIdWithKey('AgentJoinCorner'))
-    const gear = header.getByTestId(testIdWithKey('AgentSettings'))
-    expect(join.props.accessibilityLabel).toBe('VtaLink.JoinCorner')
+    const gear = corners().getByTestId(testIdWithKey('AgentSettings'))
     expect(gear.props.accessibilityLabel).toBe('VtaLink.AgentSettings')
-    // No words in the corner: they did not fit.
-    expect(join).not.toHaveTextContent(/VtaLink\.JoinCorner/)
-    // As wide as the app's own header buttons (IconButton: the icon and 15 on
-    // the screen's side). With padding on both sides they were clipped at the
-    // edge (236, iPhone and Pixel).
-    const across = (el: typeof join) => {
-      const {
-        paddingHorizontal = 0,
-        paddingLeft = 0,
-        paddingRight = 0,
-        marginLeft = 0,
-        marginRight = 0,
-      } = StyleSheet.flatten(el.props.style)
-      return (
-        2 * Number(paddingHorizontal) +
-        Number(paddingLeft) +
-        Number(paddingRight) +
-        Number(marginLeft) +
-        Number(marginRight)
-      )
-    }
-    expect(across(join)).toBe(15)
-    expect(across(gear)).toBe(15)
-    expect(StyleSheet.flatten(join.props.style).marginLeft).toBe(15)
-    expect(StyleSheet.flatten(gear.props.style).marginRight).toBe(15)
-  })
-
-  // Pixel, 236 build: sized to its content, the menu's second item ran out of
-  // the box and over the page. It has a set width and stays on screen.
-  it('the Join menu has a set width and stays on screen', async () => {
-    await renderHome([persona, membership])
-    const header = corners()
-    fireEvent.press(header.getByTestId(testIdWithKey('AgentJoinCorner')))
-    const { width, left, minWidth, maxWidth } = StyleSheet.flatten(
-      header.getByTestId(testIdWithKey('AgentJoinMenu')).props.style
+    const { paddingHorizontal, paddingLeft, paddingRight, marginLeft, marginRight } = StyleSheet.flatten(
+      gear.props.style
     )
-    const screen = Dimensions.get('window').width
-    expect(width).toBe(Math.min(320, screen - 32))
-    expect(minWidth).toBeUndefined()
-    expect(maxWidth).toBeUndefined()
-    expect(left).toBeGreaterThanOrEqual(16)
-    expect(left + width).toBeLessThanOrEqual(screen - 16)
+    expect({ paddingHorizontal, paddingLeft, paddingRight, marginLeft, marginRight }).toEqual({
+      paddingHorizontal: undefined,
+      paddingLeft: undefined,
+      paddingRight: undefined,
+      marginLeft: undefined,
+      marginRight: 15,
+    })
   })
 
   it('the introduction has no header corners', async () => {
