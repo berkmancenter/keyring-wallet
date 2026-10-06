@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter, StyleSheet } from 'react-native'
+import { DeviceEventEmitter, Dimensions, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -821,6 +821,23 @@ describe('Your agent — after linking', () => {
       return { paddingHorizontal, paddingVertical }
     }
     expect(box(join)).toEqual(box(gear))
+  })
+
+  // Pixel, 236 build: sized to its content, the menu's second item ran out of
+  // the box and over the page. It has a set width and stays on screen.
+  it('the Join menu has a set width and stays on screen', async () => {
+    await renderHome([persona, membership])
+    const header = corners()
+    fireEvent.press(header.getByTestId(testIdWithKey('AgentJoinCorner')))
+    const { width, left, minWidth, maxWidth } = StyleSheet.flatten(
+      header.getByTestId(testIdWithKey('AgentJoinMenu')).props.style
+    )
+    const screen = Dimensions.get('window').width
+    expect(width).toBe(Math.min(320, screen - 32))
+    expect(minWidth).toBeUndefined()
+    expect(maxWidth).toBeUndefined()
+    expect(left).toBeGreaterThanOrEqual(16)
+    expect(left + width).toBeLessThanOrEqual(screen - 16)
   })
 
   it('the introduction has no header corners', async () => {
