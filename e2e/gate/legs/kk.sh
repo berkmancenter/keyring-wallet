@@ -38,12 +38,13 @@ while read -r _ shot st rest; do
   case $st in clear) row "foot-$shot" PASS "$rest" ;; *) row "foot-$shot" FAIL "$st $rest" ;; esac
 done < <(grep -E '^FOOT ' "$LEG_DIR/vetting.out")
 if selected id305; then
-  sim_boot "$APPLICANT_SIM_UDID"
-  UDID=$APPLICANT_SIM_UDID E2E_APP_ID=$BID C_DID=$C_DID WDA_LOCAL_PORT=8122 perl -e 'alarm 600; exec @ARGV' node run-identity-ios.mjs > "$LEG_DIR/id305.out" 2>&1
-  shown=$(grep -oE '^ID305 DID did:[^ ]+' "$LEG_DIR/id305.out" | awk '{print $3}')
+  # The applicant's community card, as the vetting run captured it (its "Show the code they see" line): the
+  # identity C must list as its newest member. Read from that capture, not a second driver session (236 gate:
+  # a separate iOS session found the toggle but read an empty line).
+  shown=$(grep -oE '^PERSONA-DID kk-applicant-community-card did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
   newest=$(c_admin members | python3 -c "
 import sys,json; t=sys.stdin.read(); d=json.loads(t[t.index('{'):]) if '{' in t else {}
 m=sorted(d.get('items') or [], key=lambda x: x.get('joinedAt','')); print(m[-1]['did'] if m else '-')")
   if [ -n "$shown" ] && [ "$shown" = "$newest" ]; then row id305 PASS "the card shows $shown, the community's newest member"
-  else row id305 FAIL "the card shows ${shown:-nothing} ($(grep -E '^ID305 (NO-TOGGLE|ERROR)' "$LEG_DIR/id305.out" | head -1 | cut -c1-80)); newest member $newest"; fi
+  else row id305 FAIL "the card shows ${shown:-nothing}; newest member $newest"; fi
 fi

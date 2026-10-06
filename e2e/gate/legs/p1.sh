@@ -25,6 +25,16 @@ E2E_KEEP_APP=1 LINK_MODE=manual perl -e 'alarm 1800; exec @ARGV' node run-vta-li
   || broken "applicant link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 row p1-link PASS "$(( $(date +%s) - t ))s"
 
+# Seat the TUI persona as C's vetter: a vetter grant from C's admin, delivered while the TUI listens. A Farm
+# upgrade can leave the TUI with no grant (10-06, 0.55.0: "No community has named you a vetter yet").
+if selected p1-tui-seated || selected p1-tui-vets; then
+  (cd "$REPO" && perl -e 'alarm 600; exec @ARGV' node e2e/openvtc/regrant-tui.mjs "$OPENVTC_BIN" "$OPENVTC_VERSION" "$TUI_FX" "$TUI_PROFILE" "$TUI_PERSONA" \
+    "$C_REST" "$C_DID" "$C_ADMIN_CRED" vetter-grant) > "$LEG_DIR/tui-seat.out" 2>&1; rc=$?
+  seat=$(grep -E 'SEATED|NOT SEATED|vetter-grant:' "$LEG_DIR/tui-seat.out" | tail -1 | cut -c1-160)
+  if [ $rc -eq 0 ] && echo "$seat" | grep -q '^.*SEATED' && ! echo "$seat" | grep -q 'NOT SEATED'; then row p1-tui-seated PASS "$seat"
+  else row p1-tui-seated FAIL "rc=$rc $seat"; fi
+fi
+
 if selected p1-tui-vets; then
   t=$(date +%s)
   (cd "$REPO" && perl -e 'alarm 1800; exec @ARGV' node e2e/openvtc/run-phase1.mjs --platform android --label "P1-gate-${CAND_WALLET:0:8}" --expect green \
