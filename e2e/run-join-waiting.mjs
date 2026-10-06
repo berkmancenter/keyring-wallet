@@ -158,7 +158,8 @@ try {
   await footClear(d, "JoinActions", "join-actions");
   // #334: Join's buttons scroll with the page (nothing hides behind them), so a swipe moves them.
   const yAfter = await actionsY();
-  row("join-actions-scroll", yBefore !== undefined && yAfter !== undefined && yAfter !== yBefore, `JoinActions y ${yBefore ?? "absent"} → ${yAfter ?? "absent"} after swiping`);
+  // Moved by the swipe, or brought into view by it (off screen before, so not in the tree): either way it scrolls.
+  row("join-actions-scroll", yAfter !== undefined && yAfter !== yBefore, `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`);
   await tapTestId(d, "MyAgent", 15000);
   // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
   // element: AgentCommunityOpen_<key> or AgentMembershipRow), or the status child's text on Android.
