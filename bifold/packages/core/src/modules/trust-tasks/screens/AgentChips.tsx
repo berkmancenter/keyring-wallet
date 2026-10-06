@@ -109,7 +109,15 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
             disabled={a.current || busy}
             onPress={() => onUse(a.vtaDid)}
             accessibilityRole="tab"
-            accessibilityLabel={a.waiting > 0 ? `${a.name}, ${t('Requests.RowWaiting', { count: a.waiting })}` : a.name}
+            // "<name>, <status>", as the rows of the list it replaces read: the
+            // e2e switch checks read it, and so does a screen reader.
+            accessibilityLabel={`${a.name}, ${
+              a.current
+                ? t('VtaLink.SwitcherCurrent')
+                : a.waiting > 0
+                  ? t('VtaLink.SwitcherWaiting', { count: a.waiting })
+                  : t('VtaLink.SwitcherNotConnected')
+            }`}
             accessibilityState={{ selected: a.current, disabled: a.current || busy }}
             testID={testIdWithKey(`AgentSwitcherRow_${i}`)}
           >

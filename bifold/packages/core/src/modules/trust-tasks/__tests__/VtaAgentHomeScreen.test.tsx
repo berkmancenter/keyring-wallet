@@ -160,8 +160,10 @@ describe('Your agent — after linking', () => {
   it("names each agent's chip to a screen reader by the agent's name, the current one selected", async () => {
     const tree = await renderHome([])
     const chip = tree.getByTestId(testIdWithKey('AgentSwitcherRow_0'))
-    expect(chip.props.accessibilityLabel).toBe(tree.getByTestId(testIdWithKey('AgentHomeName')).props.children)
-    expect(chip.props.accessibilityLabel).toEqual(expect.any(String))
+    // "<name>, Current", as the list's rows read (the e2e switch checks read it).
+    expect(chip.props.accessibilityLabel).toBe(
+      `${tree.getByTestId(testIdWithKey('AgentHomeName')).props.children}, VtaLink.SwitcherCurrent`
+    )
     expect(chip.props.accessibilityState).toEqual({ selected: true, disabled: true })
     // No busy value at all (234: Android said "busy" for a false one).
     expect(chip.props.accessibilityState.busy).toBeUndefined()
@@ -935,7 +937,7 @@ describe('Your agent — several agents', () => {
     const tree = await renderHome()
     expect(tree.getByTestId(testIdWithKey('AgentSwitcherBadge_1'))).toHaveTextContent('1')
     expect(tree.getByTestId(testIdWithKey('AgentSwitcherRow_1')).props.accessibilityLabel).toMatch(
-      /Work, Requests\.RowWaiting/
+      /^Work, VtaLink\.SwitcherWaiting/
     )
     expect(tree.queryByTestId(testIdWithKey('AgentSwitcherBadge_0'))).toBeNull()
     controller.set({ otherRequests: undefined })
