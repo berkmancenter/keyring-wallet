@@ -135,7 +135,7 @@ describe('Requests', () => {
     controller.set({ approvals: [request('a')] })
     const tree = await show()
     const card = tree.getByTestId(id('AgentApprovalCard'))
-    expect(card).toHaveTextContent(/MyAgent\.ApprovalAsks/)
+    expect(card).toHaveTextContent(/Requests\.AsksTo/)
     expect(card).toHaveTextContent(/MyAgent\.ApprovalExpires/)
     expect(card).not.toHaveTextContent(/trusttasks\.org/)
     expect(tree.getByTestId(id('ApprovalMatchCode'))).toHaveTextContent('f8cc7d')
@@ -170,7 +170,7 @@ describe('Requests', () => {
     // Decided: what was asked and what was decided, not the advice for deciding.
     expect(earlier.queryByTestId(id('ApprovalMatchCode'))).toBeNull()
     expect(earlier.queryByTestId(id('ApprovalOutcomeUnknown'))).toBeNull()
-    expect(earlier.getByTestId(id('AgentApprovalCard'))).toHaveTextContent(/MyAgent\.ApprovalAsks/)
+    expect(earlier.getByTestId(id('AgentApprovalCard'))).toHaveTextContent(/Requests\.AsksTo/)
     fireEvent.press(tree.getByTestId(id('RequestsBackToAgent')))
     expect(navigation.goBack).toHaveBeenCalledTimes(1)
   })

@@ -8,18 +8,25 @@
  * @module trust-tasks/screens/ApprovalDetails
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { VtiApproval } from '../module/vtaAgent'
 
+import { taskWords } from './requestWords'
+
 export interface ApprovalDetailsProps {
-  approval: Pick<VtiApproval, 'matchCode' | 'outcome'>
+  approval: Pick<VtiApproval, 'matchCode' | 'outcome'> &
+    Partial<Pick<VtiApproval, 'taskType' | 'payloadDigest' | 'subject'>>
 }
+
+/** A subject worth showing: a name, not an identifier (never a DID, #12). */
+const readableSubject = (subject: unknown): string | undefined =>
+  typeof subject === 'string' && subject.trim() && !/^did:/i.test(subject.trim()) ? subject.trim() : undefined
 
 export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) => {
   const { t } = useTranslation()
@@ -28,12 +35,30 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
     block: { gap: 4, marginVertical: 4 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     code: { ...TextTheme.bold, fontFamily: 'Menlo', letterSpacing: 2 },
+    digest: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
   })
   const outcome = approval.outcome ?? { from: 'unknown' as const }
+  const [fullOpen, setFullOpen] = useState(false)
+  // Undescribed by the agent, but a task Keyring knows: say what it is, in
+  // Keyring's words and saying they are Keyring's (al-signer, 10-06).
+  const action = outcome.from === 'unknown' && approval.taskType ? taskWords(approval.taskType, t) : undefined
+  const subject = readableSubject(approval.subject)
   return (
     <View style={styles.block}>
+      {action ? (
+        <ThemedText testID={testIdWithKey('ApprovalTaskDoes')}>
+          {t('Requests.TaskDoes', { action, interpolation: { escapeValue: false } })}
+        </ThemedText>
+      ) : null}
+      {subject ? (
+        <ThemedText style={styles.muted} selectable testID={testIdWithKey('ApprovalSubject')}>
+          {t('Requests.About', { subject, interpolation: { escapeValue: false } })}
+        </ThemedText>
+      ) : null}
       {outcome.from === 'unknown' ? (
-        <ThemedText testID={testIdWithKey('ApprovalOutcomeUnknown')}>{t('MyAgent.ApprovalOutcomeUnknown')}</ThemedText>
+        <ThemedText testID={testIdWithKey('ApprovalOutcomeUnknown')}>
+          {t(action ? 'Requests.ApproveIfYouStartedIt' : 'MyAgent.ApprovalOutcomeUnknown')}
+        </ThemedText>
       ) : (
         <View testID={testIdWithKey('ApprovalOutcome')}>
           <ThemedText>{t('MyAgent.ApprovalWouldDo')}</ThemedText>
@@ -48,6 +73,27 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
           <ThemedText style={styles.code} selectable testID={testIdWithKey('ApprovalMatchCode')}>
             {approval.matchCode}
           </ThemedText>
+          {/* The code is the start of this digest: a tool that prints the
+              whole digest can be matched against it too (al-signer, 10-06). */}
+          {approval.payloadDigest ? (
+            <>
+              <Pressable
+                onPress={() => setFullOpen(!fullOpen)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: fullOpen }}
+                testID={testIdWithKey('ApprovalDigestToggle')}
+              >
+                <ThemedText style={styles.muted}>
+                  {t(fullOpen ? 'Requests.HideFullCode' : 'Requests.ShowFullCode')}
+                </ThemedText>
+              </Pressable>
+              {fullOpen ? (
+                <ThemedText style={styles.digest} selectable testID={testIdWithKey('ApprovalDigest')}>
+                  {approval.payloadDigest}
+                </ThemedText>
+              ) : null}
+            </>
+          ) : null}
         </View>
       ) : null}
     </View>

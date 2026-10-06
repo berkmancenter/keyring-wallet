@@ -108,11 +108,16 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
  * names ({@link deviceNameKey}); a phone when it registered as Keyring, or is
  * a Keyring phone from before registration (a did:peer key).
  */
-export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView => {
+/** A device's name as its row shows it: the name it registered, else its label, else a plain name by kind. */
+export const deviceNameOf = (device: { did: string; label?: string; displayName?: string }, t: Translate): string => {
   const { key, label } = deviceNameKey(device)
+  return readable(device.displayName) ?? label ?? t(key ?? 'Devices.Unnamed')
+}
+
+export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView => {
   return {
     did: device.did,
-    name: readable(device.displayName) ?? label ?? t(key ?? 'Devices.Unnamed'),
+    name: deviceNameOf(device, t),
     ...(device.platform ? { platform: device.platform } : {}),
     ...(device.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
     status: deviceStatusOf(device),

@@ -165,6 +165,12 @@ export interface VtaAgentState {
   agentNames?: Readonly<Record<string, AgentLabel>>
   /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
   ownsAgent?: boolean
+  /**
+   * The devices an agent's list named when last read, by DID: what a request
+   * card calls the device that asked (Alberto's iPhone, 10-06: a request from
+   * his computer read "Someone asks"). Filled by every read of the list.
+   */
+  knownDevices?: Readonly<Record<string, KnownDevice>>
   /** Every agent this phone is linked to, oldest first; `link` is the current one's. */
   agents?: ReadonlyArray<{ vtaDid: string; label: string; owner?: boolean }>
   /** "Add another agent" is under way: the current agent was left until it ends. */
@@ -198,6 +204,14 @@ export interface VtaAgentState {
  * marks this phone's own key. Every admin row is shown — a backup added from
  * this phone is an equal of it (plan §4, D3).
  */
+/** What a request card needs to name a device: as My devices names it. */
+export interface KnownDevice {
+  did: string
+  label?: string
+  displayName?: string
+  isThisPhone: boolean
+}
+
 export interface VtaDevice {
   did: string
   role: string
@@ -1819,6 +1833,20 @@ export class VtaAgentController {
     })
   }
 
+  /** Keep what a read of the device list named, for the request cards. */
+  private rememberDevices(devices: KnownDevice[]): void {
+    const known = { ...this.state.knownDevices }
+    for (const d of devices) {
+      known[d.did] = {
+        did: d.did,
+        isThisPhone: d.isThisPhone,
+        ...(d.label ? { label: d.label } : {}),
+        ...(d.displayName ? { displayName: d.displayName } : {}),
+      }
+    }
+    this.set({ knownDevices: known })
+  }
+
   /**
    * Every device that runs this agent with its device binding where it has one
    * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
@@ -1832,7 +1860,9 @@ export class VtaAgentController {
       const devices = await listAgentDevices(client).catch((error: unknown) => {
         throw this.refused(error)
       })
-      return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+      const listed = devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+      this.rememberDevices(listed)
+      return listed
     }
     const ms = this.deps.deviceListDeadlineMs ?? DEVICE_LIST_DEADLINE_MS
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -2431,6 +2461,10 @@ export class VtaAgentController {
       if (this.state.approvals.some((a) => a.id === approval.id)) return
       this.set({ approvals: [approval, ...this.state.approvals] })
       void this.checkRequest(approval.id, plaintext.body as unknown as Record<string, unknown>)
+      // Asked by a device this phone has not seen named: read the list once,
+      // in the background, so the card can say which device asked.
+      const agent = this.agent
+      if (agent && !this.state.knownDevices?.[approval.requester]) void this.agentDevices(agent).catch(() => undefined)
       return
     }
     if (kept && 'granted' in kept) this.set({ awaitingConsentFor: undefined })

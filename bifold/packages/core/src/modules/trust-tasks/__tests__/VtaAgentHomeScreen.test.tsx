@@ -230,7 +230,7 @@ describe('Your agent — after linking', () => {
     const tree = await renderHome([])
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }
     navigation.navigate.mockClear()
-    expect(tree.getByTestId(testIdWithKey('AgentApprovalBanner'))).toHaveTextContent(/MyAgent\.ApprovalAsks/)
+    expect(tree.getByTestId(testIdWithKey('AgentApprovalBanner'))).toHaveTextContent(/Requests\.AsksTo/)
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentApprovalBanner')))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaRequests)
     controller.set({ approvals: [] })
