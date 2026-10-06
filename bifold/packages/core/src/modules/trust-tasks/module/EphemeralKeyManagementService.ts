@@ -29,6 +29,13 @@
  *
  * {@link dropInMemoryKeys} empties it; the app does so whenever it locks.
  *
+ * A copy not held when an operation needs it — after a restart, before the
+ * session that fetches it, or for an identity under a linked agent that is not
+ * the current one — is fetched first through the fetcher the agent controller
+ * sets ({@link EphemeralKeyManagementService.setMissingKeyFetcher}). Without
+ * it, such an operation failed with "Key with key id 'vta-copy:…' not found in
+ * backend 'ephemeral'" (TestFlight 239, an identity of another linked agent).
+ *
  * @module trust-tasks/module/EphemeralKeyManagementService
  */
 import { AskarKeyManagementService } from '@credo-ts/askar'
@@ -59,6 +66,12 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   /** The wallet's store, read for keys this backend does not hold. */
   private readonly wallet = new AskarKeyManagementService()
   private store?: Promise<Store>
+  /** Fetches an in-memory copy this backend does not hold, set by the agent controller. */
+  private fetchMissing?: (keyId: string) => Promise<void>
+  /** Fetches under way, one per key, so concurrent uses wait on one fetch. */
+  private readonly fetching = new Map<string, Promise<void>>()
+  /** When a fetch last failed, so a key the agent will not give is not asked for on every use. */
+  private readonly failedAt = new Map<string, number>()
 
   public constructor() {
     const inner = this.askar as unknown as AskarKmsInternals
@@ -99,10 +112,15 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     return this.askar.isOperationSupported(agentContext, operation)
   }
 
-  public getPublicKey(agentContext: AgentContext, keyId: string) {
+  public async getPublicKey(agentContext: AgentContext, keyId: string) {
     // Only our own keys are found here — a wallet key is the wallet's to
-    // answer, and nothing is held until a key arrives.
-    if (!this.store || !isInMemoryKeyId(keyId)) return Promise.resolve(null)
+    // answer. Credo routes a signature by asking each backend for the key, so
+    // a copy not held yet is fetched here first. Not while that key's fetch is
+    // itself running: the fetch asks whether the key is held, and must hear
+    // "not yet" rather than wait on itself.
+    if (!isInMemoryKeyId(keyId)) return null
+    if (!this.fetching.has(keyId)) await this.ensureHeld(keyId)
+    if (!this.store) return null
     return this.askar.getPublicKey(agentContext, keyId)
   }
 
@@ -119,7 +137,8 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     return this.askar.createKey(agentContext, options)
   }
 
-  public sign(agentContext: AgentContext, options: Kms.KmsSignOptions) {
+  public async sign(agentContext: AgentContext, options: Kms.KmsSignOptions) {
+    await this.ensureHeld(options.keyId)
     return this.askar.sign(agentContext, options)
   }
 
@@ -127,11 +146,13 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     return this.askar.verify(agentContext, options)
   }
 
-  public encrypt(agentContext: AgentContext, options: Kms.KmsEncryptOptions) {
+  public async encrypt(agentContext: AgentContext, options: Kms.KmsEncryptOptions) {
+    await this.ensureHeld(keyAgreementKeyId(options))
     return this.askar.encrypt(agentContext, options)
   }
 
-  public decrypt(agentContext: AgentContext, options: Kms.KmsDecryptOptions) {
+  public async decrypt(agentContext: AgentContext, options: Kms.KmsDecryptOptions) {
+    await this.ensureHeld(keyAgreementKeyId(options))
     return this.askar.decrypt(agentContext, options)
   }
 
@@ -145,11 +166,57 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
    * agreement). Undefined when this backend does not hold it.
    */
   public async withKey<T>(keyId: string, use: (key: Key) => T | Promise<T>): Promise<T | undefined> {
+    await this.ensureHeld(keyId)
     if (!this.store) return undefined
     return this.withSession(async (session) => {
       const entry = await session.fetchKey({ name: keyId })
       return entry ? use(entry.key) : undefined
     })
+  }
+
+  /**
+   * How a copy this backend does not hold is fetched (the agent controller's,
+   * through that identity's own agent). Undefined stops fetching.
+   */
+  public setMissingKeyFetcher(fetch: ((keyId: string) => Promise<void>) | undefined): void {
+    this.fetchMissing = fetch
+    this.failedAt.clear()
+  }
+
+  /**
+   * Make sure an in-memory copy is held before it is used: fetch it if not,
+   * once at a time per key. A failed fetch is not retried for
+   * {@link FETCH_RETRY_MS}; the operation then fails as it would have.
+   * Never throws.
+   */
+  private async ensureHeld(keyId: string | undefined): Promise<void> {
+    if (!keyId || !isInMemoryKeyId(keyId) || !this.fetchMissing) return
+    const running = this.fetching.get(keyId)
+    if (running) return running
+    if (await this.isHeld(keyId)) return
+    // Another use may have started the fetch while this one looked.
+    const started = this.fetching.get(keyId)
+    if (started) return started
+    const failed = this.failedAt.get(keyId)
+    if (failed !== undefined && Date.now() - failed < FETCH_RETRY_MS) return
+    const fetch = this.fetchMissing
+    // Marked as fetching before the fetcher starts: it asks whether the key is
+    // held as its first step, synchronously, and must find the mark there.
+    const work = Promise.resolve()
+      .then(() => fetch(keyId))
+      .then(
+        () => void this.failedAt.delete(keyId),
+        () => void this.failedAt.set(keyId, Date.now())
+      )
+      .finally(() => this.fetching.delete(keyId))
+    this.fetching.set(keyId, work)
+    return work
+  }
+
+  /** Whether this backend holds `keyId` now, without fetching it. */
+  public async isHeld(keyId: string): Promise<boolean> {
+    if (!this.store) return false
+    return this.withSession(async (session) => Boolean(await session.fetchKey({ name: keyId })))
   }
 
   /** Forget every key held. The next import starts a fresh store. */
@@ -172,6 +239,24 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
       await session.close()
     }
   }
+}
+
+/**
+ * How long a key whose fetch failed is left before it is asked for again.
+ * Shorter than the persona inbox's 30 s look, so its next look asks again.
+ */
+export const FETCH_RETRY_MS = 20_000
+
+/**
+ * The key an encrypt or decrypt names, in either Credo's shape: 0.7.1 (the
+ * app's) passes `key: { keyId }` or `key: { keyAgreement: { keyId } }`, 0.6.3 a
+ * top-level `keyAgreement: { keyId }`.
+ */
+function keyAgreementKeyId(options: unknown): string | undefined {
+  type Named = { keyId?: unknown }
+  const o = options as { key?: Named & { keyAgreement?: Named }; keyAgreement?: Named } | undefined
+  const id = o?.key?.keyId ?? o?.key?.keyAgreement?.keyId ?? o?.keyAgreement?.keyId
+  return typeof id === 'string' ? id : undefined
 }
 
 /** This agent's in-memory backend, when it has one. */
