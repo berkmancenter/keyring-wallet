@@ -362,6 +362,9 @@ export const UNLINK_TELL_QUEUE_MS = 10000
 export const OWNER_ACT_DEADLINE_MS = 45000
 /** An Approve or Deny not taken by then is said so, and can be sent again. */
 export const DECISION_DEADLINE_MS = 15000
+
+/** What the owner check says when a request is approved. */
+export const APPROVE_REASON = 'Approve a request from your agent'
 /**
  * My devices' list, bounded (IN-124: "a spinner that never loads"). Reading it
  * signs in through `connect`, which has no deadline of its own and shares a
@@ -2462,6 +2465,12 @@ export class VtaAgentController {
     const client = this.current?.client
     const approval = this.state.approvals.find((a) => a.id === id)
     if (!client || !approval) return
+    // Approving lets the agent do what was asked, so it is an owner act, as
+    // removing or renaming a device is: Face ID, a fingerprint or the
+    // passcode first (Alberto's iPhone, 10-06: Approve asked for nothing).
+    // Declining grants nothing and stays one tap. Not confirmed: nothing is
+    // sent, and the request still waits — it did not fail.
+    if (decision === 'approve') await this.confirmOwner(APPROVE_REASON)
     try {
       const ms = this.deps.decisionDeadlineMs ?? DECISION_DEADLINE_MS
       const sending = client.decideConsent(approval, decision, reason)
