@@ -48,14 +48,14 @@ describe('the first-run slides', () => {
     expect(ptBrCopy.Onboarding.AgentParagraph).toMatch(/^Nada de agente secreto/)
   })
 
-  // Alberto (10-07): the welcome handshake a little larger, the circle the same.
-  test("the welcome slide's glyph is larger than the others, in the same circle", () => {
+  // Alberto (10-07): the agent slide's shield a little larger, the circle the same.
+  test("the agent slide's glyph is larger than the others, in the same circle", () => {
     const tree = render(
       <BasicAppContext>
         <Slides />
       </BasicAppContext>
     )
-    expect(tree.UNSAFE_getAllByProps({ width: 112, height: 112 }).length).toBeGreaterThan(0)
+    expect(tree.UNSAFE_getAllByProps({ name: 'shield-account-outline', size: 104 })).toHaveLength(1)
     expect(tree.UNSAFE_getAllByProps({ width: 88, height: 88 }).length).toBeGreaterThan(0)
   })
 

@@ -13,11 +13,10 @@ const KEYRING_PROJECT_URL = 'https://www.appliedtechnologylab.org/projects#keyri
 
 const ICON_SIZE = 88
 /**
- * The welcome slide's handshake, a little larger in the same circle (Alberto,
- * 10-07): its glyph has the most air of the five. 34 points still clear it
- * from the circle's edge.
+ * The agent slide's shield, a little larger in the same circle (Alberto,
+ * 10-07). 38 points still clear it from the circle's edge.
  */
-const WELCOME_ICON_SIZE = 112
+const AGENT_ICON_SIZE = 104
 const CIRCLE_SIZE = 180
 const CIRCLE_COLOR = 'rgba(163, 73, 164, 0.18)'
 
@@ -105,10 +104,9 @@ const AgentIcon: React.FC<{ fill?: string; width?: number }> = ({ fill, width = 
   <Icon name="shield-account-outline" size={width} color={fill} />
 )
 
-/** The stroke a glyph is drawn with: the same weight on screen whatever its size. */
-const strokeProps = (viewBoxSize: number, fill: string, size: number = ICON_SIZE) => ({
+const strokeProps = (viewBoxSize: number, fill: string) => ({
   stroke: fill,
-  strokeWidth: 0.8 * (viewBoxSize / size),
+  strokeWidth: 0.8 * (viewBoxSize / ICON_SIZE),
   strokeLinejoin: 'round' as const,
   strokeLinecap: 'round' as const,
 })
@@ -116,11 +114,7 @@ const strokeProps = (viewBoxSize: number, fill: string, size: number = ICON_SIZE
 export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['OnboardingTheme']): Array<Element> => {
   const fill = theme.imageDisplayOptions.fill
   return [
-    WelcomePage(theme, {
-      ...strokeProps(512, fill, WELCOME_ICON_SIZE),
-      width: WELCOME_ICON_SIZE,
-      height: WELCOME_ICON_SIZE,
-    }),
+    WelcomePage(theme, strokeProps(512, fill)),
     CreatePage(
       'Onboarding.CredentialsHeading',
       'Onboarding.CredentialsParagraph',
@@ -136,7 +130,10 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
       strokeProps(536, fill)
     ),
     // After trusted connections: the agent that acts for the person (Alberto, 10-05).
-    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon),
+    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon, {
+      width: AGENT_ICON_SIZE,
+      height: AGENT_ICON_SIZE,
+    }),
     CreatePage(
       'Onboarding.SecurityHeading',
       'Onboarding.SecurityParagraph',
