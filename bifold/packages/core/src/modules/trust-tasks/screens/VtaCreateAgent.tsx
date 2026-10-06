@@ -129,6 +129,10 @@ const VtaCreateAgent: React.FC = () => {
   const [howShown, setHowShown] = useState(false)
   // Face ID is asked once, when the code is handed out; checks after that are quiet.
   const [ownerConfirmed, setOwnerConfirmed] = useState(false)
+  // A phone with no screen lock cannot own the agent, and has no Face ID or
+  // passcode to ask for: it is added as a device instead, as an admin adds
+  // any other (Alberto, 239: one way to link by address, not two).
+  const [asDevice, setAsDevice] = useState(false)
   const [pollUntil, setPollUntil] = useState<number | undefined>()
   const [pollExpired, setPollExpired] = useState(false)
   // Paused only when the app is known to be away; an unknown state keeps waiting.
@@ -274,10 +278,15 @@ const VtaCreateAgent: React.FC = () => {
     if (!agent) return
     setBusy(true)
     try {
+      setAsDevice(false)
       await vtaAgent.startCreateAgent(agent, did, did)
     } catch (e) {
-      setError(e instanceof DeviceCannotOwn ? needsScreenLock() : t('CreateAgent.NotConfirmed'))
-      return
+      if (!(e instanceof DeviceCannotOwn)) {
+        setError(t('CreateAgent.NotConfirmed'))
+        return
+      }
+      setAsDevice(true)
+      await vtaAgent.startManualLink(agent, did, did)
     } finally {
       setBusy(false)
     }
@@ -304,7 +313,7 @@ const VtaCreateAgent: React.FC = () => {
   const handOut = async (how: 'copy' | 'share') => {
     if (!ownerKey) return
     setError(undefined)
-    if (!ownerConfirmed) {
+    if (!ownerConfirmed && !asDevice) {
       const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
       if (!confirmed.ok) {
         setError(ownerFailureLine(confirmed.reason))
@@ -328,7 +337,7 @@ const VtaCreateAgent: React.FC = () => {
   const onConnect = async () => {
     if (!agent) return
     setError(undefined)
-    if (!ownerConfirmed) {
+    if (!ownerConfirmed && !asDevice) {
       const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
       if (!confirmed.ok) {
         setError(ownerFailureLine(confirmed.reason))
@@ -491,13 +500,19 @@ const VtaCreateAgent: React.FC = () => {
     body = (
       <View style={styles.card} testID={testIdWithKey('AgentCreateOwnerCode')}>
         <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 2, of: 2 })}</ThemedText>
-        <ThemedText variant="headingThree">{t('CreateAgent.OwnerTitle')}</ThemedText>
-        <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
-          {t('CreateAgent.OwnerBody', {
-            method: t(`CreateAgent.Lock.${lockKind}`),
-            interpolation: { escapeValue: false },
-          })}
+        <ThemedText variant="headingThree">
+          {asDevice ? t('CreateAgent.AsDeviceTitle') : t('CreateAgent.OwnerTitle')}
         </ThemedText>
+        {asDevice ? (
+          <ThemedText testID={testIdWithKey('AgentCreateAsDevice')}>{t('CreateAgent.AsDeviceBody')}</ThemedText>
+        ) : (
+          <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
+            {t('CreateAgent.OwnerBody', {
+              method: t(`CreateAgent.Lock.${lockKind}`),
+              interpolation: { escapeValue: false },
+            })}
+          </ThemedText>
+        )}
         <ThemedText>{t('CreateAgent.OwnerWhereToPaste')}</ThemedText>
         <Pressable
           onPress={() => setHowShown(!howShown)}

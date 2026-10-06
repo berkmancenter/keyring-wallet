@@ -13,7 +13,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useHeaderHeight } from '@react-navigation/elements'
-import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -24,7 +24,6 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native'
@@ -78,16 +77,9 @@ const VtaLink: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
-  const route = useRoute()
   const { ColorPalette, TextTheme } = useTheme()
   const { link: current, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const link = withAgentName(current, agentNames)
-  // Form state only — what the person is typing before they ask for a key.
-  // Opening straight into the address field when the previous screen already
-  // asked: being asked the same question twice reads as not having been heard.
-  const askedWithoutQr = Boolean((route?.params as { withoutQr?: boolean } | undefined)?.withoutQr)
-  const [manualEntry, setManualEntry] = useState(askedWithoutQr)
-  const [agentAddress, setAgentAddress] = useState('')
   const [copied, setCopied] = useState(false)
   // The code was handed out (Copy or Share): "I've been added" becomes the
   // one main button; before that, handing it out is (IN-125).
@@ -148,25 +140,8 @@ const VtaLink: React.FC = () => {
     actions: { padding: 20, gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
-    input: {
-      ...TextTheme.normal,
-      borderWidth: 1,
-      borderColor: ColorPalette.grayscale.mediumGrey,
-      borderRadius: 6,
-      padding: 12,
-      minHeight: 48,
-    },
     key: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 13 },
   })
-
-  const addressLooksRight = /^did:[a-z0-9]+:.+/.test(agentAddress.trim())
-
-  const onShowMyCode = useCallback(() => {
-    const vtaDid = agentAddress.trim()
-    if (!agent || !/^did:[a-z0-9]+:.+/.test(vtaDid)) return
-    setCopied(false)
-    void vtaAgent.startManualLink(agent, vtaDid, vtaDid)
-  }, [agent, agentAddress])
 
   const onCheckGrant = useCallback(() => {
     if (agent) void vtaAgent.checkManualGrant(agent)
@@ -682,47 +657,12 @@ const VtaLink: React.FC = () => {
               </>
             ) : null}
           </View>
-          {manualEntry ? (
-            <View style={styles.card} testID={testIdWithKey('VtaLinkManualEntry')}>
-              <ThemedText variant="labelTitle">{t('VtaLink.AgentAddress')}</ThemedText>
-              <ThemedText>{t('VtaLink.AgentAddressHint')}</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={agentAddress}
-                onChangeText={setAgentAddress}
-                placeholder="did:webvh:…"
-                placeholderTextColor={ColorPalette.grayscale.mediumGrey}
-                autoCapitalize="none"
-                autoCorrect={false}
-                accessibilityLabel={t('VtaLink.AgentAddress')}
-                testID={testIdWithKey('VtaLinkAgentAddress')}
-                // The keyboard's own key submits, so it never has to be
-                // dismissed to reach the button it covers.
-                returnKeyType="go"
-                onSubmitEditing={onShowMyCode}
-                submitBehavior="blurAndSubmit"
-              />
-            </View>
-          ) : null}
         </>
       )
-      actions = manualEntry ? (
-        <>
-          <Button
-            title={t('VtaLink.ShowMyCode')}
-            buttonType={ButtonType.Primary}
-            onPress={onShowMyCode}
-            disabled={!addressLooksRight}
-            testID={testIdWithKey('VtaLinkShowMyCode')}
-          />
-          <Button
-            title={t('VtaLink.ScanInstead')}
-            buttonType={ButtonType.Secondary}
-            onPress={() => setManualEntry(false)}
-            testID={testIdWithKey('VtaLinkScanInstead')}
-          />
-        </>
-      ) : (
+      // One way without a code (Alberto, 239): the address path that sets up
+      // an agent, which also links one a host has made. This screen's own
+      // address field asked the same thing a second way.
+      actions = (
         <>
           <Button
             title={t('VtaLink.ScanAgain')}
@@ -731,10 +671,10 @@ const VtaLink: React.FC = () => {
             testID={testIdWithKey('VtaLinkScanAgain')}
           />
           <Button
-            title={t('VtaLink.WithoutQr')}
+            title={t('VtaLink.UseAgentAddress')}
             buttonType={ButtonType.Secondary}
-            onPress={() => setManualEntry(true)}
-            testID={testIdWithKey('VtaLinkWithoutQr')}
+            onPress={() => navigation.navigate(Screens.VtaCreateAgent as never, { byAddress: true } as never)}
+            testID={testIdWithKey('VtaLinkByAddress')}
           />
         </>
       )

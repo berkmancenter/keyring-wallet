@@ -2060,6 +2060,8 @@
     "NoAgentThere": "Keyring couldn't find an agent at that address. Check you copied the whole line, and that your agent has finished being created.",
     "OwnerTitle": "Your owner code",
     "OwnerBody": "This code tells your agent that this phone owns it. The code is protected by {{method}}.",
+    "AsDeviceTitle": "This phone's code",
+    "AsDeviceBody": "This phone has no screen lock, so it joins your agent as a device, not as its owner. To make it the owner, turn on a screen lock and link it again.",
     "OwnerWhereToPaste": "Copy this code and add it as an owner (admin) in your agent host's settings. If you run your own agent, give this code to it as an admin. Come back when your agent is online.",
     "ConfirmReason": "Set up your new agent with this phone",
     "NotConfirmed": "Keyring couldn't confirm it's you. Try again, or use your passcode.",

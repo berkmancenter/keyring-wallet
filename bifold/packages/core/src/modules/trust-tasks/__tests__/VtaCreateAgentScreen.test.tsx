@@ -131,15 +131,26 @@ describe('create my agent: the address comes first', () => {
     expect(within(avoiding!).getByTestId(id('AgentCreateAddressContinue'))).toBeTruthy()
   })
 
-  test('a phone with no screen lock is told how to protect its agent first', async () => {
+  // One way to link by address (Alberto, 239): a phone with no screen lock
+  // cannot own the agent, so it is linked as a device, as an admin adds any
+  // other, and is told why. No Face ID is asked: there is none to ask.
+  test('a phone with no screen lock is linked as a device, told why, and asked for no Face ID', async () => {
     jest.spyOn(vtaAgent, 'startCreateAgent').mockRejectedValue(new DeviceCannotOwn())
+    const manual = jest.spyOn(vtaAgent, 'startManualLink').mockImplementation(async () => {
+      controller.set({
+        link: { kind: 'showingKey', vtaDid: VTA, label: VTA, did: 'did:key:z6MkDevice', checking: false },
+      })
+    })
     const tree = show()
     fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
     fireEvent.changeText(tree.getByTestId(id('AgentCreateAddressInput')), VTA)
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
-    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(/CreateAgent\.NeedsScreenLock(Ios|Android)/)
+    expect(manual).toHaveBeenCalledWith(expect.anything(), VTA, VTA)
+    expect(tree.queryByTestId(id('AgentCreateError'))).toBeNull()
+    expect(tree.getByTestId(id('AgentCreateAsDevice'))).toHaveTextContent('CreateAgent.AsDeviceBody')
+    expect(tree.queryByTestId(id('AgentCreateOwnerBody'))).toBeNull()
   })
 })
 

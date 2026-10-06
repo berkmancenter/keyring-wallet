@@ -1996,6 +1996,8 @@
     "NoAgentThere": "Keyring n'a trouvé aucun agent à cette adresse. Vérifiez que vous avez copié toute la ligne et que la création de votre agent est terminée.",
     "OwnerTitle": "Votre code propriétaire",
     "OwnerBody": "Ce code indique à votre agent que ce téléphone en est le propriétaire. Le code est protégé {{method}}.",
+    "AsDeviceTitle": "Le code de ce téléphone",
+    "AsDeviceBody": "Ce téléphone n'a pas de verrouillage d'écran : il rejoint votre agent comme appareil, pas comme propriétaire. Pour en faire le propriétaire, activez un verrouillage d'écran et liez-le à nouveau.",
     "OwnerWhereToPaste": "Copiez ce code et ajoutez-le comme propriétaire (admin) dans les réglages de l'hébergeur de votre agent. Si vous faites tourner votre propre agent, donnez-lui ce code comme admin. Revenez quand votre agent est en ligne.",
     "ConfirmReason": "Configurer votre nouvel agent avec ce téléphone",
     "NotConfirmed": "Keyring n'a pas pu confirmer que c'est vous. Réessayez, ou utilisez votre code.",
