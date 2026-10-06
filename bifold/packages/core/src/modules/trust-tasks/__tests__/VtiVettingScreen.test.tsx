@@ -22,6 +22,7 @@ import { resolveVtaDid } from '../module/vtaLinkMachine'
 import * as grantState from '../module/vtiGrantState'
 import { VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
 import { routeKeyringAgentLink } from '../module/vtiLinks'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The desk's attest asks for a face or fingerprint first; here it is given.
@@ -224,6 +225,16 @@ describe('Vetting — a member', () => {
     const scroll = within(avoiding).UNSAFE_getByType(KeyboardAwareScrollView)
     expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(150)
     expect(within(scroll).getByTestId(testIdWithKey('VettingAlreadyMember'))).toBeTruthy()
+  })
+
+  // Gate 235 persona shots, iOS: the last line sat under the tab bar, which draws over the page.
+  test('the page leaves room at its foot for the tab bar, so its last line scrolls clear of it', async () => {
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    const scroll = tree.UNSAFE_getByType(KeyboardAwareScrollView)
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle).paddingBottom).toBeGreaterThanOrEqual(
+      TAB_BAR_CLEARANCE
+    )
   })
 
   test('the page names its step for a driver: a member is on "member"', async () => {

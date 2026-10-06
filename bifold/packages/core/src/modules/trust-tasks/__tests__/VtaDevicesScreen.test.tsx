@@ -8,12 +8,14 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import type { AgentDevice } from '../module/vtaDevices'
 import { DeviceActionRefused } from '../module/vtaOwner'
@@ -93,6 +95,13 @@ describe('your devices', () => {
     )
     expect(deviceNameKey({ did: 'did:key:z6Mk1' }).key).toBe('Devices.AComputer')
     expect(deviceNameKey({ did: OLD }).key).toBe('Devices.AKeyringPhone')
+  })
+
+  test('leaves room at its foot for the tab bar, so its last row scrolls clear of it', async () => {
+    const tree = await show()
+    expect(
+      StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentDeviceList')).props.contentContainerStyle).paddingBottom
+    ).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
   })
 
   test('Add another device opens the add flow', async () => {

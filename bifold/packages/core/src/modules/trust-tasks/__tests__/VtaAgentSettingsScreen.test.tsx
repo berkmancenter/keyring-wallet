@@ -7,13 +7,14 @@
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { ScrollView } from 'react-native'
+import { ScrollView, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import VtaAgentSettings from '../screens/VtaAgentSettings'
 
@@ -85,6 +86,14 @@ describe('Agent settings', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentOthers'))).toBeNull()
     // Requests are on Your agent, not here.
     expect(tree.queryByTestId(testIdWithKey('AgentRequestsRow'))).toBeNull()
+  })
+
+  it('leaves room at its foot for the tab bar, so Unlink scrolls clear of it', async () => {
+    const tree = await show()
+    expect(
+      StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentSettingsScreen')).props.contentContainerStyle)
+        .paddingBottom
+    ).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
   })
 
   it("a task of this phone's waiting on someone else's consent is said here", async () => {
