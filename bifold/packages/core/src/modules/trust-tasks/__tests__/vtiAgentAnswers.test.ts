@@ -170,6 +170,7 @@ jest.setTimeout(30000)
 beforeEach(async () => {
   await vtiAgent.disconnect()
   vtiAgent.answerTimeoutMs = 30000
+  vtiAgent.submitAnswerTimeoutMs = 60000
   mockSessions.length = 0
   mockGreetings.length = 0
   mockPacked.length = 0
@@ -180,6 +181,7 @@ beforeEach(async () => {
 afterEach(() => {
   jest.restoreAllMocks()
   vtiAgent.answerTimeoutMs = 30000
+  vtiAgent.submitAnswerTimeoutMs = 60000
 })
 
 describe('T1: concurrent asks each get their own answer', () => {
@@ -238,6 +240,7 @@ describe('T2: a write is sent once', () => {
     const session = await connectTo(community, 'tsp', 'did:webvh:p:silent-apply')
     const submitsPacked = () => mockPacked.filter((d) => d.type === SUBMIT).length
     vtiAgent.answerTimeoutMs = 50
+    vtiAgent.submitAnswerTimeoutMs = 50
     const error = await vtiAgent.apply(community, manifest).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(VtiSentNoAnswer)
     expect(error).toMatchObject({
@@ -265,12 +268,25 @@ describe('T2: a write is sent once', () => {
 })
 
 describe('T3: a late answer is kept for the next caller', () => {
+  // 7b's R5, 10-06: a community retrying a DID lookup after a 429 answers at about 30 s.
+  it('a join submit waits 60 s by default, not the usual 30 s', async () => {
+    const fresh = new (vtiAgent.constructor as new () => typeof vtiAgent)()
+    expect(fresh.answerTimeoutMs).toBe(30000)
+    expect(fresh.submitAnswerTimeoutMs).toBe(60000)
+    const community = 'did:webvh:c:submit-clock'
+    await connectTo(community, 'didcomm', 'did:webvh:p:submit-clock')
+    const ask = jest.spyOn(vtiAgent, 'ask').mockResolvedValue(undefined)
+    await vtiAgent.apply(community, manifest).catch(() => undefined)
+    expect(ask).toHaveBeenCalledWith(community, SUBMIT, expect.anything(), 60000)
+  })
+
   it('gives a retried submit the answer that came after its clock ran out, without sending it again', async () => {
     const community = 'did:webvh:c:late-submit'
     const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-submit')
     const inbox = jest.fn()
     const stop = vtiAgent.onInbound(inbox)
     vtiAgent.answerTimeoutMs = 50
+    vtiAgent.submitAnswerTimeoutMs = 50
     const error = await vtiAgent.apply(community, manifest).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(VtiSentNoAnswer)
     const sent = session.didcomm[0] as Sent
@@ -309,6 +325,7 @@ describe('T3: a late answer is kept for the next caller', () => {
     const community = 'did:webvh:c:late-verdict'
     const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-verdict')
     vtiAgent.answerTimeoutMs = 30
+    vtiAgent.submitAnswerTimeoutMs = 30
     const error = (await vtiAgent.apply(community, manifest).catch((e: unknown) => e)) as VtiSentNoAnswer
     expect(error).toBeInstanceOf(VtiSentNoAnswer)
     const waiting = vtiAgent.lateVerdict(error, 2000)
@@ -324,6 +341,7 @@ describe('T3: a late answer is kept for the next caller', () => {
     const community = 'did:webvh:c:late-refusal'
     const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-refusal')
     vtiAgent.answerTimeoutMs = 30
+    vtiAgent.submitAnswerTimeoutMs = 30
     const error = (await vtiAgent.apply(community, manifest).catch((e: unknown) => e)) as VtiSentNoAnswer
     await expect(vtiAgent.lateVerdict(error, 30)).resolves.toBeUndefined()
 

@@ -402,6 +402,13 @@ class VtiAgentController {
   private readonly asks = new Map<string, AskEntry>()
   /** How long `ask` waits for an answer when the caller names no time. */
   answerTimeoutMs = 30000
+  /**
+   * How long a join submit waits. A community deciding a join may look up the
+   * applicant's DIDs, and after a DID host's 429 it retries 30 s later
+   * (VTI-69): its answer then lands just past a 30 s clock (7b's R5, 10-06,
+   * 0.2 s late). The longer clock covers one such retry.
+   */
+  submitAnswerTimeoutMs = 60000
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void | Promise<void>)[] = []
   private tsp?: TspSessionIdentity
   /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
@@ -1607,7 +1614,8 @@ class VtiAgentController {
           vp: this.presentation(options.credentials),
           registryConsent: options.registryConsent === true,
           criterion,
-        })
+        }),
+        this.submitAnswerTimeoutMs
       )
       const refusal = answer ? refusalOf(answer) : undefined
       refused.push(wire)
