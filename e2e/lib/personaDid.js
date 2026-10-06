@@ -13,6 +13,25 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { byTestId, existsTestId, scrollToTestId, sleep, tapTestId } from "./driver.js";
 
+/**
+ * Whether an element sits wholly above the tab bar (bifold #322: the last line of a page used to end behind it).
+ * Prints `FOOT <name> clear|HIDDEN — …` and returns true/false, or undefined when either rect cannot be read.
+ */
+export async function footClear(d, id, name = id) {
+  try {
+    const r = await byTestId(d, id).getRect();
+    const tab = await byTestId(d, "MyAgent").getRect();
+    const bottom = Math.round(r.y + r.height);
+    const top = Math.round(tab.y);
+    const ok = bottom <= top;
+    console.log(`FOOT ${name} ${ok ? "clear" : "HIDDEN"} — ${id} ends at y=${bottom}, the tab bar starts at y=${top}`);
+    return ok;
+  } catch (e) {
+    console.log(`FOOT ${name} unread — ${String(e.message).split("\n")[0].slice(0, 100)}`);
+    return undefined;
+  }
+}
+
 export async function capturePersonaDid(d, stem, name) {
   const dir = process.env.PERSONA_SHOTS;
   if (!dir) return undefined;
@@ -45,6 +64,7 @@ export async function capturePersonaDid(d, stem, name) {
     const did = String((await el.getAttribute(ios ? "label" : "text").catch(() => "")) || "").replace(/\s+/g, "");
     await d.saveScreenshot(path.join(dir, `${name}.png`)).catch(() => undefined);
     console.log(`PERSONA-DID ${name} ${did || "(empty)"}`);
+    await footClear(d, `${stem}Did`, name);
     return did || undefined;
   } catch (e) {
     console.log(`PERSONA-DID ${name} (capture failed: ${String(e.message).split("\n")[0].slice(0, 100)})`);
