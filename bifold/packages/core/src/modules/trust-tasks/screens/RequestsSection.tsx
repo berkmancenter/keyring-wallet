@@ -12,7 +12,7 @@
  *
  * @module trust-tasks/screens/RequestsSection
  */
-import React from 'react'
+import React, { useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -20,10 +20,9 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import type { VtiApproval } from '../module/vtaAgent'
+import { vtaAgent, type VtiApproval } from '../module/vtaAgent'
 
-import { partyLabelStartOf } from './communityName'
-import { shortTask } from './RequestCard'
+import { requestLine } from './requestWords'
 
 /** How many waiting requests the section lists before "See all". */
 export const REQUESTS_SHOWN = 3
@@ -37,6 +36,8 @@ export interface RequestsSectionProps {
 export const RequestsSection: React.FC<RequestsSectionProps> = ({ waiting, onOpen, onAskMe }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
+  // Who asked is named from what this phone knows of the agent's devices.
+  const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const styles = StyleSheet.create({
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 4 },
     attention: { borderLeftWidth: 4, borderLeftColor: ColorPalette.brand.primary },
@@ -99,11 +100,7 @@ export const RequestsSection: React.FC<RequestsSectionProps> = ({ waiting, onOpe
         >
           <View style={{ width: 22 }} />
           <ThemedText style={{ flex: 1, ...TextTheme.normal }} numberOfLines={2}>
-            {t('MyAgent.ApprovalAsks', {
-              requester: partyLabelStartOf(approval.requester, t),
-              task: shortTask(approval.taskType),
-              interpolation: { escapeValue: false },
-            })}
+            {requestLine(approval, { managerDid: state.managerDid, knownDevices: state.knownDevices }, t)}
           </ThemedText>
           <ThemedText style={{ color: ColorPalette.brand.link }}>{t('VtaLink.RequestDecide')}</ThemedText>
         </Pressable>

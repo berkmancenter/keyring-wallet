@@ -13,19 +13,19 @@
  *
  * @module trust-tasks/screens/RequestCard
  */
-import React, { useState } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import type { VtiApproval } from '../module/vtaAgent'
+import { vtaAgent, type VtiApproval } from '../module/vtaAgent'
 
 import { ApprovalDetails } from './ApprovalDetails'
-import { partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
 import { localDateTime } from './localTime'
+import { requestLine } from './requestWords'
 
 /** The task URI without the part every task shares. */
 export const shortTask = (uri: string) => uri.replace('https://trusttasks.org/spec/', '')
@@ -72,17 +72,15 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
     approveText: { color: ColorPalette.brand.buttonText, textAlign: 'center' },
     declineText: { color: ColorPalette.brand.primary, textAlign: 'center' },
   })
+  // Who asked is named from what this phone knows of the agent's devices.
+  const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const handle = requestHandle(approval)
   const [detailOpen, setDetailOpen] = useState(false)
   return (
     <View testID={testIdWithKey(`AgentApprovalCard_${handle}`)}>
       <View style={styles.card} testID={testIdWithKey('AgentApprovalCard')}>
-        <ThemedText>
-          {t('MyAgent.ApprovalAsks', {
-            requester: partyLabelStartOf(approval.requester, t),
-            task: shortTask(approval.taskType),
-            interpolation: { escapeValue: false },
-          })}
+        <ThemedText testID={testIdWithKey('RequestAsks')}>
+          {requestLine(approval, { managerDid: state.managerDid, knownDevices: state.knownDevices }, t)}
         </ThemedText>
         {shows === 'expired' ? (
           <ThemedText testID={testIdWithKey('RequestExpired')}>{t('Requests.Expired')}</ThemedText>
