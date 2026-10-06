@@ -186,9 +186,23 @@ try {
     await waitForTestId(d, "AgentDeviceList", 30000);
     // UiAutomator lists only what is on screen: scroll until a row with the name shows, a few swipes at most.
     let mine;
-    for (let i = 0; i < 5 && !mine; i++) {
-      mine = (await deviceRows(d)).filter((r) => r.text.includes(defaultName)).pop();
-      if (!mine) await scrollToTestId(d, "AgentDeviceAdd", 1).catch(() => undefined);
+    const findMine = async () => {
+      for (let i = 0; i < 5 && !mine; i++) {
+        mine = (await deviceRows(d)).filter((r) => r.text.includes(defaultName)).pop();
+        if (!mine) await scrollToTestId(d, "AgentDeviceAdd", 1).catch(() => undefined);
+      }
+    };
+    await findMine();
+    // 236: the new device's row read "A computer or other app", not its label, right after the add. Reopen
+    // My devices up to 3 times to tell a list that refreshes late from one that never shows the label.
+    for (let reopen = 1; reopen <= 3 && !mine; reopen++) {
+      log(`no row named "${defaultName}" yet (rows ${JSON.stringify((await deviceRows(d)).map((r) => r.text))}); reopening My devices (${reopen}/3)`);
+      await sleep(5000);
+      await d.back().catch(() => undefined);
+      await openDevices(d);
+      await waitForTestId(d, "AgentDeviceList", 30000);
+      await findMine();
+      console.log(`DEVICES-REOPEN ${reopen} ${mine ? "found" : "not found"} ${new Date().toISOString()}`);
     }
     if (!mine) {
       log(`device rows on screen: ${JSON.stringify(await deviceRows(d))}`);
