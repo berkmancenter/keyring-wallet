@@ -37,7 +37,7 @@ import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
-import { communityName, unnamedCommunityLabel } from './communityName'
+import { communityName, didPathName, unnamedCommunityLabel } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { claimWords, joinNeedWords } from './claimWords'
@@ -49,6 +49,13 @@ import { JoinWaysCard } from './JoinWaysCard'
 import { JoinWithAgent, useAgentsHoldingIdentity } from './JoinWithAgent'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
+
+/**
+ * An identity in a word a person can say out loud: the last word of its DID's
+ * path ("…term-benefit"), else its last characters. What an operator matches
+ * in the community's join requests.
+ */
+export const identityWord = (did: string): string => `…${didPathName(did) ?? did.slice(-8)}`
 import { useTakingLong } from './useTakingLong'
 
 type Step = 'which' | 'asks' | 'as'
@@ -848,6 +855,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingReason')}>
             {tp('Join.StandingReason', { reason: standing.reason })}
           </ThemedText>
+        ) : null}
+        {/* While the request is open, the identity it was sent as, in a word
+            a person can say out loud: the applicant tells the operator "I'm
+            term-benefit", and the operator finds it among the join requests.
+            The whole DID, with Copy, behind its toggle (as on Your agent, #305). */}
+        {(standing.kind === 'sent' || standing.kind === 'pending' || standing.kind === 'deferred') &&
+        standing.submission.personaDid ? (
+          <View testID={testIdWithKey('JoinStandingIdentity')}>
+            <ThemedText variant="bold" testID={testIdWithKey('JoinStandingIdentityName')}>
+              {t('Join.IdentityHere', {
+                name: identityWord(standing.submission.personaDid),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+            <DidDetails
+              did={standing.submission.personaDid}
+              label={t('VtaLink.ShowIdentityCode')}
+              hint={tp('VtaLink.ShowIdentityCodeHint')}
+              copy
+              testIdStem="JoinStandingIdentity"
+            />
+          </View>
         ) : null}
         {/* No promise of a new identity: asking again makes one, and the
             vetting path was seen to carry on with the earlier one (IN-104).
