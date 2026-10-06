@@ -93,6 +93,9 @@ export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'membershi
  */
 export const VETTER_RECHECK_MS = 15_000
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
+/** The page's padding, and the first card's: the agent chips run out past both to the screen's edges. */
+const PAGE_PADDING = 20
+const CARD_PADDING = 16
 
 /**
  * What the agent holds, as last read, kept across remounts and keyed by the
@@ -158,8 +161,8 @@ const VtaAgentHome: React.FC = () => {
   const waiting = waitingCount > 0 ? waitingRequests(state.approvals, Date.now()) : []
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 20, paddingBottom: 20 + roomAboveTabBar, gap: 16 },
-    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
+    content: { padding: PAGE_PADDING, paddingBottom: PAGE_PADDING + roomAboveTabBar, gap: 16 },
+    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: CARD_PADDING, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
@@ -527,6 +530,7 @@ const VtaAgentHome: React.FC = () => {
           </ThemedText>
           <AgentChips
             agents={chips}
+            inset={PAGE_PADDING + CARD_PADDING}
             switchingTo={state.switchingTo}
             switchingText={
               state.switchingTo
