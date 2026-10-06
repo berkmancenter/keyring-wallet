@@ -525,13 +525,15 @@ export async function tapElement(driver, el) {
  * 236 gate's vetter tapped the ticket's Details toggle that way and ended on the Wallet tab.
  * Returns whether it is clear; true when there is no tab bar to clear.
  */
-export async function liftAboveTabBar(driver, key, tries = 4) {
+export async function liftAboveTabBar(driver, key, tries = 4, { log = false } = {}) {
   const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
   const tab = await box(byTestId(driver, "MyAgent")).catch(() => undefined);
   if (!tab) return true;
   for (let i = 0; i <= tries; i++) {
     const r = await box(byTestId(driver, key)).catch(() => undefined);
     if (!r) return false;
+    // With log: where it is after each swipe, so a page that does not move shows as the same y.
+    if (log) console.log(`[e2e] lift ${key}: try ${i}, y=${Math.round(r.y)}..${Math.round(r.y + r.height)}, tab bar at y=${Math.round(tab.y)}`);
     if (r.y + r.height <= tab.y - 8 && r.y >= 0) return true;
     if (i === tries) break;
     const { width, height } = await driver.getWindowSize();
