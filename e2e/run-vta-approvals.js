@@ -133,6 +133,16 @@ function approvalsList() {
 function rules() {
   return approvalsList().rules ?? [];
 }
+/** The agent's record of this phone as a device: whether it can be woken (`pushCapable`), or "unregistered". */
+function pushCapableOf(did) {
+  const out = pnm(["device", "list", "--json"]);
+  try {
+    const dev = (JSON.parse(out.slice(out.indexOf("{"))).devices ?? []).find((x) => x.consumerDid === did);
+    return dev ? String(dev.pushCapable === true) : "unregistered";
+  } catch {
+    return `unreadable (${lastLine(out)})`;
+  }
+}
 /** The approver sets as a stable string, to say whether cleanup put them back as they were. */
 const setsOf = (list) => JSON.stringify(Object.fromEntries(Object.entries(list.approverSets ?? {}).sort(([a], [b]) => a.localeCompare(b))));
 
@@ -248,10 +258,18 @@ try {
     await screenshot(d, "vta-approvals-owner-cancelled").catch(() => log("screenshot vta-approvals-owner-cancelled not taken (the owner check is a secure window)"));
     row("317 cancel keeps it waiting", Boolean(asked) && still && heldNow, `card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
   }
+  // An iPhone's wake channel was cleared during an approval (236, under review): read the agent's
+  // pushCapable for this phone before and after, so the run shows whether Approve's owner check
+  // turns waking off.
+  const pushBefore = pushCapableOf(approver);
   await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
   await tapTestId(d, "ApproveConsentButton", 10000);
   if (PIN_DEV) await answerOwner(d, "approve");
   await waitForTestId(d, "AgentApprovalDecided", 30000);
+  await sleep(5000);
+  const pushAfter = pushCapableOf(approver);
+  console.log(`PUSH-CAPABLE ${PLATFORM} before Approve ${pushBefore}, after ${pushAfter}`);
+  if (pushBefore === "true") row("push stays on through Approve", pushAfter === "true", `pushCapable ${pushBefore} → ${pushAfter}`);
   const decided = await textOf(d, "AgentApprovalDecided");
   log(`after Approve: "${decided}"`);
   if (!/approved/i.test(decided)) throw new Error(`the phone did not show the approval as given: "${decided}"`);
