@@ -51,6 +51,8 @@ const mockVta = {
   /** Hold these task types for consent until `consentGranted` is true. */
   consentFor: new Set<string>(),
   consentGranted: false,
+  /** Never answer these task types: a reply lost on the way. */
+  silentFor: new Set<string>(),
   /** A session start that never finishes: an agent that cannot be reached (IN-53). */
   startHangs: false,
   /** Members a newer VTA might add to every list entry — ignored by the phone. */
@@ -147,6 +149,7 @@ jest.mock('../module/VtiMediatorTransport', () => ({
         refuse({ code: 'permissionDenied', message: `forbidden: DID not in ACL: ${from}` })
         return
       }
+      if (mockVta.silentFor.has(body.type)) return
       const injected = mockVta.refuseNext.get(body.type)
       if (injected) {
         mockVta.refuseNext.delete(body.type)
@@ -427,6 +430,7 @@ beforeEach(() => {
   mockVta.refuseNext = new Map()
   mockVta.consentFor = new Set()
   mockVta.consentGranted = false
+  mockVta.silentFor = new Set()
   mockVta.startHangs = false
   mockVta.extraEntryMembers = {}
   mockVta.whoami = { roles: ['admin'] }
@@ -934,6 +938,71 @@ describe('creating an agent', () => {
   it('the owned marker survives a restart', async () => {
     const { vta } = await linkedPhone()
     expect(vta.getState().ownsAgent).toBe(true)
+  })
+})
+
+describe('a link whose swap onto the long-term key does not happen says why', () => {
+  async function linkByHand() {
+    const p = phone()
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => p.links, identityStore: () => p.identities as never })
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent).catch(() => undefined)
+    return { vta, ...p }
+  }
+  const failure = (vta: VtaAgentController) => {
+    const link = vta.getState().link
+    return link.kind === 'notLinked' ? link.lastError : undefined
+  }
+
+  it('held by an approval rule: the failure says so, and the agent kept the first key', async () => {
+    // #287's device check, Run A: a consent rule held the swap until the wait ran out.
+    mockClientOptions.consentWaitMs = 50
+    mockVta.consentFor.add(SWAP)
+    // The setup pins Date.now, and the consent wait's deadline is read from it.
+    const clock = Date.now as jest.Mock
+    const pinned = Date.now()
+    let tick = pinned
+    clock.mockImplementation(() => (tick += 25))
+    let linked: Awaited<ReturnType<typeof linkByHand>>
+    try {
+      linked = await linkByHand()
+    } finally {
+      clock.mockImplementation(() => pinned)
+    }
+    const { vta, disk } = linked
+    expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'held' })
+    expect(mockVta.acl.has(TEMPORARY)).toBe(true)
+    expect(disk.link).toBeUndefined()
+  })
+
+  it('refused: the failure says the agent refused', async () => {
+    mockVta.refuseNext.set(SWAP, { code: 'permissionDenied', message: 'forbidden: super admin role required' })
+    const { vta } = await linkByHand()
+    expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'refused' })
+    expect(mockVta.acl.has(TEMPORARY)).toBe(true)
+  })
+
+  it('not answered, and the agent then confirms it kept the first key: the failure says no answer', async () => {
+    mockClientOptions.swapTimeoutMs = 50
+    mockVta.silentFor.add(SWAP)
+    const { vta } = await linkByHand()
+    expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'noAnswer' })
+    expect(mockVta.acl.has(TEMPORARY)).toBe(true)
+  })
+
+  it('a link that fails some other way carries no swap reason', async () => {
+    const p = phone()
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => p.links, identityStore: () => p.identities as never })
+    await vta.startManualLink(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.refuseNext.set(WHOAMI, { code: 'taskFailed', message: 'something new' })
+    await vta.checkManualGrant(agent).catch(() => undefined)
+    expect(failure(vta)?.swap).toBeUndefined()
   })
 })
 

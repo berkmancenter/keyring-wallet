@@ -1392,6 +1392,11 @@
     "FailedCommunityAgent": "This is a community's agent. Link Keyring to your personal agent instead.",
     "FailedCommunityAgentCleanup": "If you added this phone in that agent's settings, remove it there.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
+    "SwapFailed": {
+      "held": "Your agent held this phone's link for an approval, because of an approval rule on your agent. Approve it or remove that rule where it was set, then link again.",
+      "refused": "Your agent refused to finish linking this phone. Check this phone's access where your agent is managed, then link again.",
+      "noAnswer": "Your agent didn't answer while this phone was finishing its link, and nothing was changed. Link again; this usually works the second time."
+    },
     "LinkYourAgent": "Link your agent",
     "YourAgentFallback": "your agent",
     "LinkYourAgentHint": "Scan the code on your agent's page, or paste its link.",

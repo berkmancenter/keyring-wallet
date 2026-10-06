@@ -1237,6 +1237,11 @@
     "FailedCommunityAgent": "Este é o agente de uma comunidade. Vincule o Keyring ao seu agente pessoal.",
     "FailedCommunityAgentCleanup": "Se você adicionou este telefone nas configurações desse agente, remova-o lá.",
     "FailedOther": "Algo deu errado ao vincular. Escaneie o código novamente.",
+    "SwapFailed": {
+      "held": "Seu agente deixou a vinculação deste telefone esperando uma aprovação, por causa de uma regra de aprovação no seu agente. Aprove ou remova essa regra onde ela foi definida e vincule de novo.",
+      "refused": "Seu agente se recusou a concluir a vinculação deste telefone. Verifique o acesso deste telefone onde seu agente é gerenciado e vincule de novo.",
+      "noAnswer": "Seu agente não respondeu enquanto este telefone concluía a vinculação, e nada foi alterado. Vincule de novo; isso costuma funcionar na segunda vez."
+    },
     "LinkYourAgent": "Vincular seu agente",
     "YourAgentFallback": "seu agente",
     "LinkYourAgentHint": "Escaneie o código na página do seu agente ou cole o link.",

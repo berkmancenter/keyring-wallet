@@ -125,6 +125,8 @@ export interface VtaLinkFailure {
   detail?: string
   /** An agent host's automatic connection stopped: why, in its own words for a screen (agentHostConnection.ts). */
   hostReason?: HostLinkFailure
+  /** The swap onto the long-term key did not happen, and the agent confirmed it: why (VtaClient KeySwapNotDone). */
+  swap?: 'held' | 'refused' | 'noAnswer'
 }
 
 export type VtaLinkEvent =
