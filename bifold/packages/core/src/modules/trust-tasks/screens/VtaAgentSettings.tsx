@@ -36,6 +36,7 @@ import { shortTask } from './RequestCard'
 import { forgetAgentHoldings, ownHoldings } from './VtaAgentHome'
 import { useVtaLinkWithClock } from './VtaStatus'
 import { useRoomAboveTabBar } from './aboveTabBar'
+import { SectionRule } from './SectionRule'
 
 const VtaAgentSettings: React.FC = () => {
   // The tab bar draws over the page: the last line scrolls clear of it.
@@ -181,57 +182,63 @@ const VtaAgentSettings: React.FC = () => {
 
         {/* The other agents: unlinked from here; switched to from the chips. */}
         {otherAgents.length > 0 ? (
-          <View style={styles.card} testID={testIdWithKey('AgentOthers')}>
-            <ThemedText variant="labelTitle" accessibilityRole="header">
-              {t('VtaLink.OtherAgents')}
-            </ThemedText>
-            <ThemedText style={styles.muted}>{t('VtaLink.SwitcherOnlyCurrent')}</ThemedText>
-            {otherAgents.map((a) => (
-              <View key={a.vtaDid} style={styles.row} testID={testIdWithKey(`AgentOtherRow_${a.i}`)}>
-                <ThemedText variant="bold" style={{ flex: 1 }}>
-                  {nameOf(a.vtaDid)}
-                </ThemedText>
-                <Pressable
-                  onPress={() => setUnlinkTarget(a.vtaDid)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('VtaLink.UnlinkTitle', {
-                    agent: nameOf(a.vtaDid),
-                    interpolation: { escapeValue: false },
-                  })}
-                  hitSlop={8}
-                  testID={testIdWithKey(`AgentSwitcherUnlink_${a.i}`)}
-                >
-                  <ThemedText style={styles.link}>{t('VtaLink.UnlinkConfirm')}</ThemedText>
-                </Pressable>
-              </View>
-            ))}
-            {unlinkTarget ? (
-              <View style={{ gap: 8 }} testID={testIdWithKey('AgentUnlinkOtherCard')}>
-                <ThemedText variant="labelTitle" accessibilityRole="header">
-                  {t('VtaLink.UnlinkTitle', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
-                </ThemedText>
-                <ThemedText>
-                  {t('VtaLink.UnlinkOtherBody', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
-                </ThemedText>
-                <Button
-                  title={t('VtaLink.UnlinkConfirm')}
-                  buttonType={ButtonType.Critical}
-                  onPress={() => {
-                    const target = unlinkTarget
-                    setUnlinkTarget(undefined)
-                    if (agent && target) void vtaAgent.unlinkAgent(agent, target)
-                  }}
-                  testID={testIdWithKey('AgentUnlinkOtherConfirm')}
-                />
-                <Button
-                  title={t('Global.Cancel')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => setUnlinkTarget(undefined)}
-                  testID={testIdWithKey('AgentUnlinkOtherCancel')}
-                />
-              </View>
-            ) : null}
-          </View>
+          <>
+            <SectionRule />
+            <View style={styles.card} testID={testIdWithKey('AgentOthers')}>
+              <ThemedText variant="labelTitle" accessibilityRole="header">
+                {t('VtaLink.OtherAgents')}
+              </ThemedText>
+              <ThemedText style={styles.muted}>{t('VtaLink.SwitcherOnlyCurrent')}</ThemedText>
+              {otherAgents.map((a) => (
+                <View key={a.vtaDid} style={styles.row} testID={testIdWithKey(`AgentOtherRow_${a.i}`)}>
+                  <ThemedText variant="bold" style={{ flex: 1 }}>
+                    {nameOf(a.vtaDid)}
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => setUnlinkTarget(a.vtaDid)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('VtaLink.UnlinkTitle', {
+                      agent: nameOf(a.vtaDid),
+                      interpolation: { escapeValue: false },
+                    })}
+                    hitSlop={8}
+                    testID={testIdWithKey(`AgentSwitcherUnlink_${a.i}`)}
+                  >
+                    <ThemedText style={styles.link}>{t('VtaLink.UnlinkConfirm')}</ThemedText>
+                  </Pressable>
+                </View>
+              ))}
+              {unlinkTarget ? (
+                <View style={{ gap: 8 }} testID={testIdWithKey('AgentUnlinkOtherCard')}>
+                  <ThemedText variant="labelTitle" accessibilityRole="header">
+                    {t('VtaLink.UnlinkTitle', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
+                  </ThemedText>
+                  <ThemedText>
+                    {t('VtaLink.UnlinkOtherBody', {
+                      agent: nameOf(unlinkTarget),
+                      interpolation: { escapeValue: false },
+                    })}
+                  </ThemedText>
+                  <Button
+                    title={t('VtaLink.UnlinkConfirm')}
+                    buttonType={ButtonType.Critical}
+                    onPress={() => {
+                      const target = unlinkTarget
+                      setUnlinkTarget(undefined)
+                      if (agent && target) void vtaAgent.unlinkAgent(agent, target)
+                    }}
+                    testID={testIdWithKey('AgentUnlinkOtherConfirm')}
+                  />
+                  <Button
+                    title={t('Global.Cancel')}
+                    buttonType={ButtonType.Secondary}
+                    onPress={() => setUnlinkTarget(undefined)}
+                    testID={testIdWithKey('AgentUnlinkOtherCancel')}
+                  />
+                </View>
+              ) : null}
+            </View>
+          </>
         ) : null}
 
         {/* A task of this phone's that waits on someone else's consent: not a
@@ -249,10 +256,19 @@ const VtaAgentSettings: React.FC = () => {
         ) : null}
 
         {/* The cards the agent keeps, back on this phone (226). */}
-        {agent && personas ? <GetCardsFromAgent agent={agent} personas={personas} /> : null}
+        {agent && personas ? (
+          <>
+            <SectionRule />
+            <GetCardsFromAgent agent={agent} personas={personas} />
+          </>
+        ) : null}
 
+        {/* Each section set apart, its heading in one style, as on "Your agent" (Alberto, 238). */}
+        <SectionRule />
         <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
-          <ThemedText variant="labelTitle">{t('VtaLink.Did')}</ThemedText>
+          <ThemedText variant="labelTitle" accessibilityRole="header">
+            {t('VtaLink.Did')}
+          </ThemedText>
           {state.activity.length === 0 ? (
             <ThemedText style={styles.muted}>{t('VtaLink.DidNothing')}</ThemedText>
           ) : (
@@ -264,6 +280,7 @@ const VtaAgentSettings: React.FC = () => {
           )}
         </View>
 
+        <SectionRule />
         <View style={styles.card}>
           <Pressable
             style={styles.row}
@@ -291,6 +308,7 @@ const VtaAgentSettings: React.FC = () => {
           ) : null}
         </View>
 
+        <SectionRule />
         <Button
           title={t('VtaLink.Unlink')}
           buttonType={ButtonType.Tertiary}
