@@ -234,6 +234,54 @@ describe('sending an application', () => {
   })
 })
 
+// IN-127, 10-06: a plain request sent from Join before the vetting stayed open
+// (pending review), and every send with the statement was refused.
+describe('replacing an open request sent without the vetting', () => {
+  it('withdraws the pending request, then sends one with the statements', async () => {
+    const { applicant, store } = applicantWith({
+      ...baseApplication(),
+      submission: { requestId: 'r1', state: 'pending', at: '2026-09-21T00:00:00Z' },
+    })
+    const order: string[] = []
+    mockWithdraw.mockImplementation(async () => {
+      order.push('withdraw')
+      return { requestId: 'r1', status: 'withdrawn' }
+    })
+    mockApply.mockImplementation(async () => {
+      order.push('apply')
+      return { requestId: 'r2', effect: 'allow', needs: [] }
+    })
+    const verdict = await applicant.submit(manifest, ['s1'], 'digest-1', undefined, { replacePending: true })
+    expect(order).toEqual(['withdraw', 'apply'])
+    expect(mockWithdraw).toHaveBeenCalledWith(COMMUNITY, expect.objectContaining({ requestId: 'r1' }))
+    expect(verdict).toMatchObject({ requestId: 'r2', effect: 'allow' })
+    expect(mockSupplement).not.toHaveBeenCalled()
+    expect(store.current().submission).toMatchObject({ requestId: 'r2' })
+  })
+
+  it('an earlier request the community already decided is not replaced', async () => {
+    const { applicant } = applicantWith({
+      ...baseApplication(),
+      submission: { requestId: 'r1', state: 'pending', at: '2026-09-21T00:00:00Z' },
+    })
+    mockWithdraw.mockRejectedValue(new VtiRefusal('vtc/join-requests/withdraw:alreadyDecided', 'decided'))
+    await expect(applicant.submit(manifest, ['s1'], 'digest-1', undefined, { replacePending: true })).rejects.toThrow(
+      /already decided/
+    )
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('without the choice, nothing is withdrawn', async () => {
+    const { applicant } = applicantWith({
+      ...baseApplication(),
+      submission: { requestId: 'r1', state: 'pending', at: '2026-09-21T00:00:00Z' },
+    })
+    mockApply.mockResolvedValue({ requestId: 'r1', effect: 'refer', needs: [] })
+    await applicant.submit(manifest, ['s1'])
+    expect(mockWithdraw).not.toHaveBeenCalled()
+  })
+})
+
 describe('withdrawing', () => {
   it('closes the open request by its id and records it', async () => {
     const { applicant, store } = applicantWith({

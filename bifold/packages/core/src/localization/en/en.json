@@ -1300,6 +1300,7 @@
     "Someone": "Someone",
     "Open": "Open this community",
     "Leave": "Leave community",
+    "HowToJoin": "Choose how to join",
     "HeldElsewhere": "Your identity in {{community}} is on {{agent}}, not on the agent you're using now.",
     "HeldElsewhereLinked": "Switch to {{agent}} to use it or to leave {{community}}.",
     "HeldElsewhereUnlinked": "{{agent}} isn't linked to this phone any more. Add it again to use this identity or to leave {{community}}.",
@@ -1825,6 +1826,8 @@
     "CardReceived": "Their card",
     "Attest": "I checked them and their ID — attest",
     "StatementIssued": "Statement issued",
+    "FinishedName": "Confirmed name: {{name}}",
+    "FinishedIdentity": "Their identity: {{name}}",
     "YourFace": "Your face",
     "LegalName": "Legal name",
     "LegalNamePlaceholder": "As on your passport or ID",
@@ -1990,6 +1993,8 @@
     "ApplyRefused": "The community did not admit you.",
     "ApplyRefusedNeeds": "The community did not admit you. It asks for: {{needs}}.",
     "AlreadyApplied": "You'd already applied to this community — here is where that application stands.",
+    "ReplaceRequestExplains": "Your earlier request went without your vetting, and the community won't take a second one while it's open. Replace it with a request that includes your vetting?",
+    "ReplaceRequest": "Replace my request",
     "AddWhatTheyAsked": "Add what they asked for"
   },
   "Errors": {

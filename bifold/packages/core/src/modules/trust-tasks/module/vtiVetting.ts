@@ -2123,10 +2123,20 @@ export class VtiApplicant {
     requirementsDigest?: string,
     // Sent with a fresh application only: a supplement answers the open one,
     // whose consent was given when it was sent.
-    registryConsent?: boolean
+    registryConsent?: boolean,
+    // The person chose to replace an open request sent without the vetting
+    // (pending, under review): it is withdrawn first, then this one is sent.
+    // A community takes no second request while one is open (IN-127, 10-06).
+    options: { replacePending?: boolean } = {}
   ): Promise<VtiVerdict> {
-    const application = await this.app()
+    let application = await this.app()
     const communityDid = this.persona.communityDid
+    if (options.replacePending && application.submission?.state === 'pending') {
+      const outcome = await this.withdraw('replaced by a request with vetting statements')
+      if (outcome === 'alreadyDecided') throw new Error('vtiVetting: the community already decided the earlier request')
+      // Withdrawn: what follows is a fresh application, sent and recorded as one.
+      application = await this.app()
+    }
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
     let verdict: VtiVerdict
     if (open) {

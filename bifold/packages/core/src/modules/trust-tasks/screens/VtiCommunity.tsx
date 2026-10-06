@@ -25,7 +25,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
-import { selfRemoveRefusal, vtiAgent, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
+import { selfRemoveRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
@@ -58,7 +58,6 @@ const VtiCommunity: React.FC = () => {
   const called = useCommunityCalled(communityDid)
 
   const [manifest, setManifest] = useState<VtiManifest>()
-  const [verdict, setVerdict] = useState<VtiVerdict>()
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string>()
   // A refusal's framework code belongs behind Details, not in the sentence.
@@ -205,19 +204,15 @@ const VtiCommunity: React.FC = () => {
     }
   }, [communityDid, agent, t])
 
-  const onApply = useCallback(async () => {
-    if (!manifest) return
-    setBusy(true)
-    setError(undefined)
-    try {
-      setVerdict(await vtiAgent.apply(communityDid, manifest))
-    } catch (err) {
-      setError(t(plainError(err).line))
-      setRefusalCode(detailOf(err))
-    } finally {
-      setBusy(false)
-    }
-  }, [communityDid, manifest, t])
+  // Joining is chosen, never sent from here: this screen's "Apply to join"
+  // sent a plain request at once, and the vetting that followed could not be
+  // added to it (IN-127, 10-06: four refusals after the statement). Join shows
+  // the community's ways in — ask to join, or join through vetting — and the
+  // person picks one, with one identity whichever they pick.
+  const onApply = useCallback(() => {
+    communityTarget.set({ communityDid })
+    ;(navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiJoin)
+  }, [communityDid, navigation])
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -302,25 +297,6 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {verdict ? (
-          <View style={styles.card} testID={testIdWithKey('CommunityVerdict')}>
-            <Text style={styles.label}>{t('MyAgent.Verdict')}</Text>
-            <Text style={styles.value} testID={testIdWithKey('CommunityVerdictEffect')}>
-              {verdict.effect}
-            </Text>
-            {verdict.needs.length > 0 ? (
-              <>
-                <Text style={styles.label}>{t('MyAgent.StillNeeded')}</Text>
-                {verdict.needs.map((need) => (
-                  <Text style={styles.value} key={need}>
-                    {need}
-                  </Text>
-                ))}
-              </>
-            ) : null}
-          </View>
-        ) : null}
-
         {error ? (
           <View style={styles.card}>
             <Text style={styles.error} testID={testIdWithKey('CommunityError')}>
@@ -343,15 +319,14 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {manifest && !verdict && !membership && !heldElsewhere ? (
+        {manifest && !membership && !heldElsewhere ? (
           <Pressable
             style={styles.button}
             testID={testIdWithKey('ApplyToCommunityButton')}
             accessibilityRole="button"
-            disabled={busy}
             onPress={onApply}
           >
-            {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('MyAgent.Apply')}</Text>}
+            <Text style={styles.buttonText}>{t('Community.HowToJoin')}</Text>
           </Pressable>
         ) : null}
 

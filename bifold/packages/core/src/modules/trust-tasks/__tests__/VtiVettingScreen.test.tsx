@@ -15,7 +15,7 @@ import { encodeTicketUri } from '@bifold/trust-tasks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import VtiVetting, { requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
+import VtiVetting, { confirmedNameOf, requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
@@ -520,6 +520,21 @@ describe('Vetting — the desk', () => {
     expect(setOptions).toHaveBeenLastCalledWith({ title: 'Screens.VetterDesk', headerVariant: 'vetter' })
   })
 
+  test('a finished request says the name the vetter confirmed (IN-127)', async () => {
+    const tree = await renderDesk([
+      persona,
+      grant,
+      deskRequest('attested', { card: { claims: [{ type: 'name.legal', value: 'Alice Example' }] } }),
+    ])
+    await tree.findByTestId(testIdWithKey('VettingDeskFinishedToggle'))
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedName'))).toHaveTextContent(/Vetting\.FinishedName/)
+    expect(confirmedNameOf({ card: { claims: [{ type: 'name.legal', value: ' Alice Example ' }] } })).toBe(
+      'Alice Example'
+    )
+    expect(confirmedNameOf({})).toBeUndefined()
+  })
+
   test('only a finished request on the desk: it opens on a new ticket, the finished one folded away', async () => {
     const tree = await renderDesk([persona, grant, deskRequest('attested')])
     expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
@@ -532,6 +547,11 @@ describe('Vetting — the desk', () => {
     expect(tree.queryByTestId(testIdWithKey('VettingDeskClearButton'))).toBeNull()
     fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
     expect(tree.getAllByTestId(testIdWithKey('VettingDeskFinishedRequest'))).toHaveLength(1)
+    // Who it was: their identity's word, the DID behind a toggle (IN-127).
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedIdentity'))).toHaveTextContent(
+      /Vetting\.FinishedIdentity/
+    )
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedApplicantToggle'))).toBeTruthy()
 
     // Clearing them still works, from inside.
     await act(async () => {

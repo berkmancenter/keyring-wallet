@@ -196,3 +196,10 @@ export function partyLabelStartOf(did: string, t: TFunction): string {
     host ? t('Community.SomeoneAt', { host, interpolation: { escapeValue: false } }) : t('Community.Someone')
   ) as string
 }
+
+/**
+ * An identity in a word a person can say out loud: the last word of its DID's
+ * path ("…term-benefit"), else its last characters. What an operator matches
+ * in the community's join requests.
+ */
+export const identityWord = (did: string): string => `…${didPathName(did) ?? did.slice(-8)}`

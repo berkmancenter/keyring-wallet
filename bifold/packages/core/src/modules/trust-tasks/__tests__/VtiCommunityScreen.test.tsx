@@ -228,6 +228,20 @@ describe('the community screen, for a member', () => {
     expect(tree.getByTestId(testIdWithKey('CommunityCriteria'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeTruthy()
   })
+
+  // IN-127, 10-06: this button sent a plain request at once, and the vetting that
+  // followed could not be added to it. Now it opens Join, where the person chooses.
+  it('"Choose how to join" opens Join on this community, and sends nothing', async () => {
+    mockJourney = { join: { kind: 'none' }, vetterGrant: { state: 'none' } }
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('ApplyToCommunityButton'))).toHaveTextContent('Community.HowToJoin')
+    fireEvent.press(tree.getByTestId(testIdWithKey('ApplyToCommunityButton')))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+    expect(communityTarget.get()?.communityDid).toBe(communityDid)
+  })
 })
 
 // Alberto's iPhone, 10-06: joined with al-phone, unlinked it, linked al-signer.

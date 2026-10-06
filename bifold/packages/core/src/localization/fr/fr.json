@@ -1239,6 +1239,7 @@
     "Someone": "Quelqu’un",
     "Open": "Ouvrir cette communauté",
     "Leave": "Quitter la communauté",
+    "HowToJoin": "Choisir comment rejoindre",
     "HeldElsewhere": "Votre identité dans {{community}} est sur {{agent}}, pas sur l'agent que vous utilisez maintenant.",
     "HeldElsewhereLinked": "Passez à {{agent}} pour l'utiliser ou pour quitter {{community}}.",
     "HeldElsewhereUnlinked": "{{agent}} n'est plus lié à ce téléphone. Ajoutez-le de nouveau pour utiliser cette identité ou pour quitter {{community}}.",
@@ -1773,6 +1774,8 @@
     "CardReceived": "Sa carte",
     "Attest": "J'ai vérifié la personne et son document — attester",
     "StatementIssued": "Déclaration émise",
+    "FinishedName": "Nom confirmé : {{name}}",
+    "FinishedIdentity": "Son identité : {{name}}",
     "YourFace": "Votre visage",
     "LegalName": "Nom légal",
     "LegalNamePlaceholder": "Comme sur votre passeport ou pièce d'identité",
@@ -1926,6 +1929,8 @@
     "ApplyRefused": "La communauté ne vous a pas admis.",
     "ApplyRefusedNeeds": "La communauté ne vous a pas admis. Elle demande : {{needs}}.",
     "AlreadyApplied": "Vous aviez déjà postulé à cette communauté — voici où en est cette candidature.",
+    "ReplaceRequestExplains": "Votre demande précédente est partie sans votre vérification, et la communauté n'en accepte pas une deuxième tant qu'elle est ouverte. La remplacer par une demande qui inclut votre vérification ?",
+    "ReplaceRequest": "Remplacer ma demande",
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   },
   "Errors": {
