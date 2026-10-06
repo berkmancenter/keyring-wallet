@@ -247,16 +247,22 @@ try {
     const asked = await authWindow(8000);
     await screenshot(d, "vta-approvals-owner-prompt").catch(() => log("screenshot vta-approvals-owner-prompt not taken (the owner check is a secure window)"));
     row("317 Approve asks the owner", Boolean(asked), asked ? asked.slice(0, 100) : "no owner check within 8 s of Approve");
-    if (asked) {
+    // Cancel: Back until the prompt is gone. One Back left Android's BiometricPrompt up (236 rerun, 13:48Z: the
+    // secure window still there 11 s later), which hid the card and stopped the second Approve.
+    let promptGone = !asked;
+    for (let i = 0; i < 4 && !promptGone; i++) {
       adb("shell", "input", "keyevent", "4");
-      await sleep(3000);
+      await sleep(1500);
+      promptGone = !(await authWindow(1500));
     }
-    const still = await existsTestId(d, "ApproveConsentButton", 5000);
+    log(`owner check cancelled: prompt gone ${promptGone}`);
+    await sleep(1500);
+    const still = (await existsTestId(d, "ApproveConsentButton", 5000)) || Boolean(await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined));
     const page = await d.getPageSource().catch(() => "");
     const said = (page.match(/text="[^"]{6,160}"/g) ?? []).filter((t) => /confirm|cancel|owner|lock|not approved|try again/i.test(t)).slice(0, 3);
     const heldNow = /consent required/i.test(pnm(["contexts", "get", contextId], 120000));
     await screenshot(d, "vta-approvals-owner-cancelled").catch(() => log("screenshot vta-approvals-owner-cancelled not taken (the owner check is a secure window)"));
-    row("317 cancel keeps it waiting", Boolean(asked) && still && heldNow, `card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
+    row("317 cancel keeps it waiting", Boolean(asked) && promptGone && still && heldNow, `prompt gone ${promptGone}; card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
   }
   // An iPhone's wake channel was cleared during an approval (236, under review): read the agent's
   // pushCapable for this phone before and after, so the run shows whether Approve's owner check
