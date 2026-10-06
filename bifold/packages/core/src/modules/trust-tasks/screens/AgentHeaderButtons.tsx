@@ -58,18 +58,10 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
   const [anchor, setAnchor] = useState({ x: 16, y: 96 })
   const button = useRef<View>(null)
   const styles = StyleSheet.create({
-    button: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      marginLeft: 12,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 16,
-      borderWidth: 1.5,
-      borderColor: ColorPalette.brand.headerIcon,
-    },
-    label: { color: ColorPalette.brand.headerIcon },
+    // An icon the gear's size: the header's corners are narrow (the title
+    // takes 68% of the width), and "+ Join" in a pill was squeezed into a box
+    // with its letters stacked (Pixel, 10-06). The menu says what it offers.
+    button: { paddingHorizontal: 16, paddingVertical: 8 },
     scrim: { flex: 1 },
     menu: {
       position: 'absolute',
@@ -115,16 +107,14 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
       <Pressable
         ref={button}
         style={styles.button}
+        hitSlop={8}
         onPress={show}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={t('VtaLink.JoinCorner')}
         testID={testIdWithKey('AgentJoinCorner')}
       >
-        <Icon name="plus" size={18} color={ColorPalette.brand.headerIcon} />
-        <ThemedText variant="bold" style={styles.label}>
-          {t('VtaLink.JoinCorner')}
-        </ThemedText>
+        <Icon name="account-multiple-plus-outline" size={26} color={ColorPalette.brand.headerIcon} />
       </Pressable>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable
