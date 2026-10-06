@@ -1518,6 +1518,8 @@
     "JoinAnother": "Join another community",
     "YouCanVet": "You can now vet people for {{community}}",
     "YouCanVetBody": "Its admin made you a vetter. Hand out a ticket when you meet someone.",
+    "YouCanVetToast": "You can now vet people for {{community}}.",
+    "YouCanVetToastHint": "Open the vetting desk from Your agent.",
     "OpenDesk": "Open the vetting desk",
     "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out.",
     "Unlink": "Unlink this agent",

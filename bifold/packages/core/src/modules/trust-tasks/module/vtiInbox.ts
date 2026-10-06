@@ -43,6 +43,14 @@ export const VTI_CARD_REFUSED_EVENT = 'vti:card-refused'
  */
 export const VTI_JOINED_EVENT = 'vti:joined'
 
+/**
+ * A community made this phone's identity a vetter: emitted with
+ * `{ communityDid }` when a vetter grant is kept that this phone did not
+ * already hold — the first grant, or a new one after a revoke or expiry.
+ * The same grant delivered again is not news.
+ */
+export const VTI_VETTER_GRANTED_EVENT = 'vti:vetterGranted'
+
 export const CREDENTIAL_EXCHANGE_ISSUE = 'https://trusttasks.org/spec/credential-exchange/issue/0.1'
 export { IDENTITY_VETTING_ENDORSEMENT_TYPE } from '@bifold/trust-tasks'
 export const COMMUNITY_ROLE_ENDORSEMENT_TYPE = 'CommunityRole'
@@ -282,7 +290,13 @@ export async function receiveIssue(
       if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
       else await store.saveHeldCredential({ ...item, kind: 'role' })
     } else {
+      const news =
+        item.kind === 'vetter-grant' &&
+        !((await store.listHeldCredentials?.('vetter-grant', item.communityDid).catch(() => [])) ?? []).some(
+          (held) => held.credential?.id !== undefined && held.credential.id === item.credential.id
+        )
       await store.saveHeldCredential({ ...item, kind: item.kind })
+      if (news) DeviceEventEmitter.emit(VTI_VETTER_GRANTED_EVENT, { communityDid: item.communityDid })
     }
   }
   return kept
