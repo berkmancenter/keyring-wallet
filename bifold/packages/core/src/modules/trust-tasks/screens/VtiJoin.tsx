@@ -46,7 +46,7 @@ import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
 import { joinCard } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
-import { JoinWithAgent, useAgentsHoldingIdentity } from './JoinWithAgent'
+import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
@@ -286,7 +286,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     content: { flexGrow: 1, padding: 20, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    actions: { padding: 20, gap: 12 },
+    actions: { marginTop: 'auto', paddingTop: 4, gap: 12 },
     errorDetail: { maxHeight: 160 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
@@ -949,19 +949,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      {/* The buttons scroll with the page, after everything it says: held
+          below it, above the tab bar, they left only a band for the page,
+          and its last lines showed half-hidden behind them (239, iPhone). A
+          short page still keeps them at the bottom. */}
       <ScrollView
-        contentContainerStyle={[styles.content, actions ? undefined : { paddingBottom: 20 + roomAboveTabBar }]}
+        contentContainerStyle={[styles.content, { paddingBottom: 20 + roomAboveTabBar }]}
         testID={testIdWithKey('JoinScroll')}
       >
-        {/* Several agents: which one joins (step 3); not over where the person already stands. */}
-        {communityDid && !standingShown ? <JoinWithAgent communityDid={communityDid} name={name} /> : null}
         {body}
+        {actions ? (
+          <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+            {actions}
+          </View>
+        ) : null}
       </ScrollView>
-      {actions ? (
-        <View style={[styles.actions, { paddingBottom: 20 + roomAboveTabBar }]} testID={testIdWithKey('JoinActions')}>
-          {actions}
-        </View>
-      ) : null}
     </SafeAreaView>
   )
 }

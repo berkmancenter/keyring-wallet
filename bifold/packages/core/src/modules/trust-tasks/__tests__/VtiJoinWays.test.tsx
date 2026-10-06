@@ -122,17 +122,18 @@ describe('Join, at manifest 0.3', () => {
     return tree
   }
 
-  it('leaves room at its foot for the tab bar: under the scroll, or under the buttons when they sit below it', async () => {
+  it('leaves room at its foot for the tab bar, with its buttons in the page', async () => {
     const tree = await toAsks(defaults)
     const room = (testId: string, prop: 'style' | 'contentContainerStyle') =>
       StyleSheet.flatten(tree.getByTestId(id(testId)).props[prop])?.paddingBottom ?? 0
     // The ways: their buttons are in the page, which leaves the room.
     expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
     expect(room('JoinScroll', 'contentContainerStyle')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
-    // Making the identity: its button sits below the page, and the room is under it.
+    // Making the identity: its button scrolls with the page, after it, so
+    // nothing hides behind it (239, iPhone); the room is under the page.
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
-    expect(room('JoinActions', 'style')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
-    expect(room('JoinScroll', 'contentContainerStyle')).toBeLessThan(TAB_BAR_CLEARANCE)
+    expect(within(tree.getByTestId(id('JoinScroll'))).getByTestId(id('JoinActions'))).toBeTruthy()
+    expect(room('JoinScroll', 'contentContainerStyle')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
   })
 
   it('a new community, a phone holding nothing: its three ways, and "Ask to join"', async () => {

@@ -279,7 +279,9 @@ describe('I want to join a community', () => {
 
     // The several-agents device check (R2): with B current, A's membership
     // showed as B's ("You're a member"), and A was never offered.
-    it("another agent's membership is not the current agent's: Join offers that agent", async () => {
+    // Joining uses the current agent, as chosen on "Your agent": no "with
+    // which agent?" and no other agent offered (Alberto, 239).
+    it("another agent's membership is not the current agent's: Join goes on with the current agent", async () => {
       const A = 'did:webvh:join-screen:agent-a'
       const B = 'did:webvh:join-screen:agent-b'
       const personaOfA = {
@@ -309,8 +311,9 @@ describe('I want to join a community', () => {
         jest.advanceTimersByTime(10)
       })
       expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
-      expect(tree.getByTestId(testIdWithKey('JoinAgentSuggested'))).toBeTruthy()
-      expect(tree.getByTestId(testIdWithKey('JoinUseSuggestedAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinWithAgent'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinUseSuggestedAgent'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
       ;(vtaAgent as unknown as Setter).set({ agents: undefined })
     })
 

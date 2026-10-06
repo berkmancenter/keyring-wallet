@@ -38,7 +38,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
-import { useAgentsHoldingIdentity } from './JoinWithAgent'
+import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
 
@@ -54,6 +54,7 @@ import { useCommunityDid } from './useCommunity'
 import { asksFrom, type Asks } from './VtiJoin'
 import { useVtaDid } from './VtaStatus'
 import { useTakingLong } from './useTakingLong'
+import { useRoomAboveTabBar } from './aboveTabBar'
 
 type Step = 'intro' | 'share' | 'waiting' | 'joined' | 'deferred' | 'pending'
 
@@ -130,13 +131,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     setDetailsOpen(false)
   }, [communityDid])
   const joinAs = useJoinAsChoice(navigation)
+  const roomAboveTabBar = useRoomAboveTabBar()
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { flexGrow: 1, padding: 20, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    actions: { padding: 20, gap: 12 },
+    actions: { marginTop: 'auto', paddingTop: 4, gap: 12 },
     errorDetail: { maxHeight: 160 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
@@ -717,12 +719,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      {/* The buttons scroll with the page, after everything it says, clear of
+          the tab bar: none of it hides behind them (as on Join, 239). */}
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 20 + roomAboveTabBar }]}>
         {body}
         {different}
+        {actions ? <View style={styles.actions}>{actions}</View> : null}
       </ScrollView>
-      {actions ? <View style={styles.actions}>{actions}</View> : null}
     </SafeAreaView>
   )
 }

@@ -34,7 +34,7 @@ import { useCommunityJourney } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { HeldByAnotherAgent } from './HeldByAnotherAgent'
-import { useAgentsHoldingIdentity } from './JoinWithAgent'
+import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
