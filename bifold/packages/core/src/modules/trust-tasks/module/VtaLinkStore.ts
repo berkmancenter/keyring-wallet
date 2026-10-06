@@ -41,6 +41,12 @@ export interface VtaLink {
    * agent" (several-agents device check, R6, 10-04).
    */
   agentName?: AgentLabel
+  /**
+   * What the person named this agent on this phone ("Name this agent"). Shown
+   * before any name the agent gives itself: an agent made with pnm publishes
+   * none, and read "your agent" beside another that did (Alberto, 10-06).
+   */
+  nickname?: string
 }
 
 export interface VtaLinkStore {

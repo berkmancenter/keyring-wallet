@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -29,7 +29,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
-import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
+import { vtaAgent } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityChanged } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -37,13 +37,15 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
-import { useWaitingRequestsCount } from '../module/waitingRequests'
+import { useWaitingRequestsCount, waitingRequests } from '../module/waitingRequests'
 import { CommunityCard } from './CommunityCard'
-import { OtherAgentsRequests, useOtherAgentsWaiting } from './OtherAgentsRequests'
+import { useOtherAgentsWaiting } from './OtherAgentsRequests'
+import { AgentChips } from './AgentChips'
+import { AgentSettingsButton, JoinMenuButton } from './AgentHeaderButtons'
+import { RequestsSection } from './RequestsSection'
 import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
-import { GetCardsFromAgent } from './GetCardsFromAgent'
-import { shortTask } from './RequestCard'
+import { communityCardKey as communityKeyOf } from './CommunityCard'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -124,46 +126,19 @@ const VtaAgentHome: React.FC = () => {
     setHoldings(agentKey ? lastHoldings.get(agentKey) : undefined)
   }, [agentKey])
   const [holdingsError, setHoldingsError] = useState(false)
-  const [unlinkOpen, setUnlinkOpen] = useState(false)
-  // The card opens below the button, at the foot of the screen: bring it into
-  // view, or a tap on "Unlink this agent" looks like it did nothing (Farm, 2026-09-24).
-  const scrollRef = useRef<ScrollView>(null)
-  useEffect(() => {
-    if (!unlinkOpen) return
-    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
-    return () => clearTimeout(timer)
-  }, [unlinkOpen])
-  const [detailsOpen, setDetailsOpen] = useState(false)
   const [introPanel, setIntroPanel] = useState(0)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
-  /** The other agent the person asked to unlink, awaiting their confirmation. */
-  const [unlinkTarget, setUnlinkTarget] = useState<string>()
   const otherWaiting = useOtherAgentsWaiting()
   const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
   const onCardStep = useCallback((communityDid: string, primary: CommunityCardPrimary | undefined) => {
     setCardSteps((prev) => (prev[communityDid] === primary ? prev : { ...prev, [communityDid]: primary }))
   }, [])
 
-  // After joining, the communities come first; joining another is a corner
-  // button, and requests, cards, unlinking and the agent's status sit under
-  // one "Agent settings" row at the bottom (Alberto, K6/K8, 10-04).
-  const [joinOpen, setJoinOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  // Only what still waits: a decided or expired request is not in the count.
-  // The same count as the badge on the My Agent tab (waitingRequests.ts).
-  const pendingApprovals = useWaitingRequestsCount()
+  // Only what still waits: a decided or expired request is not listed. The
+  // same rule as the badge on the My Agent tab (waitingRequests.ts).
+  // The count's hook also re-renders this screen when a request expires.
+  const waitingCount = useWaitingRequestsCount()
+  const waiting = waitingCount > 0 ? waitingRequests(state.approvals, Date.now()) : []
   const styles = StyleSheet.create({
-    holdsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-    joinButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 16,
-      backgroundColor: ColorPalette.brand.primary,
-    },
-    joinButtonText: { color: ColorPalette.grayscale.white },
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 20, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
@@ -276,22 +251,50 @@ const VtaAgentHome: React.FC = () => {
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
 
-  // Unlinking is local: this phone forgets the agent and its own key for it.
-  // The agent keeps the key on its list until its owner removes it — a client
-  // cannot remove its own entry (VTI-Q23) — and the confirmation says so. It
-  // confirms in place rather than in a native alert, which the e2e runner's
-  // autoAcceptAlerts would answer by itself.
-  const unlink = () => {
-    if (!agent) return
-    setUnlinkOpen(false)
-    forgetAgentHoldings()
-    void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
-  }
   /** A screen that needs to be told which community it is about. */
   const goToCommunity = (communityDid: string) =>
     (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.VtiCommunity, {
       communityDid,
     })
+
+  // The header's corners (Alberto, 10-06): Join, with its two ways in, on
+  // one; the gear that opens Agent settings on the other. Only on the agent's
+  // own page, once the introduction is done.
+  const memberNow = (holdings?.memberships ?? []).some(isCurrentMembership)
+  const invitedTo = holdings?.invited?.[0]
+  const withCorners = link.kind === 'linked' && state.introSeen
+  useLayoutEffect(() => {
+    const setOptions = (navigation as unknown as { setOptions?: (options: object) => void }).setOptions
+    if (!setOptions) return
+    if (!withCorners) {
+      setOptions({ headerLeft: () => null, headerRight: () => null })
+      return
+    }
+    setOptions({
+      headerLeft: () => (
+        <JoinMenuButton
+          member={memberNow}
+          invitationText={
+            invitedTo
+              ? t('VtaLink.InvitationWaiting', {
+                  community: communityLabelOf(invitedTo, t),
+                  interpolation: { escapeValue: false },
+                })
+              : undefined
+          }
+          onInvited={() => go(Screens.VtiInvited)}
+          onJoin={() => {
+            // From the beginning: which community, not the last one a link opened.
+            communityTarget.clearViewing()
+            go(Screens.VtiJoin)
+          }}
+        />
+      ),
+      headerRight: () => <AgentSettingsButton onPress={() => go(Screens.VtaAgentSettings)} />,
+    })
+    // `go` is a fresh closure each render over the same navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, withCorners, memberNow, invitedTo, t])
 
   // A removed phone is told so here, where it lands, not only behind "Link your agent".
   if (link.kind === 'revoked') {
@@ -360,10 +363,8 @@ const VtaAgentHome: React.FC = () => {
     )
   }
 
-  const activityText = (a: VtaActivity) => t(`VtaLink.Activity.${a.kind}`)
   // Every linked agent; the current one is `link` (several agents, step 2).
   const agents = state.agents?.length ? state.agents : [{ vtaDid: link.vtaDid, label: link.label }]
-  const otherAgents = agents.filter((a) => a.vtaDid !== link.vtaDid)
   const nameOf = (vtaDid: string) =>
     agentDisplayName(withAgentName(agents.find((a) => a.vtaDid === vtaDid) ?? { vtaDid }, state.agentNames), t)
   const isVetter = (holdings?.vetterFor.length ?? 0) > 0
@@ -414,15 +415,13 @@ const VtaAgentHome: React.FC = () => {
 
   const doorsCard = (
     <View style={styles.card} testID={testIdWithKey('AgentDoors')}>
-      {/* Each community opens from its row in "what your agent holds"; a
-        member meets only the doors here. */}
-      {!isMember ? (
-        <ThemedText variant="headingFour" accessibilityRole="header">
-          {t('VtaLink.WhatBringsYou')}
-        </ThemedText>
-      ) : null}
+      {/* Before joining, the two ways in lead the page; after, they are the
+          header's Join menu. */}
+      <ThemedText variant="headingFour" accessibilityRole="header">
+        {t('VtaLink.WhatBringsYou')}
+      </ThemedText>
       <Pressable
-        style={[styles.door, isMember ? undefined : styles.doorNext]}
+        style={[styles.door, styles.doorNext]}
         onPress={() => go(Screens.VtiInvited)}
         accessibilityRole="button"
         testID={testIdWithKey('AgentInvited')}
@@ -430,9 +429,7 @@ const VtaAgentHome: React.FC = () => {
         <Icon name="email-open-outline" size={24} color={ColorPalette.brand.primary} />
         <View style={{ flex: 1 }}>
           <ThemedText variant="bold">{t('VtaLink.IWasInvited')}</ThemedText>
-          {/* An invitation that has already arrived says so here, named,
-            rather than being listed on a separate screen — the door
-            behind this is what knows how to accept one. */}
+          {/* An invitation that has already arrived says so here, named. */}
           {holdings?.invited?.length ? (
             <ThemedText testID={testIdWithKey('AgentInvitationWaiting')}>
               {t('VtaLink.InvitationWaiting', {
@@ -447,7 +444,7 @@ const VtaAgentHome: React.FC = () => {
         <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
       </Pressable>
       <Pressable
-        style={[styles.door, isMember ? undefined : styles.doorNext]}
+        style={[styles.door, styles.doorNext]}
         onPress={() => {
           // From the beginning: which community, not the last one a link opened.
           communityTarget.clearViewing()
@@ -458,7 +455,7 @@ const VtaAgentHome: React.FC = () => {
       >
         <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
         <View style={{ flex: 1 }}>
-          <ThemedText variant="bold">{isMember ? t('VtaLink.JoinAnother') : t('VtaLink.WantToJoin')}</ThemedText>
+          <ThemedText variant="bold">{t('VtaLink.WantToJoin')}</ThemedText>
           <ThemedText style={styles.muted}>{t('VtaLink.WantToJoinHint')}</ThemedText>
         </View>
         <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
@@ -466,10 +463,26 @@ const VtaAgentHome: React.FC = () => {
     </View>
   )
 
+  // The chips: each agent by its name, "Agent 2" for one that has none, so
+  // two unnamed agents never both read "your agent".
+  const chips = agents.map((a, i) => {
+    const named = withAgentName(a, state.agentNames)
+    const name =
+      agentDisplayName(named, t) === t('VtaLink.YourAgentFallback') && agents.length > 1
+        ? (t('VtaLink.ChipUnnamed', { n: i + 1 }) as string)
+        : agentDisplayName(named, t)
+    const current = a.vtaDid === link.vtaDid
+    return {
+      vtaDid: a.vtaDid,
+      name,
+      current,
+      waiting: current ? waiting.length : (otherWaiting.find((o) => o.vtaDid === a.vtaDid)?.count ?? 0),
+    }
+  })
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView
-        ref={scrollRef}
         contentContainerStyle={styles.content}
         // No pull-to-refresh here (234 known issue, fixed in 235): after a
         // refused request, Android's SwipeRefreshLayout behind it took every
@@ -479,155 +492,37 @@ const VtaAgentHome: React.FC = () => {
         testID={testIdWithKey('AgentHome')}
       >
         <View style={styles.card}>
-          {/* "Your agent" leads; the name the host gave it is a line under it
-              (IN-20c: the name alone at the top meant little). */}
-          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('AgentHomeTitle')}>
-            {t('MyAgent.Title')}
-          </ThemedText>
-          {/* The agent's name opens the list of agents (several agents, step 2). */}
-          <Pressable
-            style={styles.row}
-            onPress={() => setSwitcherOpen(!switcherOpen)}
-            disabled={Boolean(state.switchingTo)}
-            accessibilityRole="button"
-            // The agent's name is what a screen reader says. `busy` is set only
-            // while a switch lasts: Android reads the key itself, false or not,
-            // and said "busy" in place of the name (234 final gate).
-            accessibilityLabel={agentDisplayName(withAgentName(link, state.agentNames), t)}
-            accessibilityState={
-              state.switchingTo ? { expanded: switcherOpen, busy: true, disabled: true } : { expanded: switcherOpen }
-            }
-            accessibilityHint={t('VtaLink.SwitcherTitle')}
-            testID={testIdWithKey('AgentSwitcherOpen')}
+          {/* The header says "Your agent"; this card says which, and switches. */}
+          <ThemedText
+            variant="labelTitle"
+            style={styles.muted}
+            accessibilityRole="header"
+            testID={testIdWithKey('AgentHomeTitle')}
           >
-            <ThemedText variant="bold" style={{ flexShrink: 1 }} testID={testIdWithKey('AgentHomeName')}>
-              {agentDisplayName(withAgentName(link, state.agentNames), t)}
-            </ThemedText>
-            <Icon name={switcherOpen ? 'chevron-up' : 'chevron-down'} size={22} color={TextTheme.normal.color} />
-          </Pressable>
-          {/* A switch leaves one agent and signs in to the next (about 20 s on the
-              device check): said while it lasts, so it is not tapped again. */}
-          {state.switchingTo ? (
-            <View style={styles.row} testID={testIdWithKey('AgentSwitching')}>
-              <ActivityIndicator color={ColorPalette.brand.primary} />
-              <ThemedText style={styles.muted}>
-                {t('VtaLink.Switching', {
-                  agent: agentDisplayName(
-                    withAgentName(
-                      agents.find((a) => a.vtaDid === state.switchingTo) ?? { vtaDid: state.switchingTo },
-                      state.agentNames
-                    ),
-                    t
-                  ),
-                  interpolation: { escapeValue: false },
-                })}
-              </ThemedText>
-            </View>
-          ) : null}
-          {switcherOpen ? (
-            <View style={{ gap: 4 }} testID={testIdWithKey('AgentSwitcher')}>
-              <ThemedText variant="labelTitle" accessibilityRole="header">
-                {t('VtaLink.SwitcherTitle')}
-              </ThemedText>
-              {otherAgents.length > 0 ? (
-                <ThemedText style={styles.muted} testID={testIdWithKey('AgentSwitcherNote')}>
-                  {t('VtaLink.SwitcherOnlyCurrent')}
-                </ThemedText>
-              ) : null}
-              {agents.map((a, i) => {
-                const isCurrent = a.vtaDid === link.vtaDid
-                return (
-                  <Pressable
-                    key={a.vtaDid}
-                    style={styles.row}
-                    disabled={isCurrent}
-                    onPress={() => {
-                      setSwitcherOpen(false)
-                      if (agent) void vtaAgent.useAgent(agent, a.vtaDid)
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isCurrent, disabled: isCurrent }}
-                    testID={testIdWithKey(`AgentSwitcherRow_${i}`)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <ThemedText variant="bold">{agentDisplayName(withAgentName(a, state.agentNames), t)}</ThemedText>
-                      <ThemedText
-                        style={styles.muted}
-                        testID={testIdWithKey(isCurrent ? 'AgentSwitcherCurrent' : `AgentSwitcherOther_${i}`)}
-                      >
-                        {isCurrent
-                          ? t('VtaLink.SwitcherCurrent')
-                          : (otherWaiting.find((o) => o.vtaDid === a.vtaDid)?.count ?? 0) > 0
-                            ? t('VtaLink.SwitcherWaiting', {
-                                count: otherWaiting.find((o) => o.vtaDid === a.vtaDid)?.count,
-                              })
-                            : t('VtaLink.SwitcherNotConnected')}
-                      </ThemedText>
-                    </View>
-                    {isCurrent ? (
-                      <Icon name="check" size={22} color={ColorPalette.brand.primary} />
-                    ) : (
-                      <Pressable
-                        onPress={() => setUnlinkTarget(a.vtaDid)}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('VtaLink.UnlinkTitle', {
-                          agent: agentDisplayName(withAgentName(a, state.agentNames), t),
-                          interpolation: { escapeValue: false },
-                        })}
-                        hitSlop={8}
-                        testID={testIdWithKey(`AgentSwitcherUnlink_${i}`)}
-                      >
-                        <ThemedText style={styles.link}>{t('VtaLink.UnlinkConfirm')}</ThemedText>
-                      </Pressable>
-                    )}
-                  </Pressable>
-                )
-              })}
-              <Pressable
-                style={styles.row}
-                onPress={() => {
-                  setSwitcherOpen(false)
-                  void vtaAgent.startAddingAgent().then(() => go(Screens.VtaLink))
-                }}
-                accessibilityRole="button"
-                testID={testIdWithKey('AgentSwitcherAdd')}
-              >
-                <Icon name="plus" size={22} color={ColorPalette.brand.link} />
-                <ThemedText style={[styles.link, { flex: 1 }]}>{t('VtaLink.SwitcherAdd')}</ThemedText>
-              </Pressable>
-            </View>
-          ) : null}
-          {unlinkTarget ? (
-            <View style={{ gap: 8 }} testID={testIdWithKey('AgentUnlinkOtherCard')}>
-              <ThemedText variant="labelTitle" accessibilityRole="header">
-                {t('VtaLink.UnlinkTitle', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
-              </ThemedText>
-              <ThemedText>
-                {t('VtaLink.UnlinkOtherBody', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
-              </ThemedText>
-              <Button
-                title={t('VtaLink.UnlinkConfirm')}
-                buttonType={ButtonType.Critical}
-                onPress={() => {
-                  const target = unlinkTarget
-                  setUnlinkTarget(undefined)
-                  if (agent && target) void vtaAgent.unlinkAgent(agent, target)
-                }}
-                testID={testIdWithKey('AgentUnlinkOtherConfirm')}
-              />
-              <Button
-                title={t('Global.Cancel')}
-                buttonType={ButtonType.Secondary}
-                onPress={() => setUnlinkTarget(undefined)}
-                testID={testIdWithKey('AgentUnlinkOtherCancel')}
-              />
-            </View>
-          ) : null}
+            {t('VtaLink.SwitcherTitle')}
+          </ThemedText>
+          <AgentChips
+            agents={chips}
+            switchingTo={state.switchingTo}
+            switchingText={
+              state.switchingTo
+                ? (t('VtaLink.Switching', {
+                    agent: nameOf(state.switchingTo),
+                    interpolation: { escapeValue: false },
+                  }) as string)
+                : undefined
+            }
+            onUse={(vtaDid) => {
+              if (agent) void vtaAgent.useAgent(agent, vtaDid)
+            }}
+            onAdd={() => {
+              void vtaAgent.startAddingAgent().then(() => go(Screens.VtaLink))
+            }}
+          />
           <VtaStatusLine connection={link.connection} now={now} />
-          <OtherAgentsRequests shape="line" />
           {link.connection.kind === 'gone' ? (
             // Gone for good (agentGone.ts): said plainly, with the way on — a new agent.
-            // Unlinking is still confirmed, under Agent settings, with words for an agent that is gone.
+            // Unlinking is still confirmed, in Agent settings, with words for an agent that is gone.
             <View style={{ gap: 8 }} testID={testIdWithKey('AgentGone')}>
               <ThemedText variant="bold" style={{ color: ColorPalette.semantic.error }}>
                 {t('VtaLink.AgentGoneTitle')}
@@ -638,10 +533,12 @@ const VtaAgentHome: React.FC = () => {
               <Button
                 title={t('VtaLink.AgentGoneLinkNew')}
                 buttonType={ButtonType.Primary}
-                onPress={() => {
-                  setSettingsOpen(true)
-                  setUnlinkOpen(true)
-                }}
+                onPress={() =>
+                  (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(
+                    Screens.VtaAgentSettings,
+                    { unlink: true }
+                  )
+                }
                 testID={testIdWithKey('AgentGoneLinkNew')}
               />
               <Button
@@ -667,14 +564,9 @@ const VtaAgentHome: React.FC = () => {
               />
             </View>
           ) : null}
-          {/* What this phone is here, in one line and one place.
-              A reader used to infer the seat from which cards were on screen,
-              which is how `run-vetter-grant-lifecycle` ended up waiting for an
-              id that never existed. A seat is a fact the screen knows, so the
-              screen says it: member, vetter, applicant, or none of those yet. */}
-          {/* Only once what the agent holds has been read: before that every
-              phone would briefly read "not joined yet", and a reader that sees
-              this line can trust the cards below it have settled too. */}
+          {/* What this phone is here, in one line and one place: member,
+              vetter, applicant, or none of those yet. Only once what the agent
+              holds has been read, so a reader can trust the cards below. */}
           {holdings ? (
             <ThemedText style={styles.muted} testID={testIdWithKey('AgentSeat')}>
               {removedBy
@@ -694,9 +586,8 @@ const VtaAgentHome: React.FC = () => {
             </ThemedText>
           ) : null}
           {/* The step bar teaches the first setup, so it shows only until the
-              first membership. After that a status line says where this agent
-              stands, and the next-step card below says what, if anything, needs
-              the person now (233). */}
+              first membership; after that a status line says where this agent
+              stands (233). */}
           {holdings && everMemberOf.size > 0 ? (
             isMember ? (
               // The id the vetting e2e has always read as "this phone is a member".
@@ -742,6 +633,7 @@ const VtaAgentHome: React.FC = () => {
             <ThemedText style={styles.link}>{t('VtaLink.WhatIsMyAgent')}</ThemedText>
           </Pressable>
         </View>
+
         {/* An agent was just added: it is current now; keep it, or go back. */}
         {state.addedAgent && state.addedAgent.added === link.vtaDid ? (
           <View style={[styles.card, styles.tip]} testID={testIdWithKey('AgentAddedCard')}>
@@ -768,24 +660,51 @@ const VtaAgentHome: React.FC = () => {
             />
           </View>
         ) : null}
-        {/* Something waits on the person: said on every segment, and one tap
-            from where it is decided (IN-20c). */}
-        {pendingApprovals > 0 ? (
-          <Pressable
-            style={[styles.card, styles.row]}
-            onPress={() => go(Screens.VtaRequests)}
-            accessibilityRole="button"
-            testID={testIdWithKey('AgentApprovalBanner')}
-          >
-            <Icon name="bell-ring-outline" size={22} color={ColorPalette.brand.primary} />
-            <ThemedText variant="bold" style={{ flex: 1 }}>
-              {t('VtaLink.ApprovalsWaiting', { count: pendingApprovals })}
+
+        {/* A vetter's desk, at the top, one tap away: it sat in a community's
+            card further down, under a scroll (Alberto, 10-06). */}
+        {holdings?.vetterFor.map((communityDid) => (
+          <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
+            <ThemedText variant="bold">
+              {t('VtaLink.YouCanVet', {
+                community: communityHeadingOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
             </ThemedText>
-            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-          </Pressable>
+            <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
+            <Button
+              title={t('VtaLink.OpenDesk')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                // The vetting screen works on the chosen community.
+                communityTarget.choose(communityDid)
+                go(Screens.VtiVetting)
+              }}
+              testID={testIdWithKey(
+                holdings.vetterFor.length > 1 ? `AgentOpenDesk_${communityKeyOf(communityDid)}` : 'AgentOpenDesk'
+              )}
+            />
+          </View>
+        ))}
+        {!isVetter && lapsed.length > 0 ? (
+          <View style={styles.card}>
+            {lapsed.map(({ communityDid, grant }) => (
+              <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
+                {lapsedText(communityDid, grant)}
+              </ThemedText>
+            ))}
+          </View>
         ) : null}
+
+        {/* What waits for this person's decision, on this agent: always here. */}
+        <RequestsSection
+          waiting={waiting}
+          onOpen={() => go(Screens.VtaRequests)}
+          onAskMe={() => go(Screens.VtaAskMe)}
+        />
+
         {/* One next step, only when there is one: an invitation waiting, else
-            a vetting to continue. A request to decide has the banner above. */}
+            a vetting to continue. */}
         {nextStep ? (
           <View style={[styles.card, styles.tip]} testID={testIdWithKey('AgentNextStep')}>
             <ThemedText variant="labelTitle" style={styles.muted}>
@@ -814,57 +733,14 @@ const VtaAgentHome: React.FC = () => {
             />
           </View>
         ) : null}
-        {/* The vetter role is news, not a step: it shows when an admin grants
-              it. The desk opens from the community's card below — one button,
-              not the same one twice on a vetter's page. */}
-        {holdings?.vetterFor.map((communityDid) => (
-          <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
-            <ThemedText variant="bold">
-              {t('VtaLink.YouCanVet', {
-                community: communityHeadingOf(communityDid, t),
-                interpolation: { escapeValue: false },
-              })}
-            </ThemedText>
-            <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
-          </View>
-        ))}
-        {!isVetter && lapsed.length > 0 ? (
-          <View style={styles.card}>
-            {lapsed.map(({ communityDid, grant }) => (
-              <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
-                {lapsedText(communityDid, grant)}
-              </ThemedText>
-            ))}
-          </View>
-        ) : null}
 
-        {/* Before joining, the two doors lead; after, the communities do and the
-              doors sit behind the corner Join button. */}
+        {/* Before joining, the two ways in lead; after, they are the header's Join. */}
         {!isMember ? doorsCard : null}
 
         <View style={styles.card} testID={testIdWithKey('AgentHolds')}>
-          <View style={styles.holdsHeader}>
-            <ThemedText variant="labelTitle" accessibilityRole="header">
-              {t('VtaLink.Holds')}
-            </ThemedText>
-            {/* After joining, joining another is one corner button away. */}
-            {isMember ? (
-              <Pressable
-                style={styles.joinButton}
-                onPress={() => setJoinOpen(!joinOpen)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: joinOpen }}
-                accessibilityLabel={t('VtaLink.JoinCorner')}
-                testID={testIdWithKey('AgentJoinCorner')}
-              >
-                <Icon name={joinOpen ? 'close' : 'plus'} size={18} color={ColorPalette.grayscale.white} />
-                <ThemedText variant="bold" style={styles.joinButtonText}>
-                  {t('VtaLink.JoinCorner')}
-                </ThemedText>
-              </Pressable>
-            ) : null}
-          </View>
-          {isMember && joinOpen ? doorsCard : null}
+          <ThemedText variant="labelTitle" accessibilityRole="header">
+            {t('VtaLink.Holds')}
+          </ThemedText>
           {!holdings ? (
             <ActivityIndicator color={ColorPalette.brand.primary} />
           ) : communitiesHeld(holdings).length === 0 ? (
@@ -881,6 +757,7 @@ const VtaAgentHome: React.FC = () => {
                 membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
                 invited={holdings.invited.includes(communityDid)}
                 vetter={holdings.vetterFor.includes(communityDid)}
+                deskShownAbove={holdings.vetterFor.includes(communityDid)}
                 linkedAt={link.linkedAt}
                 onOpen={goToCommunity}
                 onNextStep={onCardStep}
@@ -900,160 +777,6 @@ const VtaAgentHome: React.FC = () => {
         </View>
 
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
-
-        {/* Requests, cards, unlinking and the agent's status: one row at the
-            bottom, opened when wanted (K8). */}
-        <View style={styles.card}>
-          <Pressable
-            style={styles.row}
-            onPress={() => setSettingsOpen(!settingsOpen)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: settingsOpen }}
-            testID={testIdWithKey('AgentSettings')}
-          >
-            <Icon name="cog-outline" size={22} color={ColorPalette.brand.primary} />
-            <ThemedText variant="bold" style={{ flex: 1 }}>
-              {t('VtaLink.AgentSettings')}
-            </ThemedText>
-            {pendingApprovals > 0 ? (
-              <ThemedText style={styles.muted}>{t('Requests.RowWaiting', { count: pendingApprovals })}</ThemedText>
-            ) : null}
-            <Icon
-              name={settingsOpen ? 'chevron-up' : 'chevron-down'}
-              size={22}
-              color={ColorPalette.grayscale.mediumGrey}
-            />
-          </Pressable>
-        </View>
-        {settingsOpen ? (
-          <>
-            {/* What waits for the person's decision has its own screen (Requests);
-            this row is the way to it from here, and is always there, so a
-            person learns where requests are before one arrives. */}
-            <Pressable
-              style={[styles.card, styles.row]}
-              onPress={() => go(Screens.VtaRequests)}
-              accessibilityRole="button"
-              testID={testIdWithKey('AgentRequestsRow')}
-            >
-              <View style={{ flex: 1 }}>
-                <ThemedText variant="bold">{t('Requests.Row')}</ThemedText>
-                <ThemedText style={styles.muted} testID={testIdWithKey('AgentRequestsRowCount')}>
-                  {pendingApprovals > 0 ? t('Requests.RowWaiting', { count: pendingApprovals }) : t('Requests.RowNone')}
-                </ThemedText>
-              </View>
-              <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-            </Pressable>
-            {/* Requests arrive only for what the agent has a rule on. */}
-            <Pressable
-              style={[styles.card, styles.row]}
-              onPress={() => go(Screens.VtaAskMe)}
-              accessibilityRole="button"
-              testID={testIdWithKey('AgentAskMeRow')}
-            >
-              <View style={{ flex: 1 }}>
-                <ThemedText variant="bold">{t('Requests.AskMeRow')}</ThemedText>
-                <ThemedText style={styles.muted}>{t('Requests.AskMeRowHint')}</ThemedText>
-              </View>
-              <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-            </Pressable>
-            {/* A task of this phone's that waits on someone else's consent:
-            not a decision for this person, so it stays here. */}
-            {state.awaitingConsentFor ? (
-              <View style={[styles.card, styles.row]}>
-                <ActivityIndicator color={ColorPalette.brand.primary} />
-                <ThemedText style={{ flex: 1 }} testID={testIdWithKey('AgentAwaitingConsent')}>
-                  {t('MyAgent.AwaitingConsent', {
-                    task: shortTask(state.awaitingConsentFor),
-                    interpolation: { escapeValue: false },
-                  })}
-                </ThemedText>
-              </View>
-            ) : null}
-
-            {/* The cards the agent keeps, back on this phone (226). */}
-            {agent && holdings ? <GetCardsFromAgent agent={agent} personas={holdings.personas} /> : null}
-
-            <Button
-              title={t('VtaLink.Unlink')}
-              buttonType={ButtonType.Tertiary}
-              onPress={() => setUnlinkOpen(true)}
-              testID={testIdWithKey('AgentUnlink')}
-            />
-            {unlinkOpen ? (
-              <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
-                <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
-                  {t('VtaLink.UnlinkTitle', {
-                    agent: agentDisplayName(withAgentName(link, state.agentNames), t),
-                    interpolation: { escapeValue: false },
-                  })}
-                </ThemedText>
-                <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>
-                  {t(link.connection.kind === 'gone' ? 'VtaLink.UnlinkBodyGone' : 'VtaLink.UnlinkBody')}
-                </ThemedText>
-                {otherAgents.length > 0 ? (
-                  <ThemedText testID={testIdWithKey('AgentUnlinkNext')}>
-                    {t('VtaLink.UnlinkNext', {
-                      agent: nameOf(otherAgents[0].vtaDid),
-                      interpolation: { escapeValue: false },
-                    })}
-                  </ThemedText>
-                ) : null}
-                <Button
-                  title={t('VtaLink.UnlinkConfirm')}
-                  buttonType={ButtonType.Critical}
-                  onPress={unlink}
-                  testID={testIdWithKey('AgentUnlinkConfirm')}
-                />
-                <Button
-                  title={t('Global.Cancel')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => setUnlinkOpen(false)}
-                  testID={testIdWithKey('AgentUnlinkCancel')}
-                />
-              </View>
-            ) : null}
-            <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
-              <ThemedText variant="labelTitle">{t('VtaLink.Did')}</ThemedText>
-              {state.activity.length === 0 ? (
-                <ThemedText style={styles.muted}>{t('VtaLink.DidNothing')}</ThemedText>
-              ) : (
-                state.activity.slice(0, 6).map((a) => (
-                  <ThemedText key={`${a.at}-${a.kind}`}>
-                    {new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {activityText(a)}
-                  </ThemedText>
-                ))
-              )}
-            </View>
-
-            <View style={styles.card}>
-              <Pressable
-                style={styles.row}
-                onPress={() => setDetailsOpen(!detailsOpen)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: detailsOpen }}
-                testID={testIdWithKey('AgentDetailsToggle')}
-              >
-                <Icon name={detailsOpen ? 'chevron-down' : 'chevron-right'} size={20} color={TextTheme.normal.color} />
-                <ThemedText variant="labelTitle">{t('VtaLink.Details')}</ThemedText>
-              </Pressable>
-              {detailsOpen ? (
-                <View testID={testIdWithKey('AgentDetails')}>
-                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsAgent')}</ThemedText>
-                  <ThemedText style={styles.mono} selectable>
-                    {link.vtaDid}
-                  </ThemedText>
-                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsPhoneKey')}</ThemedText>
-                  <ThemedText style={styles.mono} selectable>
-                    {state.managerDid ?? '—'}
-                  </ThemedText>
-                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsLinkedAt')}</ThemedText>
-                  <ThemedText>{new Date(link.linkedAt).toLocaleString()}</ThemedText>
-                </View>
-              ) : null}
-            </View>
-          </>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   )

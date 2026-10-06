@@ -4,8 +4,9 @@
  *
  * In order: the name the agent gives itself (its verified agent name, else the
  * operator's `vta_name` — the maintainers' answer to Q19), read once a session
- * opens and merged in by `withAgentName`; then the label the enrolment offer
- * gave it; then plain words ("your agent"). Never the DID itself, and never
+ * opens and merged in by `withAgentName`, unless the person named it on this
+ * phone, which wins; then the label the enrolment offer gave it; then a
+ * readable name in its DID's path; then plain words ("your agent"). Never the DID itself, and never
  * the host its DID is served from: that is the agent host's own domain, a
  * provider named where a person expects their agent's name (225 gate). A
  * manual link or a claim stores the DID as its label, and a label that is
@@ -18,6 +19,7 @@ import type { TFunction } from 'i18next'
 
 import type { AgentLabel } from '../module/agentLabel'
 
+import { didPathName } from './communityName'
 import { agentHost } from './VtaLink'
 
 export interface NamedAgent {
@@ -38,7 +40,26 @@ export function agentDisplayName(agent: NamedAgent | undefined, t: TFunction): s
   const host = agent?.vtaDid ? agentHost(agent.vtaDid) : undefined
   const label = agent?.label?.trim()
   if (label && !isDid(label) && label !== host) return label
+  const fromDid = agent?.vtaDid ? agentNameInDid(agent.vtaDid) : undefined
+  if (fromDid) return fromDid
   return t('VtaLink.YourAgentFallback') as string
+}
+
+/**
+ * The name a did:webvh carries in its path, when it carries a readable one:
+ * `did:webvh:<scid>:<host>:al-signer` → "al-signer" (an agent made with pnm
+ * publishes no name, and its path is what its maker called it). Never the
+ * host, which is the provider's domain (225 gate), and never a segment that
+ * reads as an identifier rather than a name.
+ */
+export function agentNameInDid(vtaDid: string): string | undefined {
+  const last = didPathName(vtaDid)?.trim()
+  if (!last || last.length > 40) return undefined
+  if (!/^[a-z][a-z0-9._-]*$/i.test(last)) return undefined
+  // Hash-like: a long run of letters and digits with no separator (a SCID, a key).
+  if (/^[a-z0-9]{20,}$/i.test(last)) return undefined
+  if (/^(Qm|z6Mk|bafy)/.test(last)) return undefined
+  return last
 }
 
 /** For a sentence that starts with the agent's name: "Your agent didn't answer." */
