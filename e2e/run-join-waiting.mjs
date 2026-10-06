@@ -3,10 +3,21 @@
  * 235 evidence (Alberto, 10-06): the community card's "Show the code they see" WHILE a join is still waiting.
  * On a linked Android phone: open C by its link, Ask to join (the admin-review way), then My Agent → the card's
  * identity line → screenshot community-card-waiting.png into PERSONA_SHOTS. Prints `PERSONA-DID …` and
- * `WAITING-STATUS …`. The caller declines the request afterwards.
+ * `WAITING-STATUS …`. The caller declines the request afterwards, unless JOIN_APPROVE=1.
+ *
+ * JOIN_APPROVE=1 (C_ADMIN="<rest> <did> <admin credential>"): flow B, a plain join approved by the community.
+ * After the waiting checks the community's admin approves the request, and the rows are:
+ *   join-request-is-mine     (a) the newest pending request is from the identity the phone showed
+ *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
+ *   join-approved-listed     (c) the community lists that identity as a member
+ *   join-approved-wallet     (d) the Wallet shows C's membership card
+ * Prints `JOIN_MEMBER <did>` so the caller removes the member afterwards.
  *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME="Keyring Lab Community" PERSONA_SHOTS=<dir> node run-join-waiting.mjs
  */
 import "./lib/cli-guard.js";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsTestId, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId, ensureAppium, screenshot } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { handleBiometricConfirmIfPresent, pasteLinkFromHome } from "./lib/flows.js";
@@ -15,7 +26,75 @@ import { communityCardKey } from "./lib/testIdKeys.js";
 
 const C_DID = process.env.C_DID;
 const key = communityCardKey(C_DID || "");
+const C_NAME = process.env.C_NAME || "Keyring Lab Community";
+const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
+const admin = (...a) =>
+  execFileSync("node", [ADMIN, ...(process.env.C_ADMIN || "").split(" ").filter(Boolean), ...a], { encoding: "utf8", timeout: 90000, stdio: ["ignore", "pipe", "pipe"] });
+const json = (t) => JSON.parse(t.slice(t.indexOf("{")));
+const row = (name, ok, detail) => console.log(`ROW ${name} ${ok ? "PASS" : "FAIL"} — ${detail}`);
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
+/** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
+async function statusOf(d, tries) {
+  let status = "";
+  for (let i = 0; i < tries && !status; i++) {
+    await sleep(1500);
+    status = (await textOf(d, `AgentCommunityStatus_${key}`).catch(() => "")).replace(/\s+/g, " ").trim();
+    if (!status) {
+      for (const id of [`AgentCommunityOpen_${key}`, "AgentMembershipRow"]) {
+        const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/${id}")`);
+        const label = String((await el.getAttribute("content-desc").catch(() => "")) || "");
+        if (label.includes(", ")) status = label.slice(label.indexOf(", ") + 2).trim();
+        if (status) break;
+      }
+    }
+  }
+  return status;
+}
+
+/** The card's own words for a member ("You're a member of <C>."), not any status that mentions members. */
+const isMember = (status) => /you(?:'|’)?re a member/i.test(status);
+
+/** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
+async function approvedFlow(d, me) {
+  const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
+  const req = pending.filter((r) => r.applicantDid === me).pop();
+  row("join-request-is-mine", Boolean(me && req), req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`);
+  if (!req) return;
+  const said = admin("join-decide", req.id, "approved").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+  log(`admin approves ${req.id}: ${said.trim()}`);
+  console.log(`JOIN_MEMBER ${me}`);
+  // (b) On its own first: Keyring is told, or finds out at its next read. Then once by Check now.
+  const t0 = Date.now();
+  let status = "";
+  let how = "";
+  for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
+    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+    status = await statusOf(d, 3);
+    if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
+  }
+  if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
+    await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
+    const t1 = Date.now();
+    for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
+    if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
+  }
+  await screenshot(d, "join-approved-card").catch(() => undefined);
+  row("join-approved-card", isMember(status), `${how || "not a member after 90 s and Check now"}; status "${status}"`);
+  // (c) The community's own list.
+  const members = (json(admin("members")).items ?? []).map((m) => m.did);
+  row("join-approved-listed", members.includes(me), members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members`);
+  // (d) The Wallet card. The Wallet's first-visit tour sits over the list: close it first.
+  await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+  await sleep(2000);
+  for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+  const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+  let shown = false;
+  for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
+  const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
+  await screenshot(d, "join-approved-wallet").catch(() => undefined);
+  row("join-approved-wallet", shown, shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s`);
+}
+
 let d;
 try {
   await ensureAppium();
@@ -24,7 +103,7 @@ try {
   await unlockToHome(d).catch(async (e) => {
     if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
   });
-  await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(C_DID)}&n=${encodeURIComponent(process.env.C_NAME || "Keyring Lab Community")}`);
+  await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(C_DID)}&n=${encodeURIComponent(C_NAME)}`);
   await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
   const ask = (await existsTestId(d, "JoinAsk", 5000)) ? "JoinAsk" : "JoinStart";
   await tapTestId(d, ask, 15000);
@@ -49,22 +128,11 @@ try {
   await tapTestId(d, "MyAgent", 15000);
   // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
   // element: AgentCommunityOpen_<key> or AgentMembershipRow), or the status child's text on Android.
-  let status = "";
-  for (let i = 0; i < 10 && !status; i++) {
-    await sleep(1500);
-    status = (await textOf(d, `AgentCommunityStatus_${key}`).catch(() => "")).replace(/\s+/g, " ").trim();
-    if (!status) {
-      for (const row of [`AgentCommunityOpen_${key}`, "AgentMembershipRow"]) {
-        const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/${row}")`);
-        const label = String((await el.getAttribute("content-desc").catch(() => "")) || "");
-        if (label.includes(", ")) status = label.slice(label.indexOf(", ") + 2).trim();
-        if (status) break;
-      }
-    }
-  }
+  const status = await statusOf(d, 10);
   console.log(`WAITING-STATUS ${status || "(no status line)"}`);
-  await capturePersonaDid(d, `AgentCommunityIdentity_${key}`, "community-card-waiting");
+  const me = await capturePersonaDid(d, `AgentCommunityIdentity_${key}`, "community-card-waiting");
   await screenshot(d, "community-card-waiting").catch(() => undefined);
+  if (process.env.JOIN_APPROVE === "1") await approvedFlow(d, me);
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);
   if (d) await screenshot(d, "community-card-waiting-failure").catch(() => undefined);
