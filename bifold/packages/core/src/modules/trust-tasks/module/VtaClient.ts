@@ -425,6 +425,30 @@ export class VtaTaskDropped extends Error {
   }
 }
 
+/** TSP no-answers in a row that open the breaker (vta-sdk `REPLY_TIMEOUT_BREAKER`). */
+export const REPLY_TIMEOUT_BREAKER = 2
+/**
+ * How long the breaker stays open before one probe: the VTA's own window for a
+ * peer it found not collecting its inbox (VTI #1978, `UncollectedPeers`).
+ */
+export const REPLIES_STALLED_WINDOW_MS = 5 * 60_000
+
+/**
+ * Not sent: the last asks over TSP got no answer, so replies are not reaching
+ * this phone (vta-sdk `VtaError::RepliesNotArriving`). Sending more would only
+ * queue more replies the phone cannot collect, or be dropped by a VTA that
+ * found it not collecting.
+ */
+export class VtaRepliesNotArriving extends Error {
+  constructor(
+    readonly taskType: string,
+    readonly consecutiveTimeouts: number
+  ) {
+    super(`${LOG_PREFIX} ${taskType} not sent; replies are not reaching this phone`)
+    this.name = 'VtaRepliesNotArriving'
+  }
+}
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -465,6 +489,10 @@ export class VtaClient {
   private readonly carriageByPeer = new Map<string, Carriage>()
   /** Whether the VTA has been greeted (§7.2.2) this session; cleared by an ask over TSP that got no answer. */
   private greeted = false
+  /** TSP asks in a row that got no answer; any reply resets it. */
+  private noAnswerInARow = 0
+  /** While set, asks over TSP fail at once, until this time; then one goes as a probe. */
+  private stalledUntil?: number
   private queue: Promise<unknown> = Promise.resolve()
   /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
   private tickets = 0
@@ -497,7 +525,22 @@ export class VtaClient {
     }
   }
 
+  /** A reply came: the breaker closes and the count starts again. */
+  private repliesArrived(): void {
+    const wasOpen = this.stalledUntil !== undefined
+    this.noAnswerInARow = 0
+    this.stalledUntil = undefined
+    if (wasOpen) this.options.onRepliesStalled?.(false)
+  }
+
+  /** Whether replies have stopped reaching this phone: the breaker is open. */
+  get repliesStalled(): boolean {
+    return this.stalledUntil !== undefined
+  }
+
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
+    // Anything from the agent shows replies reach this phone again.
+    this.repliesArrived()
     // A granted notice answers a wait, never a task.
     const body = plaintext.body as { type?: string; payload?: { payloadDigest?: string } } | undefined
     if (body?.type === VTA_TASK.consentGranted) {
@@ -591,6 +634,8 @@ export class VtaClient {
       swapTimeoutMs?: number
       /** How long each `whoami` asked while settling a swap waits for its answer. */
       probeTimeoutMs?: number
+      /** Replies stopped reaching this phone (the breaker opened), or came back. */
+      onRepliesStalled?: (stalled: boolean) => void
     } = {}
   ) {}
 
@@ -648,6 +693,7 @@ export class VtaClient {
       ? undefined
       : await tspSessionForManager(this.agent, did).catch(() => undefined)
     this.greeted = false
+    this.repliesArrived()
     this.carriageByPeer.clear()
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
@@ -859,6 +905,13 @@ export class VtaClient {
         { decided: this.carriageByPeer }
       )
       const overTsp = carriage === 'tsp' && Boolean(this.tsp)
+      // The breaker (vta-sdk's D4 breaker, VTI #1978): after two TSP asks in a
+      // row went unanswered, nothing more is sent until the window passes; the
+      // first ask after it goes as the probe, with a fresh greeting.
+      if (overTsp && this.stalledUntil !== undefined && Date.now() < this.stalledUntil) {
+        this.pending = undefined
+        throw new VtaRepliesNotArriving(type, this.noAnswerInARow)
+      }
       if (carriage === 'tsp' && this.tsp) {
         if (!this.greeted) {
           // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
@@ -905,9 +958,21 @@ export class VtaClient {
         // fails: resending it could run it twice.
         if (overTsp) {
           this.greeted = false
-          this.agent.config.logger.info(
-            `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
-          )
+          this.noAnswerInARow += 1
+          if (this.noAnswerInARow >= REPLY_TIMEOUT_BREAKER) {
+            // A VTA that found this phone not collecting drops its replies and
+            // sends no accept for 5 min (VTI #1978): greeting it at every ask
+            // only adds sends it ignores. Wait the window out, then probe.
+            const wasOpen = this.stalledUntil !== undefined
+            this.stalledUntil = Date.now() + REPLIES_STALLED_WINDOW_MS
+            this.agent.config.logger.warn(
+              `${LOG_PREFIX} ${this.noAnswerInARow} asks in a row got no answer over TSP; replies are not reaching this phone — holding asks to ${this.vtaDid} for ${REPLIES_STALLED_WINDOW_MS / 1000} s`
+            )
+            if (!wasOpen) this.options.onRepliesStalled?.(true)
+          } else
+            this.agent.config.logger.info(
+              `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
+            )
         }
         throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
       }

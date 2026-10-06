@@ -1365,6 +1365,7 @@
     "SwitcherNotConnected": "Não conectado agora",
     "Switching": "Mudando para {{agent}}…",
     "SwitcherAdd": "Adicionar outro agente",
+    "CatchingUp": "Seu agente está se atualizando: as respostas ainda não chegam a este telefone.",
     "ChipUnnamed": "Agente {{n}}",
     "ChipAdd": "Adicionar",
     "RequestDecide": "Decidir",

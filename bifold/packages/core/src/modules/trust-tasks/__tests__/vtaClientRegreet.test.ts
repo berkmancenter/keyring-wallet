@@ -28,16 +28,16 @@ jest.mock('../module/vtiTsp', () => ({
   })),
 }))
 
-import { VtaClient } from '../module/VtaClient'
+import { REPLIES_STALLED_WINDOW_MS, VtaClient, VtaRepliesNotArriving } from '../module/VtaClient'
 
 const HEARTBEAT = 'https://trusttasks.org/spec/vta/device/heartbeat/0.1'
 
-function tspClient() {
+function tspClient(options: { onRepliesStalled?: (stalled: boolean) => void } = {}) {
   const client = new VtaClient(
     { config: { logger: { warn: jest.fn(), info: jest.fn(), debug: jest.fn() } } } as never,
     'did:webvh:agent',
     {} as never,
-    {}
+    options
   )
   // What went out, in order: 'invite' or the task's type.
   const frames: string[] = []
@@ -77,7 +77,7 @@ function tspClient() {
       body: { type: `${doc.type}#response`, threadId: doc.threadId, payload: { ok: true } },
     })
   }
-  return { client, frames, answerLast }
+  return { client, frames, answerLast, deliver: internals.deliver.bind(client) }
 }
 const flush = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve()
@@ -138,5 +138,94 @@ describe('greeting the VTA again after an ask over TSP got no answer', () => {
     answerLast()
     await expect(next).resolves.toEqual({ ok: true })
     expect(frames).toEqual(['invite', 'https://t/whoami'])
+  })
+})
+
+// VTI #1978: a VTA that finds a peer not collecting its inbox drops its replies
+// and sends it no accept for 5 min. vta-sdk's client stops after two reply
+// timeouts in a row (REPLY_TIMEOUT_BREAKER); Keyring does the same.
+describe('the breaker, when replies stop reaching this phone', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  const silence = async (client: VtaClient, type = HEARTBEAT) => {
+    const asked = client.task(type, {}, 1_000)
+    await flush()
+    jest.advanceTimersByTime(1_000)
+    await expect(asked).rejects.toThrow(/did not answer/)
+  }
+
+  it('opens after two asks in a row go unanswered: the next fails at once, sending nothing', async () => {
+    const stalled = jest.fn()
+    const { client, frames } = tspClient({ onRepliesStalled: stalled })
+    await silence(client)
+    expect(stalled).not.toHaveBeenCalled()
+    await silence(client)
+    expect(stalled).toHaveBeenCalledWith(true)
+    expect(client.repliesStalled).toBe(true)
+    const sentBefore = frames.length
+    await expect(client.task('https://t/whoami', {}, 1_000)).rejects.toBeInstanceOf(VtaRepliesNotArriving)
+    expect(frames).toHaveLength(sentBefore)
+  })
+
+  it('after the window, one ask goes as the probe, greeting first; its answer closes the breaker', async () => {
+    const stalled = jest.fn()
+    const { client, frames, answerLast } = tspClient({ onRepliesStalled: stalled })
+    await silence(client)
+    await silence(client)
+    jest.advanceTimersByTime(REPLIES_STALLED_WINDOW_MS)
+    const sentBefore = frames.length
+    const probe = client.task('https://t/whoami', {}, 1_000)
+    await flush()
+    expect(frames.slice(sentBefore)).toEqual(['invite', 'https://t/whoami'])
+    answerLast()
+    await expect(probe).resolves.toEqual({ ok: true })
+    expect(stalled).toHaveBeenLastCalledWith(false)
+    expect(client.repliesStalled).toBe(false)
+    // Closed: the next ask goes as usual, with no second greeting.
+    const next = client.task('https://t/acl-list', {}, 1_000)
+    await flush()
+    expect(frames.at(-1)).toBe('https://t/acl-list')
+    expect(frames.at(-2)).not.toBe('invite')
+    answerLast()
+    await expect(next).resolves.toEqual({ ok: true })
+  })
+
+  it('a probe that is not answered either holds asks for another window', async () => {
+    const { client } = tspClient()
+    await silence(client)
+    await silence(client)
+    jest.advanceTimersByTime(REPLIES_STALLED_WINDOW_MS)
+    await silence(client)
+    await expect(client.task(HEARTBEAT, {}, 1_000)).rejects.toBeInstanceOf(VtaRepliesNotArriving)
+  })
+
+  it('any reply resets the count: one silence, an answer, one silence does not open it', async () => {
+    const stalled = jest.fn()
+    const { client, answerLast } = tspClient({ onRepliesStalled: stalled })
+    await silence(client)
+    const answered = client.task('https://t/whoami', {}, 1_000)
+    await flush()
+    answerLast()
+    await expect(answered).resolves.toEqual({ ok: true })
+    await silence(client)
+    expect(stalled).not.toHaveBeenCalled()
+    expect(client.repliesStalled).toBe(false)
+  })
+
+  it('anything the agent sends of its own accord closes it too', async () => {
+    const stalled = jest.fn()
+    const { client, deliver } = tspClient({ onRepliesStalled: stalled })
+    await silence(client)
+    await silence(client)
+    deliver({
+      id: 'urn:uuid:notice',
+      type: 'https://trusttasks.org/binding/didcomm/v2',
+      from: 'did:webvh:agent',
+      created_time: Math.floor(Date.now() / 1000),
+      body: { type: 'https://trusttasks.org/spec/task-consent/request/0.1', payload: {} },
+    })
+    expect(stalled).toHaveBeenLastCalledWith(false)
+    expect(client.repliesStalled).toBe(false)
   })
 })
