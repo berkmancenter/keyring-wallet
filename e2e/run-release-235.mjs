@@ -93,14 +93,30 @@ async function openDevices(d) {
   await tapTestId(d, "AgentDevices", 15000);
 }
 
-/** The text of every device row, keyed by its testID suffix. */
+/**
+ * Every device row, keyed by its testID suffix, with the words shown for it. The row (AgentDevice_<key>) is an empty
+ * view; its name and line are the text nodes that follow it, up to the next row's controls (page source, 235 gate).
+ */
 async function deviceRows(d) {
+  const src = await d.getPageSource();
+  const nodes = [...src.matchAll(/<[^>]+>/g)].map((m) => m[0]);
   const rows = [];
-  for (const el of await d.$$(`//*[starts-with(@resource-id,"com.ariesbifold:id/AgentDevice_")]`)) {
-    const id = String(await el.getAttribute("resource-id")).replace("com.ariesbifold:id/AgentDevice_", "");
-    let text = "";
-    for (const c of await d.$$(`//*[@resource-id="com.ariesbifold:id/AgentDevice_${id}"]//*[@text!=""]`)) text += `${await c.getAttribute("text")} `;
-    rows.push({ key: id, text: text.trim() });
+  let cur = null;
+  for (const n of nodes) {
+    const id = (n.match(/resource-id="com\.ariesbifold:id\/([^"]+)"/) || [])[1] || "";
+    const row = id.match(/^AgentDevice_([^_]+)$/);
+    if (row) {
+      cur = { key: row[1], text: "" };
+      rows.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (/^AgentDevice(Rename|Remove|Details|Did|State)/.test(id)) {
+      cur = null;
+      continue;
+    }
+    const t = (n.match(/ text="([^"]+)"/) || [])[1];
+    if (t) cur.text = `${cur.text} ${t}`.trim();
   }
   return rows;
 }
