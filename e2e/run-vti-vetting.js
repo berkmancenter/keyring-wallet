@@ -27,6 +27,8 @@ import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
+import { capturePersonaDid } from "./lib/personaDid.js";
+import { communityCardKey } from "./lib/testIdKeys.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -388,8 +390,10 @@ try {
     await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
     await roles.applicant.awaitAccepted(applicant, {}, o);
     await screenshot(applicant, "vetting-02-accepted");
+    await capturePersonaDid(applicant, "VettingRequestMine", "kk-applicant-request-card");
     await checkVettingStep(applicant, "applicant, request accepted");
     await roles.vetter.awaitRequest(vetter, {}, o);
+    await capturePersonaDid(vetter, "VettingDeskApplicant", "kk-vetter-desk");
     await checkVettingStep(vetter, "desk, a request waiting");
     const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
     const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
@@ -414,6 +418,7 @@ try {
     // The applicant waits for the statement; away and back, the step stays.
     if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
+    await capturePersonaDid(vetter, "VettingCheckApplicant", "kk-vetter-step4");
     // A gate leg that changes the world around the attest — the Farm 0.47
     // gate's (c) makes the community unreachable for it, so the desk must
     // choose the statement shape by the vetter's own grant — runs its own
@@ -470,6 +475,11 @@ try {
     }
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
+    if (process.env.KEYRING_COMMUNITY_DID) {
+      await byTestId(applicant, "MyAgent").click().catch(() => undefined);
+      await sleep(2000);
+      await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card");
+    }
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
     if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
     printSuccess("vti-vetting");
