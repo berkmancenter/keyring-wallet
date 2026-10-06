@@ -14,7 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { VtaAgentController } from '../module/vtaAgent'
 import { ApprovalDetails } from '../screens/ApprovalDetails'
-import { requestLine, requesterName, TASK_WORDS, taskPath, taskWords } from '../screens/requestWords'
+import { requestLine, requesterName, TASK_THINGS, TASK_WORDS, taskPath, taskWords } from '../screens/requestWords'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -33,6 +33,20 @@ describe('the words', () => {
     expect(taskWords(`${SPEC}vta/contexts/create/1.0`, t)).toBe('create a context (a group of identities)')
     expect(taskWords(`${SPEC}acl/grant/0.2`, t)).toBe('give a device access to your agent')
     expect(taskWords(`${SPEC}vta/something/new/0.1`, t)).toBeUndefined()
+  })
+
+  it('puts the rest together from what the task does and what to', () => {
+    expect(taskWords(`${SPEC}vta/contexts/get/1.0`, t)).toBe('look at its contexts')
+    expect(taskWords(`${SPEC}keys/list/0.1`, t)).toBe('look at its keys')
+    expect(taskWords(`${SPEC}keys/rename/0.1`, t)).toBe('change its keys')
+    expect(taskWords(`${SPEC}keys/sign/0.1`, t)).toBe('sign with its keys')
+    expect(taskWords(`${SPEC}acl/show/0.1`, t)).toBe('look at who can use it')
+    expect(taskWords(`${SPEC}config/patch/0.1`, t)).toBe('change its settings')
+    expect(taskWords(`${SPEC}did-management/did/publish/0.1`, t)).toBe('add to its identities (DIDs)')
+    expect(taskWords(`${SPEC}vta/seeds/rotate/1.0`, t)).toBe('change its key seeds')
+    expect(taskWords(`${SPEC}persona/attribute/delete/0.1`, t)).toBe('remove from your identity details')
+    // A word Keyring does not know for the action: no guess.
+    expect(taskWords(`${SPEC}keys/frobnicate/0.1`, t)).toBeUndefined()
   })
 
   it('names who asked: this phone, a device by its name on My devices, a key by its kind — never the DID', () => {
@@ -56,15 +70,19 @@ describe('the words', () => {
     expect(requestLine({ requester: COMPUTER, taskType: `${SPEC}vta/contexts/create/1.0` }, context, t)).toBe(
       'al-mac asks your agent to create a context (a group of identities)'
     )
-    expect(requestLine({ requester: COMPUTER, taskType: `${SPEC}vta/something/new/0.1` }, context, t)).toMatch(
-      /^al-mac asks your agent to run vta\/something\/new\/0\.1/
-    )
+    // Never the task's URI in the sentence (10-06: "…to run vta/contexts/get/1.0").
+    const unknown = requestLine({ requester: COMPUTER, taskType: `${SPEC}vta/something/new/0.1` }, context, t)
+    expect(unknown).toBe("al-mac asks your agent to do something Keyring can't describe yet.")
+    expect(unknown).not.toMatch(/vta\//)
   })
 
   it('exist in every language', () => {
     for (const words of [en, fr, ptBr]) {
       const requests = words.Requests as Record<string, unknown>
       for (const key of Object.values(TASK_WORDS)) expect(typeof requests[key.replace('Requests.', '')]).toBe('string')
+      for (const key of Object.values(TASK_THINGS)) expect(typeof requests[key.replace('Requests.', '')]).toBe('string')
+      for (const key of ['VerbSee', 'VerbAdd', 'VerbRemove', 'VerbChange', 'VerbUse', 'AsksSomething', 'TaskName'])
+        expect(requests[key]).toEqual(expect.any(String))
       for (const key of [
         'ThisPhone',
         'AsksTo',
