@@ -1531,7 +1531,7 @@
     "StandingWithdrawn": "Você retirou seu pedido a {{community}}.",
     "StandingLeft": "Você saiu de {{community}}.",
     "StandingAgain": "Você pode pedir para entrar de novo.",
-    "IdentityHere": "Sua identidade aqui: {{name}}",
+    "IdentityHere": "Seu ID de persona: {{name}}",
     "Open": "Abrir {{community}}",
     "CheckAgain": "Verificar de novo",
     "JoinAgain": "Entrar de novo",

@@ -6,9 +6,9 @@
  */
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render, within } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter, ScrollView } from 'react-native'
+import { DeviceEventEmitter } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -154,10 +154,9 @@ describe('I was invited', () => {
     })
     expect(tree.getByTestId(testIdWithKey('InvitedError'))).toHaveTextContent('Errors.NoDidHost')
     expect(tree.queryByText(raw)).toBeNull()
-    // Above Continue, outside the scrolled body: at the body's end it fell
-    // below the fold on Android and Continue looked dead (221).
-    const [body] = tree.UNSAFE_getAllByType(ScrollView)
-    expect(within(body).queryByTestId(testIdWithKey('InvitedErrorCard'))).toBeNull()
+    // Right above Continue: at the body's end, with Continue held below the
+    // page, it fell below the fold on Android and Continue looked dead (221).
+    // The buttons now scroll with the page (239), and the error stays next to them.
     const order = tree.root
       .findAll((n) => typeof n.type === 'string' && typeof n.props.testID === 'string')
       .map((n) => n.props.testID as string)

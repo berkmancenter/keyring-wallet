@@ -1686,7 +1686,7 @@
     "StandingWithdrawn": "You withdrew your request to {{community}}.",
     "StandingLeft": "You left {{community}}.",
     "StandingAgain": "You can ask to join again.",
-    "IdentityHere": "Your identity here: {{name}}",
+    "IdentityHere": "Your persona ID: {{name}}",
     "Open": "Open {{community}}",
     "CheckAgain": "Check again",
     "JoinAgain": "Join again",
