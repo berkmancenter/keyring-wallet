@@ -4,10 +4,11 @@ import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
+import { runPath } from "./runDir.js";
 
 // The host port this worktree's Metro serves on; a second worktree runs its
 // own on another port (Android reaches it via debug_http_host, see below).
@@ -103,8 +104,7 @@ export async function ensureAppium() {
       );
     }
   }
-  mkdirSync("artifacts", { recursive: true });
-  const logFile = "artifacts/appium.log";
+  const logFile = runPath("appium.log");
   console.log(`[e2e] starting appium on :${APPIUM_PORT} (log: ${logFile})`);
   const log = createWriteStream(logFile, { flags: "w" });
   appiumProc = spawn(
@@ -734,18 +734,15 @@ export async function tapText(driver, text, timeout = 30000) {
 
 export async function dumpSource(driver, label) {
   const src = await driver.getPageSource();
-  const { writeFileSync, mkdirSync } = await import("node:fs");
-  mkdirSync("artifacts", { recursive: true });
-  const file = `artifacts/${label}-${driver.e2ePlatform}-${Date.now()}.xml`;
+  const { writeFileSync } = await import("node:fs");
+  const file = runPath(`${label}-${driver.e2ePlatform}-${Date.now()}.xml`);
   writeFileSync(file, src);
   console.log(`[e2e] page source dumped: ${file}`);
   return file;
 }
 
 export async function screenshot(driver, label) {
-  const { mkdirSync } = await import("node:fs");
-  mkdirSync("artifacts", { recursive: true });
-  const file = `artifacts/${label}-${driver.e2ePlatform}-${Date.now()}.png`;
+  const file = runPath(`${label}-${driver.e2ePlatform}-${Date.now()}.png`);
   await driver.saveScreenshot(file);
   console.log(`[e2e] screenshot: ${file}`);
   return file;
