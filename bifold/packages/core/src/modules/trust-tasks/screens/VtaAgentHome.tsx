@@ -108,6 +108,21 @@ export const forgetAgentHoldings = () => {
   lastHoldings.clear()
 }
 
+/**
+ * A line between the page's sections, so it is clear where each one ends:
+ * on the theme's background the cards' own edges do not show (Alberto, 239).
+ * Each section opens with a heading of one style.
+ */
+const SectionRule: React.FC = () => {
+  const { ColorPalette } = useTheme()
+  return (
+    <View
+      style={{ height: StyleSheet.hairlineWidth, backgroundColor: ColorPalette.grayscale.lightGrey }}
+      testID={testIdWithKey('AgentSectionRule')}
+    />
+  )
+}
+
 const VtaAgentHome: React.FC = () => {
   // The tab bar draws over the page: the last line scrolls clear of it.
   const roomAboveTabBar = useRoomAboveTabBar()
@@ -332,7 +347,13 @@ const VtaAgentHome: React.FC = () => {
     const last = introPanel === INTRO_PANELS.length - 1
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-        <View style={[styles.content, { flex: 1, justifyContent: 'center' }]} testID={testIdWithKey('AgentIntro')}>
+        {/* Centred between the header and the buttons: only the buttons keep
+            the room above the tab bar. With it here too, the text sat near the
+            header and the buttons halfway up the screen (239, iPhone). */}
+        <View
+          style={[styles.content, { flex: 1, justifyContent: 'center', paddingBottom: 20 }]}
+          testID={testIdWithKey('AgentIntro')}
+        >
           <ThemedText variant="headingTwo" accessibilityRole="header">
             {t(`VtaLink.${INTRO_PANELS[introPanel]}Title`)}
           </ThemedText>
@@ -420,7 +441,7 @@ const VtaAgentHome: React.FC = () => {
     <View style={styles.card} testID={testIdWithKey('AgentDoors')}>
       {/* Before joining, the two ways in lead the page; after, they are the
           header's Join menu. */}
-      <ThemedText variant="headingFour" accessibilityRole="header">
+      <ThemedText variant="labelTitle" accessibilityRole="header">
         {t('VtaLink.WhatBringsYou')}
       </ThemedText>
       <Pressable
@@ -706,13 +727,6 @@ const VtaAgentHome: React.FC = () => {
           </View>
         ) : null}
 
-        {/* What waits for this person's decision, on this agent: always here. */}
-        <RequestsSection
-          waiting={waiting}
-          onOpen={() => go(Screens.VtaRequests)}
-          onAskMe={() => go(Screens.VtaAskMe)}
-        />
-
         {/* One next step, only when there is one: an invitation waiting, else
             a vetting to continue. */}
         {nextStep ? (
@@ -745,8 +759,23 @@ const VtaAgentHome: React.FC = () => {
         ) : null}
 
         {/* Before joining, the two ways in lead; after, they are the header's Join. */}
-        {!isMember ? doorsCard : null}
+        {!isMember ? (
+          <>
+            <SectionRule />
+            {doorsCard}
+          </>
+        ) : null}
 
+        {/* What waits for this person's decision, on this agent: always here,
+            after the ways in (Alberto, 239). */}
+        <SectionRule />
+        <RequestsSection
+          waiting={waiting}
+          onOpen={() => go(Screens.VtaRequests)}
+          onAskMe={() => go(Screens.VtaAskMe)}
+        />
+
+        <SectionRule />
         <View style={styles.card} testID={testIdWithKey('AgentHolds')}>
           <ThemedText variant="labelTitle" accessibilityRole="header">
             {t('VtaLink.Holds')}
@@ -786,6 +815,7 @@ const VtaAgentHome: React.FC = () => {
           ) : null}
         </View>
 
+        <SectionRule />
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
       </ScrollView>
     </SafeAreaView>
