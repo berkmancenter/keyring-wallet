@@ -20,6 +20,7 @@
  * A link restored at launch does not count: an already wakeable phone is not
  * registered again at every start.
  */
+import { isHandleLimitRefusal } from './pushGateway'
 import type { PushWakeOutcome } from './pushWake'
 
 /** The parts of bifold's `vtaAgent` this reads. */
@@ -39,6 +40,8 @@ export interface PushAfterLinkDeps {
   optedIn(): boolean
   enableWake(): Promise<PushWakeOutcome>
   log(message: string, data?: Record<string, unknown>): void
+  /** The gateway keeps no more handles for this phone's token: say so, and do not retry. */
+  onHandleLimit?(): void
 }
 
 /** How often one new link is tried before giving up until the next one. */
@@ -104,6 +107,12 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
           error: e instanceof Error ? e.message : String(e),
           try: tries,
         })
+        // The gateway's limit does not lift by trying again soon (retryable: false).
+        if (isHandleLimitRefusal(e)) {
+          deps.onHandleLimit?.()
+          pending = false
+          return
+        }
         if (tries >= PUSH_AFTER_LINK_TRIES) {
           pending = false
           return

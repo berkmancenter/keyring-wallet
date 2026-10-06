@@ -8,6 +8,7 @@ import {
   watchLinkForPush,
   type LinkSource,
 } from '@/push/pushAfterLink'
+import { PushGatewayRefusal } from '@/push/pushGateway'
 import type { PushWakeOutcome } from '@/push/pushWake'
 
 type State = ReturnType<LinkSource['getState']>
@@ -161,6 +162,26 @@ describe('when making the phone wakeable fails', () => {
     w.stop()
     await waitOut(10 * 60_000)
     expect(enableWake).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("the gateway's limit of handles for this token", () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+
+  it('is said to the person once, and not retried', async () => {
+    const enableWake = jest.fn(async (): Promise<PushWakeOutcome> => {
+      throw new PushGatewayRefusal('taskFailed', 'task failed: too many handles for this push token')
+    })
+    const fake = fakeSource({ link: { kind: 'unlinked' }, activity: [] })
+    const onHandleLimit = jest.fn()
+    watchLinkForPush({ source: fake.source, since: T0, optedIn: () => true, enableWake, log: jest.fn(), onHandleLimit })
+    fake.set({ link: online, activity: [{ at: T0 + 5, kind: 'linked' }] })
+    await flush()
+    jest.advanceTimersByTime(10 * 60_000)
+    await flush()
+    expect(enableWake).toHaveBeenCalledTimes(1)
+    expect(onHandleLimit).toHaveBeenCalledTimes(1)
   })
 })
 

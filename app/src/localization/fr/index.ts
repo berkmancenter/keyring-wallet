@@ -231,6 +231,8 @@ const translation = {
     "GiveFeedback": "Donner votre avis",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Les notifications ne peuvent pas encore atteindre cet agent",
+    "HandleLimitBody": "Ce téléphone est enregistré auprès du service de notifications pour autant d'agents qu'il le permet : les notifications pour cet agent pourraient ne pas arriver. Keyring continue de fonctionner, et les demandes attendent toujours dans Demandes.",
     "NotificationsOffTitle": "Les notifications pour Keyring sont désactivées",
   },
   "AddCredentialSlider": {
