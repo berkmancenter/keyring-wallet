@@ -11,6 +11,8 @@
 # Legs in the order they run on one platform, and which device each needs.
 LEGS_IOS="kk smoke-ios"
 LEGS_ANDROID="p1 testreq agents waiting smoke-android devices"
+# Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
+LEGS_SOLO="linkfail"
 
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -34,7 +36,8 @@ run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; 
 
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
 run_legs() {
-  local rd=$1 want=$2 serial=$3 ios=() android=() l
+  local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l
+  for l in $LEGS_SOLO; do [[ ",$want," == *",$l,"* || $want == all ]] && solo+=("$l"); done
   for l in $LEGS_IOS; do [[ ",$want," == *",$l,"* || $want == all ]] && ios+=("$l"); done
   for l in $LEGS_ANDROID; do [[ ",$want," == *",$l,"* || $want == all ]] && android+=("$l"); done
   local free; free=$(disk_free_gb)
@@ -49,6 +52,7 @@ run_legs() {
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
     run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
   fi
+  [ ${#solo[@]} -eq 0 ] || { say "alone, after the others: ${solo[*]}"; run_group "$rd" "${solo[@]}"; }
 }
 
 new_run() {

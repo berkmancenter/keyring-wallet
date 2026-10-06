@@ -83,7 +83,14 @@ const LINK_MODE = process.env.LINK_MODE || "qr";
 const JOURNEY = process.env.JOURNEY === "1";
 // EXPECT_REFUSAL=communityAgent (with LINK_MODE=manual and RUNNER_VTA naming a
 // community's own agent): pass when the phone refuses to link it (bifold #306).
+// EXPECT_REFUSAL=swapHeld | swapRefused (LINK_MODE=manual): the agent keeps the
+// phone's first key, because a consent rule holds acl/swap-key or a policy
+// denies it, and the phone must say why in words (bifold #325, VtaLink.SwapFailed).
 const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
+const SWAP_FAILED = {
+  swapHeld: { words: /holding this phone's link until someone approves it/, waitMs: 300000 },
+  swapRefused: { words: /refused to finish linking this phone/, waitMs: 180000 },
+};
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
@@ -344,6 +351,17 @@ async function linkManually(driver) {
     }
     if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked after refusing a community's agent");
     console.log(`[e2e] refused as a community's agent: "${said}"`);
+    return temporaryDid;
+  }
+  if (SWAP_FAILED[EXPECT_REFUSAL]) {
+    // bifold #325: the swap onto the long-term key did not happen, and the screen says why.
+    const want = SWAP_FAILED[EXPECT_REFUSAL];
+    await waitForTestId(driver, "VtaLinkError", want.waitMs);
+    const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
+    await screenshot(driver, `link-${EXPECT_REFUSAL}`);
+    if (!want.words.test(said)) throw new Error(`the failed swap did not say ${want.words}: "${said.slice(0, 200)}"`);
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked though the swap failed");
+    console.log(`[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
     return temporaryDid;
   }
   await waitForTestId(driver, "VtaLinkDone", 180000);
@@ -976,7 +994,9 @@ try {
   if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
     await linkManually(driver);
-    if (EXPECT_REFUSAL === "communityAgent") {
+    if (SWAP_FAILED[EXPECT_REFUSAL]) {
+      printSuccess(`VTA LINK SWAP FAILED AS EXPECTED — ${EXPECT_REFUSAL}, said in words`);
+    } else if (EXPECT_REFUSAL === "communityAgent") {
       // After a refusal nothing of the agent stays: the link screen, not My Agent's home.
       if (await existsTestId(driver, "AgentHomeName", 3000)) throw new Error("an agent home shows after refusing a community's agent");
       printSuccess("VTA LINK REFUSED — a community's own agent (nothing kept)");
