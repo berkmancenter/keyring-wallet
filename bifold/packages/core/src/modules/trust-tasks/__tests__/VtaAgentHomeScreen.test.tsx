@@ -971,6 +971,22 @@ describe('Your agent — several agents', () => {
     expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
   })
 
+  // 238, iPhone: between leaving the current agent and the link screen,
+  // this page drew "Link your agent" for an instant. Nothing is drawn.
+  it('"Add" draws no "Link your agent" while it leaves for the link screen', async () => {
+    const before = vtaAgent.getState().link
+    jest.spyOn(vtaAgent, 'startAddingAgent').mockImplementation(async () => {
+      controller.set({ link: { kind: 'notLinked' } })
+    })
+    const tree = await renderHome()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherAdd')))
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentHomeLeaving'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentHomeLink'))).toBeNull()
+    controller.set({ link: before })
+  })
+
   it('one agent: one chip, and "Add another agent"', async () => {
     controller.set({ agents: [{ vtaDid: HOME, label: 'Home' }] })
     const tree = await renderHome()
