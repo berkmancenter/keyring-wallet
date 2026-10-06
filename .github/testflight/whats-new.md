@@ -7,31 +7,28 @@
 # App Store Connect allows at most 4000 characters.
 
 What's new
-• Several agents in one Keyring: link more than one agent, switch between them, see every agent's requests in one place, and unlink one. Wallet cards say which agent holds them.
-• My Agent is reorganised: your communities and what your agent holds come first, a "Join" button sits in the corner, and Manage, Status, "Ask me before…" and "Restore cards from your agent" are under Agent settings.
-• "Ask me before…": choose what your agent asks this phone about before it acts.
-• Approval rules keep asking this phone after its linking key is replaced.
-• If an approval rule covers turning notifications on or off, Settings says so within seconds, and the switch shows what your agent really has.
-• Turn Keyring's notifications off in your phone's settings, and your agent learns it the next time you open Keyring.
-• A second community's messages keep arriving even if listening for it failed at start-up.
-• My Agent learns that a request was turned down without you opening Join.
-• When a community's way in can't be used yet, Join says why in plain words, and says when nothing is wrong on your side.
-• Vetting: a vetter's ticket you scanned is kept until it's used, even after a relaunch, and scanning goes straight on. The legal-name step offers your profile name but never fills it in by itself.
-• One Wallet card per membership; a plain "member" role no longer shows a second card.
-• A community with no published name reads "<short ID> (no name published yet)".
-• "Get your cards" is now "Restore cards from your agent", with a line saying when to use it.
-• Onboarding has a slide about your own agent, and the biometrics step says why it's recommended.
-• Smaller fixes: the Wallet's empty message is centred, the R-Card name sits under the photo, a phone's removal shows once, and notification text stays visible on short phones.
+• Fixed: with more than one agent, after a community turns down a request, tapping the other agent in the switcher now works. My Agent refreshes itself when you open it (pull-down-to-refresh is gone).
+• Fixed: Approve and Decline, and adding, renaming or removing a device, now work with agents on 0.53 and 0.54. When your agent refuses something, Keyring says so, with the reason under Details.
+• Fixed: after your agent restarts, Keyring reconnects on the next request instead of going unanswered until you force-quit.
+• Keyring won't link to a community's own agent: "This is a community's agent. Link Keyring to your personal agent instead."
+• Scanning another agent's code on a linked phone adds it beside the current one, instead of "already linked".
+• Devices: "device" instead of "phone"; add a device by scanning or entering its code; name it when you add it, and rename it later. My devices no longer spins forever.
+• After a successful scan Keyring goes straight on; one clear main button; Copy/Share next to codes.
+• Each community card can show the identity code the community sees for you ("Show the code they see"); vetting screens show it too.
+• With two agents, Keyring signs in as the current agent's identity.
+• "Community identity" in My QR code; the attest button's text fits; the agent switcher reads its name to screen readers.
 
 Please test
-• Link a second agent, switch between them, and unlink one.
-• My Agent's new layout: Join in the corner, then Agent settings → Manage, Status, Ask me before…, Restore cards.
-• Vetting with a scanned ticket: open Menu during the application and come back. The ticket should still be there.
+• Two agents: after a community turns down a request, tap the other agent in the switcher.
+• My devices: add a device by scanning its code, name it, rename it.
+• Approve and Decline a request from your agent.
+• On a community card, "Show the code they see".
 
 Known issues
-• With more than one agent, after a community turns down a request, tapping the other agent in the switcher may do nothing. Leave My Agent (for example, open Contacts) and come back, then try again.
-• Communities set up before October whose ways in still ask for a credential show those ways as "can't be used yet". The community's admin needs to update them.
-• Notifications only arrive if your agent has policy enforcement on and an approval rule naming your phone.
-• Keyring can't take part in hidden (zero-knowledge) vetting yet. On a community that offers it, Keyring still joins the ordinary way, and a terminal-app vetter who has enrolled for hidden vetting can't vet a Keyring applicant.
-• Keyring can't present a credential you already hold to join a community yet.
+• If a community takes more than about 30 seconds to answer a join request, Join can stay on "hasn't answered yet". Your request isn't lost: open My Agent and use Check now on that community.
+• Approving a request doesn't ask for Face ID yet.
+• Keyring can't take part in hidden (zero-knowledge) vetting yet; it joins the ordinary way. A terminal-app vetter enrolled for hidden vetting can't vet a Keyring applicant.
+• Keyring doesn't yet take over identities another app (pnm/openvtc) created on an agent you add.
+• Community admins don't get push notifications for join requests yet.
+• Notifications need your agent's policy enforcement on and an approval rule naming your phone.
 • Update over your current version; your memberships carry over.

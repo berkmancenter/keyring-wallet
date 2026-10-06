@@ -188,7 +188,25 @@ try {
   log(`rule removed: ${lastLine(pnm(["approvals", "remove", TASK]))}`);
   if (approver) log(`approver removed: ${lastLine(pnm(["approvals", "approvers", "remove", SET, approver]))}`);
   // After the rule is gone, so removing the probe context needs no consent.
-  if (probeContext) log(`probe context removed: ${lastLine(pnm(["contexts", "delete", "--yes", probeContext]))}`);
+  // Say what happened, not what was asked: a refused delete (a rate-limited DID
+  // host, 429) was logged as "removed" and the context stayed on the runner
+  // (10-03, found 10-05). Retry a few times, then check the list.
+  if (probeContext) {
+    // Gone only when a list that was read (it always holds the agent's own
+    // "vta" context) no longer names it; an unreadable list proves nothing.
+    const gone = () => {
+      const listed = pnm(["contexts", "list"]);
+      return /"id":\s*"vta"/.test(listed) && !listed.includes(probeContext);
+    };
+    let said = "";
+    let removed = false;
+    for (let attempt = 1; attempt <= 4 && !removed; attempt++) {
+      said = lastLine(pnm(["contexts", "delete", "--yes", probeContext]));
+      removed = gone();
+      if (!removed) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+    }
+    log(removed ? `probe context removed: ${said}` : `probe context NOT confirmed removed (${said}): ${PNM} --vta ${SLUG} contexts delete --yes ${probeContext}`);
+  }
   try {
     log(`rules after: ${rules().length}`);
   } catch (err) {
@@ -197,7 +215,7 @@ try {
   // The phone's own key ends the chain here, unless it is handed on. Kept on a
   // failure, as evidence, like every other run key (aclCleanup.js).
   if (process.env.E2E_KEEP_APP !== "1") {
-    removeRunKeys({ slug: SLUG, pnmHome: link.pnmHome, before: new Set(link.before), tempDid: link.tempDid, failed });
+    removeRunKeys({ slug: SLUG, pnmHome: link.pnmHome, before: new Set(link.before), tempDid: link.tempDid, heirs: link.heirs ?? [], failed });
     if (approver && !failed) log(`phone key removed: ${lastLine(pnm(["acl", "delete", approver]))}`);
     else if (approver) log(`phone key kept (failed run): ${PNM} --vta ${SLUG} acl delete '${approver}'`);
   }
