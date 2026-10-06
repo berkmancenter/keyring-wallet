@@ -22,6 +22,9 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
+/** The Join menu's width, in points, on a screen wide enough for it. */
+const MENU_WIDTH = 320
+
 /** The gear: Agent settings. A dot when something there wants a look. */
 export const AgentSettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
   const { t } = useTranslation()
@@ -57,6 +60,11 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState({ x: 16, y: 96 })
   const button = useRef<View>(null)
+  // A set width: sized to its content, the menu's second item ran out of the
+  // box and over the page on Android (Pixel, 236 build), its wrapped hint
+  // taller than the box was laid out for. It stays on screen whatever the
+  // corner's place.
+  const menuWidth = Math.min(MENU_WIDTH, width - 32)
   const styles = StyleSheet.create({
     // An icon the gear's size: the header's corners are narrow (the title
     // takes 68% of the width), and "+ Join" in a pill was squeezed into a box
@@ -65,8 +73,7 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
     scrim: { flex: 1 },
     menu: {
       position: 'absolute',
-      minWidth: 240,
-      maxWidth: width - 32,
+      width: menuWidth,
       borderRadius: 12,
       paddingVertical: 6,
       backgroundColor: ColorPalette.brand.secondaryBackground,
@@ -124,7 +131,10 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
           accessibilityLabel={t('Global.Close')}
           testID={testIdWithKey('AgentJoinMenuClose')}
         />
-        <View style={[styles.menu, { left: anchor.x, top: anchor.y }]} testID={testIdWithKey('AgentJoinMenu')}>
+        <View
+          style={[styles.menu, { left: Math.max(16, Math.min(anchor.x, width - menuWidth - 16)), top: anchor.y }]}
+          testID={testIdWithKey('AgentJoinMenu')}
+        >
           <Pressable
             style={styles.item}
             onPress={() => choose(onInvited)}
