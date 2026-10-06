@@ -253,6 +253,64 @@ async function linkByAddress(driver, entry) {
   return temporaryDid;
 }
 
+/**
+ * VtaLink's scan branch (237: a pasted or scanned bare agent address, f7 10-07): the card VtaLinkForOtherPhone
+ * shows the phone's key as a QR; "Show as text" (VtaLinkShowAsText) puts the did:key in VtaLinkManualDid. The
+ * screen polls by itself (VtaLinkWaitingForPhone; VtaLinkCheckAgain once its window ends), so: read the key,
+ * have the host grant it, and wait for VtaLinkDone, or VtaLinkError for the refusal rows. No screen lock needed.
+ */
+async function linkViaScan(driver) {
+  await waitForTestId(driver, "VtaLinkForOtherPhone", 45000);
+  if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+    const show = await scrollToTestId(driver, "VtaLinkShowAsText", 6).catch(() => undefined);
+    if (show) await show.click();
+    else await tapTestId(driver, "VtaLinkShowAsText", 15000);
+  }
+  await scrollToTestId(driver, "VtaLinkManualDid", 4).catch(() => undefined);
+  const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  if (!/^did:/.test(temporaryDid)) throw new Error(`no key in VtaLinkManualDid: "${temporaryDid.slice(0, 60)}"`);
+  runTempDids.push(temporaryDid);
+  console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}… (scan branch)`);
+  await screenshot(driver, "link-m1-key-scan");
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
+  execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /This is a community's agent\. Link Keyring to your personal agent instead\./, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const by = Date.now() + (wanted ? wanted.waitMs : 240000);
+  let state = "";
+  while (Date.now() < by && !state) {
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) state = "done";
+    else if (await existsTestId(driver, "VtaLinkError", 1000)) state = "error";
+    else if (await existsTestId(driver, "VtaLinkCheckAgain", 500)) await tapTestId(driver, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+  }
+  if (state === "error" || wanted) {
+    const said = state === "error" ? (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim() : "";
+    await screenshot(driver, `link-scan-${EXPECT_REFUSAL || "error"}`);
+    if (!wanted) throw new Error(`the link failed: "${said.slice(0, 200)}"`);
+    if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no VtaLinkError)"}"`);
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked though the link should have failed");
+    console.log(EXPECT_REFUSAL === "communityAgent" ? `[e2e] refused as a community's agent: "${said}"` : `[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
+    return temporaryDid;
+  }
+  if (state !== "done") throw new Error("the scan-branch link never reached VtaLinkDone in 240 s");
+  await screenshot(driver, "link-m2-linked-scan");
+  if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+  console.log("[e2e] the temporary key is no longer in the ACL");
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
+  await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
+  return temporaryDid;
+}
+
 async function linkManually(driver) {
   // #339: the link screen's own address entry (VtaLinkByAddress) goes to the address path.
   if (await existsTestId(driver, "VtaLinkByAddress", 1500)) return linkByAddress(driver, "VtaLinkByAddress");
@@ -272,6 +330,7 @@ async function linkManually(driver) {
       await tapTestId(driver, "LinkYourAgentButton", 30000);
       await pasteLinkOnScanScreen(driver, runnerVtaDid());
       console.log("[e2e] link: pasted the agent's address on the scanner (237's way in without a code)");
+      return linkViaScan(driver);
     }
   }
   // "Link without QR" can land straight on the address screen, and then the

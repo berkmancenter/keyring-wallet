@@ -25,7 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { byTestId, dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
-import { handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, unlockIfLocked } from "./lib/flows.js";
+import { pasteLinkOnScanScreen, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, unlockIfLocked } from "./lib/flows.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 
@@ -127,6 +127,25 @@ async function waitSwitched(d, wantName) {
   log(`switch wait: ${((Date.now() - t) / 1000).toFixed(1)} s · AgentSwitching seen ${sawSwitching}`);
 }
 
+/** VtaLink's scan branch: the key as text (VtaLinkShowAsText → VtaLinkManualDid), grant, it polls by itself. */
+async function linkScanTo(d, did, slug) {
+  await waitForTestId(d, "VtaLinkForOtherPhone", 45000);
+  if (!(await existsTestId(d, "VtaLinkManualDid", 1500))) await (await scrollToTestId(d, "VtaLinkShowAsText", 6)).click();
+  await scrollToTestId(d, "VtaLinkManualDid", 4).catch(() => undefined);
+  const temp = (await textOf(d, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  log(`link to ${slug} (scan branch): the phone shows ${temp.slice(0, 30)}…; granting`);
+  execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+  const by = Date.now() + 240000;
+  while (Date.now() < by && !(await existsTestId(d, "VtaLinkDone", 2000))) {
+    if (await existsTestId(d, "VtaLinkError", 500)) throw new Error(`the link failed: "${(await textOf(d, "VtaLinkError")).slice(0, 160)}"`);
+    if (await existsTestId(d, "VtaLinkCheckAgain", 500)) await tapTestId(d, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+  }
+  await tapTestId(d, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(d).catch(() => undefined);
+  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  return temp;
+}
+
 /** The address path (VtaCreateAgent, bifold #338/#339), from its address step: code, grant, Connect, Done. */
 async function linkByAddressTo(d, did, slug) {
   (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(did);
@@ -152,6 +171,11 @@ async function linkByAddressTo(d, did, slug) {
 
 /** The no-QR link to `did` (slug for the grant), from a link screen already open. */
 async function linkTo(d, did, slug) {
+  // 237: Add can open the scanner: paste the agent's bare address, then VtaLink's scan branch.
+  if (await existsTestId(d, "PasteUrlButton", 3000)) {
+    await pasteLinkOnScanScreen(d, did);
+    return linkScanTo(d, did, slug);
+  }
   // #338/#339: no "Link without a QR code" here, the address path instead (VtaCreateAgent).
   if (!(await existsTestId(d, "VtaLinkAgentAddress", 3000)) && !(await existsTestId(d, "VtaLinkWithoutQr", 1500))) {
     for (const entry of ["VtaLinkByAddress", "LinkByAddressButton"]) if (await existsTestId(d, entry, 1500)) { await tapTestId(d, entry, 10000); break; }
