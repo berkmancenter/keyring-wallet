@@ -17,3 +17,27 @@
 • The demo collector card and approval demo are gone; contacts show the regular list.
 • Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
 • Update over your current version; there's no need to reinstall.
+What's new
+• Approving a request now asks for Face ID, a fingerprint or your passcode. Decline doesn't ask.
+• Request cards say what is being asked and who is asking, and show the full request code. Approve and Decline are the same size.
+• My Agent home is redesigned around your requests, and you can name your agent.
+• Fixed: Join no longer stays on "hasn't answered yet" when a community answers slowly.
+• The Join screen shows the identity code the community will see for you.
+• With several agents, a membership held by another agent shows correctly.
+• If your agent stops answering, Keyring stops waiting after two tries and says "Your agent is catching up".
+• Notifications: every linked agent can wake your phone, and turning notifications off and on no longer uses up the limit.
+• New vetters see a confirmation, the vetter screen has its own header, and vetting no longer scrolls under the tab bar.
+• The agent screen's header has a Join icon.
+
+Please test
+• Approve a request: Face ID should appear; cancel it and the request should still be waiting.
+• Join a community that answers slowly.
+• With two agents linked, check that a request on either one wakes the phone.
+
+Known issues
+• Some request cards still show the technical task name (for example "vta/contexts/get/1.0"). Plain words are next.
+• Keyring can't take part in hidden (zero-knowledge) vetting yet; it joins the ordinary way.
+• Keyring doesn't yet take over identities another app (pnm/openvtc) created on an agent you add.
+• Community admins don't get push notifications for join requests yet.
+• Notifications need your agent's policy enforcement on and an approval rule naming your phone.
+• Update over your current version; your memberships carry over.
