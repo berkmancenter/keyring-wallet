@@ -664,7 +664,7 @@ try {
     await owner(d, "unlink A");
     let linkOffered = false;
     for (const until = Date.now() + 30000; Date.now() < until && !linkOffered; await sleep(1000)) {
-      linkOffered = (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
+      linkOffered = (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "LinkYourAgentButton", 500)) || (await existsTestId(d, "LinkByAddressButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
     }
     await shot(d, "agents-r4-unlinked");
     row("R4 unlink the last", linkOffered, linkOffered ? "the phone offers to link an agent" : "no link offer");

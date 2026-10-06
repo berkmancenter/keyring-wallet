@@ -191,7 +191,10 @@ async function linkManually(driver) {
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    // 237 (bifold #338): My Agent's "Link without a QR code" is gone; its "Scan your agent's code"
+    // (LinkYourAgentButton) opens the link screen, which still offers VtaLinkWithoutQr. Older builds keep the button.
+    if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    else await tapTestId(driver, "LinkYourAgentButton", 30000);
   }
   // "Link without QR" can land straight on the address screen, and then the
   // intermediate control is never there to tap — the same shape as the
@@ -413,7 +416,7 @@ async function openManage(driver) {
   }
 }
 
-/** Bring "Join another community" into reach: after #297 a member finds it behind the corner Join button. */
+/** Bring "Join another community" into reach: behind the corner Join button on 236 (#316); a row on 237 (#337). */
 async function openJoinDoors(driver) {
   if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
   if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
@@ -421,10 +424,16 @@ async function openJoinDoors(driver) {
   }
 }
 
-/** Into Join: the doors' "Join a community", or (236, bifold #316) the corner menu's Join. */
+/**
+ * Into Join: before joining, the doors' "Join a community" (AgentJoinCommunity); after, on 237 (bifold #337) the
+ * "Join another community" row at the end of Your agent (AgentJoinAnother); on 236 the corner menu's Join.
+ */
 async function tapJoinDoor(driver) {
   await openJoinDoors(driver);
   if (await existsTestId(driver, "AgentJoinMenuJoin", 2000)) return tapTestId(driver, "AgentJoinMenuJoin", 10000);
+  if (await existsTestId(driver, "AgentJoinCommunity", 1500)) return tapTestId(driver, "AgentJoinCommunity", 15000);
+  const another = await scrollToTestId(driver, "AgentJoinAnother", 8).catch(() => undefined);
+  if (another) return another.click();
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   return tapTestId(driver, "AgentJoinCommunity", 15000);
 }

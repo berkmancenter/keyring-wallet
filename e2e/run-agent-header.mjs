@@ -2,9 +2,10 @@
 /**
  * Your agent's header and chips, measured (bifold #329 Join menu width, #330 header corners, #331 agent chips).
  * On an installed, linked app, driven as it is: unlock, My Agent, then
- *   header-corners    the Join button (AgentJoinCorner) and the gear (AgentSettings) both inside the window,
- *                     apart from each other
- *   join-menu-fits    the Join menu (AgentJoinMenu) opens wholly inside the window, its Join item shown
+ *   header-corners    236: the Join button (AgentJoinCorner) and the gear (AgentSettings) inside the window, apart;
+ *                     237 (bifold #337, no header Join): the gear inside the window
+ *   join-menu-fits    236: the Join menu opens wholly inside the window. 237: join-way-in instead, Join's way in
+ *                     (AgentJoinCommunity before joining, AgentJoinAnother after) on the page and inside the window
  *   chip-row-fits     the chip row (AgentChips) and its Add chip (AgentSwitcherAdd) inside the window
  *   chip-strip-edges  #332: the chip strip runs edge to edge (within 4 px of both sides)
  *   home-sections     #333: sections separated (AgentSectionRule), Requests below the ways in; the intro centred
@@ -15,7 +16,7 @@
  *   PLATFORM=ios|android UDID=<sim udid or emulator serial> [APPIUM_PORT=…] node run-agent-header.mjs
  */
 import "./lib/cli-guard.js";
-import { byTestId, ensureAppium, existsTestId, screenshot, stopAppium, tapTestId } from "./lib/driver.js";
+import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, stopAppium, tapTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 
 const PLATFORM = process.env.PLATFORM ?? "android";
@@ -48,7 +49,8 @@ try {
   const gear = await rectOf(d, "AgentSettings");
   const apart = join && gear && (join.x + join.w <= gear.x || gear.x + gear.w <= join.x);
   await screenshot(d, `agent-header-${PLATFORM}`).catch(() => undefined);
-  row("header-corners", inside(join, W) && inside(gear, W) && Boolean(apart), `window ${W} wide · Join ${show(join)} · gear ${show(gear)}`);
+  if (join) row("header-corners", inside(join, W) && inside(gear, W) && Boolean(apart), `window ${W} wide · Join ${show(join)} · gear ${show(gear)}`);
+  else row("header-corners", inside(gear, W), `window ${W} wide · gear ${show(gear)} (no header Join: bifold #337)`);
 
   const chips = await rectOf(d, "AgentChips");
   const add = await rectOf(d, "AgentSwitcherAdd");
@@ -76,7 +78,12 @@ try {
     await screenshot(d, `agent-join-menu-${PLATFORM}`).catch(() => undefined);
     row("join-menu-fits", inside(menu, W) && inside(item, W), `menu ${show(menu)} · Join item ${show(item)} · window ${W}`);
     if (await existsTestId(d, "AgentJoinMenuClose", 2000)) await tapTestId(d, "AgentJoinMenuClose", 5000).catch(() => undefined);
-  } else row("join-menu-fits", false, "no AgentJoinCorner to open it from");
+  } else {
+    // 237: Join's way in is on the page: the doors before joining, "Join another community" after.
+    const way = (await rectOf(d, "AgentJoinCommunity")) || (await scrollToTestId(d, "AgentJoinAnother", 6).then(() => rectOf(d, "AgentJoinAnother"), () => undefined));
+    await screenshot(d, `agent-join-way-${PLATFORM}`).catch(() => undefined);
+    row("join-way-in", inside(way, W), `Join's way in ${show(way)} · window ${W}`);
+  }
 
   // #335: Add, then back: the same agent's home, no "Link your agent" / unlinked screen.
   const before = (await textOf(d, "AgentHomeName").catch(() => "")).trim();
