@@ -87,6 +87,11 @@ own (`setsid`), and a gate started by hand should be too
 (`nohup perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' e2e/gate/gate.sh run … &`): a gate sharing a process
 group with an agent tool's job was taken down mid-leg when that job was stopped, before the leg's cleanup ran.
 
+## Sharing the Mac
+
+A lane about to run a heavy job of its own (a device build, say) creates `~/.keyring-fleet/gate/hold-start`, with a
+line saying who and why; a run that is about to start its first leg waits until the file is gone.
+
 ## Parallel legs
 
 The iOS legs (K↔K, iOS smoke) use simulators. The Android legs (P1 + approvals, agents, waiting card, Android

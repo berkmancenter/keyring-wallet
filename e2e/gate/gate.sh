@@ -70,6 +70,9 @@ cmd_run() {
   esac; done
   [ -n "$pin" ] || usage
   gate_env; use_build "$pin"
+  # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
+  local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
+  [ $held = 1 ] && say "hold released"
   local rd; rd=$(new_run "$pin" "$kind")
   { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; } >> "$rd/meta"
   say "run $(basename "$rd"): wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
