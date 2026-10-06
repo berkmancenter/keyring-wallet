@@ -461,7 +461,7 @@ describe('directory consent on an application', () => {
       .mockResolvedValue({ type: `${SUBMIT}#response`, body: { payload: { status: 'pending' } } } as never)
     try {
       await vtiAgent.apply('did:webvh:c:consent', manifest, options).catch(() => undefined)
-      expect(ask).toHaveBeenCalledWith('did:webvh:c:consent', SUBMIT, expect.anything())
+      expect(ask).toHaveBeenCalledWith('did:webvh:c:consent', SUBMIT, expect.anything(), vtiAgent.submitAnswerTimeoutMs)
       return (ask.mock.calls[0][2] as { registryConsent?: unknown }).registryConsent
     } finally {
       ask.mockRestore()

@@ -402,6 +402,13 @@ class VtiAgentController {
   private readonly asks = new Map<string, AskEntry>()
   /** How long `ask` waits for an answer when the caller names no time. */
   answerTimeoutMs = 30000
+  /**
+   * How long a join submit waits. A community deciding a join may look up the
+   * applicant's DIDs, and after a DID host's 429 it retries 30 s later
+   * (VTI-69): its answer then lands just past a 30 s clock (7b's R5, 10-06,
+   * 0.2 s late). The longer clock covers one such retry.
+   */
+  submitAnswerTimeoutMs = 60000
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void | Promise<void>)[] = []
   private tsp?: TspSessionIdentity
   /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
@@ -662,6 +669,41 @@ class VtiAgentController {
     if (!held) return undefined
     this.asks.delete(held.id)
     return held.answer
+  }
+
+  /**
+   * The answer to a submit that came back unanswered, if it arrives while the
+   * ask is held (`VTI_ANSWER_HOLD_MS`): taken once, as a verdict, the way an
+   * answer in time would have been — a refusal is thrown. Undefined when none
+   * comes in that time. 7b's R5, 10-06: the community answered a join 0.2 s
+   * after the 30 s clock, and the Join screen never learned it.
+   */
+  lateVerdict(sent: VtiSentNoAnswer, holdMs = VTI_ANSWER_HOLD_MS): Promise<VtiVerdict | undefined> {
+    const communityDid = sent.communityDid
+    if (!communityDid || !sent.requestId) return Promise.resolve(undefined)
+    return new Promise((resolve, reject) => {
+      let done = false
+      const finish = (verdict?: VtiVerdict, error?: unknown) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        unsubscribe()
+        if (error) reject(error)
+        else resolve(verdict)
+      }
+      const look = () => {
+        const answer = this.takeHeldAnswer(communityDid, sent.taskType, sent.requestId)
+        if (!answer) return
+        try {
+          finish(this.verdictOf(answer, communityDid, sent.taskType))
+        } catch (error) {
+          finish(undefined, error)
+        }
+      }
+      const unsubscribe = this.subscribe(look)
+      const timer = setTimeout(() => finish(undefined), holdMs)
+      look()
+    })
   }
 
   /**
@@ -1572,7 +1614,8 @@ class VtiAgentController {
           vp: this.presentation(options.credentials),
           registryConsent: options.registryConsent === true,
           criterion,
-        })
+        }),
+        this.submitAnswerTimeoutMs
       )
       const refusal = answer ? refusalOf(answer) : undefined
       refused.push(wire)

@@ -15,7 +15,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import type { JoinAsks, JoinWay } from '../module/joinManifest'
 import { vtaAgent } from '../module/vtaAgent'
-import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
+import { VtiRefusal, VtiSentNoAnswer, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin from '../screens/VtiJoin'
 
@@ -373,6 +373,27 @@ describe('Join, at manifest 0.3', () => {
     const tree = await toAsks(defaults)
     expect(tree.getByTestId(id('JoinVersionUnsupported'))).toHaveTextContent(/Join\.Ways\.VersionUnsupported/)
     expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+  })
+
+  // 7b's R5, 10-06: the answer came 0.2 s after the 30 s clock, and the screen
+  // sat on "sent, hasn't answered yet" with Continue for four minutes.
+  it('a request sent with no answer in time: shows where it stands, asking the community, not an error', async () => {
+    const tree = await toAsks(defaults)
+    mockJoinCommunity.mockRejectedValueOnce(
+      new VtiSentNoAnswer('https://trusttasks.org/spec/vtc/join-requests/submit/0.3', 'urn:uuid:r', 0, community)
+    )
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'sent', submission: { withInvitation: false } }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStanding'))).toBeTruthy()
+    expect(tree.queryByTestId(id('JoinError'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinAsContinue'))).toBeNull()
+    // Asked the community where it stands (a poll), not only what this phone holds.
+    expect(mockReadJoinState).toHaveBeenCalledWith(expect.anything(), community, { mediatorDid: config.mediatorDid })
+    expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
   })
 
   it('the community changed what it asks while the request went: says so, and reads it again', async () => {

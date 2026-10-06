@@ -583,6 +583,7 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
       state: { status: 'connected', did: applicant.did },
     })
     controller.answerTimeoutMs = 1
+    controller.submitAnswerTimeoutMs = 1
     const community_ = community.did
     const manifest = { criteria: [], requirementsDigest: 'zQmDigest' } as never
     const asks: [string, () => Promise<unknown>][] = [
