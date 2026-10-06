@@ -322,6 +322,9 @@ jest.mock('../module/VtaClient', () => {
   return { ...actual, VtaClient: FastVtaClient }
 })
 
+import { DeviceEventEmitter } from 'react-native'
+
+import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { VtaClient } from '../module/VtaClient'
 import type { VtaLink } from '../module/VtaLinkStore'
 import type { VtiManagerIdentity, VtiPersona } from '../module/VtiIdentityStore'
@@ -1073,7 +1076,12 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     const tiger = persona(OTHER, 'tiger-silver')
     const held = jest.spyOn(VtaClient.prototype, 'holdPersonaKeys')
     const { fetch, keyClient, other } = await restartedPhone([tiger])
+    const announced: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, (e) => announced.push(e))
     await fetch(tiger.kmsKeyIds?.keyAgreement as string)
+    sub.remove()
+    // Its inbox looks again at once, rather than at its next 30 s look.
+    expect(announced).toEqual([{ did: tiger.did }])
     expect(keyClient).toHaveBeenCalledTimes(1)
     expect((keyClient.mock.calls[0] as unknown[])[1]).toBe(OTHER)
     expect(other.holdPersonaKeys).toHaveBeenCalledWith(tiger)

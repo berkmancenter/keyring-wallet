@@ -2257,6 +2257,7 @@ export class VtaAgentController {
       // The current agent: ask on its session, which may still be opening.
       await this.untilOnline(vtaDid, KEY_FETCH_WAIT_MS)
       await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       return
     }
     const links = (await Promise.resolve(this.linkStore(agent).list?.()).catch(() => undefined)) ?? []
@@ -2268,6 +2269,8 @@ export class VtaAgentController {
     try {
       await client.holdPersonaKeys(persona)
       agent.config?.logger?.info?.(`[VTA] fetched ${persona.did}'s keys through its agent ${didPrefix(vtaDid)} on use`)
+      // Whatever waits for this identity's keys (its inbox, its listeners) looks again now.
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
     } finally {
       await client.disconnect().catch(() => undefined)
     }

@@ -241,8 +241,11 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   }
 }
 
-/** How long a key whose fetch failed is left before it is asked for again. */
-export const FETCH_RETRY_MS = 30_000
+/**
+ * How long a key whose fetch failed is left before it is asked for again.
+ * Shorter than the persona inbox's 30 s look, so its next look asks again.
+ */
+export const FETCH_RETRY_MS = 20_000
 
 /**
  * The key an encrypt or decrypt names, in either Credo's shape: 0.7.1 (the

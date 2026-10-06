@@ -79,7 +79,7 @@ jest.mock('@credo-ts/askar', () => ({
   },
 }))
 
-import { EphemeralKeyManagementService } from '../module/EphemeralKeyManagementService'
+import { EphemeralKeyManagementService, FETCH_RETRY_MS } from '../module/EphemeralKeyManagementService'
 
 const ctx = {} as never
 
@@ -202,6 +202,24 @@ describe('a copy not held when it is used is fetched first (TestFlight 239)', ()
     await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found in backend 'ephemeral'/)
     await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found/)
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('a key whose fetch failed is asked for again after the pause, within the inbox look', async () => {
+    const kms = new EphemeralKeyManagementService()
+    let fail = true
+    const fetch = jest.fn(async (keyId: string) => {
+      if (fail) throw new Error('the agent is not reachable')
+      await importer(kms)(keyId)
+    })
+    kms.setMissingKeyFetcher(fetch)
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found/)
+    fail = false
+    now.mockReturnValue(1_000_000 + FETCH_RETRY_MS)
+    await expect(kms.sign(ctx, { keyId: KEY } as never)).resolves.toBeTruthy()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(FETCH_RETRY_MS).toBeLessThan(30_000)
+    now.mockRestore()
   })
 
   it('a wallet key never reaches the fetcher', async () => {
