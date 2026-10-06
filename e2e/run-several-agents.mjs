@@ -388,6 +388,10 @@ try {
     await switchToOther(d, E.B_NAME);
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     await sleep(3000);
+    // Which tap opens the "Add credentials" sheet (236 gate, both runs): the screen between the two.
+    await shot(d, "agents-r7-wallet-before-card");
+    const sheetFirst = await existsTestId(d, "AddCredentialSlider", 500).catch(() => false);
+    log(`R7: Wallet open; "Add credentials" sheet already up: ${sheetFirst}`);
     // The card by its name line (CredentialName), not by any text naming C: the first text match can be
     // something else on the page (236 gate, 05:27Z: the run ended on Wallet behind "Add credentials").
     const cardEl = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")');
