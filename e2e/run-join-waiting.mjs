@@ -11,6 +11,7 @@
  *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
  *   join-approved-listed     (c) the community lists that identity as a member
  *   join-approved-wallet     (d) the Wallet shows C's membership card
+ * Always, before approving: choose-how-to-join (#326): C's screen offers "Choose how to join" → Join.
  * Prints `JOIN_MEMBER <did>` so the caller removes the member afterwards.
  *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME="Keyring Lab Community" PERSONA_SHOTS=<dir> node run-join-waiting.mjs
  */
@@ -53,6 +54,29 @@ async function statusOf(d, tries) {
 
 /** The card's own words for a member ("You're a member of <C>."), not any status that mentions members. */
 const isMember = (status) => /you(?:'|’)?re a member/i.test(status);
+
+/**
+ * #326 (IN-127): C's own screen never sends a request; its button is "Choose how to join" and leads to Join's
+ * ways in. Opened from Your agent's card for C while this phone's request waits. Row: choose-how-to-join.
+ */
+async function chooseHowToJoin(d) {
+  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+  const open = (await existsTestId(d, `AgentCommunityOpen_${key}`, 5000)) ? `AgentCommunityOpen_${key}` : (await existsTestId(d, "AgentMembershipRow", 1500)) ? "AgentMembershipRow" : "";
+  if (!open) return row("choose-how-to-join", false, `no card for C on Your agent (AgentCommunityOpen_${key})`);
+  await tapTestId(d, open, 10000);
+  const btn = await scrollToTestId(d, "ApplyToCommunityButton", 6).catch(() => undefined);
+  const words = btn ? String((await btn.getAttribute("text").catch(() => "")) || (await textOf(d, "ApplyToCommunityButton").catch(() => ""))).trim() : "";
+  if (!btn) {
+    await screenshot(d, "choose-how-to-join-missing").catch(() => undefined);
+    return row("choose-how-to-join", false, "C's screen shows no ApplyToCommunityButton");
+  }
+  await btn.click();
+  let landed = "";
+  for (const id of ["JoinWays", "JoinAsks", "JoinStanding", "JoinAsk"]) if (!landed && (await existsTestId(d, id, id === "JoinWays" ? 15000 : 2000))) landed = id;
+  await screenshot(d, "choose-how-to-join").catch(() => undefined);
+  row("choose-how-to-join", Boolean(landed) && !/apply to join/i.test(words), `button "${words || "?"}" → ${landed || "no Join screen"}`);
+  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+}
 
 /** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
 async function approvedFlow(d, me) {
@@ -132,6 +156,7 @@ try {
   console.log(`WAITING-STATUS ${status || "(no status line)"}`);
   const me = await capturePersonaDid(d, `AgentCommunityIdentity_${key}`, "community-card-waiting");
   await screenshot(d, "community-card-waiting").catch(() => undefined);
+  await chooseHowToJoin(d);
   if (process.env.JOIN_APPROVE === "1") await approvedFlow(d, me);
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);
