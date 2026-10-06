@@ -187,6 +187,9 @@ try {
     // UiAutomator lists only what is on screen: scroll until a row with the name shows, a few swipes at most.
     let mine;
     const findMine = async () => {
+      // From the top first: UiAutomator lists only what is on screen, and the 236 gate's search, scrolling down
+      // only, left the first row's name above the screen (AgentDevice_0o7ku5a at y=275, its Details showing).
+      await scrollToTestId(d, "AgentDeviceList", 3, { direction: "up", both: false }).catch(() => undefined);
       for (let i = 0; i < 5 && !mine; i++) {
         mine = (await deviceRows(d)).filter((r) => r.text.includes(defaultName)).pop();
         if (!mine) await scrollToTestId(d, "AgentDeviceAdd", 1).catch(() => undefined);
