@@ -794,6 +794,32 @@ describe('Your agent — after linking', () => {
     expect(navigate).toHaveBeenCalledWith(Screens.VtaAgentSettings)
   })
 
+  // Alberto, 239: Requests below "What brings you here?", and a line between
+  // sections so it is clear where each one ends.
+  it('Requests follows the ways in, and a line sets each section apart', async () => {
+    const tree = await renderHome([persona])
+    const ids: string[] = []
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) return node.forEach(walk)
+      const n = node as { props?: { testID?: string }; children?: unknown[] }
+      if (n.props?.testID) ids.push(n.props.testID)
+      n.children?.forEach(walk)
+    }
+    walk(tree.toJSON())
+    const at = (key: string) => ids.indexOf(testIdWithKey(key))
+    expect(at('AgentDoors')).toBeGreaterThan(-1)
+    expect(at('AgentRequests')).toBeGreaterThan(at('AgentDoors'))
+    expect(at('AgentHolds')).toBeGreaterThan(at('AgentRequests'))
+    // A line before the ways in, Requests, what the agent holds, and devices.
+    const rules = ids.map((id, i) => (id === testIdWithKey('AgentSectionRule') ? i : -1)).filter((i) => i >= 0)
+    expect(rules).toHaveLength(4)
+    expect(rules[0]).toBeLessThan(at('AgentDoors'))
+    expect(rules[1]).toBeGreaterThan(at('AgentDoors'))
+    expect(rules[1]).toBeLessThan(at('AgentRequests'))
+    expect(rules[2]).toBeLessThan(at('AgentHolds'))
+  })
+
   it('before joining: the two doors lead the page, and Join is in the header too', async () => {
     const tree = await renderHome([persona])
     expect(tree.getByTestId(testIdWithKey('AgentDoors'))).toBeTruthy()
@@ -865,6 +891,16 @@ describe('Your agent — after linking', () => {
     const options = setOptions.mock.calls.at(-1)?.[0] as { headerLeft: () => unknown; headerRight: () => unknown }
     expect(options.headerLeft()).toBeNull()
     expect(options.headerRight()).toBeNull()
+    controller.set({ introSeen: true })
+  })
+
+  // 239, iPhone: the text sat near the header and the buttons halfway up the
+  // screen, as both kept the room above the tab bar. Only the buttons do.
+  it('the introduction is centred between the header and its buttons', async () => {
+    controller.set({ introSeen: false })
+    const tree = await renderHome([])
+    const intro = StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentIntro')).props.style)
+    expect(intro).toMatchObject({ flex: 1, justifyContent: 'center', paddingBottom: 20 })
     controller.set({ introSeen: true })
   })
 
