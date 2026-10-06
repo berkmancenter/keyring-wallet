@@ -19,11 +19,25 @@ import { Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-n
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
+import { hitSlop } from '../../../constants'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
 /** The Join menu's width, in points, on a screen wide enough for it. */
 const MENU_WIDTH = 320
+
+/**
+ * The corners' buttons, sized as the app's own header buttons (IconButton):
+ * the icon, and a margin on the screen's side only. The header gives each
+ * corner what the title (68% of the width) leaves, and with padding on both
+ * sides the icons were clipped at the edge (236, iPhone and Pixel). The tap
+ * area stays large through `hitSlop`.
+ */
+const ICON_SIZE = 26
+const corner = StyleSheet.create({
+  left: { marginLeft: 15, paddingVertical: 8 },
+  right: { marginRight: 15, paddingVertical: 8 },
+})
 
 /** The gear: Agent settings. A dot when something there wants a look. */
 export const AgentSettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
@@ -32,13 +46,13 @@ export const AgentSettingsButton: React.FC<{ onPress: () => void }> = ({ onPress
   return (
     <Pressable
       onPress={onPress}
-      style={{ paddingHorizontal: 16, paddingVertical: 8 }}
-      hitSlop={8}
+      style={corner.right}
+      hitSlop={hitSlop}
       accessibilityRole="button"
       accessibilityLabel={t('VtaLink.AgentSettings')}
       testID={testIdWithKey('AgentSettings')}
     >
-      <Icon name="cog-outline" size={26} color={ColorPalette.brand.headerIcon} />
+      <Icon name="cog-outline" size={ICON_SIZE} color={ColorPalette.brand.headerIcon} />
     </Pressable>
   )
 }
@@ -66,10 +80,9 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
   // corner's place.
   const menuWidth = Math.min(MENU_WIDTH, width - 32)
   const styles = StyleSheet.create({
-    // An icon the gear's size: the header's corners are narrow (the title
-    // takes 68% of the width), and "+ Join" in a pill was squeezed into a box
-    // with its letters stacked (Pixel, 10-06). The menu says what it offers.
-    button: { paddingHorizontal: 16, paddingVertical: 8 },
+    // An icon the gear's size: the header's corners are narrow, and "+ Join"
+    // in a pill was squeezed into a box with its letters stacked (Pixel,
+    // 10-06). The menu says what it offers.
     scrim: { flex: 1 },
     menu: {
       position: 'absolute',
@@ -113,15 +126,15 @@ export const JoinMenuButton: React.FC<JoinMenuButtonProps> = ({ invitationText, 
     <>
       <Pressable
         ref={button}
-        style={styles.button}
-        hitSlop={8}
+        style={corner.left}
+        hitSlop={hitSlop}
         onPress={show}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={t('VtaLink.JoinCorner')}
         testID={testIdWithKey('AgentJoinCorner')}
       >
-        <Icon name="account-multiple-plus-outline" size={26} color={ColorPalette.brand.headerIcon} />
+        <Icon name="account-multiple-plus-outline" size={ICON_SIZE} color={ColorPalette.brand.headerIcon} />
       </Pressable>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable

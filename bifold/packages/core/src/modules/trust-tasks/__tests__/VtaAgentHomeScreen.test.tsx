@@ -816,11 +816,29 @@ describe('Your agent — after linking', () => {
     expect(gear.props.accessibilityLabel).toBe('VtaLink.AgentSettings')
     // No words in the corner: they did not fit.
     expect(join).not.toHaveTextContent(/VtaLink\.JoinCorner/)
-    const box = (el: typeof join) => {
-      const { paddingHorizontal, paddingVertical } = StyleSheet.flatten(el.props.style)
-      return { paddingHorizontal, paddingVertical }
+    // As wide as the app's own header buttons (IconButton: the icon and 15 on
+    // the screen's side). With padding on both sides they were clipped at the
+    // edge (236, iPhone and Pixel).
+    const across = (el: typeof join) => {
+      const {
+        paddingHorizontal = 0,
+        paddingLeft = 0,
+        paddingRight = 0,
+        marginLeft = 0,
+        marginRight = 0,
+      } = StyleSheet.flatten(el.props.style)
+      return (
+        2 * Number(paddingHorizontal) +
+        Number(paddingLeft) +
+        Number(paddingRight) +
+        Number(marginLeft) +
+        Number(marginRight)
+      )
     }
-    expect(box(join)).toEqual(box(gear))
+    expect(across(join)).toBe(15)
+    expect(across(gear)).toBe(15)
+    expect(StyleSheet.flatten(join.props.style).marginLeft).toBe(15)
+    expect(StyleSheet.flatten(gear.props.style).marginRight).toBe(15)
   })
 
   // Pixel, 236 build: sized to its content, the menu's second item ran out of
