@@ -157,7 +157,7 @@ export type MyAgentStackParams = {
   [Screens.VtaAskMe]: undefined
   [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined
   [Screens.VtiInvited]: undefined
-  [Screens.VtaCreateAgent]: { addDevice?: boolean } | undefined
+  [Screens.VtaCreateAgent]: { addDevice?: boolean; byAddress?: boolean } | undefined
   [Screens.VtaDevices]: undefined
   [Screens.VtaNewPhoneOffer]: undefined
   [Screens.VtiJoin]: undefined

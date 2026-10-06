@@ -77,6 +77,16 @@ describe("create my agent: a community's own agent", () => {
 })
 
 describe('create my agent: the address comes first', () => {
+  // "No code? Use your agent's address" (Alberto, 239): straight to the
+  // address, without the introduction's Continue first.
+  test('opened for an address, it starts at the address', () => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { byAddress: true } })
+    const tree = show()
+    expect(tree.queryByTestId(id('AgentCreateContinue'))).toBeNull()
+    expect(tree.getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
+    ;(useRoute as jest.Mock).mockReturnValue({ params: {} })
+  })
+
   test('something that is not an agent address is refused in words, and nothing is made', async () => {
     const start = jest.spyOn(vtaAgent, 'startCreateAgent').mockResolvedValue(undefined)
     const tree = show()
