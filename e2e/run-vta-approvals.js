@@ -211,7 +211,7 @@ try {
     // #317: Approve asks for the owner; a cancelled check leaves the request as it was.
     await tapTestId(d, "ApproveConsentButton", 10000);
     const asked = await authWindow(8000);
-    await screenshot(d, "vta-approvals-owner-prompt");
+    await screenshot(d, "vta-approvals-owner-prompt").catch(() => log("screenshot vta-approvals-owner-prompt not taken (the owner check is a secure window)"));
     row("317 Approve asks the owner", Boolean(asked), asked ? asked.slice(0, 100) : "no owner check within 8 s of Approve");
     if (asked) {
       adb("shell", "input", "keyevent", "4");
@@ -221,7 +221,7 @@ try {
     const page = await d.getPageSource().catch(() => "");
     const said = (page.match(/text="[^"]{6,160}"/g) ?? []).filter((t) => /confirm|cancel|owner|lock|not approved|try again/i.test(t)).slice(0, 3);
     const heldNow = /consent required/i.test(pnm(["contexts", "get", contextId], 120000));
-    await screenshot(d, "vta-approvals-owner-cancelled");
+    await screenshot(d, "vta-approvals-owner-cancelled").catch(() => log("screenshot vta-approvals-owner-cancelled not taken (the owner check is a secure window)"));
     row("317 cancel keeps it waiting", Boolean(asked) && still && heldNow, `card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
   }
   await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
@@ -270,7 +270,7 @@ try {
         gone = !(await existsTestId(d, "DenyConsentButton", 500));
       }
       decided2 = (await existsTestId(d, "AgentApprovalDecided", 2000)) ? await textOf(d, "AgentApprovalDecided") : "";
-      await screenshot(d, "vta-approvals-declined");
+      await screenshot(d, "vta-approvals-declined").catch(() => log("screenshot vta-approvals-declined not taken (the owner check is a secure window)"));
     }
     row("317 Decline does not ask", card2 && !prompted && gone, card2 ? `owner check ${prompted ? "SHOWN" : "none"}; card cleared ${gone}; "${decided2}"` : `no card for the second request (held ${held2}: ${lastLine(asked2)})`);
   }

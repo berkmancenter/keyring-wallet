@@ -388,11 +388,24 @@ try {
     await switchToOther(d, E.B_NAME);
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     await sleep(3000);
-    const cardEl = await d.$('//*[contains(@text,"Keyring Lab Community") or contains(@content-desc,"Keyring Lab Community")]');
-    if (!(await cardEl.isExisting().catch(() => false))) await stop(d, "R7: no Wallet card for C (R2 makes A a member first)");
+    // The card by its name line (CredentialName), not by any text naming C: the first text match can be
+    // something else on the page (236 gate, 05:27Z: the run ended on Wallet behind "Add credentials").
+    const cardEl = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")');
+    if (!(await cardEl.isExisting().catch(() => false))) {
+      await dumpSource(d, "agents-r7-wallet").catch(() => undefined);
+      await stop(d, "R7: no Wallet card for C (R2 makes A a member first)");
+    }
     await cardEl.click();
+    if (!(await existsTestId(d, "CommunityCardDetails", 15000)) && !(await scrollToTestId(d, "CommunityCardDetails", 4).catch(() => undefined))) {
+      await shot(d, "agents-r7-after-card-tap");
+      await dumpSource(d, "agents-r7-after-card-tap").catch(() => undefined);
+      await stop(d, "R7: the Wallet card opened no community details (CommunityCardDetails)");
+    }
     const open = await scrollToTestId(d, "CommunityCardOpenCommunity", 8).catch(() => undefined);
-    if (!open) await stop(d, "R7: the card's details offer no way to open C");
+    if (!open) {
+      await dumpSource(d, "agents-r7-details").catch(() => undefined);
+      await stop(d, "R7: the card's details offer no way to open C");
+    }
     await open.click();
     const held = await existsTestId(d, "CommunityHeldElsewhere", 20000);
     const heldText = held ? await rowText(d, "CommunityHeldElsewhereText") : null;

@@ -17,17 +17,24 @@ import { byTestId, existsTestId, scrollToTestId, sleep, tapTestId } from "./driv
  * Whether an element sits wholly above the tab bar (bifold #322: the last line of a page used to end behind it).
  * Prints `FOOT <name> clear|HIDDEN — …` and returns true/false, or undefined when either rect cannot be read.
  */
+/** An element's box. WebdriverIO elements have no getRect(); location and size together are the rect. */
+async function rectOf(el) {
+  const { x, y } = await el.getLocation();
+  const { width, height } = await el.getSize();
+  return { x, y, width, height };
+}
+
 export async function footClear(d, id, name = id) {
   try {
-    const r = await byTestId(d, id).getRect();
-    const tab = await byTestId(d, "MyAgent").getRect();
+    const r = await rectOf(byTestId(d, id));
+    const tab = await rectOf(byTestId(d, "MyAgent"));
     const bottom = Math.round(r.y + r.height);
     const top = Math.round(tab.y);
     const ok = bottom <= top;
     console.log(`FOOT ${name} ${ok ? "clear" : "HIDDEN"} — ${id} ends at y=${bottom}, the tab bar starts at y=${top}`);
     return ok;
   } catch (e) {
-    console.log(`FOOT ${name} unread — ${String(e.message).split("\n")[0].slice(0, 100)}`);
+    console.log(`FOOT ${name} unread — ${String(e.message).split("\n")[0].slice(0, 200)}`);
     return undefined;
   }
 }
@@ -51,14 +58,15 @@ export async function capturePersonaDid(d, stem, name) {
     try {
       const { height } = await d.getWindowSize();
       for (let i = 0; i < 3; i++) {
-        const r = await el.getRect();
+        const r = await rectOf(el);
         if (r.y + r.height <= height * 0.72) break;
         const x = Math.floor((await d.getWindowSize()).width / 2);
         await d.action("pointer").move({ x, y: Math.floor(height * 0.7) }).down().pause(80).move({ x, y: Math.floor(height * 0.4), duration: 400 }).up().perform();
         await sleep(700);
       }
-    } catch {
-      /* best effort: the screenshot is still taken */
+    } catch (e) {
+      // Best effort, but said: a silent catch here hid that this never scrolled (235's request card, cut off).
+      console.log(`PERSONA-DID ${name} (could not lift the line: ${String(e.message).split("\n")[0].slice(0, 100)})`);
     }
     const ios = d.e2ePlatform === "ios";
     const did = String((await el.getAttribute(ios ? "label" : "text").catch(() => "")) || "").replace(/\s+/g, "");
