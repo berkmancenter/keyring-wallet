@@ -47,6 +47,7 @@ import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
 import { communityCardKey as communityKeyOf } from './CommunityCard'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
+import { useRoomAboveTabBar } from './aboveTabBar'
 
 interface Holdings {
   personas: VtiPersona[]
@@ -108,6 +109,8 @@ export const forgetAgentHoldings = () => {
 }
 
 const VtaAgentHome: React.FC = () => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
@@ -140,7 +143,7 @@ const VtaAgentHome: React.FC = () => {
   const waiting = waitingCount > 0 ? waitingRequests(state.approvals, Date.now()) : []
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 20, gap: 16 },
+    content: { padding: 20, paddingBottom: 20 + roomAboveTabBar, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     muted: { color: ColorPalette.grayscale.mediumGrey },

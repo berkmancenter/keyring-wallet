@@ -13,6 +13,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent, type VtiApproval } from '../module/vtaAgent'
 import { QUIET_MS } from '../screens/requestsView'
 import VtaRequests from '../screens/VtaRequests'
@@ -233,6 +234,13 @@ describe('Requests', () => {
     // Not "nothing is waiting": the request that brought the person here is shown.
     expect(tree.queryByTestId(id('RequestsEmpty'))).toBeNull()
     expect(tree.getByTestId(id('RequestsBackToAgent'))).toBeTruthy()
+  })
+
+  it('leaves room at its foot for the tab bar, so the way back scrolls clear of it', async () => {
+    const tree = await show()
+    expect(
+      StyleSheet.flatten(tree.getByTestId(id('Requests')).props.contentContainerStyle).paddingBottom
+    ).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
   })
 
   it('opened with nothing received yet: says it is getting them, then that nothing waits once the agent has been quiet', async () => {

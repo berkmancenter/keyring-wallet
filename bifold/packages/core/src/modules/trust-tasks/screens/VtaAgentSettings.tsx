@@ -35,8 +35,11 @@ import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { shortTask } from './RequestCard'
 import { forgetAgentHoldings, ownHoldings } from './VtaAgentHome'
 import { useVtaLinkWithClock } from './VtaStatus'
+import { useRoomAboveTabBar } from './aboveTabBar'
 
 const VtaAgentSettings: React.FC = () => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
@@ -78,7 +81,7 @@ const VtaAgentSettings: React.FC = () => {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 20, gap: 16 },
+    content: { padding: 20, paddingBottom: 20 + roomAboveTabBar, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     muted: { color: ColorPalette.grayscale.mediumGrey },

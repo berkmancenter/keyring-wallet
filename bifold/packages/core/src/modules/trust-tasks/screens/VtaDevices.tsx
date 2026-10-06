@@ -33,6 +33,7 @@ import { DeviceRow } from './DeviceRow'
 import { LostPhoneCard, type RotationSupport } from './LostPhoneCard'
 import { deviceViewOf } from './deviceWords'
 import { didHashKey } from './testIdKey'
+import { useRoomAboveTabBar } from './aboveTabBar'
 
 /**
  * A row's handle for tests: {@link didHashKey} of the device's whole DID. Not
@@ -69,6 +70,8 @@ const thisPhoneFirst = (devices: AgentDevice[]): AgentDevice[] => [
 ]
 
 const VtaDevices: React.FC = () => {
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
@@ -83,7 +86,7 @@ const VtaDevices: React.FC = () => {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 20, gap: 16 },
+    content: { padding: 20, paddingBottom: 20 + roomAboveTabBar, gap: 16 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
@@ -176,7 +179,7 @@ const VtaDevices: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('AgentDeviceList')}>
         <ThemedText>{t('Devices.Intro')}</ThemedText>
         <Button

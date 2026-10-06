@@ -7,12 +7,14 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import type { JoinAsks, JoinWay } from '../module/joinManifest'
 import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, VtiSentNoAnswer, vtiAgent } from '../module/vtiAgent'
@@ -119,6 +121,19 @@ describe('Join, at manifest 0.3', () => {
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinThisCommunity'))))
     return tree
   }
+
+  it('leaves room at its foot for the tab bar: under the scroll, or under the buttons when they sit below it', async () => {
+    const tree = await toAsks(defaults)
+    const room = (testId: string, prop: 'style' | 'contentContainerStyle') =>
+      StyleSheet.flatten(tree.getByTestId(id(testId)).props[prop])?.paddingBottom ?? 0
+    // The ways: their buttons are in the page, which leaves the room.
+    expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+    expect(room('JoinScroll', 'contentContainerStyle')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+    // Making the identity: its button sits below the page, and the room is under it.
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    expect(room('JoinActions', 'style')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+    expect(room('JoinScroll', 'contentContainerStyle')).toBeLessThan(TAB_BAR_CLEARANCE)
+  })
 
   it('a new community, a phone holding nothing: its three ways, and "Ask to join"', async () => {
     const tree = await toAsks(defaults)
