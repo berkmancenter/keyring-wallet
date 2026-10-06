@@ -342,6 +342,30 @@ export class SwapDoneSignInFailed extends Error {
   }
 }
 
+/**
+ * The agent kept the key the phone signed in with: the swap onto the long-term
+ * key did not happen, and asking the agent confirmed it. Why, for a sentence
+ * rather than "the app doesn't know why" (#287's device check, Run A, 10-05):
+ * `held`, an approval rule held the swap for consent until the wait ran out;
+ * `refused`, the agent answered no; `noAnswer`, it did not answer at all. The
+ * message is the original one, for Details.
+ */
+export class KeySwapNotDone extends Error {
+  constructor(
+    readonly why: 'held' | 'refused' | 'noAnswer',
+    readonly cause: unknown
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.name = 'KeySwapNotDone'
+  }
+}
+
+/** Why a swap the agent confirmed it did not make failed. */
+export function keySwapNotDone(error: unknown): KeySwapNotDone {
+  const why = consentPendingOf(error) ? 'held' : error instanceof VtiRefusal ? 'refused' : 'noAnswer'
+  return new KeySwapNotDone(why, error)
+}
+
 export class ManagerKeyUnresolved extends Error {
   constructor(
     readonly vtaDid: string,
@@ -1143,7 +1167,7 @@ export class VtaClient {
       await this.disconnect()
       const live = await this.resolvePendingSwap(record)
       if (live === next) return next
-      throw error
+      throw keySwapNotDone(error)
     }
     await this.store.setManager({
       vtaDid: this.vtaDid,

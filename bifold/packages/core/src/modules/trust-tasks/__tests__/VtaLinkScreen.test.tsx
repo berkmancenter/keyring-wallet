@@ -446,6 +446,28 @@ describe('a link that failed', () => {
     )
   })
 
+  // #287's device check, Run A (10-05): an approval rule held the swap, and the
+  // screen said only "That didn't work, and the app doesn't know why".
+  test.each(['held', 'refused', 'noAnswer'])(
+    'a swap the agent did not make (%s): says why, with the original text behind Details',
+    async (swap) => {
+      const mockUseAgent = useAgent as jest.Mock
+      mockUseAgent.mockReturnValue({ agent: {} })
+      const raw = 'auth:consent_required'
+      failed({ reason: 'failed', detail: raw, swap })
+      const tree = render(
+        <BasicAppContext>
+          <VtaLink />
+        </BasicAppContext>
+      )
+      expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent(`VtaLink.SwapFailed.${swap}`)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErrorDetailsToggle')))
+      })
+      expect(tree.getByTestId(testIdWithKey('VtaLinkErrorDetail'))).toHaveTextContent(raw)
+    }
+  )
+
   test('with nothing caught, the general sentence and no Details', () => {
     const mockUseAgent = useAgent as jest.Mock
     mockUseAgent.mockReturnValue({ agent: {} })

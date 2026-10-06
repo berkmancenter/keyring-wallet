@@ -215,6 +215,8 @@ const VtaLink: React.FC = () => {
   const failureText = (failure?: VtaLinkFailure) => {
     // An agent host's automatic connection says why in its own terms.
     if (failure?.hostReason) return t(`VtaLink.Host.Failed.${failure.hostReason}`)
+    // The agent kept this phone's first key: say why, not "doesn't know why" (#287, Run A).
+    if (failure?.swap) return t(`VtaLink.SwapFailed.${failure.swap}`)
     switch (failure?.reason) {
       case 'expired':
         return t('VtaLink.FailedExpired')

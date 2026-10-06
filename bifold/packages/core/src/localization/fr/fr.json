@@ -1331,6 +1331,11 @@
     "FailedCommunityAgent": "C’est l’agent d’une communauté. Liez plutôt Keyring à votre agent personnel.",
     "FailedCommunityAgentCleanup": "Si vous avez ajouté ce téléphone dans les réglages de cet agent, retirez-le là-bas.",
     "FailedOther": "Un problème est survenu pendant la liaison. Scannez le code à nouveau.",
+    "SwapFailed": {
+      "held": "Votre agent garde la liaison de ce téléphone en attente d'une approbation : une règle d'approbation sur votre agent l'exige. Approuvez-la depuis un appareil qui le peut, ou supprimez cette règle là où elle a été définie, puis liez à nouveau.",
+      "refused": "Votre agent a refusé de terminer la liaison de ce téléphone. Vérifiez l'accès de ce téléphone là où votre agent est géré, puis liez à nouveau.",
+      "noAnswer": "Votre agent n'a pas répondu pendant que ce téléphone terminait sa liaison, et rien n'a été modifié. Liez à nouveau."
+    },
     "LinkYourAgent": "Relier votre agent",
     "YourAgentFallback": "votre agent",
     "LinkYourAgentHint": "Scannez le code affiché sur la page de votre agent, ou collez son lien.",

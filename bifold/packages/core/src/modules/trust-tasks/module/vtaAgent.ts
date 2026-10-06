@@ -41,6 +41,7 @@ import {
   VtaClient,
   consentPendingOf,
   resolveVtaMediator,
+  type KeySwapNotDone,
   type VtaAclEntry,
   type VtaConsentRequest,
   type VtaContext,
@@ -515,6 +516,17 @@ export class CommunityAgentRefused extends Error {
 const COMMUNITY_CONTEXTS_READ = 8
 /** How long the link waits for the agent to say what it holds. */
 const COMMUNITY_CHECK_MS = 10_000
+
+/**
+ * A failed link whose swap onto the long-term key the agent confirmed it did
+ * not make says why (held by an approval rule, refused, not answered), so the
+ * screen can say it in words rather than "the app doesn't know why".
+ */
+function withSwapReason(failure: VtaLinkFailure, error: unknown): VtaLinkFailure {
+  // By name, not `instanceof`: a test that stands in for VtaClient need not provide the class.
+  const swap = error instanceof Error && error.name === 'KeySwapNotDone' ? (error as KeySwapNotDone).why : undefined
+  return swap ? { ...failure, swap } : failure
+}
 
 export class VtaAgentController {
   private state: VtaAgentState = {
@@ -1289,7 +1301,10 @@ export class VtaAgentController {
             ? { reason: 'refused' as const, detail: 'no screen lock', hostReason: 'needsScreenLock' as const }
             : error instanceof CommunityAgentRefused
               ? { reason: 'communityAgent' as const, detail: error.message }
-              : { reason: 'failed' as const, detail: error instanceof Error ? error.message : String(error) }
+              : withSwapReason(
+                  { reason: 'failed', detail: error instanceof Error ? error.message : String(error) },
+                  error
+                )
       this.ownerFor = undefined
       this.set({ status: 'failed', error: failure.detail })
       this.dispatch({ type: 'failed', failure })
@@ -1371,15 +1386,18 @@ export class VtaAgentController {
       this.set({ status: 'failed', error: detail })
       this.dispatch({
         type: 'failed',
-        failure: {
-          reason:
-            error instanceof EnrolmentError
-              ? error.reason
-              : error instanceof CommunityAgentRefused
-                ? 'communityAgent'
-                : 'failed',
-          detail,
-        },
+        failure: withSwapReason(
+          {
+            reason:
+              error instanceof EnrolmentError
+                ? error.reason
+                : error instanceof CommunityAgentRefused
+                  ? 'communityAgent'
+                  : 'failed',
+            detail,
+          },
+          error
+        ),
       })
     } finally {
       if (live()) this.offer = undefined
@@ -1735,7 +1753,10 @@ export class VtaAgentController {
       this.set({ status: 'failed', error: detail })
       this.dispatch({
         type: 'failed',
-        failure: { reason: error instanceof CommunityAgentRefused ? 'communityAgent' : 'failed', detail },
+        failure: withSwapReason(
+          { reason: error instanceof CommunityAgentRefused ? 'communityAgent' : 'failed', detail },
+          error
+        ),
       })
     }
   }
