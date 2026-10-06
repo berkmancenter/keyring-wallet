@@ -41,7 +41,7 @@ import { useWaitingRequestsCount, waitingRequests } from '../module/waitingReque
 import { CommunityCard } from './CommunityCard'
 import { useOtherAgentsWaiting } from './OtherAgentsRequests'
 import { AgentChips } from './AgentChips'
-import { AgentSettingsButton, JoinMenuButton } from './AgentHeaderButtons'
+import { AgentSettingsButton } from './AgentHeaderButtons'
 import { RequestsSection } from './RequestsSection'
 import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
@@ -278,11 +278,10 @@ const VtaAgentHome: React.FC = () => {
       communityDid,
     })
 
-  // The header's corners (Alberto, 10-06): Join, with its two ways in, on
-  // one; the gear that opens Agent settings on the other. Only on the agent's
-  // own page, once the introduction is done.
-  const memberNow = (holdings?.memberships ?? []).some(isCurrentMembership)
-  const invitedTo = holdings?.invited?.[0]
+  // The header's gear opens Agent settings, on the agent's own page once the
+  // introduction is done. The Join menu that sat in the other corner said
+  // again what the page's cards say (Alberto, 239): a member joins another
+  // community from a row at the page's end.
   const withCorners = link.kind === 'linked' && state.introSeen
   useLayoutEffect(() => {
     const setOptions = (navigation as unknown as { setOptions?: (options: object) => void }).setOptions
@@ -292,30 +291,12 @@ const VtaAgentHome: React.FC = () => {
       return
     }
     setOptions({
-      headerLeft: () => (
-        <JoinMenuButton
-          member={memberNow}
-          invitationText={
-            invitedTo
-              ? t('VtaLink.InvitationWaiting', {
-                  community: communityLabelOf(invitedTo, t),
-                  interpolation: { escapeValue: false },
-                })
-              : undefined
-          }
-          onInvited={() => go(Screens.VtiInvited)}
-          onJoin={() => {
-            // From the beginning: which community, not the last one a link opened.
-            communityTarget.clearViewing()
-            go(Screens.VtiJoin)
-          }}
-        />
-      ),
+      headerLeft: () => null,
       headerRight: () => <AgentSettingsButton onPress={() => go(Screens.VtaAgentSettings)} />,
     })
     // `go` is a fresh closure each render over the same navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, withCorners, memberNow, invitedTo, t])
+  }, [navigation, withCorners])
 
   // A removed phone is told so here, where it lands, not only behind "Link your agent".
   if (link.kind === 'revoked') {
@@ -762,7 +743,7 @@ const VtaAgentHome: React.FC = () => {
           </View>
         ) : null}
 
-        {/* Before joining, the two ways in lead; after, they are the header's Join. */}
+        {/* Before joining, the two ways in lead; after, one row at the page's end. */}
         {!isMember ? (
           <>
             <SectionRule />
@@ -821,6 +802,31 @@ const VtaAgentHome: React.FC = () => {
 
         <SectionRule />
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
+
+        {/* A member joins another community from here: one row, not the two
+            cards again (Alberto, 239). Join takes a community's link or an
+            invitation's. */}
+        {isMember ? (
+          <>
+            <SectionRule />
+            <Pressable
+              style={[styles.row, { paddingHorizontal: 16 }]}
+              onPress={() => {
+                // From the beginning: which community, not the last one a link opened.
+                communityTarget.clearViewing()
+                go(Screens.VtiJoin)
+              }}
+              accessibilityRole="button"
+              testID={testIdWithKey('AgentJoinAnother')}
+            >
+              <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
+              <ThemedText variant="bold" style={{ flex: 1 }}>
+                {t('VtaLink.JoinAnother')}
+              </ThemedText>
+              <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+            </Pressable>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )
