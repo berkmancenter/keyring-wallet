@@ -47,7 +47,7 @@ run_legs() {
     local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
   else
     [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
-    run_group "$rd" "${ios[@]}" "${android[@]}"
+    run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
   fi
 }
 
