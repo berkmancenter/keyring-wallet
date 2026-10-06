@@ -390,6 +390,8 @@ try {
     await sleep(3000);
     // Which tap opens the "Add credentials" sheet (236 gate, both runs): the screen between the two.
     await shot(d, "agents-r7-wallet-before-card");
+    await dumpSource(d, "agents-r7-wallet-before-card").catch(() => undefined);
+    console.log(`R7-CARD-TAP ${new Date().toISOString()}`); // to line up with logcat's Wallet render
     const sheetFirst = await existsTestId(d, "AddCredentialSlider", 500).catch(() => false);
     log(`R7: Wallet open; "Add credentials" sheet already up: ${sheetFirst}`);
     // The card by its name line (CredentialName), not by any text naming C: the first text match can be
