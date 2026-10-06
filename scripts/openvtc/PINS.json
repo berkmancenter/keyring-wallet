@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-29",
+  "updated": "2026-10-06",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -118,6 +118,18 @@
         "spec/body.md",
         "spec/terms-definitions/",
         "specs.json"
+      ]
+    },
+    "predicate-credential-system": {
+      "url": "https://github.com/OpenVTC/predicate-credential-system.git",
+      "sha": "62de5ab",
+      "commitDate": "2026-09-28",
+      "pinnedOn": "2026-10-06",
+      "why": "The source of the published crate predicate-credential-system 0.1.0 (tag predicate-credential-system-v0.1.0), so citations in the zero-knowledge work name a pinned commit. Main is 3 commits ahead with a dependency bump only (affinidi-did-resolver-cache-sdk 0.8.40), not yet released.",
+      "watch": [
+        "src/",
+        "Cargo.toml",
+        "docs/"
       ]
     }
   },
