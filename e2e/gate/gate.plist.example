@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A LaunchAgent that runs watch.sh for one pin PR. Installing it is a lasting change to the Mac: ask its owner
+     first. Fill in the paths and the PR number, copy to ~/Library/LaunchAgents/org.keyring.gate-watch.plist, then
+     `launchctl load` it; `launchctl unload` it after the gate. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>org.keyring.gate-watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/ABSOLUTE/PATH/TO/keyring-wallet/e2e/gate/watch.sh</string>
+    <string>PR_NUMBER</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+</dict>
+</plist>

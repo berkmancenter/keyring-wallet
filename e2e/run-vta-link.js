@@ -915,7 +915,8 @@ async function openLinkFlow(driver, link) {
  */
 function keepForNextStep({ before, tempDid, heirs = [] }) {
   try {
-    const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts", "last-link.json");
+    // In the leg's own folder when the gate gives one: two legs linking side by side must not share this file.
+    const file = path.join(process.env.E2E_RUN_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts"), "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);

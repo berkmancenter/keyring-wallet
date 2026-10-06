@@ -54,7 +54,7 @@ const UDID = PLATFORM === "android" ? process.env.ANDROID_UDID || process.env.UD
 const TASK = "https://trusttasks.org/spec/vta/contexts/get/1.0";
 const SET = process.env.APPROVER_SET || "e2e-approvals";
 
-const link = JSON.parse(readFileSync(path.join(here, "artifacts", "last-link.json"), "utf8"));
+const link = JSON.parse(readFileSync(path.join(process.env.E2E_RUN_DIR || path.join(here, "artifacts"), "last-link.json"), "utf8"));
 const SLUG = process.env.RUNNER_VTA || process.env.VTA_SLUG || link.slug;
 if (SLUG !== link.slug) throw new Error(`the phone was linked to "${link.slug}", not "${SLUG}"`);
 
