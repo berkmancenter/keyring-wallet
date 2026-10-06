@@ -37,6 +37,13 @@ grep -E '^(PERSONA-DID|\[step\])' "$LEG_DIR/vetting.out" | cut -c1-200
 while read -r _ shot st rest; do
   case $st in clear) row "foot-$shot" PASS "$rest" ;; *) row "foot-$shot" FAIL "$st $rest" ;; esac
 done < <(grep -E '^FOOT ' "$LEG_DIR/vetting.out")
+# #326: the vetter's desk lists the finished vetting by the identity the applicant joined with.
+deskdid=$(grep -oE '^PERSONA-DID kk-vetter-desk-finished did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
+carddid=$(grep -oE '^PERSONA-DID kk-applicant-community-card did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
+deskline=$(grep -oE '^DESK-FINISHED "[^"]*"' "$LEG_DIR/vetting.out" | cut -d'"' -f2)
+if [ -n "$deskdid" ] && [ "$deskdid" = "$carddid" ] && [ -n "$deskline" ]; then row desk-finished-identity PASS "\"$deskline\" · $deskdid"
+else row desk-finished-identity FAIL "desk \"${deskline:-no line}\" ${deskdid:-no DID}; applicant's card ${carddid:-none}"; fi
+
 if selected id305; then
   # The applicant's community card, as the vetting run captured it (its "Show the code they see" line): the
   # identity C must list as its newest member. Read from that capture, not a second driver session (236 gate:

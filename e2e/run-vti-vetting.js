@@ -480,6 +480,23 @@ try {
       await sleep(2000);
       await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card");
     }
+    if (process.env.PERSONA_SHOTS) {
+      // #326: the vetter's desk lists a finished vetting by the applicant's identity word and its DID.
+      if (!(await byTestId(vetter, "VettingYouVetFor").isExisting().catch(() => false))) {
+        await byTestId(vetter, "MyAgent").click().catch(() => undefined);
+        await sleep(2000);
+        for (const door of ["AgentOpenDesk", "AgentVetOthers"]) if (await byTestId(vetter, door).isExisting().catch(() => false)) { await byTestId(vetter, door).click().catch(() => undefined); break; }
+        await sleep(2000);
+      }
+      if (await scrollToTestId(vetter, "VettingDeskFinishedToggle", 4).catch(() => undefined)) {
+        await tapTestIdByCoordinates(vetter, "VettingDeskFinishedToggle");
+        await sleep(1000);
+      }
+      await scrollToTestId(vetter, "VettingDeskFinishedIdentity", 4).catch(() => undefined);
+      const line = (await textOf(vetter, "VettingDeskFinishedIdentity").catch(() => "")).trim();
+      const did = await capturePersonaDid(vetter, "VettingDeskFinishedApplicant", "kk-vetter-desk-finished");
+      console.log(`DESK-FINISHED "${line}" ${did ?? "(no DID)"}`);
+    }
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
     if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
     printSuccess("vti-vetting");
