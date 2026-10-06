@@ -6,13 +6,17 @@
  *                     apart from each other
  *   join-menu-fits    the Join menu (AgentJoinMenu) opens wholly inside the window, its Join item shown
  *   chip-row-fits     the chip row (AgentChips) and its Add chip (AgentSwitcherAdd) inside the window
+ *   chip-strip-edges  #332: the chip strip runs edge to edge (within 4 px of both sides)
+ *   home-sections     #333: sections separated (AgentSectionRule), Requests below the ways in; the intro centred
+ *                     when it shows (AgentIntro)
+ *   add-then-back     #335: Add on the chips, then back, returns to the same agent with no unlinked screen
  * with a screenshot at each into E2E_RUN_DIR (or artifacts/). Prints ROW lines; exit 0 all pass, 3 any fail.
  *
  *   PLATFORM=ios|android UDID=<sim udid or emulator serial> [APPIUM_PORT=…] node run-agent-header.mjs
  */
 import "./lib/cli-guard.js";
 import { byTestId, ensureAppium, existsTestId, screenshot, stopAppium, tapTestId } from "./lib/driver.js";
-import { makeDriver, unlockToHome } from "./lib/keyringRoles.js";
+import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 
 const PLATFORM = process.env.PLATFORM ?? "android";
 let failed = 0;
@@ -50,6 +54,20 @@ try {
   const add = await rectOf(d, "AgentSwitcherAdd");
   row("chip-row-fits", inside(chips, W) && inside(add, W), `chips ${show(chips)} · Add ${show(add)}`);
 
+  // #332: edge to edge, not inset like the cards.
+  row("chip-strip-edges", Boolean(chips) && chips.x <= 4 && chips.x + chips.w >= W - 4, `chips ${show(chips)} · window ${W}`);
+
+  // #333: sections, Requests below the ways in, the intro centred (only a phone with no agent shows the intro).
+  const page = await d.getPageSource();
+  const rules = (page.match(/AgentSectionRule/g) || []).length;
+  const ways = (await rectOf(d, "AgentJoinCommunity")) || (await rectOf(d, "AgentDoors"));
+  const reqs = await rectOf(d, "AgentRequestsRow");
+  const intro = await rectOf(d, "AgentIntro");
+  const centred = !intro || Math.abs(intro.x + intro.w / 2 - W / 2) <= 8;
+  const order = !ways || !reqs || reqs.y > ways.y;
+  await screenshot(d, `agent-home-sections-${PLATFORM}`).catch(() => undefined);
+  row("home-sections", rules > 0 && order && centred, `${rules} section rule(s) · ways ${show(ways)} · Requests ${show(reqs)} · intro ${intro ? show(intro) : "not shown"}`);
+
   if (join) {
     await tapTestId(d, "AgentJoinCorner", 10000);
     const shown = await existsTestId(d, "AgentJoinMenu", 8000);
@@ -59,6 +77,20 @@ try {
     row("join-menu-fits", inside(menu, W) && inside(item, W), `menu ${show(menu)} · Join item ${show(item)} · window ${W}`);
     if (await existsTestId(d, "AgentJoinMenuClose", 2000)) await tapTestId(d, "AgentJoinMenuClose", 5000).catch(() => undefined);
   } else row("join-menu-fits", false, "no AgentJoinCorner to open it from");
+
+  // #335: Add, then back: the same agent's home, no "Link your agent" / unlinked screen.
+  const before = (await textOf(d, "AgentHomeName").catch(() => "")).trim();
+  if (await existsTestId(d, "AgentSwitcherAdd", 5000)) {
+    await tapTestId(d, "AgentSwitcherAdd", 10000);
+    await new Promise((r) => setTimeout(r, 2500));
+    await d.back().catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 2500));
+    const home = await existsTestId(d, "AgentHome", 10000);
+    const after = home ? (await textOf(d, "AgentHomeName").catch(() => "")).trim() : "";
+    const unlinked = /Link your agent|no longer linked|Add this phone/i.test(await d.getPageSource());
+    await screenshot(d, `agent-add-then-back-${PLATFORM}`).catch(() => undefined);
+    row("add-then-back", home && after === before && !unlinked, `before "${before}", after "${after}"${unlinked ? ", an unlinked/link screen showed" : ""}`);
+  } else row("add-then-back", false, "no AgentSwitcherAdd");
   process.exitCode = failed ? 3 : 0;
 } catch (e) {
   console.log(`LEG agent-header BROKEN — ${String(e.message).split("\n")[0]}`);

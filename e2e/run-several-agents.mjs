@@ -3,7 +3,7 @@
  * Several agents on one phone (bifold #277–#281) and a refusal on Your agent (#282), on an Android
  * built app. Rows, run in this order whatever ROWS lists:
  *   R1 add a second agent and keep the first; switch to it
- *   R2 an identity belongs to its agent: Join on B suggests A, which already has one in C
+ *   R2 an identity belongs to its agent: A joins C; on B, Join offers no chooser and goes ahead with B (#334)
  *   R5 a refusal reaches Your agent: the card's own status, and "Check now" if the session holds another identity
  *   R3 requests from the other agent ("Ask me before…" on A, a held task, Requests on B)
  *   R6 both agents join one community; both memberships survive a relaunch; the Wallet names each card's agent
@@ -358,28 +358,17 @@ try {
     await sleep(5000);
     await switchToOther(d, E.B_NAME);
     await openC(d);
-    const withAgent = await existsTestId(d, "JoinWithAgent", 15000);
-    const suggested = (await rowText(d, "JoinAgentSuggested")) || (await rowText(d, "JoinWithAgent"));
+    // bifold #334 took Join's agent chooser away: on B, Join offers no other agent and goes ahead with B.
+    const chooser = (await existsTestId(d, "JoinWithAgent", 6000)) || (await existsTestId(d, "JoinUseSuggestedAgent", 1500)) || (await existsTestId(d, "JoinAgentSuggested", 1500));
+    await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
+    const ask = (await existsTestId(d, "JoinAsk", 4000)) || (await existsTestId(d, "JoinStart", 1500)) || (await existsTestId(d, "JoinWays", 1500));
+    const standingOnB = await txt(d, "JoinStandingText");
     await shot(d, "agents-r2-join-on-b");
     await dumpSource(d, "agents-r2-join-on-b").catch(() => undefined);
-    const standingOnB = await txt(d, "JoinStandingText");
-    log(`R2: Join standing on B: "${standingOnB}"`);
-    log(`R2: on B, Join shows JoinWithAgent ${withAgent} · suggested "${suggested}" · home still B: ${(await homeName(d).catch(() => "")) || "(not on home)"}`);
-    row("R2 suggests A", withAgent && (suggested ?? "").includes(E.A_NAME) && !standingOnB, `JoinWithAgent ${withAgent}; suggested "${suggested}"; standing on B "${standingOnB}"`);
-    if (await existsTestId(d, "JoinUseSuggestedAgent", 5000)) {
-      await tapTestId(d, "JoinUseSuggestedAgent", 15000);
-      await owner(d, "use suggested");
-      await sleep(4000);
-      await myAgent(d);
-      const nameAfter = await homeName(d);
-      await scrollToTestId(d, `AgentCommunityStatus_${C_KEY}`, 4).catch(() => undefined);
-      const cStatus = await txt(d, `AgentCommunityStatus_${C_KEY}`);
-      log(`R2: after "use suggested": home "${nameAfter}" · C card "${cStatus}" (${since("R2")})`);
-      row("R2 use suggested", nameAfter.includes(E.A_NAME) && /member/i.test(cStatus ?? ""), `home "${nameAfter}", C "${cStatus}"`);
-    } else {
-      row("R2 use suggested", false, "no JoinUseSuggestedAgent on B's Join");
-      await d.back().catch(() => undefined);
-    }
+    log(`R2: on B, Join shows a chooser ${chooser} · its own way in ${ask} · standing on B "${standingOnB}" (${since("R2")})`);
+    row("R2 Join on B goes ahead with B", !chooser && ask && !standingOnB, `chooser ${chooser}; way in ${ask}; standing on B "${standingOnB}"`);
+    await d.back().catch(() => undefined);
+    await switchToOther(d, E.A_NAME);
   }
 
   if (ROWS.includes("R7")) {

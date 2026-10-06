@@ -11,7 +11,7 @@
  *   PLATFORM=ios|android UDID=… [C_DID=…] [EXPECT_AGENTS=2] node run-after-update.mjs
  */
 import "./lib/cli-guard.js";
-import { ensureAppium, existsTestId, screenshot, stopAppium, tapTestId } from "./lib/driver.js";
+import { ensureAppium, existsTestId, screenshot, scrollToTestId, stopAppium, tapTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 
@@ -49,7 +49,9 @@ try {
     for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
     const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${process.env.C_NAME || "Keyring Lab Community"}")`);
     const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
-    const toC = opened && (await existsTestId(d, "CommunityCardOpenCommunity", 15000)) && (await tapTestId(d, "CommunityCardOpenCommunity", 10000).then(() => true, () => false));
+    // The card's details put "Open the community" below the fold: scroll to it (as R7 does).
+    const openBtn = opened ? await scrollToTestId(d, "CommunityCardOpenCommunity", 8).catch(() => undefined) : undefined;
+    const toC = Boolean(openBtn) && (await openBtn.click().then(() => true, () => false));
     await new Promise((r) => setTimeout(r, 15000)); // the persona's session, if any, opens now
     await screenshot(d, `after-update-persona-${PLATFORM}`).catch(() => undefined);
     console.log(`USED-PERSONA card ${opened} · community screen ${toC} ${new Date().toISOString()}`);

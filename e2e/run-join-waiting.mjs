@@ -141,6 +141,13 @@ try {
   // 236: #319 the Join screen names the identity it asked with; #322 its actions end above the tab bar.
   const nameLine = (await existsTestId(d, "JoinStandingIdentityName", 3000)) ? (await textOf(d, "JoinStandingIdentityName")).trim() : "";
   console.log(`JOIN-IDENTITY-NAME ${nameLine || "(none)"}`);
+  // #334: the line names the identity as a persona ID.
+  row("join-persona-id", /^Your persona ID: \S/.test(nameLine), `"${nameLine}"`);
+  const actionsY = async () => {
+    const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/JoinActions")`);
+    return (await el.isExisting().catch(() => false)) ? Math.round((await el.getLocation()).y) : undefined;
+  };
+  const yBefore = await actionsY();
   await capturePersonaDid(d, "JoinStandingIdentity", "join-standing-identity");
   // To the very end of the page: the question is whether its last line can rise above the tab bar.
   const { width: w, height: h } = await d.getWindowSize();
@@ -149,6 +156,9 @@ try {
     await sleep(600);
   }
   await footClear(d, "JoinActions", "join-actions");
+  // #334: Join's buttons scroll with the page (nothing hides behind them), so a swipe moves them.
+  const yAfter = await actionsY();
+  row("join-actions-scroll", yBefore !== undefined && yAfter !== undefined && yAfter !== yBefore, `JoinActions y ${yBefore ?? "absent"} → ${yAfter ?? "absent"} after swiping`);
   await tapTestId(d, "MyAgent", 15000);
   // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
   // element: AgentCommunityOpen_<key> or AgentMembershipRow), or the status child's text on Android.
