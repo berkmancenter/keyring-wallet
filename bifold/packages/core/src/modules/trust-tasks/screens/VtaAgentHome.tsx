@@ -15,7 +15,7 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -94,6 +94,8 @@ export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'membershi
  */
 export const VETTER_RECHECK_MS = 15_000
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
+/** How long a community just joined stays picked out on its card. */
+export const HIGHLIGHT_MS = 4000
 /** The page's padding, and the first card's: the agent chips run out past both to the screen's edges. */
 const PAGE_PADDING = 20
 const CARD_PADDING = 16
@@ -173,6 +175,7 @@ const VtaAgentHome: React.FC = () => {
     },
     doorNext: { borderWidth: 2, borderColor: ColorPalette.brand.primary },
     link: { color: ColorPalette.brand.link, textDecorationLine: 'underline' },
+    highlight: { borderWidth: 2, borderColor: ColorPalette.brand.primary, borderRadius: 8, padding: 4 },
   })
 
   const load = useCallback(async () => {
@@ -235,6 +238,17 @@ const VtaAgentHome: React.FC = () => {
   // identity came back to "You have not joined a community yet" and no way
   // back into vetting, until a pull to refresh (Farm gate, 2026-09-23).
   const isFocused = useIsFocused()
+  // A community just joined, from Join's "Done": its card picked out for a
+  // few seconds, so the person sees where the membership went (Alberto, 238).
+  const highlightParam = (useRoute()?.params as { highlightCommunity?: string } | undefined)?.highlightCommunity
+  const [highlighted, setHighlighted] = useState<string | undefined>()
+  useEffect(() => {
+    if (!highlightParam) return
+    setHighlighted(highlightParam)
+    ;(navigation as unknown as { setParams?: (p: object) => void }).setParams?.({ highlightCommunity: undefined })
+    const timer = setTimeout(() => setHighlighted(undefined), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlightParam, navigation])
   // "Add" on the chips leaves the current agent, then opens the link screen:
   // in between this page is unlinked, and for an instant it drew "Link your
   // agent" (238, iPhone). Nothing is drawn while it goes; back here, as ever.
@@ -771,24 +785,29 @@ const VtaAgentHome: React.FC = () => {
             // One card per community, with what the agent holds for it under
             // it and at most one next step (IN-20c).
             communitiesHeld(holdings).map((communityDid) => (
-              <CommunityCard
+              <View
                 key={communityDid}
-                agent={agent}
-                communityDid={communityDid}
-                persona={holdings.personas.find((p) => p.communityDid === communityDid)}
-                membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
-                invited={holdings.invited.includes(communityDid)}
-                vetter={holdings.vetterFor.includes(communityDid)}
-                deskShownAbove={holdings.vetterFor.includes(communityDid)}
-                linkedAt={link.linkedAt}
-                onOpen={goToCommunity}
-                onNextStep={onCardStep}
-                onPrimary={(action, did) => {
-                  // The vetting and invitation screens work on the chosen community.
-                  communityTarget.choose(did)
-                  go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
-                }}
-              />
+                style={communityDid === highlighted ? styles.highlight : undefined}
+                testID={communityDid === highlighted ? testIdWithKey('AgentCommunityHighlighted') : undefined}
+              >
+                <CommunityCard
+                  agent={agent}
+                  communityDid={communityDid}
+                  persona={holdings.personas.find((p) => p.communityDid === communityDid)}
+                  membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
+                  invited={holdings.invited.includes(communityDid)}
+                  vetter={holdings.vetterFor.includes(communityDid)}
+                  deskShownAbove={holdings.vetterFor.includes(communityDid)}
+                  linkedAt={link.linkedAt}
+                  onOpen={goToCommunity}
+                  onNextStep={onCardStep}
+                  onPrimary={(action, did) => {
+                    // The vetting and invitation screens work on the chosen community.
+                    communityTarget.choose(did)
+                    go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
+                  }}
+                />
+              </View>
             ))
           )}
           {holdingsError ? (

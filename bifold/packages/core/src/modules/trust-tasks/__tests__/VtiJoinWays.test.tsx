@@ -184,7 +184,13 @@ describe('Join, at manifest 0.3', () => {
     await act(async () => {
       jest.advanceTimersByTime(10)
     })
-    expect(tree.getByTestId(id('JoinStandingIdentityName'))).toHaveTextContent(/Join\.IdentityHere/)
+    // "Request sent", what follows, and "You asked to join as" the word, whole (Alberto, 238).
+    expect(tree.getByTestId(id('JoinRequestSent'))).toHaveTextContent('Join.RequestSentTitle')
+    expect(tree.getByTestId(id('JoinWillShow'))).toHaveTextContent('Join.WillShowWhenAccepted')
+    expect(tree.getByTestId(id('JoinStandingIdentity'))).toHaveTextContent(/Join\.AskedAs/)
+    expect(tree.getByTestId(id('JoinStandingIdentityName'))).toHaveTextContent(/^term-benefit$/)
+    expect(tree.getByTestId(id('JoinStandingIdentityToggle'))).toHaveTextContent(/Join\.SeeFullPersonaId/)
+    expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
     // The word: the last of its DID's path, else its last characters.
     expect(identityWord(personaDid)).toBe('…term-benefit')
     expect(identityWord('did:key:z6MkABCDEFGH12345678')).toBe('…12345678')
@@ -307,21 +313,28 @@ describe('Join, at manifest 0.3', () => {
       return tree
     }
 
+    it('under a removal: the ways are shown, with no "Meet a vetter" or "Ask to join"', async () => {
+      const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
+      expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+      expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+      for (const key of ['JoinStart', 'JoinAsk', 'JoinWayStart_vetted-member']) {
+        expect(tree.queryByTestId(id(key))).toBeNull()
+      }
+    })
+
+    // Alberto, 238: once asked, or once a member, what the community asks is
+    // behind the person; said again, it pushed "Check again" below the fold.
     it.each([
-      ['removed', { kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' }],
       ['a member', { kind: 'member', membership: {} }],
       ['a request open', { kind: 'pending', submission: { withInvitation: false } }],
-    ])(
-      'under %s: the ways are shown, with no "Meet a vetter" or "Ask to join" and nothing saying "use this now"',
-      async (_, state) => {
-        const tree = await openedByLink(state)
-        expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
-        expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
-        for (const key of ['JoinStart', 'JoinAsk', 'JoinWayStart_vetted-member', 'JoinWaySuggested']) {
-          expect(tree.queryByTestId(id(key))).toBeNull()
-        }
+    ])('under %s: the ways are not repeated, and there is nothing to start', async (_, state) => {
+      const tree = await openedByLink(state)
+      expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+      expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
+      for (const key of ['JoinStart', 'JoinAsk']) {
+        expect(tree.queryByTestId(id(key))).toBeNull()
       }
-    )
+    })
 
     it('after "Join again" from the removed standing, the two buttons are back', async () => {
       const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
@@ -412,6 +425,9 @@ describe('Join, at manifest 0.3', () => {
     const tree = await toAsks({ wire: '0.3', accepting: true, ways: [memberCredential] })
     expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
     expect(tree.queryByTestId(id('JoinGoInvited'))).toBeNull()
+    // It is one Keyring can't use yet: one line, the way itself behind "See them".
+    expect(tree.getByTestId(id('JoinWaysOthers'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(id('JoinWaysOthersToggle')))
     expect(tree.getByTestId(id('JoinWay_member-credential'))).toHaveTextContent(/Join\.Ways\.CredentialNotYet/)
   })
 

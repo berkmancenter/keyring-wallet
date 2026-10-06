@@ -452,10 +452,13 @@ describe('the words', () => {
         // The reader's vocabulary stays under Details.
         expect(w[key]).not.toMatch(/digest|issuer|query|criteri|manifest|admission|Missing|Unknown|Unreadable/)
       }
-      // A way the community left unfinished, or one that doesn't match, is theirs to fix.
-      for (const key of ['CannotUseIncomplete', 'CannotUseChanged', 'NoneUsable']) {
-        expect(w[key]).toContain('{{community}}')
+      // A way the community left unfinished, or one that doesn't match, is
+      // theirs to fix. The heading names the community once; the lines under
+      // it say "this community" (Alberto, 238).
+      for (const key of ['CannotUseIncomplete', 'CannotUseChanged']) {
+        expect(w[key]).toMatch(/this community|cette communauté|esta comunidade/i)
       }
+      expect(w.NoneUsable).toContain('{{community}}')
     }
     expect(ways(enCopy).NoneUsable).toMatch(/Nothing is wrong on your side/)
     expect(ways(frCopy).NoneUsable).toMatch(/de votre côté/)
