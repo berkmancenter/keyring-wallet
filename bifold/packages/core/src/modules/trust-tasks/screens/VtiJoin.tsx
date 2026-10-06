@@ -338,6 +338,15 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         setChanged(true)
         setReread((n) => n + 1)
         setStep('asks')
+      } else if (plainRequest && e instanceof Error && e.name === 'VtiSentNoAnswer') {
+        // The request went; its answer did not come in time. Not a failure to
+        // fix with Continue: show where the request stands, asking the
+        // community now (its status task finds the request from the identity),
+        // and a late answer, if it comes, shows there too (7b's R5, 10-06:
+        // the screen sat on "hasn't answered yet" for four minutes).
+        setAgain(false)
+        setStanding(await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+        setStep('asks')
       } else {
         setError(plainError(e))
       }

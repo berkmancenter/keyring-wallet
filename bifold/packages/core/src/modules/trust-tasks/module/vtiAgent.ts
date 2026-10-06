@@ -665,6 +665,41 @@ class VtiAgentController {
   }
 
   /**
+   * The answer to a submit that came back unanswered, if it arrives while the
+   * ask is held (`VTI_ANSWER_HOLD_MS`): taken once, as a verdict, the way an
+   * answer in time would have been — a refusal is thrown. Undefined when none
+   * comes in that time. 7b's R5, 10-06: the community answered a join 0.2 s
+   * after the 30 s clock, and the Join screen never learned it.
+   */
+  lateVerdict(sent: VtiSentNoAnswer, holdMs = VTI_ANSWER_HOLD_MS): Promise<VtiVerdict | undefined> {
+    const communityDid = sent.communityDid
+    if (!communityDid || !sent.requestId) return Promise.resolve(undefined)
+    return new Promise((resolve, reject) => {
+      let done = false
+      const finish = (verdict?: VtiVerdict, error?: unknown) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        unsubscribe()
+        if (error) reject(error)
+        else resolve(verdict)
+      }
+      const look = () => {
+        const answer = this.takeHeldAnswer(communityDid, sent.taskType, sent.requestId)
+        if (!answer) return
+        try {
+          finish(this.verdictOf(answer, communityDid, sent.taskType))
+        } catch (error) {
+          finish(undefined, error)
+        }
+      }
+      const unsubscribe = this.subscribe(look)
+      const timer = setTimeout(() => finish(undefined), holdMs)
+      look()
+    })
+  }
+
+  /**
    * The error for an `ask` that came back unanswered: the latest such request
    * of `type` to that community, as `VtiSentNoAnswer`. For callers of `ask`,
    * which returns undefined on silence.

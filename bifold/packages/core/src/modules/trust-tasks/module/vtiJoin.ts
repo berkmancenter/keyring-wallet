@@ -25,7 +25,7 @@ import {
   type VtiMembership,
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
-import { selfRemoveRefusal, vtiAgent, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
+import { selfRemoveRefusal, vtiAgent, VtiSentNoAnswer, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 import { recordCardRevocation } from './vtiCardStanding'
 import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { receiveIssue, roleNameOf, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
@@ -134,6 +134,19 @@ export async function joinCommunity(
     })
   } catch (e) {
     await recordAnswer(deps.communityStore, deps.communityDid, { refusal: e }).catch(() => undefined)
+    // The request went and its answer did not come in time: it may still. If
+    // it comes while the ask is held, it is recorded as an answer in time
+    // would have been, and the screens reading the request learn it (7b's R5,
+    // 10-06). Cards it brings still arrive by delivery: the inbox stays open
+    // as long.
+    if (e instanceof VtiSentNoAnswer) {
+      void vtiAgent
+        .lateVerdict(e)
+        .then((late) => late && recordAnswer(deps.communityStore, deps.communityDid, { verdict: late }))
+        .catch((refusal) => recordAnswer(deps.communityStore, deps.communityDid, { refusal }))
+        .catch(() => undefined)
+        .finally(stopInbox)
+    } else setTimeout(stopInbox, 30000)
     throw e
   }
   await recordAnswer(deps.communityStore, deps.communityDid, { verdict }).catch(() => undefined)

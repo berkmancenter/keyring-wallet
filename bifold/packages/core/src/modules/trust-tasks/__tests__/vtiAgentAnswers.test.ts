@@ -304,6 +304,44 @@ describe('T3: a late answer is kept for the next caller', () => {
     expect(vtiAgent.takeHeldAnswer(community, STATUS, error.requestId)).toBeUndefined()
   })
 
+  // 7b's R5, 10-06: a join answered 0.2 s after the 30 s clock, and nothing took it.
+  it('a submit that met silence learns its late answer as a verdict, without asking again', async () => {
+    const community = 'did:webvh:c:late-verdict'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-verdict')
+    vtiAgent.answerTimeoutMs = 30
+    const error = (await vtiAgent.apply(community, manifest).catch((e: unknown) => e)) as VtiSentNoAnswer
+    expect(error).toBeInstanceOf(VtiSentNoAnswer)
+    const waiting = vtiAgent.lateVerdict(error, 2000)
+    const sent = session.didcomm[0] as Sent
+    session.onMessage(didcommReply(sent, SUBMIT, { requestId: 'r7', verdict: { effect: 'refer' } }))
+    await expect(waiting).resolves.toMatchObject({ requestId: 'r7', effect: 'refer' })
+    expect(session.didcomm).toHaveLength(1)
+    // Taken once.
+    expect(vtiAgent.takeHeldAnswer(community, SUBMIT, error.requestId)).toBeUndefined()
+  })
+
+  it('a late refusal is thrown as the refusal; no late answer is undefined once the hold is over', async () => {
+    const community = 'did:webvh:c:late-refusal'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-refusal')
+    vtiAgent.answerTimeoutMs = 30
+    const error = (await vtiAgent.apply(community, manifest).catch((e: unknown) => e)) as VtiSentNoAnswer
+    await expect(vtiAgent.lateVerdict(error, 30)).resolves.toBeUndefined()
+
+    const again = vtiAgent.lateVerdict(error, 2000)
+    const sent = session.didcomm[0] as Sent
+    session.onMessage({
+      id: 'urn:uuid:refused',
+      type: 'https://trusttasks.org/spec/trust-task-error/0.1',
+      thid: sent.id,
+      body: {
+        type: 'https://trusttasks.org/spec/trust-task-error/0.1',
+        threadId: sent.body.threadId,
+        payload: { code: 'requestAlreadyOpen', message: 'open' },
+      },
+    })
+    await expect(again).rejects.toMatchObject({ code: expect.stringMatching(/requestAlreadyOpen/) })
+  })
+
   it('lets the ask go once the hold is over; the answer then goes to the inbox', async () => {
     const community = 'did:webvh:c:late-too-late'
     const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-too-late')
