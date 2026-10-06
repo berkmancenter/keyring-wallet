@@ -519,9 +519,35 @@ export async function tapElement(driver, el) {
   return el;
 }
 
+/**
+ * Swipe until the element ends above the tab bar, when a tab bar is on screen. A tap at an element
+ * that exists below the fold (iOS reports it) or ends behind the bar lands on the bar instead: the
+ * 236 gate's vetter tapped the ticket's Details toggle that way and ended on the Wallet tab.
+ * Returns whether it is clear; true when there is no tab bar to clear.
+ */
+export async function liftAboveTabBar(driver, key, tries = 4) {
+  const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
+  const tab = await box(byTestId(driver, "MyAgent")).catch(() => undefined);
+  if (!tab) return true;
+  for (let i = 0; i <= tries; i++) {
+    const r = await box(byTestId(driver, key)).catch(() => undefined);
+    if (!r) return false;
+    if (r.y + r.height <= tab.y - 8 && r.y >= 0) return true;
+    if (i === tries) break;
+    const { width, height } = await driver.getWindowSize();
+    const x = Math.floor(width / 2);
+    await driver.action("pointer").move({ x, y: Math.floor(height * 0.65) }).down().pause(80).move({ x, y: Math.floor(height * 0.35), duration: 400 }).up().perform();
+    await sleep(700);
+  }
+  return false;
+}
+
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
+  // Not a refusal: a sheet's button over the tab bar is tappable where it is. Said, so a tap that lands
+  // on a tab instead shows in the log.
+  if (!(await liftAboveTabBar(driver, key))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
   const cx = Math.floor(x + width / 2);

@@ -113,7 +113,7 @@ export async function checkVettingStep(driver, where) {
   let last;
   for (let i = 0; i < 6; i++) {
     if (i > 0) await sleep(1000);
-    const { at, expected } = await expectedAt(driver, where);
+    let { at, expected } = await expectedAt(driver, where);
     const seen = await buttonsOnScreen(driver);
     const filledSet = new Set(seen.filter((b) => b.filled).map((b) => b.id));
     // The step's button below the fold (the desk's "Codes match" sits under
@@ -132,6 +132,10 @@ export async function checkVettingStep(driver, where) {
       }
       for (const b of after) if (b.filled) filledSet.add(b.id);
       console.log(`[e2e] ${where}: ${expected} was below the fold — judged after scrolling (${drags} drag${drags === 1 ? "" : "s"})`);
+      // What the step expects can depend on what was below the fold: on iOS
+      // the applicant's "Apply" is not in the tree until scrolled to, so the
+      // step was judged as "ask a vetter" (227 gate, Farm K↔K). Read it again.
+      ({ at, expected } = await expectedAt(driver, where));
     }
     const filled = [...filledSet];
     const want = expected ? [expected] : [];
@@ -174,9 +178,9 @@ async function expectedAt(driver, where) {
   if (at.side === "vetter") {
     expected = DESK_PRIMARY[at.step];
   } else {
-    const has = async (id) => (await driver.$$(`//*[contains(@resource-id,"${id}") or @name="${id}"]`)).length > 0;
+    const has = async (id) => (await driver.$$(`//*[contains(@resource-id,"${id}") or contains(@name,"${id}")]`)).length > 0;
     const pasted = async () => {
-      const input = await driver.$(`//*[contains(@resource-id,"VettingTicketInput") or @name="VettingTicketInput"]`);
+      const input = await driver.$(`//*[contains(@resource-id,"VettingTicketInput") or contains(@name,"VettingTicketInput")]`);
       const text = (await input.getText().catch(() => "")) ?? "";
       // An empty field on Android reports its placeholder as its text, and the
       // placeholder is a ticket's start ("vetting-ticket:?v=1&…"): not a ticket.

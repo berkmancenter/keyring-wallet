@@ -61,9 +61,9 @@ vtc() { # name base did
 }
 
 # The Farm was wiped and rebuilt on 2026-09-29/30: these are the farm2-* runners.
-vta farm2-runner-prague yes
-vta farm2-runner-uiux yes
-vta farm2-runner-openvtc yes
+vta farm3-runner-prague yes
+vta farm3-runner-uiux yes
+vta farm3-runner-openvtc yes
 # keyring-test-vtc and farm-runner-nohost did not survive the reset. Added back when recreated:
 #   vtc keyring-test-vtc <base> <did>
 #   vta <nohost slug> no

@@ -28,6 +28,39 @@ export interface PushWakeDeps {
     opts: { pushPlatform: PushRegistration['platform'] }
   ): Promise<{ pushCapable: boolean; allowedTriggers?: string[] }>
   register?: typeof registerWithGateway
+  /**
+   * The handle each agent was given, and for which token. The gateway mints a
+   * new handle at every `push/register`, keeps them, and refuses a token past
+   * a few (GATEWAY_MAX_HANDLES_PER_TOKEN, 4): registering at every link,
+   * switch or toggle would soon leave a new agent unable to wake the phone.
+   * So a handle is registered once per agent and token, and given again.
+   */
+  handles?: WakeHandleStore
+}
+
+/** One agent's handle, and a fingerprint of the token it was made for. */
+export interface KeptWakeHandle {
+  tokenKey: string
+  handle: GatewayWakeHandle
+}
+
+export interface WakeHandleStore {
+  get(agentDid: string): Promise<KeptWakeHandle | undefined>
+  set(agentDid: string, kept: KeptWakeHandle): Promise<void>
+}
+
+/**
+ * A fingerprint of a push token, so a handle is known to be for this token
+ * without keeping the token itself (FNV-1a, 32 bits: telling one token from
+ * the next, not a secret).
+ */
+export function tokenKeyOf(registration: PushRegistration): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < registration.token.length; i++) {
+    hash ^= registration.token.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return `${registration.platform}:${hash.toString(16).padStart(8, '0')}`
 }
 
 export type PushWakeOutcome =
@@ -51,12 +84,17 @@ export async function enablePushWake(deps: PushWakeDeps): Promise<PushWakeOutcom
   const registration = await deps.pushRegistration()
   if (!registration) return { status: 'noToken' }
 
-  const handle = await (deps.register ?? registerWithGateway)(gatewayUrl, registration, agentDid)
+  // The handle this agent already has for this token, else a new one.
+  const tokenKey = tokenKeyOf(registration)
+  const kept = await deps.handles?.get(agentDid).catch(() => undefined)
+  const reuse = kept?.tokenKey === tokenKey ? kept.handle : undefined
+  const handle = reuse ?? (await (deps.register ?? registerWithGateway)(gatewayUrl, registration, agentDid))
   if (!handle.gateway.startsWith('did:')) {
     // An agent wakes only a gateway named by a DID; one without an identity
     // answers with its URL, and set-wake would record a channel nothing uses.
     throw new Error('push gateway has no DID identity, so the agent could not wake this phone through it')
   }
+  if (!reuse) await deps.handles?.set(agentDid, { tokenKey, handle }).catch(() => undefined)
   const channel = await deps.setWake(handle, { pushPlatform: registration.platform })
   return channel.pushCapable
     ? { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }

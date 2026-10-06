@@ -6,6 +6,7 @@
  */
 import type { Agent } from '@credo-ts/core'
 
+import { PushGatewayRefusal } from '@/push/pushGateway'
 import { pushNotificationsConfig, type PushConfigDeps } from '@/push/pushConfig'
 import { onPushWake, wakeHints } from '@/push/pushHandlers'
 
@@ -75,6 +76,18 @@ describe('a build that names a push gateway', () => {
     expect(d.log).toHaveBeenCalledWith('push wake: failed', { enable: false, error: 'agent unreachable' })
   })
 
+  it('keeps the platform token when an approval rule holds the change, since the agent kept the wake channel', async () => {
+    const d = deps({
+      clearWake: jest.fn(async () => {
+        throw Object.assign(new Error('Your agent is waiting for someone else to approve this.'), {
+          reason: 'awaitingApproval',
+        })
+      }),
+    })
+    await expect(pushNotificationsConfig(d)!.toggle(false, agent)).resolves.toBeUndefined()
+    expect(d.stopPlatformPush).not.toHaveBeenCalled()
+  })
+
   it('logs a failure to withdraw the platform token instead of throwing into Settings', async () => {
     const d = deps({
       stopPlatformPush: jest.fn(async () => {
@@ -93,6 +106,20 @@ describe('a build that names a push gateway', () => {
     })
     await expect(pushNotificationsConfig(d)!.toggle(true, agent)).resolves.toBeUndefined()
     expect(d.log).toHaveBeenCalledWith('push wake: failed', { enable: true, error: 'permissionDenied' })
+  })
+
+  it("says so when the gateway keeps no more handles for this phone's token", async () => {
+    const onHandleLimit = jest.fn()
+    const d = {
+      ...deps({
+        enableWake: jest.fn(async () => {
+          throw new PushGatewayRefusal('taskFailed', 'task failed: too many handles for this push token')
+        }),
+      }),
+      onHandleLimit,
+    }
+    await expect(pushNotificationsConfig(d)!.toggle(true, agent)).resolves.toBeUndefined()
+    expect(onHandleLimit).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -72,6 +72,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Créer des connexions de confiance",
     "ConnectionsParagraph": "Construisez des relations directes et mutuelles avec des personnes que vous connaissez. Contrairement aux abonnements sur les réseaux sociaux, les deux parties confirment la connexion.\n\nVos connexions vivent sur votre appareil, sous votre contrôle — pas gérées par une plateforme.",
+    // Page 3b: Agent
+    "AgentHeading": "Votre propre agent",
+    "AgentParagraph": "Votre agent travaille pour vous en ligne, même quand votre téléphone est éteint. Il garde vos identités et vos cartes, et peut vous demander avant de faire quelque chose d'important.",
     // Page 4: Security
     "SecurityHeading": "Sécurisez votre portefeuille",
     "SecurityParagraph": "Votre portefeuille est protégé par un code PIN que vous créez. Pour plus de commodité, vous pouvez également activer Face ID ou Touch ID pour déverrouiller rapidement votre portefeuille et vérifier des actions comme la création de nouvelles connexions.\n\nVos données biométriques ne quittent jamais votre appareil — elles sont utilisées uniquement pour déverrouiller l'accès et confirmer vos actions. Vous pouvez les activer ou les désactiver à tout moment dans les Paramètres.",
@@ -228,6 +231,8 @@ const translation = {
     "GiveFeedback": "Donner votre avis",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Les notifications ne peuvent pas encore atteindre cet agent",
+    "HandleLimitBody": "Ce téléphone est enregistré auprès du service de notifications pour autant d'agents qu'il le permet : les notifications pour cet agent pourraient ne pas arriver. Keyring continue de fonctionner, et les demandes attendent toujours dans Demandes.",
     "NotificationsOffTitle": "Les notifications pour Keyring sont désactivées",
   },
   "AddCredentialSlider": {

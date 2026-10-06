@@ -73,6 +73,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Create Trusted Connections",
     "ConnectionsParagraph": "Connect directly with trusted contacts. Both parties confirm — no middleman, no platform. Always private, on your device.",
+    // Page 3b: Agent
+    "AgentHeading": "Your Own Agent",
+    "AgentParagraph": "Your agent works for you online, even when your phone is off. It keeps your identities and cards, and can ask you before it does something important.",
     // Page 4: Security
     "SecurityHeading": "Secure by Design",
     "SecurityParagraph": "Protected by PIN and optional biometrics. Your data never leaves your device.",
@@ -233,6 +236,8 @@ const translation = {
     "GiveFeedback": "Give Feedback",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Notifications can't reach this agent yet",
+    "HandleLimitBody": "This phone is registered with the push service for as many agents as it allows, so notifications for this agent may not arrive. Keyring keeps working, and requests still wait in Requests.",
     "NotificationsOffTitle": "Notifications for Keyring are turned off",
   },
   "AddCredentialSlider": {

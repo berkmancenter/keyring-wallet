@@ -27,6 +27,12 @@
  *   RUNNER_VTA      the runner agent's pnm slug (default bob; never a person's own agent)
  *   PNM_BIN         the pnm that speaks to that agent's version
  *   E2E_KEEP_APP=1  leave the phone linked (and its keys on the agent) for a next step
+ *   DEVICE_PIN      Android: set this screen lock after the link and type it into the owner
+ *                   check. Since keyring-bifold #317 Approve asks for the owner (Face ID, or
+ *                   the device PIN), and a phone with no lock cannot approve at all.
+ *   CARD_ROWS=1     #321's row: the card says "<who> asks your agent to <what>", no DID in it.
+ *   OWNER_ROWS=1    Android, with DEVICE_PIN: #317's rows. Approve asks; a cancelled check
+ *                   leaves the request waiting; Decline (a second request) does not ask.
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
@@ -63,6 +69,47 @@ function pnm(args, timeout = 120000) {
     return `${err.stdout ?? ""}${err.stderr ?? ""}` || String(err.message);
   }
 }
+const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
+const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
+const row = (name, ok, detail) => console.log(`ROW ${name} ${ok ? "PASS" : "FAIL"} — ${detail}`);
+function adb(...args) {
+  try {
+    return execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8", timeout: 30000 });
+  } catch (err) {
+    return `${err.stdout ?? ""}${err.stderr ?? ""}`;
+  }
+}
+/** The system's owner-check window (BiometricPrompt / device credential), or "" when none shows within `ms`. */
+async function authWindow(ms) {
+  for (const until = Date.now() + ms; Date.now() < until; await sleep(500)) {
+    const ws = adb("shell", "dumpsys", "window", "windows");
+    const win = (ws.match(/Window\{[^}]*(AuthContainer|BiometricPrompt|ConfirmDeviceCredential|CredentialView|biometric)[^}]*\}/i) || [""])[0];
+    if (win) return win;
+  }
+  return "";
+}
+/** Type the device PIN into the owner check; only into one, since Enter on the app presses its focused row. */
+async function answerOwner(d, tag) {
+  const win = await authWindow(8000);
+  if (!win) {
+    log(`owner check (${tag}): no prompt in 8 s; nothing typed`);
+    return false;
+  }
+  log(`owner check (${tag}): ${win.slice(0, 120)}; typing the PIN`);
+  adb("shell", "input", "text", PIN_DEV);
+  adb("shell", "input", "keyevent", "66");
+  await sleep(2500);
+  return true;
+}
+/** Into the approval card for a held request: the banner on Your agent, or the card on Requests. */
+async function awaitCard(d, ms) {
+  let card = false;
+  for (const until = Date.now() + ms; Date.now() < until && !card; await sleep(2000)) {
+    if (await existsTestId(d, "AgentApprovalBanner", 300)) await tapTestId(d, "AgentApprovalBanner", 3000).catch(() => undefined);
+    card = (await existsTestId(d, "AgentApprovalCard", 500)) || Boolean(await scrollToTestId(d, "AgentApprovalCard", 2).catch(() => false));
+  }
+  return card;
+}
 const lastLine = (out) => out.trim().split("\n").pop()?.slice(0, 160) ?? "";
 function rules() {
   const out = pnm(["approvals", "list", "--json"]);
@@ -91,6 +138,8 @@ let d;
 let failed = true;
 let approver;
 let probeContext;
+let declineContext;
+let pinSet = false;
 try {
   // The phone's key on the agent. A key the phone rotated onto is recorded as
   // created by whoever granted its temporary key: the temporary key itself for
@@ -123,8 +172,21 @@ try {
   await ensureAppium();
   d = await makeDriver({ platform: PLATFORM, udid: UDID, deviceName: process.env.IOS_DEVICE_NAME, keepState: true });
   await unlockToHome(d);
+  if (PIN_DEV) {
+    adb("shell", "locksettings", "set-pin", PIN_DEV);
+    pinSet = true;
+    // A key made in the 5 s after a lock is set does not prompt yet (10-04): wait past it.
+    log("device PIN set (after the link)");
+    await sleep(8000);
+  }
   await tapTestId(d, "MyAgent", 15000);
-  await tapTestId(d, "AgentSegment_manage", 15000).catch(() => undefined);
+  // Manage: a segment before bifold #297, the "Agent settings" row after.
+  if (await existsTestId(d, "AgentSegment_manage", 5000)) {
+    await tapTestId(d, "AgentSegment_manage", 5000);
+  } else if (!(await existsTestId(d, "AgentRequestsRow", 1500))) {
+    await scrollToTestId(d, "AgentSettings", 8).catch(() => undefined);
+    await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
+  }
 
   // The request: read the probe context, which the rule now holds for consent.
   const contextId = probeContext;
@@ -133,18 +195,38 @@ try {
   log(`request held: ${lastLine(asked)}`);
 
   const t0 = Date.now();
-  let card = false;
-  for (const until = Date.now() + 180000; Date.now() < until && !card; await sleep(2000)) {
-    if (await existsTestId(d, "AgentApprovalBanner", 300)) await tapTestId(d, "AgentApprovalBanner", 3000).catch(() => undefined);
-    card = (await existsTestId(d, "AgentApprovalCard", 500)) || Boolean(await scrollToTestId(d, "AgentApprovalCard", 2).catch(() => false));
-  }
+  const card = await awaitCard(d, 180000);
   if (!card) throw new Error("no approval card on the phone within 180 s");
   log(`approval card after ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
   const code = (await existsTestId(d, "ApprovalMatchCode", 1000)) ? await textOf(d, "ApprovalMatchCode") : "(none)";
   log(`match code on the phone: "${code}"`);
   await screenshot(d, "vta-approvals-card");
+  // #321: the card names who asks and what for, never as a DID.
+  const asks = (await existsTestId(d, "RequestAsks", 1500)) ? (await textOf(d, "RequestAsks")).trim() : "";
+  const does = (await existsTestId(d, "ApprovalTaskDoes", 1000)) ? (await textOf(d, "ApprovalTaskDoes")).trim() : "";
+  log(`card says: "${asks}" · task "${does}"`);
+  if (process.env.CARD_ROWS === "1") row("321 card names the action and requester", /asks your agent to \S/.test(asks) && !/did:/i.test(asks) && Boolean(does), `"${asks}" · "${does}"`);
+  if (OWNER_ROWS) {
+    // #317: Approve asks for the owner; a cancelled check leaves the request as it was.
+    await tapTestId(d, "ApproveConsentButton", 10000);
+    const asked = await authWindow(8000);
+    await screenshot(d, "vta-approvals-owner-prompt").catch(() => log("screenshot vta-approvals-owner-prompt not taken (the owner check is a secure window)"));
+    row("317 Approve asks the owner", Boolean(asked), asked ? asked.slice(0, 100) : "no owner check within 8 s of Approve");
+    if (asked) {
+      adb("shell", "input", "keyevent", "4");
+      await sleep(3000);
+    }
+    const still = await existsTestId(d, "ApproveConsentButton", 5000);
+    const page = await d.getPageSource().catch(() => "");
+    const said = (page.match(/text="[^"]{6,160}"/g) ?? []).filter((t) => /confirm|cancel|owner|lock|not approved|try again/i.test(t)).slice(0, 3);
+    const heldNow = /consent required/i.test(pnm(["contexts", "get", contextId], 120000));
+    await screenshot(d, "vta-approvals-owner-cancelled").catch(() => log("screenshot vta-approvals-owner-cancelled not taken (the owner check is a secure window)"));
+    row("317 cancel keeps it waiting", Boolean(asked) && still && heldNow, `card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
+  }
+  await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
   await tapTestId(d, "ApproveConsentButton", 10000);
+  if (PIN_DEV) await answerOwner(d, "approve");
   await waitForTestId(d, "AgentApprovalDecided", 30000);
   const decided = await textOf(d, "AgentApprovalDecided");
   log(`after Approve: "${decided}"`);
@@ -167,6 +249,32 @@ try {
   if (/not found/i.test(again)) throw new Error(`the approved request did not read the probe context: ${lastLine(again)}`);
   log(`the same request again: ${lastLine(again)}`);
 
+  if (OWNER_ROWS) {
+    // #317: Decline needs no owner check. A second request (another context: the same one would be the
+    // approved grant again), declined from the card.
+    declineContext = `e2e-decline-${Date.now()}`;
+    log(`decline context: ${lastLine(pnm(["contexts", "create", "--id", declineContext, "--name", "e2e approvals decline"]))}`);
+    const asked2 = pnm(["contexts", "get", declineContext], 180000);
+    const held2 = /consent required/i.test(asked2);
+    const card2 = held2 && (await awaitCard(d, 180000));
+    let prompted = "";
+    let gone = false;
+    let decided2 = "";
+    if (card2) {
+      await scrollToTestId(d, "DenyConsentButton", 3).catch(() => undefined);
+      await tapTestId(d, "DenyConsentButton", 10000);
+      prompted = await authWindow(5000);
+      if (prompted) adb("shell", "input", "keyevent", "4");
+      for (let i = 0; i < 20 && !gone; i++) {
+        await sleep(1000);
+        gone = !(await existsTestId(d, "DenyConsentButton", 500));
+      }
+      decided2 = (await existsTestId(d, "AgentApprovalDecided", 2000)) ? await textOf(d, "AgentApprovalDecided") : "";
+      await screenshot(d, "vta-approvals-declined").catch(() => log("screenshot vta-approvals-declined not taken (the owner check is a secure window)"));
+    }
+    row("317 Decline does not ask", card2 && !prompted && gone, card2 ? `owner check ${prompted ? "SHOWN" : "none"}; card cleared ${gone}; "${decided2}"` : `no card for the second request (held ${held2}: ${lastLine(asked2)})`);
+  }
+
   failed = false;
   printSuccess("VTA APPROVAL — held for consent, approved on the phone, then let through");
 } catch (err) {
@@ -182,7 +290,25 @@ try {
   log(`rule removed: ${lastLine(pnm(["approvals", "remove", TASK]))}`);
   if (approver) log(`approver removed: ${lastLine(pnm(["approvals", "approvers", "remove", SET, approver]))}`);
   // After the rule is gone, so removing the probe context needs no consent.
-  if (probeContext) log(`probe context removed: ${lastLine(pnm(["contexts", "delete", "--yes", probeContext]))}`);
+  // Say what happened, not what was asked: a refused delete (a rate-limited DID
+  // host, 429) was logged as "removed" and the context stayed on the runner
+  // (10-03, found 10-05). Retry a few times, then check the list.
+  for (const ctx of [probeContext, declineContext].filter(Boolean)) {
+    // Gone only when a list that was read (it always holds the agent's own
+    // "vta" context) no longer names it; an unreadable list proves nothing.
+    const gone = () => {
+      const listed = pnm(["contexts", "list"]);
+      return /"id":\s*"vta"/.test(listed) && !listed.includes(`"${ctx}"`);
+    };
+    let said = "";
+    let removed = false;
+    for (let attempt = 1; attempt <= 4 && !removed; attempt++) {
+      said = lastLine(pnm(["contexts", "delete", "--yes", ctx]));
+      removed = gone();
+      if (!removed) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+    }
+    log(removed ? `context ${ctx} removed: ${said}` : `context ${ctx} NOT confirmed removed (${said}): ${PNM} --vta ${SLUG} contexts delete --yes ${ctx}`);
+  }
   try {
     log(`rules after: ${rules().length}`);
   } catch (err) {
@@ -191,10 +317,11 @@ try {
   // The phone's own key ends the chain here, unless it is handed on. Kept on a
   // failure, as evidence, like every other run key (aclCleanup.js).
   if (process.env.E2E_KEEP_APP !== "1") {
-    removeRunKeys({ slug: SLUG, pnmHome: link.pnmHome, before: new Set(link.before), tempDid: link.tempDid, failed });
+    removeRunKeys({ slug: SLUG, pnmHome: link.pnmHome, before: new Set(link.before), tempDid: link.tempDid, heirs: link.heirs ?? [], failed });
     if (approver && !failed) log(`phone key removed: ${lastLine(pnm(["acl", "delete", approver]))}`);
     else if (approver) log(`phone key kept (failed run): ${PNM} --vta ${SLUG} acl delete '${approver}'`);
   }
+  if (pinSet) log(`device PIN cleared: ${adb("shell", "locksettings", "clear", "--old", PIN_DEV).trim().slice(0, 60)}`);
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();
 }

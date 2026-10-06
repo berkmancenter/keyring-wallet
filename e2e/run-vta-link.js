@@ -52,7 +52,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 
 const platform = process.env.PLATFORM || "android";
@@ -81,6 +81,9 @@ const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
 const IOS_UDID = process.env.IOS_UDID || "";
 const LINK_MODE = process.env.LINK_MODE || "qr";
 const JOURNEY = process.env.JOURNEY === "1";
+// EXPECT_REFUSAL=communityAgent (with LINK_MODE=manual and RUNNER_VTA naming a
+// community's own agent): pass when the phone refuses to link it (bifold #306).
+const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
@@ -120,6 +123,8 @@ async function assertAgentNamed(driver, key, where) {
 
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
+  // An agent with other phones on it first offers "Your other phones"; keep them all.
+  if (await passNewPhoneOfferIfShown(driver, 8000)) console.log("[e2e] other-phones offer: kept them all (Done)");
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
@@ -324,14 +329,42 @@ async function linkManually(driver) {
   } else {
     console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
   }
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
   execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
   await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+  if (EXPECT_REFUSAL === "communityAgent") {
+    // bifold #306: the phone signs in, learns the agent serves a community, and
+    // refuses it, keeping nothing (vtaAgent.ts finishLink). Its grant stays on
+    // that agent's list until an admin removes it: the run's cleanup does.
+    await waitForTestId(driver, "VtaLinkError", 120000);
+    const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
+    await screenshot(driver, "link-refused-community-agent");
+    if (!/This is a community's agent\. Link Keyring to your personal agent instead\./.test(said)) {
+      throw new Error(`the link was not refused as a community's agent: "${said.slice(0, 160)}"`);
+    }
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked after refusing a community's agent");
+    console.log(`[e2e] refused as a community's agent: "${said}"`);
+    return temporaryDid;
+  }
   await waitForTestId(driver, "VtaLinkDone", 180000);
   await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
   await assertNoDidShown(driver, "the Linked screen");
   await screenshot(driver, "link-m2-linked");
   if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
   console.log("[e2e] the temporary key is no longer in the ACL");
+  // The admin key that granted the temporary key is also the recorded creator of
+  // the rotated one, so the cleanup's chain cannot find it: name it now (aclCleanup.js).
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
   await tapTestId(driver, "VtaLinkContinue", 15000);
   await passNewPhoneOfferIfShown(driver);
   return temporaryDid;
@@ -349,7 +382,42 @@ async function linkManually(driver) {
  * (IN-20c); on a build without them it is on the page itself.
  */
 async function openManage(driver) {
-  if (await existsTestId(driver, "AgentSegment_manage", 3000)) await tapTestId(driver, "AgentSegment_manage", 5000);
+  // Before bifold #297: a Manage segment. After: one "Agent settings" row at
+  // the bottom that opens Manage's and Status's contents — tapped only when
+  // closed, since a second tap closes it.
+  if (await existsTestId(driver, "AgentSegment_manage", 3000)) {
+    await tapTestId(driver, "AgentSegment_manage", 5000);
+    return;
+  }
+  await scrollToTestId(driver, "AgentSettings", 8).catch(() => undefined);
+  if (!(await existsTestId(driver, "AgentRequestsRow", 1500)) && (await existsTestId(driver, "AgentSettings", 3000))) {
+    await tapTestId(driver, "AgentSettings", 5000);
+  }
+}
+
+/** Bring "Join another community" into reach: after #297 a member finds it behind the corner Join button. */
+async function openJoinDoors(driver) {
+  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
+    await tapTestId(driver, "AgentJoinCorner", 5000);
+  }
+}
+
+/** Into Join: the doors' "Join a community", or (236, bifold #316) the corner menu's Join. */
+async function tapJoinDoor(driver) {
+  await openJoinDoors(driver);
+  if (await existsTestId(driver, "AgentJoinMenuJoin", 2000)) return tapTestId(driver, "AgentJoinMenuJoin", 10000);
+  await scrollToTestId(driver, "AgentJoinCommunity", 8);
+  return tapTestId(driver, "AgentJoinCommunity", 15000);
+}
+
+/** Join's "what it asks": one card (JoinAsks), or the ways in (JoinWays) when the community offers several. */
+async function waitForJoinAsks(driver, timeout) {
+  await driver
+    .waitUntil(async () => (await byTestId(driver, "JoinAsks").isExisting()) || (await byTestId(driver, "JoinWays").isExisting()), { timeout, interval: 500 })
+    .catch(() => {
+      throw new Error(`Join showed neither testID=JoinAsks nor testID=JoinWays in ${timeout}ms`);
+    });
 }
 
 async function unlinkAndRelink(driver) {
@@ -437,9 +505,7 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   // What the build's suggestion is called. A community that has published no
   // name must not be offered by its hostname dressed up as one — the default
   // a maintainer meets on day one, since a fresh community publishes none.
@@ -487,7 +553,7 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: a pasted bare community DID opened Join${shows ? ` on "${shows}"` : ""}`);
     await assertNoDidShown(driver, "Join on a pasted bare community DID");
   }
-  await waitForTestId(driver, "JoinAsks", 15000);
+  await waitForJoinAsks(driver, 15000);
   await assertNoDidShown(driver, "Join: what the community asks");
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
@@ -672,9 +738,7 @@ async function testerJourney(driver) {
   // choose the segment and scroll to them (the #10 lab run tapped blind and
   // timed out on an applicant's screen).
   await openAgentHome(driver);
-  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
     // A community already chosen by a link opens on what it asks; go back one.
     await goBack(driver);
@@ -716,7 +780,7 @@ async function testerJourney(driver) {
     const linkName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
     const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(linkName)}`;
     await pasteLinkFromHome(driver, link);
-    await waitForTestId(driver, "JoinAsks", 30000);
+    await waitForJoinAsks(driver, 30000);
     // What the screen shows is NOT necessarily the name in the link. A name a
     // community publishes about itself outranks one a link claims, on purpose:
     // anyone can write a link, and the community's own service is the
@@ -849,12 +913,12 @@ async function openLinkFlow(driver, link) {
  * Leave this run's keys in place — the phone stays linked for the next step —
  * and hand what the chain's last step needs to remove them.
  */
-function keepForNextStep({ before, tempDid }) {
+function keepForNextStep({ before, tempDid, heirs = [] }) {
   try {
     const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts", "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, before: [...before], at: new Date().toISOString() }, null, 2));
-    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid);
+    writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
+    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);
     console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
     for (const e of mine) console.log(`  ${PNM_HOME ? `PNM_HOME=${PNM_HOME} ` : ''}${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
   } catch (e) {
@@ -869,6 +933,8 @@ let page;
 let aclBefore;
 /** Every temporary key this run showed, in order: a relink adds a second. */
 const runTempDids = [];
+/** The keys a manual link rotated onto, named at link time (heirOf). */
+const runHeirs = [];
 let runFailed = false;
 try {
   // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
@@ -909,9 +975,15 @@ try {
   if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
     await linkManually(driver);
-    await checkAgentScreen(driver);
-    if (JOURNEY) await testerJourney(driver);
-    printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
+    if (EXPECT_REFUSAL === "communityAgent") {
+      // After a refusal nothing of the agent stays: the link screen, not My Agent's home.
+      if (await existsTestId(driver, "AgentHomeName", 3000)) throw new Error("an agent home shows after refusing a community's agent");
+      printSuccess("VTA LINK REFUSED — a community's own agent (nothing kept)");
+    } else {
+      await checkAgentScreen(driver);
+      if (JOURNEY) await testerJourney(driver);
+      printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
+    }
     process.exitCode = 0;
   } else {
   // 1 — the admin sees codes that differ and refuses: the phone must say so.
@@ -981,13 +1053,14 @@ try {
   // they are kept as evidence either way.
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
-    if (runFailed || JOURNEY || mode === "always" || mode === "never") {
+    // A refused link ends its chain: its grant on the community's agent goes now.
+    if (runFailed || JOURNEY || EXPECT_REFUSAL || mode === "always" || mode === "never") {
       // Each link's chain by its own temporary key: an unlinked phone's key
       // stays on the agent's list (VTI-Q23), and the relink adds another.
-      for (const tempDid of runTempDids) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, failed: runFailed });
+      for (const [i, tempDid] of runTempDids.entries()) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, heirs: i === runTempDids.length - 1 ? runHeirs : [], failed: runFailed });
       if (!runTempDids.length) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: undefined, failed: runFailed });
     } else if (runTempDids.length) {
-      keepForNextStep({ before: aclBefore, tempDid: runTempDids[runTempDids.length - 1] });
+      keepForNextStep({ before: aclBefore, tempDid: runTempDids[runTempDids.length - 1], heirs: runHeirs });
     }
   }
   if (driver) await driver.deleteSession().catch(() => undefined);
