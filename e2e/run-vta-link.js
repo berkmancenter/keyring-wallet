@@ -403,6 +403,14 @@ async function openJoinDoors(driver) {
   }
 }
 
+/** Into Join: the doors' "Join a community", or (236, bifold #316) the corner menu's Join. */
+async function tapJoinDoor(driver) {
+  await openJoinDoors(driver);
+  if (await existsTestId(driver, "AgentJoinMenuJoin", 2000)) return tapTestId(driver, "AgentJoinMenuJoin", 10000);
+  await scrollToTestId(driver, "AgentJoinCommunity", 8);
+  return tapTestId(driver, "AgentJoinCommunity", 15000);
+}
+
 /** Join's "what it asks": one card (JoinAsks), or the ways in (JoinWays) when the community offers several. */
 async function waitForJoinAsks(driver, timeout) {
   await driver
@@ -497,9 +505,7 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  await openJoinDoors(driver);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   // What the build's suggestion is called. A community that has published no
   // name must not be offered by its hostname dressed up as one — the default
   // a maintainer meets on day one, since a fresh community publishes none.
@@ -732,9 +738,7 @@ async function testerJourney(driver) {
   // choose the segment and scroll to them (the #10 lab run tapped blind and
   // timed out on an applicant's screen).
   await openAgentHome(driver);
-  await openJoinDoors(driver);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
     // A community already chosen by a link opens on what it asks; go back one.
     await goBack(driver);

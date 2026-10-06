@@ -7,6 +7,7 @@
  *   R5 a refusal reaches Your agent: the card's own status, and "Check now" if the session holds another identity
  *   R3 requests from the other agent ("Ask me before…" on A, a held task, Requests on B)
  *   R6 both agents join one community; both memberships survive a relaunch; the Wallet names each card's agent
+ *   R7 a membership of another agent (#320): A a member of C (R2), on B open C from its Wallet card → "on A"
  *   R4 unlink one of several, then the last
  * Stops at the first unexpected screen, with a screenshot and the page source.
  *
@@ -160,6 +161,11 @@ async function linkTo(d, did, slug) {
 
 async function openSwitcher(d) {
   await myAgent(d);
+  // 236 (#316): the agents are chips, always shown; there is no AgentSwitcherOpen to tap.
+  if (!(await existsTestId(d, "AgentSwitcherOpen", 1500))) {
+    await scrollToTestId(d, "AgentSwitcherRow_0", 4, { from: 0.35 }).catch(() => undefined);
+    return;
+  }
   await scrollToTestId(d, "AgentSwitcherOpen", 4).catch(() => undefined);
   // AgentSwitcherOpen toggles: tapping it while the list is open closes it (21:58:47Z miss).
   if ((await switcherRows(d)).length) return;
@@ -376,6 +382,38 @@ try {
     }
   }
 
+  if (ROWS.includes("R7")) {
+    // #320: what the phone knows of C is A's. On B, C's screen says so and offers A, not Leave.
+    t0.R7 = Date.now();
+    await switchToOther(d, E.B_NAME);
+    await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+    await sleep(3000);
+    const cardEl = await d.$('//*[contains(@text,"Keyring Lab Community") or contains(@content-desc,"Keyring Lab Community")]');
+    if (!(await cardEl.isExisting().catch(() => false))) await stop(d, "R7: no Wallet card for C (R2 makes A a member first)");
+    await cardEl.click();
+    const open = await scrollToTestId(d, "CommunityCardOpenCommunity", 8).catch(() => undefined);
+    if (!open) await stop(d, "R7: the card's details offer no way to open C");
+    await open.click();
+    const held = await existsTestId(d, "CommunityHeldElsewhere", 20000);
+    const heldText = held ? await rowText(d, "CommunityHeldElsewhereText") : null;
+    const useA = await existsTestId(d, "CommunityUseHolderAgent", 3000);
+    const leave = await existsTestId(d, "LeaveCommunityButton", 1500);
+    await shot(d, "agents-r7-held-elsewhere");
+    log(`R7: on B, C shows held elsewhere ${held} "${heldText}" · use A ${useA} · Leave ${leave} (${since("R7")})`);
+    row("R7 C says it is A's", held && (heldText ?? "").includes(E.A_NAME) && useA && !leave, `held ${held} "${heldText}"; use A ${useA}; Leave offered ${leave}`);
+    if (useA) {
+      await tapTestId(d, "CommunityUseHolderAgent", 10000);
+      await owner(d, "R7 use A");
+      await waitSwitched(d, E.A_NAME).catch(() => undefined);
+      await sleep(3000);
+      const after = !(await existsTestId(d, "CommunityHeldElsewhere", 3000));
+      await shot(d, "agents-r7-after-use-a");
+      await myAgent(d);
+      const nameAfter = await homeName(d);
+      row("R7 use A", after && nameAfter.includes(E.A_NAME), `held card gone ${after}; home "${nameAfter}"`);
+    }
+  }
+
   if (ROWS.includes("R5")) {
     t0.R5 = Date.now();
     // A second identity for C, made on B; its request is declined while the shared session holds A's identity.
@@ -446,6 +484,8 @@ try {
     for (const until = Date.now() + 90000; Date.now() < until && !waiting.length; await sleep(3000)) {
       await myAgent(d);
       waiting = await idsWithPrefix(d, "AgentOtherWaiting_");
+      // 236 (#316): the count sits on the other agent's chip instead.
+      if (!waiting.length) waiting = await idsWithPrefix(d, "AgentSwitcherBadge_");
     }
     const wText = waiting.length ? await txt(d, waiting[0]) : null;
     await shot(d, "agents-r3-other-waiting");
@@ -555,14 +595,22 @@ try {
     t0.R4 = Date.now();
     if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
     await openSwitcher(d);
-    const unl = await idsWithPrefix(d, "AgentSwitcherUnlink_");
+    let unl = await idsWithPrefix(d, "AgentSwitcherUnlink_");
+    // 236 (#316): unlinking another agent moved to the gear's Agent settings screen.
+    const onSettings = !unl.length && (await existsTestId(d, "AgentSettings", 3000));
+    if (onSettings) {
+      await tapTestId(d, "AgentSettings", 10000);
+      await waitForTestId(d, "AgentSettingsScreen", 15000);
+      await scrollToTestId(d, "AgentOthers", 6).catch(() => undefined);
+      unl = await idsWithPrefix(d, "AgentSwitcherUnlink_");
+    }
     if (!unl.length) await stop(d, "no unlink control for the other agent");
     await tapTestId(d, unl[0], 10000);
     await waitForTestId(d, "AgentUnlinkOtherCard", 15000);
     await tapTestId(d, "AgentUnlinkOtherConfirm", 10000);
     await owner(d, "unlink B");
     await sleep(5000);
-    const left = (await switcherRows(d)).filter((r) => !/Current/.test(r.desc));
+    const left = onSettings ? await idsWithPrefix(d, "AgentOtherRow_") : (await switcherRows(d)).filter((r) => !/Current/.test(r.desc));
     await d.back().catch(() => undefined);
     await myAgent(d);
     const name = await homeName(d);

@@ -472,7 +472,9 @@ async function openVetting(d) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
   const homeBy = Date.now() + 60000;
   while (Date.now() < homeBy) {
-    for (const door of ["AgentVetOthers", "AgentContinueVetting"]) {
+    // 236 (#316): the desk's door is AgentOpenDesk, or AgentOpenDesk_<community> for a vetter of several.
+    const desks = (await d.getPageSource().catch(() => "")).match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
+    for (const door of ["AgentOpenDesk", ...new Set(desks), "AgentVetOthers", "AgentContinueVetting"]) {
       const el = await scrollToTestId(d, door, 4).catch(() => undefined);
       if (el) {
         await el.click();
