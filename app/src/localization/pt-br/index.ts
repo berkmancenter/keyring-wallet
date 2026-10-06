@@ -75,6 +75,7 @@ const translation = {
     // Page 3b: Agent
     "AgentHeading": "Seu próprio agente",
     "AgentParagraph": "Seu agente trabalha por você online, mesmo com o telefone desligado. Ele guarda suas identidades e seus cartões, e pode perguntar a você antes de fazer algo importante.",
+    "AgentDisclaimer": "Não esse tipo de agente.",
     // Page 4: Security
     "SecurityHeading": "Proteja sua carteira",
     "SecurityParagraph": "Sua carteira é protegida por um PIN que você cria. Para conveniência, você também pode habilitar Face ID ou Touch ID para desbloquear sua carteira rapidamente e verificar ações como criar novas conexões.\n\nSeus dados biométricos nunca saem do seu dispositivo — são usados apenas para desbloquear o acesso e confirmar suas ações. Você pode habilitar ou desabilitar a qualquer momento nas Configurações.",

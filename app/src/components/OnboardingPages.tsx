@@ -9,7 +9,7 @@ import PassIcon from '../assets/img/onboarding-pass.svg'
 import NetworkIcon from '../assets/img/onboarding-network.svg'
 import AccessControlIcon from '../assets/img/onboarding-access-control.svg'
 
-const KEYRING_PROJECT_URL = 'https://asml.cyber.harvard.edu/advanced-digital-identity/'
+const KEYRING_PROJECT_URL = 'https://www.appliedtechnologylab.org/projects#keyring'
 
 const ICON_SIZE = 88
 const CIRCLE_SIZE = 180
@@ -94,6 +94,22 @@ const WelcomePage = (theme: ITheme['OnboardingTheme'], iconStrokeProps?: Record<
   )
 }
 
+/**
+ * A light aside under the agent slide (Alberto, 10-07): "agent" here is
+ * software that works for the person, not a secret agent.
+ */
+const AgentDisclaimer: React.FC<{ theme: ITheme['OnboardingTheme'] }> = ({ theme }) => {
+  const { t } = useTranslation()
+  return (
+    <Text
+      style={[createStyles(theme).bodyText, { marginTop: 12, textAlign: 'center', fontStyle: 'italic', opacity: 0.8 }]}
+      testID="OnboardingAgentDisclaimer"
+    >
+      {t('Onboarding.AgentDisclaimer')}
+    </Text>
+  )
+}
+
 /** The My Agent tab's own icon, drawn at the size and colour of the other slides' icons. */
 const AgentIcon: React.FC<{ fill?: string; width?: number }> = ({ fill, width = ICON_SIZE }) => (
   <Icon name="shield-account-outline" size={width} color={fill} />
@@ -125,7 +141,14 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
       strokeProps(536, fill)
     ),
     // After trusted connections: the agent that acts for the person (Alberto, 10-05).
-    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon),
+    CreatePage(
+      'Onboarding.AgentHeading',
+      'Onboarding.AgentParagraph',
+      theme,
+      AgentIcon,
+      undefined,
+      <AgentDisclaimer theme={theme} />
+    ),
     CreatePage(
       'Onboarding.SecurityHeading',
       'Onboarding.SecurityParagraph',
