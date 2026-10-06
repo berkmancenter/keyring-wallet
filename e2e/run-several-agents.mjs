@@ -127,8 +127,36 @@ async function waitSwitched(d, wantName) {
   log(`switch wait: ${((Date.now() - t) / 1000).toFixed(1)} s · AgentSwitching seen ${sawSwitching}`);
 }
 
+/** The address path (VtaCreateAgent, bifold #338/#339), from its address step: code, grant, Connect, Done. */
+async function linkByAddressTo(d, did, slug) {
+  (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(did);
+  await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+  await waitForTestId(d, "AgentCreateOwnerCode", 60000);
+  if (!(await existsTestId(d, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(d, "AgentCreateShowCode", 6)).click();
+  await scrollToTestId(d, "AgentCreateOwnerDid", 4).catch(() => undefined);
+  const temp = (await textOf(d, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+  log(`link to ${slug} (address path): the phone shows ${temp.slice(0, 30)}…; granting`);
+  execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+  await (await scrollToTestId(d, "AgentCreateConnect", 6).catch(() => byTestId(d, "AgentCreateConnect"))).click();
+  await owner(d, "connect").catch(() => undefined);
+  const by = Date.now() + 240000;
+  while (Date.now() < by && !(await existsTestId(d, "AgentCreateReady", 2000))) {
+    if (await existsTestId(d, "AgentCreateError", 500)) throw new Error(`the address link failed: "${(await textOf(d, "AgentCreateError")).slice(0, 160)}"`);
+    if (await existsTestId(d, "AgentCreateCheckAgain", 500)) await tapTestId(d, "AgentCreateCheckAgain", 5000).catch(() => undefined);
+  }
+  await tapTestId(d, "AgentCreateDone", 15000);
+  await passNewPhoneOfferIfShown(d).catch(() => undefined);
+  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  return temp;
+}
+
 /** The no-QR link to `did` (slug for the grant), from a link screen already open. */
 async function linkTo(d, did, slug) {
+  // #338/#339: no "Link without a QR code" here, the address path instead (VtaCreateAgent).
+  if (!(await existsTestId(d, "VtaLinkAgentAddress", 3000)) && !(await existsTestId(d, "VtaLinkWithoutQr", 1500))) {
+    for (const entry of ["VtaLinkByAddress", "LinkByAddressButton"]) if (await existsTestId(d, entry, 1500)) { await tapTestId(d, entry, 10000); break; }
+    if (await existsTestId(d, "AgentCreateAddressInput", 15000)) return linkByAddressTo(d, did, slug);
+  }
   if (!(await existsTestId(d, "VtaLinkAgentAddress", 3000))) await tapTestId(d, "VtaLinkWithoutQr", 15000).catch(() => undefined);
   const address = await waitForTestId(d, "VtaLinkAgentAddress", 20000);
   await address.setValue(`${did}\n`);

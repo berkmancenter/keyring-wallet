@@ -186,15 +186,85 @@ async function openAgentHome(driver) {
  * The no-QR link: name the agent, show the key, grant it by hand — ending on
  * "Linked". Returns the phone's temporary key, recorded for the cleanup.
  */
+/**
+ * The link by the agent's address on 237 and later (bifold #338, #339): My Agent's "No code? Use your agent's
+ * address" (LinkByAddressButton), or the link screen's VtaLinkByAddress, opens VtaCreateAgent at the address
+ * step. Address → Continue → the code card (AgentCreateOwnerCode) → "Show the code" → the phone's did:key in
+ * AgentCreateOwnerDid → the host grants it → Connect → AgentCreateReady → Done. A phone with no screen lock (a
+ * simulator, an emulator before its PIN) takes the device path there and asks no owner check. Refusals show in
+ * AgentCreateError, worded as the link screen words them. Returns the phone's temporary key, for the cleanup.
+ */
+async function linkByAddress(driver, entry) {
+  await tapTestId(driver, entry, 30000);
+  const address = await waitForTestId(driver, "AgentCreateAddressInput", 30000);
+  await address.setValue(runnerVtaDid());
+  await (await scrollToTestId(driver, "AgentCreateAddressContinue", 4).catch(() => byTestId(driver, "AgentCreateAddressContinue"))).click();
+  await waitForTestId(driver, "AgentCreateOwnerCode", 60000);
+  if (!(await existsTestId(driver, "AgentCreateOwnerDid", 2000))) {
+    const show = await scrollToTestId(driver, "AgentCreateShowCode", 6).catch(() => undefined);
+    if (show) await show.click();
+    else await tapTestId(driver, "AgentCreateShowCode", 15000);
+  }
+  await scrollToTestId(driver, "AgentCreateOwnerDid", 4).catch(() => undefined);
+  const temporaryDid = (await textOf(driver, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+  if (!/^did:/.test(temporaryDid)) throw new Error(`no code in AgentCreateOwnerDid: "${temporaryDid.slice(0, 60)}"`);
+  runTempDids.push(temporaryDid);
+  console.log(`[e2e] phone shows its code ${temporaryDid.slice(0, 32)}… (address path${(await existsTestId(driver, "AgentCreateAsDevice", 500)) ? ", as a device: no screen lock" : ""})`);
+  await screenshot(driver, "link-m1-key-address");
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
+  execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const connect = await scrollToTestId(driver, "AgentCreateConnect", 6).catch(() => undefined);
+  if (connect) await connect.click();
+  else await tapTestId(driver, "AgentCreateConnect", 15000);
+  // A refusal, expected or not, lands back on the address step in AgentCreateError.
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /This is a community's agent\. Link Keyring to your personal agent instead\./, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const by = Date.now() + (wanted ? wanted.waitMs : 240000);
+  let state = "";
+  while (Date.now() < by && !state) {
+    if (await existsTestId(driver, "AgentCreateReady", 2000)) state = "ready";
+    else if (await existsTestId(driver, "AgentCreateError", 1000)) state = "error";
+    else if (await existsTestId(driver, "AgentCreateCheckAgain", 500)) await tapTestId(driver, "AgentCreateCheckAgain", 5000).catch(() => undefined);
+  }
+  if (state === "error" || wanted) {
+    const said = state === "error" ? (await textOf(driver, "AgentCreateError")).replace(/\s+/g, " ").trim() : "";
+    await screenshot(driver, `link-address-${EXPECT_REFUSAL || "error"}`);
+    if (!wanted) throw new Error(`the address link failed: "${said.slice(0, 200)}"`);
+    if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no AgentCreateError)"}"`);
+    console.log(EXPECT_REFUSAL === "communityAgent" ? `[e2e] refused as a community's agent: "${said}"` : `[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
+    return temporaryDid;
+  }
+  if (state !== "ready") throw new Error("the address link never reached AgentCreateReady in 240 s");
+  await screenshot(driver, "link-m2-linked-address");
+  if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+  console.log("[e2e] the temporary key is no longer in the ACL");
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
+  await tapTestId(driver, "AgentCreateDone", 15000);
+  await passNewPhoneOfferIfShown(driver);
+  return temporaryDid;
+}
+
 async function linkManually(driver) {
+  // #339: the link screen's own address entry (VtaLinkByAddress) goes to the address path.
+  if (await existsTestId(driver, "VtaLinkByAddress", 1500)) return linkByAddress(driver, "VtaLinkByAddress");
   // From My Agent, unless the link screen is already open (after an unlink it is).
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    // 237 (bifold #338): My Agent's "Link without a QR code" is gone; its "Scan your agent's code"
-    // (LinkYourAgentButton) opens the link screen, which still offers VtaLinkWithoutQr. Older builds keep the button.
-    if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) await tapTestId(driver, "LinkWithoutQrButton", 30000);
-    else await tapTestId(driver, "LinkYourAgentButton", 30000);
+    // 237 (bifold #338): "No code? Use your agent's address" (LinkByAddressButton) is the way in without a code.
+    if (!(await existsTestId(driver, "LinkWithoutQrButton", 3000)) && (await existsTestId(driver, "LinkByAddressButton", 3000))) {
+      return linkByAddress(driver, "LinkByAddressButton");
+    }
+    await tapTestId(driver, "LinkWithoutQrButton", 30000);
   }
   // "Link without QR" can land straight on the address screen, and then the
   // intermediate control is never there to tap — the same shape as the
