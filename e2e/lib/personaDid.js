@@ -28,6 +28,19 @@ export async function capturePersonaDid(d, stem, name) {
     await sleep(1000);
     await scrollToTestId(d, `${stem}Did`, 4).catch(() => undefined);
     const el = byTestId(d, `${stem}Did`);
+    // Bring the whole DID line well above the tab bar: a line can exist (iOS) or sit at the bottom edge yet be cut off.
+    try {
+      const { height } = await d.getWindowSize();
+      for (let i = 0; i < 3; i++) {
+        const r = await el.getRect();
+        if (r.y + r.height <= height * 0.72) break;
+        const x = Math.floor((await d.getWindowSize()).width / 2);
+        await d.action("pointer").move({ x, y: Math.floor(height * 0.7) }).down().pause(80).move({ x, y: Math.floor(height * 0.4), duration: 400 }).up().perform();
+        await sleep(700);
+      }
+    } catch {
+      /* best effort: the screenshot is still taken */
+    }
     const ios = d.e2ePlatform === "ios";
     const did = String((await el.getAttribute(ios ? "label" : "text").catch(() => "")) || "").replace(/\s+/g, "");
     await d.saveScreenshot(path.join(dir, `${name}.png`)).catch(() => undefined);

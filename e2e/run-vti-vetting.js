@@ -476,7 +476,7 @@ try {
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
     if (process.env.KEYRING_COMMUNITY_DID) {
-      await tapTestId(applicant, "MyAgent", 10000).catch(() => undefined);
+      await byTestId(applicant, "MyAgent").click().catch(() => undefined);
       await sleep(2000);
       await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card");
     }
