@@ -3,7 +3,7 @@
  * doors and where they are on the journey — and the vetter role appears only
  * when a grant stands, never as a locked button up front.
  */
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter, StyleSheet } from 'react-native'
@@ -18,7 +18,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
-import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
+import VtaAgentHome, { forgetAgentHoldings, HIGHLIGHT_MS, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 import { communityCardKey } from '../screens/CommunityCard'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -879,6 +879,19 @@ describe('Your agent — after linking', () => {
     const intro = StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentIntro')).props.style)
     expect(intro).toMatchObject({ flex: 1, justifyContent: 'center', paddingBottom: 20 })
     controller.set({ introSeen: true })
+  })
+
+  // Alberto, 238: Join's "Done" after an admission comes back here with the
+  // new community's card picked out for a moment.
+  it('a community just joined is picked out on its card for a moment', async () => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { highlightCommunity: communityDid } })
+    const tree = await renderHome([persona, membership])
+    expect(tree.getByTestId(testIdWithKey('AgentCommunityHighlighted'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(HIGHLIGHT_MS)
+    })
+    expect(tree.queryByTestId(testIdWithKey('AgentCommunityHighlighted'))).toBeNull()
+    ;(useRoute as jest.Mock).mockReturnValue({ params: {} })
   })
 
   it('no approval waiting: no banner', async () => {

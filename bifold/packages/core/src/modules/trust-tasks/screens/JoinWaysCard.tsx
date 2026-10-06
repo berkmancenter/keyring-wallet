@@ -115,39 +115,41 @@ export const JoinWaysCard: React.FC<{
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
   const named = { community, interpolation: { escapeValue: false } }
+  // Only the ways this person can use are listed (Alberto, 238): a way
+  // Keyring cannot read, or one asking for a credential it cannot present
+  // yet, is one quiet line, the ways themselves under it for whoever wants
+  // them. "There is more than one way in" and "You can use this one now"
+  // said again what the list and its buttons show.
+  const [othersOpen, setOthersOpen] = useState(false)
+  const notYet = (row: JoinWayRow) => row.cannotUse || row.credentialNotYet
+  const usable = card.rows.filter((row) => !notYet(row))
+  const others = card.rows.filter(notYet)
+  const wayView = (row: JoinWayRow, withAction: boolean) => (
+    <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
+      {row.needs
+        .flatMap((need) => needLines(need, community, t))
+        .map((line) => (
+          <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
+            {'• '}
+            {line}
+          </ThemedText>
+        ))}
+      {row.follows ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey(`JoinWayFollows_${row.id}`)}>
+          {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}
+        </ThemedText>
+      ) : null}
+      {row.cannotUse ? <CannotUse row={row} community={community} muted={styles.muted} /> : null}
+      {row.credentialNotYet ? <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText> : null}
+      {row.canStartVetting && !readOnly ? (
+        <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
+      ) : null}
+      {withAction && rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
+    </View>
+  )
   return (
     <View style={styles.card} testID={testIdWithKey('JoinWays')}>
-      {card.several ? (
-        <ThemedText testID={testIdWithKey('JoinWaysSeveral')}>{t('Join.Ways.Several')}</ThemedText>
-      ) : null}
-      {card.rows.map((row) => (
-        <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
-          {row.needs
-            .flatMap((need) => needLines(need, community, t))
-            .map((line) => (
-              <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
-                {'• '}
-                {line}
-              </ThemedText>
-            ))}
-          {row.follows ? (
-            <ThemedText style={styles.muted} testID={testIdWithKey(`JoinWayFollows_${row.id}`)}>
-              {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}
-            </ThemedText>
-          ) : null}
-          {row.cannotUse ? <CannotUse row={row} community={community} muted={styles.muted} /> : null}
-          {row.credentialNotYet ? (
-            <ThemedText style={styles.muted}>{t('Join.Ways.CredentialNotYet')}</ThemedText>
-          ) : null}
-          {row.suggested && !readOnly ? (
-            <ThemedText testID={testIdWithKey('JoinWaySuggested')}>{t('Join.Ways.Suggested')}</ThemedText>
-          ) : null}
-          {row.canStartVetting && !readOnly ? (
-            <ThemedText testID={testIdWithKey(`JoinWayStart_${row.id}`)}>{t('Join.Ways.VettingToDo')}</ThemedText>
-          ) : null}
-          {rowAction?.(row) ? <View style={styles.action}>{rowAction(row)}</View> : null}
-        </View>
-      ))}
+      {usable.map((row) => wayView(row, true))}
       {card.noneUsable ? (
         <ThemedText testID={testIdWithKey('JoinWaysNoneUsable')}>{t('Join.Ways.NoneUsable', named)}</ThemedText>
       ) : null}
@@ -156,6 +158,22 @@ export const JoinWaysCard: React.FC<{
           <ThemedText>{t('Join.Ways.MissingInvitation', named)}</ThemedText>
         </View>
       ) : null}
+      {others.length && !card.noneUsable ? (
+        <ThemedText style={styles.muted} testID={testIdWithKey('JoinWaysOthers')}>
+          {t('Join.Ways.OthersNotYet')}
+        </ThemedText>
+      ) : null}
+      {others.length ? (
+        <Pressable
+          onPress={() => setOthersOpen((was) => !was)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: othersOpen }}
+          testID={testIdWithKey('JoinWaysOthersToggle')}
+        >
+          <ThemedText style={styles.muted}>{t('Join.Ways.OthersShow')}</ThemedText>
+        </Pressable>
+      ) : null}
+      {othersOpen ? others.map((row) => wayView(row, false)) : null}
     </View>
   )
 }

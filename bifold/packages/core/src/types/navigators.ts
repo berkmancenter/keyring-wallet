@@ -152,7 +152,8 @@ export type MyAgentStackParams = {
   // screen before, so this one opens at the address field instead of asking
   // the same question again (report #24).
   [Screens.VtaLink]: { withoutQr?: boolean } | undefined
-  [Screens.VtaAgent]: undefined
+  // `highlightCommunity`: a community just joined, picked out on its card for a moment (238).
+  [Screens.VtaAgent]: { highlightCommunity?: string } | undefined
   [Screens.VtaRequests]: undefined
   [Screens.VtaAskMe]: undefined
   [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined
