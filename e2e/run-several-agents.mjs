@@ -641,6 +641,8 @@ try {
     if (!unl.length) await stop(d, "no unlink control for the other agent");
     await tapTestId(d, unl[0], 10000);
     await waitForTestId(d, "AgentUnlinkOtherCard", 15000);
+    // On 236's Agent settings screen the confirm sits under the card, below the fold (rerun 13:58Z).
+    await scrollToTestId(d, "AgentUnlinkOtherConfirm", 4).catch(() => undefined);
     await tapTestId(d, "AgentUnlinkOtherConfirm", 10000);
     await owner(d, "unlink B");
     await sleep(5000);
