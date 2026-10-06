@@ -4,7 +4,7 @@
  * when a grant stands, never as a locked button up front.
  */
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
@@ -871,13 +871,17 @@ describe('Your agent — after linking', () => {
     controller.set({ introSeen: true })
   })
 
-  // 239, iPhone: the text sat near the header and the buttons halfway up the
-  // screen, as both kept the room above the tab bar. Only the buttons do.
-  it('the introduction is centred between the header and its buttons', async () => {
+  // 239 and 238, iPhone: the panel sat high, as it kept room for a tab bar
+  // that sits below the screen, not over it. The words and their buttons are
+  // centred together, with no such room.
+  it('the introduction, words and buttons together, is centred between the header and the tab bar', async () => {
     controller.set({ introSeen: false })
     const tree = await renderHome([])
-    const intro = StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentIntro')).props.style)
-    expect(intro).toMatchObject({ flex: 1, justifyContent: 'center', paddingBottom: 20 })
+    const intro = tree.getByTestId(testIdWithKey('AgentIntro'))
+    const style = StyleSheet.flatten(intro.props.style)
+    expect(style).toMatchObject({ flex: 1, justifyContent: 'center', padding: 20 })
+    expect(style.paddingBottom).toBeUndefined()
+    expect(within(intro).getByTestId(testIdWithKey('AgentIntroNext'))).toBeTruthy()
     controller.set({ introSeen: true })
   })
 

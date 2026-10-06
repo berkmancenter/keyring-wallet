@@ -330,14 +330,12 @@ const VtaAgentHome: React.FC = () => {
   if (!state.introSeen) {
     const last = introPanel === INTRO_PANELS.length - 1
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-        {/* Centred between the header and the buttons: only the buttons keep
-            the room above the tab bar. With it here too, the text sat near the
-            header and the buttons halfway up the screen (239, iPhone). */}
-        <View
-          style={[styles.content, { flex: 1, justifyContent: 'center', paddingBottom: 20 }]}
-          testID={testIdWithKey('AgentIntro')}
-        >
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        {/* The words and their buttons, centred together between the header
+            and the tab bar. The tab bar sits below the screen, not over it,
+            so no room is kept for it here; with that room the panel sat
+            high (238, iPhone). */}
+        <View style={{ flex: 1, justifyContent: 'center', padding: 20, gap: 16 }} testID={testIdWithKey('AgentIntro')}>
           <ThemedText variant="headingTwo" accessibilityRole="header">
             {t(`VtaLink.${INTRO_PANELS[introPanel]}Title`)}
           </ThemedText>
@@ -345,27 +343,27 @@ const VtaAgentHome: React.FC = () => {
           <ThemedText style={styles.muted}>
             {t('VtaLink.IntroStep', { n: introPanel + 1, of: INTRO_PANELS.length })}
           </ThemedText>
-        </View>
-        <View style={[styles.content, { paddingTop: 0 }]}>
-          <Button
-            title={last ? t('VtaLink.IntroDone') : t('VtaLink.IntroNext')}
-            buttonType={ButtonType.Primary}
-            onPress={() => {
-              if (last && agent) {
-                setIntroPanel(0)
-                void vtaAgent.markIntroSeen(agent)
-              } else setIntroPanel(introPanel + 1)
-            }}
-            testID={testIdWithKey('AgentIntroNext')}
-          />
-          {!last ? (
+          <View style={{ gap: 16, marginTop: 8 }} testID={testIdWithKey('AgentIntroButtons')}>
             <Button
-              title={t('VtaLink.IntroSkip')}
-              buttonType={ButtonType.Tertiary}
-              onPress={() => agent && void vtaAgent.markIntroSeen(agent)}
-              testID={testIdWithKey('AgentIntroSkip')}
+              title={last ? t('VtaLink.IntroDone') : t('VtaLink.IntroNext')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                if (last && agent) {
+                  setIntroPanel(0)
+                  void vtaAgent.markIntroSeen(agent)
+                } else setIntroPanel(introPanel + 1)
+              }}
+              testID={testIdWithKey('AgentIntroNext')}
             />
-          ) : null}
+            {!last ? (
+              <Button
+                title={t('VtaLink.IntroSkip')}
+                buttonType={ButtonType.Tertiary}
+                onPress={() => agent && void vtaAgent.markIntroSeen(agent)}
+                testID={testIdWithKey('AgentIntroSkip')}
+              />
+            ) : null}
+          </View>
         </View>
       </SafeAreaView>
     )
