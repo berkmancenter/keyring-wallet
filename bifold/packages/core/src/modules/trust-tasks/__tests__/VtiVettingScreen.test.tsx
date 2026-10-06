@@ -232,6 +232,14 @@ describe('Vetting — a member', () => {
     expect(tree.getByTestId(testIdWithKey('VettingApplicantStep_member'))).toBeTruthy()
   })
 
+  test("the applicant's side keeps the usual header and says whose side it is", async () => {
+    const setOptions = useNavigation().setOptions as jest.Mock
+    setOptions.mockClear()
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(setOptions).toHaveBeenLastCalledWith({ title: 'Screens.GettingVetted', headerVariant: undefined })
+  })
+
   test('a role that says more than member is named', async () => {
     const tree = await renderAs('vetter')
     expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent('Vetting.MemberAs')
@@ -492,6 +500,14 @@ describe('Vetting — the desk', () => {
           .map((b) => String(b.props.testID).replace(/^com\.ariesbifold:id\//, ''))
       )
     )
+
+  test("the vetter's desk asks for its own header: another title and the gradient's far end changed", async () => {
+    const setOptions = useNavigation().setOptions as jest.Mock
+    setOptions.mockClear()
+    const tree = await renderDesk([persona, grant])
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))
+    expect(setOptions).toHaveBeenLastCalledWith({ title: 'Screens.VetterDesk', headerVariant: 'vetter' })
+  })
 
   test('only a finished request on the desk: it opens on a new ticket, the finished one folded away', async () => {
     const tree = await renderDesk([persona, grant, deskRequest('attested')])

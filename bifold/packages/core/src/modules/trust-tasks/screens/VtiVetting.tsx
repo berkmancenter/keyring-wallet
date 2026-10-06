@@ -17,7 +17,7 @@ import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -38,6 +38,7 @@ import QRRenderer from '../../../components/misc/QRRenderer'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
@@ -568,6 +569,19 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     if (!checkTicketFor(ticket, communityDid).ok) return
     void run('request', () => applicantRef.current!.requestVetter({ link: ticket }))
   }, [ticketLink, application, communityDid, busy, run])
+
+  // Whose side this is, in the header: the vetter's desk has its own title and
+  // the theme's gradient with one end changed; the applicant keeps the usual
+  // header. The two read alike otherwise (Alberto, 10-06).
+  const side: 'vetter' | 'applicant' | undefined = grant ? 'vetter' : persona ? 'applicant' : undefined
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: t(
+        side === 'vetter' ? 'Screens.VetterDesk' : side === 'applicant' ? 'Screens.GettingVetted' : 'Screens.Vetting'
+      ),
+      headerVariant: side === 'vetter' ? VETTER_HEADER : undefined,
+    } as object)
+  }, [navigation, side, t])
 
   // Say what is missing and offer the way to it — a store build names neither.
   if (!vtaDid || !communityDid) {

@@ -615,4 +615,9 @@ export interface IGradientTheme {
     end: { x: number; y: number }
   }
   HeaderBackground?: React.ComponentType<{ style?: any }>
+  /**
+   * The far end of the header gradient on the vetter's side of vetting, so it
+   * reads differently from the applicant's. Unset: the semantic focus colour.
+   */
+  vetterHeaderEnd?: string
 }
