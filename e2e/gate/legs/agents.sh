@@ -9,7 +9,7 @@ leg_begin agents "$(shasum -a 256 "$APK" | cut -c1-12)"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1
-  kill "${LC:-0}" 2>/dev/null; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"
   local s m c
   for s in "$RUNNER_A_SLUG" "$RUNNER_B_SLUG"; do

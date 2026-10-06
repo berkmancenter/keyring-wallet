@@ -11,7 +11,7 @@ PREV_APK=$NEW_APK; PREV_W=$NEW_W
 leg_begin relaunch-android "$(shasum -a 256 "$NEW_APK" | cut -c1-12)"
 T0=$(stamp); E=emulator-5572
 fin() {
-  adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; kill "${LC:-0}" 2>/dev/null; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
+  adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; keys_since "$RUNNER_B_SLUG" "$T0"
   local m; for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR"/*.out 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: update leg member" | grep -oE -- '-> [0-9]+' | tail -1)"; done
