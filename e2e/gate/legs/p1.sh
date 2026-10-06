@@ -27,7 +27,10 @@ row p1-link PASS "$(( $(date +%s) - t ))s"
 
 # Seat the TUI persona as C's vetter: a vetter grant from C's admin, delivered while the TUI listens. A Farm
 # upgrade can leave the TUI with no grant (10-06, 0.55.0: "No community has named you a vetter yet").
-if selected p1-tui-seated || selected p1-tui-vets; then
+# P1_BLOCKED="<why>": the TUI rows are reported as blocked (SKIP with the reason), not run; approvals still run.
+if [ -n "${P1_BLOCKED:-}" ]; then
+  row p1-tui-seated SKIP "blocked: $P1_BLOCKED"; row p1-tui-vets SKIP "blocked: $P1_BLOCKED"
+elif selected p1-tui-seated || selected p1-tui-vets; then
   (cd "$REPO" && perl -e 'alarm 600; exec @ARGV' node e2e/openvtc/regrant-tui.mjs "$OPENVTC_BIN" "$OPENVTC_VERSION" "$TUI_FX" "$TUI_PROFILE" "$TUI_PERSONA" \
     "$C_REST" "$C_DID" "$C_ADMIN_CRED" vetter-grant) > "$LEG_DIR/tui-seat.out" 2>&1; rc=$?
   seat=$(grep -E 'SEATED|NOT SEATED|vetter-grant:' "$LEG_DIR/tui-seat.out" | tail -1 | cut -c1-160)
@@ -35,14 +38,14 @@ if selected p1-tui-seated || selected p1-tui-vets; then
   else row p1-tui-seated FAIL "rc=$rc $seat"; fi
 fi
 
-if selected p1-tui-vets; then
+if [ -z "${P1_BLOCKED:-}" ] && selected p1-tui-vets; then
   t=$(date +%s)
   (cd "$REPO" && perl -e 'alarm 1800; exec @ARGV' node e2e/openvtc/run-phase1.mjs --platform android --label "P1-gate-${CAND_WALLET:0:8}" --expect green \
     --no-install --apk "$APK" --udid $E --openvtc-bin "$OPENVTC_BIN" --openvtc-version "$OPENVTC_VERSION" --fixture-dir "$TUI_FX" --profile "$TUI_PROFILE" \
     --tui-persona "$TUI_PERSONA" --community-did "$C_DID" --community-name "$C_NAME" --vtc-base "$C_REST" --admin-credential "$C_ADMIN_CRED") > "$LEG_DIR/p1.out" 2>&1; rc=$?
   grep -E '✅|❌|\[step\]' "$LEG_DIR/p1.out" | grep -v webdriver | tail -8 | cut -c1-200
   if [ $rc -eq 0 ]; then row p1-tui-vets PASS "$(( $(date +%s) - t ))s"; else row p1-tui-vets FAIL "rc=$rc $(grep -E '❌' "$LEG_DIR/p1.out" | tail -1 | cut -c1-140)"; fi
-else row p1-tui-vets SKIP "not selected"; fi
+elif [ -z "${P1_BLOCKED:-}" ]; then row p1-tui-vets SKIP "not selected"; fi
 
 # Approvals on the same linked phone (run-vta-approvals.js reads artifacts/last-link.json from the link).
 t=$(date +%s)
