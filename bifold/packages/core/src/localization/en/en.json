@@ -1393,9 +1393,9 @@
     "FailedCommunityAgentCleanup": "If you added this phone in that agent's settings, remove it there.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
     "SwapFailed": {
-      "held": "Your agent held this phone's link for an approval, because of an approval rule on your agent. Approve it or remove that rule where it was set, then link again.",
+      "held": "Your agent is holding this phone's link until someone approves it: an approval rule on your agent asks for that. Approve it from a device that can, or remove that rule where it was set, then link again.",
       "refused": "Your agent refused to finish linking this phone. Check this phone's access where your agent is managed, then link again.",
-      "noAnswer": "Your agent didn't answer while this phone was finishing its link, and nothing was changed. Link again; this usually works the second time."
+      "noAnswer": "Your agent didn't answer while this phone was finishing its link, and nothing was changed. Link again."
     },
     "LinkYourAgent": "Link your agent",
     "YourAgentFallback": "your agent",
