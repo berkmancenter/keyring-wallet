@@ -46,28 +46,43 @@ export interface AgentChipsProps {
   switchingText?: string
   onUse: (vtaDid: string) => void
   onAdd: () => void
+  /**
+   * How far the strip sits in from the screen's edges (the page's and the
+   * card's padding). The strip runs out to the edges and starts its first
+   * chip this far in, so the chips line up with the text above and scroll to
+   * the screen's edge, not to an invisible line short of it (239, iPhone).
+   */
+  inset?: number
 }
 
-export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, switchingText, onUse, onAdd }) => {
+export const AgentChips: React.FC<AgentChipsProps> = ({
+  agents,
+  switchingTo,
+  switchingText,
+  onUse,
+  onAdd,
+  inset = 0,
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const busy = Boolean(switchingTo)
   const strip = useRef<ScrollView>(null)
   const chipX = useRef(new Map<string, number>())
   const current = agents.find((a) => a.current)?.vtaDid
-  // The current chip at the strip's start, so the row shows it whole; the
-  // strip cannot scroll past its end, so a last chip ends up flush right.
+  // The current chip where the first one starts, so the row shows it whole;
+  // the strip cannot scroll past its end, so a last chip ends up at the right.
   const showCurrent = useCallback(() => {
     const x = current ? chipX.current.get(current) : undefined
-    if (x !== undefined) strip.current?.scrollTo({ x: Math.max(0, x - 8), animated: true })
-  }, [current])
+    if (x !== undefined) strip.current?.scrollTo({ x: Math.max(0, x - inset), animated: true })
+  }, [current, inset])
   useEffect(showCurrent, [showCurrent])
   const onChipLayout = (vtaDid: string) => (e: LayoutChangeEvent) => {
     chipX.current.set(vtaDid, e.nativeEvent.layout.x)
     if (vtaDid === current) showCurrent()
   }
   const styles = StyleSheet.create({
-    strip: { gap: 8, paddingVertical: 2, paddingRight: 4 },
+    bleed: { marginHorizontal: -inset },
+    strip: { gap: 8, paddingVertical: 2, paddingHorizontal: inset },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -116,6 +131,7 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
       <ScrollView
         ref={strip}
         horizontal
+        style={styles.bleed}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.strip}
         accessibilityRole="tablist"
