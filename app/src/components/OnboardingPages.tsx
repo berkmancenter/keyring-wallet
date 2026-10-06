@@ -12,6 +12,12 @@ import AccessControlIcon from '../assets/img/onboarding-access-control.svg'
 const KEYRING_PROJECT_URL = 'https://www.appliedtechnologylab.org/projects#keyring'
 
 const ICON_SIZE = 88
+/**
+ * The welcome slide's handshake, a little larger in the same circle (Alberto,
+ * 10-07): its glyph has the most air of the five. 34 points still clear it
+ * from the circle's edge.
+ */
+const WELCOME_ICON_SIZE = 112
 const CIRCLE_SIZE = 180
 const CIRCLE_COLOR = 'rgba(163, 73, 164, 0.18)'
 
@@ -94,30 +100,15 @@ const WelcomePage = (theme: ITheme['OnboardingTheme'], iconStrokeProps?: Record<
   )
 }
 
-/**
- * A light aside under the agent slide (Alberto, 10-07): "agent" here is
- * software that works for the person, not a secret agent.
- */
-const AgentDisclaimer: React.FC<{ theme: ITheme['OnboardingTheme'] }> = ({ theme }) => {
-  const { t } = useTranslation()
-  return (
-    <Text
-      style={[createStyles(theme).bodyText, { marginTop: 12, textAlign: 'center', fontStyle: 'italic', opacity: 0.8 }]}
-      testID="OnboardingAgentDisclaimer"
-    >
-      {t('Onboarding.AgentDisclaimer')}
-    </Text>
-  )
-}
-
 /** The My Agent tab's own icon, drawn at the size and colour of the other slides' icons. */
 const AgentIcon: React.FC<{ fill?: string; width?: number }> = ({ fill, width = ICON_SIZE }) => (
   <Icon name="shield-account-outline" size={width} color={fill} />
 )
 
-const strokeProps = (viewBoxSize: number, fill: string) => ({
+/** The stroke a glyph is drawn with: the same weight on screen whatever its size. */
+const strokeProps = (viewBoxSize: number, fill: string, size: number = ICON_SIZE) => ({
   stroke: fill,
-  strokeWidth: 0.8 * (viewBoxSize / ICON_SIZE),
+  strokeWidth: 0.8 * (viewBoxSize / size),
   strokeLinejoin: 'round' as const,
   strokeLinecap: 'round' as const,
 })
@@ -125,7 +116,11 @@ const strokeProps = (viewBoxSize: number, fill: string) => ({
 export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['OnboardingTheme']): Array<Element> => {
   const fill = theme.imageDisplayOptions.fill
   return [
-    WelcomePage(theme, strokeProps(512, fill)),
+    WelcomePage(theme, {
+      ...strokeProps(512, fill, WELCOME_ICON_SIZE),
+      width: WELCOME_ICON_SIZE,
+      height: WELCOME_ICON_SIZE,
+    }),
     CreatePage(
       'Onboarding.CredentialsHeading',
       'Onboarding.CredentialsParagraph',
@@ -141,14 +136,7 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
       strokeProps(536, fill)
     ),
     // After trusted connections: the agent that acts for the person (Alberto, 10-05).
-    CreatePage(
-      'Onboarding.AgentHeading',
-      'Onboarding.AgentParagraph',
-      theme,
-      AgentIcon,
-      undefined,
-      <AgentDisclaimer theme={theme} />
-    ),
+    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon),
     CreatePage(
       'Onboarding.SecurityHeading',
       'Onboarding.SecurityParagraph',

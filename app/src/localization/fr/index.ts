@@ -74,8 +74,7 @@ const translation = {
     "ConnectionsParagraph": "Construisez des relations directes et mutuelles avec des personnes que vous connaissez. Contrairement aux abonnements sur les réseaux sociaux, les deux parties confirment la connexion.\n\nVos connexions vivent sur votre appareil, sous votre contrôle — pas gérées par une plateforme.",
     // Page 3b: Agent
     "AgentHeading": "Votre propre agent",
-    "AgentParagraph": "Votre agent travaille pour vous en ligne, même quand votre téléphone est éteint. Il garde vos identités et vos cartes, et peut vous demander avant de faire quelque chose d'important.",
-    "AgentDisclaimer": "Pas ce genre d'agent.",
+    "AgentParagraph": "Rien d'un agent secret : celui-ci travaille pour vous en ligne, même quand votre téléphone est éteint. Il garde vos identités et vos cartes, et vous demande votre accord avant toute chose importante.",
     // Page 4: Security
     "SecurityHeading": "Sécurisez votre portefeuille",
     "SecurityParagraph": "Votre portefeuille est protégé par un code PIN que vous créez. Pour plus de commodité, vous pouvez également activer Face ID ou Touch ID pour déverrouiller rapidement votre portefeuille et vérifier des actions comme la création de nouvelles connexions.\n\nVos données biométriques ne quittent jamais votre appareil — elles sont utilisées uniquement pour déverrouiller l'accès et confirmer vos actions. Vous pouvez les activer ou les désactiver à tout moment dans les Paramètres.",

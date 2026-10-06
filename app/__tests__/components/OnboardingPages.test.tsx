@@ -5,6 +5,9 @@ import { Linking } from 'react-native'
 
 import { pages } from '../../src/components/OnboardingPages'
 import { BasicAppContext } from '../../__mocks__/helpers/app'
+import enCopy from '../../src/localization/en'
+import frCopy from '../../src/localization/fr'
+import ptBrCopy from '../../src/localization/pt-br'
 
 /** The slides, rendered one after another, as the onboarding carousel shows them. */
 const Slides: React.FC = () => {
@@ -37,14 +40,23 @@ describe('the first-run slides', () => {
     expect(order).toEqual(headings)
   })
 
-  // Alberto (10-07): a light aside under the agent slide.
-  test('the agent slide says, lightly, that it is not that kind of agent', () => {
+  // Alberto (10-07): the agent slide opens with a wink, "Not that kind of
+  // agent", in each language's own words, not a literal translation.
+  test('the agent slide says it is not that kind of agent, in every language', () => {
+    expect(enCopy.Onboarding.AgentParagraph).toMatch(/^Not that kind of agent — /)
+    expect(frCopy.Onboarding.AgentParagraph).toMatch(/^Rien d'un agent secret/)
+    expect(ptBrCopy.Onboarding.AgentParagraph).toMatch(/^Nada de agente secreto/)
+  })
+
+  // Alberto (10-07): the welcome handshake a little larger, the circle the same.
+  test("the welcome slide's glyph is larger than the others, in the same circle", () => {
     const tree = render(
       <BasicAppContext>
         <Slides />
       </BasicAppContext>
     )
-    expect(tree.getByTestId('OnboardingAgentDisclaimer')).toHaveTextContent('Onboarding.AgentDisclaimer')
+    expect(tree.UNSAFE_getAllByProps({ width: 112, height: 112 }).length).toBeGreaterThan(0)
+    expect(tree.UNSAFE_getAllByProps({ width: 88, height: 88 }).length).toBeGreaterThan(0)
   })
 
   // Alberto (10-07): the project's page at the Applied Technology Lab.

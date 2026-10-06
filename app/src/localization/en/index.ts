@@ -75,8 +75,7 @@ const translation = {
     "ConnectionsParagraph": "Connect directly with trusted contacts. Both parties confirm — no middleman, no platform. Always private, on your device.",
     // Page 3b: Agent
     "AgentHeading": "Your Own Agent",
-    "AgentParagraph": "Your agent works for you online, even when your phone is off. It keeps your identities and cards, and can ask you before it does something important.",
-    "AgentDisclaimer": "Not that kind of agent.",
+    "AgentParagraph": "Not that kind of agent — this one works for you online, even when your phone is off. It keeps your identities and cards, and asks you before it does anything important.",
     // Page 4: Security
     "SecurityHeading": "Secure by Design",
     "SecurityParagraph": "Protected by PIN and optional biometrics. Your data never leaves your device.",
