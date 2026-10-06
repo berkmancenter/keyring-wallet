@@ -5,6 +5,11 @@
  * it replaces opened into a column of names and status lines that read as
  * one block of text, and the count for another agent was a line in it.
  *
+ * The current chip is scrolled into view, and a long name loses its middle,
+ * not its end: agents named alike ("keyring-runner-…") were told apart only
+ * by the end the chip cut off, and a chip switched to past the screen's edge
+ * stayed half off it (236, Pixel).
+ *
  * Unlinking another agent moved to Agent settings, with the other settings.
  * A switch in progress disables the chips and is said under them.
  *
@@ -15,9 +20,9 @@
  *
  * @module trust-tasks/screens/AgentChips
  */
-import React from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -47,6 +52,20 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const busy = Boolean(switchingTo)
+  const strip = useRef<ScrollView>(null)
+  const chipX = useRef(new Map<string, number>())
+  const current = agents.find((a) => a.current)?.vtaDid
+  // The current chip at the strip's start, so the row shows it whole; the
+  // strip cannot scroll past its end, so a last chip ends up flush right.
+  const showCurrent = useCallback(() => {
+    const x = current ? chipX.current.get(current) : undefined
+    if (x !== undefined) strip.current?.scrollTo({ x: Math.max(0, x - 8), animated: true })
+  }, [current])
+  useEffect(showCurrent, [showCurrent])
+  const onChipLayout = (vtaDid: string) => (e: LayoutChangeEvent) => {
+    chipX.current.set(vtaDid, e.nativeEvent.layout.x)
+    if (vtaDid === current) showCurrent()
+  }
   const styles = StyleSheet.create({
     strip: { gap: 8, paddingVertical: 2, paddingRight: 4 },
     chip: {
@@ -95,6 +114,7 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
   return (
     <View style={{ gap: 8 }} testID={testIdWithKey('AgentSwitcher')}>
       <ScrollView
+        ref={strip}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.strip}
@@ -108,6 +128,7 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
             style={[styles.chip, a.current ? styles.chipCurrent : styles.chipOther, busy ? styles.chipBusy : undefined]}
             disabled={a.current || busy}
             onPress={() => onUse(a.vtaDid)}
+            onLayout={onChipLayout(a.vtaDid)}
             accessibilityRole="tab"
             // "<name>, <status>", as the rows of the list it replaces read: the
             // e2e switch checks read it, and so does a screen reader.
@@ -129,6 +150,7 @@ export const AgentChips: React.FC<AgentChipsProps> = ({ agents, switchingTo, swi
             <ThemedText
               variant="bold"
               numberOfLines={1}
+              ellipsizeMode="middle"
               style={a.current ? styles.nameCurrent : styles.nameOther}
               testID={testIdWithKey(a.current ? 'AgentHomeName' : `AgentSwitcherOther_${i}`)}
             >
