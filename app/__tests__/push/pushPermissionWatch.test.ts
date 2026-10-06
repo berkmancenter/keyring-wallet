@@ -3,6 +3,7 @@
  * on: the agent's wake channel follows the permission (push/pushPermissionWatch.ts).
  */
 import {
+  DENIED_CONFIRM_MS,
   reconcilePushPermission,
   watchPushPermission,
   type AppStateSource,
@@ -28,6 +29,7 @@ function deps(over: { optedIn?: boolean; linked?: boolean; permission?: OsPermis
     clearWake: jest.fn(async () => ({ pushCapable: false })),
     enableWake: jest.fn(async () => wakeable),
     log: jest.fn(),
+    sleep: jest.fn(async () => undefined),
   }
   return { d: d as PermissionWatchDeps & typeof d, cleared: () => cleared }
 }
@@ -112,7 +114,8 @@ describe('when the check runs', () => {
   const flush = () => new Promise((resolve) => setImmediate(resolve))
 
   it('at start, and each time the app comes back to the foreground', async () => {
-    const { d } = deps({ permission: 'denied' })
+    // Granted: one reading per check (a denied one is read twice before a clear).
+    const { d } = deps()
     const app = fakeAppState()
     const stop = watchPushPermission(d, app.source)
     await flush()
@@ -160,12 +163,33 @@ describe('when the agent link comes up', () => {
     await flush()
     expect(d.clearWake).toHaveBeenCalledTimes(1)
 
-    // Other changes while it stays up do not check again.
+    // Other changes while it stays up do not check again (the two readings
+    // are the one check that cleared).
     listeners.forEach((l) => l())
     await flush()
-    expect(d.permission).toHaveBeenCalledTimes(1)
+    expect(d.permission).toHaveBeenCalledTimes(2)
 
     stop()
     expect(listeners.size).toBe(0)
+  })
+})
+
+describe('a denied reading is confirmed before anything is cleared', () => {
+  it('denied, then granted a second later: nothing cleared, and said in the log', async () => {
+    const { d, cleared } = deps({ permission: 'denied' })
+    d.permission.mockResolvedValueOnce('denied').mockResolvedValueOnce('granted')
+    await expect(reconcilePushPermission(d)).resolves.toBe('none')
+    expect(d.sleep).toHaveBeenCalledWith(DENIED_CONFIRM_MS)
+    expect(d.clearWake).not.toHaveBeenCalled()
+    expect(cleared()).toBe(false)
+    expect(d.log).toHaveBeenCalledWith('push wake: permission read denied, then not; nothing cleared', {
+      second: 'granted',
+    })
+  })
+
+  it('denied twice: cleared', async () => {
+    const { d } = deps({ permission: 'denied' })
+    await expect(reconcilePushPermission(d)).resolves.toBe('cleared')
+    expect(d.permission).toHaveBeenCalledTimes(2)
   })
 })

@@ -32,7 +32,17 @@ export interface PermissionWatchDeps {
   clearWake(): Promise<unknown>
   enableWake(): Promise<PushWakeOutcome>
   log(message: string, data?: Record<string, unknown>): void
+  /** Waits between the two readings before a clear; replaceable in tests. */
+  sleep?: (ms: number) => Promise<void>
 }
+
+/**
+ * How long to wait before reading the permission a second time. The channel is
+ * cleared only if both readings say denied: a clear the person did not ask for
+ * silently stops their notifications (GS-1, 10-06: a phone cleared its channel
+ * with nobody touching a setting, and nothing logged which reading caused it).
+ */
+export const DENIED_CONFIRM_MS = 1000
 
 export type ReconcileResult = 'none' | 'cleared' | 'restored' | 'failed'
 
@@ -50,6 +60,12 @@ export async function reconcilePushPermission(deps: PermissionWatchDeps): Promis
   const permission = await deps.permission()
   try {
     if (permission === 'denied' && !cleared) {
+      await (deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(DENIED_CONFIRM_MS)
+      const again = await deps.permission()
+      if (again !== 'denied') {
+        deps.log('push wake: permission read denied, then not; nothing cleared', { second: again })
+        return 'none'
+      }
       await deps.clearWake()
       await deps.clearedForDenial.set(true)
       deps.log('push wake: cleared, notifications blocked in the phone settings')

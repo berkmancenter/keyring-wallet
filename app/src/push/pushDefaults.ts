@@ -127,8 +127,11 @@ export async function notificationPermissionStatus(): Promise<PermissionState> {
  * mean they were switched off since.
  */
 export async function notificationsAllowedNow(): Promise<PermissionState> {
-  if (Platform.OS === 'ios') return fromIos(await messaging().hasPermission())
-  return (await checkNotifications()).status === RESULTS.GRANTED ? 'granted' : 'denied'
+  const raw = Platform.OS === 'ios' ? await messaging().hasPermission() : (await checkNotifications()).status
+  const state = Platform.OS === 'ios' ? fromIos(raw as number) : raw === RESULTS.GRANTED ? 'granted' : 'denied'
+  // The platform's own answer, whenever it is not "allowed": what a clear was based on.
+  if (state !== 'granted') BCLogger.info('push permission read', { os: Platform.OS, raw, state })
+  return state
 }
 
 /** Ask for the notification permission (Android 13+ and iOS show the system prompt). */
