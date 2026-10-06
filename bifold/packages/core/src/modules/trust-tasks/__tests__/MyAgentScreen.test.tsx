@@ -4,7 +4,7 @@
  * manager identity to enrol); once it is, what the agent holds appears, led
  * by the vetting entry that names the seat this phone takes.
  */
-import { render, act } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -190,17 +190,19 @@ describe('My Agent — the connected gate', () => {
     })
     expect(tree.queryByTestId(testIdWithKey('MyAgentNotConfigured'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
-    expect(tree.getByTestId(testIdWithKey('LinkWithoutQrButton'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('LinkByAddressButton'))).toBeTruthy()
     // With no agent there is nothing to connect to, so no button that could only fail.
     expect(tree.queryByTestId(testIdWithKey('ConnectMyAgentButton'))).toBeNull()
   })
 
   /**
-   * A maintainer on 228 picked "I already have one — link it" for an agent a
-   * host had just made, met "Show this to your other phone", and went back
-   * for "Claim your agent". Each choice now says what it is for, under it.
+   * Alberto, 239: three buttons for two flows ("Set up a new agent", "Add this
+   * phone to my agent", "Link without a QR code") read as a puzzle. One
+   * sentence, the scanner, the way without a code, and where adding this
+   * phone is done.
    */
-  test('each way in says what it is for: a new agent, an agent used elsewhere, or no code', async () => {
+  test('one way in, the way without a code, and where to add this phone', async () => {
+    const navigate = useNavigation().navigate as jest.Mock
     mockUseAgent.mockReturnValue(fakeAgent([]))
     setVta({ link: { kind: 'notLinked' } })
     const tree = render(
@@ -211,26 +213,29 @@ describe('My Agent — the connected gate', () => {
     await act(async () => {
       jest.advanceTimersByTime(10)
     })
-    expect(tree.getByTestId(testIdWithKey('AgentCreate'))).toHaveTextContent('CreateAgent.CreateMyAgent')
-    expect(tree.getByTestId(testIdWithKey('AgentCreateHint'))).toHaveTextContent('CreateAgent.CreateMyAgentHint')
-    expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toHaveTextContent('CreateAgent.AlreadyHaveOne')
-    expect(tree.getByTestId(testIdWithKey('LinkYourAgentHint'))).toHaveTextContent('CreateAgent.AlreadyHaveOneHint')
-    expect(tree.getByTestId(testIdWithKey('LinkWithoutQrButton'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toHaveTextContent('VtaLink.ScanAgentCode')
+    expect(tree.getByTestId(testIdWithKey('LinkOtherPhoneHint'))).toHaveTextContent('VtaLink.OtherPhoneHint')
+    for (const gone of [
+      'AgentCreate',
+      'AgentCreateHint',
+      'LinkYourAgentHint',
+      'LinkWithoutQrButton',
+      'LinkYourAgentHelp',
+    ]) {
+      expect(tree.queryByTestId(testIdWithKey(gone))).toBeNull()
+    }
+    navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('LinkByAddressButton')))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtaCreateAgent, { byAddress: true })
   })
 
-  test('the words for the ways in: set up a new agent, add this phone to one, in every language', () => {
-    for (const [words, newAgent, addPhone] of [
-      [enCopy, /new agent/i, /add this phone/i],
-      [frCopy, /nouvel agent/i, /ajouter ce téléphone/i],
-      [ptBrCopy, /novo agente/i, /adicionar este telefone/i],
-    ] as const) {
-      expect(words.CreateAgent.CreateMyAgent).toMatch(newAgent)
-      expect(words.Screens.VtaCreateAgent).toBe(words.CreateAgent.CreateMyAgent)
-      expect(words.CreateAgent.AlreadyHaveOne).toMatch(addPhone)
-      expect(words.CreateAgent.CreateMyAgentHint).toEqual(expect.any(String))
-      expect(words.CreateAgent.AlreadyHaveOneHint).toEqual(expect.any(String))
-      // The steps that name the second choice name it as it now reads.
-      expect(words.CreateAgent.BackupScanThisBody).toContain(words.CreateAgent.AlreadyHaveOne)
+  test('the words for the ways in, in every language, and the steps that name them', () => {
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      for (const key of ['ScanAgentCode', 'UseAgentAddress', 'OtherPhoneHint'] as const) {
+        expect(words.VtaLink[key]).toEqual(expect.any(String))
+      }
+      // Another phone's "Add another device" names the button this one shows.
+      expect(words.CreateAgent.BackupScanThisBody).toContain(words.VtaLink.ScanAgentCode)
       expect(JSON.stringify(words.CreateAgent)).not.toMatch(/claim|revendiquer|reivindi/i)
     }
   })

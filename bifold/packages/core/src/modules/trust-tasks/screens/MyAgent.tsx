@@ -697,40 +697,29 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? <ErasedNotice /> : null}
         {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? (
           <View style={styles.card} testID={testIdWithKey('MyAgentLinkCard')}>
+            {/* One sentence and one way in, then the way without a code
+                (Alberto, 239). The scanner takes every code there is: the
+                agent's page, its host's, or another phone's. "Set up a new
+                agent", "Add this phone to my agent" and "Link without a QR
+                code" were three buttons for two flows. */}
             <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
-            {/* A tester with no agent page at hand should learn where a code
-                comes from, not meet a camera with nothing to scan. */}
-            <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHelp')}>
-              {t('VtaLink.LinkYourAgentHelp')}
-            </Text>
-            {/* A person with no agent at all makes one here (own_agent_subtask.md §7);
-                one who has an agent links it below. */}
-            {/* Each way in says what it is for (228: a maintainer took "I already
-                have one" for an agent a host had just made for him). */}
             <Button
-              title={t('CreateAgent.CreateMyAgent')}
+              title={t('VtaLink.ScanAgentCode')}
               buttonType={ButtonType.Primary}
-              onPress={() => navigation.navigate(Screens.VtaCreateAgent)}
-              testID={testIdWithKey('AgentCreate')}
-            />
-            <Text style={styles.label} testID={testIdWithKey('AgentCreateHint')}>
-              {t('CreateAgent.CreateMyAgentHint')}
-            </Text>
-            <Button
-              title={t('CreateAgent.AlreadyHaveOne')}
-              buttonType={ButtonType.Secondary}
               onPress={onLinkAgent}
               testID={testIdWithKey('LinkYourAgentButton')}
             />
-            <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHint')}>
-              {t('CreateAgent.AlreadyHaveOneHint')}
-            </Text>
             <Button
-              title={t('VtaLink.WithoutQr')}
+              title={t('VtaLink.UseAgentAddress')}
               buttonType={ButtonType.Tertiary}
-              onPress={() => navigation.navigate(Screens.VtaLink, { withoutQr: true })}
-              testID={testIdWithKey('LinkWithoutQrButton')}
+              onPress={() => navigation.navigate(Screens.VtaCreateAgent, { byAddress: true })}
+              testID={testIdWithKey('LinkByAddressButton')}
             />
+            {/* Adding this phone is done on the phone that already has the
+                agent: it shows the code this one scans. */}
+            <Text style={styles.label} testID={testIdWithKey('LinkOtherPhoneHint')}>
+              {t('VtaLink.OtherPhoneHint')}
+            </Text>
           </View>
         ) : null}
         {vtaDid ? (

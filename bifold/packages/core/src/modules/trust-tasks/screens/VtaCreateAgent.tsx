@@ -106,7 +106,11 @@ const VtaCreateAgent: React.FC = () => {
   const navigation = useNavigation()
   // "Add another device" from My devices opens this screen at the backup
   // step: setup itself no longer offers a backup (decided 2026-09-25).
-  const addDevice = Boolean((useRoute().params as { addDevice?: boolean } | undefined)?.addDevice)
+  const params = useRoute().params as { addDevice?: boolean; byAddress?: boolean } | undefined
+  const addDevice = Boolean(params?.addDevice)
+  // "No code? Use your agent's address" (Alberto, 239): straight to the
+  // address, without the introduction's Continue first.
+  const byAddress = Boolean(params?.byAddress)
   // The stack titles this screen "Claim your agent"; adding a device is not
   // claiming one, and its two steps said so under the wrong title (225 gate).
   useEffect(() => {
@@ -118,7 +122,7 @@ const VtaCreateAgent: React.FC = () => {
   const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const readyName = readyNameOf(link.kind === 'linked' ? link.vtaDid : undefined, agentNames, t)
 
-  const [step, setStep] = useState<LocalStep>(addDevice ? 'backupAddress' : 'intro')
+  const [step, setStep] = useState<LocalStep>(addDevice ? 'backupAddress' : byAddress ? 'address' : 'intro')
   const [address, setAddress] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [codeShown, setCodeShown] = useState(false)
