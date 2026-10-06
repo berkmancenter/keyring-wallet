@@ -18,7 +18,7 @@ import { useNavigation } from '@react-navigation/native'
 import { HeaderBackButton } from '@react-navigation/elements'
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -130,15 +130,31 @@ const VtaRequests: React.FC = () => {
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    backLink: { alignSelf: 'center', paddingVertical: 8 },
+    link: { color: ColorPalette.brand.link, textDecorationLine: 'underline' },
   })
 
-  const backToAgent = (
+  // After a decision, going back is the next step, so it is a button. With
+  // nothing to decide it is only a way out, so it is a link: the screen's one
+  // button is then what can be done here (Alberto, 10-06).
+  const backIsTheNextStep = Boolean(view.decided) || view.expired.length > 0
+  const backToAgent = backIsTheNextStep ? (
     <Button
       title={t('Requests.BackToAgent')}
       buttonType={ButtonType.Secondary}
       onPress={toAgent}
       testID={testIdWithKey('RequestsBackToAgent')}
     />
+  ) : (
+    <Pressable
+      style={styles.backLink}
+      onPress={toAgent}
+      accessibilityRole="link"
+      hitSlop={8}
+      testID={testIdWithKey('RequestsBackToAgent')}
+    >
+      <ThemedText style={styles.link}>{t('Requests.BackToAgent')}</ThemedText>
+    </Pressable>
   )
 
   return (
@@ -164,21 +180,26 @@ const VtaRequests: React.FC = () => {
           </View>
         ) : null}
 
+        {/* Nothing waits: one card and, when nothing has ever arrived, one
+            thing to do — choose what the agent asks about. The way back is a
+            plain link under it, not a second button of the same weight; two
+            stacked outlined buttons left the person unsure which to press
+            (Alberto, 10-06). */}
         {view.mode === 'empty' ? (
           <View style={styles.card} testID={testIdWithKey('RequestsEmpty')}>
             <ThemedText>{t('Requests.Empty')}</ThemedText>
-          </View>
-        ) : null}
-        {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
-        {view.mode === 'empty' && state.approvals.length === 0 ? (
-          <View style={styles.card} testID={testIdWithKey('RequestsAskMeCard')}>
-            <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
-            <Button
-              title={t('Requests.AskMeRow')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => navigation.navigate(Screens.VtaAskMe)}
-              testID={testIdWithKey('RequestsAskMe')}
-            />
+            {/* Nothing has ever arrived: the likely reason is that the agent has no rule to ask about. */}
+            {state.approvals.length === 0 ? (
+              <View style={{ gap: 12 }} testID={testIdWithKey('RequestsAskMeCard')}>
+                <ThemedText style={styles.muted}>{t('Requests.AskMeEmpty')}</ThemedText>
+                <Button
+                  title={t('Requests.AskMeRow')}
+                  buttonType={ButtonType.Primary}
+                  onPress={() => navigation.navigate(Screens.VtaAskMe)}
+                  testID={testIdWithKey('RequestsAskMe')}
+                />
+              </View>
+            ) : null}
           </View>
         ) : null}
 

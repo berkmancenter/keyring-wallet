@@ -17,7 +17,6 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 
-import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
@@ -55,6 +54,23 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
     card: { gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    decisions: { flexDirection: 'row', gap: 12 },
+    decision: { flex: 1 },
+    answer: {
+      minHeight: 48,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: ColorPalette.brand.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    approve: { backgroundColor: ColorPalette.brand.primary },
+    decline: { backgroundColor: 'transparent' },
+    answerBusy: { opacity: 0.5 },
+    approveText: { color: ColorPalette.brand.buttonText, textAlign: 'center' },
+    declineText: { color: ColorPalette.brand.primary, textAlign: 'center' },
   })
   const handle = requestHandle(approval)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -110,24 +126,37 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
           </View>
         ) : null}
         {shows === 'waiting' ? (
-          <View style={styles.row}>
-            <View testID={testIdWithKey(`ApproveConsentButton_${handle}`)}>
-              <Button
-                title={t('MyAgent.Approve')}
-                buttonType={ButtonType.Primary}
+          // One shape for both answers, side by side and the same size: the
+          // theme's primary and secondary buttons differ in padding and border,
+          // so Approve and Decline read as two kinds of control (Alberto, 10-06).
+          <View style={styles.decisions}>
+            <View style={styles.decision} testID={testIdWithKey(`ApproveConsentButton_${handle}`)}>
+              <Pressable
+                style={[styles.answer, styles.approve, busy ? styles.answerBusy : undefined]}
                 disabled={busy}
                 onPress={() => onDecide(approval.id, 'approve')}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
                 testID={testIdWithKey('ApproveConsentButton')}
-              />
+              >
+                <ThemedText variant="bold" style={styles.approveText}>
+                  {t('MyAgent.Approve')}
+                </ThemedText>
+              </Pressable>
             </View>
-            <View testID={testIdWithKey(`DenyConsentButton_${handle}`)}>
-              <Button
-                title={t('MyAgent.Deny')}
-                buttonType={ButtonType.Secondary}
+            <View style={styles.decision} testID={testIdWithKey(`DenyConsentButton_${handle}`)}>
+              <Pressable
+                style={[styles.answer, styles.decline, busy ? styles.answerBusy : undefined]}
                 disabled={busy}
                 onPress={() => onDecide(approval.id, 'deny')}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
                 testID={testIdWithKey('DenyConsentButton')}
-              />
+              >
+                <ThemedText variant="bold" style={styles.declineText}>
+                  {t('MyAgent.Deny')}
+                </ThemedText>
+              </Pressable>
             </View>
           </View>
         ) : null}
