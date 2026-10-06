@@ -37,7 +37,7 @@ import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
-import { communityName, didPathName, unnamedCommunityLabel } from './communityName'
+import { communityName, identityWord, unnamedCommunityLabel } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { claimWords, joinNeedWords } from './claimWords'
@@ -50,12 +50,7 @@ import { JoinWithAgent, useAgentsHoldingIdentity } from './JoinWithAgent'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
-/**
- * An identity in a word a person can say out loud: the last word of its DID's
- * path ("…term-benefit"), else its last characters. What an operator matches
- * in the community's join requests.
- */
-export const identityWord = (did: string): string => `…${didPathName(did) ?? did.slice(-8)}`
+export { identityWord } from './communityName'
 import { useTakingLong } from './useTakingLong'
 import { useRoomAboveTabBar } from './aboveTabBar'
 

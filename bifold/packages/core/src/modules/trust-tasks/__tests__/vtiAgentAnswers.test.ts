@@ -267,6 +267,35 @@ describe('T2: a write is sent once', () => {
   })
 })
 
+// IN-127, 10-06: four refusals of a join reached the report as bare "inbound
+// trust-task-error" lines, and nothing said why.
+describe("a community's refusal is logged with its code and words", () => {
+  it('names the task it answers, the code, and the message, cut short', async () => {
+    const community = 'did:webvh:c:refusal-log'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:refusal-log')
+    logger.warn.mockClear()
+    const asked = vtiAgent.apply(community, manifest).catch((e: unknown) => e)
+    await until(() => session.didcomm.length > 0)
+    const sent = session.didcomm[0] as Sent
+    session.onMessage({
+      id: 'urn:uuid:refused',
+      type: 'https://trusttasks.org/spec/trust-task-error/0.5',
+      thid: sent.id,
+      body: {
+        type: 'https://trusttasks.org/spec/trust-task-error/0.5',
+        threadId: sent.body.threadId,
+        payload: { code: 'requestAlreadyOpen', message: 'a request from this applicant is open' },
+      },
+    })
+    await asked
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /refused vtc\/join-requests\/submit: requestAlreadyOpen — a request from this applicant is open/
+      )
+    )
+  })
+})
+
 describe('T3: a late answer is kept for the next caller', () => {
   // 7b's R5, 10-06: a community retrying a DID lookup after a 429 answers at about 30 s.
   it('a join submit waits 60 s by default, not the usual 30 s', async () => {

@@ -373,6 +373,18 @@ interface AskEntry {
   answer?: DidCommV2PlaintextMessage
 }
 
+/** A trust-task-error's code and words, cut short for a log line that reaches problem reports. */
+export function refusalWordsOf(plaintext: DidCommV2PlaintextMessage): { code: string; message?: string } {
+  const payload = ((plaintext.body as { payload?: unknown } | undefined)?.payload ?? {}) as {
+    code?: unknown
+    message?: unknown
+  }
+  const code = typeof payload.code === 'string' && payload.code ? payload.code : 'unknown'
+  const message =
+    typeof payload.message === 'string' ? payload.message.replace(/\s+/g, ' ').trim().slice(0, 200) : undefined
+  return { code, ...(message ? { message } : {}) }
+}
+
 const hostOf = (endpoint?: string) => {
   if (!endpoint) return undefined
   const match = /^[a-z]+:\/\/([^/]+)/i.exec(endpoint)
@@ -533,6 +545,17 @@ class VtiAgentController {
     )
     this.dropExpiredHolds()
     const entry = this.askAnswered(plaintext)
+    // A community's refusal, said in the log with its code and words and what
+    // it answers: four refusals of a join reached a tester's report as bare
+    // "inbound trust-task-error" lines (IN-127, 10-06), and nothing said why.
+    if (String(plaintext.type ?? '').startsWith(TASK_ERROR)) {
+      const refusal = refusalWordsOf(plaintext)
+      this.agent?.config?.logger?.warn?.(
+        `vtiAgent: ${didPrefix(plaintext.from)} refused ${entry ? taskName(entry.type) : 'a task'}: ${refusal.code}${
+          refusal.message ? ` — ${refusal.message}` : ''
+        }`
+      )
+    }
     if (entry) {
       this.settle(
         entry,

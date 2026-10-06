@@ -72,7 +72,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
 import { useCommunityDid } from './useCommunity'
-import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
@@ -116,6 +116,13 @@ const useSafeHeaderHeight = (): number => {
  * when it is not. "Sent 04:21 PM" read as the card's time on a phone whose
  * clock said 06:59; it was the request's, sent hours earlier (2026-09-25).
  */
+/** The legal name a finished request's card carried: what the vetter confirmed when it attested. */
+export function confirmedNameOf(request: { card?: { claims?: unknown } }): string | undefined {
+  const claims = (request.card?.claims as { type?: string; value?: unknown }[] | undefined) ?? []
+  const name = claims.find((c) => c.type === 'name.legal')?.value
+  return typeof name === 'string' && name.trim() ? name.trim() : undefined
+}
+
 export const whenShown = (iso: string, now: Date = new Date()): string => {
   const at = new Date(iso)
   const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -1108,6 +1115,23 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                             ? t('Vetting.StatementIssued')
                             : t(`Vetting.Status.${r.status}`)} · {whenShown(r.receivedAt)}
                         </Text>
+                        {/* Who it was, as the community's join requests show them: the
+                            name the vetter confirmed and the identity's word, the DID
+                            behind it (IN-127, 10-06). */}
+                        {r.status === 'attested' && confirmedNameOf(r) ? (
+                          <Text style={styles.value} testID={testIdWithKey('VettingDeskFinishedName')}>
+                            {tp('Vetting.FinishedName', { name: confirmedNameOf(r) as string })}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.value} testID={testIdWithKey('VettingDeskFinishedIdentity')}>
+                          {tp('Vetting.FinishedIdentity', { name: identityWord(r.applicantDid) })}
+                        </Text>
+                        <DidDetails
+                          did={r.applicantDid}
+                          label={t('Vetting.TheirIdentity')}
+                          copy
+                          testIdStem="VettingDeskFinishedApplicant"
+                        />
                       </View>
                     ))}
                     <Pressable
@@ -1275,6 +1299,72 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       ) : null}
     </View>
   )
+
+  // Send the application with the statements gathered. `replace`: an earlier
+  // request sent without them is still open (asked from Join before the
+  // vetting), and the community refuses a second one; the person chose to
+  // replace it, so it is withdrawn and this one sent (IN-127, 10-06).
+  const sendApplication = (replace: boolean) =>
+    run(replace ? 'replace' : 'apply', async () => {
+      if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
+      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+      // Ask about the grants now, not when the statements were
+      // gathered: the community applies the status at intake,
+      // so a vetter revoked since is the case this catches.
+      await applicantRef.current!.refreshGrantStatus()
+      const { statements } = await applicantRef.current!.checklist()
+      const stopInbox = vtiAgent.onInbound(async (msg) => {
+        await receiveIssue(stores!.community, persona.did, msg, {
+          via: 'vetting',
+          acceptStatement: (m) => applicantRef.current!.receiveStatement(m),
+          checkCard: deliveredCardCheck(agent),
+        })
+      })
+      try {
+        // Submits, or answers an open deferral in place — a
+        // second submit while one is open would be refused.
+        let verdict
+        try {
+          verdict = await applicantRef.current!.submit(m, statements, application?.requirementsDigest, listMe, {
+            replacePending: replace,
+          })
+        } catch (e) {
+          // Already applied (requestAlreadyOpen): not an error. The
+          // open request is now recorded on the application, and the
+          // card below says where it stands and what can be done.
+          if (openJoinRequestOf(e)) {
+            setAlreadyOpen(true)
+            return
+          }
+          throw e
+        }
+        // A deferral or a referral leaves the request open;
+        // the submission card says where it stands and what
+        // the applicant can do. Only a verdict that closes it
+        // without admitting them is an error.
+        if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
+        if (verdict.effect !== 'allow')
+          throw new InWords(
+            verdict.needs.length
+              ? t('Vetting.ApplyRefusedNeeds', {
+                  needs: verdict.needs.map((need) => needWords(need, t)).join(', '),
+                  interpolation: { escapeValue: false },
+                })
+              : t('Vetting.ApplyRefused')
+          )
+        for (let i = 0; i < 20; i++) {
+          const mem = await stores!.community.getMembership(communityDid)
+          // An ended membership from before is not the one this is waiting for.
+          if (mem && isCurrentMembership(mem)) {
+            if (mem.via === 'unknown') await stores!.community.saveMembership({ ...mem, via: 'vetting' })
+            break
+          }
+          await new Promise((res) => setTimeout(res, 1500))
+        }
+      } finally {
+        setTimeout(stopInbox, 30000)
+      }
+    })
 
   return (
     // Which step the page is on, for whoever drives it: the step text says
@@ -1587,72 +1677,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     testID={testIdWithKey('VettingApplyButton')}
                     accessibilityRole="button"
                     disabled={!!busy}
-                    onPress={() =>
-                      run('apply', async () => {
-                        if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
-                        const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
-                        // Ask about the grants now, not when the statements were
-                        // gathered: the community applies the status at intake,
-                        // so a vetter revoked since is the case this catches.
-                        await applicantRef.current!.refreshGrantStatus()
-                        const { statements } = await applicantRef.current!.checklist()
-                        const stopInbox = vtiAgent.onInbound(async (msg) => {
-                          await receiveIssue(stores!.community, persona.did, msg, {
-                            via: 'vetting',
-                            acceptStatement: (m) => applicantRef.current!.receiveStatement(m),
-                            checkCard: deliveredCardCheck(agent),
-                          })
-                        })
-                        try {
-                          // Submits, or answers an open deferral in place — a
-                          // second submit while one is open would be refused.
-                          let verdict
-                          try {
-                            verdict = await applicantRef.current!.submit(
-                              m,
-                              statements,
-                              application?.requirementsDigest,
-                              listMe
-                            )
-                          } catch (e) {
-                            // Already applied (requestAlreadyOpen): not an error. The
-                            // open request is now recorded on the application, and the
-                            // card below says where it stands and what can be done.
-                            if (openJoinRequestOf(e)) {
-                              setAlreadyOpen(true)
-                              return
-                            }
-                            throw e
-                          }
-                          // A deferral or a referral leaves the request open;
-                          // the submission card says where it stands and what
-                          // the applicant can do. Only a verdict that closes it
-                          // without admitting them is an error.
-                          if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
-                          if (verdict.effect !== 'allow')
-                            throw new InWords(
-                              verdict.needs.length
-                                ? t('Vetting.ApplyRefusedNeeds', {
-                                    needs: verdict.needs.map((need) => needWords(need, t)).join(', '),
-                                    interpolation: { escapeValue: false },
-                                  })
-                                : t('Vetting.ApplyRefused')
-                            )
-                          for (let i = 0; i < 20; i++) {
-                            const mem = await stores!.community.getMembership(communityDid)
-                            // An ended membership from before is not the one this is waiting for.
-                            if (mem && isCurrentMembership(mem)) {
-                              if (mem.via === 'unknown')
-                                await stores!.community.saveMembership({ ...mem, via: 'vetting' })
-                              break
-                            }
-                            await new Promise((res) => setTimeout(res, 1500))
-                          }
-                        } finally {
-                          setTimeout(stopInbox, 30000)
-                        }
-                      })
-                    }
+                    onPress={() => sendApplication(false)}
                   >
                     {busy === 'apply' ? (
                       <ActivityIndicator color={look('VettingApplyButton', applicantPrimaryId).spinner} />
@@ -1675,6 +1700,28 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       <Text style={styles.value} testID={testIdWithKey('VettingAlreadyApplied')}>
                         {t('Vetting.AlreadyApplied')}
                       </Text>
+                    ) : null}
+                    {/* The open request went without the vetting (asked from Join
+                        first): the community will not take the statements as a
+                        second request. Offer to replace it with one that has them. */}
+                    {alreadyOpen && application.submission.state === 'pending' && checklist?.meets ? (
+                      <View style={{ gap: 8 }} testID={testIdWithKey('VettingReplaceRequestCard')}>
+                        <Text style={styles.value}>{t('Vetting.ReplaceRequestExplains')}</Text>
+                        <Pressable
+                          style={look('VettingReplaceRequest', 'VettingReplaceRequest').button}
+                          testID={testIdWithKey('VettingReplaceRequest')}
+                          accessibilityRole="button"
+                          disabled={!!busy}
+                          onPress={() => sendApplication(true)}
+                        >
+                          {busy === 'replace' ? (
+                            <ActivityIndicator color={look('VettingReplaceRequest', 'VettingReplaceRequest').spinner} />
+                          ) : null}
+                          <Text style={look('VettingReplaceRequest', 'VettingReplaceRequest').text}>
+                            {t('Vetting.ReplaceRequest')}
+                          </Text>
+                        </Pressable>
+                      </View>
                     ) : null}
                     <Text style={styles.label} testID={testIdWithKey('VettingSubmissionState')}>
                       {application.submission.state === 'deferred'
