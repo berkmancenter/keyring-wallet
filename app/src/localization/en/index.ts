@@ -236,6 +236,8 @@ const translation = {
     "GiveFeedback": "Give Feedback",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Notifications can't reach this agent yet",
+    "HandleLimitBody": "This phone is registered with the push service for as many agents as it allows, so notifications for this agent may not arrive. Keyring keeps working, and requests still wait in Requests.",
     "NotificationsOffTitle": "Notifications for Keyring are turned off",
   },
   "AddCredentialSlider": {
