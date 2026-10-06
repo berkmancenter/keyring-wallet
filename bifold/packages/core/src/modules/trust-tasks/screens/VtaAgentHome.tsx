@@ -42,6 +42,7 @@ import { CommunityCard } from './CommunityCard'
 import { useOtherAgentsWaiting } from './OtherAgentsRequests'
 import { AgentChips } from './AgentChips'
 import { AgentSettingsButton } from './AgentHeaderButtons'
+import { SectionRule } from './SectionRule'
 import { RequestsSection } from './RequestsSection'
 import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
@@ -109,21 +110,6 @@ const lastHoldings = new Map<string, Holdings>()
 /** Forget every reading (unlink does; tests start clean with it). */
 export const forgetAgentHoldings = () => {
   lastHoldings.clear()
-}
-
-/**
- * A line between the page's sections, so it is clear where each one ends:
- * on the theme's background the cards' own edges do not show (Alberto, 239).
- * Each section opens with a heading of one style.
- */
-const SectionRule: React.FC = () => {
-  const { ColorPalette } = useTheme()
-  return (
-    <View
-      style={{ height: StyleSheet.hairlineWidth, backgroundColor: ColorPalette.grayscale.lightGrey }}
-      testID={testIdWithKey('AgentSectionRule')}
-    />
-  )
 }
 
 const VtaAgentHome: React.FC = () => {
