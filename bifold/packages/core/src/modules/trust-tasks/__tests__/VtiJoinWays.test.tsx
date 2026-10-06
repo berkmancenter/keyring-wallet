@@ -17,7 +17,7 @@ import type { JoinAsks, JoinWay } from '../module/joinManifest'
 import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
-import VtiJoin from '../screens/VtiJoin'
+import VtiJoin, { identityWord } from '../screens/VtiJoin'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../../vrc/vrc-biometric', () => ({
@@ -152,6 +152,44 @@ describe('Join, at manifest 0.3', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.Ways\.SentForReview/)
+  })
+
+  // Alberto, 10-06: in a demo the applicant says "I'm term-benefit" and the
+  // operator finds it in the console's join requests.
+  it('once asked: says the identity it was sent as, in a word, with the whole DID and Copy behind a toggle', async () => {
+    const personaDid = 'did:webvh:QmPersona:vta.example.org:term-benefit'
+    const tree = await toAsks(defaults)
+    mockReadJoinState.mockImplementation(async () => ({
+      kind: 'pending',
+      submission: { withInvitation: false, personaDid },
+    }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStandingIdentityName'))).toHaveTextContent(/Join\.IdentityHere/)
+    // The word: the last of its DID's path, else its last characters.
+    expect(identityWord(personaDid)).toBe('…term-benefit')
+    expect(identityWord('did:key:z6MkABCDEFGH12345678')).toBe('…12345678')
+    expect(tree.queryByTestId(id('JoinStandingIdentityDid'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('JoinStandingIdentityToggle')))
+    expect(tree.getByTestId(id('JoinStandingIdentityDid'))).toHaveTextContent(personaDid)
+    expect(tree.getByTestId(id('JoinStandingIdentityCopy'))).toBeTruthy()
+  })
+
+  it('a member is not shown the identity line: it is for a request still open', async () => {
+    const tree = await toAsks(defaults)
+    mockReadJoinState.mockImplementation(async () => ({
+      kind: 'member',
+      submission: { withInvitation: false, personaDid: 'did:webvh:QmPersona:vta.example.org:term-benefit' },
+    }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(id('JoinStandingIdentity'))).toBeNull()
   })
 
   it('a phone holding the invitation: "Join", through "I was invited", where the invitation is', async () => {
