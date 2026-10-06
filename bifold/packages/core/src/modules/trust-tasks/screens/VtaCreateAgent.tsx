@@ -19,7 +19,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
-import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -55,6 +55,7 @@ import { DeviceNameField } from './DeviceNamePrompt'
 import { openScanner } from './openScanner'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
+import { linkFailureText } from './linkFailureWords'
 
 /**
  * A known agent host's website, to open from the intro. Never named on screen:
@@ -293,14 +294,28 @@ const VtaCreateAgent: React.FC = () => {
     if (vtaAgent.getState().link.kind === 'notLinked') setError(t('CreateAgent.NoAgentThere'))
   }
 
-  // The agent turned out to serve a community (CommunityAgentRefused): said
-  // here, back on the address, since this screen has no failed step.
-  const refusedAsCommunity = link.kind === 'notLinked' && link.lastError?.reason === 'communityAgent'
+  // A link that fails once its code is out (the agent refused it, it serves a
+  // community, the key swap was refused…) is said here, back on the address,
+  // since this screen has no failed step: in the link screen's words, the
+  // original text under Details. Since this is the one way to link by
+  // address (Alberto, 239), none of them may end in silence. Only a failure
+  // of this screen's own attempt: an older one is not this person's news.
+  const attempting = link.kind === 'showingKey' || link.kind === 'linking'
+  const wasAttempting = useRef(false)
   useEffect(() => {
-    if (!refusedAsCommunity) return
-    setStep('address')
-    setError(`${t('VtaLink.FailedCommunityAgent')} ${t('VtaLink.FailedCommunityAgentCleanup')}`)
-  }, [refusedAsCommunity, t])
+    const failure = link.kind === 'notLinked' ? link.lastError : undefined
+    if (wasAttempting.current && failure) {
+      setStep('address')
+      setError(
+        failure.reason === 'communityAgent'
+          ? `${linkFailureText(failure, t)} ${t('VtaLink.FailedCommunityAgentCleanup')}`
+          : linkFailureText(failure, t)
+      )
+      setErrorDetail(failure.detail)
+      setErrorDetailOpen(false)
+    }
+    wasAttempting.current = attempting
+  }, [attempting, link, t])
 
   const ownerKey = link.kind === 'showingKey' ? link.did : undefined
 
