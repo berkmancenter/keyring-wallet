@@ -168,7 +168,17 @@ try {
 
     // Rename it beside Remove: the newest row named like it.
     await waitForTestId(d, "AgentDeviceList", 30000);
-    const mine = (await deviceRows(d)).filter((r) => r.text.includes(defaultName)).pop();
+    // UiAutomator lists only what is on screen: scroll until a row with the name shows, a few swipes at most.
+    let mine;
+    for (let i = 0; i < 5 && !mine; i++) {
+      mine = (await deviceRows(d)).filter((r) => r.text.includes(defaultName)).pop();
+      if (!mine) await scrollToTestId(d, "AgentDeviceAdd", 1).catch(() => undefined);
+    }
+    if (!mine) {
+      log(`device rows on screen: ${JSON.stringify(await deviceRows(d))}`);
+      await shot(d, "release235-device-row-missing");
+      await dumpSource(d, "release235-device-row-missing").catch(() => undefined);
+    }
     const newName = `Gate desk ${Date.now() % 10000}`;
     if (!mine) {
       row("devices rename changes the label", false, `no device row named "${defaultName}" on My devices`);
@@ -218,13 +228,16 @@ try {
     await sleep(3000);
     const page = await d.getPageSource();
     const refused = /already linked to an agent/.test(page);
-    const offered = ["VtaLinkWithoutQr", "VtaLinkAgentAddress", "VtaLinkManualDid", "VtaLinkCheckGrant", "VtaLinkConfirm"];
+    // bifold #310: after a scan the link goes straight on to adding this phone (VtaLinkForOtherPhone).
+    const offered = ["VtaLinkForOtherPhone", "VtaLinkWaitingForPhone", "VtaLinkWithoutQr", "VtaLinkAgentAddress", "VtaLinkManualDid", "VtaLinkCheckGrant", "VtaLinkConfirm"];
     let at = "";
     for (const id of offered) if (!at && (await existsTestId(d, id, 1500))) at = id;
     await shot(d, "release235-scan-beside");
     await dumpSource(d, "release235-scan-beside").catch(() => undefined);
     row("scanbeside another agent is offered beside, not refused", !refused && Boolean(at), refused ? 'the phone said "already linked"' : at ? `the link flow opened (${at})` : "neither the link flow nor a refusal");
-    await d.back().catch(() => undefined);
+    // Leave without linking it: Stop linking returns to the current agent (vtiLinks cancelLink).
+    if (await existsTestId(d, "VtaLinkCancel", 2000)) await tapTestId(d, "VtaLinkCancel", 10000).catch(() => undefined);
+    else await d.back().catch(() => undefined);
     await sleep(1500);
   }
 } catch (e) {
