@@ -38,6 +38,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
+import { useAgentsHoldingIdentity } from './JoinWithAgent'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
 
@@ -70,7 +71,10 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   // What this phone has stored about the community: a member who comes back
   // (or remounts) sees that they joined, not the start of the invitation.
   const { journey } = useCommunityJourney(agent, communityDid)
-  const held = journey?.join
+  // Another agent's membership or request is not this agent's: the person is
+  // invited afresh, not shown "You're a member" a moment later (10-06).
+  const holding = useAgentsHoldingIdentity(communityDid)
+  const held = holding.onlyOthers ? undefined : journey?.join
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 

@@ -33,6 +33,8 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { useCommunityJourney } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
+import { HeldByAnotherAgent } from './HeldByAnotherAgent'
+import { useAgentsHoldingIdentity } from './JoinWithAgent'
 import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
@@ -64,8 +66,12 @@ const VtiCommunity: React.FC = () => {
   const navigation = useNavigation()
   // Where this phone stands with the community: a member is not asked to apply.
   const { journey } = useCommunityJourney(agent, communityDid)
-  const membership = journey?.join.kind === 'member' ? journey.join.membership : undefined
-  const vetsHere = journey?.vetterGrant.state === 'active'
+  // What the phone knows here may be another agent's: its identity, its
+  // membership. Then this agent is not a member and cannot leave (10-06).
+  const holding = useAgentsHoldingIdentity(communityDid)
+  const heldElsewhere = holding.onlyOthers ? holding.holders.find(Boolean) : undefined
+  const membership = !heldElsewhere && journey?.join.kind === 'member' ? journey.join.membership : undefined
+  const vetsHere = !heldElsewhere && journey?.vetterGrant.state === 'active'
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -242,6 +248,13 @@ const VtiCommunity: React.FC = () => {
           ) : null}
         </View>
 
+        {heldElsewhere ? (
+          <HeldByAnotherAgent
+            communityDid={communityDid}
+            community={communityLabelOf(communityDid, t)}
+            holderVtaDid={heldElsewhere}
+          />
+        ) : null}
         {membership ? (
           <View style={styles.card} testID={testIdWithKey('CommunityMember')}>
             <View style={styles.row}>
@@ -272,7 +285,7 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {membership ? null : (
+        {membership || heldElsewhere ? null : (
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>
         )}
         {busy && !manifest && !membership ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
@@ -328,7 +341,7 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {manifest && !verdict && !membership ? (
+        {manifest && !verdict && !membership && !heldElsewhere ? (
           <Pressable
             style={styles.button}
             testID={testIdWithKey('ApplyToCommunityButton')}
@@ -340,7 +353,7 @@ const VtiCommunity: React.FC = () => {
           </Pressable>
         ) : null}
 
-        {!holds ? null : confirmingLeave ? (
+        {!holds || heldElsewhere ? null : confirmingLeave ? (
           <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
             <Text style={styles.value}>
               {t('Community.LeaveExplains', {
