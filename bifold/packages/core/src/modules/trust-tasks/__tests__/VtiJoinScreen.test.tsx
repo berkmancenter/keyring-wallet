@@ -6,6 +6,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -221,6 +222,15 @@ describe('I want to join a community', () => {
     const tree = await renderJoin()
     expect(tree.getByTestId(testIdWithKey('JoinRememberedUnreachable'))).toHaveTextContent('Join.RememberedUnreachable')
     expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
+  })
+
+  // 238, iPhone: "Which community?" sat at the top and its button at the
+  // foot, the screen between them. Kept together and centred.
+  it('"Which community?" and its button sit together, centred', async () => {
+    const tree = await renderJoin()
+    const scroll = StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinScroll')).props.contentContainerStyle)
+    expect(scroll.justifyContent).toBe('center')
+    expect(StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinActions')).props.style).marginTop).toBe(8)
   })
 
   it('a suggested community that does not answer is not called gone', async () => {
