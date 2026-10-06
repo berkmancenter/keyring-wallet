@@ -82,6 +82,8 @@ export const RequestCard: React.FC<RequestCardProps> = ({ approval, shows, busy,
         <ThemedText testID={testIdWithKey('RequestAsks')}>
           {requestLine(approval, { managerDid: state.managerDid, knownDevices: state.knownDevices }, t)}
         </ThemedText>
+        {/* The task's technical name, for whoever needs it — never in the sentence. */}
+        <DidDetails did={shortTask(approval.taskType)} label={t('Requests.TaskName')} testIdStem="RequestTask" />
         {shows === 'expired' ? (
           <ThemedText testID={testIdWithKey('RequestExpired')}>{t('Requests.Expired')}</ThemedText>
         ) : null}

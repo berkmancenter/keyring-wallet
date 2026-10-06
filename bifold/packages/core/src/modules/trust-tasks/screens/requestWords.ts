@@ -39,10 +39,60 @@ export const TASK_WORDS: Readonly<Record<string, string>> = {
 /** `https://trusttasks.org/spec/vta/contexts/create/1.0` → `vta/contexts/create`. */
 export const taskPath = (taskType: string): string => shortTask(taskType).replace(/\/\d+(\.\d+)*$/, '')
 
-/** The task in words ("create a context"), or undefined for one Keyring has no words for. */
+/**
+ * What a task acts on, by its path's family: the object of "see …", "change …"
+ * (the longest family that matches wins).
+ */
+export const TASK_THINGS: Readonly<Record<string, string>> = {
+  'vta/contexts': 'Requests.ThingContexts',
+  keys: 'Requests.ThingKeys',
+  'vta/webvh/dids': 'Requests.ThingDids',
+  'did-management/did': 'Requests.ThingDids',
+  'did-management/domain': 'Requests.ThingDomains',
+  'vta/webvh/servers': 'Requests.ThingServers',
+  'did-management/server': 'Requests.ThingServers',
+  acl: 'Requests.ThingAccess',
+  config: 'Requests.ThingSettings',
+  'vta/seeds': 'Requests.ThingSeeds',
+  'vta/audit': 'Requests.ThingAudit',
+  audit: 'Requests.ThingAudit',
+  device: 'Requests.ThingDevices',
+  policy: 'Requests.ThingRules',
+  consent: 'Requests.ThingApprovals',
+  persona: 'Requests.ThingPersona',
+  'vault/credentials': 'Requests.ThingCards',
+}
+
+/** What a task does to it, by the path's last word. */
+const TASK_VERBS: ReadonlyArray<[RegExp, string]> = [
+  [/^(list|get|show|info|check-name|stats|health|history|preview|analyze)$/, 'Requests.VerbSee'],
+  [/^(create|import|register|put|publish|add|admin-register|receive)$/, 'Requests.VerbAdd'],
+  [/^(delete|purge|revoke|disable|deregister|unassign|wipe|purge-version)$/, 'Requests.VerbRemove'],
+  [
+    /^(update|patch|rename|rotate|enable|assign|set|set-.+|change-.+|promote|rollback|update-.+|upsert)$/,
+    'Requests.VerbChange',
+  ],
+  [/^(sign|derive-and-sign|derive-and-sign-document|present)$/, 'Requests.VerbUse'],
+]
+
+/**
+ * The task in words ("create a context"), or undefined for one Keyring has no
+ * words for. A task with a phrase of its own says it; another is put together
+ * from what it does (its path's last word) and what to (its family): a request
+ * for `vta/contexts/get` read as "run vta/contexts/get/1.0" (10-06).
+ */
 export function taskWords(taskType: string, t: TFunction): string | undefined {
-  const key = TASK_WORDS[taskPath(taskType)]
-  return key ? (t(key) as string) : undefined
+  const path = taskPath(taskType)
+  const key = TASK_WORDS[path]
+  if (key) return t(key) as string
+  const cut = path.lastIndexOf('/')
+  if (cut < 0) return undefined
+  const family = path.slice(0, cut)
+  const action = path.slice(cut + 1)
+  const thing = TASK_THINGS[family] ?? TASK_THINGS[family.split('/').slice(0, -1).join('/')]
+  const verb = TASK_VERBS.find(([match]) => match.test(action))?.[1]
+  if (!thing || !verb) return undefined
+  return t(verb, { thing: t(thing), interpolation: { escapeValue: false } }) as string
 }
 
 export interface RequesterContext {
@@ -69,13 +119,11 @@ export function requestLine(
 ): string {
   const requester = requesterName(approval.requester, context, t)
   const action = taskWords(approval.taskType, t)
+  // A task Keyring cannot put in words is not named by its URI in the
+  // sentence; its technical name is under the card's toggle.
   return (
     action
       ? t('Requests.AsksTo', { requester, action, interpolation: { escapeValue: false } })
-      : t('MyAgent.ApprovalAsks', {
-          requester,
-          task: shortTask(approval.taskType),
-          interpolation: { escapeValue: false },
-        })
+      : t('Requests.AsksSomething', { requester, interpolation: { escapeValue: false } })
   ) as string
 }
