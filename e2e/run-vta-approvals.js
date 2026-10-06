@@ -61,13 +61,28 @@ if (SLUG !== link.slug) throw new Error(`the phone was linked to "${link.slug}",
 const utc = () => new Date().toISOString().slice(11, 19) + "Z";
 const log = (s) => console.log(`[e2e] ${utc()} ${s}`);
 
-/** One pnm call on the runner VTA, through the slug's lock. Returns what it said, whatever its exit status. */
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+/** A rate-limit answer from the agent or the proxy in front of it (the 236 gate's setup, 12:48Z). */
+const RATE_LIMITED = /\b429\b|too many requests|rate.?limit|proxy \/ load balancer/i;
+
+/**
+ * One pnm call on the runner VTA, through the slug's lock. Returns what it said, whatever its exit status.
+ * A rate-limited answer is retried with backoff (5, 10, 20, 40 s), and each one is logged with its time
+ * as `RATE-LIMITED <utc> <args>`: evidence for the Farm's rate-limit question, not only a retry.
+ */
 function pnm(args, timeout = 120000) {
-  try {
-    return execFileSync(PNM_LOCKED, ["--vta", SLUG, ...args], { encoding: "utf8", timeout, env: { ...process.env, PNM_BIN: PNM }, stdio: ["ignore", "pipe", "pipe"] });
-  } catch (err) {
-    return `${err.stdout ?? ""}${err.stderr ?? ""}` || String(err.message);
+  let out = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      out = execFileSync(PNM_LOCKED, ["--vta", SLUG, ...args], { encoding: "utf8", timeout, env: { ...process.env, PNM_BIN: PNM }, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      out = `${err.stdout ?? ""}${err.stderr ?? ""}` || String(err.message);
+    }
+    if (!RATE_LIMITED.test(out)) return out;
+    console.log(`RATE-LIMITED ${new Date().toISOString()} pnm ${args.slice(0, 3).join(" ")} (attempt ${attempt + 1})`);
+    if (attempt < 4) pause(5000 * 2 ** attempt);
   }
+  return out;
 }
 const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
 const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
@@ -111,11 +126,15 @@ async function awaitCard(d, ms) {
   return card;
 }
 const lastLine = (out) => out.trim().split("\n").pop()?.slice(0, 160) ?? "";
-function rules() {
+function approvalsList() {
   const out = pnm(["approvals", "list", "--json"]);
-  const parsed = JSON.parse(out.slice(out.indexOf("{")));
-  return parsed.rules ?? [];
+  return JSON.parse(out.slice(out.indexOf("{")));
 }
+function rules() {
+  return approvalsList().rules ?? [];
+}
+/** The approver sets as a stable string, to say whether cleanup put them back as they were. */
+const setsOf = (list) => JSON.stringify(Object.fromEntries(Object.entries(list.approverSets ?? {}).sort(([a], [b]) => a.localeCompare(b))));
 
 /**
  * From the Requests screen back to Your agent. Its own button shows only when nothing
@@ -139,6 +158,7 @@ let failed = true;
 let approver;
 let probeContext;
 let declineContext;
+let setsBefore;
 let pinSet = false;
 try {
   // The phone's key on the agent. A key the phone rotated onto is recorded as
@@ -157,6 +177,8 @@ try {
   if (!approver) throw new Error(`no key of this phone on "${SLUG}": link it first (run-vta-link.js with E2E_KEEP_APP=1)`);
   log(`approver = this phone's key ${approver.slice(0, 40)}… on ${SLUG}`);
 
+  setsBefore = setsOf(approvalsList());
+  log(`approver sets before: ${setsBefore}`);
   const rulesBefore = rules();
   if (rulesBefore.length) throw new Error(`"${SLUG}" already has ${rulesBefore.length} approval rule(s): another run is using it, or left them`);
   // The context the request will ask for, made before the rule exists so that
@@ -165,7 +187,9 @@ try {
   probeContext = `e2e-approvals-${Date.now()}`;
   log(`probe context: ${lastLine(pnm(["contexts", "create", "--id", probeContext, "--name", "e2e approvals probe"]))}`);
   if (/consent required|not found/i.test(pnm(["contexts", "get", probeContext]))) throw new Error(`the probe context "${probeContext}" cannot be read back before the rule is set`);
+  pause(3000); // the setup calls a few seconds apart: back to back they met the Farm's rate limit (12:48Z)
   log(`approver set: ${lastLine(pnm(["approvals", "approvers", "add", SET, approver]))}`);
+  pause(3000);
   log(`rule: ${lastLine(pnm(["approvals", "require", TASK, "--consent", "--set", SET]))}`);
   if (!rules().length) throw new Error("the consent rule did not take");
 
@@ -305,12 +329,17 @@ try {
     for (let attempt = 1; attempt <= 4 && !removed; attempt++) {
       said = lastLine(pnm(["contexts", "delete", "--yes", ctx]));
       removed = gone();
-      if (!removed) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+      if (!removed) pause(15000);
     }
     log(removed ? `context ${ctx} removed: ${said}` : `context ${ctx} NOT confirmed removed (${said}): ${PNM} --vta ${SLUG} contexts delete --yes ${ctx}`);
   }
   try {
-    log(`rules after: ${rules().length}`);
+    const after = approvalsList();
+    log(`rules after: ${(after.rules ?? []).length}`);
+    if (setsBefore !== undefined) {
+      const setsAfter = setsOf(after);
+      log(`approver sets after: ${setsAfter} — ${setsAfter === setsBefore ? "as before" : `NOT as before (${setsBefore})`}`);
+    }
   } catch (err) {
     log(`rules after: unreadable (${err.message.split("\n")[0]})`);
   }
