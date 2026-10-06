@@ -17,6 +17,7 @@ import VtaRequests from '../modules/trust-tasks/screens/VtaRequests'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
 import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
 import VtaAskMe from '../modules/trust-tasks/screens/VtaAskMe'
+import VtaAgentSettings from '../modules/trust-tasks/screens/VtaAgentSettings'
 import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
@@ -131,6 +132,12 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaAskMe}
         component={VtaAskMe}
         options={{ title: t('Screens.VtaAskMe'), ...ScreenOptionsDictionary[Screens.VtaAskMe] }}
+      />
+      {/* Opened from the gear in "Your agent"'s header. */}
+      <Stack.Screen
+        name={Screens.VtaAgentSettings}
+        component={VtaAgentSettings}
+        options={{ title: t('Screens.VtaAgentSettings'), ...ScreenOptionsDictionary[Screens.VtaAgentSettings] }}
       />
     </Stack.Navigator>
   )

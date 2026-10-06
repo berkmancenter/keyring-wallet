@@ -284,6 +284,9 @@ export interface VtaAgentDeps {
 export const HOST_SIGN_IN_TRIES = 24
 export const HOST_SIGN_IN_RETRY_MS = 5000
 
+/** The longest name a person can give an agent on this phone. */
+export const AGENT_NICKNAME_MAX = 40
+
 /** Why an automatic connection stopped, as a link failure: the reason the older screens know, and the host's own. */
 function hostFailure(error: AgentHostConnectionError): VtaLinkFailure {
   const reason: VtaLinkFailure['reason'] =
@@ -696,11 +699,34 @@ export class VtaAgentController {
       .then((found) => {
         if (!found) this.namesAsked.delete(vtaDid)
         else {
-          this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
+          // Kept with the link either way; shown only when the person has not named it.
+          const named = this.state.agentNames?.[vtaDid]?.source === 'nickname'
+          if (!named) this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
           void this.keepAgentName(vtaDid, found)
         }
       })
       .catch(() => this.namesAsked.delete(vtaDid))
+  }
+
+  /**
+   * Name an agent on this phone ("Name this agent"), or clear the name with an
+   * empty one: kept with its link, and shown before any name the agent gives
+   * itself. Local only; the agent is not told.
+   */
+  async nameAgent(agent: Agent, vtaDid: string, nickname: string): Promise<void> {
+    const store = this.linkStore(agent)
+    const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
+    const link =
+      links.find((l) => l.vtaDid === vtaDid) ??
+      (await store
+        .get()
+        .then((l) => (l?.vtaDid === vtaDid ? l : undefined))
+        .catch(() => undefined))
+    if (!link) return
+    const name = nickname.trim().slice(0, AGENT_NICKNAME_MAX)
+    const { nickname: _old, ...rest } = link
+    await store.set(name ? { ...rest, nickname: name } : rest)
+    await this.refreshAgents(agent)
   }
 
   /** Keep an agent's name with its link, so it survives a restart while another agent is current. */
@@ -749,9 +775,20 @@ export class VtaAgentController {
     const kept = Object.fromEntries(
       links.filter((l) => l.agentName?.label).map((l) => [l.vtaDid, l.agentName as AgentLabel])
     )
+    // What the person named an agent wins over any name it gives itself.
+    const nicknames: Record<string, AgentLabel> = Object.fromEntries(
+      links
+        .filter((l) => l.nickname?.trim())
+        .map((l) => [l.vtaDid, { label: (l.nickname as string).trim(), source: 'nickname' as const }])
+    )
+    // A nickname taken away gives the agent's own name back.
+    const learned = Object.fromEntries(
+      Object.entries(this.state.agentNames ?? {}).filter(([, n]) => n.source !== 'nickname')
+    )
+    const names = { ...kept, ...learned, ...nicknames }
     this.set({
       agents: links.map(({ vtaDid, label, owner }) => ({ vtaDid, label, ...(owner ? { owner } : {}) })),
-      ...(Object.keys(kept).length ? { agentNames: { ...kept, ...this.state.agentNames } } : {}),
+      ...(Object.keys(names).length || this.state.agentNames ? { agentNames: names } : {}),
     })
   }
 

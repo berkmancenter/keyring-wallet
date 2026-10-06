@@ -162,19 +162,25 @@ describe('what your agent holds, card by card', () => {
     expect(tree.queryByTestId(testIdWithKey(`AgentMemberBeforeLink_${keyOf(B)}`))).toBeNull()
   })
 
-  it("a vetter's page offers the vetting desk once, on the community's card", async () => {
+  it("a vetter's page offers the vetting desk once, at the top, not again on the community's card", async () => {
     mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
     const tree = await renderHome([persona(A), membership(A, linkedAt), grant(A)])
+    const top = within(tree.getByTestId(testIdWithKey('AgentVetterCard')))
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toHaveTextContent(/VtaLink\.YouCanVet/)
+    expect(top.getByTestId(testIdWithKey('AgentOpenDesk'))).toHaveTextContent('VtaLink.OpenDesk')
     expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
-    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${keyOf(A)}`))).toHaveTextContent('VtaLink.OpenDesk')
+    expect(tree.queryByTestId(testIdWithKey(`AgentCommunityPrimary_${keyOf(A)}`))).toBeNull()
     expect(tree.getAllByText('VtaLink.OpenDesk')).toHaveLength(1)
+    // It opens the desk on that community.
+    fireEvent.press(top.getByTestId(testIdWithKey('AgentOpenDesk')))
+    expect(useNavigation().navigate).toHaveBeenCalledWith(Screens.VtiVetting)
   })
 
-  it("a vetter who holds no membership yet still has the desk on the card, not 'continue vetting'", async () => {
+  it("a vetter who holds no membership yet still has the desk at the top, and no 'continue vetting'", async () => {
     mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
     const tree = await renderHome([persona(A), grant(A)])
-    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${keyOf(A)}`))).toHaveTextContent('VtaLink.OpenDesk')
+    expect(tree.getByTestId(testIdWithKey('AgentOpenDesk'))).toHaveTextContent('VtaLink.OpenDesk')
+    expect(tree.queryByText('VtaLink.ContinueVetting')).toBeNull()
   })
 
   it('an applicant\'s card says "your identity for" the community once', async () => {

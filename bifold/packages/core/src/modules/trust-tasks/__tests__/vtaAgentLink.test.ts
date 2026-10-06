@@ -1204,6 +1204,39 @@ describe('several agents', () => {
     expect(stored.find((l) => l.vtaDid === HOME.vtaDid)?.agentName).toEqual({ label: 'Home agent', source: 'vtaName' })
   })
 
+  // Alberto, 10-06: an agent made with pnm gives no name; the person names it here.
+  it("a name given on this phone is kept with the link, wins over the agent's own, and can be taken back", async () => {
+    const work = { ...WORK, agentName: { label: 'Work agent', source: 'agentName' as const } }
+    const stored: Record<string, unknown>[] = [HOME, work]
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({
+        get: async () => stored[0] as never,
+        set: async (l: Record<string, unknown>) => {
+          const at = stored.findIndex((x) => x.vtaDid === l.vtaDid)
+          stored[at] = l
+        },
+        clear: async () => undefined,
+        list: async () => stored as never,
+        current: async () => HOME.vtaDid,
+      }),
+      identityStore: (() => ({ setManager: async () => undefined, forgetManager: async () => undefined })) as never,
+    })
+    await vta.restore({} as never)
+
+    await vta.nameAgent({} as never, WORK.vtaDid, '  al-signer  ')
+    expect(stored.find((l) => l.vtaDid === WORK.vtaDid)?.nickname).toBe('al-signer')
+    expect(vta.getState().agentNames?.[WORK.vtaDid]).toEqual({ label: 'al-signer', source: 'nickname' })
+    // The name the agent gives itself stays with the link, under the nickname.
+    expect(stored.find((l) => l.vtaDid === WORK.vtaDid)?.agentName).toEqual(work.agentName)
+
+    // Taken back: the agent's own name again.
+    await vta.nameAgent({} as never, WORK.vtaDid, '')
+    expect(stored.find((l) => l.vtaDid === WORK.vtaDid)).not.toHaveProperty('nickname')
+    expect(vta.getState().agentNames?.[WORK.vtaDid]).toEqual(work.agentName)
+  })
+
   it('lists every agent and switches to another, which becomes current and connects', async () => {
     const { vta, current } = twoAgents()
     await vta.restore({} as never)

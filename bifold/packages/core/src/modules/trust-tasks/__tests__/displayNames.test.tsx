@@ -10,7 +10,7 @@ import React from 'react'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityTarget } from '../module/vtiCommunityLink'
-import { agentDisplayName, agentDisplayNameStart, withAgentName } from '../screens/agentName'
+import { agentDisplayName, agentDisplayNameStart, agentNameInDid, withAgentName } from '../screens/agentName'
 import { communityLabelOf, communityLabelStartOf, partyLabelStartOf } from '../screens/communityName'
 import { DidDetails } from '../screens/DidDetails'
 
@@ -86,19 +86,32 @@ describe('an agent', () => {
   it("else by the enrolment offer's label", () => {
     expect(agentDisplayName({ vtaDid, label: 'Lab agent' }, t)).toBe('Lab agent')
   })
-  it("a manual link's DID-as-label is no label, and the host is never a name: plain words", () => {
+  it("a manual link's DID-as-label is no label, and the host is never a name: the name in its DID's path", () => {
     // The host is the agent host's own domain, a provider named where a person
-    // expects their agent's name (225 gate).
-    expect(agentDisplayName({ vtaDid, label: vtaDid }, t)).toBe('VtaLink.YourAgentFallback')
+    // expects their agent's name (225 gate). The path's last segment is what
+    // its maker called it: an agent made with pnm publishes no name (10-06).
+    expect(agentDisplayName({ vtaDid, label: vtaDid }, t)).toBe('alice')
   })
   it('a label that is only the host (stored by a link before 226) is no name either', () => {
-    expect(agentDisplayName({ vtaDid, label: 'dids.example.org' }, t)).toBe('VtaLink.YourAgentFallback')
+    expect(agentDisplayName({ vtaDid, label: 'dids.example.org' }, t)).toBe('alice')
+  })
+  it('a DID with no readable path name: plain words, never the host or a hash', () => {
+    const atHost = 'did:webvh:QmVta:dids.example.org'
+    expect(agentDisplayName({ vtaDid: atHost, label: atHost }, t)).toBe('VtaLink.YourAgentFallback')
+    const hashed = 'did:webvh:QmVta:dids.example.org:QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx'
+    expect(agentDisplayName({ vtaDid: hashed, label: hashed }, t)).toBe('VtaLink.YourAgentFallback')
+    expect(agentNameInDid('did:webvh:QmVta:dids.example.org:al-signer')).toBe('al-signer')
+    expect(agentNameInDid('did:webvh:QmVta:dids.example.org:people:al%20signer')).toBeUndefined()
   })
   it('by the name the agent gave, once read, for that agent only', () => {
     const names = { [vtaDid]: { label: 'runner', source: 'vtaName' as const } }
     expect(agentDisplayName(withAgentName({ vtaDid, label: 'Lab agent' }, names), t)).toBe('runner')
     expect(agentDisplayName(withAgentName({ vtaDid: 'did:webvh:QmB:b.example.org', label: 'B' }, names), t)).toBe('B')
-    expect(agentDisplayName(withAgentName({ vtaDid, label: vtaDid }, undefined), t)).toBe('VtaLink.YourAgentFallback')
+    expect(agentDisplayName(withAgentName({ vtaDid, label: vtaDid }, undefined), t)).toBe('alice')
+  })
+  it('by what the person named it on this phone, over any name it gives itself', () => {
+    const names = { [vtaDid]: { label: 'Work', source: 'nickname' as const } }
+    expect(agentDisplayName(withAgentName({ vtaDid, label: 'Lab agent' }, names), t)).toBe('Work')
   })
   it('with neither a label nor a host: words, never the DID', () => {
     expect(agentDisplayName({ vtaDid: peer, label: peer }, t)).toBe('VtaLink.YourAgentFallback')

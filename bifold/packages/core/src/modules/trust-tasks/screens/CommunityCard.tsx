@@ -54,6 +54,11 @@ export interface CommunityCardProps {
   onPrimary: (action: CommunityCardPrimary, communityDid: string) => void
   /** Told the card's next step whenever it changes, so "Your agent" can lead with it. */
   onNextStep?: (communityDid: string, primary: CommunityCardPrimary | undefined) => void
+  /**
+   * "Your agent" shows this community's vetting desk at the top of the page:
+   * the card does not offer it a second time (Alberto, 10-06).
+   */
+  deskShownAbove?: boolean
 }
 
 const primaryLabel: Record<CommunityCardPrimary, string> = {
@@ -73,6 +78,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   onOpen,
   onPrimary,
   onNextStep,
+  deskShownAbove = false,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
@@ -97,6 +103,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       : undefined)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
   const key = communityCardKey(communityDid)
+  const shownPrimary = deskShownAbove && model.primary === 'openDesk' ? undefined : model.primary
   useEffect(() => {
     onNextStep?.(communityDid, model.primary)
   }, [onNextStep, communityDid, model.primary])
@@ -243,11 +250,11 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         />
       ) : null}
 
-      {model.primary ? (
+      {shownPrimary ? (
         <Button
-          title={t(primaryLabel[model.primary])}
+          title={t(primaryLabel[shownPrimary])}
           buttonType={ButtonType.Primary}
-          onPress={() => onPrimary(model.primary!, communityDid)}
+          onPress={() => onPrimary(shownPrimary, communityDid)}
           testID={testIdWithKey(`AgentCommunityPrimary_${key}`)}
         />
       ) : null}

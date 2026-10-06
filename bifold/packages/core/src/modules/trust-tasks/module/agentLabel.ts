@@ -22,7 +22,8 @@
 /** The label to show for an agent, and where it came from. */
 export interface AgentLabel {
   label: string
-  source: 'agentName' | 'vtaName'
+  /** `nickname`: what the person named it on this phone, which wins over both. */
+  source: 'agentName' | 'vtaName' | 'nickname'
 }
 
 /** The document shape this reads: its `alsoKnownAs`. */
