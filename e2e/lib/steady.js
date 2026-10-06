@@ -10,6 +10,8 @@
  *   that only scrolled down never found it (My devices, run-release-235).
  * - `expectChanged`: a still-valid ticket from eight hours before was taken as
  *   the new cut, so no new ticket was ever made (the vetter's desk).
+ * - `dismissTourIfUp`: a first-visit tour (bifold's TourBox) sat over the
+ *   Wallet and took the tap meant for the card, on both 236 runs.
  * - `tapLifted`: iOS kept the ticket's Details toggle "not displayed" through
  *   four swipes, so a tap waiting for isDisplayed was never made; lift it by
  *   its measured position and tap where it is (#331).
@@ -17,7 +19,7 @@
  * A target is a testID (string) or a function returning a WebdriverIO element,
  * for things only a UiSelector or predicate can name.
  */
-import { byTestId, liftAboveTabBar, scrollToTestId, sleep, tapTestIdByCoordinates } from "./driver.js";
+import { byTestId, liftAboveTabBar, scrollToTestId, sleep, tapTestId, tapTestIdByCoordinates } from "./driver.js";
 
 const elementOf = (driver, target) => (typeof target === "function" ? target() : byTestId(driver, target));
 const nameOf = (target) => (typeof target === "function" ? target.name || "element" : `testID=${target}`);
@@ -134,4 +136,35 @@ export async function tapLifted(
     if (!verify || (await verify())) return true;
   }
   return false;
+}
+
+/**
+ * Close bifold's first-visit tour (TourBox) if one is over the screen: tap its
+ * ✕ (`Close`), else its "Next"/"Done" (`Next`), until neither shows — a tour
+ * can have several steps. At most `max` taps. Returns how many it closed.
+ * Call it after navigating to a tab, before tapping anything on it. A tour can
+ * take a moment to appear, so the first look waits up to `appearMs`.
+ *
+ * Generic, unlike flows.js `dismissTourIfPresent` (one ✕, after onboarding).
+ * `present`, `tap` and `wait` are for tests.
+ */
+export async function dismissTourIfUp(
+  driver,
+  { max = 5, appearMs = 1500, settleMs = 600, present: isHere = present, tap = tapTestId, wait = sleep, log = console.log } = {}
+) {
+  const step = async () => ((await isHere(driver, "Close")) ? "Close" : (await isHere(driver, "Next")) ? "Next" : undefined);
+  let control = await step();
+  for (let waited = 0; !control && waited < appearMs; waited += 300) {
+    await wait(300);
+    control = await step();
+  }
+  let closed = 0;
+  while (control && closed < max) {
+    await tap(driver, control, 5000);
+    closed++;
+    await wait(settleMs);
+    control = await step();
+  }
+  if (closed) log(`[e2e] ${driver.e2ePlatform ?? "device"}: closed a tour (${closed} tap${closed === 1 ? "" : "s"})${control ? `, still showing ${control}` : ""}`);
+  return closed;
 }

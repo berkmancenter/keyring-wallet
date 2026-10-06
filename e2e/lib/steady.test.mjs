@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { expectChanged, findScrolling, waitStable } from "./steady.js";
+import { dismissTourIfUp, expectChanged, findScrolling, waitStable } from "./steady.js";
 
 /** A clock that moves only when the code waits, and a screen scripted by time. */
 function fakeTime() {
@@ -92,4 +92,57 @@ test("expectChanged: compares structure, so an equal list read twice is unchange
     expectChanged(async () => ["a", "b"], async () => undefined, { timeout: 500, now: c.now, wait: c.wait }),
     /unchanged/
   );
+});
+
+/** A tour with these steps: each tap on what shows moves to the next; empty when done. */
+function tour(steps) {
+  const shown = [...steps];
+  const taps = [];
+  return {
+    taps,
+    opts: {
+      present: async (_d, id) => shown[0] === id,
+      tap: async (_d, id) => (taps.push(id), shown.shift()),
+      wait: async () => undefined,
+      log: () => undefined,
+    },
+  };
+}
+
+test("dismissTourIfUp: a several-step tour is closed step by step, ✕ first, then Next/Done", async () => {
+  const t = tour(["Next", "Next", "Close"]);
+  assert.equal(await dismissTourIfUp({}, t.opts), 3);
+  assert.deepEqual(t.taps, ["Next", "Next", "Close"]);
+});
+
+test("dismissTourIfUp: no tour, no taps", async () => {
+  const t = tour([]);
+  assert.equal(await dismissTourIfUp({}, t.opts), 0);
+  assert.deepEqual(t.taps, []);
+});
+
+test("dismissTourIfUp: a tour that will not go stops after max taps", async () => {
+  const taps = [];
+  const closed = await dismissTourIfUp(
+    {},
+    { max: 5, present: async (_d, id) => id === "Close", tap: async (_d, id) => taps.push(id), wait: async () => undefined, log: () => undefined }
+  );
+  assert.equal(closed, 5);
+  assert.equal(taps.length, 5);
+});
+
+test("dismissTourIfUp: a tour that appears a moment after the tab is still caught", async () => {
+  let t = 0;
+  const taps = [];
+  const closed = await dismissTourIfUp(
+    {},
+    {
+      appearMs: 1500,
+      present: async (_d, id) => id === "Close" && t >= 600 && taps.length === 0,
+      tap: async (_d, id) => taps.push(id),
+      wait: async (ms) => void (t += ms),
+      log: () => undefined,
+    }
+  );
+  assert.equal(closed, 1);
 });
