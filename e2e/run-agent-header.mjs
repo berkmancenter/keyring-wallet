@@ -90,8 +90,14 @@ try {
   if (await existsTestId(d, "AgentSwitcherAdd", 5000)) {
     await tapTestId(d, "AgentSwitcherAdd", 10000);
     await new Promise((r) => setTimeout(r, 2500));
-    await d.back().catch(() => undefined);
-    await new Promise((r) => setTimeout(r, 2500));
+    // iOS: the link screen's header is no UINavigationBar, so XCUITest's back() finds nothing; tap its "Back".
+    const back = d.$("~Back");
+    if (PLATFORM === "ios" && (await back.isExisting().catch(() => false))) await back.click();
+    else await d.back().catch(() => undefined);
+    // What Your agent shows right after Back, and 3 s later (while it reconnects to the previous agent).
+    await screenshot(d, `agent-add-back-0s-${PLATFORM}`).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 3000));
+    await screenshot(d, `agent-add-back-3s-${PLATFORM}`).catch(() => undefined);
     const home = await existsTestId(d, "AgentHome", 10000);
     const after = home ? (await textOf(d, "AgentHomeName").catch(() => "")).trim() : "";
     const unlinked = /Link your agent|no longer linked|Add this phone/i.test(await d.getPageSource());
