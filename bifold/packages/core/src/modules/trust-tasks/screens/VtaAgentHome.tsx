@@ -249,6 +249,13 @@ const VtaAgentHome: React.FC = () => {
   // identity came back to "You have not joined a community yet" and no way
   // back into vetting, until a pull to refresh (Farm gate, 2026-09-23).
   const isFocused = useIsFocused()
+  // "Add" on the chips leaves the current agent, then opens the link screen:
+  // in between this page is unlinked, and for an instant it drew "Link your
+  // agent" (238, iPhone). Nothing is drawn while it goes; back here, as ever.
+  const [leavingToAdd, setLeavingToAdd] = useState(false)
+  useEffect(() => {
+    if (isFocused) setLeavingToAdd(false)
+  }, [isFocused])
   useEffect(() => {
     if (isFocused) void load()
   }, [load, isFocused])
@@ -306,6 +313,12 @@ const VtaAgentHome: React.FC = () => {
           <RemovedPhoneCard link={link} />
         </View>
       </SafeAreaView>
+    )
+  }
+
+  if (link.kind !== 'linked' && leavingToAdd) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey('AgentHomeLeaving')} />
     )
   }
 
@@ -525,6 +538,7 @@ const VtaAgentHome: React.FC = () => {
               if (agent) void vtaAgent.useAgent(agent, vtaDid)
             }}
             onAdd={() => {
+              setLeavingToAdd(true)
               void vtaAgent.startAddingAgent().then(() => go(Screens.VtaLink))
             }}
           />
