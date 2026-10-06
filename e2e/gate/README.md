@@ -82,7 +82,10 @@ On 236, four of the day's reruns would have been caught this way: ticket, owner 
 
 `watch.sh` polls the pin PR. When it has merged and the merge commit's CI builds (push off and push on) are
 green, it downloads them into the cache and starts `run`. launchd runs it, never an agent tool's background
-job: one of those was stopped by its 2-hour limit in the 236 download step.
+job: one of those was stopped by its 2-hour limit in the 236 download step. It runs the gate in a session of its
+own (`setsid`), and a gate started by hand should be too
+(`nohup perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' e2e/gate/gate.sh run … &`): a gate sharing a process
+group with an agent tool's job was taken down mid-leg when that job was stopped, before the leg's cleanup ran.
 
 ## Parallel legs
 
