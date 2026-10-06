@@ -947,19 +947,31 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     )
   }
 
+  const whichCentred = step === 'which' && !standingShown
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {/* The buttons scroll with the page, after everything it says: held
           below it, above the tab bar, they left only a band for the page,
           and its last lines showed half-hidden behind them (239, iPhone). A
           short page still keeps them at the bottom. */}
+      {/* "Which community?" is a few lines and one button: kept together and
+          centred, not the words at the top and the button at the foot with
+          the screen between them (238, iPhone). The tab bar sits below the
+          screen, so the centre is the screen's own. */}
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 20 + roomAboveTabBar }]}
+        contentContainerStyle={[
+          styles.content,
+          whichCentred ? { justifyContent: 'center', paddingBottom: 20 } : { paddingBottom: 20 + roomAboveTabBar },
+        ]}
         testID={testIdWithKey('JoinScroll')}
       >
         {body}
         {actions ? (
-          <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+          <View
+            style={[styles.actions, whichCentred ? { marginTop: 8 } : undefined]}
+            testID={testIdWithKey('JoinActions')}
+          >
             {actions}
           </View>
         ) : null}
