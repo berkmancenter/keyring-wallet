@@ -260,23 +260,35 @@ async function linkManually(driver) {
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    // 237 (bifold #338): "No code? Use your agent's address" (LinkByAddressButton) is the way in without a code.
-    if (!(await existsTestId(driver, "LinkWithoutQrButton", 3000)) && (await existsTestId(driver, "LinkByAddressButton", 3000))) {
+    if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) {
+      await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    } else if (process.env.LINK_VIA === "address") {
+      // The address path on purpose (VtaCreateAgent). Before #339 it needs a screen lock first (DeviceCannotOwn).
       return linkByAddress(driver, "LinkByAddressButton");
+    } else {
+      // 237 (bifold #338, without #339): My Agent's "Scan your agent's code" opens the scanner, and the agent's
+      // bare address pasted there starts the "add this phone" link on VtaLink, which needs no screen lock. The
+      // address path needs one until #339 (f7, 10-07).
+      await tapTestId(driver, "LinkYourAgentButton", 30000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      console.log("[e2e] link: pasted the agent's address on the scanner (237's way in without a code)");
     }
-    await tapTestId(driver, "LinkWithoutQrButton", 30000);
   }
   // "Link without QR" can land straight on the address screen, and then the
   // intermediate control is never there to tap — the same shape as the
   // "Show my code" race below: ask for the GOAL first, and treat the
   // waypoint as optional. Measured on the candidate tree 2026-09-23, where
   // the run died waiting 15s for a step the flow had already passed.
-  if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
-    await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+  // After a pasted address the link screen already knows the agent: no address to type.
+  const knowsAgent = (await existsTestId(driver, "VtaLinkManualDid", 3000)) || (await existsTestId(driver, "VtaLinkShowTheCode", 1500)) || (await existsTestId(driver, "VtaLinkShowMyCode", 1500));
+  if (!knowsAgent) {
+    if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
+      await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+    }
+    const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
+    // Return on the keyboard submits the address, as a person would — on iOS.
+    await address.setValue(`${runnerVtaDid()}\n`);
   }
-  const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
-  // Return on the keyboard submits the address, as a person would — on iOS.
-  await address.setValue(`${runnerVtaDid()}\n`);
   // The key is revealed by "Show my code", which the screen enables once the
   // address looks like a DID — it does not appear on submit. Measured on
   // Android, 2026-09-22: the run waited out 60s on a screen that was only
