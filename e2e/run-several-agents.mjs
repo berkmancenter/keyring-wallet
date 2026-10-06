@@ -391,7 +391,22 @@ try {
     // Which tap opens the "Add credentials" sheet (236 gate, both runs): the screen between the two.
     await shot(d, "agents-r7-wallet-before-card");
     await dumpSource(d, "agents-r7-wallet-before-card").catch(() => undefined);
-    console.log(`R7-CARD-TAP ${new Date().toISOString()}`); // to line up with logcat's Wallet render
+    // The Wallet remounts on each tab tap and can show EmptyList (its AddFirstCredential sits where a card
+    // row is) until its records load (f7, 10-06). Tap only once the card has held, with no empty state, for 1 s;
+    // say whether the empty state showed meanwhile: that is the app-side evidence.
+    let emptySeen = false;
+    let steadySince = 0;
+    for (const until = Date.now() + 20000; Date.now() < until; await sleep(200)) {
+      const empty = (await existsTestId(d, "NoCredentials", 100).catch(() => false)) || (await existsTestId(d, "AddFirstCredential", 100).catch(() => false));
+      const card = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")').isExisting().catch(() => false);
+      if (empty) emptySeen = true;
+      if (card && !empty) {
+        steadySince ||= Date.now();
+        if (Date.now() - steadySince >= 1000) break;
+      } else steadySince = 0;
+    }
+    log(`R7: Wallet empty state seen before the card held: ${emptySeen}`);
+    console.log(`R7-CARD-TAP ${new Date().toISOString()} empty-seen ${emptySeen}`); // to line up with logcat's Wallet render
     const sheetFirst = await existsTestId(d, "AddCredentialSlider", 500).catch(() => false);
     log(`R7: Wallet open; "Add credentials" sheet already up: ${sheetFirst}`);
     // The card by its name line (CredentialName), not by any text naming C: the first text match can be
