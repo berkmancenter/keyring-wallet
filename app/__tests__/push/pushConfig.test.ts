@@ -6,6 +6,7 @@
  */
 import type { Agent } from '@credo-ts/core'
 
+import { PushGatewayRefusal } from '@/push/pushGateway'
 import { pushNotificationsConfig, type PushConfigDeps } from '@/push/pushConfig'
 import { onPushWake, wakeHints } from '@/push/pushHandlers'
 
@@ -105,6 +106,20 @@ describe('a build that names a push gateway', () => {
     })
     await expect(pushNotificationsConfig(d)!.toggle(true, agent)).resolves.toBeUndefined()
     expect(d.log).toHaveBeenCalledWith('push wake: failed', { enable: true, error: 'permissionDenied' })
+  })
+
+  it("says so when the gateway keeps no more handles for this phone's token", async () => {
+    const onHandleLimit = jest.fn()
+    const d = {
+      ...deps({
+        enableWake: jest.fn(async () => {
+          throw new PushGatewayRefusal('taskFailed', 'task failed: too many handles for this push token')
+        }),
+      }),
+      onHandleLimit,
+    }
+    await expect(pushNotificationsConfig(d)!.toggle(true, agent)).resolves.toBeUndefined()
+    expect(onHandleLimit).toHaveBeenCalledTimes(1)
   })
 })
 

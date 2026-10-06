@@ -81,6 +81,9 @@ const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
 const IOS_UDID = process.env.IOS_UDID || "";
 const LINK_MODE = process.env.LINK_MODE || "qr";
 const JOURNEY = process.env.JOURNEY === "1";
+// EXPECT_REFUSAL=communityAgent (with LINK_MODE=manual and RUNNER_VTA naming a
+// community's own agent): pass when the phone refuses to link it (bifold #306).
+const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
@@ -329,6 +332,20 @@ async function linkManually(driver) {
   const grantedSince = new Date(Date.now() - 2000).toISOString();
   execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
   await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+  if (EXPECT_REFUSAL === "communityAgent") {
+    // bifold #306: the phone signs in, learns the agent serves a community, and
+    // refuses it, keeping nothing (vtaAgent.ts finishLink). Its grant stays on
+    // that agent's list until an admin removes it: the run's cleanup does.
+    await waitForTestId(driver, "VtaLinkError", 120000);
+    const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
+    await screenshot(driver, "link-refused-community-agent");
+    if (!/This is a community's agent\. Link Keyring to your personal agent instead\./.test(said)) {
+      throw new Error(`the link was not refused as a community's agent: "${said.slice(0, 160)}"`);
+    }
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked after refusing a community's agent");
+    console.log(`[e2e] refused as a community's agent: "${said}"`);
+    return temporaryDid;
+  }
   await waitForTestId(driver, "VtaLinkDone", 180000);
   await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
   await assertNoDidShown(driver, "the Linked screen");
@@ -384,6 +401,14 @@ async function openJoinDoors(driver) {
   if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
     await tapTestId(driver, "AgentJoinCorner", 5000);
   }
+}
+
+/** Into Join: the doors' "Join a community", or (236, bifold #316) the corner menu's Join. */
+async function tapJoinDoor(driver) {
+  await openJoinDoors(driver);
+  if (await existsTestId(driver, "AgentJoinMenuJoin", 2000)) return tapTestId(driver, "AgentJoinMenuJoin", 10000);
+  await scrollToTestId(driver, "AgentJoinCommunity", 8);
+  return tapTestId(driver, "AgentJoinCommunity", 15000);
 }
 
 /** Join's "what it asks": one card (JoinAsks), or the ways in (JoinWays) when the community offers several. */
@@ -480,9 +505,7 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  await openJoinDoors(driver);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   // What the build's suggestion is called. A community that has published no
   // name must not be offered by its hostname dressed up as one — the default
   // a maintainer meets on day one, since a fresh community publishes none.
@@ -715,9 +738,7 @@ async function testerJourney(driver) {
   // choose the segment and scroll to them (the #10 lab run tapped blind and
   // timed out on an applicant's screen).
   await openAgentHome(driver);
-  await openJoinDoors(driver);
-  await scrollToTestId(driver, "AgentJoinCommunity", 8);
-  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapJoinDoor(driver);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
     // A community already chosen by a link opens on what it asks; go back one.
     await goBack(driver);
@@ -954,9 +975,15 @@ try {
   if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
     await linkManually(driver);
-    await checkAgentScreen(driver);
-    if (JOURNEY) await testerJourney(driver);
-    printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
+    if (EXPECT_REFUSAL === "communityAgent") {
+      // After a refusal nothing of the agent stays: the link screen, not My Agent's home.
+      if (await existsTestId(driver, "AgentHomeName", 3000)) throw new Error("an agent home shows after refusing a community's agent");
+      printSuccess("VTA LINK REFUSED — a community's own agent (nothing kept)");
+    } else {
+      await checkAgentScreen(driver);
+      if (JOURNEY) await testerJourney(driver);
+      printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
+    }
     process.exitCode = 0;
   } else {
   // 1 — the admin sees codes that differ and refuses: the phone must say so.
@@ -1026,7 +1053,8 @@ try {
   // they are kept as evidence either way.
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
-    if (runFailed || JOURNEY || mode === "always" || mode === "never") {
+    // A refused link ends its chain: its grant on the community's agent goes now.
+    if (runFailed || JOURNEY || EXPECT_REFUSAL || mode === "always" || mode === "never") {
       // Each link's chain by its own temporary key: an unlinked phone's key
       // stays on the agent's list (VTI-Q23), and the relink adds another.
       for (const [i, tempDid] of runTempDids.entries()) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, heirs: i === runTempDids.length - 1 ? runHeirs : [], failed: runFailed });

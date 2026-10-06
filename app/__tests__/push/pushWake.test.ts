@@ -3,8 +3,8 @@
  * 1.5): off unless a gateway is configured, then token → push/register →
  * device/set-wake.
  */
-import { type PushRegistration } from '@/push/pushGateway'
-import { enablePushWake, type PushWakeDeps } from '@/push/pushWake'
+import { PushGatewayRefusal, isHandleLimitRefusal, type PushRegistration } from '@/push/pushGateway'
+import { enablePushWake, tokenKeyOf, type KeptWakeHandle, type PushWakeDeps } from '@/push/pushWake'
 
 const AGENT = 'did:webvh:QmAgent:agent.example.org'
 const GATEWAY_DID = 'did:webvh:QmGateway:push.example.org:gateway'
@@ -82,5 +82,80 @@ describe('making this phone wakeable', () => {
       },
     })
     await expect(enablePushWake(d)).rejects.toThrow('permissionDenied')
+  })
+})
+
+// vti-push-gateway mints a new handle at every push/register and keeps four
+// per token (e542a9d7 store.rs:89-129): one per agent and token, then given again.
+describe('one handle per agent and token', () => {
+  const A = 'did:webvh:QmA:agents.example.org:a'
+  const B = 'did:webvh:QmB:agents.example.org:b'
+  function memoryHandles() {
+    const kept = new Map<string, KeptWakeHandle>()
+    return {
+      kept,
+      handles: {
+        get: async (agentDid: string) => kept.get(agentDid),
+        set: async (agentDid: string, k: KeptWakeHandle) => void kept.set(agentDid, k),
+      },
+    }
+  }
+
+  it('switching A, B, A, B registers twice, and gives each agent its own handle every time', async () => {
+    let current = A
+    let minted = 0
+    const register = jest.fn(async () => ({ gateway: GATEWAY_DID, handle: `h${++minted}` }))
+    const { d, setWake } = deps({ agentDid: () => current, register })
+    const { handles } = memoryHandles()
+    const run = () => enablePushWake({ ...d, handles })
+    for (const agent of [A, B, A, B]) {
+      current = agent
+      await run()
+    }
+    expect(register).toHaveBeenCalledTimes(2)
+    expect(setWake.mock.calls.map((c) => (c as unknown as [{ handle: string }])[0].handle)).toEqual([
+      'h1',
+      'h2',
+      'h1',
+      'h2',
+    ])
+  })
+
+  it('notifications off and on with the same token: no new register', async () => {
+    const { d, register, setWake } = deps()
+    const { handles } = memoryHandles()
+    await enablePushWake({ ...d, handles })
+    await enablePushWake({ ...d, handles })
+    expect(register).toHaveBeenCalledTimes(1)
+    expect(setWake).toHaveBeenCalledTimes(2)
+  })
+
+  it('a new token registers again, once', async () => {
+    let token = 'fcm-token'
+    const { d, register } = deps({ pushRegistration: async () => ({ platform: 'fcm', token }) })
+    const { handles, kept } = memoryHandles()
+    await enablePushWake({ ...d, handles })
+    token = 'fcm-token-2'
+    await enablePushWake({ ...d, handles })
+    await enablePushWake({ ...d, handles })
+    expect(register).toHaveBeenCalledTimes(2)
+    expect(kept.get(AGENT)?.tokenKey).toBe(tokenKeyOf({ platform: 'fcm', token: 'fcm-token-2' }))
+  })
+
+  it('keeps no token, only a fingerprint of it', async () => {
+    const { d } = deps()
+    const { handles, kept } = memoryHandles()
+    await enablePushWake({ ...d, handles })
+    expect(JSON.stringify([...kept.values()])).not.toContain('fcm-token')
+  })
+
+  it("knows the gateway's limit by its own words, not every taskFailed", () => {
+    expect(
+      isHandleLimitRefusal(new PushGatewayRefusal('taskFailed', 'task failed: too many handles for this push token'))
+    ).toBe(true)
+    expect(
+      isHandleLimitRefusal(new PushGatewayRefusal('taskFailed', 'task failed: no sender configured for this platform'))
+    ).toBe(false)
+    expect(isHandleLimitRefusal(new Error('too many handles for this push token'))).toBe(false)
   })
 })

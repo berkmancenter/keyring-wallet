@@ -472,7 +472,9 @@ async function openVetting(d) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
   const homeBy = Date.now() + 60000;
   while (Date.now() < homeBy) {
-    for (const door of ["AgentVetOthers", "AgentContinueVetting"]) {
+    // 236 (#316): the desk's door is AgentOpenDesk, or AgentOpenDesk_<community> for a vetter of several.
+    const desks = (await d.getPageSource().catch(() => "")).match(/AgentOpenDesk_[A-Za-z0-9_-]+/g) || [];
+    for (const door of ["AgentOpenDesk", ...new Set(desks), "AgentVetOthers", "AgentContinueVetting"]) {
       const el = await scrollToTestId(d, door, 4).catch(() => undefined);
       if (el) {
         await el.click();
@@ -881,6 +883,9 @@ export async function clearFinishedRequests(d) {
  */
 export async function ticketIssued(d) {
   if ((await stepIdOf(d, "vetter")) === "share") return true;
+  // 236: the step stays "ticket" after a cut, and the link hides under its Details toggle; the ticket's
+  // code and that toggle are what a cut shows. Without this every cut read as "did nothing" and was cut again.
+  if ((await byTestId(d, "VettingTicketCode").isExisting().catch(() => false)) || (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false))) return true;
   // The card renders below the button, off the bottom of the screen: scroll to
   // it before deciding the tap did nothing (older builds).
   await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);

@@ -8,8 +8,11 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { vtaAgent } from '@bifold/core'
+import { ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import i18n from 'i18next'
+import Toast from 'react-native-toast-message'
 import messaging from '@react-native-firebase/messaging'
 import { Platform } from 'react-native'
 import { Config } from 'react-native-config'
@@ -21,7 +24,7 @@ import BCLogger from '@/utils/logger'
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
 import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
-import { enablePushWake, type PushWakeDeps } from './pushWake'
+import { enablePushWake, type KeptWakeHandle, type PushWakeDeps, type WakeHandleStore } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
 function apnsEnvironment(): 'sandbox' | 'production' {
@@ -51,6 +54,39 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
   return token ? { platform: 'fcm', token } : undefined
 }
 
+const HANDLE_KEY_PREFIX = 'keyring.push.handle.'
+
+/** Each agent's wake handle, kept on this phone (see {@link WakeHandleStore}). */
+export const appWakeHandles: WakeHandleStore & { count(): Promise<number> } = {
+  get: async (agentDid) => {
+    const raw = await AsyncStorage.getItem(HANDLE_KEY_PREFIX + agentDid)
+    return raw ? (JSON.parse(raw) as KeptWakeHandle) : undefined
+  },
+  set: async (agentDid, kept) => {
+    await AsyncStorage.setItem(HANDLE_KEY_PREFIX + agentDid, JSON.stringify(kept))
+  },
+  count: async () => (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(HANDLE_KEY_PREFIX)).length,
+}
+
+/**
+ * The gateway refused a new handle: this phone's token is at its limit. Said
+ * in plain words, and logged with how many agents hold a handle here.
+ */
+export function showHandleLimit(): void {
+  void appWakeHandles
+    .count()
+    .catch(() => -1)
+    .then((agentsWithHandles) =>
+      BCLogger.info('push wake: too many handles for this push token', { agentsWithHandles })
+    )
+  Toast.show({
+    type: ToastType.Warn,
+    text1: i18n.t('PushNotifications.HandleLimitTitle'),
+    text2: i18n.t('PushNotifications.HandleLimitBody'),
+    visibilityTime: 10000,
+  })
+}
+
 /** {@link PushWakeDeps} for the running app. */
 export function appPushWakeDeps(agent: Agent): PushWakeDeps {
   return {
@@ -58,6 +94,7 @@ export function appPushWakeDeps(agent: Agent): PushWakeDeps {
     agentDid: () => vtaAgent.agentAddress(),
     pushRegistration: platformPushRegistration,
     setWake: (wake, opts) => vtaAgent.setThisDeviceWake(agent, wake, opts),
+    handles: appWakeHandles,
   }
 }
 
@@ -114,5 +151,6 @@ export function appPushNotificationsConfig(): PushNotificationsConfig | undefine
     clearWake: (agent) => vtaAgent.clearThisDeviceWake(agent),
     stopPlatformPush: () => stopPlatformPush(Platform.OS, messaging()),
     log: (message, data) => BCLogger.info(message, data),
+    onHandleLimit: showHandleLimit,
   })
 }

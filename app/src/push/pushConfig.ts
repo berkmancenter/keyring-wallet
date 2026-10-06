@@ -15,6 +15,7 @@
 import type { Config } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 
+import { isHandleLimitRefusal } from './pushGateway'
 import type { PushWakeOutcome } from './pushWake'
 
 export type PushNotificationsConfig = NonNullable<Config['enablePushNotifications']>
@@ -29,6 +30,8 @@ export interface PushConfigDeps {
   /** Withdraw this install's token from the platform push service. */
   stopPlatformPush(): Promise<void>
   log(message: string, data?: Record<string, unknown>): void
+  /** The gateway keeps no more handles for this phone's token: say so to the person. */
+  onHandleLimit?(): void
 }
 
 /** The configuration, or undefined when the build names no push gateway. */
@@ -52,6 +55,7 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
       } catch (e) {
         held = heldForApproval(e)
         deps.log('push wake: failed', { enable: state, error: e instanceof Error ? e.message : String(e) })
+        if (isHandleLimitRefusal(e)) deps.onHandleLimit?.()
       }
       // Turned off: the platform push service forgets this install too, even
       // if the agent could not be told (it may be unreachable or unlinked).
