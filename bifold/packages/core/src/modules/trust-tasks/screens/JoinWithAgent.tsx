@@ -41,6 +41,9 @@ export function useAgentsHoldingIdentity(communityDid: string | undefined): {
   holders: string[]
   current?: string
   onlyOthers: boolean
+  /** The holders still linked to this phone: an agent unlinked since cannot be switched to. */
+  linkedHolders: string[]
+  several: boolean
 } {
   const { agent } = useAgent()
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
@@ -62,7 +65,19 @@ export function useAgentsHoldingIdentity(communityDid: string | undefined): {
       live = false
     }
   }, [agent, communityDid, tick, current])
-  return { holders, current, onlyOthers: several && !!current && holders.length > 0 && !holders.includes(current) }
+  // A legacy identity kept with no agent counts as the current agent's. Not
+  // only with several agents linked: an identity of an agent since unlinked
+  // is another agent's too (Alberto's iPhone, 10-06: al-phone's membership
+  // on al-signer).
+  const onlyOthers = !!current && holders.length > 0 && !holders.some((h) => !h || h === current)
+  const linked = new Set((state.agents ?? []).map((a) => a.vtaDid))
+  return {
+    holders,
+    current,
+    onlyOthers,
+    linkedHolders: holders.filter((h) => !!h && linked.has(h)),
+    several,
+  }
 }
 
 export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = ({ communityDid, name }) => {
@@ -71,7 +86,8 @@ export const JoinWithAgent: React.FC<{ communityDid: string; name: string }> = (
   const { ColorPalette, TextTheme } = useTheme()
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const agents = state.agents ?? []
-  const { holders, current } = useAgentsHoldingIdentity(communityDid)
+  const { linkedHolders, current } = useAgentsHoldingIdentity(communityDid)
+  const holders = linkedHolders
 
   if (agents.length < 2) return null
   const styles = StyleSheet.create({

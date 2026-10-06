@@ -5,14 +5,16 @@
  * name leads and the DID — still the only checkable thing here — sits one tap
  * away under Details, where every other detail already is.
  */
-import { useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
 
@@ -31,15 +33,22 @@ jest.mock('react-native-toast-message', () => ({
   default: { show: (...a: unknown[]) => mockToast(...a), hide: jest.fn() },
 }))
 let mockPersona: unknown = undefined
+// Every identity on the phone, any agent's (the holders hook reads them all).
+let mockPersonas: unknown[] = []
+const mockForgetCommunity = jest.fn(async () => undefined)
+const mockForgetPersona = jest.fn(async () => undefined)
 jest.mock('../module/VtiCommunityStore', () => ({
   GenericRecordsCommunityStore: class {
     getMembership = async () => undefined
     listHeldCredentials = async () => []
+    forgetCommunity = (...a: unknown[]) => mockForgetCommunity(...(a as []))
   },
 }))
 jest.mock('../module/VtiIdentityStore', () => ({
   GenericRecordsIdentityStore: class {
     getPersona = async () => mockPersona
+    listPersonas = async () => mockPersonas
+    forgetPersona = (...a: unknown[]) => mockForgetPersona(...(a as []))
   },
 }))
 
@@ -109,7 +118,7 @@ describe('leaving a community (220)', () => {
   })
 
   const openLeave = async () => {
-    (useRoute as jest.Mock).mockReturnValue({ params: { communityDid } })
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid } })
     ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
     const tree = render(
       <BasicAppContext>
@@ -216,5 +225,112 @@ describe('the community screen, for a member', () => {
     expect(tree.queryByTestId(testIdWithKey('CommunityMember'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('CommunityCriteria'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeTruthy()
+  })
+})
+
+// Alberto's iPhone, 10-06: joined with al-phone, unlinked it, linked al-signer.
+// The screen said "You're a member" and offered Leave, which failed.
+describe("a community known only through another agent's identity", () => {
+  const AL_PHONE = 'did:webvh:QmA:dids.example.org:al-phone-vta'
+  const AL_SIGNER = 'did:webvh:QmB:dids.example.org:al-signer-vta'
+  const setVta = (next: Record<string, unknown>) => (vtaAgent as unknown as { set(n: object): void }).set(next)
+  const member = {
+    join: {
+      kind: 'member',
+      membership: { communityDid, personaDid: 'did:webvh:QmP:p', grantedAt: '2026-10-05T00:00:00Z' },
+    },
+    vetterGrant: { state: 'none' },
+  }
+  beforeEach(() => {
+    mockPersona = undefined
+    mockPersonas = [{ did: 'did:webvh:QmP:p', communityDid, vtaDid: AL_PHONE }]
+    mockJourney = member
+    mockForgetCommunity.mockClear()
+    mockForgetPersona.mockClear()
+    setVta({
+      link: {
+        kind: 'linked',
+        vtaDid: AL_SIGNER,
+        label: 'al-signer',
+        linkedAt: '2026-10-06T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+      agents: [{ vtaDid: AL_SIGNER, label: 'al-signer' }],
+    })
+  })
+  afterAll(() => {
+    mockPersonas = []
+    mockJourney = undefined
+    setVta({ agents: undefined })
+  })
+
+  const open = async () => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid } })
+    ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
+    const tree = render(
+      <BasicAppContext>
+        <VtiCommunity />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    return tree
+  }
+
+  it('says whose identity it is, with no "member", no Leave and no Apply', async () => {
+    const tree = await open()
+    expect(tree.getByTestId(testIdWithKey('CommunityHeldElsewhereText'))).toHaveTextContent(/Community\.HeldElsewhere/)
+    expect(tree.queryByTestId(testIdWithKey('CommunityMember'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('LeaveCommunityButton'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeNull()
+  })
+
+  it('an agent no longer linked: "Add it again" leads to adding an agent', async () => {
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const start = jest.spyOn(vtaAgent, 'startAddingAgent').mockResolvedValue(undefined)
+    const tree = await open()
+    expect(tree.getByTestId(testIdWithKey('CommunityHeldElsewhere'))).toHaveTextContent(
+      /Community\.HeldElsewhereUnlinked/
+    )
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('CommunityAddHolderAgent'))))
+    expect(start).toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+    start.mockRestore()
+  })
+
+  it('an agent still linked: switch to it', async () => {
+    setVta({
+      agents: [
+        { vtaDid: AL_SIGNER, label: 'al-signer' },
+        { vtaDid: AL_PHONE, label: 'al-phone' },
+      ],
+    })
+    const use = jest.spyOn(vtaAgent, 'useAgent').mockResolvedValue(undefined)
+    const tree = await open()
+    expect(tree.getByTestId(testIdWithKey('CommunityHeldElsewhere'))).toHaveTextContent(
+      /Community\.HeldElsewhereLinked/
+    )
+    fireEvent.press(tree.getByTestId(testIdWithKey('CommunityUseHolderAgent')))
+    expect(use).toHaveBeenCalledWith(expect.anything(), AL_PHONE)
+    use.mockRestore()
+  })
+
+  it('"Remove from this phone" says it does not leave, then forgets only that agent\'s records', async () => {
+    const tree = await open()
+    fireEvent.press(tree.getByTestId(testIdWithKey('CommunityRemoveHere')))
+    expect(tree.getByTestId(testIdWithKey('CommunityRemoveHereCard'))).toHaveTextContent(/Community\.RemoveHereWarning/)
+    expect(mockForgetCommunity).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('CommunityRemoveHereConfirm'))))
+    expect(mockForgetCommunity).toHaveBeenCalledWith(communityDid, 'did:webvh:QmP:p')
+    expect(mockForgetPersona).toHaveBeenCalledWith(communityDid, AL_PHONE)
+  })
+
+  it("the current agent's own identity: a member as before, with Leave", async () => {
+    mockPersona = { did: 'did:webvh:QmP:mine', communityDid, vtaDid: AL_SIGNER }
+    mockPersonas = [mockPersona]
+    const tree = await open()
+    expect(tree.queryByTestId(testIdWithKey('CommunityHeldElsewhere'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('CommunityMember'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('LeaveCommunityButton'))).toBeTruthy()
   })
 })

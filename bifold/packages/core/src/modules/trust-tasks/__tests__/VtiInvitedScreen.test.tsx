@@ -339,6 +339,18 @@ describe('I was invited', () => {
     expect(again.tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
   })
 
+  // Alberto's iPhone, 10-06: the membership was al-phone's identity's, and
+  // "I was invited" on al-signer flashed to "You're a member".
+  test('another agent\'s membership is not this agent\'s: no "You joined"', async () => {
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    const theirs: Rec = {
+      ...personaRecord,
+      content: { ...personaRecord.content, vtaDid: 'did:webvh:example:unlinked-vta' },
+    }
+    const { tree } = await renderInvited([theirs])
+    expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+  })
+
   // 233: a member of one community, invited by another, only ever saw the first.
   test('a member can bring an invitation from a different community, whose link comes back here', async () => {
     communityLinkReturn.take()
