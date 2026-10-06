@@ -39,6 +39,7 @@ import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdenti
 import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { useVtiJoinedNotice } from '../modules/trust-tasks/screens/joinedNotice'
+import { useVtiVetterGrantedNotice } from '../modules/trust-tasks/screens/vetterNotice'
 import { useToastAboveTabBar } from '../modules/trust-tasks/screens/aboveTabBar'
 import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { useVtiTurnedDownNotice } from '../modules/trust-tasks/screens/turnedDownNotice'
@@ -112,6 +113,8 @@ const TabStack: React.FC = () => {
   useVtiRemovedNotice()
   // …and a community making this phone a member.
   useVtiJoinedNotice()
+  // …and a community making this phone a vetter.
+  useVtiVetterGrantedNotice()
   // …and a community turning a request down, once, when the app first learns it.
   useVtiTurnedDownNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()

@@ -1457,6 +1457,8 @@
     "JoinAnother": "Rejoindre une autre communauté",
     "YouCanVet": "Vous pouvez maintenant vérifier des personnes pour {{community}}",
     "YouCanVetBody": "Son admin a fait de vous un vérificateur. Donnez un ticket quand vous rencontrez quelqu'un.",
+    "YouCanVetToast": "Vous pouvez maintenant vérifier des personnes pour {{community}}.",
+    "YouCanVetToastHint": "Ouvrez le bureau de vérification depuis Votre agent.",
     "OpenDesk": "Ouvrir le bureau de vérification",
     "ShareKeyHint": "Long et facile à mal saisir — envoyez-le plutôt que de le dicter.",
     "Unlink": "Délier cet agent",
