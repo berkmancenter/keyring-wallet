@@ -181,6 +181,20 @@ const VtaLink: React.FC = () => {
     navigation.goBack()
   }, [navigation])
 
+  // Adding another agent, and leaving this screen by the header's back or a
+  // swipe before it is linked: given up, as Cancel is. "Add" leaves the
+  // current agent so the link can run, and only a cancel goes back to it;
+  // without this, "Your agent" read "Link your agent" until the app was
+  // restarted (239, iPhone). Opening the scanner does not leave this screen.
+  useEffect(
+    () =>
+      navigation.addListener?.('beforeRemove', () => {
+        const { addingAgent, link: now } = vtaAgent.getState()
+        if (addingAgent && now.kind !== 'linked') vtaAgent.cancelLink()
+      }),
+    [navigation]
+  )
+
   const onScanAgain = useCallback(() => {
     vtaAgent.relink()
     openScanner(navigation)
