@@ -6,6 +6,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -242,8 +243,31 @@ describe('Requests', () => {
       jest.advanceTimersByTime(QUIET_MS + 1000)
     })
     expect(tree.queryByTestId(id('RequestsLoading'))).toBeNull()
-    expect(tree.getByTestId(id('RequestsEmpty'))).toHaveTextContent('Requests.Empty')
+    expect(tree.getByTestId(id('RequestsEmpty'))).toHaveTextContent(/^Requests\.Empty/)
     expect(tree.getByTestId(id('RequestsBackToAgent'))).toBeTruthy()
+  })
+
+  it('with nothing waiting, one button and a way back that reads as a link, not a second button (Alberto, 10-06)', async () => {
+    const tree = await show()
+    await act(async () => {
+      jest.advanceTimersByTime(QUIET_MS + 1000)
+    })
+    // The one thing to do sits in the same card as what is said.
+    const empty = within(tree.getByTestId(id('RequestsEmpty')))
+    expect(empty.getByTestId(id('RequestsAskMe'))).toHaveTextContent('Requests.AskMeRow')
+    expect(tree.getByTestId(id('RequestsBackToAgent')).props.accessibilityRole).toBe('link')
+  })
+
+  it('Approve and Decline are the same shape, side by side', async () => {
+    controller.set({ approvals: [request('a')] })
+    const tree = await show()
+    const flat = (testId: string) => StyleSheet.flatten(tree.getByTestId(id(testId)).props.style)
+    const approve = flat('ApproveConsentButton')
+    const decline = flat('DenyConsentButton')
+    for (const key of ['minHeight', 'borderRadius', 'borderWidth', 'paddingVertical', 'paddingHorizontal'] as const)
+      expect(approve[key]).toBe(decline[key])
+    expect(StyleSheet.flatten(tree.getByTestId(id(`ApproveConsentButton_${DIGEST}`)).props.style).flex).toBe(1)
+    expect(StyleSheet.flatten(tree.getByTestId(id(`DenyConsentButton_${DIGEST}`)).props.style).flex).toBe(1)
   })
 
   it('a request that arrives after "nothing is waiting" still shows', async () => {
