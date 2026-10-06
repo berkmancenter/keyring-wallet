@@ -259,15 +259,28 @@ async function linkByAddress(driver, entry) {
  * screen polls by itself (VtaLinkWaitingForPhone; VtaLinkCheckAgain once its window ends), so: read the key,
  * have the host grant it, and wait for VtaLinkDone, or VtaLinkError for the refusal rows. No screen lock needed.
  */
+/**
+ * The phone's key on the scan branch: as text behind VtaLinkShowAsText when the card offers it, else by Copy
+ * (VtaLinkCopyKey) and the device clipboard (237's card showed only Copy, Share and Stop linking, 10-07).
+ */
+async function scanBranchKey(driver) {
+  if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+    const show = await scrollToTestId(driver, "VtaLinkShowAsText", 3).catch(() => undefined);
+    if (show) await show.click();
+  }
+  if (await scrollToTestId(driver, "VtaLinkManualDid", 3).catch(() => undefined)) return (await textOf(driver, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  await tapTestId(driver, "VtaLinkCopyKey", 15000);
+  await sleep(1000);
+  const raw = await driver.getClipboard("plaintext").catch(() => "");
+  const text = Buffer.from(String(raw), "base64").toString("utf8");
+  const did = (text.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  console.log(`[e2e] key read by Copy (clipboard): ${did.slice(0, 32)}…`);
+  return did;
+}
+
 async function linkViaScan(driver) {
   await waitForTestId(driver, "VtaLinkForOtherPhone", 45000);
-  if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
-    const show = await scrollToTestId(driver, "VtaLinkShowAsText", 6).catch(() => undefined);
-    if (show) await show.click();
-    else await tapTestId(driver, "VtaLinkShowAsText", 15000);
-  }
-  await scrollToTestId(driver, "VtaLinkManualDid", 4).catch(() => undefined);
-  const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  const temporaryDid = await scanBranchKey(driver);
   if (!/^did:/.test(temporaryDid)) throw new Error(`no key in VtaLinkManualDid: "${temporaryDid.slice(0, 60)}"`);
   runTempDids.push(temporaryDid);
   console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}… (scan branch)`);

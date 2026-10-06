@@ -130,9 +130,17 @@ async function waitSwitched(d, wantName) {
 /** VtaLink's scan branch: the key as text (VtaLinkShowAsText → VtaLinkManualDid), grant, it polls by itself. */
 async function linkScanTo(d, did, slug) {
   await waitForTestId(d, "VtaLinkForOtherPhone", 45000);
-  if (!(await existsTestId(d, "VtaLinkManualDid", 1500))) await (await scrollToTestId(d, "VtaLinkShowAsText", 6)).click();
-  await scrollToTestId(d, "VtaLinkManualDid", 4).catch(() => undefined);
-  const temp = (await textOf(d, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  let temp = "";
+  if (await scrollToTestId(d, "VtaLinkShowAsText", 3).then((e) => e.click().then(() => true), () => false)) {
+    await scrollToTestId(d, "VtaLinkManualDid", 3).catch(() => undefined);
+    temp = (await textOf(d, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  } else {
+    // 237's card offers only Copy: read the key from the clipboard.
+    await tapTestId(d, "VtaLinkCopyKey", 15000);
+    await sleep(1000);
+    const text = Buffer.from(String(await d.getClipboard("plaintext").catch(() => "")), "base64").toString("utf8");
+    temp = (text.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  }
   log(`link to ${slug} (scan branch): the phone shows ${temp.slice(0, 30)}…; granting`);
   execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
   const by = Date.now() + 240000;
