@@ -137,6 +137,42 @@ export async function forgetKeyCopy(agent: Agent, keyId: string): Promise<void> 
 }
 
 /**
+ * Whether the in-memory backend holds `keyId` now, asked without fetching it
+ * (EphemeralKeyManagementService.isHeld). Undefined when the agent has no
+ * in-memory backend that can say. Never throws.
+ */
+export async function heldInMemory(agent: Agent, keyId: string): Promise<boolean | undefined> {
+  try {
+    const config = agent.dependencyManager?.resolve?.(Kms.KeyManagementModuleConfig)
+    const kms = config?.backends.find((b) => b.backend === EPHEMERAL_KMS_BACKEND) as
+      | { isHeld?: (id: string) => Promise<boolean> }
+      | undefined
+    return typeof kms?.isHeld === 'function' ? await kms.isHeld(keyId) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Tell the in-memory backend how to fetch a copy it is asked for and does not
+ * hold (EphemeralKeyManagementService.setMissingKeyFetcher). Answers whether
+ * the agent has such a backend. Never throws.
+ */
+export function setInMemoryKeyFetcher(agent: Agent, fetch: ((keyId: string) => Promise<void>) | undefined): boolean {
+  try {
+    const config = agent.dependencyManager?.resolve?.(Kms.KeyManagementModuleConfig)
+    const kms = config?.backends.find((b) => b.backend === EPHEMERAL_KMS_BACKEND) as
+      | { setMissingKeyFetcher?: (f: typeof fetch) => void }
+      | undefined
+    if (typeof kms?.setMissingKeyFetcher !== 'function') return false
+    kms.setMissingKeyFetcher(fetch)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Delete from a named backend directly: the in-memory backend declines
  * `deleteKey` as an operation (so an unnamed delete of a wallet key never
  * lands there), and Credo checks that even when the backend is named.

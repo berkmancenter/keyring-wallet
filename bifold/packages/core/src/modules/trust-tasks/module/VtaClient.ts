@@ -31,7 +31,14 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
 import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
-import { EPHEMERAL_KMS_BACKEND, importVtaKey, inMemoryKeyId, isInMemoryKeyId, type VtaExportedKey } from './vtaKeys'
+import {
+  EPHEMERAL_KMS_BACKEND,
+  heldInMemory,
+  importVtaKey,
+  inMemoryKeyId,
+  isInMemoryKeyId,
+  type VtaExportedKey,
+} from './vtaKeys'
 import {
   createVtiClientDid,
   resolveVtiMediator,
@@ -1697,10 +1704,14 @@ export class VtaClient {
     let fetched = false
     for (const [kmsKeyId, vtaKeyId] of pairs) {
       if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) continue
-      const held = await this.agent.kms
-        .getPublicKey({ keyId: kmsKeyId, backend: EPHEMERAL_KMS_BACKEND })
-        .then(() => true)
-        .catch(() => false)
+      // Asked without fetching: getPublicKey would fetch a missing copy itself
+      // (EphemeralKeyManagementService), and this is the fetch.
+      const held =
+        (await heldInMemory(this.agent, kmsKeyId)) ??
+        (await this.agent.kms
+          .getPublicKey({ keyId: kmsKeyId, backend: EPHEMERAL_KMS_BACKEND })
+          .then(() => true)
+          .catch(() => false))
       if (held) continue
       await this.connect()
       await this.borrowKey(vtaKeyId)

@@ -324,7 +324,7 @@ jest.mock('../module/VtaClient', () => {
 
 import { VtaClient } from '../module/VtaClient'
 import type { VtaLink } from '../module/VtaLinkStore'
-import type { VtiManagerIdentity } from '../module/VtiIdentityStore'
+import type { VtiManagerIdentity, VtiPersona } from '../module/VtiIdentityStore'
 import { VtaAgentController } from '../module/vtaAgent'
 import {
   DeviceActionRefused,
@@ -1003,6 +1003,115 @@ describe('a link whose swap onto the long-term key does not happen says why', ()
     mockVta.refuseNext.set(WHOAMI, { code: 'taskFailed', message: 'something new' })
     await vta.checkManualGrant(agent).catch(() => undefined)
     expect(failure(vta)?.swap).toBeUndefined()
+  })
+})
+
+describe("an identity's key copy used before any session fetched it (TestFlight 239)", () => {
+  const OTHER = 'did:webvh:QmFarm:farm.example:bob'
+  const persona = (vtaDid: string, name: string): VtiPersona =>
+    ({
+      vtaDid,
+      did: `did:webvh:QmP:dids.example:${name}`,
+      communityDid: `did:webvh:QmC:community-${name}`,
+      vtaKeyIds: {
+        signing: `did:webvh:QmP:dids.example:${name}#key-0`,
+        keyAgreement: `did:webvh:QmP:dids.example:${name}#key-1`,
+      },
+      kmsKeyIds: {
+        signing: `vta-copy:${vtaDid}:did:webvh:QmP:dids.example:${name}#key-0`,
+        keyAgreement: `vta-copy:${vtaDid}:did:webvh:QmP:dids.example:${name}#key-1`,
+      },
+    }) as unknown as VtiPersona
+
+  /** A phone linked to VTA (current) and OTHER, holding the given identities, on an agent with an in-memory backend. */
+  async function restartedPhone(personas: VtiPersona[], { waitOnline = true } = {}) {
+    const p = phone({
+      manager: linkedManager,
+      link: { vtaDid: VTA, label: 'farm.example', linkedAt: 'x', owner: true },
+    })
+    const links = {
+      ...p.links,
+      list: async () => [
+        { vtaDid: VTA, label: 'farm.example', linkedAt: 'x' },
+        { vtaDid: OTHER, label: 'bob', linkedAt: 'y' },
+      ],
+    }
+    const identities = { ...p.identities, listPersonas: jest.fn(async () => personas) }
+    let fetcher: ((keyId: string) => Promise<void>) | undefined
+    const backend = { backend: 'ephemeral', setMissingKeyFetcher: (f: typeof fetcher) => (fetcher = f) }
+    const kmsAgent = {
+      ...(agent as object),
+      dependencyManager: { resolve: () => ({ backends: [{ backend: 'askar' }, backend] }) },
+    } as never
+    const other = { holdPersonaKeys: jest.fn(async () => true), disconnect: jest.fn(async () => undefined) }
+    const keyClient = jest.fn(() => other)
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => links as never, identityStore: () => identities as never, keyClient } as never)
+    await vta.restore(kmsAgent)
+    if (waitOnline) {
+      await until(() => {
+        const link = vta.getState().link
+        return link.kind === 'linked' && link.connection.kind === 'online'
+      })
+    }
+    return {
+      vta,
+      fetch: (keyId: string) => (fetcher as NonNullable<typeof fetcher>)(keyId),
+      keyClient,
+      other,
+      hasFetcher: () => Boolean(fetcher),
+    }
+  }
+
+  it('the app registers the fetcher with the in-memory backend when it hands over its agent', async () => {
+    const { hasFetcher } = await restartedPhone([])
+    expect(hasFetcher()).toBe(true)
+  })
+
+  it("a persona under a non-current agent, after a restart: fetched through that agent's own short session", async () => {
+    const tiger = persona(OTHER, 'tiger-silver')
+    const held = jest.spyOn(VtaClient.prototype, 'holdPersonaKeys')
+    const { fetch, keyClient, other } = await restartedPhone([tiger])
+    await fetch(tiger.kmsKeyIds?.keyAgreement as string)
+    expect(keyClient).toHaveBeenCalledTimes(1)
+    expect((keyClient.mock.calls[0] as unknown[])[1]).toBe(OTHER)
+    expect(other.holdPersonaKeys).toHaveBeenCalledWith(tiger)
+    expect(other.disconnect).toHaveBeenCalledTimes(1)
+    // Not on the current agent's session: that agent does not hold this identity's keys.
+    expect(held).not.toHaveBeenCalled()
+    held.mockRestore()
+  })
+
+  it("used straight after a restart: waits for the current agent's session, then fetches on it", async () => {
+    const mine = persona(VTA, 'mine')
+    const held = jest.spyOn(VtaClient.prototype, 'holdPersonaKeys').mockResolvedValue(true)
+    const { vta, fetch, keyClient } = await restartedPhone([mine], { waitOnline: false })
+    const before = vta.getState().link
+    // Asked for before the session that fetches the keys has opened.
+    expect(before.kind === 'linked' && before.connection.kind).not.toBe('online')
+    const fetching = fetch(mine.kmsKeyIds?.signing as string)
+    await fetching
+    const link = vta.getState().link
+    expect(link.kind === 'linked' && link.connection.kind).toBe('online')
+    expect(held).toHaveBeenCalledWith(mine)
+    expect(keyClient).not.toHaveBeenCalled()
+    held.mockRestore()
+  })
+
+  it('a key no identity on this phone names is refused, not guessed at', async () => {
+    const { fetch, keyClient } = await restartedPhone([persona(OTHER, 'tiger-silver')])
+    await expect(fetch('vta-copy:did:webvh:nobody:did:webvh:x#key-1')).rejects.toThrow(
+      /no identity on this phone names/
+    )
+    expect(keyClient).not.toHaveBeenCalled()
+  })
+
+  it('an identity whose agent is no longer linked is refused', async () => {
+    const gone = persona('did:webvh:QmFarm:farm.example:carol', 'gone')
+    const { fetch, keyClient } = await restartedPhone([gone])
+    await expect(fetch(gone.kmsKeyIds?.signing as string)).rejects.toThrow(/no longer linked/)
+    expect(keyClient).not.toHaveBeenCalled()
   })
 })
 

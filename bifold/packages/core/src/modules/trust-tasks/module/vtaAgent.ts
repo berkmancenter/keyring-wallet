@@ -73,7 +73,7 @@ import {
 } from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { migratePersonaKeys } from './vtaKeyMigration'
-import { forgetKeyCopy } from './vtaKeys'
+import { forgetKeyCopy, setInMemoryKeyFetcher } from './vtaKeys'
 import {
   initialLinkState,
   reconnectDelayMs,
@@ -253,6 +253,12 @@ export interface VtaAgentDeps {
     store: VtiIdentityStore,
     options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void }
   ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
+  /** The client a key fetch opens for a linked agent that is not the current one (fetchKeyCopy). */
+  keyClient?: (
+    agent: Agent,
+    vtaDid: string,
+    store: VtiIdentityStore
+  ) => Pick<VtaClient, 'holdPersonaKeys' | 'disconnect'>
   /** Whether the agent's address exists: its DID host says `notFound`, it resolves (`found`), or no one could tell. */
   agentAddress?: (agent: Agent, vtaDid: string) => Promise<'notFound' | 'found' | 'unknown'>
   identityStore?: (agent: Agent) => VtiIdentityStore
@@ -478,6 +484,13 @@ function stillWaiting(approvals: VtiApproval[], now: number): VtiApproval[] {
 
 /** A look at another agent: how long after the last message it ends, and at most. */
 export const LOOK_QUIET_MS = 3_000
+
+/**
+ * How long a key fetch for the current agent waits for its session to open:
+ * straight after a restart, an identity's key can be needed before the session
+ * that fetches the keys is up.
+ */
+export const KEY_FETCH_WAIT_MS = 20_000
 export const LOOK_MAX_MS = 12_000
 
 /**
@@ -792,6 +805,7 @@ export class VtaAgentController {
     }
     this.restored = true
     this.agent = agent
+    this.fetchKeysThrough(agent)
     const link = await this.linkStore(agent)
       .get()
       .catch(() => undefined)
@@ -1066,6 +1080,7 @@ export class VtaAgentController {
   private async adoptAgent(agent: Agent): Promise<void> {
     const before = this.agent
     this.agent = agent
+    this.fetchKeysThrough(agent)
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
     const previous = this.current
@@ -2214,6 +2229,59 @@ export class VtaAgentController {
           `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
         )
       }
+    }
+  }
+
+  /**
+   * An identity's key copy is held in memory only, and is gone after every
+   * restart or lock. This session fetches the current agent's when it opens
+   * (holdPersonaKeys); any copy needed before that — or one of an identity
+   * under another linked agent, which no session fetches — is fetched when it
+   * is first used, through that identity's own agent (TestFlight 239: an
+   * identity of a non-current agent failed with "not found in backend
+   * 'ephemeral'").
+   */
+  private fetchKeysThrough(agent: Agent): void {
+    setInMemoryKeyFetcher(agent, (keyId) => this.fetchKeyCopy(agent, keyId))
+  }
+
+  /** Fetch the copy `keyId` names, through the agent of the identity that names it. */
+  private async fetchKeyCopy(agent: Agent, keyId: string): Promise<void> {
+    const store = this.identityStore(agent)
+    const personas = (await Promise.resolve(store.listPersonas?.()).catch(() => undefined)) ?? []
+    const persona = personas.find((p) => Object.values(p.kmsKeyIds ?? {}).includes(keyId))
+    if (!persona) throw new Error(`no identity on this phone names ${keyId}`)
+    const vtaDid = persona.vtaDid
+    const link = this.state.link
+    if (link.kind === 'linked' && link.vtaDid === vtaDid) {
+      // The current agent: ask on its session, which may still be opening.
+      await this.untilOnline(vtaDid, KEY_FETCH_WAIT_MS)
+      await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      return
+    }
+    const links = (await Promise.resolve(this.linkStore(agent).list?.()).catch(() => undefined)) ?? []
+    if (!links.some((l) => l.vtaDid === vtaDid)) throw new Error(`${persona.did}'s agent is no longer linked`)
+    // Another linked agent: its own short session, as a look at it opens one,
+    // and never beside a look (one session per agent at a time).
+    await this.looking?.catch(() => undefined)
+    const client = (this.deps.keyClient ?? ((a, did, s) => new VtaClient(a, did, s)))(agent, vtaDid, store)
+    try {
+      await client.holdPersonaKeys(persona)
+      agent.config?.logger?.info?.(`[VTA] fetched ${persona.did}'s keys through its agent ${didPrefix(vtaDid)} on use`)
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
+  }
+
+  /** Wait until the linked agent `vtaDid` is online, up to `ms`; throws if it is not. */
+  private async untilOnline(vtaDid: string, ms: number): Promise<void> {
+    const online = () => {
+      const link = this.state.link
+      return link.kind === 'linked' && link.vtaDid === vtaDid && link.connection.kind === 'online'
+    }
+    for (let waited = 0; !online(); waited += 250) {
+      if (waited >= ms) throw new Error(`${didPrefix(vtaDid)} did not come online within ${ms / 1000} s`)
+      await new Promise((resolve) => setTimeout(resolve, 250))
     }
   }
 
