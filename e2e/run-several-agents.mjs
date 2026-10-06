@@ -407,8 +407,14 @@ try {
     }
     log(`R7: Wallet empty state seen before the card held: ${emptySeen}`);
     console.log(`R7-CARD-TAP ${new Date().toISOString()} empty-seen ${emptySeen}`); // to line up with logcat's Wallet render
-    const sheetFirst = await existsTestId(d, "AddCredentialSlider", 500).catch(() => false);
-    log(`R7: Wallet open; "Add credentials" sheet already up: ${sheetFirst}`);
+    // The Wallet's first-visit tour ("Add credentials", step 1) sits over the list and takes the tap (f7, 10-06:
+    // CredentialsTourSteps; the same since 235). Close it first: its ✕ is `Close`, its "Done" is `Next`.
+    const tour = await existsTestId(d, "Close", 1500).catch(() => false);
+    if (tour) {
+      await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      await sleep(1000);
+    }
+    log(`R7: Wallet open; first-visit tour was up: ${tour}`);
     // The card by its name line (CredentialName), not by any text naming C: the first text match can be
     // something else on the page (236 gate, 05:27Z: the run ended on Wallet behind "Add credentials").
     const cardEl = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")');
