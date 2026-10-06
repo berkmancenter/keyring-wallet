@@ -665,3 +665,59 @@ describe("an agent host's automatic connection", () => {
     }
   })
 })
+
+// 239, iPhone: "Add" on the agent chips, then back, and "Your agent" read
+// "Link your agent" until the app was restarted. Leaving this screen while an
+// agent is being added, before it is linked, gives the adding up, as Cancel does.
+describe('leaving while adding another agent', () => {
+  const nav = useNavigation() as unknown as { addListener?: jest.Mock }
+  let leave: (() => void) | undefined
+  beforeEach(() => {
+    leave = undefined
+    nav.addListener = jest.fn((event: string, handler: () => void) => {
+      if (event === 'beforeRemove') leave = handler
+      return jest.fn()
+    })
+  })
+  afterEach(() => {
+    delete nav.addListener
+    ;(vtaAgent as unknown as Setter).set({ addingAgent: false, link: { kind: 'notLinked' } })
+    jest.restoreAllMocks()
+  })
+
+  const leaveWith = (state: Record<string, unknown>) => {
+    ;(vtaAgent as unknown as Setter).set(state)
+    // An earlier test in this file spies on it too: count from here.
+    const cancel = jest.spyOn(vtaAgent, 'cancelLink').mockImplementation(() => undefined)
+    cancel.mockClear()
+    render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(leave).toBeDefined()
+    act(() => leave?.())
+    return cancel
+  }
+
+  test('before the new agent is linked: back to the agent before', () => {
+    expect(leaveWith({ addingAgent: true, link: { kind: 'notLinked' } })).toHaveBeenCalledTimes(1)
+  })
+
+  test('once the new agent is linked, or when not adding one: nothing to give up', () => {
+    expect(
+      leaveWith({
+        addingAgent: true,
+        link: {
+          kind: 'linked',
+          vtaDid: 'did:webvh:new',
+          label: 'new',
+          linkedAt: 't',
+          connection: { kind: 'online', since: 0 },
+        },
+      })
+    ).not.toHaveBeenCalled()
+    jest.restoreAllMocks()
+    expect(leaveWith({ addingAgent: false, link: { kind: 'notLinked' } })).not.toHaveBeenCalled()
+  })
+})
