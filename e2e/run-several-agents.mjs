@@ -388,6 +388,33 @@ try {
     await switchToOther(d, E.B_NAME);
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     await sleep(3000);
+    // Which tap opens the "Add credentials" sheet (236 gate, both runs): the screen between the two.
+    await shot(d, "agents-r7-wallet-before-card");
+    await dumpSource(d, "agents-r7-wallet-before-card").catch(() => undefined);
+    // The Wallet remounts on each tab tap and can show EmptyList (its AddFirstCredential sits where a card
+    // row is) until its records load (f7, 10-06). Tap only once the card has held, with no empty state, for 1 s;
+    // say whether the empty state showed meanwhile: that is the app-side evidence.
+    let emptySeen = false;
+    let steadySince = 0;
+    for (const until = Date.now() + 20000; Date.now() < until; await sleep(200)) {
+      const empty = (await existsTestId(d, "NoCredentials", 100).catch(() => false)) || (await existsTestId(d, "AddFirstCredential", 100).catch(() => false));
+      const card = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")').isExisting().catch(() => false);
+      if (empty) emptySeen = true;
+      if (card && !empty) {
+        steadySince ||= Date.now();
+        if (Date.now() - steadySince >= 1000) break;
+      } else steadySince = 0;
+    }
+    log(`R7: Wallet empty state seen before the card held: ${emptySeen}`);
+    console.log(`R7-CARD-TAP ${new Date().toISOString()} empty-seen ${emptySeen}`); // to line up with logcat's Wallet render
+    // The Wallet's first-visit tour ("Add credentials", step 1) sits over the list and takes the tap (f7, 10-06:
+    // CredentialsTourSteps; the same since 235). Close it first: its ✕ is `Close`, its "Done" is `Next`.
+    const tour = await existsTestId(d, "Close", 1500).catch(() => false);
+    if (tour) {
+      await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      await sleep(1000);
+    }
+    log(`R7: Wallet open; first-visit tour was up: ${tour}`);
     // The card by its name line (CredentialName), not by any text naming C: the first text match can be
     // something else on the page (236 gate, 05:27Z: the run ended on Wallet behind "Add credentials").
     const cardEl = await d.$('android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("Keyring Lab Community")');
@@ -620,6 +647,8 @@ try {
     if (!unl.length) await stop(d, "no unlink control for the other agent");
     await tapTestId(d, unl[0], 10000);
     await waitForTestId(d, "AgentUnlinkOtherCard", 15000);
+    // On 236's Agent settings screen the confirm sits under the card, below the fold (rerun 13:58Z).
+    await scrollToTestId(d, "AgentUnlinkOtherConfirm", 4).catch(() => undefined);
     await tapTestId(d, "AgentUnlinkOtherConfirm", 10000);
     await owner(d, "unlink B");
     await sleep(5000);

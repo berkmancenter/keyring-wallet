@@ -1,8 +1,8 @@
-• Approve asks for Face ID, fingerprint or passcode.
-• Request cards say what is asked and by whom.
-• New My Agent home; name your agent.
-• Fixed: Join stuck on "hasn't answered yet" with slow communities.
-• Join shows the identity code the community sees.
-• Keyring says "Your agent is catching up" instead of hanging.
-• Every linked agent can wake your phone.
-• Vetter confirmation and header; vetting stays above the tab bar.
+• Fixed: a second agent's identity signs in after a restart.
+• Fixed: back from Add returns to your agent.
+• Simpler unlinked screen; link by scan or address.
+• Join uses your current agent and shows your persona ID.
+• Choose how to join; replace a waiting request.
+• Clearer Your agent: sections, icons and chips fit.
+• Link failures say held or refused.
+• Request cards in plain words.

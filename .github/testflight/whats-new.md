@@ -18,26 +18,24 @@
 • Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
 • Update over your current version; there's no need to reinstall.
 What's new
-• Approving a request now asks for Face ID, a fingerprint or your passcode. Decline doesn't ask.
-• Request cards say what is being asked and who is asking, and show the full request code. Approve and Decline are the same size.
-• My Agent home is redesigned around your requests, and you can name your agent.
-• Fixed: Join no longer stays on "hasn't answered yet" when a community answers slowly.
-• The Join screen shows the identity code the community will see for you.
-• With several agents, a membership held by another agent shows correctly.
-• If your agent stops answering, Keyring stops waiting after two tries and says "Your agent is catching up".
-• Notifications: every linked agent can wake your phone, and turning notifications off and on no longer uses up the limit.
-• New vetters see a confirmation, the vetter screen has its own header, and vetting no longer scrolls under the tab bar.
-• The agent screen's header has a Join icon.
+• Fixed: with two agents, an identity on the agent you're not using signs in again after the app restarts (no more "not found in backend 'ephemeral'").
+• Fixed: tapping Add on the agent chips and going back returns to your agent instead of the unlinked screen.
+• A simpler unlinked screen: "Scan your agent's code", or "No code? Use your agent's address".
+• Join uses the agent you're on, and shows "Your persona ID". Buttons scroll with the page, so nothing hides behind them.
+• "Choose how to join" on a community's screen; if vetting finishes over a plain request, you can replace it.
+• Your agent: sections in a clear order with dividers; the header icons and agent chips fit the screen; "Join another community" replaces the header menu.
+• When linking fails, Keyring says whether your agent held it for approval or refused it.
+• Request cards describe tasks in plain words ("look at its contexts"), with the technical name behind a toggle.
 
 Please test
-• Approve a request: Face ID should appear; cancel it and the request should still be waiting.
-• Join a community that answers slowly.
-• With two agents linked, check that a request on either one wakes the phone.
+• With two agents, restart the app and use a community from the agent you're not on.
+• Tap Add on the agent chips, then go back.
+• Join a community and check "Your persona ID".
 
 Known issues
-• Some request cards still show the technical task name (for example "vta/contexts/get/1.0"). Plain words are next.
+• Beside a single agent, the "Add" chip can run past the right edge (the strip scrolls). Fixed next.
+• Linking by address needs a screen lock on the phone. A fallback is next.
+• If your agent is busy, some errors say "doesn't know why". Clearer wording is next.
 • Keyring can't take part in hidden (zero-knowledge) vetting yet; it joins the ordinary way.
-• Keyring doesn't yet take over identities another app (pnm/openvtc) created on an agent you add.
 • Community admins don't get push notifications for join requests yet.
-• Notifications need your agent's policy enforcement on and an approval rule naming your phone.
 • Update over your current version; your memberships carry over.

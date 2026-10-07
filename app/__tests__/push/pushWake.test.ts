@@ -4,7 +4,13 @@
  * device/set-wake.
  */
 import { PushGatewayRefusal, isHandleLimitRefusal, type PushRegistration } from '@/push/pushGateway'
-import { enablePushWake, tokenKeyOf, type KeptWakeHandle, type PushWakeDeps } from '@/push/pushWake'
+import {
+  enablePushWake,
+  tokenKeyOf,
+  UNCONFIRMED_HANDLE_REUSE_MS,
+  type KeptWakeHandle,
+  type PushWakeDeps,
+} from '@/push/pushWake'
 
 const AGENT = 'did:webvh:QmAgent:agent.example.org'
 const GATEWAY_DID = 'did:webvh:QmGateway:push.example.org:gateway'
@@ -157,5 +163,72 @@ describe('one handle per agent and token', () => {
       isHandleLimitRefusal(new PushGatewayRefusal('taskFailed', 'task failed: no sender configured for this platform'))
     ).toBe(false)
     expect(isHandleLimitRefusal(new Error('too many handles for this push token'))).toBe(false)
+  })
+})
+
+// A handle stored before set-wake can outlive its provisioning: the gateway
+// sweeps a handle still unprovisioned an hour after it was minted (e542a9d7
+// store.rs:26-30, 528-541). Only a handle the agent confirmed is kept for good.
+describe('a handle the agent has not confirmed', () => {
+  const MIN = 60 * 1000
+  function setup(setWakeImpl: () => Promise<{ pushCapable: boolean }>) {
+    let clock = 1_000_000
+    let minted = 0
+    const register = jest.fn(async () => ({ gateway: GATEWAY_DID, handle: `h${++minted}` }))
+    const setWake = jest.fn(setWakeImpl)
+    const kept = new Map<string, KeptWakeHandle>()
+    const handles = {
+      get: async (agentDid: string) => kept.get(agentDid),
+      set: async (agentDid: string, k: KeptWakeHandle) => void kept.set(agentDid, k),
+    }
+    const { d } = deps({ register, setWake, handles, now: () => clock })
+    return { d, register, setWake, kept, advance: (ms: number) => (clock += ms) }
+  }
+
+  it('after a failed set-wake, a retry within the window gives the same handle: one register', async () => {
+    const s = setup(async () => ({ pushCapable: true }))
+    s.setWake.mockRejectedValueOnce(new Error('agent unreachable'))
+    await expect(enablePushWake(s.d)).rejects.toThrow('agent unreachable')
+    expect(s.kept.get(AGENT)?.provisionedAt).toBeUndefined()
+
+    s.advance(20 * MIN)
+    await expect(enablePushWake(s.d)).resolves.toMatchObject({ status: 'wakeable', handle: { handle: 'h1' } })
+    expect(s.register).toHaveBeenCalledTimes(1)
+    expect(s.kept.get(AGENT)?.provisionedAt).toBeDefined()
+  })
+
+  it('after a failed set-wake, a retry past the window registers a fresh handle (the old one is swept)', async () => {
+    const s = setup(async () => ({ pushCapable: true }))
+    s.setWake.mockRejectedValueOnce(new Error('agent unreachable'))
+    await expect(enablePushWake(s.d)).rejects.toThrow()
+
+    s.advance(UNCONFIRMED_HANDLE_REUSE_MS + MIN)
+    await expect(enablePushWake(s.d)).resolves.toMatchObject({ handle: { handle: 'h2' } })
+    expect(s.register).toHaveBeenCalledTimes(2)
+  })
+
+  it('a handle the agent confirmed is given again however old it is', async () => {
+    const s = setup(async () => ({ pushCapable: true }))
+    await enablePushWake(s.d)
+    s.advance(30 * 24 * 60 * MIN)
+    await enablePushWake(s.d)
+    expect(s.register).toHaveBeenCalledTimes(1)
+  })
+
+  it('answered not wakeable: not confirmed, so it is replaced only after the window, not at every try', async () => {
+    const s = setup(async () => ({ pushCapable: false }))
+    await enablePushWake(s.d)
+    await enablePushWake(s.d)
+    expect(s.register).toHaveBeenCalledTimes(1)
+    s.advance(UNCONFIRMED_HANDLE_REUSE_MS + MIN)
+    await enablePushWake(s.d)
+    expect(s.register).toHaveBeenCalledTimes(2)
+  })
+
+  it('a handle kept before this was recorded is given again, not re-registered', async () => {
+    const s = setup(async () => ({ pushCapable: true }))
+    s.kept.set(AGENT, { tokenKey: tokenKeyOf(FCM), handle: { gateway: GATEWAY_DID, handle: 'legacy' } })
+    await expect(enablePushWake(s.d)).resolves.toMatchObject({ handle: { handle: 'legacy' } })
+    expect(s.register).not.toHaveBeenCalled()
   })
 })
