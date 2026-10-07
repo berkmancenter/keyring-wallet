@@ -78,6 +78,26 @@ async function chooseHowToJoin(d) {
   await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
 }
 
+/**
+ * 238 (#344): Join for a member says so (JoinMemberCheck) and ends on Done, which goes to Your agent with C's card
+ * set apart (AgentCommunityHighlighted). Rows: join-done-member, join-done-highlight.
+ */
+async function doneFlow(d) {
+  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+  await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(C_DID)}&n=${encodeURIComponent(C_NAME)}`);
+  const check = await existsTestId(d, "JoinMemberCheck", 30000);
+  const done = Boolean(await scrollToTestId(d, "JoinDone", 4, { from: 0.5 }).catch(() => undefined));
+  const open = await existsTestId(d, "JoinOpenCommunity", 1500);
+  await screenshot(d, "join-done-member").catch(() => undefined);
+  row("join-done-member", check && done, `JoinMemberCheck ${check} · JoinDone ${done} · JoinOpenCommunity ${open}`);
+  if (!done) return row("join-done-highlight", false, "no JoinDone to tap");
+  await tapTestId(d, "JoinDone", 10000);
+  const home = await existsTestId(d, "AgentHome", 15000);
+  const lit = await existsTestId(d, "AgentCommunityHighlighted", 10000);
+  await screenshot(d, "join-done-highlight").catch(() => undefined);
+  row("join-done-highlight", home && lit, `Your agent ${home} · AgentCommunityHighlighted ${lit}`);
+}
+
 /** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
 async function approvedFlow(d, me) {
   const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
@@ -117,9 +137,11 @@ async function approvedFlow(d, me) {
   const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
   await screenshot(d, "join-approved-wallet").catch(() => undefined);
   row("join-approved-wallet", shown, shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s`);
+  if (is238) await doneFlow(d);
 }
 
 let d;
+let is238 = false;
 try {
   await ensureAppium();
   d = await makeDriver({ platform: "android", udid: process.env.UDID, keepState: true });
@@ -141,8 +163,15 @@ try {
   // 236: #319 the Join screen names the identity it asked with; #322 its actions end above the tab bar.
   const nameLine = (await existsTestId(d, "JoinStandingIdentityName", 3000)) ? (await textOf(d, "JoinStandingIdentityName")).trim() : "";
   console.log(`JOIN-IDENTITY-NAME ${nameLine || "(none)"}`);
-  // #334: the line names the identity as a persona ID.
-  row("join-persona-id", /^Your persona ID: \S/.test(nameLine), `"${nameLine}"`);
+  // #334: the line names the identity as a persona ID; 238 (#344): the bare word, under "You asked to join as".
+  const bareWord = /^[a-z]+(?:-[a-z]+)+$/.test(nameLine);
+  row("join-persona-id", /^Your persona ID: \S/.test(nameLine) || bareWord, `"${nameLine}"${bareWord ? " (the bare word, #344)" : ""}`);
+  // 238 (#344): the waiting state says so in a title and what shows when accepted, and offers no ways in.
+  is238 = await existsTestId(d, "JoinRequestSent", 2000);
+  if (is238) {
+    const willShow = await existsTestId(d, "JoinWillShow", 2000);
+    row("join-request-sent", willShow, `JoinRequestSent "${(await textOf(d, "JoinRequestSent").catch(() => "")).trim()}" · JoinWillShow ${willShow}`);
+  }
   const actionsY = async () => {
     const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/JoinActions")`);
     return (await el.isExisting().catch(() => false)) ? Math.round((await el.getLocation()).y) : undefined;
@@ -160,6 +189,11 @@ try {
   const yAfter = await actionsY();
   // Moved by the swipe, or brought into view by it (off screen before, so not in the tree): either way it scrolls.
   row("join-actions-scroll", yAfter !== undefined && yAfter !== yBefore, `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`);
+  if (is238) {
+    // Swiped to the end of the page: no ways in anywhere on it while the request waits.
+    const ways = (await existsTestId(d, "JoinWays", 1500)) || (await existsTestId(d, "JoinWaysOthers", 500));
+    row("join-waiting-no-ways", !ways, ways ? "the waiting state still shows ways in" : "no JoinWays while waiting");
+  }
   await tapTestId(d, "MyAgent", 15000);
   // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
   // element: AgentCommunityOpen_<key> or AgentMembershipRow), or the status child's text on Android.

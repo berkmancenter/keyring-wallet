@@ -98,12 +98,32 @@ try {
     await screenshot(d, `agent-add-back-0s-${PLATFORM}`).catch(() => undefined);
     await new Promise((r) => setTimeout(r, 3000));
     await screenshot(d, `agent-add-back-3s-${PLATFORM}`).catch(() => undefined);
+    // 238 (#342): adding shows a blank AgentHomeLeaving, not "Link your agent", while it leaves: wait it out.
+    for (let i = 0; i < 15 && (await existsTestId(d, "AgentHomeLeaving", 500)); i++) await new Promise((r) => setTimeout(r, 1000));
     const home = await existsTestId(d, "AgentHome", 10000);
     const after = home ? (await textOf(d, "AgentHomeName").catch(() => "")).trim() : "";
     const unlinked = /Link your agent|no longer linked|Add this phone/i.test(await d.getPageSource());
     await screenshot(d, `agent-add-then-back-${PLATFORM}`).catch(() => undefined);
     row("add-then-back", home && after === before && !unlinked, `before "${before}", after "${after}"${unlinked ? ", an unlinked/link screen showed" : ""}`);
   } else row("add-then-back", false, "no AgentSwitcherAdd");
+  // #341: Agent settings sets its sections apart as Your agent does: a rule just above Activity, Details and Unlink.
+  if (await existsTestId(d, "AgentSettings", 5000)) {
+    await tapTestId(d, "AgentSettings", 10000);
+    const found = [];
+    for (const id of ["AgentActivity", "AgentDetailsToggle", "AgentUnlink"]) {
+      const el = await scrollToTestId(d, id, 6, { from: 0.6 }).catch(() => undefined);
+      if (!el) { found.push(`${id} absent`); continue; }
+      const y = Math.round((await el.getLocation()).y);
+      let ruled = false;
+      for (const r of await d.$$(PLATFORM === "ios" ? '//*[@name="com.ariesbifold:id/AgentSectionRule"]' : '//*[@resource-id="com.ariesbifold:id/AgentSectionRule"]')) {
+        const ry = Math.round((await r.getLocation().catch(() => ({ y: -1 }))).y);
+        if (ry >= 0 && ry < y && y - ry <= 160) ruled = true;
+      }
+      found.push(`${id} ${ruled ? "ruled" : "NO RULE above"}`);
+    }
+    await screenshot(d, `agent-settings-sections-${PLATFORM}`).catch(() => undefined);
+    row("settings-section-rules", found.every((f) => f.endsWith("ruled")), found.join(" · "));
+  } else row("settings-section-rules", false, "no AgentSettings gear");
   process.exitCode = failed ? 3 : 0;
 } catch (e) {
   console.log(`LEG agent-header BROKEN — ${String(e.message).split("\n")[0]}`);

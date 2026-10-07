@@ -128,12 +128,37 @@ async function assertAgentNamed(driver, key, where) {
   throw new Error(`${where} says "${shown}", not the agent's own name "${name}"`);
 }
 
+/**
+ * 238 (bifold #340): the introduction's words and buttons are centred together in AgentIntro. Prints
+ * `INTRO-CENTRE ok|off <space above the first line> <space below the buttons>` (within 24 px is ok), or nothing
+ * on a build without AgentIntroButtons.
+ */
+async function introCentre(driver) {
+  try {
+    if (!(await existsTestId(driver, "AgentIntroButtons", 2000))) return;
+    const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
+    const intro = await box(byTestId(driver, "AgentIntro"));
+    const buttons = await box(byTestId(driver, "AgentIntroButtons"));
+    let top = Infinity;
+    for (const c of await byTestId(driver, "AgentIntro").$$(".//*")) {
+      const r = await box(c).catch(() => undefined);
+      if (r && r.height > 0 && r.y >= intro.y) top = Math.min(top, r.y);
+    }
+    const above = Math.round(top - intro.y);
+    const below = Math.round(intro.y + intro.height - (buttons.y + buttons.height));
+    console.log(`INTRO-CENTRE ${Math.abs(above - below) <= 24 ? "ok" : "off"} ${above} ${below}`);
+  } catch (e) {
+    console.log(`INTRO-CENTRE off unmeasured: ${String(e.message).split("\n")[0].slice(0, 80)}`);
+  }
+}
+
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
   // An agent with other phones on it first offers "Your other phones"; keep them all.
   if (await passNewPhoneOfferIfShown(driver, 8000)) console.log("[e2e] other-phones offer: kept them all (Done)");
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
+  await introCentre(driver);
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
   await waitForTestId(driver, "AgentHome", 30000);
   await assertAgentNamed(driver, "AgentHomeName", "the agent screen");

@@ -27,6 +27,7 @@ adb -s $E shell am force-stop $BID
 ( export PLATFORM=android APPIUM_PORT=4760 ENROL_PORT=8196 ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E
 cd $E2E; t=$(date +%s); E2E_KEEP_APP=1 perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > $LEG_DIR/android-link.out 2>&1; rc=$?
 echo "ROW android-onboarding-home $([ $rc -eq 0 ] && echo PASS || echo FAIL) — link run rc=$rc $(( $(date +%s)-t ))s $(grep -E '✅|❌' $LEG_DIR/android-link.out | tail -1 | cut -c1-110); push steps in the transcript: $(grep -c 'PushNotificationContinue' $LEG_DIR/android-link.out)"
+ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/android-link.out); [ -z "$ic" ] || echo "ROW agent-intro-centred-android $(case $ic in "INTRO-CENTRE ok"*) echo PASS ;; *) echo FAIL ;; esac) — above/below: ${ic#INTRO-CENTRE } (#340)"
 [ $rc -eq 0 ] && { cd $E2E; EXPECT=${PROBE_EXPECT:-off} perl -e 'alarm 600; exec @ARGV' node run-push-off-probe.mjs > $LEG_DIR/android-push-off.out 2>&1; prc=$?; echo "ROW android-push-${PROBE_EXPECT:-off} $([ $prc -eq 0 ] && echo PASS || echo FAIL) — $(grep -E '^PUSH_O' $LEG_DIR/android-push-off.out | cut -c1-140)"; } )
 (cd $E2E && PLATFORM=android UDID=$E APPIUM_PORT=4760 perl -e 'alarm 600; exec @ARGV' node run-agent-header.mjs > $LEG_DIR/android-header.out 2>&1; grep -E '^(ROW|LEG)' $LEG_DIR/android-header.out)
 sleep 2; kill $LC 2>/dev/null; grep -E "$TOK" $LEG_DIR/android-logcat-all.txt | grep -v "GCM.*Unexpected forwarded intent.*PACKAGE_ADDED" | cut -c1-200 > $LEG_DIR/android-token-lines-all.txt; P2=$(grep -c . $LEG_DIR/android-token-lines-all.txt)

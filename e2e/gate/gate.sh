@@ -10,10 +10,13 @@
 
 # Legs in the order they run on one platform, and which device each needs.
 LEGS_IOS="kk smoke-ios update-ios"
-LEGS_ANDROID="p1 testreq agents waiting smoke-android devices update-android relaunch-android"
+LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail"
+# iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
+# so they run first, with nothing beside them; the rest of iOS then runs beside Android.
+LEGS_IOS_ALONE="kk smoke-ios"
 
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -37,12 +40,20 @@ run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; 
 
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
 run_legs() {
-  local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l
+  local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l return_solo=0
   for l in $LEGS_SOLO; do [[ ",$want," == *",$l,"* || $want == all ]] && solo+=("$l"); done
   for l in $LEGS_IOS; do [[ ",$want," == *",$l,"* || $want == all ]] && ios+=("$l"); done
   for l in $LEGS_ANDROID; do [[ ",$want," == *",$l,"* || $want == all ]] && android+=("$l"); done
   local free; free=$(disk_free_gb)
   if [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
+    local alone=() rest=() l2
+    for l2 in "${ios[@]}"; do [[ " $LEGS_IOS_ALONE " == *" $l2 "* ]] && alone+=("$l2") || rest+=("$l2"); done
+    [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
+    ios=(${rest[@]+"${rest[@]}"})
+    if [ ${#ios[@]} -eq 0 ]; then run_group "$rd" "${android[@]}"; return_solo=1; fi
+  fi
+  if [ "$return_solo" = 1 ]; then :
+  elif [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
     say "iOS (${ios[*]}) and Android (${android[*]}) side by side: ${free} GB free"
     local t0; t0=$(stamp)
     ( export GATE_DEFER_KEYS=1; run_group "$rd" "${ios[@]}" ) & local p1=$!
