@@ -523,6 +523,7 @@ try {
     console.log(`R5-SWITCH-B ${new Date().toISOString()}`);
     await switchToOther(d, E.B_NAME);
     await myAgent(d);
+    let heldStatus = "";
     const holds = async (tag) => {
       await scrollToTestId(d, `AgentCommunityCard_${C_KEY}`, 6).catch(() => undefined);
       const card = await existsTestId(d, `AgentCommunityCard_${C_KEY}`, 1500);
@@ -530,6 +531,7 @@ try {
       const check = await existsTestId(d, `AgentCommunityCheck_${C_KEY}`, 800);
       await shot(d, `agents-r5-holds-${tag}`);
       await dumpSource(d, `agents-r5-holds-${tag}`).catch(() => undefined);
+      heldStatus = status || heldStatus;
       log(`R5 holds (${tag}): AgentCommunityCard ${card} · status "${status}" · AgentCommunityCheck ${check}`);
     };
     await holds("0s");
@@ -539,7 +541,10 @@ try {
     const hasCheck = await existsTestId(d, `AgentCommunityCheck_${C_KEY}`, 5000);
     const tc = Date.now();
     if (hasCheck) await tapTestId(d, `AgentCommunityCheck_${C_KEY}`, 5000);
-    let refused = null;
+    // Looking for "Check now" swipes; with none, the card can be off screen now (237: status read null). Back to it.
+    else await scrollToTestId(d, `AgentCommunityStatus_${C_KEY}`, 6).catch(() => undefined);
+    // Without "Check now", a refusal the card already showed while it held (0 s / 30 s) is the card learning it by itself.
+    let refused = !hasCheck && /turned down/i.test(heldStatus) ? heldStatus : null;
     let toast = null;
     for (const until = Date.now() + 30000; Date.now() < until && !refused; await sleep(1000)) {
       toast = toast ?? (await txt(d, "ToastTitle"));

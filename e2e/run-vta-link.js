@@ -373,7 +373,11 @@ async function linkManually(driver) {
   // waypoint as optional. Measured on the candidate tree 2026-09-23, where
   // the run died waiting 15s for a step the flow had already passed.
   // After a pasted address the link screen already knows the agent: no address to type.
-  const knowsAgent = (await existsTestId(driver, "VtaLinkManualDid", 3000)) || (await existsTestId(driver, "VtaLinkShowTheCode", 1500)) || (await existsTestId(driver, "VtaLinkShowMyCode", 1500));
+  // 236's address screen shows "Show my code" beside an empty address field: that one still needs the address.
+  const knowsAgent =
+    (await existsTestId(driver, "VtaLinkManualDid", 3000)) ||
+    (await existsTestId(driver, "VtaLinkShowTheCode", 1500)) ||
+    ((await existsTestId(driver, "VtaLinkShowMyCode", 1500)) && !(await existsTestId(driver, "VtaLinkAgentAddress", 1500)));
   if (!knowsAgent) {
     if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
       await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
