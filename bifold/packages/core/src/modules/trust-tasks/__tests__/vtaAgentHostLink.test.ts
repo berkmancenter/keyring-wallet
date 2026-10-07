@@ -5,6 +5,7 @@
  * the host it connected. Every step moves the one state the screens read.
  */
 import { VtaAgentController } from '../module/vtaAgent'
+import { VtaClient } from '../module/VtaClient'
 import type { AgentHostOffer } from '../module/agentHostConnection'
 
 const mockClient = {
@@ -190,6 +191,51 @@ describe('an agent host’s automatic connection', () => {
     vta.scanHostOffer(hostOffer)
     await vta.confirmOffer({} as never)
     expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  // IN-135: Keyring locked while the host worked. Its agent is shut down
+  // until the person unlocks, when a new one is handed over. Waiting for that
+  // spends no sign-in try, and the link goes on with the new agent.
+  it('a lock while signing in waits without spending tries, and links with the agent handed over on unlock', async () => {
+    const before = { isInitialized: true }
+    const after = { isInitialized: true }
+    let sleeps = 0
+    let whoAmIs = 0
+    mockClient.whoAmI.mockImplementation(async () => {
+      whoAmIs++
+      if (whoAmIs === 1) {
+        // The lock shuts the agent down mid-try.
+        before.isInitialized = false
+        throw new Error('the session closed')
+      }
+      return { roles: ['admin'] }
+    })
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host, {
+      sleep: async () => {
+        // Locked for longer than every try together would last; then unlocked.
+        if (++sleeps === 40) (vta as unknown as { agent: unknown }).agent = after
+      },
+    })
+    ;(vta as unknown as { agent: unknown }).agent = before
+    let lastTry = 1
+    const stop = vta.subscribe(() => {
+      const stage = (vta.getState().link as { stage?: { attempt?: number } }).stage
+      if (typeof stage?.attempt === 'number') lastTry = Math.max(lastTry, stage.attempt)
+    })
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer(before as never)
+    stop()
+    expect(vta.getState().link.kind).toBe('linked')
+    // Forty waits while locked, and only the second sign-in try.
+    expect(sleeps).toBeGreaterThanOrEqual(40)
+    expect(lastTry).toBe(2)
+    const clientAgents = (VtaClient as unknown as jest.Mock).mock.calls.map((c) => c[0])
+    expect(clientAgents).toContain(after)
   })
 
   it.each([
