@@ -229,6 +229,34 @@ describe('My Agent — the connected gate', () => {
     expect(navigate).toHaveBeenCalledWith(Screens.VtaCreateAgent, { byAddress: true })
   })
 
+  // IN-135: a link picked back up shows its code again; carrying on comes first.
+  test('a code showing again: Continue linking opens it', async () => {
+    const navigate = useNavigation().navigate as jest.Mock
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    setVta({
+      link: {
+        kind: 'showingKey',
+        vtaDid: 'did:webvh:x',
+        label: 'x',
+        did: 'did:key:z6Mk',
+        checking: false,
+        resumed: true,
+      },
+    })
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('MyAgentContinueLink')))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+    setVta({ link: { kind: 'notLinked' } })
+  })
+
   test('the words for the ways in, in every language, and the steps that name them', () => {
     for (const words of [enCopy, frCopy, ptBrCopy]) {
       for (const key of ['ScanAgentCode', 'UseAgentAddress', 'OtherPhoneHint'] as const) {

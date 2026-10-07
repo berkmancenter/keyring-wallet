@@ -703,6 +703,16 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 agent", "Add this phone to my agent" and "Link without a QR
                 code" were three buttons for two flows. */}
             <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
+            {/* A link left part-way, picked back up (IN-135): its code is
+                showing again, so carrying on comes first. */}
+            {vta.link.kind === 'showingKey' ? (
+              <Button
+                title={t('VtaLink.ContinueLinking')}
+                buttonType={ButtonType.Primary}
+                onPress={() => navigation.navigate(Screens.VtaLink)}
+                testID={testIdWithKey('MyAgentContinueLink')}
+              />
+            ) : null}
             <Button
               title={t('VtaLink.ScanAgentCode')}
               buttonType={ButtonType.Primary}
