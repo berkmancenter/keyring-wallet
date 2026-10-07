@@ -338,7 +338,13 @@ async function linkManually(driver) {
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) {
+    if (process.env.LINK_VIA === "scan") {
+      // The scan branch on purpose, on any build: "Scan your agent's code", paste the bare address, VtaLink's scan card.
+      await tapTestId(driver, "LinkYourAgentButton", 30000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      console.log("[e2e] link: LINK_VIA=scan, pasted the agent's address on the scanner");
+      return linkViaScan(driver);
+    } else if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) {
       await tapTestId(driver, "LinkWithoutQrButton", 30000);
     } else if (process.env.LINK_VIA === "address") {
       // The address path on purpose (VtaCreateAgent). Before #339 it needs a screen lock first (DeviceCannotOwn).
