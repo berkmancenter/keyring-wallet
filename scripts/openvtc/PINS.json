@@ -93,10 +93,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "bdae1cf9",
-      "commitDate": "2026-09-21",
-      "pinnedOn": "2026-09-21",
-      "why": "Specifications for vtc/join-requests/withdraw/0.1 and supplement/0.1, which the client now implements (VTI-03 client half).",
+      "sha": "7b6bb488",
+      "commitDate": "2026-10-05",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag trust-tasks-v0.27.7, the trust-tasks-rs version VTI vta-service-v0.55.0 builds with. Publishes the hidden-vetting task specs (vtc/vetting/hidden/{publish,show,withdraw}/0.1, vtc/vetting/pcs-challenge/0.1), vtc/vetting/vetters/event-mode/0.1, and the hidden path in vetting/attestation/0.1, so they can be cited and used as fixtures at a pin.",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
@@ -105,7 +105,9 @@
         "bindings/didcomm-v1/",
         "bindings/tsp/",
         "trust-tasks-ts/",
-        "ceremonies/"
+        "ceremonies/",
+        "specs/vtc/vetting/",
+        "specs/vetting/"
       ]
     },
     "dtgwg-cred-spec": {
