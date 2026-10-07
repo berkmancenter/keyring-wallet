@@ -675,6 +675,13 @@ export const MAX_CARD_VALIDITY_MS = 15 * 60 * 1000
 export const VETTING_SESSION_MS = 15 * 60 * 1000
 
 /**
+ * How long the vetter's desk waits before reading the community's vetting
+ * requirements a second time, when the first read fails: they decide the
+ * statement's shape, and a guess is only the fallback.
+ */
+export const STATEMENT_SHAPE_RETRY_MS = 2000
+
+/**
  * Why a vetter did not accept a Vetting Card — vta-sdk `verify_card`'s errors
  * (card.rs:270-327), in its order, after openvtc's own session check
  * (`receive_card`, vetter.rs:547-551):
@@ -856,6 +863,8 @@ export function cardDigestMultibase(card: Record<string, unknown>): string {
 // ---------------------------------------------------------------------------
 
 export class VtiVetterDesk {
+  /** The wait before a second read of the requirements (STATEMENT_SHAPE_RETRY_MS); shorter in tests. */
+  static shapeRetryMs = STATEMENT_SHAPE_RETRY_MS
   private stop?: () => void
   constructor(
     private readonly agent: Agent,
@@ -1328,13 +1337,18 @@ export class VtiVetterDesk {
     const mode = getDtgV1WritingMode()
     if (mode !== 'auto') return chooseStatementShape({ mode })
     let statementType: string | undefined
-    try {
-      statementType = publishedStatementType(await vtiAgent.fetchManifest(communityDid, this.agent))
-    } catch (e) {
-      this.agent.config?.logger?.info?.(
-        `[VTI] statement shape: the community's requirements could not be read (${(e as Error)?.message ?? e}); deciding by this vetter's grant`,
-        { communityDid }
-      )
+    let unread: string | undefined
+    // Read twice before giving up: the requirements decide the shape, and the
+    // fallback is a guess (a guess of the old shape made a vetting not count).
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        statementType = publishedStatementType(await vtiAgent.fetchManifest(communityDid, this.agent))
+        unread = undefined
+        break
+      } catch (e) {
+        unread = (e as Error)?.message ?? String(e)
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, VtiVetterDesk.shapeRetryMs))
+      }
     }
     const grants =
       (await this.communityStore?.listHeldCredentials?.('vetter-grant', communityDid).catch(() => [])) ?? []
@@ -1342,7 +1356,13 @@ export class VtiVetterDesk {
       .filter((g) => g.subjectDid === this.persona.did)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
     const grantShape = communityRoleCard(own[0]?.credential)?.shape
-    return chooseStatementShape({ mode, statementType, grantShape })
+    const choice = chooseStatementShape({ mode, statementType, grantShape })
+    if (unread) {
+      releaseWarn(
+        `[VTI] statement shape: the community's requirements could not be read twice (${unread}); writing ${choice.shape} by ${choice.by}`
+      )
+    }
+    return choice
   }
 
   async attest(

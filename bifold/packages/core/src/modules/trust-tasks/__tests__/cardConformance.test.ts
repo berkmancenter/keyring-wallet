@@ -85,7 +85,7 @@ import {
   type VtiVettingStore,
 } from '../module/vtiVetting'
 // eslint-disable-next-line import/order
-import { setDtgV1WritingEnabled } from '../module/dtgV1Writing'
+import { DTG_V1_WRITING_RELEASE_DEFAULT, setDtgV1WritingEnabled, setDtgV1WritingMode } from '../module/dtgV1Writing'
 // eslint-disable-next-line import/order
 import { verifyEligibilityPresentation } from '../module/vtiEligibility'
 import { purposeForDocumentType } from '../module/proofPurpose'
@@ -199,10 +199,18 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       kmsKeyIds: { signing: 'vetter-key', keyAgreement: 'vetter-key' },
     }
     mockSend.mockClear()
-    await new VtiVetterDesk(vetter.agent as never, vetterPersona as never, deskStore, {} as never).attest(
-      desk.requestId,
-      { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
-    )
+    // statement.json is the endorsement-shaped statement, written on purpose:
+    // with no requirements and no grant here, mode auto now writes vetted/1,
+    // which statement-v1.json below already covers.
+    setDtgV1WritingMode('off')
+    try {
+      await new VtiVetterDesk(vetter.agent as never, vetterPersona as never, deskStore, {} as never).attest(
+        desk.requestId,
+        { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
+      )
+    } finally {
+      setDtgV1WritingMode(DTG_V1_WRITING_RELEASE_DEFAULT)
+    }
     // Delivered as openvtc delivers and opens one (openvtc b52dc28
     // vetting/wire.rs:188-205 `credential_delivery`, :218-240 `open`): a signed
     // Trust Task document, its type the message's, issued by the vetter,
