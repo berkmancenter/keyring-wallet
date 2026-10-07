@@ -150,7 +150,7 @@ const didHost = (did: string) => did.split(':')[3] ?? did
  * 10-05). The current agent is left, not forgotten; a link given up goes back
  * to it (`cancelLink`). One this phone already has is said so instead.
  */
-async function makeRoomForAgent(vtaDid: string): Promise<void> {
+async function makeRoomForAgent(vtaDid: string): Promise<boolean> {
   // Checked whatever the link is now (IN-132): after an "Add" the current
   // agent has been left, and the agent named may be the one left.
   if (vtaAgent.hasAgent(vtaDid)) {
@@ -160,8 +160,9 @@ async function makeRoomForAgent(vtaDid: string): Promise<void> {
       'VtaLink.FailedAlreadyLinked'
     )
   }
-  if (vtaAgent.getState().link.kind !== 'linked') return
+  if (vtaAgent.getState().link.kind !== 'linked') return false
   await vtaAgent.startAddingAgent()
+  return true
 }
 
 /**
@@ -183,13 +184,21 @@ async function routeBareDid(
       communityTarget.set({ communityDid: did })
       navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
-    case 'agent':
-      await makeRoomForAgent(did)
+    case 'agent': {
+      const adding = await makeRoomForAgent(did)
       // Scanned or pasted: usually another phone's "Add another phone" code, so
       // this phone shows its own code for that phone to scan (#30).
-      await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
+      try {
+        await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
+      } catch (error) {
+        // The link screen never opened: the add it started is given up, and
+        // the agent before comes back (IN-138).
+        if (adding) vtaAgent.cancelLink()
+        throw error
+      }
       navigate('VtaLink')
       return
+    }
     case 'ambiguous':
       throw new KeyringLinkError(
         'This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.',

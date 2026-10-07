@@ -256,6 +256,16 @@ const VtaAgentHome: React.FC = () => {
   useEffect(() => {
     if (isFocused) setLeavingToAdd(false)
   }, [isFocused])
+  // Back on this page with an "Add" still open and nothing under way (it
+  // failed, or the person left by a way that did not close it): the add is
+  // given up and the agent before comes back, rather than "Link your agent"
+  // until a restart (IN-138). Only on arriving here: pressing Add on this
+  // page does not count.
+  useEffect(() => {
+    if (!isFocused) return
+    const now = vtaAgent.getState()
+    if (now.addingAgent && now.link.kind === 'notLinked') vtaAgent.cancelLink()
+  }, [isFocused])
   useEffect(() => {
     if (isFocused) void load()
   }, [load, isFocused])
