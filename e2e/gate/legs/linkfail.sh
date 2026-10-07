@@ -43,4 +43,31 @@ if selected swap-refused; then
   L env EXPECT_REFUSAL=swapRefused perl -e 'alarm 1200; exec @ARGV' node run-vta-link.js > "$LEG_DIR/refused.out" 2>&1; rc=$?
   if [ $rc -eq 0 ]; then row swap-refused PASS "$(said "$LEG_DIR/refused.out")"; else row swap-refused FAIL "rc=$rc $(grep -E '❌|Error:' "$LEG_DIR/refused.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
 fi
+# 239 (bifold #355), on VtaLink's scan branch (the address path's AgentCreateError has no Try again): a held swap
+# offers Try again, which links with the same key once the rule is lifted; a refused one does not; neither retries
+# by itself on foreground. A build without VtaLinkTryAgain skips these.
+if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryAgain; then
+  line() { grep -m1 "^$2" "$1" | cut -c1-200; }
+  if selected swap-held-try-again || selected swap-held-no-retry; then
+    echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
+    echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
+    HOOK="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
+    L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld TRY_AGAIN_EXPECT=yes NO_RETRY_CHECK=1 TRY_AGAIN_HOOK="$HOOK" \
+      perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-scan.out" 2>&1; rc=$?
+    t=$(line "$LEG_DIR/held-scan.out" TRYAGAIN-LINKED); s=$(line "$LEG_DIR/held-scan.out" "TRYAGAIN "); n=$(line "$LEG_DIR/held-scan.out" NO-RETRY)
+    a=$(echo "$t" | grep -oE 'ACL [0-9]+ → [0-9]+'); grow=$(echo "$a" | awk '{print ($4 > $2)}')
+    row swap-held-try-again "$([[ $s == "TRYAGAIN shown"* && $t == "TRYAGAIN-LINKED yes"* && $grow == 0 ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${t:-no TRYAGAIN-LINKED line}"
+    row swap-held-no-retry "$([[ $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "${n:-no NO-RETRY line}"
+    echo "  rule off (again): $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
+  fi
+  if selected swap-refused-no-try-again; then
+    pnm "$RUNNER_MAIN_SLUG" policy list | grep -q "$POL" || echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"
+    L env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 \
+      perl -e 'alarm 1200; exec @ARGV' node run-vta-link.js > "$LEG_DIR/refused-scan.out" 2>&1; rc=$?
+    s=$(line "$LEG_DIR/refused-scan.out" "TRYAGAIN "); n=$(line "$LEG_DIR/refused-scan.out" NO-RETRY)
+    row swap-refused-no-try-again "$([[ $s == "TRYAGAIN absent"* && $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${n:-no NO-RETRY line}"
+  fi
+else
+  row swap-held-try-again SKIP "this build has no VtaLinkTryAgain (bifold #355)"
+fi
 row swap-no-answer SKIP "covered by bifold's unit tests: the agent must go silent at the exact swap moment"

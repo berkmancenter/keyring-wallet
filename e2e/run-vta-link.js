@@ -342,6 +342,65 @@ async function scanBranchKey(driver) {
   return did;
 }
 
+/**
+ * bifold #355 (239), on VtaLink after an expected refusal; each part only when the leg asks for it. Prints lines the
+ * leg turns into rows:
+ *   TRY_AGAIN_EXPECT=yes|no   `TRYAGAIN shown|absent` (a held swap offers Try again; a refused one, or a
+ *                             community's agent, does not)
+ *   NO_RETRY_CHECK=1          `NO-RETRY ok|retried …`: after background → foreground the refusal stays (VtaLinkError,
+ *                             same words, no checking state, polled 30 s) and logcat has no new "[TrustTasks:VtaClient]
+ *                             asked|greeted <agent DID>" line. A positive control first: the attempt itself logged
+ *                             "asked <agent DID>"; without it only the screen half counts (Android only)
+ *   TRY_AGAIN_HOOK=<shell>    runs it (the leg lifts the rule that held the swap), presses Try again, and prints
+ *                             `TRYAGAIN-LINKED yes|no` with the ACL size before and after (the same key: no growth)
+ */
+async function afterRefusal(driver, said, temporaryDid) {
+  const did = runnerVtaDid();
+  const logcat = () => { try { return execFileSync("adb", ["-s", driver.e2eUdid, "logcat", "-d", "-v", "time"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n"); } catch { return []; } };
+  const asked = (lines) => lines.filter((l) => l.includes("[TrustTasks:VtaClient]") && l.includes(did) && /\b(asked|greeted)\b/.test(l));
+  if (process.env.TRY_AGAIN_EXPECT) {
+    const shown = Boolean(await scrollToTestId(driver, "VtaLinkTryAgain", 3).catch(() => undefined));
+    console.log(`TRYAGAIN ${shown ? "shown" : "absent"} (expected ${process.env.TRY_AGAIN_EXPECT === "yes" ? "shown" : "absent"})`);
+  }
+  if (process.env.NO_RETRY_CHECK === "1" && driver.e2ePlatform === "android") {
+    const before = logcat();
+    const control = asked(before).length;
+    await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
+    let kept = true;
+    let seen = "";
+    for (let i = 0; i < 30 && kept; i++) {
+      await sleep(1000);
+      const now = (await textOf(driver, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+      const checking = (await existsTestId(driver, "VtaLinkCheckGrant", 200)) || (await existsTestId(driver, "VtaLinkWaitingForPhone", 200));
+      if (now !== said || checking) { kept = false; seen = checking ? "a checking state" : `"${now.slice(0, 80)}"`; }
+    }
+    const seenBefore = new Set(before);
+    const after = asked(logcat()).filter((l) => !seenBefore.has(l));
+    const logHalf = control > 0 ? (after.length === 0 ? "no new sign-in lines" : `${after.length} new line(s): ${after[0].slice(0, 120)}`) : "control missing: no \"asked <agent>\" line from the attempt, the log half does not count";
+    const ok = kept && (control === 0 || after.length === 0);
+    console.log(`NO-RETRY ${ok ? "ok" : "retried"} · screen ${kept ? "kept the refusal 30 s" : `changed to ${seen}`} · ${logHalf} · control ${control}`);
+  }
+  if (process.env.TRY_AGAIN_HOOK) {
+    const size = () => (aclDids().match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/g) || []).length;
+    const before = size();
+    execFileSync("bash", ["-c", process.env.TRY_AGAIN_HOOK], { stdio: "inherit" });
+    await sleep(3000);
+    const btn = await scrollToTestId(driver, "VtaLinkTryAgain", 3).catch(() => undefined);
+    let linked = false;
+    if (btn) {
+      await btn.click();
+      for (const until = Date.now() + 240000; Date.now() < until && !linked; ) {
+        linked = await existsTestId(driver, "VtaLinkDone", 2000);
+        if (!linked && (await existsTestId(driver, "VtaLinkError", 500)) && !(await existsTestId(driver, "VtaLinkCheckGrant", 300))) break;
+      }
+    }
+    const after = size();
+    await screenshot(driver, "link-try-again");
+    console.log(`TRYAGAIN-LINKED ${linked ? "yes" : "no"} · button ${Boolean(btn)} · ACL ${before} → ${after}`);
+    if (linked) runTempDids.push(temporaryDid);
+  }
+}
+
 async function linkViaScan(driver) {
   await waitForTestId(driver, "VtaLinkForOtherPhone", 45000);
   const temporaryDid = await scanBranchKey(driver);
@@ -373,6 +432,7 @@ async function linkViaScan(driver) {
     if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no VtaLinkError)"}"`);
     if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked though the link should have failed");
     console.log(EXPECT_REFUSAL === "communityAgent" ? `[e2e] refused as a community's agent: "${said}"` : `[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
+    await afterRefusal(driver, said, temporaryDid);
     return temporaryDid;
   }
   if (state !== "done") throw new Error("the scan-branch link never reached VtaLinkDone in 240 s");
