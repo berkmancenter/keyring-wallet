@@ -188,7 +188,11 @@ try {
   // #334: Join's buttons scroll with the page (nothing hides behind them), so a swipe moves them.
   const yAfter = await actionsY();
   // Moved by the swipe, or brought into view by it (off screen before, so not in the tree): either way it scrolls.
-  row("join-actions-scroll", yAfter !== undefined && yAfter !== yBefore, `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`);
+  // A page that fits above the tab bar has nothing to scroll (238's shorter waiting state): its buttons stay put and
+  // in view, which is what the row is for. Otherwise the swipe must move them.
+  const { height: wh } = await d.getWindowSize();
+  const fits = yBefore !== undefined && yAfter === yBefore && yAfter < wh * 0.85;
+  row("join-actions-scroll", (yAfter !== undefined && yAfter !== yBefore) || fits, fits ? `the page fits: JoinActions stays at y ${yAfter} of ${wh}, in view (nothing to scroll)` : `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`);
   if (is238) {
     // Swiped to the end of the page: no ways in anywhere on it while the request waits.
     const ways = (await existsTestId(d, "JoinWays", 1500)) || (await existsTestId(d, "JoinWaysOthers", 500));

@@ -11,7 +11,7 @@ PREV_APK=$NEW_APK; PREV_W=$NEW_W
 leg_begin relaunch-android "$(shasum -a 256 "$NEW_APK" | cut -c1-12)"
 T0=$(stamp); E=emulator-5572
 fin() {
-  adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
+  adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; { [ -n "${LCL:-}" ] && kill "$LCL" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; keys_since "$RUNNER_B_SLUG" "$T0"
   local m; for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR"/*.out 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: update leg member" | grep -oE -- '-> [0-9]+' | tail -1)"; done
@@ -21,9 +21,12 @@ echo "candidate ${CAND_WALLET:0:8}: link, join, second agent, then kill and rela
 emu_start 5572
 for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; done
 cd "$E2E"
+# The app's own log across the first link too: on the 238 gate the app left the screen after Done, with no log.
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat-link.log" 2>/dev/null & LCL=$!
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$PREV_APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
   perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link-prev.out" 2>&1 || broken "link on the previous build: $(grep -E '✅|❌' "$LEG_DIR/link-prev.out" | tail -1 | cut -c1-120)"
+{ [ -n "${LCL:-}" ] && kill "$LCL" 2>/dev/null; }
 row relaunch-linked PASS "linked to the main runner"
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME JOIN_APPROVE=1 C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
   PERSONA_SHOTS=$LEG_DIR/persona-did perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/join-prev.out" 2>&1

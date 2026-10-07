@@ -77,6 +77,9 @@ try {
   await handleBiometricConfirmIfPresent(d).catch(() => undefined);
   await sleep(20000);
   const offline = (await said("JoinError")) || ((await existsTestId(d, "JoinRequestSent", 1000)) ? `"Sent" (${await said("JoinStandingText")})` : "");
+  // Still making the identity (it needs the agent, so the network): nothing was recorded as sent, so nothing can be
+  // lost. Seen on the 238 gate: "Getting your identity ready…" with the network off.
+  const stillMaking = !offline && (await d.getPageSource()).includes("Getting your identity ready");
   await screenshot(d, "lost-ask-offline").catch(() => undefined);
   log(`with the network off, Join shows: ${offline || "(no error line, no standing)"}`);
 
@@ -85,7 +88,11 @@ try {
   netOff = false;
   await sleep(10000);
   const arrived = [...pendingIds()].filter((id) => !before.has(id));
-  if (arrived.length) {
+  if (stillMaking) {
+    row("lost-ask-offline", "skip", "the network went off while the identity was still being made: no request was recorded as sent, so the loss was not forced");
+    row("join-lost-request", "skip", "not forced (see lost-ask-offline)");
+    row("join-lost-send-again", "skip", "not forced (see lost-ask-offline)");
+  } else if (arrived.length) {
     row("lost-ask-offline", false, `the ask reached C anyway (${arrived.join(", ")}): the loss was not forced; Join showed ${offline || "nothing"}`);
     arrived.forEach((id) => console.log(`LOST_REQ ${id}`));
     row("join-lost-request", "skip", "the request was not lost");

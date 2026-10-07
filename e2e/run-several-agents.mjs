@@ -150,7 +150,12 @@ async function linkScanTo(d, did, slug) {
   }
   await tapTestId(d, "VtaLinkContinue", 15000);
   await passNewPhoneOfferIfShown(d).catch(() => undefined);
-  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it.
+  if (await existsTestId(d, "AgentIntro", 15000)) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
   return temp;
 }
 
@@ -173,7 +178,12 @@ async function linkByAddressTo(d, did, slug) {
   }
   await tapTestId(d, "AgentCreateDone", 15000);
   await passNewPhoneOfferIfShown(d).catch(() => undefined);
-  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it.
+  if (await existsTestId(d, "AgentIntro", 15000)) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
   return temp;
 }
 
@@ -215,7 +225,12 @@ async function linkTo(d, did, slug) {
   await waitForTestId(d, "VtaLinkDone", 180000);
   await tapTestId(d, "VtaLinkContinue", 15000);
   await passNewPhoneOfferIfShown(d).catch(() => undefined);
-  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it.
+  if (await existsTestId(d, "AgentIntro", 15000)) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
   return temp;
 }
 
