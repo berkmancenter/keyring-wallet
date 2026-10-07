@@ -138,7 +138,8 @@ async function waitSwitched(d, wantName) {
 }
 
 /** VtaLink's scan branch: the key as text (VtaLinkShowAsText → VtaLinkManualDid), grant, it polls by itself. */
-async function linkScanTo(d, did, slug) {
+/** The phone's key on VtaLink's scan branch: as text behind Show as text, else by Copy and the clipboard (237). */
+async function scanKey(d) {
   await waitForTestId(d, "VtaLinkForOtherPhone", 45000);
   let temp = "";
   if (await scrollToTestId(d, "VtaLinkShowAsText", 3).then((e) => e.click().then(() => true), () => false)) {
@@ -151,6 +152,11 @@ async function linkScanTo(d, did, slug) {
     const text = Buffer.from(String(await d.getClipboard("plaintext").catch(() => "")), "base64").toString("utf8");
     temp = (text.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
   }
+  return temp;
+}
+
+async function linkScanTo(d, did, slug) {
+  const temp = await scanKey(d);
   log(`link to ${slug} (scan branch): the phone shows ${temp.slice(0, 30)}…; granting`);
   execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
   const by = Date.now() + 240000;
@@ -521,6 +527,60 @@ try {
     await myAgent(d);
     if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
     log(`R8 done in ${since("R8")}`);
+  }
+
+  // R9 (IN-138, bifold #356): an Add that fails returns to the agent the phone was on (A), by each way out: back, the
+  // My Agent tab, or the scanner then the tab. The failure: a community's own agent, scanned (CA_DID), refused once
+  // its key is granted. Proof: A's home and A current, no link card, A online within 30 s, no key added to A, and
+  // logcat's "[VTI] agent switch: to … done in N ms" (the return ran; nothing re-linked).
+  if (ROWS.includes("R9") && E.CA_DID && E.CA_SLUG) {
+    t0.R9 = Date.now();
+    const aclA = () => { const t = pnm(E.A_SLUG, "acl", "list", "--json"); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const logLines = () => { try { return readFileSync(E.LOGCAT, "utf8").split("\n"); } catch { return []; } };
+    await myAgent(d);
+    if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
+    for (const way of ["back", "tab", "scanner"]) {
+      const n0 = logLines().length;
+      const before = aclA();
+      await myAgent(d);
+      await tapTestId(d, "AgentSwitcherAdd", 15000);
+      await owner(d, `add a community's agent (${way})`);
+      if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+      let said = "";
+      if (await existsTestId(d, "PasteUrlButton", 10000)) {
+        await pasteLinkOnScanScreen(d, E.CA_DID);
+        const temp = await scanKey(d).catch(() => "");
+        if (temp) execFileSync("bash", [ENROL, temp, E.CA_SLUG, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+        for (const until = Date.now() + 240000; Date.now() < until && !said; ) {
+          if (await existsTestId(d, "VtaLinkError", 2000)) said = (await textOf(d, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+          else if (await existsTestId(d, "VtaLinkCheckAgain", 500)) await tapTestId(d, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+        }
+      }
+      await shot(d, `agents-r9-refused-${way}`);
+      // Out, the way under test.
+      if (way === "back") await d.back();
+      else if (way === "tab") await tapTestId(d, "MyAgent", 10000);
+      else {
+        if (await existsTestId(d, "VtaLinkScanAgain", 3000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+        await sleep(1500);
+        await d.back();
+        await tapTestId(d, "MyAgent", 10000);
+      }
+      await sleep(3000);
+      const home = await existsTestId(d, "AgentHome", 15000);
+      const name = home ? await homeName(d) : "";
+      const rows = await switcherRows(d).catch(() => []);
+      const current = rows.find((r) => /Current/.test(r.desc))?.desc ?? "";
+      const linkCard = (await existsTestId(d, "MyAgentLinkCard", 1000)) || (await existsTestId(d, "AgentHomeLink", 500));
+      let status = "";
+      for (const until = Date.now() + 30000; Date.now() < until && !/online/i.test(status); await sleep(1500)) status = await txt(d, "VtaStatusText");
+      const after = aclA();
+      const switched = logLines().slice(n0).find((l) => l.includes("[VTI] agent switch: to") && l.includes("done in")) || "";
+      await shot(d, `agents-r9-returned-${way}`);
+      const ok = /community's agent/i.test(said) && name.includes(E.A_NAME) && current.includes(E.A_NAME) && !linkCard && /online/i.test(status) && before >= 0 && after === before && Boolean(switched);
+      row(`add-fail-return-${way}`, ok, `refused "${said.slice(0, 70)}" · home "${name}" · current "${current}" · link card ${linkCard} · status "${status}" · A's ACL ${before} → ${after} · ${switched ? `logcat "${switched.slice(switched.indexOf("agent switch")).slice(0, 70)}"` : "no agent-switch line"}`);
+    }
+    log(`R9 done in ${since("R9")}`);
   }
 
   if (ROWS.includes("R2")) {
