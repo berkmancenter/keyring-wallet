@@ -189,7 +189,9 @@ export const AgentChips: React.FC<AgentChipsProps> = ({
         >
           <Icon name="plus" size={18} color={ColorPalette.brand.link} />
           <ThemedText style={styles.addText}>
-            {agents.length > 1 ? t('VtaLink.ChipAdd') : t('VtaLink.SwitcherAdd')}
+            {/* "Add" alone: "Add another agent" ran off the screen's edge beside
+                one agent's chip (237, iPhone). A screen reader hears it whole. */}
+            {t('VtaLink.ChipAdd')}
           </ThemedText>
         </Pressable>
       </ScrollView>

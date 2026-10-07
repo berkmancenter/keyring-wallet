@@ -1000,11 +1000,16 @@ describe('Your agent — several agents', () => {
     controller.set({ link: before })
   })
 
-  it('one agent: one chip, and "Add another agent"', async () => {
+  // 237, iPhone: "Add another agent" ran off the screen's edge beside one
+  // agent's chip. The chip says "Add"; a screen reader hears it whole.
+  it('one agent: one chip, and "Add", named "Add another agent" for a screen reader', async () => {
     controller.set({ agents: [{ vtaDid: HOME, label: 'Home' }] })
     const tree = await renderHome()
     expect(tree.queryByTestId(testIdWithKey('AgentSwitcherRow_1'))).toBeNull()
-    expect(tree.getByTestId(testIdWithKey('AgentSwitcherAdd'))).toHaveTextContent(/VtaLink\.SwitcherAdd/)
+    const add = tree.getByTestId(testIdWithKey('AgentSwitcherAdd'))
+    expect(add).toHaveTextContent(/VtaLink\.ChipAdd/)
+    expect(add).not.toHaveTextContent(/VtaLink\.SwitcherAdd/)
+    expect(add.props.accessibilityLabel).toBe('VtaLink.SwitcherAdd')
   })
 
   it('two agents with no name: "Agent 1" and "Agent 2", never "your agent" twice', async () => {
