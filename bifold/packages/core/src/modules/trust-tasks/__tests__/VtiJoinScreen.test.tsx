@@ -6,6 +6,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -223,6 +224,15 @@ describe('I want to join a community', () => {
     expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
   })
 
+  // 238, iPhone: "Which community?" sat at the top and its button at the
+  // foot, the screen between them. Kept together and centred.
+  it('"Which community?" and its button sit together, centred', async () => {
+    const tree = await renderJoin()
+    const scroll = StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinScroll')).props.contentContainerStyle)
+    expect(scroll.justifyContent).toBe('center')
+    expect(StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinActions')).props.style).marginTop).toBe(8)
+  })
+
   it('a suggested community that does not answer is not called gone', async () => {
     const tree = await renderJoin()
     expect(tree.queryByTestId(testIdWithKey('JoinRememberedUnreachable'))).toBeNull()
@@ -330,17 +340,22 @@ describe('I want to join a community', () => {
       expect(mockReadJoinState).toHaveBeenLastCalledWith(expect.anything(), linked, { poll: false })
     })
 
-    it('a member: Open, not Join', async () => {
-      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    // Alberto, 238: a success state in place. Done goes back to Your agent
+    // with the community's card picked out; View community takes Join's
+    // place, so back from it is Your agent, not this screen again.
+    it('a member: a success state, Done back to Your agent, View community in place of Join', async () => {
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock; replace: jest.Mock }
       navigation.navigate.mockClear()
+      navigation.replace.mockClear()
       const tree = await standAt({ kind: 'member', membership: {} })
+      expect(tree.getByTestId(testIdWithKey('JoinMemberCheck'))).toBeTruthy()
       expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
       expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
-      // IN-102: opened on a community a link named, a member had only "Open"
-      // and no way to another community.
-      expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinWays'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinDone'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaAgent, { highlightCommunity: linked })
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenCommunity'))))
-      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
+      expect(navigation.replace).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
     })
 
     it('sent and not yet answered: says so, and whether the invitation went with it; Check again asks', async () => {

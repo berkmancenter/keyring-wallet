@@ -88,6 +88,29 @@ describe('Agent settings', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentRequestsRow'))).toBeNull()
   })
 
+  // Alberto, 238: the same section lines and heading style as "Your agent".
+  it('sets each section apart with a line, before what the agent did, Details and Unlink', async () => {
+    const tree = await show()
+    const ids: string[] = []
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) return node.forEach(walk)
+      const n = node as { props?: { testID?: string }; children?: unknown[] }
+      if (n.props?.testID) ids.push(n.props.testID)
+      n.children?.forEach(walk)
+    }
+    walk(tree.toJSON())
+    const at = (key: string) => ids.indexOf(testIdWithKey(key))
+    const rules = ids.map((id, i) => (id === testIdWithKey('AgentSectionRule') ? i : -1)).filter((i) => i >= 0)
+    for (const section of ['AgentActivity', 'AgentDetailsToggle', 'AgentUnlink']) {
+      // The line just before each section: none of the others lies between.
+      const before = rules.filter((r) => r < at(section)).pop()
+      expect(before).toBeDefined()
+      expect(rules.some((r) => r > (before ?? -1) && r < at(section))).toBe(false)
+    }
+    expect(at('AgentNameCard')).toBeLessThan(rules[0])
+  })
+
   it('leaves room at its foot for the tab bar, so Unlink scrolls clear of it', async () => {
     const tree = await show()
     expect(

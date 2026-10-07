@@ -652,7 +652,12 @@ const VtaLink: React.FC = () => {
           <Button
             title={t('VtaLink.UseAgentAddress')}
             buttonType={ButtonType.Secondary}
-            onPress={() => navigation.navigate(Screens.VtaCreateAgent as never, { byAddress: true } as never)}
+            onPress={() =>
+              (navigation as unknown as { navigate: (screen: string, params?: object) => void }).navigate(
+                Screens.VtaCreateAgent,
+                { byAddress: true }
+              )
+            }
             testID={testIdWithKey('VtaLinkByAddress')}
           />
         </>

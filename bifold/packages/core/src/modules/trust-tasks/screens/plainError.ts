@@ -73,6 +73,18 @@ const JOIN_REFUSALS: Record<string, string> = {
   policyUnsatisfied: 'Errors.JoinPolicyUnsatisfied',
 }
 
+/**
+ * The agent or its host is turning requests away for now: rate-limited (HTTP
+ * 429, Cloudflare's error 1015) or overloaded (503). It said so; it is not
+ * unknown. Waiting a minute is what helps, so that is what the sentence says
+ * (237 gate: a link failed with "doesn't know why" while other phones were
+ * hitting the same agent). A status number only counts beside a word that
+ * makes it one, so a DID or a port that happens to hold "429" is not taken
+ * for it.
+ */
+const BUSY =
+  /\b(?:status|http|code|error)\b\D{0,3}(?:429|503)\b|too many requests|rate[ -]?limit|error(?: code)?:? ?1015|service (?:temporarily )?unavailable/i
+
 /** Nothing to reach: a wrong address, a service that is down, no network. */
 const UNREACHABLE = /network|fetch failed|ECONN|ENOTFOUND|unreachable|could not resolve|did not resolve/i
 
@@ -89,6 +101,7 @@ export function plainError(error: unknown): PlainError {
   }
   if (NOT_ALLOWED.test(bare)) return { line: 'Errors.NotAllowed', detail, retry: false }
   if (NO_DID_HOST.test(bare)) return { line: 'Errors.NoDidHost', detail, retry: false }
+  if (BUSY.test(bare)) return { line: 'Errors.AgentBusy', detail, retry: true }
   if (NO_ANSWER.test(bare)) return { line: 'Errors.NoAnswer', detail, retry: true }
   if (UNREACHABLE.test(bare)) return { line: 'Errors.Unreachable', detail, retry: true }
   // Something we have not met. Say that honestly rather than showing the raw

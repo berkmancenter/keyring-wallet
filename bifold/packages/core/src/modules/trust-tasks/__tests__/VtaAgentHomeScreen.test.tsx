@@ -3,8 +3,8 @@
  * doors and where they are on the journey — and the vetter role appears only
  * when a grant stands, never as a locked button up front.
  */
-import { useIsFocused, useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
@@ -18,7 +18,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
-import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
+import VtaAgentHome, { forgetAgentHoldings, HIGHLIGHT_MS, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 import { communityCardKey } from '../screens/CommunityCard'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -871,14 +871,31 @@ describe('Your agent — after linking', () => {
     controller.set({ introSeen: true })
   })
 
-  // 239, iPhone: the text sat near the header and the buttons halfway up the
-  // screen, as both kept the room above the tab bar. Only the buttons do.
-  it('the introduction is centred between the header and its buttons', async () => {
+  // 239 and 238, iPhone: the panel sat high, as it kept room for a tab bar
+  // that sits below the screen, not over it. The words and their buttons are
+  // centred together, with no such room.
+  it('the introduction, words and buttons together, is centred between the header and the tab bar', async () => {
     controller.set({ introSeen: false })
     const tree = await renderHome([])
-    const intro = StyleSheet.flatten(tree.getByTestId(testIdWithKey('AgentIntro')).props.style)
-    expect(intro).toMatchObject({ flex: 1, justifyContent: 'center', paddingBottom: 20 })
+    const intro = tree.getByTestId(testIdWithKey('AgentIntro'))
+    const style = StyleSheet.flatten(intro.props.style)
+    expect(style).toMatchObject({ flex: 1, justifyContent: 'center', padding: 20 })
+    expect(style.paddingBottom).toBeUndefined()
+    expect(within(intro).getByTestId(testIdWithKey('AgentIntroNext'))).toBeTruthy()
     controller.set({ introSeen: true })
+  })
+
+  // Alberto, 238: Join's "Done" after an admission comes back here with the
+  // new community's card picked out for a moment.
+  it('a community just joined is picked out on its card for a moment', async () => {
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { highlightCommunity: communityDid } })
+    const tree = await renderHome([persona, membership])
+    expect(tree.getByTestId(testIdWithKey('AgentCommunityHighlighted'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(HIGHLIGHT_MS)
+    })
+    expect(tree.queryByTestId(testIdWithKey('AgentCommunityHighlighted'))).toBeNull()
+    ;(useRoute as jest.Mock).mockReturnValue({ params: {} })
   })
 
   it('no approval waiting: no banner', async () => {
@@ -967,11 +984,32 @@ describe('Your agent — several agents', () => {
     expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
   })
 
-  it('one agent: one chip, and "Add another agent"', async () => {
+  // 238, iPhone: between leaving the current agent and the link screen,
+  // this page drew "Link your agent" for an instant. Nothing is drawn.
+  it('"Add" draws no "Link your agent" while it leaves for the link screen', async () => {
+    const before = vtaAgent.getState().link
+    jest.spyOn(vtaAgent, 'startAddingAgent').mockImplementation(async () => {
+      controller.set({ link: { kind: 'notLinked' } })
+    })
+    const tree = await renderHome()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentSwitcherAdd')))
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentHomeLeaving'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentHomeLink'))).toBeNull()
+    controller.set({ link: before })
+  })
+
+  // 237, iPhone: "Add another agent" ran off the screen's edge beside one
+  // agent's chip. The chip says "Add"; a screen reader hears it whole.
+  it('one agent: one chip, and "Add", named "Add another agent" for a screen reader', async () => {
     controller.set({ agents: [{ vtaDid: HOME, label: 'Home' }] })
     const tree = await renderHome()
     expect(tree.queryByTestId(testIdWithKey('AgentSwitcherRow_1'))).toBeNull()
-    expect(tree.getByTestId(testIdWithKey('AgentSwitcherAdd'))).toHaveTextContent(/VtaLink\.SwitcherAdd/)
+    const add = tree.getByTestId(testIdWithKey('AgentSwitcherAdd'))
+    expect(add).toHaveTextContent(/VtaLink\.ChipAdd/)
+    expect(add).not.toHaveTextContent(/VtaLink\.SwitcherAdd/)
+    expect(add.props.accessibilityLabel).toBe('VtaLink.SwitcherAdd')
   })
 
   it('two agents with no name: "Agent 1" and "Agent 2", never "your agent" twice', async () => {

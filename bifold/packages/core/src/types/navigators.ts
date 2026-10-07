@@ -149,7 +149,8 @@ export type MyAgentStackParams = {
   [Screens.VtiCommunity]: { communityDid: string }
   [Screens.VtiVetting]: undefined
   [Screens.VtaLink]: undefined
-  [Screens.VtaAgent]: undefined
+  // `highlightCommunity`: a community just joined, picked out on its card for a moment (238).
+  [Screens.VtaAgent]: { highlightCommunity?: string } | undefined
   [Screens.VtaRequests]: undefined
   [Screens.VtaAskMe]: undefined
   [Screens.VtaAgentSettings]: { unlink?: boolean } | undefined

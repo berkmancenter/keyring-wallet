@@ -51,6 +51,16 @@ import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 export { identityWord } from './communityName'
+
+/**
+ * The identity's word as said aloud: its DID's own last path name whole
+ * ("bunker-noodle"), or, for a DID with none, the last characters, "…"
+ * marking them as cut (Alberto, 238).
+ */
+const wholeWord = (did: string): string => {
+  const word = identityWord(did)
+  return word.startsWith('…') && did.endsWith(`:${word.slice(1)}`) ? word.slice(1) : word
+}
 import { useTakingLong } from './useTakingLong'
 import { useRoomAboveTabBar } from './aboveTabBar'
 
@@ -812,11 +822,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const tp = (key: string, values: Record<string, unknown> = {}) =>
     t(key, { community: name, ...values, interpolation: { escapeValue: false } }) as string
   if (standingShown && communityDid && standing) {
-    const withInvitation =
-      (standing.kind === 'sent' || standing.kind === 'pending') && standing.submission.withInvitation
+    const waiting = standing.kind === 'sent' || standing.kind === 'pending'
+    const withInvitation = waiting && standing.submission.withInvitation
     const standingCard = (
       <View style={styles.card} testID={testIdWithKey('JoinStanding')}>
-        <ThemedText testID={testIdWithKey('JoinStandingText')}>
+        {waiting ? (
+          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('JoinRequestSent')}>
+            {t('Join.RequestSentTitle')}
+          </ThemedText>
+        ) : null}
+        {standing.kind === 'member' ? (
+          <Icon
+            name="check-circle"
+            size={40}
+            color={ColorPalette.semantic.success}
+            testID={testIdWithKey('JoinMemberCheck')}
+          />
+        ) : null}
+        <ThemedText
+          variant={standing.kind === 'member' ? 'headingThree' : undefined}
+          accessibilityRole={standing.kind === 'member' ? 'header' : undefined}
+          testID={testIdWithKey('JoinStandingText')}
+        >
           {standing.kind === 'member'
             ? tp('Join.StandingMember')
             : standing.kind === 'removed'
@@ -836,6 +863,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                         ? tp('Join.StandingWithdrawn')
                         : tp('Join.StandingLeft')}
         </ThemedText>
+        {waiting ? (
+          <ThemedText testID={testIdWithKey('JoinWillShow')}>{t('Join.WillShowWhenAccepted')}</ThemedText>
+        ) : null}
         {withInvitation ? (
           <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingInvitation')}>
             {t('Join.StandingWithInvitation')}
@@ -861,15 +891,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         {(standing.kind === 'sent' || standing.kind === 'pending' || standing.kind === 'deferred') &&
         standing.submission.personaDid ? (
           <View testID={testIdWithKey('JoinStandingIdentity')}>
-            <ThemedText variant="bold" testID={testIdWithKey('JoinStandingIdentityName')}>
-              {t('Join.IdentityHere', {
-                name: identityWord(standing.submission.personaDid),
-                interpolation: { escapeValue: false },
-              })}
+            {/* "You asked to join as", then the word, a size up (Alberto, 238). */}
+            <ThemedText style={styles.muted}>{t('Join.AskedAs')}</ThemedText>
+            <ThemedText variant="headingFour" testID={testIdWithKey('JoinStandingIdentityName')}>
+              {wholeWord(standing.submission.personaDid)}
             </ThemedText>
             <DidDetails
               did={standing.submission.personaDid}
-              label={t('VtaLink.ShowIdentityCode')}
+              label={t('Join.SeeFullPersonaId')}
               hint={tp('VtaLink.ShowIdentityCodeHint')}
               copy
               testIdStem="JoinStandingIdentity"
@@ -886,16 +915,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         ) : null}
       </View>
     )
-    body = (
-      <>
-        {standingCard}
-        {body}
-      </>
-    )
+    // Waiting, or a member: what the community asks is behind them, and
+    // said again it pushed "Check again" below the fold (Alberto, 238).
+    body =
+      waiting || standing.kind === 'member' ? (
+        standingCard
+      ) : (
+        <>
+          {standingCard}
+          {body}
+        </>
+      )
     // "A different community" is always in reach, from the community a person
     // is already in too: a member's card used to offer only "Open" (IN-102).
     const different =
-      current === 'which' || !differentInBody ? (
+      standing.kind !== 'member' && (current === 'which' || !differentInBody) ? (
         <Button
           title={t('Join.Different')}
           buttonType={ButtonType.Secondary}
@@ -908,12 +942,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     actions = (
       <>
         {standing.kind === 'member' ? (
-          <Button
-            title={tp('Join.Open')}
-            buttonType={ButtonType.Primary}
-            onPress={() => go(Screens.VtiCommunity, { communityDid })}
-            testID={testIdWithKey('JoinOpenCommunity')}
-          />
+          // Done: back to Your agent, the new community's card picked out.
+          // View community takes Join's place, so back from it is Your agent,
+          // not this screen again (Alberto, 238).
+          <>
+            <Button
+              title={t('Global.Done')}
+              buttonType={ButtonType.Primary}
+              onPress={() => go(Screens.VtaAgent, { highlightCommunity: communityDid })}
+              testID={testIdWithKey('JoinDone')}
+            />
+            <Button
+              title={t('Join.ViewCommunity')}
+              buttonType={ButtonType.Secondary}
+              onPress={() =>
+                (navigation as unknown as { replace: (screen: string, params?: object) => void }).replace(
+                  Screens.VtiCommunity,
+                  { communityDid }
+                )
+              }
+              testID={testIdWithKey('JoinOpenCommunity')}
+            />
+          </>
         ) : standing.kind === 'sent' || standing.kind === 'pending' ? (
           <Button
             title={t('Join.CheckAgain')}
@@ -947,19 +997,31 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     )
   }
 
+  const whichCentred = step === 'which' && !standingShown
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {/* The buttons scroll with the page, after everything it says: held
           below it, above the tab bar, they left only a band for the page,
           and its last lines showed half-hidden behind them (239, iPhone). A
           short page still keeps them at the bottom. */}
+      {/* "Which community?" is a few lines and one button: kept together and
+          centred, not the words at the top and the button at the foot with
+          the screen between them (238, iPhone). The tab bar sits below the
+          screen, so the centre is the screen's own. */}
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 20 + roomAboveTabBar }]}
+        contentContainerStyle={[
+          styles.content,
+          whichCentred ? { justifyContent: 'center', paddingBottom: 20 } : { paddingBottom: 20 + roomAboveTabBar },
+        ]}
         testID={testIdWithKey('JoinScroll')}
       >
         {body}
         {actions ? (
-          <View style={styles.actions} testID={testIdWithKey('JoinActions')}>
+          <View
+            style={[styles.actions, whichCentred ? { marginTop: 8 } : undefined]}
+            testID={testIdWithKey('JoinActions')}
+          >
             {actions}
           </View>
         ) : null}

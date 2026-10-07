@@ -15,7 +15,7 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -42,6 +42,7 @@ import { CommunityCard } from './CommunityCard'
 import { useOtherAgentsWaiting } from './OtherAgentsRequests'
 import { AgentChips } from './AgentChips'
 import { AgentSettingsButton } from './AgentHeaderButtons'
+import { SectionRule } from './SectionRule'
 import { RequestsSection } from './RequestsSection'
 import type { CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
@@ -93,6 +94,8 @@ export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'membershi
  */
 export const VETTER_RECHECK_MS = 15_000
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
+/** How long a community just joined stays picked out on its card. */
+export const HIGHLIGHT_MS = 4000
 /** The page's padding, and the first card's: the agent chips run out past both to the screen's edges. */
 const PAGE_PADDING = 20
 const CARD_PADDING = 16
@@ -109,21 +112,6 @@ const lastHoldings = new Map<string, Holdings>()
 /** Forget every reading (unlink does; tests start clean with it). */
 export const forgetAgentHoldings = () => {
   lastHoldings.clear()
-}
-
-/**
- * A line between the page's sections, so it is clear where each one ends:
- * on the theme's background the cards' own edges do not show (Alberto, 239).
- * Each section opens with a heading of one style.
- */
-const SectionRule: React.FC = () => {
-  const { ColorPalette } = useTheme()
-  return (
-    <View
-      style={{ height: StyleSheet.hairlineWidth, backgroundColor: ColorPalette.grayscale.lightGrey }}
-      testID={testIdWithKey('AgentSectionRule')}
-    />
-  )
 }
 
 const VtaAgentHome: React.FC = () => {
@@ -187,6 +175,7 @@ const VtaAgentHome: React.FC = () => {
     },
     doorNext: { borderWidth: 2, borderColor: ColorPalette.brand.primary },
     link: { color: ColorPalette.brand.link, textDecorationLine: 'underline' },
+    highlight: { borderWidth: 2, borderColor: ColorPalette.brand.primary, borderRadius: 8, padding: 4 },
   })
 
   const load = useCallback(async () => {
@@ -249,6 +238,24 @@ const VtaAgentHome: React.FC = () => {
   // identity came back to "You have not joined a community yet" and no way
   // back into vetting, until a pull to refresh (Farm gate, 2026-09-23).
   const isFocused = useIsFocused()
+  // A community just joined, from Join's "Done": its card picked out for a
+  // few seconds, so the person sees where the membership went (Alberto, 238).
+  const highlightParam = (useRoute()?.params as { highlightCommunity?: string } | undefined)?.highlightCommunity
+  const [highlighted, setHighlighted] = useState<string | undefined>()
+  useEffect(() => {
+    if (!highlightParam) return
+    setHighlighted(highlightParam)
+    ;(navigation as unknown as { setParams?: (p: object) => void }).setParams?.({ highlightCommunity: undefined })
+    const timer = setTimeout(() => setHighlighted(undefined), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
+  }, [highlightParam, navigation])
+  // "Add" on the chips leaves the current agent, then opens the link screen:
+  // in between this page is unlinked, and for an instant it drew "Link your
+  // agent" (238, iPhone). Nothing is drawn while it goes; back here, as ever.
+  const [leavingToAdd, setLeavingToAdd] = useState(false)
+  useEffect(() => {
+    if (isFocused) setLeavingToAdd(false)
+  }, [isFocused])
   useEffect(() => {
     if (isFocused) void load()
   }, [load, isFocused])
@@ -309,6 +316,12 @@ const VtaAgentHome: React.FC = () => {
     )
   }
 
+  if (link.kind !== 'linked' && leavingToAdd) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey('AgentHomeLeaving')} />
+    )
+  }
+
   if (link.kind !== 'linked') {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
@@ -330,14 +343,12 @@ const VtaAgentHome: React.FC = () => {
   if (!state.introSeen) {
     const last = introPanel === INTRO_PANELS.length - 1
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-        {/* Centred between the header and the buttons: only the buttons keep
-            the room above the tab bar. With it here too, the text sat near the
-            header and the buttons halfway up the screen (239, iPhone). */}
-        <View
-          style={[styles.content, { flex: 1, justifyContent: 'center', paddingBottom: 20 }]}
-          testID={testIdWithKey('AgentIntro')}
-        >
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        {/* The words and their buttons, centred together between the header
+            and the tab bar. The tab bar sits below the screen, not over it,
+            so no room is kept for it here; with that room the panel sat
+            high (238, iPhone). */}
+        <View style={{ flex: 1, justifyContent: 'center', padding: 20, gap: 16 }} testID={testIdWithKey('AgentIntro')}>
           <ThemedText variant="headingTwo" accessibilityRole="header">
             {t(`VtaLink.${INTRO_PANELS[introPanel]}Title`)}
           </ThemedText>
@@ -345,27 +356,27 @@ const VtaAgentHome: React.FC = () => {
           <ThemedText style={styles.muted}>
             {t('VtaLink.IntroStep', { n: introPanel + 1, of: INTRO_PANELS.length })}
           </ThemedText>
-        </View>
-        <View style={[styles.content, { paddingTop: 0 }]}>
-          <Button
-            title={last ? t('VtaLink.IntroDone') : t('VtaLink.IntroNext')}
-            buttonType={ButtonType.Primary}
-            onPress={() => {
-              if (last && agent) {
-                setIntroPanel(0)
-                void vtaAgent.markIntroSeen(agent)
-              } else setIntroPanel(introPanel + 1)
-            }}
-            testID={testIdWithKey('AgentIntroNext')}
-          />
-          {!last ? (
+          <View style={{ gap: 16, marginTop: 8 }} testID={testIdWithKey('AgentIntroButtons')}>
             <Button
-              title={t('VtaLink.IntroSkip')}
-              buttonType={ButtonType.Tertiary}
-              onPress={() => agent && void vtaAgent.markIntroSeen(agent)}
-              testID={testIdWithKey('AgentIntroSkip')}
+              title={last ? t('VtaLink.IntroDone') : t('VtaLink.IntroNext')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                if (last && agent) {
+                  setIntroPanel(0)
+                  void vtaAgent.markIntroSeen(agent)
+                } else setIntroPanel(introPanel + 1)
+              }}
+              testID={testIdWithKey('AgentIntroNext')}
             />
-          ) : null}
+            {!last ? (
+              <Button
+                title={t('VtaLink.IntroSkip')}
+                buttonType={ButtonType.Tertiary}
+                onPress={() => agent && void vtaAgent.markIntroSeen(agent)}
+                testID={testIdWithKey('AgentIntroSkip')}
+              />
+            ) : null}
+          </View>
         </View>
       </SafeAreaView>
     )
@@ -525,6 +536,7 @@ const VtaAgentHome: React.FC = () => {
               if (agent) void vtaAgent.useAgent(agent, vtaDid)
             }}
             onAdd={() => {
+              setLeavingToAdd(true)
               void vtaAgent.startAddingAgent().then(() => go(Screens.VtaLink))
             }}
           />
@@ -773,24 +785,29 @@ const VtaAgentHome: React.FC = () => {
             // One card per community, with what the agent holds for it under
             // it and at most one next step (IN-20c).
             communitiesHeld(holdings).map((communityDid) => (
-              <CommunityCard
+              <View
                 key={communityDid}
-                agent={agent}
-                communityDid={communityDid}
-                persona={holdings.personas.find((p) => p.communityDid === communityDid)}
-                membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
-                invited={holdings.invited.includes(communityDid)}
-                vetter={holdings.vetterFor.includes(communityDid)}
-                deskShownAbove={holdings.vetterFor.includes(communityDid)}
-                linkedAt={link.linkedAt}
-                onOpen={goToCommunity}
-                onNextStep={onCardStep}
-                onPrimary={(action, did) => {
-                  // The vetting and invitation screens work on the chosen community.
-                  communityTarget.choose(did)
-                  go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
-                }}
-              />
+                style={communityDid === highlighted ? styles.highlight : undefined}
+                testID={communityDid === highlighted ? testIdWithKey('AgentCommunityHighlighted') : undefined}
+              >
+                <CommunityCard
+                  agent={agent}
+                  communityDid={communityDid}
+                  persona={holdings.personas.find((p) => p.communityDid === communityDid)}
+                  membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
+                  invited={holdings.invited.includes(communityDid)}
+                  vetter={holdings.vetterFor.includes(communityDid)}
+                  deskShownAbove={holdings.vetterFor.includes(communityDid)}
+                  linkedAt={link.linkedAt}
+                  onOpen={goToCommunity}
+                  onNextStep={onCardStep}
+                  onPrimary={(action, did) => {
+                    // The vetting and invitation screens work on the chosen community.
+                    communityTarget.choose(did)
+                    go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
+                  }}
+                />
+              </View>
             ))
           )}
           {holdingsError ? (
