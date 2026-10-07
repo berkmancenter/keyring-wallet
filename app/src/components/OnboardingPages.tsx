@@ -9,9 +9,14 @@ import PassIcon from '../assets/img/onboarding-pass.svg'
 import NetworkIcon from '../assets/img/onboarding-network.svg'
 import AccessControlIcon from '../assets/img/onboarding-access-control.svg'
 
-const KEYRING_PROJECT_URL = 'https://asml.cyber.harvard.edu/advanced-digital-identity/'
+const KEYRING_PROJECT_URL = 'https://www.appliedtechnologylab.org/projects#keyring'
 
 const ICON_SIZE = 88
+/**
+ * The agent slide's shield, a little larger in the same circle (Alberto,
+ * 10-07). 38 points still clear it from the circle's edge.
+ */
+const AGENT_ICON_SIZE = 104
 const CIRCLE_SIZE = 180
 const CIRCLE_COLOR = 'rgba(163, 73, 164, 0.18)'
 
@@ -125,7 +130,10 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
       strokeProps(536, fill)
     ),
     // After trusted connections: the agent that acts for the person (Alberto, 10-05).
-    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon),
+    CreatePage('Onboarding.AgentHeading', 'Onboarding.AgentParagraph', theme, AgentIcon, {
+      width: AGENT_ICON_SIZE,
+      height: AGENT_ICON_SIZE,
+    }),
     CreatePage(
       'Onboarding.SecurityHeading',
       'Onboarding.SecurityParagraph',
