@@ -543,7 +543,8 @@ try {
     let toast = null;
     for (const until = Date.now() + 30000; Date.now() < until && !refused; await sleep(1000)) {
       toast = toast ?? (await txt(d, "ToastTitle"));
-      const st = await txt(d, `AgentCommunityStatus_${C_KEY}`);
+      // The status as the hold check reads it (rowText: the line, or its children on Android): txt() read null on 237.
+      const st = (await rowText(d, `AgentCommunityStatus_${C_KEY}`)) || (await txt(d, `AgentCommunityStatus_${C_KEY}`));
       if (/turned down/i.test(st ?? "") || /turned down/i.test(toast ?? "")) refused = st ?? toast;
     }
     await shot(d, "agents-r5-refusal");
