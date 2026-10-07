@@ -415,9 +415,16 @@ try {
     }
     // The card sits on the new agent's home and can come a moment after it, or below the fold (238: the loop broke
     // on AgentHome before it showed, Keep was never tapped, and the new agent stayed current): look for it.
-    for (const until = Date.now() + 20000; Date.now() < until; ) {
+    // 238: the new agent's introduction comes up to a few minutes after Done, and the card is on the home behind it
+    // (1007-1437: the card search ended at 14:44:48, the intro came at 14:44:51). Wait through the intro.
+    for (const until = Date.now() + 90000; Date.now() < until; ) {
+      if (await existsTestId(d, "AgentIntroSkip", 500)) {
+        log("R1: the new agent's introduction is up: Skip");
+        await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+        await sleep(1500);
+        continue;
+      }
       if (await scrollToTestId(d, "AgentAddedKeep", 2, { from: 0.6 }).catch(() => undefined)) break;
-      if (await existsTestId(d, "AgentIntroSkip", 500)) await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
       await sleep(1000);
     }
     const cardEl = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentAddedCard")`);
