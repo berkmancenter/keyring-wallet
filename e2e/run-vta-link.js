@@ -139,10 +139,21 @@ async function introCentre(driver) {
     const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
     const intro = await box(byTestId(driver, "AgentIntro"));
     const buttons = await box(byTestId(driver, "AgentIntroButtons"));
+    // The topmost element inside AgentIntro's rectangle, from the page source (an element's own child query found
+    // nothing on iOS, 238 gate): iOS gives x/y/width/height in points, Android bounds in pixels, as getLocation does.
     let top = Infinity;
-    for (const c of await byTestId(driver, "AgentIntro").$$(".//*")) {
-      const r = await box(c).catch(() => undefined);
-      if (r && r.height > 0 && r.y >= intro.y) top = Math.min(top, r.y);
+    for (const [tag] of (await driver.getPageSource()).matchAll(/<[A-Za-z.]+ [^>]*>/g)) {
+      if (/AgentIntro"/.test(tag)) continue;
+      let r;
+      const b = tag.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (b) r = { x: +b[1], y: +b[2], width: b[3] - b[1], height: b[4] - b[2] };
+      else {
+        const n = (k) => Number((tag.match(new RegExp(` ${k}="(-?\\d+)"`)) || [])[1]);
+        r = { x: n("x"), y: n("y"), width: n("width"), height: n("height") };
+      }
+      if (!(r.height > 0) || Number.isNaN(r.y)) continue;
+      const inside = r.x >= intro.x - 1 && r.y >= intro.y - 1 && r.x + r.width <= intro.x + intro.width + 1 && r.y + r.height <= intro.y + intro.height + 1;
+      if (inside && !(r.y <= intro.y + 1 && r.height >= intro.height - 2)) top = Math.min(top, r.y);
     }
     const above = Math.round(top - intro.y);
     const below = Math.round(intro.y + intro.height - (buttons.y + buttons.height));

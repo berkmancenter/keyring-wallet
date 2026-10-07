@@ -31,7 +31,7 @@ xcrun simctl terminate $SIM $BID 2>/dev/null
 (cd $E2E; perl -e 'alarm 300; exec @ARGV' node run-welcome.mjs > $LEG_DIR/ios-welcome.out 2>&1; grep -E '^(ROW|LEG)' $LEG_DIR/ios-welcome.out)
 cd $E2E; t=$(date +%s); E2E_KEEP_APP=1 perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > $LEG_DIR/ios-link.out 2>&1; rc=$?
 echo "ROW ios-onboarding-home $([ $rc -eq 0 ] && echo PASS || echo FAIL) — link run rc=$rc $(( $(date +%s)-t ))s $(grep -E '✅|❌' $LEG_DIR/ios-link.out | tail -1 | cut -c1-110); push steps in the transcript: $(grep -c 'PushNotificationContinue' $LEG_DIR/ios-link.out)"
-ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/ios-link.out); [ -z "$ic" ] || echo "ROW agent-intro-centred-ios $(case $ic in "INTRO-CENTRE ok"*) echo PASS ;; *) echo FAIL ;; esac) — above/below: ${ic#INTRO-CENTRE } (#340)"
+ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/ios-link.out); if [ -n "$ic" ]; then st=FAIL; [[ $ic == "INTRO-CENTRE ok"* ]] && st=PASS; echo "ROW agent-intro-centred-ios $st — above/below: ${ic#INTRO-CENTRE } (#340)"; fi
 [ $rc -eq 0 ] && { cd $E2E; EXPECT=${PROBE_EXPECT:-off} perl -e 'alarm 600; exec @ARGV' node run-push-off-probe.mjs > $LEG_DIR/ios-push-off.out 2>&1; prc=$?; echo "ROW ios-push-${PROBE_EXPECT:-off} $([ $prc -eq 0 ] && echo PASS || echo FAIL) — $(grep -E "^PUSH_O" $LEG_DIR/ios-push-off.out | cut -c1-140)"; } )
 # Your agent's header, Join menu and chips (#329/#330/#331), measured on the linked phone.
 (cd $E2E && PLATFORM=ios UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 \
