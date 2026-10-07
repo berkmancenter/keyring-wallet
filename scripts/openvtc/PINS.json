@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-06",
+  "updated": "2026-10-07",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "afcf2470",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the local lab now runs (vta-service 0.45.1; #1835 and #1840 make every community call a signed Trust Task). From now on the lab follows upstream main, and the Farm was reset today. card-verify moves with it: trust-tasks-rs 0.24.6 and affinidi-data-integrity 0.7.13, per afcf2470's Cargo.lock.",
+      "sha": "822ff78a",
+      "commitDate": "2026-10-06",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag vta-service-v0.55.0, which the Farm runs (vtc-service 0.11.58). Carries #1978/#1979 (non-collecting peers: per-peer quota, receive-leg reconnect). Next step: vta-service-v0.56.0 (39c801ed), additive only (keys/sign-sshsig/0.1).",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -41,20 +41,20 @@
     },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
-      "sha": "da432130",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's mediator now runs: #905 stops a TSP payload sent right after a relationship invite from being dropped (the O10/VTI-52 lost-reply shape).",
+      "sha": "c0a69f1e",
+      "commitDate": "2026-10-03",
+      "pinnedOn": "2026-10-07",
+      "why": "The release commit for affinidi-messaging-mediator 0.37.0, affinidi-messaging-sdk 0.33.0 and affinidi-tdk 0.23.0: the versions VTI vta-service-v0.55.0's Cargo.lock builds against.",
       "watch": [
         "crates/messaging/affinidi-messaging-mediator/"
       ]
     },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
-      "sha": "e49816c",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's TUI (interop harness) now runs: it takes vta-service 0.45 (#395) and adds the PCS hidden-vetting client (#396).",
+      "sha": "8991f9ca",
+      "commitDate": "2026-10-04",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag v0.4.0, the TUI build the gate uses (vta-sdk 0.62.0, messaging-sdk 0.32.1). Does not contain the VTI-67 may_claim fix (1ba289e4, #456), which is on main only.",
       "watch": [
         "openvtc/src/ui/pages/",
         "openvtc/src/state_handler/vetting_actions.rs",
