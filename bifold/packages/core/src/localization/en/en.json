@@ -1411,7 +1411,7 @@
     "FailedExpired": "The code expired. Ask for a new one and scan it again.",
     "FailedRefused": "The admin did not grant access to this phone.",
     "FailedUnreachable": "The agent's page could not be reached. Check your connection and scan again.",
-    "FailedCommunityAgent": "This is a community's agent. Link Keyring to your personal agent instead.",
+    "FailedCommunityAgent": "This code is for a community's agent. To use Keyring, create a personal agent with your host and scan its code.",
     "AlreadyOnPhone": "This phone already has that agent.",
     "SwitchToIt": "Switch to it",
     "FailedAlreadyLinked": "This phone already has that agent. Switch to it on Your agent.",

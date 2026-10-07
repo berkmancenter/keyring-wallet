@@ -1350,7 +1350,7 @@
     "FailedExpired": "Le code a expiré. Demandez-en un nouveau et scannez-le à nouveau.",
     "FailedRefused": "L'administrateur n'a pas accordé l'accès à ce téléphone.",
     "FailedUnreachable": "La page de l'agent est injoignable. Vérifiez votre connexion et scannez à nouveau.",
-    "FailedCommunityAgent": "C’est l’agent d’une communauté. Liez plutôt Keyring à votre agent personnel.",
+    "FailedCommunityAgent": "Ce code est celui de l’agent d’une communauté. Pour utiliser Keyring, créez un agent personnel chez votre hébergeur et scannez son code.",
     "AlreadyOnPhone": "Ce téléphone a déjà cet agent.",
     "SwitchToIt": "Y passer",
     "FailedAlreadyLinked": "Ce téléphone a déjà cet agent. Passez-y depuis Votre agent.",
