@@ -175,6 +175,23 @@ export type VtaLinkEvent =
 
 export const initialLinkState: VtaLinkState = { kind: 'notLinked' }
 
+/**
+ * The agent a failed link can be tried again for, with the key the phone
+ * still holds (IN-135): an attempt that broke off (no answer, a dropped
+ * connection), never a refusal — the agent's, the swap's, or Keyring's own
+ * (a community's agent, an agent already on the phone) — and never a host
+ * code that is dead. The Try again button and the automatic pick-up both ask
+ * this, so they cannot drift apart.
+ */
+export function resumableFailure(failure: VtaLinkFailure | undefined): string | undefined {
+  if (!failure?.vtaDid) return undefined
+  if (failure.reason !== 'failed' && failure.reason !== 'unreachable') return undefined
+  if (failure.swap && failure.swap !== 'noAnswer') return undefined
+  if (['expired', 'timedOut', 'notAccepted', 'needsScreenLock'].includes(String(failure.hostReason ?? '')))
+    return undefined
+  return failure.vtaDid
+}
+
 export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkState {
   switch (event.type) {
     case 'restored':

@@ -146,4 +146,50 @@ describe('a link left part-way picks back up with the same key', () => {
     ;(vta as unknown as Setter).set({ link: { kind: 'notLinked' }, addingAgent: true })
     expect(await vta.resumeLink({} as never)).toBe(false)
   })
+
+  // A refusal is not retried behind the person's back: every foreground would
+  // sign in again and be refused again (#355 review).
+  type Dispatcher = { dispatch(event: unknown): void; agent: unknown }
+  const failWhileShowingKey = (vta: VtaAgentController, failure: Record<string, unknown>) => {
+    ;(vta as unknown as Setter).set({
+      link: { kind: 'showingKey', vtaDid: VTA, label: 'home', did: 'did:key:z6MkEarlier', checking: true },
+    })
+    ;(vta as unknown as Dispatcher).agent = {}
+    ;(vta as unknown as Dispatcher).dispatch({ type: 'failed', failure })
+  }
+
+  it.each([
+    ['a community agent', { reason: 'communityAgent' }],
+    ['a swap the agent refused', { reason: 'failed', swap: 'refused' }],
+    ['a swap held for approval', { reason: 'failed', swap: 'held' }],
+    ['an expired host code', { reason: 'failed', hostReason: 'expired' }],
+  ])('after %s, a foreground does not pick the link up, and the key is dropped', async (_, failure) => {
+    const { vta, forgetManager } = controller([temporary(5 * 60 * 1000)])
+    failWhileShowingKey(vta, failure)
+    await vta.ensureOnline({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link.kind).toBe('notLinked')
+    expect(mockClient.connect).not.toHaveBeenCalled()
+    expect(forgetManager).toHaveBeenCalledWith(VTA)
+  })
+
+  it('after a check that broke off, a foreground picks the link up with the same key', async () => {
+    const { vta, forgetManager } = controller([temporary(5 * 60 * 1000)])
+    failWhileShowingKey(vta, { reason: 'failed', detail: 'socket closed' })
+    await vta.ensureOnline({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(forgetManager).not.toHaveBeenCalled()
+    expect(vta.getState().link.kind).toBe('linked')
+    expect(mockMint).not.toHaveBeenCalled()
+  })
+
+  it('a cancel during the key swap keeps the record: a rotate in flight would write it back', async () => {
+    const { vta, forgetManager } = controller([temporary(5 * 60 * 1000)])
+    ;(vta as unknown as Setter).set({ link: { kind: 'linking', vtaDid: VTA, label: 'home' } })
+    ;(vta as unknown as Dispatcher).agent = {}
+    vta.cancelLink()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(forgetManager).not.toHaveBeenCalled()
+  })
 })

@@ -78,6 +78,7 @@ import {
   initialLinkState,
   reconnectDelayMs,
   reduceLink,
+  resumableFailure,
   type VtaLinkEvent,
   type VtaLinkFailure,
   type VtaLinkState,
@@ -645,6 +646,11 @@ export class VtaAgentController {
     // The activity list records what changed for the person, not every retry.
     const wasOnline = previous.kind === 'linked' && previous.connection.kind === 'online'
     const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
+    // A refusal, or a dead host code: its temporary key is never tried again,
+    // so it is dropped, as on a cancel, and no restart picks it back up (IN-135).
+    if (event.type === 'failed' && next.kind === 'notLinked' && next.lastError?.vtaDid && this.agent) {
+      if (!resumableFailure(next.lastError)) void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
+    }
     if (event.type === 'linked') this.note('linked')
     else if (event.type === 'accessRevoked') this.note('revoked')
     else if (wasOnline && !isOnline) this.note('wentOffline')
@@ -1134,7 +1140,9 @@ export class VtaAgentController {
     this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
     // Given up on purpose: its temporary key is not offered again (IN-135).
-    if (this.agent && 'vtaDid' in cancelling && cancelling.kind !== 'linked') {
+    // Not from `linking`: the key swap may be under way, and a rotate already
+    // in flight would write the record back with its next key.
+    if (this.agent && 'vtaDid' in cancelling && cancelling.kind !== 'linked' && cancelling.kind !== 'linking') {
       void this.forgetTemporaryKey(this.agent, cancelling.vtaDid)
     }
     // Adding another agent, given up: back to the one before.
@@ -1734,15 +1742,19 @@ export class VtaAgentController {
 
   /**
    * Pick a link left part-way back up (IN-135): a sleep, Keyring's lock or a
-   * restart dropped it, or it failed for a reason that was not a refusal.
-   * The same temporary key is shown again — the agent may already hold it —
-   * and checked once; the person can check again from there. Nothing happens
-   * while something is linked or under way, or while another agent is being
-   * added. Whether there was one to pick up.
+   * restart dropped it, or it failed for a reason that was not a refusal
+   * (`resumableFailure`). The same temporary key is shown again — the agent
+   * may already hold it — and checked once; the person can check again from
+   * there. Nothing happens while something is linked or under way, or while
+   * another agent is being added. Without `vtaDid` (the app's own pick-up, at
+   * start and back in the foreground) a refused attempt is not retried: only
+   * the person's Try again names an agent. Whether there was one to pick up.
    */
   async resumeLink(agent: Agent, vtaDid?: string): Promise<boolean> {
     if (this.state.link.kind !== 'notLinked' || this.resuming) return false
     if (!vtaDid && this.state.addingAgent) return false
+    const failed = this.state.link.lastError
+    if (!vtaDid && failed && !resumableFailure(failed)) return false
     this.resuming = true
     try {
       const pending = await this.pendingLinkKey(agent, vtaDid)

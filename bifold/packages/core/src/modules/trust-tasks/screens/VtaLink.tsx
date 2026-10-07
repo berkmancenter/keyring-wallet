@@ -38,7 +38,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
-import type { VtaLinkFailure } from '../module/vtaLinkMachine'
+import { resumableFailure, type VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
 import { DeviceNameField } from './DeviceNamePrompt'
@@ -205,13 +205,7 @@ const VtaLink: React.FC = () => {
 
   // A failed attempt that can be tried again with the key this phone still
   // holds for its agent: not a refusal, and not a dead host code (IN-135).
-  const failed = link.kind === 'notLinked' ? link.lastError : undefined
-  const retryable =
-    failed?.vtaDid &&
-    (failed.reason === 'failed' || failed.reason === 'unreachable') &&
-    !['expired', 'timedOut', 'notAccepted', 'needsScreenLock'].includes(String(failed.hostReason ?? ''))
-      ? failed.vtaDid
-      : undefined
+  const retryable = resumableFailure(link.kind === 'notLinked' ? link.lastError : undefined)
   const [retryKeyFor, setRetryKeyFor] = useState<string | undefined>()
   useEffect(() => {
     setRetryKeyFor(undefined)
