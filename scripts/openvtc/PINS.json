@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-06",
+  "updated": "2026-10-07",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "afcf2470",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the local lab now runs (vta-service 0.45.1; #1835 and #1840 make every community call a signed Trust Task). From now on the lab follows upstream main, and the Farm was reset today. card-verify moves with it: trust-tasks-rs 0.24.6 and affinidi-data-integrity 0.7.13, per afcf2470's Cargo.lock.",
+      "sha": "822ff78a",
+      "commitDate": "2026-10-06",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag vta-service-v0.55.0, which the Farm runs (vtc-service 0.11.58). Carries #1978/#1979 (non-collecting peers: per-peer quota, receive-leg reconnect). Next step: vta-service-v0.56.0 (39c801ed), additive only (keys/sign-sshsig/0.1).",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
