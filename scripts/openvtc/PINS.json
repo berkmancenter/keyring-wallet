@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "822ff78a",
-      "commitDate": "2026-10-06",
+      "sha": "afcf2470",
+      "commitDate": "2026-09-29",
       "pinnedOn": "2026-10-07",
-      "why": "Tag vta-service-v0.55.0, which the Farm runs (vtc-service 0.11.58). Carries #1978/#1979 (non-collecting peers: per-peer quota, receive-leg reconnect). Next step: vta-service-v0.56.0 (39c801ed), additive only (keys/sign-sshsig/0.1).",
+      "why": "Back from vta-service-v0.55.0 (822ff78a), where vta-sdk accepts only the DTG v1 shapes (vetted/1 StatementCredential, role VAC): card-verify does not build there, and bifold's vti-conformance main-pin step would refuse Keyring's legacy-shape statement. Stays here until card-verify and that step are ported to v1; the vetted/1 statement is judged at 0.47 (verifiable-trust-infrastructure-v047).",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
