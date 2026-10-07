@@ -415,9 +415,11 @@ try {
     }
     // The card sits on the new agent's home and can come a moment after it, or below the fold (238: the loop broke
     // on AgentHome before it showed, Keep was never tapped, and the new agent stayed current): look for it.
-    // 238: the new agent's introduction comes up to a few minutes after Done, and the card is on the home behind it
-    // (1007-1437: the card search ended at 14:44:48, the intro came at 14:44:51). Wait through the intro.
-    for (const until = Date.now() + 90000; Date.now() < until; ) {
+    // 238: after Add's Done the app is not on Your agent; the new agent's introduction, and the "added" card behind
+    // it, render when Your agent is opened (1007-1509: nothing for 3.5 min until the My Agent tab was tapped). Open it
+    // (myAgent skips the introduction), then look for Keep.
+    await myAgent(d);
+    for (const until = Date.now() + 30000; Date.now() < until; ) {
       if (await existsTestId(d, "AgentIntroSkip", 500)) {
         log("R1: the new agent's introduction is up: Skip");
         await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
