@@ -52,6 +52,9 @@ c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" 
 # build. Prints "<push-off run id> <push-on run id or ->".
 build_runs() {
   local sha=$1 off on
+  # A commit whose builds came another way (main's push build cancelled; the push-off build dispatched on a cut
+  # branch, 238): $GATE_HOME/build-override-<sha8> holds "<push-off run> <push-on run>".
+  if [ -f "$GATE_HOME/build-override-${sha:0:8}" ]; then cat "$GATE_HOME/build-override-${sha:0:8}"; return; fi
   off=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event push --json databaseId,conclusion \
     --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')
   on=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event workflow_dispatch --json databaseId,conclusion \
