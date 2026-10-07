@@ -382,6 +382,23 @@ const VtaCreateAgent: React.FC = () => {
   // inside the window. checkManualGrant skips while one is already in flight.
   const showingCode = link.kind === 'showingKey'
   const waiting = showingCode && pollUntil !== undefined && !pollExpired
+  // The window counts time in Keyring, not time asleep (IN-135): leaving the
+  // app keeps what was left of it, and coming back starts that again. A
+  // phone that slept through a slow setup came back to "Check again" with
+  // the window spent.
+  const pollLeft = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (pollUntil === undefined || pollExpired) return
+    if (!appActive) {
+      if (pollLeft.current === undefined) pollLeft.current = Math.max(0, pollUntil - Date.now())
+      return
+    }
+    if (pollLeft.current !== undefined) {
+      const left = pollLeft.current
+      pollLeft.current = undefined
+      setPollUntil(Date.now() + left)
+    }
+  }, [appActive, pollUntil, pollExpired])
   useEffect(() => {
     if (!waiting || !focused || !appActive || !agent || pollUntil === undefined) return
     const timer = setInterval(() => {

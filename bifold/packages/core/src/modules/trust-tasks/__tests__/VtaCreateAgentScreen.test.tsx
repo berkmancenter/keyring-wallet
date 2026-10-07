@@ -9,7 +9,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { TFunction } from 'i18next'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
-import { Share } from 'react-native'
+import { AppState, Share } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import QRCode from 'react-native-qrcode-svg'
 
@@ -626,6 +626,40 @@ describe('the phone waits for the agent to admit the code, on its own', () => {
       controller.set({ link: { kind: 'linking', step: 'rotating', vtaDid: VTA, label: 'a' } })
     })
     expect(tree.getByTestId(id('AgentCreateProgress'))).toBeTruthy()
+  })
+
+  // IN-135: the window counts time in Keyring, not time asleep. A phone that
+  // slept through a slow setup comes back still waiting, with what was left.
+  test('time with the app in the background does not count against the window', async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    const changes: ((next: string) => void)[] = []
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, handler: (next: string) => void) => {
+      changes.push(handler)
+      return { remove: () => undefined }
+    }) as never)
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(4 * 60 * 1000)
+    })
+    await act(async () => changes.forEach((c) => c('background')))
+    await act(async () => {
+      jest.advanceTimersByTime(30 * 60 * 1000)
+    })
+    await act(async () => changes.forEach((c) => c('active')))
+    await act(async () => {
+      jest.advanceTimersByTime(4 * 60 * 1000)
+    })
+    // Eight minutes in the app: still waiting.
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(3 * 60 * 1000)
+    })
+    expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
   })
 
   test('after 10 minutes it stops and offers Check again, which waits another window', async () => {
