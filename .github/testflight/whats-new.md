@@ -18,24 +18,21 @@
 • Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
 • Update over your current version; there's no need to reinstall.
 What's new
-• Fixed: with two agents, an identity on the agent you're not using signs in again after the app restarts (no more "not found in backend 'ephemeral'").
-• Fixed: tapping Add on the agent chips and going back returns to your agent instead of the unlinked screen.
-• A simpler unlinked screen: "Scan your agent's code", or "No code? Use your agent's address".
-• Join uses the agent you're on, and shows "Your persona ID". Buttons scroll with the page, so nothing hides behind them.
-• "Choose how to join" on a community's screen; if vetting finishes over a plain request, you can replace it.
-• Your agent: sections in a clear order with dividers; the header icons and agent chips fit the screen; "Join another community" replaces the header menu.
-• When linking fails, Keyring says whether your agent held it for approval or refused it.
-• Request cards describe tasks in plain words ("look at its contexts"), with the technical name behind a toggle.
+• Linking by address is one path. A phone without a screen lock links as a device, and every failure says what went wrong.
+• Join: "How to join" shows only the ways you can use. After you ask, "Request sent" shows your persona ID ("See full persona ID"), and once an admin accepts, a success screen takes you back to Your agent with the community highlighted.
+• If a join request never reached the community, Keyring says so and offers "Send it again".
+• If your agent is busy, Keyring says "Your agent is busy right now. Wait a minute and try again".
+• Your agent: the introduction is centred, Agent settings has section dividers, no flash when you tap Add, the Add chip fits, and "Which community?" is centred.
+• Onboarding: the agent card says "Not that kind of agent", with a larger icon, and the welcome link points to the Applied Technology Lab page.
 
 Please test
-• With two agents, restart the app and use a community from the agent you're not on.
-• Tap Add on the agent chips, then go back.
-• Join a community and check "Your persona ID".
+• Link by your agent's address, with and without a screen lock.
+• Join a community and watch "Request sent", then the success screen when you're accepted.
+• With two agents, tap Add, then choose "Keep using" your first agent.
 
 Known issues
-• Beside a single agent, the "Add" chip can run past the right edge (the strip scrolls). Fixed next.
-• Linking by address needs a screen lock on the phone. A fallback is next.
-• If your agent is busy, some errors say "doesn't know why". Clearer wording is next.
+• After adding a second agent, the "Keep using" choice shows only once you open Your agent. Fixed next.
+• If the phone sleeps while your agent host is still setting up, linking may not recover; make a new code. Fixed next.
 • Keyring can't take part in hidden (zero-knowledge) vetting yet; it joins the ordinary way.
 • Community admins don't get push notifications for join requests yet.
 • Update over your current version; your memberships carry over.
