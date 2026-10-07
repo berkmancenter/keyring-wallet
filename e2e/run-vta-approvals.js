@@ -183,7 +183,11 @@ try {
   const added = listAcl({ slug: SLUG, pnmHome: link.pnmHome }).filter((e) => !before.has(e.subject));
   const chain = ownedBy(added, link.tempDid).filter((e) => e.subject !== link.tempDid);
   const duringLink = added.filter((e) => String(e.createdAt) <= link.at);
-  if (chain.length) approver = chain.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1).subject;
+  // The link run names this phone's rotated key (heirs in last-link.json): take it when it is on the agent. Side by
+  // side another leg links a phone to the same agent, and then "the one key added during the link" is two (237 gate).
+  const heir = (link.heirs ?? []).filter((h) => added.some((e) => e.subject === h)).at(-1);
+  if (heir) approver = heir;
+  else if (chain.length) approver = chain.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1).subject;
   else if (duringLink.length === 1) approver = duringLink[0].subject;
   else if (duringLink.length > 1) throw new Error(`${duringLink.length} keys were added to "${SLUG}" during the link: cannot tell which is this phone's`);
   if (!approver) throw new Error(`no key of this phone on "${SLUG}": link it first (run-vta-link.js with E2E_KEEP_APP=1)`);
