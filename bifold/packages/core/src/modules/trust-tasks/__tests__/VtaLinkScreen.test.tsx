@@ -721,3 +721,62 @@ describe('leaving while adding another agent', () => {
     expect(leaveWith({ addingAgent: false, link: { kind: 'notLinked' } })).not.toHaveBeenCalled()
   })
 })
+
+// IN-135: a link left part-way picks back up with the same key; a failure
+// that was not a refusal offers to try again with it.
+describe('picking a link back up', () => {
+  const render_ = () =>
+    render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+  beforeEach(() => (useAgent as jest.Mock).mockReturnValue({ agent: {} }))
+  afterEach(() => {
+    ;(vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked' } })
+    jest.restoreAllMocks()
+  })
+
+  test('a key shown again says the agent may already have added this phone', () => {
+    ;(vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'showingKey',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'alice',
+        did: 'did:key:z6Mk',
+        checking: false,
+        resumed: true,
+      },
+    })
+    expect(render_().getByTestId(testIdWithKey('VtaLinkResumed'))).toHaveTextContent('VtaLink.ResumedHint')
+  })
+
+  test('a failure that was not a refusal, with the key still held: Try again uses it', async () => {
+    jest.spyOn(vtaAgent, 'pendingLinkKey').mockResolvedValue({ vtaDid: 'did:webvh:example:vta', did: 'did:key:z6Mk' })
+    const resume = jest.spyOn(vtaAgent, 'resumeLink').mockResolvedValue(true)
+    ;(vtaAgent as unknown as Setter).set({
+      link: { kind: 'notLinked', lastError: { reason: 'failed', vtaDid: 'did:webvh:example:vta', label: 'alice' } },
+    })
+    const tree = render_()
+    await act(async () => undefined)
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkTryAgain')))
+    expect(resume).toHaveBeenCalledWith(expect.anything(), 'did:webvh:example:vta')
+  })
+
+  test('a dead host code, or a refusal, offers no Try again: it says to make a new code', async () => {
+    const pending = jest
+      .spyOn(vtaAgent, 'pendingLinkKey')
+      .mockResolvedValue({ vtaDid: 'did:webvh:example:vta', did: 'did:key:z6Mk' })
+    for (const lastError of [
+      { reason: 'expired', hostReason: 'expired', vtaDid: 'did:webvh:example:vta', label: 'alice' },
+      { reason: 'communityAgent', vtaDid: 'did:webvh:example:vta', label: 'alice' },
+    ]) {
+      ;(vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked', lastError } })
+      const tree = render_()
+      await act(async () => undefined)
+      expect(tree.queryByTestId(testIdWithKey('VtaLinkTryAgain'))).toBeNull()
+      tree.unmount()
+    }
+    expect(pending).not.toHaveBeenCalled()
+  })
+})

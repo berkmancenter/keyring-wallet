@@ -83,6 +83,11 @@ export type VtaLinkState =
       noAnswer?: boolean
       /** `scan`: the agent's address was scanned or pasted — usually another phone's "Add another phone" code (#30). */
       via?: 'scan'
+      /**
+       * Shown again for a link the phone left part-way (a sleep, a lock, a
+       * restart): the same key, which the agent may already hold (IN-135).
+       */
+      resumed?: boolean
     } & VtaIdentityOfAgent)
   | ({ kind: 'linking'; step: 'connecting' | 'rotating' } & VtaIdentityOfAgent)
   | ({ kind: 'linked'; linkedAt: string; connection: VtaConnection } & VtaIdentityOfAgent)
@@ -130,6 +135,9 @@ export interface VtaLinkFailure {
   hostReason?: HostLinkFailure
   /** The swap onto the long-term key did not happen, and the agent confirmed it: why (VtaClient KeySwapNotDone). */
   swap?: 'held' | 'refused' | 'noAnswer'
+  /** The agent the attempt was for, when the phone knew it. */
+  vtaDid?: string
+  label?: string
 }
 
 export type VtaLinkEvent =
@@ -160,7 +168,7 @@ export type VtaLinkEvent =
   | { type: 'relink' }
   /** The person unlinked this phone from its agent: from any state, back to no agent. */
   | { type: 'unlinked' }
-  | ({ type: 'keyShown'; did: string; via?: 'scan' } & VtaIdentityOfAgent)
+  | ({ type: 'keyShown'; did: string; via?: 'scan'; resumed?: boolean } & VtaIdentityOfAgent)
   | { type: 'grantCheckStarted' }
   | { type: 'grantNotYet' }
   | { type: 'grantNoAnswer' }
@@ -215,6 +223,7 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
             did: event.did,
             checking: false,
             ...(event.via ? { via: event.via } : {}),
+            ...(event.resumed ? { resumed: true } : {}),
           }
         : state
 
@@ -287,7 +296,13 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
         state.kind === 'awaitingGrant' ||
         state.kind === 'showingKey' ||
         state.kind === 'linking'
-        ? { kind: 'notLinked', lastError: event.failure }
+        ? {
+            kind: 'notLinked',
+            // Which agent the attempt was for, so the failure can offer to
+            // try again with the same key (IN-135).
+            lastError:
+              'vtaDid' in state ? { vtaDid: state.vtaDid, label: state.label, ...event.failure } : event.failure,
+          }
         : state
 
     case 'sessionOpened':

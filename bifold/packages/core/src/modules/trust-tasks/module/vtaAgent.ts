@@ -47,7 +47,7 @@ import {
   type VtaContext,
 } from './VtaClient'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
-import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
+import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiManagerIdentity } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import {
@@ -415,6 +415,12 @@ const NO_ANSWER = /the VTA did not answer/
  */
 export const GRANT_HOLD_MS = 60000
 
+/**
+ * How long a temporary key is worth showing again: an admin grants it for an
+ * hour at linking (VtiManagerIdentity.stage), so a little under that.
+ */
+export const TEMPORARY_KEY_REUSE_MS = 55 * 60 * 1000
+
 const TIMED_OUT = Symbol('timedOut')
 
 /**
@@ -590,6 +596,8 @@ export class VtaAgentController {
   private ownerFor?: string
   /** The agent that was current when "Add another agent" began: the way back. */
   private addingFrom?: string
+  /** A pick-up of a link left part-way is under way (resumeLink). */
+  private resuming = false
   /** The look at the other agents under way, if any. */
   private looking?: Promise<void>
 
@@ -826,6 +834,9 @@ export class VtaAgentController {
     this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true, linkRestored: true })
     await this.refreshAgents(agent)
     if (link) void this.ensureOnline(agent)
+    // No agent linked yet, and a link left part-way before the app stopped:
+    // the same key is shown again and checked once (IN-135).
+    else void this.resumeLink(agent).catch(() => undefined)
   }
 
   /** Read the list of linked agents into the state (the switcher's rows). */
@@ -1116,11 +1127,16 @@ export class VtaAgentController {
   }
 
   cancelLink() {
+    const cancelling = this.state.link
     this.attemptToken++
     this.offer = undefined
     this.hostOffer = undefined
     this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
+    // Given up on purpose: its temporary key is not offered again (IN-135).
+    if (this.agent && 'vtaDid' in cancelling && cancelling.kind !== 'linked') {
+      void this.forgetTemporaryKey(this.agent, cancelling.vtaDid)
+    }
     // Adding another agent, given up: back to the one before.
     if (this.addingFrom && this.agent) void this.stopAddingAgent(this.agent)
   }
@@ -1686,6 +1702,73 @@ export class VtaAgentController {
     await this.useAgent(agent, vtaDid)
   }
 
+  /**
+   * A temporary key this phone made for linking `vtaDid` (or, without one,
+   * for any agent) and could not finish with: the grant may already be on
+   * the agent. Only while it is young enough to still be granted, not in the
+   * middle of a key swap (`resumeEarlierLink`'s), and for an agent not
+   * already linked.
+   */
+  async pendingLinkKey(agent: Agent, vtaDid?: string): Promise<{ vtaDid: string; did: string } | undefined> {
+    const identities = this.identityStore(agent)
+    const records = vtaDid
+      ? [await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)]
+      : await Promise.resolve(identities.listManagers?.()).catch(() => undefined)
+    const linked = new Set([
+      ...(this.state.agents ?? []).map((a) => a.vtaDid),
+      ...(this.state.link.kind === 'linked' ? [this.state.link.vtaDid] : []),
+    ])
+    const now = this.now()
+    const fresh = (records ?? [])
+      .filter((r): r is VtiManagerIdentity => Boolean(r))
+      .filter(
+        (r) =>
+          r.stage === 'temporary' &&
+          !r.pendingNext &&
+          !linked.has(r.vtaDid) &&
+          now - Date.parse(r.createdAt) < TEMPORARY_KEY_REUSE_MS
+      )
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    return fresh[0] ? { vtaDid: fresh[0].vtaDid, did: fresh[0].did } : undefined
+  }
+
+  /**
+   * Pick a link left part-way back up (IN-135): a sleep, Keyring's lock or a
+   * restart dropped it, or it failed for a reason that was not a refusal.
+   * The same temporary key is shown again — the agent may already hold it —
+   * and checked once; the person can check again from there. Nothing happens
+   * while something is linked or under way, or while another agent is being
+   * added. Whether there was one to pick up.
+   */
+  async resumeLink(agent: Agent, vtaDid?: string): Promise<boolean> {
+    if (this.state.link.kind !== 'notLinked' || this.resuming) return false
+    if (!vtaDid && this.state.addingAgent) return false
+    this.resuming = true
+    try {
+      const pending = await this.pendingLinkKey(agent, vtaDid)
+      if (!pending || this.state.link.kind !== 'notLinked') return false
+      const lastError = this.state.link.lastError
+      const label =
+        lastError?.vtaDid === pending.vtaDid && lastError.label
+          ? lastError.label
+          : (pending.vtaDid.split(':')[3] ?? pending.vtaDid)
+      this.dispatch({ type: 'keyShown', vtaDid: pending.vtaDid, label, did: pending.did, resumed: true })
+      await this.checkManualGrant(agent)
+      return true
+    } finally {
+      this.resuming = false
+    }
+  }
+
+  /** Drop a temporary key no attempt will use again (a cancel). A settled key is never touched. */
+  private async forgetTemporaryKey(agent: Agent, vtaDid: string): Promise<void> {
+    const identities = this.identityStore(agent)
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    if (record?.stage !== 'temporary' || record.pendingNext) return
+    if ((this.state.agents ?? []).some((a) => a.vtaDid === vtaDid)) return
+    await Promise.resolve(identities.forgetManager?.(vtaDid)).catch(() => undefined)
+  }
+
   async startManualLink(agent: Agent, vtaDid: string, label: string, opts: { via?: 'scan' } = {}): Promise<void> {
     return this.beginManualLink(agent, vtaDid, label, false, opts.via)
   }
@@ -1726,13 +1809,19 @@ export class VtaAgentController {
       // The agent must be reachable before a key is shown for it; the key
       // itself is a did:key, the only form the Farm's Admin DID field takes.
       await resolveVtaMediator(agent, vtaDid)
-      const did = await createVtiTemporaryDidKey(agent)
-      await this.identityStore(agent).setManager({
-        vtaDid,
-        did,
-        createdAt: new Date(this.now()).toISOString(),
-        stage: 'temporary',
-      })
+      // A key made for this agent a little earlier and not yet used is shown
+      // again rather than replaced: its admin may already have added it
+      // (IN-135). A new one would leave that grant unused.
+      const earlier = await this.pendingLinkKey(agent, vtaDid)
+      const did = earlier?.did ?? (await createVtiTemporaryDidKey(agent))
+      if (!earlier) {
+        await this.identityStore(agent).setManager({
+          vtaDid,
+          did,
+          createdAt: new Date(this.now()).toISOString(),
+          stage: 'temporary',
+        })
+      }
       if (token !== this.attemptToken) return
       this.dispatch({ type: 'keyShown', vtaDid, label, did, ...(via ? { via } : {}) })
     } catch (error) {
@@ -2439,6 +2528,8 @@ export class VtaAgentController {
     // A retry scheduled before the app replaced its agent still carries the old one.
     const agent = this.agent ?? given
     const link = this.state.link
+    // Back in the foreground with nothing linked: a link left part-way picks up (IN-135).
+    if (link.kind === 'notLinked') void this.resumeLink(agent).catch(() => undefined)
     if (link.kind !== 'linked' || this.reconnecting) return
     // Online already, unless the session it was online on is gone (reopen).
     if (link.connection.kind === 'online' && !options.reopen) return

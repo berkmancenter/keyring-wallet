@@ -47,11 +47,12 @@ describe('linking', () => {
     expect(reduceLink(waiting, { type: 'cancelled' }).kind).toBe('notLinked')
   })
 
-  it('a failure keeps its reason for the screen to word', () => {
+  // IN-135: and which agent it was for, so the screen can offer to try again with its key.
+  it('a failure keeps its reason for the screen to word, and the agent it was for', () => {
     const waiting = run([offerScanned, { type: 'confirmed' }, { type: 'submitted', code: 'X' }])
     expect(reduceLink(waiting, { type: 'failed', failure: { reason: 'refused' } })).toEqual({
       kind: 'notLinked',
-      lastError: { reason: 'refused' },
+      lastError: { reason: 'refused', vtaDid: 'did:webvh:Qm:host', label: 'Lab agent' },
     })
   })
 

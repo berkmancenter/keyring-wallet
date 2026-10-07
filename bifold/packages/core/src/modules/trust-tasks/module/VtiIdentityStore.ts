@@ -89,6 +89,8 @@ export interface VtiIdentityStore {
    * own entry (VTI-Q23). Optional: a store without it keeps the record.
    */
   forgetManager?(vtaDid: string): Promise<void>
+  /** Every agent's manager identity this phone holds. */
+  listManagers?(): Promise<VtiManagerIdentity[]>
   /**
    * This community's identity under an agent: `vtaDid`, else the agent this
    * phone acts with now (`currentAgentDid`). Identities are kept per agent and
@@ -147,6 +149,10 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
 
   setManager(identity: VtiManagerIdentity) {
     return this.put('manager', identity.vtaDid, { ...identity })
+  }
+
+  listManagers() {
+    return listKeyed<VtiManagerIdentity>(this.agent, RECORD_TYPE, 'manager')
   }
 
   async forgetManager(vtaDid: string) {

@@ -203,6 +203,29 @@ const VtaLink: React.FC = () => {
 
   const failureText = (failure?: VtaLinkFailure) => linkFailureText(failure, t)
 
+  // A failed attempt that can be tried again with the key this phone still
+  // holds for its agent: not a refusal, and not a dead host code (IN-135).
+  const failed = link.kind === 'notLinked' ? link.lastError : undefined
+  const retryable =
+    failed?.vtaDid &&
+    (failed.reason === 'failed' || failed.reason === 'unreachable') &&
+    !['expired', 'timedOut', 'notAccepted', 'needsScreenLock'].includes(String(failed.hostReason ?? ''))
+      ? failed.vtaDid
+      : undefined
+  const [retryKeyFor, setRetryKeyFor] = useState<string | undefined>()
+  useEffect(() => {
+    setRetryKeyFor(undefined)
+    if (!agent || !retryable) return
+    let live = true
+    void vtaAgent
+      .pendingLinkKey(agent, retryable)
+      .then((key) => live && setRetryKeyFor(key ? retryable : undefined))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, retryable])
+
   const host = 'vtaDid' in link ? (agentHost(link.vtaDid) ?? '') : ''
   let body: React.ReactNode
   let actions: React.ReactNode
@@ -455,6 +478,13 @@ const VtaLink: React.FC = () => {
           <ThemedText>
             {t('VtaLink.GiveKeyBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
+          {/* Picked back up after a sleep, a lock or a restart: the same key,
+              which the agent may already hold (IN-135). */}
+          {link.resumed ? (
+            <ThemedText variant="bold" testID={testIdWithKey('VtaLinkResumed')}>
+              {t('VtaLink.ResumedHint')}
+            </ThemedText>
+          ) : null}
           {/* The two things to DO come first and fit on the screen. The code
               itself is a ~350-character did:peer, and putting it here pushed
               Share, Copy and "I've been added" below the fold — a tester had
@@ -643,9 +673,22 @@ const VtaLink: React.FC = () => {
       // address field asked the same thing a second way.
       actions = (
         <>
+          {/* A failure that was not a refusal, for an agent whose key this
+              phone still holds: try again with that key (IN-135). A dead host
+              code still says to make a new one. */}
+          {retryKeyFor ? (
+            <Button
+              title={t('VtaLink.TryAgainSameKey')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                if (agent) void vtaAgent.resumeLink(agent, retryKeyFor)
+              }}
+              testID={testIdWithKey('VtaLinkTryAgain')}
+            />
+          ) : null}
           <Button
             title={t('VtaLink.ScanAgain')}
-            buttonType={ButtonType.Primary}
+            buttonType={retryKeyFor ? ButtonType.Secondary : ButtonType.Primary}
             onPress={onScanAgain}
             testID={testIdWithKey('VtaLinkScanAgain')}
           />
