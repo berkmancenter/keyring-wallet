@@ -1412,6 +1412,9 @@
     "FailedRefused": "The admin did not grant access to this phone.",
     "FailedUnreachable": "The agent's page could not be reached. Check your connection and scan again.",
     "FailedCommunityAgent": "This is a community's agent. Link Keyring to your personal agent instead.",
+    "AlreadyOnPhone": "This phone already has that agent.",
+    "SwitchToIt": "Switch to it",
+    "FailedAlreadyLinked": "This phone already has that agent. Switch to it on Your agent.",
     "FailedCommunityAgentCleanup": "If you added this phone in that agent's settings, remove it there.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
     "SwapFailed": {

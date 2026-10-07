@@ -25,7 +25,7 @@ import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import { agentAddressScan } from '../module/agentAddressScan'
 import { VtiRefusal } from '../module/vtiAgent'
 import { deviceCodeScan } from '../module/deviceCodeScan'
-import { vtaAgent } from '../module/vtaAgent'
+import { AgentAlreadyOnPhone, vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
 import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS, readyNameOf } from '../screens/VtaCreateAgent'
 
@@ -114,6 +114,25 @@ describe('create my agent: a link that fails is said', () => {
 })
 
 describe('create my agent: the address comes first', () => {
+  // IN-132: an agent this phone already has, entered by its address: said,
+  // with a switch to it, and nothing made.
+  test('an agent this phone already has is said so, with a switch to it', async () => {
+    jest.spyOn(vtaAgent, 'startCreateAgent').mockRejectedValue(new AgentAlreadyOnPhone(VTA))
+    const toIt = jest.spyOn(vtaAgent, 'switchToExisting').mockResolvedValue(undefined)
+    const nav = useNavigation() as unknown as { reset: jest.Mock }
+    nav.reset.mockClear()
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
+    fireEvent.changeText(tree.getByTestId(id('AgentCreateAddressInput')), VTA)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('VtaLink.AlreadyOnPhone')
+    fireEvent.press(tree.getByTestId(id('AgentCreateSwitchToExisting')))
+    expect(toIt).toHaveBeenCalledWith(expect.anything(), VTA)
+    expect(nav.reset).toHaveBeenCalledWith({ index: 0, routes: [{ name: Screens.VtaAgent }] })
+  })
+
   // "No code? Use your agent's address" (Alberto, 239): straight to the
   // address, without the introduction's Continue first.
   test('opened for an address, it starts at the address', () => {
