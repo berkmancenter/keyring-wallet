@@ -145,6 +145,9 @@ function deskWith(digest?: string, communityStore: unknown = {}) {
 const decision = { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
 const delivered = () => ((sent.at(-1)!.body.payload as Json).credential_response as { credential: Json }).credential
 
+// A second read of the requirements waits no time here.
+VtiVetterDesk.shapeRetryMs = 0
+
 afterEach(() => {
   setDtgV1WritingMode(DTG_V1_WRITING_RELEASE_DEFAULT)
   sent.length = 0
@@ -340,7 +343,8 @@ describe('chooseStatementShape', () => {
       'vetted/1',
       'grant',
     ],
-    ['auto: nothing to go on', { mode: 'auto' }, 'endorsement', 'default'],
+    // Every community this app meets is on DTG v1, whose SDK refuses the old shape.
+    ['auto: nothing to go on', { mode: 'auto' }, 'vetted/1', 'default'],
   ] as const)('%s', (_name, input, shape, by) => {
     expect(chooseStatementShape(input as never)).toMatchObject({ shape, by })
   })
@@ -415,6 +419,29 @@ describe('the desk in mode auto', () => {
     expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
     expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by grant)')
     warn.mockRestore()
+  })
+
+  it('requirements unread twice and no grant held: vetted/1, said at warn with the shape chosen', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValue(new Error('the VTA did not answer'))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(mockFetchManifest).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledWith(
+      "[VTI] statement shape: the community's requirements could not be read twice (the VTA did not answer); writing vetted/1 by default"
+    )
+    warn.mockRestore()
+  })
+
+  it('a requirements read that fails once and then answers: that answer decides', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(manifestNaming(ENDORSEMENT))
+    await deskWith(digest()).attest('r', decision)
+    expect(mockFetchManifest).toHaveBeenCalledTimes(2)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
   })
 
   it('… and an endorsement grant means the old shape', async () => {

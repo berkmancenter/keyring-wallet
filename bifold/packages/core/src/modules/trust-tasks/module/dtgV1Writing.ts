@@ -78,8 +78,12 @@ export interface StatementShapeChoice {
  * B (local): the vetter's own grant from that community: a role VAC is issued
  * by a community on DTG Credentials v1, a CommunityRole endorsement by one that
  * is not.
- * A when it was read; else B; with neither, the endorsement shape (read until
- * LEGACY_DTG_SHAPE_UNTIL). In `off` and `force` the mode decides.
+ * A when it was read; else B; with neither, vetted/1. Every community this
+ * app meets is on DTG Credentials v1, whose SDK refuses the endorsement shape
+ * outright (vta-sdk 0.55 `verify_statement`), so guessing the old shape made a
+ * vetting silently not count when the requirements could not be read and no
+ * grant said otherwise. The endorsement is still written whenever A or B names
+ * it. In `off` and `force` the mode decides.
  */
 export function chooseStatementShape(input: {
   mode: DtgV1WritingMode
@@ -106,7 +110,7 @@ export function chooseStatementShape(input: {
       : { shape: fromRequirements, by: 'requirements' }
   }
   if (fromGrant) return { shape: fromGrant, by: 'grant' }
-  return { shape: 'endorsement', by: 'default' }
+  return { shape: 'vetted/1', by: 'default' }
 }
 
 /** The `statementType` a community's manifest publishes for vetting, if any. */
