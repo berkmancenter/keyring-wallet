@@ -18,7 +18,7 @@ fin() {
     keys_since "$s" "$T0"; rules_clear "$s"
     for c in $(pnm "$s" contexts list | grep -oE 'agents-r3-[0-9]+' | sort -u); do echo "  $s context $c: $(pnm "$s" contexts delete -y "$c" | tail -1 | cut -c1-50)"; done
   done
-  for m in $(grep -oE '^(R2_MEMBER|R6_MEMBER) did:[^ ]+' "$LEG_DIR/agents.out" 2>/dev/null | awk '{print $2}' | sort -u); do
+  for m in $(grep -oE '^(R2_MEMBER|R6_MEMBER|R10_MEMBER) did:[^ ]+' "$LEG_DIR/agents.out" 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate cleanup" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
 }
@@ -32,7 +32,7 @@ RUNNER_VTA=$RUNNER_A_SLUG RUNNER_VTA_DID=$RUNNER_A_DID RUNNER_VTA_URL=$RUNNER_A_
   ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 LINK_MODE=manual PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
   perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link-a.out" 2>&1 || broken "link A: $(grep -E '✅|❌' "$LEG_DIR/link-a.out" | tail -1 | cut -c1-120)"
 row agents-link-a PASS "$(( $(date +%s) - t ))s"
-ROWS="${AGENT_ROWS:-R1 R8 R9 R2 R7 R5 R4}" CA_SLUG=$COMMUNITY_AGENT_SLUG CA_DID=$COMMUNITY_AGENT_DID A_SLUG=$RUNNER_A_SLUG A_DID=$RUNNER_A_DID A_NAME=$RUNNER_A_NAME B_SLUG=$RUNNER_B_SLUG B_DID=$RUNNER_B_DID \
+ROWS="${AGENT_ROWS:-R1 R8 R9 R2 R7 R5 R10 R4}" CA_SLUG=$COMMUNITY_AGENT_SLUG CA_DID=$COMMUNITY_AGENT_DID A_SLUG=$RUNNER_A_SLUG A_DID=$RUNNER_A_DID A_NAME=$RUNNER_A_NAME B_SLUG=$RUNNER_B_SLUG B_DID=$RUNNER_B_DID \
   B_NAME=$RUNNER_B_NAME C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" DEVICE_PIN=1234 LOGCAT=$LEG_DIR/logcat.log E2E_APP_ID=$BID \
   UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 PNM_BIN=$PNM_BIN perl -e 'alarm 3000; exec @ARGV' node run-several-agents.mjs > "$LEG_DIR/agents.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^FINDING' "$LEG_DIR/agents.out" | cut -c1-200

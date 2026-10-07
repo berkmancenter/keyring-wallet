@@ -138,6 +138,15 @@ async function waitSwitched(d, wantName) {
 }
 
 /** VtaLink's scan branch: the key as text (VtaLinkShowAsText → VtaLinkManualDid), grant, it polls by itself. */
+/** How many Wallet cards name C (CredentialName), after closing the Wallet's first-visit tour. */
+async function walletCardsForC(d) {
+  await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+  await sleep(2000);
+  for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+  return (await d.$$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${E.C_NAME}")`)).length;
+}
+let walletBefore = -1;
+
 /** The phone's key on VtaLink's scan branch: as text behind Show as text, else by Copy and the clipboard (237). */
 async function scanKey(d) {
   await waitForTestId(d, "VtaLinkForOtherPhone", 45000);
@@ -358,6 +367,8 @@ async function openC(d) {
 async function askToJoinC(d, tag) {
   const before = new Set((json(admin("join-list")).items ?? []).map((r) => r.id));
   await openC(d);
+  // A refused (or withdrawn, left) standing offers "Join again" first (R10 after R5's decline).
+  if (await existsTestId(d, "JoinAgain", 3000)) await tapTestId(d, "JoinAgain", 10000);
   await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
   const askId = (await existsTestId(d, "JoinAsk", 3000)) ? "JoinAsk" : "JoinStart";
   await tapTestId(d, askId, 15000);
@@ -731,6 +742,20 @@ try {
     }
   }
 
+  // R10 (#348): B joins C too (approved), so the Wallet holds two cards for C: A's (R2) and B's. R4 then unlinks B,
+  // and B's card must leave the Wallet (wallet-hidden-unlinked in R4).
+  if (ROWS.includes("R10")) {
+    t0.R10 = Date.now();
+    await switchToOther(d, E.B_NAME);
+    const req = await askToJoinC(d, "R10 on B");
+    log(`R10: admin approves: ${admin("join-decide", req.id, "approved").trim().split("\n").filter((l) => /->/.test(l)).pop()}`);
+    console.log(`R10_MEMBER ${req.applicantDid}`);
+    for (const until = Date.now() + 90000; Date.now() < until && walletBefore < 2; await sleep(5000)) walletBefore = await walletCardsForC(d);
+    await shot(d, "agents-r10-wallet-two");
+    row("wallet-both-cards", walletBefore === 2, `${walletBefore} Wallet card(s) name ${E.C_NAME} with A and B both members (want 2)`);
+    await switchToOther(d, E.A_NAME);
+  }
+
   if (ROWS.includes("R3")) {
     t0.R3 = Date.now();
     await switchToOther(d, E.A_NAME);
@@ -889,6 +914,14 @@ try {
     const phoneOnB = (process.env.B_PHONE && bAcl.includes(process.env.B_PHONE)) || false;
     log(`R4: others left ${left.length} · home "${name}" · B's ACL still has the phone: ${phoneOnB}`);
     row("R4 unlink B", left.length === 0 && name.includes(E.A_NAME) && !phoneOnB, `others ${left.length}; home "${name}"; on B's ACL ${phoneOnB}`);
+    // #348: B's card leaves the Wallet once B is unlinked; A's stays (the mirror re-runs on unlink: ~10 s).
+    if (walletBefore >= 0) {
+      let now = walletBefore;
+      for (const until = Date.now() + 20000; Date.now() < until && now !== walletBefore - 1; await sleep(4000)) now = await walletCardsForC(d);
+      await shot(d, "agents-r4-wallet-after-unlink");
+      row("wallet-hidden-unlinked", walletBefore === 2 && now === 1, `Wallet cards for ${E.C_NAME}: ${walletBefore} with B linked → ${now} after unlinking B (want 1: A's)`);
+      await myAgent(d);
+    }
     // Unlink lives under Manage: a segment in the old layout (01:18:17Z), the AgentSettings toggle in K6
     // (VtaAgentHome.tsx f0dd6e12, settingsOpen; 09:52:01Z). Open whichever this build has, once.
     if (await existsTestId(d, "AgentSegment_manage", 1500)) {
