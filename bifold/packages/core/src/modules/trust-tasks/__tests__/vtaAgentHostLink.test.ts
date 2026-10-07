@@ -6,7 +6,7 @@
  */
 import { VtaAgentController } from '../module/vtaAgent'
 import { VtaClient } from '../module/VtaClient'
-import type { AgentHostOffer } from '../module/agentHostConnection'
+import { AGENT_HOST_QR_LIFETIME_MS, type AgentHostOffer } from '../module/agentHostConnection'
 
 const mockClient = {
   connect: jest.fn(async () => undefined),
@@ -94,6 +94,32 @@ beforeEach(() => {
 })
 
 describe('an agent host’s automatic connection', () => {
+  // IN-135: a code confirmed after it lapsed (the phone slept on the
+  // confirm screen) is said to have, before anything is sent or made.
+  it('a code confirmed after it lapsed is said to have, and nothing is sent', async () => {
+    const host = mockHost({})
+    let now = 1_000
+    const managers: unknown[] = []
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => now,
+      fetch: host.fetch,
+      linkStore: () => ({ get: async () => undefined, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async (m: unknown) => void managers.push(m) }) as never,
+      deviceCanOwn: async () => true,
+      agentHost: { sleep: async () => undefined },
+    })
+    vta.scanHostOffer(hostOffer)
+    now += AGENT_HOST_QR_LIFETIME_MS + 1
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().link).toMatchObject({
+      kind: 'notLinked',
+      lastError: { reason: 'expired', hostReason: 'expired' },
+    })
+    expect(host.fetch).not.toHaveBeenCalled()
+    expect(managers).toEqual([])
+  })
+
   it('asks first, naming the agent and the host’s site — and sends nothing yet', () => {
     const host = mockHost({})
     const { vta } = controller(host)

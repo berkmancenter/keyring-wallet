@@ -503,14 +503,31 @@ describe('linking without a QR through the controller', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'showingKey', checking: false, noAnswer: true })
   })
 
-  it('an error other than "not added yet" ends the attempt', async () => {
+  // IN-135: a check cut short before the agent took the key (a sleep closed
+  // the socket, a lock shut the agent down) is passing. The key stays, marked
+  // unanswered, and the next check uses the same key: the host may already
+  // have added it. It used to end the attempt, and the next one made a new key.
+  it('a check cut short before the key was taken leaves the same key showing, unanswered', async () => {
     const { vta } = controller()
     await vta.startManualLink({} as never, offer.vta, 'alice host')
+    const shown = vta.getState().link
     mockClient.connect.mockImplementationOnce(async () => {
       throw new Error('the mediator refused the socket')
     })
     await vta.checkManualGrant({} as never)
-    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'failed' } })
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', noAnswer: true, checking: false })
+    expect((vta.getState().link as { did?: string }).did).toBe((shown as { did?: string }).did)
+    // The next check goes on with that key, and links.
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link.kind).toBe('linked')
+  })
+
+  it("a community's own agent still ends the attempt", async () => {
+    const { vta } = controller()
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    mockClient.listContexts.mockImplementationOnce(async () => [{ id: 'vtc', name: 'VTC' }])
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'communityAgent' } })
   })
 })
 

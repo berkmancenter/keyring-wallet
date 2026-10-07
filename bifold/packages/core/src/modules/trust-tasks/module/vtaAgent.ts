@@ -1275,6 +1275,18 @@ export class VtaAgentController {
   private async confirmHostOffer(agent: Agent): Promise<void> {
     const offer = this.hostOffer
     if (!offer || this.state.link.kind !== 'confirming') return
+    // A code the person confirms after it has lapsed (the phone slept on this
+    // screen, IN-135) is said to have, before anything is sent: the host
+    // would refuse it, and only after a key had been made for it.
+    if (this.state.link.exp && this.now() > this.state.link.exp) {
+      this.hostOffer = undefined
+      this.dispatch({ type: 'confirmed' })
+      this.dispatch({
+        type: 'failed',
+        failure: { reason: 'expired', hostReason: 'expired', detail: 'the code lapsed before it was confirmed' },
+      })
+      return
+    }
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken
     this.dispatch({ type: 'confirmed' })
@@ -1788,8 +1800,10 @@ export class VtaAgentController {
   /**
    * "I've been added": try to sign in as the shown key. A refusal because the
    * key is not in the agent's access list yet leaves the key showing, marked
-   * not yet; an agent that says nothing within the deadline leaves it showing
-   * too, marked unanswered; anything else ends the attempt.
+   * not yet; an agent that says nothing within the deadline, or a check cut
+   * short before the agent took the key (a sleep, a lock), leaves it showing
+   * too, marked unanswered. Only a refusal, or a failure after the key was
+   * taken, ends the attempt.
    */
   async checkManualGrant(agent: Agent): Promise<void> {
     const link = this.state.link
@@ -1853,6 +1867,18 @@ export class VtaAgentController {
       if (this.state.link.kind === 'showingKey' && ACCESS_REVOKED.test(detail)) {
         await this.reset()
         this.dispatch({ type: 'grantNotYet' })
+        return
+      }
+      // Before the agent took the key, anything but a refusal is passing: the
+      // socket a sleep or a lock closed, an agent shut down under the attempt
+      // (IN-135). The key stays showing, marked unanswered, and the next check
+      // uses the same key — the host may already have added it. Ending the
+      // attempt made the next one mint a new key, and the added one was lost.
+      if (this.state.link.kind === 'showingKey' && !(error instanceof CommunityAgentRefused)) {
+        agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] the grant check did not finish; the key stays: ${detail}`)
+        this.attemptToken++
+        await this.reset().catch(() => undefined)
+        this.dispatch({ type: 'grantNoAnswer' })
         return
       }
       this.set({ status: 'failed', error: detail })

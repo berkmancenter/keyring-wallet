@@ -1046,6 +1046,25 @@ describe('Your agent — several agents', () => {
     expect(use).toHaveBeenCalledWith(expect.anything(), WORK)
   })
 
+  // 238 gate, Android: Done after adding an agent by its address now lands
+  // here (#349). The new agent's introduction comes first, then the choice
+  // to use it or keep the one before.
+  it('an agent just added: its introduction first, then use it or keep the one before', async () => {
+    controller.set({ introSeen: false, addedAgent: { from: WORK, added: HOME } })
+    jest.spyOn(vtaAgent, 'markIntroSeen').mockImplementation(async () => {
+      controller.set({ introSeen: true })
+    })
+    const tree = await renderHome()
+    expect(tree.getByTestId(testIdWithKey('AgentIntro'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentAddedCard'))).toBeNull()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentIntroSkip')))
+    })
+    expect(tree.queryByTestId(testIdWithKey('AgentIntro'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('AgentAddedCard'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('AgentAddedKeep'))).toBeTruthy()
+  })
+
   it("each agent's chip carries its own count of requests waiting", async () => {
     controller.set({
       otherRequests: {
