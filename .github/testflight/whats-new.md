@@ -17,3 +17,22 @@
 • The demo collector card and approval demo are gone; contacts show the regular list.
 • Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
 • Update over your current version; there's no need to reinstall.
+What's new
+• Linking by address is one path. A phone without a screen lock links as a device, and every failure says what went wrong.
+• Join: "How to join" shows only the ways you can use. After you ask, "Request sent" shows your persona ID ("See full persona ID"), and once an admin accepts, a success screen takes you back to Your agent with the community highlighted.
+• If a join request never reached the community, Keyring says so and offers "Send it again".
+• If your agent is busy, Keyring says "Your agent is busy right now. Wait a minute and try again".
+• Your agent: the introduction is centred, Agent settings has section dividers, no flash when you tap Add, the Add chip fits, and "Which community?" is centred.
+• Onboarding: the agent card says "Not that kind of agent", with a larger icon, and the welcome link points to the Applied Technology Lab page.
+
+Please test
+• Link by your agent's address, with and without a screen lock.
+• Join a community and watch "Request sent", then the success screen when you're accepted.
+• With two agents, tap Add, then choose "Keep using" your first agent.
+
+Known issues
+• After adding a second agent, the "Keep using" choice shows only once you open Your agent. Fixed next.
+• If the phone sleeps while your agent host is still setting up, linking may not recover; make a new code. Fixed next.
+• Keyring can't take part in hidden (zero-knowledge) vetting yet; it joins the ordinary way.
+• Community admins don't get push notifications for join requests yet.
+• Update over your current version; your memberships carry over.
