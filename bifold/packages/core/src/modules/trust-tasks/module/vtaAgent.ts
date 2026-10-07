@@ -518,6 +518,19 @@ export async function tellAgentLeaving(
  * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
  * says nothing (only VTARest), so the agent itself is asked, once signed in.
  */
+/**
+ * The agent asked to be linked is one this phone already has (IN-132): it is
+ * refused, matched by its DID and never by a name, and the person is offered
+ * a switch to it. Linking it again replaced its entry, its name, and this
+ * phone's key on it, leaving the old key on the agent's list.
+ */
+export class AgentAlreadyOnPhone extends Error {
+  constructor(readonly vtaDid: string) {
+    super('vtaAgent: this phone already has that agent')
+    this.name = 'AgentAlreadyOnPhone'
+  }
+}
+
 export class CommunityAgentRefused extends Error {
   constructor(readonly vtaDid: string) {
     super("This is a community's agent. Link Keyring to your personal agent instead.")
@@ -1259,6 +1272,7 @@ export class VtaAgentController {
     const identities = this.identityStore(agent)
     const label = offer.vtaDid.split(':')[3] ?? offer.vtaDid
     try {
+      if (this.hasAgent(offer.vtaDid)) throw new AgentAlreadyOnPhone(offer.vtaDid)
       const canOwn = this.deps.deviceCanOwn
       if (canOwn && !(await canOwn())) throw new DeviceCannotOwn()
       this.ownerFor = offer.vtaDid
@@ -1316,10 +1330,12 @@ export class VtaAgentController {
             ? { reason: 'refused' as const, detail: 'no screen lock', hostReason: 'needsScreenLock' as const }
             : error instanceof CommunityAgentRefused
               ? { reason: 'communityAgent' as const, detail: error.message }
-              : withSwapReason(
-                  { reason: 'failed', detail: error instanceof Error ? error.message : String(error) },
-                  error
-                )
+              : error instanceof AgentAlreadyOnPhone
+                ? { reason: 'alreadyLinked' as const, detail: error.message }
+                : withSwapReason(
+                    { reason: 'failed', detail: error instanceof Error ? error.message : String(error) },
+                    error
+                  )
       this.ownerFor = undefined
       this.set({ status: 'failed', error: failure.detail })
       this.dispatch({ type: 'failed', failure })
@@ -1386,6 +1402,7 @@ export class VtaAgentController {
     const identities = this.identityStore(agent)
     const enrol = this.deps.enrol ?? { submit: submitEnrolment, waitForGrant }
     try {
+      if (this.hasAgent(offer.vta)) throw new AgentAlreadyOnPhone(offer.vta)
       if (await this.resumeEarlierLink(agent, offer.vta, offer.label, identities, live)) return
       if (!live()) return
       const { code } = await enrol.submit(agent, offer, identities, { fetch: this.deps.fetch })
@@ -1408,7 +1425,9 @@ export class VtaAgentController {
                 ? error.reason
                 : error instanceof CommunityAgentRefused
                   ? 'communityAgent'
-                  : 'failed',
+                  : error instanceof AgentAlreadyOnPhone
+                    ? 'alreadyLinked'
+                    : 'failed',
             detail,
           },
           error
@@ -1641,6 +1660,32 @@ export class VtaAgentController {
    * into their own console — upstream's Grant access form, or the Farm's
    * admin-DID step. Nothing is submitted anywhere by the phone.
    */
+  /**
+   * Whether this phone already has `vtaDid` among its agents — by DID, never
+   * by a name (IN-132), whichever agent is current or none is (an "Add" has
+   * left the current one). Not a removed phone's own agent: linking it again
+   * is the way back.
+   */
+  hasAgent(vtaDid: string): boolean {
+    const { link, agents } = this.state
+    if (link.kind === 'revoked' && link.vtaDid === vtaDid) return false
+    return (link.kind === 'linked' && link.vtaDid === vtaDid) || (agents ?? []).some((a) => a.vtaDid === vtaDid)
+  }
+
+  /**
+   * Go to an agent this phone already has, from an "Add" that named it: the
+   * adding is given up and that agent becomes current.
+   */
+  async switchToExisting(agent: Agent, vtaDid: string): Promise<void> {
+    this.attemptToken++
+    this.offer = undefined
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    this.addingFrom = undefined
+    this.set({ addingAgent: false })
+    await this.useAgent(agent, vtaDid)
+  }
+
   async startManualLink(agent: Agent, vtaDid: string, label: string, opts: { via?: 'scan' } = {}): Promise<void> {
     return this.beginManualLink(agent, vtaDid, label, false, opts.via)
   }
@@ -1656,6 +1701,7 @@ export class VtaAgentController {
    */
   async startCreateAgent(agent: Agent, vtaDid: string, label: string = vtaDid): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
     const canOwn = this.deps.deviceCanOwn
     if (!canOwn) throw new OwnerCheckNotConfigured('deviceCanOwn')
     if (!(await canOwn())) throw new DeviceCannotOwn()
@@ -1670,6 +1716,7 @@ export class VtaAgentController {
     via?: 'scan'
   ): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
     this.ownerFor = owner ? vtaDid : undefined
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken

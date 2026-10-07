@@ -1257,6 +1257,9 @@
     "FailedRefused": "O administrador não concedeu acesso a este telefone.",
     "FailedUnreachable": "Não foi possível acessar a página do agente. Verifique sua conexão e escaneie novamente.",
     "FailedCommunityAgent": "Este é o agente de uma comunidade. Vincule o Keyring ao seu agente pessoal.",
+    "AlreadyOnPhone": "Este telefone já tem esse agente.",
+    "SwitchToIt": "Mudar para ele",
+    "FailedAlreadyLinked": "Este telefone já tem esse agente. Mude para ele em Seu agente.",
     "FailedCommunityAgentCleanup": "Se você adicionou este telefone nas configurações desse agente, remova-o lá.",
     "FailedOther": "Algo deu errado ao vincular. Escaneie o código novamente.",
     "SwapFailed": {
