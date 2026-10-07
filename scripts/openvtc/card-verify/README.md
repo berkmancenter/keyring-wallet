@@ -89,7 +89,7 @@ card-verify verify-tasks <tasks.json> <dir>
 1. **The proof verifies.** It runs vta-sdk's `verify_trust_task_proof_with`, and the proven signer must be `<expected-signer-did>`.
 2. **The signer is the issuer.** The proven signer must equal the document's own `issuer`. SPEC §4.7 binds the proof to the issuer, and vtc-service refuses a valid proof by any other DID (`vtc-service/src/trust_tasks/mod.rs:326-349`, VTI `ed672fff`).
 3. **The type matches.** When `<expected-type>` is given, the document's `type` must equal it.
-4. **The payload matches its type's spec** in trust-tasks-rs 0.24.6. A request is checked against the spec's `Payload` and a `#response` against its `Response`, in three steps:
+4. **The payload matches its type's spec** in trust-tasks-rs 0.27.7. A request is checked against the spec's `Payload` and a `#response` against its `Response`, in three steps:
    - the specification's consumer policy (`SpecPolicy::enforce`, as vtc-service runs it at `trust_tasks/mod.rs:302`);
    - the published JSON Schema that the crate inlines (`validate::ValidatedPayload::validate_value`), which refuses unknown members wherever the schema sets `additionalProperties: false`;
    - a serde parse into the typed payload, as openvtc's `vetting/wire.rs` `open::<P>` does.
