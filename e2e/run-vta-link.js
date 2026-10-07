@@ -401,6 +401,167 @@ async function afterRefusal(driver, said, temporaryDid) {
   }
 }
 
+/**
+ * IN-135 (bifold #351-#355, 239): a link that survives the phone going away, and says when it can't. One case per
+ * run (LINK_CASE); prints `ROW <case> PASS|FAIL — …` and returns whether it passed. Android emulator; the leg roots it
+ * for the mediator block (BLOCK_HOST: the agent's own mediator, f7) and lifts every rule in its cleanup.
+ *   link-host-sleep            host code: lock the phone PAUSE_S (150) right after Link, then unlock: it links, with no
+ *                              "This phone was not linked"
+ *   link-host-lock-after-grant host code: lock right after the host grants (the phone awaited), unlock: it links
+ *   link-address-resume        address path: the code shown, the app force-stopped, the grant made, the app
+ *                              relaunched: My Agent offers MyAgentContinueLink, VtaLink shows VtaLinkResumed with the
+ *                              same key, and it links; the ACL grows by one
+ *   link-no-answer             address path: the agent's mediator blocked through Connect: "didn't answer" with
+ *                              AgentCreateCheckAgain (not a failure, the same key); unblocked, Check again links; ACL +1
+ *   host-code-lapsed           host code: on the confirm screen for 5 min 30 s, then Link: "expired or was already
+ *                              used", no Try again, and the host's offer never submitted
+ *   create-window-paused       address path: Copy the code, the app in the background 15 min: still waiting
+ *                              (AgentCreateWaiting), not Check again
+ *   link-try-again             host code: the mediator blocked once granted, until "This phone was not linked" with
+ *                              VtaLinkTryAgain (about 14 min); unblocked, Try again links with the same key, no ACL growth
+ */
+async function linkCase(driver, which) {
+  const udid = driver.e2eUdid;
+  const sh = (...a) => execFileSync("adb", ["-s", udid, "shell", ...a], { encoding: "utf8" });
+  const PAUSE_S = Number(process.env.PAUSE_S || 150);
+  const lockFor = async (s) => {
+    sh("input", "keyevent", "26");
+    await sleep(s * 1000);
+    sh("input", "keyevent", "26");
+    await sleep(1500);
+    try { sh("wm", "dismiss-keyguard"); } catch { /* none */ }
+    await sleep(2000);
+  };
+  const block = (on) => {
+    const host = process.env.BLOCK_HOST;
+    if (!host) throw new Error(`${which} needs BLOCK_HOST`);
+    for (const t of ["iptables", "ip6tables"]) try { sh(t, on ? "-I" : "-D", "OUTPUT", "-d", host, "-j", "REJECT"); } catch { /* the other family */ }
+    console.log(`[e2e] ${host} ${on ? "blocked" : "unblocked"}`);
+  };
+  const aclSize = () => (aclDids().match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/g) || []).length;
+  const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
+  const notLinked = async () => /was not linked/i.test(await driver.getPageSource());
+  const row = (ok, detail) => { console.log(`ROW ${which} ${ok ? "PASS" : "FAIL"} — ${detail}`); return ok; };
+  const before = aclSize();
+  const hostLink = async ({ afterLink, afterGrant } = {}) => {
+    const offered = await api("POST", "/api/offers");
+    assertOfferForRunner(offered.link);
+    await openLinkFlow(driver, offered.link);
+    await tapTestId(driver, "VtaLinkButton", 15000);
+    if (afterLink) await afterLink(offered);
+    await waitForTestId(driver, "VtaLinkCode", 60000);
+    const view = await waitForState(offered.offer.n, "submitted");
+    runTempDids.push(view.did);
+    await api("POST", `/api/offers/${offered.offer.n}/grant`);
+    if (afterGrant) await afterGrant(view);
+    return view;
+  };
+  const addressCode = async () => {
+    await tapTestId(driver, "LinkByAddressButton", 30000).catch(() => tapTestId(driver, "VtaLinkByAddress", 15000));
+    (await waitForTestId(driver, "AgentCreateAddressInput", 30000)).setValue(runnerVtaDid());
+    await (await scrollToTestId(driver, "AgentCreateAddressContinue", 4).catch(() => byTestId(driver, "AgentCreateAddressContinue"))).click();
+    await waitForTestId(driver, "AgentCreateOwnerCode", 60000);
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 6)).click();
+    await scrollToTestId(driver, "AgentCreateOwnerDid", 4).catch(() => undefined);
+    const did = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "");
+    runTempDids.push(did);
+    return did;
+  };
+  const grant = (did) => execFileSync("bash", [ENROL_MANAGER, did, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const ready = async (ms = 240000) => {
+    for (const until = Date.now() + ms; Date.now() < until; ) {
+      if ((await existsTestId(driver, "AgentCreateReady", 2000)) || (await existsTestId(driver, "VtaLinkDone", 500))) return true;
+      if (await existsTestId(driver, "AgentCreateError", 300)) return false;
+    }
+    return false;
+  };
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(1500);
+
+  if (which === "link-host-sleep" || which === "link-host-lock-after-grant") {
+    const pauseAt = which === "link-host-sleep" ? "afterLink" : "afterGrant";
+    await hostLink({ [pauseAt]: async () => { console.log(`[e2e] locking the phone ${PAUSE_S} s (${pauseAt})`); await lockFor(PAUSE_S); } });
+    const done = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false);
+    const bad = await notLinked();
+    await screenshot(driver, which);
+    return row(done && !bad, `locked ${PAUSE_S} s ${pauseAt === "afterLink" ? "while setting up" : "after the grant"}; Linked ${done}; "was not linked" ${bad}`);
+  }
+  if (which === "host-code-lapsed") {
+    const offered = await api("POST", "/api/offers");
+    await openLinkFlow(driver, offered.link);
+    console.log("[e2e] on the confirm screen 330 s");
+    await sleep(330000);
+    await tapTestId(driver, "VtaLinkButton", 15000);
+    let said = "";
+    for (const until = Date.now() + 30000; Date.now() < until && !said; await sleep(1000)) said = (await driver.getPageSource()).match(/(?:text|content-desc)="([^"]*expired or was already used[^"]*)"/i)?.[1] ?? "";
+    const tryAgain = await existsTestId(driver, "VtaLinkTryAgain", 1500);
+    const state = (await api("GET", `/api/offers/${offered.offer.n}`).catch(() => ({})))?.state ?? "?";
+    await screenshot(driver, which);
+    return row(Boolean(said) && !tryAgain && state !== "submitted", `said "${said.slice(0, 90)}" · Try again ${tryAgain} · host offer ${state}`);
+  }
+  if (which === "link-address-resume") {
+    const did = await addressCode();
+    sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    console.log("[e2e] app force-stopped with the code out; granting");
+    grant(did);
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    await unlockIfLocked(driver);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    const cont = await existsTestId(driver, "MyAgentContinueLink", 20000);
+    if (cont) await tapTestId(driver, "MyAgentContinueLink", 10000);
+    const resumed = await existsTestId(driver, "VtaLinkResumed", 20000);
+    const same = resumed && (await driver.getPageSource()).includes(did.slice(-16));
+    const linked = await ready();
+    const after = aclSize();
+    await screenshot(driver, which);
+    return row(cont && resumed && linked && after === before + 1, `MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} (same key shown ${same}) · linked ${linked} · ACL ${before} → ${after}`);
+  }
+  if (which === "link-no-answer") {
+    const did = await addressCode();
+    grant(did);
+    block(true);
+    await (await scrollToTestId(driver, "AgentCreateConnect", 6).catch(() => byTestId(driver, "AgentCreateConnect"))).click();
+    let noAnswer = false;
+    for (const until = Date.now() + 240000; Date.now() < until && !noAnswer; ) {
+      noAnswer = (await existsTestId(driver, "AgentCreateCheckAgain", 2000)) && /didn.t answer/i.test(await driver.getPageSource());
+      if (await existsTestId(driver, "AgentCreateError", 300)) break;
+    }
+    const failed = await existsTestId(driver, "AgentCreateError", 500);
+    await screenshot(driver, `${which}-blocked`);
+    block(false);
+    await sleep(3000);
+    if (noAnswer) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    const linked = noAnswer && (await ready());
+    const after = aclSize();
+    return row(noAnswer && !failed && linked && after === before + 1, `"didn't answer" + Check again ${noAnswer} · a failure instead ${failed} · linked after unblocking ${linked} · ACL ${before} → ${after}`);
+  }
+  if (which === "create-window-paused") {
+    await addressCode();
+    await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
+    console.log("[e2e] the app in the background 900 s");
+    await driver.execute("mobile: backgroundApp", { seconds: 900 });
+    await sleep(3000);
+    const waiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
+    const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
+    await screenshot(driver, which);
+    return row(waiting && !checkAgain, `after 15 min in the background: AgentCreateWaiting ${waiting} · Check again ${checkAgain}`);
+  }
+  if (which === "link-try-again") {
+    const view = await hostLink({ afterGrant: async () => block(true) });
+    let tryAgain = false;
+    for (const until = Date.now() + 1080000; Date.now() < until && !tryAgain; await sleep(10000)) tryAgain = (await existsTestId(driver, "VtaLinkTryAgain", 2000)) && (await notLinked());
+    await screenshot(driver, `${which}-failed`);
+    block(false);
+    await sleep(3000);
+    const mid = aclSize();
+    if (tryAgain) await tapTestId(driver, "VtaLinkTryAgain", 10000);
+    const done = tryAgain && (await waitForTestId(driver, "VtaLinkDone", 240000).then(() => true, () => false));
+    const after = aclSize();
+    return row(tryAgain && done && after <= mid, `"not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
+  }
+  return row(false, `no such LINK_CASE ${which}`);
+}
+
 async function linkViaScan(driver) {
   await waitForTestId(driver, "VtaLinkForOtherPhone", 45000);
   const temporaryDid = await scanBranchKey(driver);
@@ -1317,7 +1478,10 @@ try {
     await completeOnboarding(driver, { firstName: "Link", lastName: "Phone" });
   }
 
-  if (LINK_MODE === "manual") {
+  if (process.env.LINK_CASE) {
+    // IN-135 (239): one link case, its row printed by linkCase; 3 when that row failed.
+    process.exitCode = (await linkCase(driver, process.env.LINK_CASE)) ? 0 : 3;
+  } else if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
     await linkManually(driver);
     if (SWAP_FAILED[EXPECT_REFUSAL]) {

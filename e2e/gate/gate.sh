@@ -10,7 +10,7 @@
 
 # Legs in the order they run on one platform, and which device each needs.
 LEGS_IOS="kk smoke-ios update-ios"
-LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android"
+LEGS_ANDROID="p1 testreq agents waiting lostreq linkresume smoke-android devices update-android relaunch-android linkwait"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail"
