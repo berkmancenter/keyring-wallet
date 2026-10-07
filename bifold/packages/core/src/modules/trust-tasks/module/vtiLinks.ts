@@ -151,11 +151,16 @@ const didHost = (did: string) => did.split(':')[3] ?? did
  * to it (`cancelLink`). One this phone already has is said so instead.
  */
 async function makeRoomForAgent(vtaDid: string): Promise<void> {
-  const { link, agents } = vtaAgent.getState()
-  if (link.kind !== 'linked') return
-  if (link.vtaDid === vtaDid || (agents ?? []).some((a) => a.vtaDid === vtaDid)) {
-    throw new KeyringLinkError('This phone is already linked to this agent. Switch to it on My Agent.')
+  // Checked whatever the link is now (IN-132): after an "Add" the current
+  // agent has been left, and the agent named may be the one left.
+  if (vtaAgent.hasAgent(vtaDid)) {
+    throw new KeyringLinkError(
+      'This phone already has that agent. Switch to it on Your agent.',
+      undefined,
+      'VtaLink.FailedAlreadyLinked'
+    )
   }
+  if (vtaAgent.getState().link.kind !== 'linked') return
   await vtaAgent.startAddingAgent()
 }
 

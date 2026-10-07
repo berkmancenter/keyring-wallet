@@ -120,8 +120,11 @@ export interface HostSetupStage {
 
 /** Why a link attempt ended, in a form a screen can word for a person. */
 export interface VtaLinkFailure {
-  /** `communityAgent`: the agent serves a community; Keyring links only to a person's own agent. */
-  reason: 'expired' | 'refused' | 'unreachable' | 'rejected' | 'failed' | 'communityAgent'
+  /**
+   * `communityAgent`: the agent serves a community; Keyring links only to a person's own agent.
+   * `alreadyLinked`: this phone already has that agent (IN-132); switch to it instead.
+   */
+  reason: 'expired' | 'refused' | 'unreachable' | 'rejected' | 'failed' | 'communityAgent' | 'alreadyLinked'
   detail?: string
   /** An agent host's automatic connection stopped: why, in its own words for a screen (agentHostConnection.ts). */
   hostReason?: HostLinkFailure

@@ -25,6 +25,8 @@ export function linkFailureText(failure: VtaLinkFailure | undefined, t: TFunctio
       return t('VtaLink.FailedUnreachable')
     case 'communityAgent':
       return t('VtaLink.FailedCommunityAgent')
+    case 'alreadyLinked':
+      return t('VtaLink.FailedAlreadyLinked')
     default:
       // Say what was caught, in words, rather than "something went wrong":
       // an iOS link that authenticated but never opened its mediator socket
