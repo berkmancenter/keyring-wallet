@@ -170,6 +170,8 @@ async function linkScanTo(d, did, slug) {
 }
 
 /** The address path (VtaCreateAgent, bifold #338/#339), from its address step: code, grant, Connect, Done. */
+let doneLanding;
+
 async function linkByAddressTo(d, did, slug) {
   (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(did);
   await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
@@ -187,10 +189,15 @@ async function linkByAddressTo(d, did, slug) {
     if (await existsTestId(d, "AgentCreateCheckAgain", 500)) await tapTestId(d, "AgentCreateCheckAgain", 5000).catch(() => undefined);
   }
   await tapTestId(d, "AgentCreateDone", 15000);
+  await sleep(2000);
+  await shot(d, "add-done-2s");
   await passNewPhoneOfferIfShown(d).catch(() => undefined);
   // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
-  // read behind it was empty): wait for it, then skip it.
-  if (await existsTestId(d, "AgentIntro", 15000)) {
+  // read behind it was empty): wait for it, then skip it. 239 (#349): Done lands on Your agent, so it comes at once;
+  // on 238 Done went back to the link panel and it came only once My Agent was opened. Recorded for R1's row.
+  doneLanding = { intro: await existsTestId(d, "AgentIntro", 15000), linkPanel: await existsTestId(d, "VtaLinkByAddress", 500) };
+  log(`Done landed: introduction ${doneLanding.intro} · link panel ${doneLanding.linkPanel}`);
+  if (doneLanding.intro) {
     if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
     else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
   }
@@ -418,6 +425,13 @@ try {
     // 238: after Add's Done the app is not on Your agent; the new agent's introduction, and the "added" card behind
     // it, render when Your agent is opened (1007-1509: nothing for 3.5 min until the My Agent tab was tapped). Open it
     // (myAgent skips the introduction), then look for Keep.
+    // #349 (239): Done lands on Your agent, so after the introduction the Keep card is there without the tab.
+    let keepAtOnce = false;
+    if (doneLanding?.intro) for (const until = Date.now() + 15000; Date.now() < until && !keepAtOnce; ) {
+      keepAtOnce = Boolean(await scrollToTestId(d, "AgentAddedKeep", 2, { from: 0.6 }).catch(() => undefined));
+      if (!keepAtOnce) await sleep(1000);
+    }
+    row("add-done-lands", Boolean(doneLanding?.intro) && keepAtOnce, `after Done: introduction ${doneLanding?.intro ?? "?"}, link panel ${doneLanding?.linkPanel ?? "?"}; Keep card without opening My Agent ${keepAtOnce} (#349)`);
     await myAgent(d);
     for (const until = Date.now() + 30000; Date.now() < until; ) {
       if (await existsTestId(d, "AgentIntroSkip", 500)) {
@@ -457,6 +471,56 @@ try {
     log(`R1: after switching, home "${nameB}" · status "${online}" (${since("R1b")})`);
     row("R1 switch to B", nameB.includes(E.B_NAME), `home "${nameB}", status "${online}" in ${since("R1b")}`);
     console.log(`TEMP_B ${tempB}`);
+  }
+
+  // R8 (IN-132, bifold #350): Add an agent this phone already has (B). By address: refused with "This phone already
+  // has that agent." and "Switch to it", no code, no key added to B; Switch to it lands on B. By scan: refused.
+  if (ROWS.includes("R8")) {
+    t0.R8 = Date.now();
+    const aclCount = () => { const t = pnm(E.B_SLUG, "acl", "list", "--json"); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const before = aclCount();
+    await myAgent(d);
+    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await owner(d, "add agent (existing)");
+    if (await existsTestId(d, "VtaLinkByAddress", 8000)) await tapTestId(d, "VtaLinkByAddress", 10000);
+    (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(E.B_DID);
+    await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+    let said = "";
+    let code = false;
+    for (const until = Date.now() + 30000; Date.now() < until && !said && !code; ) {
+      if (await existsTestId(d, "AgentCreateError", 1000)) said = (await textOf(d, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+      else code = await existsTestId(d, "AgentCreateOwnerCode", 1000);
+    }
+    const switchBtn = await scrollToTestId(d, "AgentCreateSwitchToExisting", 3).catch(() => undefined);
+    await shot(d, "agents-r8-add-existing");
+    const after = aclCount();
+    row("add-existing-refused", /already has that agent/i.test(said) && Boolean(switchBtn) && !code && before >= 0 && after === before, `said "${said}" · Switch to it ${Boolean(switchBtn)} · code step ${code} · B's ACL ${before} → ${after}`);
+    if (switchBtn) {
+      await switchBtn.click();
+      await owner(d, "switch to existing").catch(() => undefined);
+      await waitSwitched(d, E.B_NAME).catch(() => undefined);
+      await myAgent(d);
+      const now = await homeName(d);
+      row("add-existing-switch", now.includes(E.B_NAME), `Switch to it → home "${now}"`);
+    } else row("add-existing-switch", false, "no AgentCreateSwitchToExisting");
+    // By scan: Add, the scanner, B's bare address pasted.
+    await myAgent(d);
+    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await owner(d, "add agent (existing, scan)");
+    if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+    let scanSaid = "";
+    if (await existsTestId(d, "PasteUrlButton", 10000)) {
+      await pasteLinkOnScanScreen(d, E.B_DID);
+      for (const until = Date.now() + 30000; Date.now() < until && !scanSaid; await sleep(1000)) {
+        const src = await d.getPageSource();
+        scanSaid = (src.match(/(?:text|content-desc)="([^"]*already has that agent[^"]*)"/i) || [])[1] || "";
+      }
+    }
+    await shot(d, "agents-r8-scan-existing");
+    row("add-existing-scan-refused", /already has that agent/i.test(scanSaid), scanSaid ? `"${scanSaid}"` : "no \"already has that agent\" words after pasting B's address");
+    await myAgent(d);
+    if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
+    log(`R8 done in ${since("R8")}`);
   }
 
   if (ROWS.includes("R2")) {
