@@ -41,7 +41,7 @@ row update-prev-two-agents "$([ "$two" -gt 0 ] && echo PASS || echo FAIL)" "$(gr
 # The update: the candidate over the installed app, data kept.
 adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat-after-update.log" 2>/dev/null & LC=$!
 adb -s $E install -r "$NEW_APK" 2>&1 | tail -1
-PLATFORM=android UDID=$E APPIUM_PORT=4762 C_DID=$C_DID EXPECT_AGENTS=$([ "$two" -gt 0 ] && echo 2 || echo 1) \
+PLATFORM=android UDID=$E APPIUM_PORT=4762 DEVICE_PIN=1234 C_DID=$C_DID EXPECT_AGENTS=$([ "$two" -gt 0 ] && echo 2 || echo 1) \
   perl -e 'alarm 600; exec @ARGV' node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
