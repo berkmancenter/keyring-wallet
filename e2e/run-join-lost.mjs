@@ -41,7 +41,26 @@ const online = () => {
     return false;
   }
 };
+// BLOCK_HOST (239, f7): cut only the community's messaging host (iptables on the rootable emulator), so the persona
+// is made and the request recorded as sent, and only its delivery fails. Without it, airplane mode, which on 238 cut
+// the network before the persona existed (nothing was recorded, so nothing could be lost).
+const BLOCK = process.env.BLOCK_HOST || "";
+const blockRule = (op) => {
+  for (const t of ["iptables", "ip6tables"]) {
+    try {
+      adb(t, op, "OUTPUT", "-d", BLOCK, "-j", "REJECT");
+    } catch (e) {
+      if (op === "-I") log(`${t} ${op} ${BLOCK}: ${String(e.message).split("\n")[0].slice(0, 120)}`);
+    }
+  }
+};
 const network = async (on) => {
+  if (BLOCK) {
+    blockRule(on ? "-D" : "-I");
+    const ip = (() => { try { return adb("ping", "-c", "1", "-W", "3", BLOCK).match(/\(([0-9.]+)\)/)?.[1] ?? "?"; } catch (e) { return `unreachable (${String(e.stdout ?? "").match(/\(([0-9.]+)\)/)?.[1] ?? "?"})`; } })();
+    log(`${BLOCK} ${on ? "unblocked" : "blocked"}: ${ip}`);
+    return;
+  }
   adb("cmd", "connectivity", "airplane-mode", on ? "disable" : "enable");
   for (let i = 0; i < 20 && online() !== on; i++) await sleep(1000);
   log(`network ${on ? "on" : "off"}: online ${online()}`);
