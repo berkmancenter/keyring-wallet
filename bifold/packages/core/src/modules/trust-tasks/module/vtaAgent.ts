@@ -1266,6 +1266,18 @@ export class VtaAgentController {
   private async confirmHostOffer(agent: Agent): Promise<void> {
     const offer = this.hostOffer
     if (!offer || this.state.link.kind !== 'confirming') return
+    // A code the person confirms after it has lapsed (the phone slept on this
+    // screen, IN-135) is said to have, before anything is sent: the host
+    // would refuse it, and only after a key had been made for it.
+    if (this.state.link.exp && this.now() > this.state.link.exp) {
+      this.hostOffer = undefined
+      this.dispatch({ type: 'confirmed' })
+      this.dispatch({
+        type: 'failed',
+        failure: { reason: 'expired', hostReason: 'expired', detail: 'the code lapsed before it was confirmed' },
+      })
+      return
+    }
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken
     this.dispatch({ type: 'confirmed' })
