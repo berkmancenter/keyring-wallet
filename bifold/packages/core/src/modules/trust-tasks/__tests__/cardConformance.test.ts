@@ -11,19 +11,24 @@
  * (`scripts/openvtc/card-verify/check-keyring-card.sh`).
  *
  * The same run has Keyring's vetter (`VtiVetterDesk.attest`) attest to that
- * card, really signed by the vetter's did:key, and writes `statement.json`:
- * `card-verify verify-statement` runs vta-sdk's `verify_statement` and
- * `check_against_card` on it — what an openvtc applicant runs on a statement
- * it receives (openvtc-core `vetting/applicant.rs:1068`, at ed13d29).
+ * card, really signed by the vetter's did:key, and writes the vetted/1
+ * statement as `statement-v1.json` with the session document it cites as
+ * `session.json`: `card-verify verify-statement` runs vta-sdk's
+ * `verify_statement`, `check_against_card` and `check_against_session` on it —
+ * what an openvtc applicant runs on a statement it receives (openvtc-core
+ * `vetting/applicant.rs:1068`, at ed13d29). The endorsement-shaped statement is
+ * still made and checked here, but no longer written: vta-sdk 0.55 refuses it.
  *
  * And Keyring's vetter accepts a request (`VtiVetterDesk` taking a
- * `vetting/request`), presenting a CommunityRole grant a did:key community
- * really signed, and the run writes that presentation as `eligibility.json`,
- * with `expect.json`'s `eligibility` member naming what vta-sdk
- * `verify_eligibility_vp` (vetting/eligibility.rs:252) must be given — the
- * check an openvtc applicant runs on it (openvtc-core `vetting/inbound.rs:607-620`,
- * at ed13d29). The community is a did:key of its own so the upstream checker
- * needs no network to verify the grant.
+ * `vetting/request`), presenting a grant a did:key community really signed.
+ * With the role VAC a DTG Credentials v1 community issues, the run writes that
+ * presentation as `eligibility-v1.json`, with `expect.json`'s `eligibilityV1`
+ * member naming what vta-sdk `verify_eligibility_vp` (vetting/eligibility.rs)
+ * must be given — the check an openvtc applicant runs on it (openvtc-core
+ * `vetting/inbound.rs:607-620`, at ed13d29). The presentation with the older
+ * CommunityRole grant is still checked here, but no longer written. The
+ * community is a did:key of its own so the upstream checker needs no network
+ * to verify the grant.
  *
  * And every Trust Task document Keyring signs — to a peer, to a community, to
  * its VTA — made by the shipping code, written to `tasks/<name>.json`, with
@@ -199,9 +204,9 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       kmsKeyIds: { signing: 'vetter-key', keyAgreement: 'vetter-key' },
     }
     mockSend.mockClear()
-    // statement.json is the endorsement-shaped statement, written on purpose:
-    // with no requirements and no grant here, mode auto now writes vetted/1,
-    // which statement-v1.json below already covers.
+    // The endorsement-shaped statement, made on purpose: with no requirements
+    // and no grant here, mode auto now writes vetted/1, which statement-v1.json
+    // below already covers.
     setDtgV1WritingMode('off')
     try {
       await new VtiVetterDesk(vetter.agent as never, vetterPersona as never, deskStore, {} as never).attest(
@@ -460,7 +465,6 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     if (out) {
       mkdirSync(out, { recursive: true })
       writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
-      writeFileSync(join(out, 'statement.json'), JSON.stringify(statement, null, 2))
       writeFileSync(join(out, 'statement-v1.json'), JSON.stringify(statementV1, null, 2))
       writeFileSync(join(out, 'session.json'), JSON.stringify(sessionDocument, null, 2))
       // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
@@ -473,7 +477,6 @@ describe('a Vetting Card from the shipping code, really signed', () => {
         join(out, 'signers.json'),
         JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2)
       )
-      writeFileSync(join(out, 'eligibility.json'), JSON.stringify(eligibility, null, 2))
       writeFileSync(join(out, 'eligibility-v1.json'), JSON.stringify(eligibilityV1, null, 2))
       writeFileSync(
         join(out, 'expect.json'),
@@ -485,8 +488,7 @@ describe('a Vetting Card from the shipping code, really signed', () => {
             challenge: session.challenge,
             domain: session.domain,
             requiredClaims: session.requiredClaims,
-            eligibility: eligibilityExpect,
-            // The role-VAC presentation (eligibility-v1.json), for a v1 checker.
+            // The role-VAC presentation (eligibility-v1.json).
             eligibilityV1: eligibilityV1Expect,
           },
           null,
