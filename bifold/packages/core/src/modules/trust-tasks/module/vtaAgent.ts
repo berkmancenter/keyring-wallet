@@ -513,18 +513,6 @@ export async function tellAgentLeaving(
 }
 
 /**
- * The agent being linked serves a community: its own VTC lives there (a
- * full_stack stack). Keyring links only to a person's own agent, so the link
- * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
- * says nothing (only VTARest), so the agent itself is asked, once signed in.
- */
-/**
- * The agent asked to be linked is one this phone already has (IN-132): it is
- * refused, matched by its DID and never by a name, and the person is offered
- * a switch to it. Linking it again replaced its entry, its name, and this
- * phone's key on it, leaving the old key on the agent's list.
- */
-/**
  * Whether a Credo agent can be used: Keyring's lock shuts it down
  * (`isInitialized` false) until the person unlocks and a new one is handed
  * over. An agent that does not say is taken as up.
@@ -533,6 +521,12 @@ function agentIsUp(agent: Agent): boolean {
   return (agent as unknown as { isInitialized?: boolean }).isInitialized !== false
 }
 
+/**
+ * The agent asked to be linked is one this phone already has (IN-132): it is
+ * refused, matched by its DID and never by a name, and the person is offered
+ * a switch to it. Linking it again replaced its entry, its name, and this
+ * phone's key on it, leaving the old key on the agent's list.
+ */
 export class AgentAlreadyOnPhone extends Error {
   constructor(readonly vtaDid: string) {
     super('vtaAgent: this phone already has that agent')
@@ -540,6 +534,12 @@ export class AgentAlreadyOnPhone extends Error {
   }
 }
 
+/**
+ * The agent being linked serves a community: its own VTC lives there (a
+ * full_stack stack). Keyring links only to a person's own agent, so the link
+ * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
+ * says nothing (only VTARest), so the agent itself is asked, once signed in.
+ */
 export class CommunityAgentRefused extends Error {
   constructor(readonly vtaDid: string) {
     super("This is a community's agent. Link Keyring to your personal agent instead.")
@@ -1322,10 +1322,13 @@ export class VtaAgentController {
         },
         link: async () => {
           if (!live()) throw new AgentHostConnectionError('cancelled')
-          const client = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
+          const signedIn = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
           if (!live()) throw new AgentHostConnectionError('cancelled')
           this.dispatch({ type: 'granted' })
-          // With the agent in use now: a lock while the host worked hands over a new one.
+          // With the agent in use now: a lock while the host worked hands over a
+          // new one. The signed-in client goes along only if it was made on
+          // that agent; a lock since then leaves it on a shut-down one, and the
+          // link signs in afresh.
           const current = this.agent ?? agent
           await this.finishLink(
             current,
@@ -1333,7 +1336,7 @@ export class VtaAgentController {
             label,
             current === agent ? identities : this.identityStore(current),
             live,
-            client
+            signedIn.agent === current ? signedIn.client : undefined
           )
         },
         warn: (message) => agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] ${message}`),
@@ -1372,7 +1375,7 @@ export class VtaAgentController {
     vtaDid: string,
     identities: VtiIdentityStore,
     live: () => boolean
-  ): Promise<VtaClient> {
+  ): Promise<{ client: VtaClient; agent: Agent }> {
     const wait = this.deps.agentHost?.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
     let last: unknown
     for (let attempt = 0; attempt < HOST_SIGN_IN_TRIES; attempt++) {
@@ -1406,7 +1409,8 @@ export class VtaAgentController {
         )
         if (connected) {
           await client.whoAmI()
-          return client
+          // With the agent it was signed in on: a lock after this hands over another.
+          return { client, agent }
         }
         last = new Error('the agent did not answer')
       } catch (error) {

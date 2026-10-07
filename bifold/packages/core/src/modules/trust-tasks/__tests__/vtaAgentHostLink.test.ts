@@ -238,6 +238,44 @@ describe('an agent host’s automatic connection', () => {
     expect(clientAgents).toContain(after)
   })
 
+  // ce's review of #353: a lock between the sign-in and the link's last steps
+  // hands over another agent; the signed-in client belongs to the shut-down
+  // one, so the link signs in afresh with the agent in use.
+  it('a lock just after signing in: the link goes on with a fresh sign-in on the agent handed over', async () => {
+    const before = { isInitialized: true }
+    const after = { isInitialized: true }
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const { vta } = controller(host)
+    ;(vta as unknown as { agent: unknown }).agent = before
+    let handedOver = false
+    mockClient.whoAmI.mockImplementation(async () => {
+      if (!handedOver) {
+        handedOver = true
+        // Signed in on `before`; Keyring locks and unlocks before the link is finished.
+        before.isInitialized = false
+        ;(vta as unknown as { agent: unknown }).agent = after
+      }
+      return { roles: ['admin'] }
+    })
+    // Each client says which agent it was made on, so the rotation's can be told.
+    ;(VtaClient as unknown as jest.Mock).mockImplementation((made: unknown) =>
+      Object.assign(Object.create(mockClient), { madeOn: made })
+    )
+    mockClient.rotateManagerKey.mockClear()
+    vta.scanHostOffer(hostOffer)
+    await vta.confirmOffer(before as never)
+    ;(VtaClient as unknown as jest.Mock).mockImplementation(() => mockClient)
+    expect(vta.getState().link.kind).toBe('linked')
+    // The key swap ran on a client made on the agent handed over, not on the shut-down one.
+    const rotatedOn = (mockClient.rotateManagerKey.mock.contexts as { madeOn?: unknown }[]).map((c) => c?.madeOn)
+    expect(rotatedOn).toContain(after)
+    expect(rotatedOn).not.toContain(before)
+  })
+
   it.each([
     [410, 'expired', 'expired'],
     [409, 'taken', 'refused'],
