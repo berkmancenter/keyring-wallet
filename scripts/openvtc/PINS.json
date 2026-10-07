@@ -41,10 +41,10 @@
     },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
-      "sha": "da432130",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's mediator now runs: #905 stops a TSP payload sent right after a relationship invite from being dropped (the O10/VTI-52 lost-reply shape).",
+      "sha": "c0a69f1e",
+      "commitDate": "2026-10-03",
+      "pinnedOn": "2026-10-07",
+      "why": "The release commit for affinidi-messaging-mediator 0.37.0, affinidi-messaging-sdk 0.33.0 and affinidi-tdk 0.23.0: the versions VTI vta-service-v0.55.0's Cargo.lock builds against.",
       "watch": [
         "crates/messaging/affinidi-messaging-mediator/"
       ]
