@@ -1979,6 +1979,7 @@
     "NoDidHost": "Votre agent n'a aucun endroit où publier une nouvelle identité. Demandez à son administrateur d'y enregistrer un hébergeur de DID, puis réessayez.",
     "Unreachable": "Rien n'a répondu à cette adresse. Vérifiez votre connexion, puis réessayez.",
     "Unknown": "Cela n'a pas fonctionné et l'application ne sait pas pourquoi. Réessayez ; si cela persiste, envoyez-nous les détails ci-dessous.",
+    "AgentBusy": "Votre agent est occupé pour le moment. Attendez une minute et réessayez.",
     "ShowDetails": "Détails"
   },
   "CreateAgent": {

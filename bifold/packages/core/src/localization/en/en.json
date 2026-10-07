@@ -2043,6 +2043,7 @@
     "NoDidHost": "Your agent has nowhere to publish a new identity. Ask its admin to register a DID host with it, then try again.",
     "Unreachable": "Nothing answered at that address. Check your connection, then try again.",
     "Unknown": "That didn't work, and the app doesn't know why. Try again; if it keeps happening, send us the details below.",
+    "AgentBusy": "Your agent is busy right now. Wait a minute and try again.",
     "ShowDetails": "Details"
   },
   "CreateAgent": {

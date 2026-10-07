@@ -53,6 +53,38 @@ describe('what a person is told when something fails', () => {
   })
 })
 
+// 237 gate: a link failed with "doesn't know why" while other phones hit the
+// same agent. An agent or host turning requests away for now says so; waiting
+// a minute is what helps.
+describe('an agent or host that is busy', () => {
+  it.each([
+    'request failed with status code 429',
+    'HTTP 429 Too Many Requests',
+    'Too Many Requests',
+    'error code: 1015',
+    'You are being rate limited (Cloudflare)',
+    'HTTP 503 Service Unavailable',
+    'service temporarily unavailable',
+  ])('"%s" is a busy agent, worth trying again in a minute', (text) => {
+    expect(plainError(new Error(text))).toMatchObject({ line: 'Errors.AgentBusy', retry: true, detail: text })
+  })
+
+  it('is not fooled by a DID or a port that holds the same digits', () => {
+    expect(plainError(new Error('could not resolve did:webvh:Qm429abc:example.org:503')).line).toBe(
+      'Errors.Unreachable'
+    )
+    expect(plainError(new Error('ECONNREFUSED 127.0.0.1:4290')).line).toBe('Errors.Unreachable')
+  })
+
+  it('says to wait a minute, in every language', () => {
+    for (const lang of ['en', 'fr', 'pt-br']) {
+      const errors = jest.requireActual(`../../../localization/${lang}/${lang}.json`).Errors as Record<string, string>
+      expect(errors.AgentBusy).toEqual(expect.any(String))
+      expect(errors.AgentBusy).not.toMatch(/429|503|1015|rate/i)
+    }
+  })
+})
+
 describe('the sentences themselves', () => {
   const copy = jest.requireActual('../../../localization/en/en.json').Errors as Record<string, string>
 

@@ -1885,6 +1885,7 @@
     "NoDidHost": "Seu agente não tem onde publicar uma nova identidade. Peça ao administrador dele para registrar um host de DID, depois tente de novo.",
     "Unreachable": "Nada respondeu nesse endereço. Verifique sua conexão e tente de novo.",
     "Unknown": "Não funcionou, e o aplicativo não sabe por quê. Tente de novo; se continuar, envie os detalhes abaixo.",
+    "AgentBusy": "Seu agente está ocupado agora. Espere um minuto e tente de novo.",
     "ShowDetails": "Detalhes"
   },
   "CreateAgent": {
