@@ -792,7 +792,17 @@ const VtaCreateAgent: React.FC = () => {
         <Button
           title={t('Global.Done')}
           buttonType={ButtonType.Secondary}
-          onPress={() => navigation.goBack()}
+          // The stack is set to the agent's page, not popped back to the
+          // panel this began on: that panel, linked now, swapped itself for
+          // the agent's page while the pop was still animating, and on
+          // Android that left the app gone (238 gate). The agent's page plays
+          // the first-link introduction.
+          onPress={() =>
+            (navigation as unknown as { reset: (state: { index: number; routes: { name: string }[] }) => void }).reset({
+              index: 0,
+              routes: [{ name: Screens.VtaAgent }],
+            })
+          }
           testID={testIdWithKey('AgentCreateDone')}
         />
       </>
