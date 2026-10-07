@@ -253,6 +253,8 @@ export interface VtaAgentDeps {
     store: VtiIdentityStore,
     options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void }
   ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
+  /** How long a key fetch waits for the current agent's session (KEY_FETCH_WAIT_MS); shorter in tests. */
+  keyFetchWaitMs?: number
   /** The client a key fetch opens for a linked agent that is not the current one (fetchKeyCopy). */
   keyClient?: (
     agent: Agent,
@@ -2369,9 +2371,14 @@ export class VtaAgentController {
     if (!persona) throw new Error(`no identity on this phone names ${keyId}`)
     const vtaDid = persona.vtaDid
     const link = this.state.link
-    if (link.kind === 'linked' && link.vtaDid === vtaDid) {
-      // The current agent: ask on its session, which may still be opening.
-      await this.untilOnline(vtaDid, KEY_FETCH_WAIT_MS)
+    // The current agent — or the one being linked right now, which is about to
+    // be: ask on its session once it is up. Never a side session beside a link
+    // in progress, which signs in as the same manager key, and the mediator
+    // keeps one live socket per DID.
+    // A revoked agent is neither: it will not answer this phone's key at all.
+    const linking = link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid
+    if (linking) {
+      await this.untilOnline(vtaDid, this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
       await this.client(agent, vtaDid).holdPersonaKeys(persona)
       DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       return
