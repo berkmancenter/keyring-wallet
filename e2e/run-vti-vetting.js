@@ -1060,7 +1060,19 @@ try {
   } else {
   printFailure("vti-vetting", err);
   for (const [d, name] of [[applicant, "applicant"], [vetter, "vetter"]]) {
-    if (d) { try { await screenshot(d, `vetting-failure-${name}`); await dumpSource(d, `vetting-failure-${name}`); } catch { /* ignore */ } }
+    if (d) {
+      // The app's own error, with its raw text behind Details (SaidFailure: VettingError → …DetailsToggle → …Detail).
+      try {
+        if (await scrollToTestId(d, "VettingError", 4).catch(() => undefined)) {
+          const said = (await textOf(d, "VettingError").catch(() => "")).replace(/\s+/g, " ").trim();
+          const toggle = await scrollToTestId(d, "VettingErrorDetailsToggle", 3).catch(() => undefined);
+          if (toggle) await toggle.click().catch(() => undefined);
+          const detail = (await scrollToTestId(d, "VettingErrorDetail", 3).then(() => textOf(d, "VettingErrorDetail"), () => "")).replace(/\s+/g, " ").trim();
+          console.log(`VETTING-ERROR ${name} "${said}" · detail "${detail}"`);
+        }
+      } catch { /* best effort */ }
+      try { await screenshot(d, `vetting-failure-${name}`); await dumpSource(d, `vetting-failure-${name}`); } catch { /* ignore */ }
+    }
   }
   process.exitCode = 1;
   }
