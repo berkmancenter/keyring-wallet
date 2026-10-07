@@ -32,6 +32,7 @@ L env RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_UR
   perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 adb -s $E shell locksettings set-pin 1234 >/dev/null 2>&1; sleep 8   # a key made in the 5 s after a lock is set does not prompt yet
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 RUNNER_VTA=$RUNNER_MAIN_SLUG PNM_BIN=$PNM_BIN DEVICE_PIN=1234 \
-  OTHER_AGENT_DID=$RUNNER_A_DID ROWS="in124 devices scanbeside" perl -e 'alarm 1500; exec @ARGV' node run-release-235.mjs > "$LEG_DIR/rows.out" 2>&1
+  OTHER_AGENT_DID=$RUNNER_A_DID ROWS="in124 devices scanbeside" perl -e 'alarm 1500; exec @ARGV' node run-release-235.mjs > "$LEG_DIR/rows.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^DEVICES-REOPEN' "$LEG_DIR/rows.out" | cut -c1-200
 take_rows "$LEG_DIR/rows.out"
+driver_rc devices-driver "$drc" "$LEG_DIR/rows.out"

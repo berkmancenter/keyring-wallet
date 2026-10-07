@@ -23,6 +23,7 @@ E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL
 row testreq-link PASS "$(( $(date +%s) - t ))s"
 adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 DECIDE=approve DEVICE_PIN=1234 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 RUNNER_VTA=$RUNNER_MAIN_SLUG PNM_BIN=$PNM_BIN \
-  perl -e 'alarm 900; exec @ARGV' node run-askme.mjs > "$LEG_DIR/askme.out" 2>&1
+  perl -e 'alarm 900; exec @ARGV' node run-askme.mjs > "$LEG_DIR/askme.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/askme.out" | cut -c1-200
 take_rows "$LEG_DIR/askme.out"
+driver_rc testreq-driver "$drc" "$LEG_DIR/askme.out"

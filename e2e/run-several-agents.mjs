@@ -381,13 +381,21 @@ try {
     await tapTestId(d, "AgentSwitcherAdd", 15000);
     await owner(d, "add agent");
     const tempB = await linkTo(d, E.B_DID, E.B_SLUG);
-    await waitForTestId(d, "AgentAddedCard", 60000).catch(() => undefined);
+    // 237: the new agent's introduction can play first (1 of 3), then the "added" card: skip the one, wait for the other.
+    for (const until = Date.now() + 60000; Date.now() < until; ) {
+      if (await existsTestId(d, "AgentAddedCard", 1500)) break;
+      if (await existsTestId(d, "AgentIntroSkip", 800)) await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+      else if (await existsTestId(d, "AgentIntroNext", 500)) await tapTestId(d, "AgentIntroNext", 5000).catch(() => undefined);
+      else if (await existsTestId(d, "AgentHome", 500)) break;
+    }
     const cardEl = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentAddedCard")`);
     let card = "";
     if (await cardEl.isExisting().catch(() => false)) for (const c of await cardEl.$$(".//*")) { const t = await c.getAttribute("text").catch(() => ""); if (t) card += `${t} `; }
     log(`R1: added card "${card?.slice(0, 160)}"`);
-    await tapTestId(d, "AgentAddedKeep", 15000);
-    await owner(d, "keep");
+    if (await existsTestId(d, "AgentAddedKeep", 5000)) {
+      await tapTestId(d, "AgentAddedKeep", 15000);
+      await owner(d, "keep");
+    } else log("R1: no AgentAddedKeep card after the link (the app went on to the agent)");
     await openSwitcher(d);
     const rows = await switcherRows(d);
     const others = rows.filter((r) => !/Current/.test(r.desc));

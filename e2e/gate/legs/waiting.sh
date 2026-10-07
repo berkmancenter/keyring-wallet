@@ -26,7 +26,7 @@ E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL
 APPROVE=1; [ "${WAITING_DECLINE:-}" = 1 ] && APPROVE=0
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME PERSONA_SHOTS=$LEG_DIR/persona-did \
   JOIN_APPROVE=$APPROVE C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
-  perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1
+  perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^PERSONA-DID|^WAITING-STATUS|^JOIN-IDENTITY-NAME' "$LEG_DIR/waiting.out" | cut -c1-220
 take_rows "$LEG_DIR/waiting.out"   # flow B's rows (a)–(d) when approved
 # The request whose identity the phone must show: the newest pending one, or (approved) the one it came from.
@@ -46,3 +46,4 @@ done < <(grep -E '^FOOT ' "$LEG_DIR/waiting.out")
 if [ "$APPROVE" = 0 ] && [ "$RID" != - ]; then
   echo "  decline $RID: $(JOIN_DECIDE_REASON='gate: a join left waiting on purpose' c_admin join-decide "$RID" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
 fi
+driver_rc waiting-driver "$drc" "$LEG_DIR/waiting.out"

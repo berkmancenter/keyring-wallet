@@ -180,3 +180,10 @@ leg_end() {
   echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s"
   exit $rc
 }
+
+# A driver that stopped early prints fewer rows, and the rows it did print may all pass: its exit code says so.
+# driver_rc <row-name> <exit code> <its output file>: a FAIL row unless it exited 0 or 3 (3: a row of its own failed).
+driver_rc() {
+  local name=$1 rc=$2 out=$3
+  case $rc in 0|3) ;; *) row "$name" FAIL "the driver stopped (rc=$rc): $(grep -aE 'error: |Error:|❌' "$out" 2>/dev/null | grep -v webdriver | grep -v stacktrace | tail -1 | cut -c1-160)" ;; esac
+}

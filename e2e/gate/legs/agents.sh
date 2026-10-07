@@ -32,6 +32,7 @@ RUNNER_VTA=$RUNNER_A_SLUG RUNNER_VTA_DID=$RUNNER_A_DID RUNNER_VTA_URL=$RUNNER_A_
 row agents-link-a PASS "$(( $(date +%s) - t ))s"
 ROWS="${AGENT_ROWS:-R1 R2 R7 R5 R4}" A_SLUG=$RUNNER_A_SLUG A_DID=$RUNNER_A_DID A_NAME=$RUNNER_A_NAME B_SLUG=$RUNNER_B_SLUG B_DID=$RUNNER_B_DID \
   B_NAME=$RUNNER_B_NAME C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" DEVICE_PIN=1234 LOGCAT=$LEG_DIR/logcat.log E2E_APP_ID=$BID \
-  UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 PNM_BIN=$PNM_BIN perl -e 'alarm 3000; exec @ARGV' node run-several-agents.mjs > "$LEG_DIR/agents.out" 2>&1
+  UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 PNM_BIN=$PNM_BIN perl -e 'alarm 3000; exec @ARGV' node run-several-agents.mjs > "$LEG_DIR/agents.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^FINDING' "$LEG_DIR/agents.out" | cut -c1-200
 take_rows "$LEG_DIR/agents.out"
+driver_rc agents-driver "$drc" "$LEG_DIR/agents.out"
