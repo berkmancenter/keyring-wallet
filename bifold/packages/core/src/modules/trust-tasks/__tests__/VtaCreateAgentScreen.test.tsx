@@ -385,6 +385,20 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(tree.getByTestId(id('AgentBackupNone'))).toHaveTextContent('CreateAgent.BackupLater')
   })
 
+  // 238 gate, Android: Done popped back to the panel, which swapped itself for
+  // the agent's page while the pop still animated, and the app was gone. Done
+  // sets the stack to the agent's page instead, in one step.
+  test("Done sets the stack to the agent's page, rather than going back", () => {
+    linked()
+    const nav = useNavigation() as unknown as { goBack: jest.Mock; reset: jest.Mock }
+    nav.goBack.mockClear()
+    nav.reset.mockClear()
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateDone')))
+    expect(nav.reset).toHaveBeenCalledWith({ index: 0, routes: [{ name: Screens.VtaAgent }] })
+    expect(nav.goBack).not.toHaveBeenCalled()
+  })
+
   // IN-123: a computer or another app (pnm) does not scan the agent's code;
   // the way to enter its code is said on the first step, not found after Next.
   test('a computer or another app: said on the first step, with "Enter its code" straight to the code', () => {
