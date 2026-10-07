@@ -1107,6 +1107,45 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     held.mockRestore()
   })
 
+  it('an identity of the agent being linked right now waits for that link, never a second session as the same key', async () => {
+    // A relink of an agent whose identities this phone still holds: the link
+    // signs in as this phone's manager key, and a side session beside it would
+    // be the same DID twice at the mediator.
+    const p = phone()
+    // finishLink keeps the link before it swaps keys, so for that while the
+    // agent is on the list and the link is still in progress.
+    const listed: { vtaDid: string; label: string; linkedAt: string }[] = []
+    const links = { ...p.links, list: async () => listed }
+    const tiger = persona(OTHER, 'tiger-silver')
+    const identities = { ...p.identities, listPersonas: jest.fn(async () => [tiger]) }
+    let fetcher: ((keyId: string) => Promise<void>) | undefined
+    const backend = { backend: 'ephemeral', setMissingKeyFetcher: (f: typeof fetcher) => (fetcher = f) }
+    const kmsAgent = {
+      ...(agent as object),
+      dependencyManager: { resolve: () => ({ backends: [backend] }) },
+    } as never
+    const keyClient = jest.fn(() => ({
+      holdPersonaKeys: jest.fn(async () => true),
+      disconnect: jest.fn(async () => undefined),
+    }))
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({
+      linkStore: () => links as never,
+      identityStore: () => identities as never,
+      keyClient,
+      keyFetchWaitMs: 300,
+    } as never)
+    await vta.restore(kmsAgent)
+    await vta.startManualLink(kmsAgent, OTHER, 'bob')
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: OTHER })
+    listed.push({ vtaDid: OTHER, label: 'bob', linkedAt: 'y' })
+    await expect((fetcher as NonNullable<typeof fetcher>)(tiger.kmsKeyIds?.signing as string)).rejects.toThrow(
+      /did not come online/
+    )
+    expect(keyClient).not.toHaveBeenCalled()
+  })
+
   it('a key no identity on this phone names is refused, not guessed at', async () => {
     const { fetch, keyClient } = await restartedPhone([persona(OTHER, 'tiger-silver')])
     await expect(fetch('vta-copy:did:webvh:nobody:did:webvh:x#key-1')).rejects.toThrow(
