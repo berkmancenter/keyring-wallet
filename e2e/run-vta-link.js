@@ -338,6 +338,14 @@ async function linkManually(driver) {
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    // A phone its agent no longer accepts (its key removed): My Agent says so and offers "Link again", the
+    // scanner, in place of "Scan your agent's code". Re-seating the gate's vetter goes this way.
+    if (await existsTestId(driver, "VtaLinkScanAgain", 5000)) {
+      console.log(`[e2e] link: no longer linked ("${(await textOf(driver, "VtaLinkError").catch(() => "")).trim().slice(0, 80)}"); Link again`);
+      await tapTestId(driver, "VtaLinkScanAgain", 15000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      return linkViaScan(driver);
+    }
     if (process.env.LINK_VIA === "scan") {
       // The scan branch on purpose, on any build: "Scan your agent's code", paste the bare address, VtaLink's scan card.
       await tapTestId(driver, "LinkYourAgentButton", 30000);
