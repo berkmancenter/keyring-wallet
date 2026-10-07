@@ -297,6 +297,13 @@ async function linkViaScan(driver) {
   }
   if (state === "error" || wanted) {
     const said = state === "error" ? (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim() : "";
+    if (state === "error") {
+      // The raw text behind Details (SaidFailure: VtaLinkErrorDetailsToggle → VtaLinkErrorDetail).
+      const toggle = await scrollToTestId(driver, "VtaLinkErrorDetailsToggle", 3).catch(() => undefined);
+      if (toggle) await toggle.click().catch(() => undefined);
+      const detail = (await scrollToTestId(driver, "VtaLinkErrorDetail", 3).then(() => textOf(driver, "VtaLinkErrorDetail"), () => "")).replace(/\s+/g, " ").trim();
+      console.log(`LINK-ERROR "${said}" · detail "${detail}"`);
+    }
     await screenshot(driver, `link-scan-${EXPECT_REFUSAL || "error"}`);
     if (!wanted) throw new Error(`the link failed: "${said.slice(0, 200)}"`);
     if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no VtaLinkError)"}"`);

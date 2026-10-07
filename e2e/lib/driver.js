@@ -546,10 +546,13 @@ export async function liftAboveTabBar(driver, key, tries = 4, { log = false } = 
 
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
-  await el.waitForDisplayed({ timeout });
+  // Lift it into view first: an element below the fold (iOS reports it) is not "displayed" until it scrolls up,
+  // so waiting for that before the lift timed out on the ticket's Details toggle (237 gate, kk).
+  await liftAboveTabBar(driver, key).catch(() => false);
+  await el.waitForDisplayed({ timeout: 10000 }).catch(() => undefined);
   // Not a refusal: a sheet's button over the tab bar is tappable where it is. Said, so a tap that lands
   // on a tab instead shows in the log.
-  if (!(await liftAboveTabBar(driver, key))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
+  if (!(await liftAboveTabBar(driver, key, 0))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
   const cx = Math.floor(x + width / 2);
