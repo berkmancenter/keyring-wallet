@@ -20,6 +20,12 @@
  * - a card the Wallet cannot store (Credo expands JSON-LD on store; a context
  *   the device cannot load fails there) is logged and retried at the next run,
  *   and never stops the other cards;
+ * - a card that came through an agent no longer linked to this phone is not
+ *   shown: its persona belongs to that agent (Alberto, 10-07). It stays in
+ *   the store, and linking the agent again shows it again. A card whose agent
+ *   is not known (no persona for it, or a persona from before agents) stays;
+ *   and nothing is hidden until the linked agents have been read, so a start
+ *   does not take every card out and put it back;
  * - orphans go: a W3C record whose credential is a DTG membership, role or
  *   vetter grant whose `id` no store record holds. Everything is matched by
  *   the credential's own `id`. Peer relationship cards and every other
@@ -39,6 +45,8 @@ import { withKeyLock } from './keyedRecords'
 import { roleNameOf } from './vtiInbox'
 import { cardStandingOf, loadCardStanding, VTI_CARD_STANDING_EVENT } from './vtiCardStanding'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
+import { vtaAgent } from './vtaAgent'
 
 const LOCK = 'keyring/vti-wallet-cards'
 
@@ -86,8 +94,34 @@ export function walletCardKey(vc: Json): string | undefined {
  */
 const isPlainMemberRole = (vc: Json) => roleNameOf(vc)?.replace(/^custom:/, '') === 'member'
 
+/**
+ * The agents linked to this phone, once they have been read; undefined
+ * before, when nothing is to be hidden yet.
+ */
+function linkedAgentsNow(): string[] | undefined {
+  const state = vtaAgent.getState()
+  if (!state.linkRestored || !state.agents) return undefined
+  return state.agents.map((a) => a.vtaDid)
+}
+
+/**
+ * Whether a card held by `personaDid` came through an agent no longer linked:
+ * its persona is known, names its agent, and that agent is not among `linked`.
+ */
+const ofUnlinkedAgent =
+  (agentOf: Map<string, string | undefined>, linked: string[] | undefined) =>
+  (personaDid: string | undefined): boolean => {
+    if (!linked || !personaDid) return false
+    const vtaDid = agentOf.get(personaDid)
+    return Boolean(vtaDid) && !linked.includes(vtaDid as string)
+  }
+
 /** The cards the store holds that the Wallet shows, by `walletCardKey`. */
-async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<string, Json>> {
+async function heldCards(
+  store: VtiCommunityStore,
+  now: number,
+  hidden: (personaDid: string | undefined) => boolean = () => false
+): Promise<Map<string, Json>> {
   const held = new Map<string, Json>()
   const add = (vc: Json | undefined) => {
     const key = vc ? walletCardKey(vc) : undefined
@@ -102,10 +136,13 @@ async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<str
   for (const m of await store.listMemberships()) {
     // A membership the community removed is not a card the person holds.
     if ((m as { removal?: unknown }).removal) continue
+    // Nor is one held through an agent no longer linked to this phone.
+    if (hidden(m.personaDid)) continue
     if (add(m.vmc)) withMembershipCard.add(m.communityDid)
     if (m.roleVec) roleCards.push({ vc: m.roleVec, communityDid: m.communityDid })
   }
   for (const h of await store.listHeldCredentials()) {
+    if (hidden(h.subjectDid)) continue
     if (h.kind === 'role') roleCards.push({ vc: h.credential, communityDid: h.communityDid })
     else if (h.kind === 'vetter-grant' || h.kind === 'identity-check') add(h.credential)
   }
@@ -189,10 +226,20 @@ async function storeCopy(agent: Agent, vc: Json): Promise<boolean> {
 export function syncCardsToWallet(
   agent: Agent,
   store: VtiCommunityStore = new GenericRecordsCommunityStore(agent),
-  options: { now?: number } = {}
+  options: {
+    now?: number
+    /** The agents linked to this phone; undefined hides nothing. Read from the agent state by default. */
+    linkedAgents?: string[]
+    identities?: VtiIdentityStore
+  } = {}
 ): Promise<{ added: string[]; replaced: string[]; removed: string[]; failed: string[] }> {
   return withKeyLock(LOCK, async () => {
-    const held = await heldCards(store, options.now ?? Date.now())
+    const linked = 'linkedAgents' in options ? options.linkedAgents : linkedAgentsNow()
+    const personas = linked
+      ? await (options.identities ?? new GenericRecordsIdentityStore(agent)).listPersonas().catch(() => [])
+      : []
+    const agentOf = new Map(personas.map((p) => [p.did, p.vtaDid || undefined] as const))
+    const held = await heldCards(store, options.now ?? Date.now(), ofUnlinkedAgent(agentOf, linked))
     const done = { added: [] as string[], replaced: [] as string[], removed: [] as string[], failed: [] as string[] }
     const seen = new Set<string>()
     // A copy that already matches the store is met first, so it is the one kept
@@ -250,7 +297,18 @@ export function useVtiWalletCards(agent: Agent | undefined): void {
     const subs = [COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT, VTI_CARD_STANDING_EVENT].map((name) =>
       DeviceEventEmitter.addListener(name, run)
     )
+    // An agent linked or unlinked shows or hides the cards that came through it.
+    let agentsSeen = JSON.stringify(linkedAgentsNow() ?? null)
+    const stopAgents = vtaAgent.subscribe(() => {
+      const now = JSON.stringify(linkedAgentsNow() ?? null)
+      if (now === agentsSeen) return
+      agentsSeen = now
+      run()
+    })
     void loadCardStanding(agent).then(run, run)
-    return () => subs.forEach((s) => s.remove())
+    return () => {
+      subs.forEach((s) => s.remove())
+      stopAgents()
+    }
   }, [agent])
 }

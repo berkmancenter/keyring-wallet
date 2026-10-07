@@ -124,6 +124,49 @@ describe('the Wallet shows the community cards the store holds', () => {
   })
 })
 
+// Alberto, 10-07: a card that came through an agent no longer linked to this
+// phone leaves the Wallet; linking the agent again brings it back. Agents
+// still linked keep theirs, and nothing is hidden before the linked agents
+// are known.
+describe('cards of an agent no longer linked', () => {
+  const AGENT_A = 'did:webvh:example:agent-a'
+  const AGENT_B = 'did:webvh:example:agent-b'
+  const identities = (vtaDid: string) =>
+    ({ listPersonas: async () => [{ did: PERSONA_DID, vtaDid, communityDid: COMMUNITY }] }) as never
+
+  it('leave the Wallet when their agent is unlinked, and come back when it is linked again', async () => {
+    const { agent, ids } = walletAgent([openIdCard])
+    const held = fakeCommunityStore({ memberships: [membership], held: [grantHeld] })
+    await syncCardsToWallet(agent, held.store, { now: NOW, linkedAgents: [AGENT_A], identities: identities(AGENT_A) })
+    expect(ids()).toEqual([membershipCard.id, vetterGrantProofSet.id, 'urn:uuid:openid'].sort())
+    // A unlinked: its cards leave; every other credential stays.
+    const gone = await syncCardsToWallet(agent, held.store, {
+      now: NOW,
+      linkedAgents: [AGENT_B],
+      identities: identities(AGENT_A),
+    })
+    expect(gone.removed.sort()).toEqual([membershipCard.id, vetterGrantProofSet.id].sort())
+    expect(ids()).toEqual(['urn:uuid:openid'])
+    // The store still holds them: linked again, they are back.
+    await syncCardsToWallet(agent, held.store, {
+      now: NOW,
+      linkedAgents: [AGENT_A, AGENT_B],
+      identities: identities(AGENT_A),
+    })
+    expect(ids()).toEqual([membershipCard.id, vetterGrantProofSet.id, 'urn:uuid:openid'].sort())
+  })
+
+  it('stay while the linked agents are not known yet, or when their agent is not known', async () => {
+    const { agent, ids } = walletAgent()
+    const held = fakeCommunityStore({ memberships: [membership] })
+    await syncCardsToWallet(agent, held.store, { now: NOW, linkedAgents: undefined, identities: identities(AGENT_A) })
+    expect(ids()).toEqual([membershipCard.id])
+    const noPersona = { listPersonas: async () => [] } as never
+    await syncCardsToWallet(agent, held.store, { now: NOW, linkedAgents: [AGENT_B], identities: noPersona })
+    expect(ids()).toEqual([membershipCard.id])
+  })
+})
+
 describe('what the Wallet itself reads', () => {
   it("stores copies the Wallet's JSON-LD reader accepts, a proof set among them", async () => {
     const { agent, records } = walletAgent()
