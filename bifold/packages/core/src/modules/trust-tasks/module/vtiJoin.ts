@@ -247,7 +247,12 @@ export function membershipFromVerdict(
  * Never throws: a poll that fails falls back to what the phone last knew.
  */
 export type CommunityJoinState =
-  | { kind: 'none' }
+  /**
+   * Nothing stands. `lost`: this phone sent a request and the community, asked,
+   * holds none — the send never reached it. Only ever from that answer, never
+   * from a request that is merely unanswered (238).
+   */
+  | { kind: 'none'; lost?: boolean }
   | { kind: 'member'; membership: VtiMembership }
   | { kind: 'removed'; membership: VtiMembership; at?: string }
   | { kind: 'sent'; submission: JoinSubmission }
@@ -332,7 +337,9 @@ export async function readJoinState(
       options.status ??
       (async (did: string, requestId?: string) => {
         const persona = await (options.identityStore ?? new GenericRecordsIdentityStore(agent)).getPersona(did)
-        if (!persona) return undefined
+        // No identity to ask with is not an answer: nothing is known, so the
+        // request is not taken for lost.
+        if (!persona) throw new Error('vtiJoin: no identity to ask with')
         await vtiAgent.connect(agent, options.mediatorDid, {
           persona,
           peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
@@ -342,8 +349,9 @@ export async function readJoinState(
     try {
       const polled = await poll(communityDid, submission.requestId)
       // The community holds no such request: the send never reached it, or it
-      // was swept. There is nothing to wait for — the person can send again.
-      if (!polled) return { kind: 'none' }
+      // was swept. There is nothing to wait for — the person can send again,
+      // and is told why (238).
+      if (!polled) return { kind: 'none', lost: true }
       submission = (await recordStatus(store, communityDid, polled)) ?? submission
     } catch {
       // Keep what the phone last knew.

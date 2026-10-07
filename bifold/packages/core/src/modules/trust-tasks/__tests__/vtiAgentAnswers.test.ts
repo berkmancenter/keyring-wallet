@@ -112,8 +112,11 @@ jest.mock('../module/tspCapability', () => ({
   }),
 }))
 
+import { DeviceEventEmitter } from 'react-native'
+
 import { plainError } from '../screens/plainError'
 import { VTI_ANSWER_HOLD_MS, VtiSentNoAnswer, isVtiReadTask, vtiAgent } from '../module/vtiAgent'
+import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = { config: { logger } } as never
@@ -297,6 +300,21 @@ describe("a community's refusal is logged with its code and words", () => {
 })
 
 describe('T3: a late answer is kept for the next caller', () => {
+  // 238: a status answer after the clock ran out is announced, so the screen
+  // showing the request asks again and gets it at once.
+  it('a late answer about where a join stands is announced for that community', async () => {
+    const community = 'did:webvh:c:late-status'
+    const session = await connectTo(community, 'didcomm', 'did:webvh:p:late-status')
+    const heard = jest.fn()
+    const sub = DeviceEventEmitter.addListener(VTI_JOIN_STATUS_LATE_EVENT, heard)
+    vtiAgent.answerTimeoutMs = 50
+    await expect(vtiAgent.status(community)).rejects.toBeInstanceOf(VtiSentNoAnswer)
+    const asked = session.didcomm[0] as Sent
+    session.onMessage(didcommReply(asked, STATUS, { status: 'pending' }))
+    expect(heard).toHaveBeenCalledWith({ communityDid: community })
+    sub.remove()
+  })
+
   // 7b's R5, 10-06: a community retrying a DID lookup after a 429 answers at about 30 s.
   it('a join submit waits 60 s by default, not the usual 30 s', async () => {
     const fresh = new (vtiAgent.constructor as new () => typeof vtiAgent)()

@@ -1539,6 +1539,8 @@
     "IdentityHere": "Seu ID de persona: {{name}}",
     "Open": "Abrir {{community}}",
     "CheckAgain": "Verificar de novo",
+    "RequestLost": "Seu pedido não chegou a {{community}}. Envie de novo.",
+    "SendAgain": "Enviar de novo",
     "RequestSentTitle": "Pedido enviado",
     "WillShowWhenAccepted": "O Keyring mostra aqui e em Seu agente quando aceitarem.",
     "AskedAs": "Você pediu para entrar como",

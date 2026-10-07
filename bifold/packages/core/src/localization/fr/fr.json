@@ -1633,6 +1633,8 @@
     "IdentityHere": "Votre identifiant de persona : {{name}}",
     "Open": "Ouvrir {{community}}",
     "CheckAgain": "Vérifier à nouveau",
+    "RequestLost": "Votre demande n'est pas parvenue à {{community}}. Envoyez-la à nouveau.",
+    "SendAgain": "L'envoyer à nouveau",
     "RequestSentTitle": "Demande envoyée",
     "WillShowWhenAccepted": "Keyring l'affiche ici et dans Votre agent quand elle est acceptée.",
     "AskedAs": "Vous avez demandé à rejoindre en tant que",

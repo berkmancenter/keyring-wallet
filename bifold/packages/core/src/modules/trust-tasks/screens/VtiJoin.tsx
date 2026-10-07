@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -33,7 +33,7 @@ import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
-import { useCommunityChanged } from '../module/communityChanged'
+import { useCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
@@ -280,6 +280,20 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       .catch(() => undefined)
   }, [agent, communityDid])
   useCommunityChanged(rereadHeld, communityDid)
+
+  // The community answered where the request stands after the ask gave up
+  // waiting: ask again, which takes the answer already in hand (238: a
+  // request lost on the way left this on "Sent" with the answer received).
+  useEffect(() => {
+    if (!agent || !communityDid) return
+    const sub = DeviceEventEmitter.addListener(VTI_JOIN_STATUS_LATE_EVENT, (e?: { communityDid?: string }) => {
+      if (e?.communityDid !== communityDid) return
+      void readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid })
+        .then(setStanding)
+        .catch(() => undefined)
+    })
+    return () => sub.remove()
+  }, [agent, communityDid, config?.mediatorDid])
 
   const onCheckAgain = useCallback(async () => {
     if (!agent || !communityDid) return
@@ -1016,6 +1030,22 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         ]}
         testID={testIdWithKey('JoinScroll')}
       >
+        {/* The request this phone sent never reached the community (it says
+            it holds none): said, with the way to send it again (238). */}
+        {standing?.kind === 'none' && standing.lost && step !== 'as' ? (
+          <View style={styles.card} testID={testIdWithKey('JoinRequestLost')}>
+            <ThemedText>{t('Join.RequestLost', { community: name, interpolation: { escapeValue: false } })}</ThemedText>
+            <Button
+              title={t('Join.SendAgain')}
+              buttonType={ButtonType.Primary}
+              onPress={() => {
+                setPlainRequest(true)
+                setStep('as')
+              }}
+              testID={testIdWithKey('JoinSendAgain')}
+            />
+          </View>
+        ) : null}
         {body}
         {actions ? (
           <View

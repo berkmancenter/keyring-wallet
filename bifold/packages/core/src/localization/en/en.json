@@ -1694,6 +1694,8 @@
     "IdentityHere": "Your persona ID: {{name}}",
     "Open": "Open {{community}}",
     "CheckAgain": "Check again",
+    "RequestLost": "Your request didn't reach {{community}}. Send it again.",
+    "SendAgain": "Send it again",
     "RequestSentTitle": "Request sent",
     "WillShowWhenAccepted": "Keyring shows it here and on Your agent when they accept.",
     "AskedAs": "You asked to join as",
