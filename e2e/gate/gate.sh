@@ -17,6 +17,9 @@ LEGS_SOLO="linkfail"
 # iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
 # so they run first, with nothing beside them; the rest of iOS then runs beside Android.
 LEGS_IOS_ALONE="kk smoke-ios"
+# Mostly waiting (IN-135's slow cases, about 35 min) on the emulator, so it runs beside the iOS-alone legs, where the
+# emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
+LEGS_BESIDE_IOS_ALONE="linkwait"
 
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -48,7 +51,20 @@ run_legs() {
   if [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
     local alone=() rest=() l2
     for l2 in "${ios[@]}"; do [[ " $LEGS_IOS_ALONE " == *" $l2 "* ]] && alone+=("$l2") || rest+=("$l2"); done
-    [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
+    local beside=() arest=()
+    for l2 in "${android[@]}"; do [[ " $LEGS_BESIDE_IOS_ALONE " == *" $l2 "* ]] && beside+=("$l2") || arest+=("$l2"); done
+    if [ ${#alone[@]} -gt 0 ] && [ ${#beside[@]} -gt 0 ]; then
+      say "first: ${alone[*]} (iOS), beside them ${beside[*]} (Android, mostly waiting)"
+      local tb; tb=$(stamp)
+      ( export GATE_DEFER_KEYS=1; run_group "$rd" "${alone[@]}" ) & local pa=$!
+      ( export GATE_DEFER_KEYS=1; run_group "$rd" "${beside[@]}" ) & local pb=$!
+      wait $pa $pb
+      local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
+      : > "$rd/defer-keys" 2>/dev/null
+      android=(${arest[@]+"${arest[@]}"})
+    else
+      [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
+    fi
     ios=(${rest[@]+"${rest[@]}"})
     if [ ${#ios[@]} -eq 0 ]; then run_group "$rd" "${android[@]}"; return_solo=1; fi
   fi
