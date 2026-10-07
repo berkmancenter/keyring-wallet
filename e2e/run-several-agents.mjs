@@ -102,7 +102,17 @@ async function stop(d, why) {
 async function myAgent(d) {
   await tapTestId(d, "MyAgent", 15000);
   await sleep(1500);
-  for (let i = 0; i < 10 && !(await existsTestId(d, "AgentHome", 1000)); i++) await unlockIfLocked(d);
+  for (let i = 0; i < 10 && !(await existsTestId(d, "AgentHome", 1000)); i++) {
+    // An added agent's introduction comes when Your agent first shows it, which can be well after its link's Done
+    // (238 gate: up at R1's switcher read, after a 15 s wait had passed): skip it wherever it shows.
+    if (await existsTestId(d, "AgentIntroSkip", 500)) {
+      log("an agent's introduction is up: Skip");
+      await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+      await sleep(1000);
+      continue;
+    }
+    await unlockIfLocked(d);
+  }
 }
 
 async function homeName(d) {
