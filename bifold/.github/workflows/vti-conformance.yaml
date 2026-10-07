@@ -98,24 +98,20 @@ jobs:
           CARD_VERIFY_EXPECT_PURPOSE: '1'
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
-          # Which statement and grant shapes the checker at the main pin judges.
-          # A DTG Credentials v1 build (vta-sdk 0.55 on) answers `shape` with v1
-          # and refuses the endorsement shape; an older one prints its usage.
-          shape=legacy
-          if [ "$("$bin" shape 2>/dev/null)" = v1 ]; then shape=v1; fi
-          echo "card-verify judges the $shape shapes"
+          # The checker at the main pin is a DTG Credentials v1 build (vta-sdk
+          # 0.55 on): it refuses the endorsement-shaped statement and takes only
+          # a role VAC as the vetter's grant. One that is not cannot judge below.
+          if [ "$("$bin" shape 2>/dev/null)" != v1 ]; then
+            echo "::error::card-verify at the main pin is not a DTG Credentials v1 build (\`card-verify shape\` did not print v1)"
+            exit 1
+          fi
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
             echo "== $out"
             "$bin" "$out/card.json" "$out/expect.json"
-            if [ "$shape" = v1 ]; then
-              # The vetted/1 statement against its card and the session it cites,
-              # and the presentation whose grant is a role VAC.
-              "$bin" verify-statement "$out/statement-v1.json" "$out/card.json" "$out/session.json" "$out/expect.json"
-              "$bin" verify-eligibility "$out/eligibility-v1.json" "$out/expect.json" eligibilityV1
-            else
-              "$bin" verify-statement "$out/statement.json" "$out/card.json" "$out/expect.json"
-              "$bin" verify-eligibility "$out/eligibility.json" "$out/expect.json"
-            fi
+            # The vetted/1 statement against its card and the session it cites,
+            # and the presentation whose grant is a role VAC.
+            "$bin" verify-statement "$out/statement-v1.json" "$out/card.json" "$out/session.json" "$out/expect.json"
+            "$bin" verify-eligibility "$out/eligibility-v1.json" "$out/expect.json" eligibilityV1
             "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
             "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
           done
@@ -125,8 +121,7 @@ jobs:
       # the session document it cites), judged by VTI 0.47's own SDK as an openvtc
       # applicant on 0.47 judges it: verify_statement, check_against_card,
       # check_against_session. The step above judges the same statement at the
-      # main pin once its checker is a v1 build; until then it judges the
-      # endorsement-shaped statement.json there instead.
+      # main pin.
       - name: VTI 0.47 SDK judges the vetted/1 statement (flag on)
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify-v047/target/release/card-verify-v047"
