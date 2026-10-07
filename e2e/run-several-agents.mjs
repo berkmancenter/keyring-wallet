@@ -413,12 +413,20 @@ try {
       else if (await existsTestId(d, "AgentIntroNext", 500)) await tapTestId(d, "AgentIntroNext", 5000).catch(() => undefined);
       else if (await existsTestId(d, "AgentHome", 500)) break;
     }
+    // The card sits on the new agent's home and can come a moment after it, or below the fold (238: the loop broke
+    // on AgentHome before it showed, Keep was never tapped, and the new agent stayed current): look for it.
+    for (const until = Date.now() + 20000; Date.now() < until; ) {
+      if (await scrollToTestId(d, "AgentAddedKeep", 2, { from: 0.6 }).catch(() => undefined)) break;
+      if (await existsTestId(d, "AgentIntroSkip", 500)) await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+      await sleep(1000);
+    }
     const cardEl = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentAddedCard")`);
     let card = "";
     if (await cardEl.isExisting().catch(() => false)) for (const c of await cardEl.$$(".//*")) { const t = await c.getAttribute("text").catch(() => ""); if (t) card += `${t} `; }
     log(`R1: added card "${card?.slice(0, 160)}"`);
-    if (await existsTestId(d, "AgentAddedKeep", 5000)) {
-      await tapTestId(d, "AgentAddedKeep", 15000);
+    const keep = (await existsTestId(d, "AgentAddedKeep", 3000)) ? byTestId(d, "AgentAddedKeep") : await scrollToTestId(d, "AgentAddedKeep", 3, { from: 0.6 }).catch(() => undefined);
+    if (keep) {
+      await keep.click();
       await owner(d, "keep");
     } else log("R1: no AgentAddedKeep card after the link (the app went on to the agent)");
     await openSwitcher(d);
@@ -763,7 +771,9 @@ try {
     await owner(d, "unlink A");
     let linkOffered = false;
     for (const until = Date.now() + 30000; Date.now() < until && !linkOffered; await sleep(1000)) {
-      linkOffered = (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "LinkYourAgentButton", 500)) || (await existsTestId(d, "LinkByAddressButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
+      // 238 (#339): the unlinked phone shows VtaLink's "Scan a link code" / "No code? Use your agent's address"
+      // (VtaLinkByAddress), or Your agent's own "Link your agent" (AgentHomeLink).
+      linkOffered = (await existsTestId(d, "VtaLinkByAddress", 500)) || (await existsTestId(d, "AgentHomeLink", 500)) || (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "LinkYourAgentButton", 500)) || (await existsTestId(d, "LinkByAddressButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
     }
     await shot(d, "agents-r4-unlinked");
     row("R4 unlink the last", linkOffered, linkOffered ? "the phone offers to link an agent" : "no link offer");
