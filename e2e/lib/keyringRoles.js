@@ -908,12 +908,20 @@ export async function readTicketLink(d) {
   if (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false)) {
     const clear = await liftAboveTabBar(d, "VettingTicketLinkDetailsToggle", 6, { log: true });
     if (!clear) console.log("[e2e] the ticket's Details toggle did not rise above the tab bar; tapping it where it is");
-    for (let i = 0; i < 2 && !(await byTestId(d, "VettingTicketLink").isExisting().catch(() => false)); i++) {
+    // The toggle opens and closes: tap again only while its label still says the link is hidden ("Details";
+    // open reads "Hide details"). A blind second tap closed the panel the first had opened (237 gate, kk).
+    const isOpen = async () =>
+      (await byTestId(d, "VettingTicketLink").isExisting().catch(() => false)) ||
+      /hide/i.test(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => ""));
+    for (let i = 0; i < 2 && !(await isOpen()); i++) {
       await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
-      await sleep(1200);
+      for (let w = 0; w < 5 && !(await isOpen()); w++) await sleep(1000);
+      console.log(`[e2e] ticket Details tap ${i + 1}: label "${(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => "?")).trim()}"`);
+      await screenshot(d, `ticket-details-tap-${i + 1}`).catch(() => undefined);
     }
   }
-  await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
+  // The link opens under the toggle: look down first, and only then back up.
+  await scrollToTestId(d, "VettingTicketLink", 4, { both: false }).catch(() => scrollToTestId(d, "VettingTicketLink", 4, { direction: "up", both: false })).catch(() => undefined);
   await waitForTestId(d, "VettingTicketLink", 30000);
   return (await textOf(d, "VettingTicketLink")).trim();
 }
