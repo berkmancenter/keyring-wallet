@@ -194,12 +194,38 @@ async function openAgentHome(driver) {
  * simulator, an emulator before its PIN) takes the device path there and asks no owner check. Refusals show in
  * AgentCreateError, worded as the link screen words them. Returns the phone's temporary key, for the cleanup.
  */
+// 237's refusal of a phone with no screen lock, on the address step (CreateAgent.NeedsScreenLock*).
+const NEEDS_LOCK = /To protect your agent, turn on .*(passcode|screen lock)/i;
+
+/** AgentCreateError's words, and the original text under its Details (printed as LINK-ERROR). */
+async function createErrorSaid(driver) {
+  const said = (await textOf(driver, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+  let detail = "";
+  if (await existsTestId(driver, "AgentCreateErrorDetailsToggle", 1000)) {
+    await tapTestId(driver, "AgentCreateErrorDetailsToggle", 5000).catch(() => undefined);
+    detail = (await textOf(driver, "AgentCreateErrorDetail").catch(() => "")).replace(/\s+/g, " ").trim();
+  }
+  console.log(`LINK-ERROR "${said}" · detail "${detail.slice(0, 300)}"`);
+  return said;
+}
+
 async function linkByAddress(driver, entry) {
   await tapTestId(driver, entry, 30000);
   const address = await waitForTestId(driver, "AgentCreateAddressInput", 30000);
   await address.setValue(runnerVtaDid());
   await (await scrollToTestId(driver, "AgentCreateAddressContinue", 4).catch(() => byTestId(driver, "AgentCreateAddressContinue"))).click();
-  await waitForTestId(driver, "AgentCreateOwnerCode", 60000);
+  // The code step, or a refusal back on the address (AgentCreateError). Before bifold #339 a phone with no screen
+  // lock is refused here ("To protect your agent, turn on … first"); #339 goes on as a device (AgentCreateAsDevice).
+  for (const until = Date.now() + 60000; Date.now() < until; ) {
+    if (await existsTestId(driver, "AgentCreateOwnerCode", 2000)) break;
+    if (await existsTestId(driver, "AgentCreateError", 1000)) {
+      const said = await createErrorSaid(driver);
+      await screenshot(driver, "link-address-refused-early");
+      if (NEEDS_LOCK.test(said)) throw Object.assign(new Error(`the address path needs a screen lock on this build: "${said}"`), { needsLock: true });
+      throw new Error(`the address link failed before its code: "${said}"`);
+    }
+  }
+  await waitForTestId(driver, "AgentCreateOwnerCode", 5000);
   if (!(await existsTestId(driver, "AgentCreateOwnerDid", 2000))) {
     const show = await scrollToTestId(driver, "AgentCreateShowCode", 6).catch(() => undefined);
     if (show) await show.click();
@@ -209,7 +235,9 @@ async function linkByAddress(driver, entry) {
   const temporaryDid = (await textOf(driver, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
   if (!/^did:/.test(temporaryDid)) throw new Error(`no code in AgentCreateOwnerDid: "${temporaryDid.slice(0, 60)}"`);
   runTempDids.push(temporaryDid);
-  console.log(`[e2e] phone shows its code ${temporaryDid.slice(0, 32)}… (address path${(await existsTestId(driver, "AgentCreateAsDevice", 500)) ? ", as a device: no screen lock" : ""})`);
+  const asDevice = await existsTestId(driver, "AgentCreateAsDevice", 500);
+  console.log(`[e2e] phone shows its code ${temporaryDid.slice(0, 32)}… (address path${asDevice ? ", as a device: no screen lock" : ""})`);
+  console.log(`LINK-PATH address ${asDevice ? "as-device" : "owner"}`);
   await screenshot(driver, "link-m1-key-address");
   const grantedSince = new Date(Date.now() - 2000).toISOString();
   execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
@@ -226,7 +254,7 @@ async function linkByAddress(driver, entry) {
     else if (await existsTestId(driver, "AgentCreateCheckAgain", 500)) await tapTestId(driver, "AgentCreateCheckAgain", 5000).catch(() => undefined);
   }
   if (state === "error" || wanted) {
-    const said = state === "error" ? (await textOf(driver, "AgentCreateError")).replace(/\s+/g, " ").trim() : "";
+    const said = state === "error" ? await createErrorSaid(driver) : "";
     await screenshot(driver, `link-address-${EXPECT_REFUSAL || "error"}`);
     if (!wanted) throw new Error(`the address link failed: "${said.slice(0, 200)}"`);
     if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no AgentCreateError)"}"`);
@@ -339,7 +367,9 @@ async function linkManually(driver) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
     // A phone its agent no longer accepts (its key removed): My Agent says so and offers "Link again", the
-    // scanner, in place of "Scan your agent's code". Re-seating the gate's vetter goes this way.
+    // scanner, in place of "Scan your agent's code". Re-seating the gate's vetter goes this way. bifold #339 offers
+    // the address there too (VtaLinkByAddress): that first.
+    if (await existsTestId(driver, "VtaLinkByAddress", 3000)) return linkByAddress(driver, "VtaLinkByAddress");
     if (await existsTestId(driver, "VtaLinkScanAgain", 5000)) {
       console.log(`[e2e] link: no longer linked ("${(await textOf(driver, "VtaLinkError").catch(() => "")).trim().slice(0, 80)}"); Link again`);
       await tapTestId(driver, "VtaLinkScanAgain", 15000);
@@ -358,9 +388,21 @@ async function linkManually(driver) {
       // The address path on purpose (VtaCreateAgent). Before #339 it needs a screen lock first (DeviceCannotOwn).
       return linkByAddress(driver, "LinkByAddressButton");
     } else {
+      // bifold #339 (238): "Link by address" is the one way in by address, and a phone with no screen lock goes on
+      // as a device. On 237 the same button refuses a phone with no lock: then the scan branch below, as 237's gate.
+      if (await existsTestId(driver, "LinkByAddressButton", 3000)) {
+        try {
+          return await linkByAddress(driver, "LinkByAddressButton");
+        } catch (e) {
+          if (!e?.needsLock) throw e;
+          console.log(`[e2e] link: ${e.message}; the scan branch instead (237)`);
+          await driver.back().catch(() => undefined);
+          await (await waitForTestId(driver, "MyAgent", 30000)).click();
+        }
+      }
       // 237 (bifold #338, without #339): My Agent's "Scan your agent's code" opens the scanner, and the agent's
-      // bare address pasted there starts the "add this phone" link on VtaLink, which needs no screen lock. The
-      // address path needs one until #339 (f7, 10-07).
+      // bare address pasted there starts the "add this phone" link on VtaLink, which needs no screen lock.
+      console.log("LINK-PATH scan");
       await tapTestId(driver, "LinkYourAgentButton", 30000);
       await pasteLinkOnScanScreen(driver, runnerVtaDid());
       console.log("[e2e] link: pasted the agent's address on the scanner (237's way in without a code)");
