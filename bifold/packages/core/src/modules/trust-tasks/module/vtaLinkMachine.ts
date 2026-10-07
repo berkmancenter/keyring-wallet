@@ -182,11 +182,19 @@ export const initialLinkState: VtaLinkState = { kind: 'notLinked' }
  * (a community's agent, an agent already on the phone) — and never a host
  * code that is dead. The Try again button and the automatic pick-up both ask
  * this, so they cannot drift apart.
+ *
+ * `manual`: the person's own Try again. A swap held for an approver also
+ * counts: once it is approved, the same key goes straight through, and a new
+ * key would waste that approval. The automatic pick-up never retries it, as
+ * each try would wait on the approver again.
  */
-export function resumableFailure(failure: VtaLinkFailure | undefined): string | undefined {
+export function resumableFailure(
+  failure: VtaLinkFailure | undefined,
+  options: { manual?: boolean } = {}
+): string | undefined {
   if (!failure?.vtaDid) return undefined
   if (failure.reason !== 'failed' && failure.reason !== 'unreachable') return undefined
-  if (failure.swap && failure.swap !== 'noAnswer') return undefined
+  if (failure.swap && failure.swap !== 'noAnswer' && !(options.manual && failure.swap === 'held')) return undefined
   if (['expired', 'timedOut', 'notAccepted', 'needsScreenLock'].includes(String(failure.hostReason ?? '')))
     return undefined
   return failure.vtaDid

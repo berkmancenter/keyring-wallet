@@ -205,7 +205,7 @@ const VtaLink: React.FC = () => {
 
   // A failed attempt that can be tried again with the key this phone still
   // holds for its agent: not a refusal, and not a dead host code (IN-135).
-  const retryable = resumableFailure(link.kind === 'notLinked' ? link.lastError : undefined)
+  const retryable = resumableFailure(link.kind === 'notLinked' ? link.lastError : undefined, { manual: true })
   const [retryKeyFor, setRetryKeyFor] = useState<string | undefined>()
   useEffect(() => {
     setRetryKeyFor(undefined)

@@ -648,8 +648,10 @@ export class VtaAgentController {
     const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
     // A refusal, or a dead host code: its temporary key is never tried again,
     // so it is dropped, as on a cancel, and no restart picks it back up (IN-135).
+    // A swap held for an approver keeps it, for the person's Try again.
     if (event.type === 'failed' && next.kind === 'notLinked' && next.lastError?.vtaDid && this.agent) {
-      if (!resumableFailure(next.lastError)) void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
+      if (!resumableFailure(next.lastError, { manual: true }))
+        void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
     }
     if (event.type === 'linked') this.note('linked')
     else if (event.type === 'accessRevoked') this.note('revoked')

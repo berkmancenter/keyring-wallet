@@ -161,7 +161,6 @@ describe('a link left part-way picks back up with the same key', () => {
   it.each([
     ['a community agent', { reason: 'communityAgent' }],
     ['a swap the agent refused', { reason: 'failed', swap: 'refused' }],
-    ['a swap held for approval', { reason: 'failed', swap: 'held' }],
     ['an expired host code', { reason: 'failed', hostReason: 'expired' }],
   ])('after %s, a foreground does not pick the link up, and the key is dropped', async (_, failure) => {
     const { vta, forgetManager } = controller([temporary(5 * 60 * 1000)])
@@ -171,6 +170,21 @@ describe('a link left part-way picks back up with the same key', () => {
     expect(vta.getState().link.kind).toBe('notLinked')
     expect(mockClient.connect).not.toHaveBeenCalled()
     expect(forgetManager).toHaveBeenCalledWith(VTA)
+  })
+
+  // #355 review: the key was granted and waits on an approver. Once approved,
+  // Try again with the same key goes through; a new key would waste that.
+  it('a swap held for approval: no pick-up on a foreground, but the key stays for Try again', async () => {
+    const { vta, forgetManager } = controller([temporary(5 * 60 * 1000)])
+    failWhileShowingKey(vta, { reason: 'failed', swap: 'held' })
+    await vta.ensureOnline({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link.kind).toBe('notLinked')
+    expect(mockClient.connect).not.toHaveBeenCalled()
+    expect(forgetManager).not.toHaveBeenCalled()
+    expect(await vta.resumeLink({} as never, VTA)).toBe(true)
+    expect(vta.getState().link.kind).toBe('linked')
+    expect(mockMint).not.toHaveBeenCalled()
   })
 
   it('after a check that broke off, a foreground picks the link up with the same key', async () => {
