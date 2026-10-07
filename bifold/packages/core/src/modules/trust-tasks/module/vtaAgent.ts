@@ -513,11 +513,14 @@ export async function tellAgentLeaving(
 }
 
 /**
- * The agent being linked serves a community: its own VTC lives there (a
- * full_stack stack). Keyring links only to a person's own agent, so the link
- * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
- * says nothing (only VTARest), so the agent itself is asked, once signed in.
+ * Whether a Credo agent can be used: Keyring's lock shuts it down
+ * (`isInitialized` false) until the person unlocks and a new one is handed
+ * over. An agent that does not say is taken as up.
  */
+function agentIsUp(agent: Agent): boolean {
+  return (agent as unknown as { isInitialized?: boolean }).isInitialized !== false
+}
+
 /**
  * The agent asked to be linked is one this phone already has (IN-132): it is
  * refused, matched by its DID and never by a name, and the person is offered
@@ -531,6 +534,12 @@ export class AgentAlreadyOnPhone extends Error {
   }
 }
 
+/**
+ * The agent being linked serves a community: its own VTC lives there (a
+ * full_stack stack). Keyring links only to a person's own agent, so the link
+ * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
+ * says nothing (only VTARest), so the agent itself is asked, once signed in.
+ */
 export class CommunityAgentRefused extends Error {
   constructor(readonly vtaDid: string) {
     super("This is a community's agent. Link Keyring to your personal agent instead.")
@@ -1325,10 +1334,22 @@ export class VtaAgentController {
         },
         link: async () => {
           if (!live()) throw new AgentHostConnectionError('cancelled')
-          const client = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
+          const signedIn = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
           if (!live()) throw new AgentHostConnectionError('cancelled')
           this.dispatch({ type: 'granted' })
-          await this.finishLink(agent, offer.vtaDid, label, identities, live, client)
+          // With the agent in use now: a lock while the host worked hands over a
+          // new one. The signed-in client goes along only if it was made on
+          // that agent; a lock since then leaves it on a shut-down one, and the
+          // link signs in afresh.
+          const current = this.agent ?? agent
+          await this.finishLink(
+            current,
+            offer.vtaDid,
+            label,
+            current === agent ? identities : this.identityStore(current),
+            live,
+            signedIn.agent === current ? signedIn.client : undefined
+          )
         },
         warn: (message) => agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] ${message}`),
       })
@@ -1366,11 +1387,24 @@ export class VtaAgentController {
     vtaDid: string,
     identities: VtiIdentityStore,
     live: () => boolean
-  ): Promise<VtaClient> {
+  ): Promise<{ client: VtaClient; agent: Agent }> {
     const wait = this.deps.agentHost?.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
     let last: unknown
     for (let attempt = 0; attempt < HOST_SIGN_IN_TRIES; attempt++) {
       if (!live()) throw new AgentHostConnectionError('cancelled')
+      // Keyring locked meanwhile (IN-135): its agent is shut down until the
+      // person unlocks, when a new one is handed over. Waiting for it spends
+      // no try, and each try signs in with the agent in use now — the one
+      // this began with may be shut down for good.
+      while (!agentIsUp(this.agent ?? agent)) {
+        if (!live()) throw new AgentHostConnectionError('cancelled')
+        await wait(this.deps.hostSignInRetryMs ?? HOST_SIGN_IN_RETRY_MS)
+      }
+      const now = this.agent ?? agent
+      if (now !== agent) {
+        agent = now
+        identities = this.identityStore(now)
+      }
       // The first try is "connecting this phone"; a retry says which try it is.
       this.dispatch(
         attempt === 0
@@ -1387,7 +1421,8 @@ export class VtaAgentController {
         )
         if (connected) {
           await client.whoAmI()
-          return client
+          // With the agent it was signed in on: a lock after this hands over another.
+          return { client, agent }
         }
         last = new Error('the agent did not answer')
       } catch (error) {
@@ -1423,7 +1458,15 @@ export class VtaAgentController {
       await enrol.waitForGrant(offer, { fetch: this.deps.fetch, shouldStop: () => !live() })
       if (!live()) return
       this.dispatch({ type: 'granted' })
-      await this.finishLink(agent, offer.vta, offer.label, identities, live)
+      // With the agent in use now: a lock while the admin decided hands over a new one.
+      const current = this.agent ?? agent
+      await this.finishLink(
+        current,
+        offer.vta,
+        offer.label,
+        current === agent ? identities : this.identityStore(current),
+        live
+      )
     } catch (error) {
       if (!live()) return
       const detail = error instanceof Error ? error.message : String(error)
