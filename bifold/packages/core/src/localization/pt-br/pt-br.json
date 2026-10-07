@@ -1912,6 +1912,8 @@
     "NoAgentThere": "O Keyring não encontrou um agente nesse endereço. Confira se copiou a linha inteira e se seu agente terminou de ser criado.",
     "OwnerTitle": "Seu código de proprietário",
     "OwnerBody": "Este código diz ao seu agente que este telefone é o dono dele. O código é protegido {{method}}.",
+    "AsDeviceTitle": "O código deste telefone",
+    "AsDeviceBody": "Este telefone não tem bloqueio de tela, então entra no seu agente como dispositivo, não como dono. Para torná-lo o dono, ative um bloqueio de tela e vincule-o de novo.",
     "OwnerWhereToPaste": "Copie este código e adicione-o como proprietário (admin) nas configurações do host do seu agente. Se você roda seu próprio agente, dê este código a ele como admin. Volte quando seu agente estiver online.",
     "ConfirmReason": "Configurar seu novo agente com este telefone",
     "NotConfirmed": "O Keyring não conseguiu confirmar que é você. Tente de novo ou use seu código.",

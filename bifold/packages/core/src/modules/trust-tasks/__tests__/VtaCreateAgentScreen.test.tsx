@@ -76,6 +76,43 @@ describe("create my agent: a community's own agent", () => {
   })
 })
 
+// The one way to link by address (Alberto, 239): every failure of its own
+// attempt is said, in the link screen's words, the original under Details.
+describe('create my agent: a link that fails is said', () => {
+  test('a key swap the agent refused, back on the address, with its own words under Details', async () => {
+    controller.set({
+      link: { kind: 'linking', vtaDid: VTA, label: VTA, step: 'rotating' },
+    })
+    const tree = show()
+    await act(async () => {
+      controller.set({
+        link: { kind: 'notLinked', lastError: { reason: 'failed', swap: 'refused', detail: 'acl/update refused' } },
+      })
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('VtaLink.SwapFailed.refused')
+    expect(tree.getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(id('AgentCreateErrorDetailsToggle')))
+    expect(tree.getByTestId(id('AgentCreateErrorDetail'))).toHaveTextContent('acl/update refused')
+  })
+
+  test('an agent that refused the code says so', async () => {
+    controller.set({
+      link: { kind: 'showingKey', vtaDid: VTA, label: VTA, did: 'did:key:z6MkOwner', checking: false },
+    })
+    const tree = show()
+    await act(async () => {
+      controller.set({ link: { kind: 'notLinked', lastError: { reason: 'refused' } } })
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('VtaLink.FailedRefused')
+  })
+
+  test('an older failure, from before this screen, is not said on opening it', () => {
+    controller.set({ link: { kind: 'notLinked', lastError: { reason: 'refused' } } })
+    const tree = show()
+    expect(tree.queryByTestId(id('AgentCreateError'))).toBeNull()
+  })
+})
+
 describe('create my agent: the address comes first', () => {
   // "No code? Use your agent's address" (Alberto, 239): straight to the
   // address, without the introduction's Continue first.
@@ -131,15 +168,26 @@ describe('create my agent: the address comes first', () => {
     expect(within(avoiding!).getByTestId(id('AgentCreateAddressContinue'))).toBeTruthy()
   })
 
-  test('a phone with no screen lock is told how to protect its agent first', async () => {
+  // One way to link by address (Alberto, 239): a phone with no screen lock
+  // cannot own the agent, so it is linked as a device, as an admin adds any
+  // other, and is told why. No Face ID is asked: there is none to ask.
+  test('a phone with no screen lock is linked as a device, told why, and asked for no Face ID', async () => {
     jest.spyOn(vtaAgent, 'startCreateAgent').mockRejectedValue(new DeviceCannotOwn())
+    const manual = jest.spyOn(vtaAgent, 'startManualLink').mockImplementation(async () => {
+      controller.set({
+        link: { kind: 'showingKey', vtaDid: VTA, label: VTA, did: 'did:key:z6MkDevice', checking: false },
+      })
+    })
     const tree = show()
     fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
     fireEvent.changeText(tree.getByTestId(id('AgentCreateAddressInput')), VTA)
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
-    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(/CreateAgent\.NeedsScreenLock(Ios|Android)/)
+    expect(manual).toHaveBeenCalledWith(expect.anything(), VTA, VTA)
+    expect(tree.queryByTestId(id('AgentCreateError'))).toBeNull()
+    expect(tree.getByTestId(id('AgentCreateAsDevice'))).toHaveTextContent('CreateAgent.AsDeviceBody')
+    expect(tree.queryByTestId(id('AgentCreateOwnerBody'))).toBeNull()
   })
 })
 

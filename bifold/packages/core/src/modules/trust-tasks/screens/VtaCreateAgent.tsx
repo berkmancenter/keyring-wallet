@@ -19,7 +19,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
-import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -55,6 +55,7 @@ import { DeviceNameField } from './DeviceNamePrompt'
 import { openScanner } from './openScanner'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
+import { linkFailureText } from './linkFailureWords'
 
 /**
  * A known agent host's website, to open from the intro. Never named on screen:
@@ -129,6 +130,10 @@ const VtaCreateAgent: React.FC = () => {
   const [howShown, setHowShown] = useState(false)
   // Face ID is asked once, when the code is handed out; checks after that are quiet.
   const [ownerConfirmed, setOwnerConfirmed] = useState(false)
+  // A phone with no screen lock cannot own the agent, and has no Face ID or
+  // passcode to ask for: it is added as a device instead, as an admin adds
+  // any other (Alberto, 239: one way to link by address, not two).
+  const [asDevice, setAsDevice] = useState(false)
   const [pollUntil, setPollUntil] = useState<number | undefined>()
   const [pollExpired, setPollExpired] = useState(false)
   // Paused only when the app is known to be away; an unknown state keeps waiting.
@@ -274,24 +279,43 @@ const VtaCreateAgent: React.FC = () => {
     if (!agent) return
     setBusy(true)
     try {
+      setAsDevice(false)
       await vtaAgent.startCreateAgent(agent, did, did)
     } catch (e) {
-      setError(e instanceof DeviceCannotOwn ? needsScreenLock() : t('CreateAgent.NotConfirmed'))
-      return
+      if (!(e instanceof DeviceCannotOwn)) {
+        setError(t('CreateAgent.NotConfirmed'))
+        return
+      }
+      setAsDevice(true)
+      await vtaAgent.startManualLink(agent, did, did)
     } finally {
       setBusy(false)
     }
     if (vtaAgent.getState().link.kind === 'notLinked') setError(t('CreateAgent.NoAgentThere'))
   }
 
-  // The agent turned out to serve a community (CommunityAgentRefused): said
-  // here, back on the address, since this screen has no failed step.
-  const refusedAsCommunity = link.kind === 'notLinked' && link.lastError?.reason === 'communityAgent'
+  // A link that fails once its code is out (the agent refused it, it serves a
+  // community, the key swap was refused…) is said here, back on the address,
+  // since this screen has no failed step: in the link screen's words, the
+  // original text under Details. Since this is the one way to link by
+  // address (Alberto, 239), none of them may end in silence. Only a failure
+  // of this screen's own attempt: an older one is not this person's news.
+  const attempting = link.kind === 'showingKey' || link.kind === 'linking'
+  const wasAttempting = useRef(false)
   useEffect(() => {
-    if (!refusedAsCommunity) return
-    setStep('address')
-    setError(`${t('VtaLink.FailedCommunityAgent')} ${t('VtaLink.FailedCommunityAgentCleanup')}`)
-  }, [refusedAsCommunity, t])
+    const failure = link.kind === 'notLinked' ? link.lastError : undefined
+    if (wasAttempting.current && failure) {
+      setStep('address')
+      setError(
+        failure.reason === 'communityAgent'
+          ? `${linkFailureText(failure, t)} ${t('VtaLink.FailedCommunityAgentCleanup')}`
+          : linkFailureText(failure, t)
+      )
+      setErrorDetail(failure.detail)
+      setErrorDetailOpen(false)
+    }
+    wasAttempting.current = attempting
+  }, [attempting, link, t])
 
   const ownerKey = link.kind === 'showingKey' ? link.did : undefined
 
@@ -304,7 +328,7 @@ const VtaCreateAgent: React.FC = () => {
   const handOut = async (how: 'copy' | 'share') => {
     if (!ownerKey) return
     setError(undefined)
-    if (!ownerConfirmed) {
+    if (!ownerConfirmed && !asDevice) {
       const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
       if (!confirmed.ok) {
         setError(ownerFailureLine(confirmed.reason))
@@ -328,7 +352,7 @@ const VtaCreateAgent: React.FC = () => {
   const onConnect = async () => {
     if (!agent) return
     setError(undefined)
-    if (!ownerConfirmed) {
+    if (!ownerConfirmed && !asDevice) {
       const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
       if (!confirmed.ok) {
         setError(ownerFailureLine(confirmed.reason))
@@ -491,13 +515,19 @@ const VtaCreateAgent: React.FC = () => {
     body = (
       <View style={styles.card} testID={testIdWithKey('AgentCreateOwnerCode')}>
         <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 2, of: 2 })}</ThemedText>
-        <ThemedText variant="headingThree">{t('CreateAgent.OwnerTitle')}</ThemedText>
-        <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
-          {t('CreateAgent.OwnerBody', {
-            method: t(`CreateAgent.Lock.${lockKind}`),
-            interpolation: { escapeValue: false },
-          })}
+        <ThemedText variant="headingThree">
+          {asDevice ? t('CreateAgent.AsDeviceTitle') : t('CreateAgent.OwnerTitle')}
         </ThemedText>
+        {asDevice ? (
+          <ThemedText testID={testIdWithKey('AgentCreateAsDevice')}>{t('CreateAgent.AsDeviceBody')}</ThemedText>
+        ) : (
+          <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
+            {t('CreateAgent.OwnerBody', {
+              method: t(`CreateAgent.Lock.${lockKind}`),
+              interpolation: { escapeValue: false },
+            })}
+          </ThemedText>
+        )}
         <ThemedText>{t('CreateAgent.OwnerWhereToPaste')}</ThemedText>
         <Pressable
           onPress={() => setHowShown(!howShown)}
