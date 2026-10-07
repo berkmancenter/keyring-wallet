@@ -29,6 +29,7 @@ import {
   scrollToTestId,
   sleep,
   tapElement,
+  liftAboveTabBar,
   tapTestIdByCoordinates,
   tapTestIdReliable,
   waitForTestId,
@@ -881,11 +882,14 @@ export async function clearFinishedRequests(d) {
  * Not "the ticket card is there": an open ticket from an earlier visit shows
  * one too, and a retry on that would cut a second ticket.
  */
-export async function ticketIssued(d) {
+export async function ticketIssued(d, before = "") {
   if ((await stepIdOf(d, "vetter")) === "share") return true;
-  // 236: the step stays "ticket" after a cut, and the link hides under its Details toggle; the ticket's
-  // code and that toggle are what a cut shows. Without this every cut read as "did nothing" and was cut again.
-  if ((await byTestId(d, "VettingTicketCode").isExisting().catch(() => false)) || (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false))) return true;
+  // 236: the step stays "ticket" after a cut and the link hides under its Details toggle; a cut shows a
+  // ticket code. Only a code other than the one shown before the tap counts: a still-valid earlier
+  // ticket stays on the desk (the rerun's vetter showed SG58-91EE from eight hours before, and was
+  // never cut a new one).
+  const code = (await textOf(d, "VettingTicketCode").catch(() => "")).trim();
+  if (code && code !== before) return true;
   // The card renders below the button, off the bottom of the screen: scroll to
   // it before deciding the tap did nothing (older builds).
   await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
@@ -899,10 +903,15 @@ export async function ticketIssued(d) {
  * each cut). A build before the toggle shows the link directly.
  */
 export async function readTicketLink(d) {
-  const toggle = await scrollToTestId(d, "VettingTicketLinkDetailsToggle", 4).catch(() => undefined);
-  if (toggle) {
-    await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
-    await sleep(800);
+  // The toggle sits under the QR, below the fold. Bring it up by where it is, not by isDisplayed: on the
+  // 236 rerun iOS kept the toggle "not displayed" through four swipes and the tap was never made.
+  if (await byTestId(d, "VettingTicketLinkDetailsToggle").isExisting().catch(() => false)) {
+    const clear = await liftAboveTabBar(d, "VettingTicketLinkDetailsToggle", 6, { log: true });
+    if (!clear) console.log("[e2e] the ticket's Details toggle did not rise above the tab bar; tapping it where it is");
+    for (let i = 0; i < 2 && !(await byTestId(d, "VettingTicketLink").isExisting().catch(() => false)); i++) {
+      await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
+      await sleep(1200);
+    }
   }
   await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
   await waitForTestId(d, "VettingTicketLink", 30000);
@@ -964,7 +973,9 @@ export const vetter = {
     return runStep(d, "vetter", "issueTicket", opts, async () => {
       await scrollToTestId(d, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
       await waitForTestId(d, "VettingNewTicketButton", 20000);
-      await tapTestIdReliable(d, "VettingNewTicketButton", () => ticketIssued(d), { attempts: 4, settleMs: 3000 });
+      const before = (await textOf(d, "VettingTicketCode").catch(() => "")).trim();
+      if (before) console.log(`[e2e] a ticket is already on the desk (${before}): cutting a new one`);
+      await tapTestIdReliable(d, "VettingNewTicketButton", () => ticketIssued(d, before), { attempts: 4, settleMs: 3000 });
       const link = await readTicketLink(d);
       if (!link.startsWith("vetting-ticket:")) throw failWith(`no ticket link on the desk: "${link.slice(0, 60)}"`, { ticketLink: link });
       await scrollToTestId(d, "VettingTicketCode", 4, { direction: "up" }).catch(() => undefined);
