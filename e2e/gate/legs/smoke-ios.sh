@@ -14,10 +14,10 @@ SIM=$SMOKE_SIM_UDID; NAME=$SMOKE_SIM_NAME
 wda_stop(){ local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$SIM" | grep -v grep | awk '{print $1}'); do kill $p; done; }
 echo "SMOKE iOS start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' $(dirname $APP)/manifest.txt | tr '\n' ' ')· bundle $(shasum -a 256 $APP/main.jsbundle | cut -c1-12) · GoogleService-Info project $(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' $APP/GoogleService-Info.plist 2>/dev/null || echo '(no plist in the app)') · sim $NAME $SIM"
 xcrun simctl boot $SIM 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus $SIM >/dev/null 2>&1; xcrun simctl uninstall $SIM $BID 2>/dev/null
-T0=$(date +%s); xcrun simctl install $SIM $APP && P=$(xcrun simctl launch $SIM $BID | awk '{print $2}'); echo "plain launch pid $P $(date -u +%T)Z"
+L0=$(date +%s); xcrun simctl install $SIM $APP && P=$(xcrun simctl launch $SIM $BID | awk '{print $2}'); echo "plain launch pid $P $(date -u +%T)Z"
 sleep 20; xcrun simctl io $SIM screenshot $LEG_DIR/ios-plain-20s.png >/dev/null 2>&1; a1=$(ps -p $P >/dev/null 2>&1 && echo alive || echo GONE)
 sleep 25; xcrun simctl io $SIM screenshot $LEG_DIR/ios-plain-45s.png >/dev/null 2>&1; a2=$(ps -p $P >/dev/null 2>&1 && echo alive || echo GONE)
-CR=$(find ~/Library/Logs/DiagnosticReports -name 'KeyRing*' -newermt "@$T0" 2>/dev/null | wc -l | tr -d ' ')
+CR=$(find ~/Library/Logs/DiagnosticReports -name 'KeyRing*' -newermt "@$L0" 2>/dev/null | wc -l | tr -d ' ')
 xcrun simctl spawn $SIM log show --last 2m --style compact --info --debug --predicate 'process == "KeyRing" AND (eventMessage CONTAINS[c] "firebase" OR eventMessage CONTAINS[c] "FIRApp" OR eventMessage CONTAINS[c] "RemoteNotification" OR eventMessage CONTAINS[c] "aps-environment" OR subsystem BEGINSWITH "com.google.firebase")' 2>/dev/null | grep -v "^Timestamp" | cut -c1-260 > $LEG_DIR/ios-firebase-log.txt
 REG=$(grep -cE "didFailToRegisterForRemoteNotifications|didRegisterForRemoteNotifications|aps-environment" $LEG_DIR/ios-firebase-log.txt); FCM=$(grep -c "I-FCM" $LEG_DIR/ios-firebase-log.txt); TOKN=$(grep -E "FirebaseMessaging|FirebaseInstallations|I-FCM|I-FIS" $LEG_DIR/ios-firebase-log.txt | grep -ciE "token|apns|installation")
 NET=$(grep -oE "hostname=[a-z0-9.-]*(firebaseinstallations|fcmtoken|fcm|firebaselogging|app-measurement|firebase)[a-z0-9.-]*" $LEG_DIR/ios-firebase-log.txt | sort | uniq -c | tr '\n' ' ')

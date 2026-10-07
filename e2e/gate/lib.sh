@@ -104,6 +104,9 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 # A grant made before the leg began (a seated vetter's, a person's) is never touched.
 keys_since() {
   local slug=$1 t0=$2 k r i
+  # t0 is compared as a string with each entry's ISO createdAt: anything else (epoch seconds, empty) sorts below
+  # every date and would take every phone key on the runner (a seated vetter's, on 237's gate).
+  [[ $t0 =~ ^20[0-9][0-9]-[01][0-9]-[0-3][0-9]T ]] || { echo "  $slug keys: NOT cleaned, start time \"$t0\" is not an ISO stamp"; return 1; }
   # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin): one
   # leg's cleanup would take another's live key. gate.sh then cleans each runner once, after both platforms.
   if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then echo "  $slug keys: deferred to the run's end"; echo "$slug" >> "$RUN_DIR/defer-keys"; return; fi
