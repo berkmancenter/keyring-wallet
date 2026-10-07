@@ -61,17 +61,22 @@ Measured at VTI `a96fe02f`, 2026-09-24:
 
 ## Conformance modes
 
-Two more modes, each running upstream's own function at the pin:
+More modes, each running upstream's own function at the pin:
 
 ```sh
+card-verify shape
 card-verify digest <value.json>
-card-verify verify-statement <statement.json> <card.json> <expect.json>
+card-verify verify-statement <statement.json> <card.json> [<session.json>] <expect.json>
+card-verify verify-eligibility <vp.json> <expect.json> [<key>]
 ```
 
-- **`digest`** prints DTG Credentials' `digestMultibase`: JCS without the top-level `proof`, sha-256 multihash, base58btc (`dtg_credentials::digest_multibase_json`, the function vta-sdk's `vetting::digest` calls). A golden vector for a fixture comes from this, never from Keyring's own code (keyring-bifold `openvtcVetterStatement.test.ts`).
-- **`verify-statement`** verifies the card, then runs vta-sdk's `verify_statement` and `check_against_card` on the statement. That is what an openvtc applicant runs on a statement it receives (openvtc-core `vetting/applicant.rs:1068`, at `ed13d29`). `expect.json` may add `statementNow`, which defaults to one second after the statement's `validFrom`.
+- **`shape`** prints `v1`: this build judges DTG Credentials v1 shapes (vta-sdk 0.55 and later). An older build prints its usage and exits 2. keyring-bifold's conformance job fails if the build at the pin does not print `v1`.
 
-`check-keyring-card.sh` runs both directions: the card Keyring's applicant sends, and the statement Keyring's vetter makes over it. `BIFOLD_DIR` points it at a bifold checkout other than the submodule.
+- **`digest`** prints DTG Credentials' `digestMultibase`: JCS without the top-level `proof`, sha-256 multihash, base58btc (`dtg_credentials::digest_multibase_json`, the function vta-sdk's `vetting::digest` calls). A golden vector for a fixture comes from this, never from Keyring's own code (keyring-bifold `openvtcVetterStatement.test.ts`).
+- **`verify-statement`** verifies the card, then runs vta-sdk's `verify_statement` and `check_against_card` on the statement. That is what an openvtc applicant runs on a statement it receives (openvtc-core `vetting/applicant.rs:1068`, at `ed13d29`). With the vetting session document as the fourth argument, it also runs `check_against_session`. The statement must be a vetted/1 StatementCredential; the older endorsement shape is refused. `expect.json` may add `statementNow`, which defaults to one second after the statement's `validFrom`.
+- **`verify-eligibility`** runs vta-sdk's `verify_eligibility_vp` on a vetter's eligibility presentation. It reads `vetter`, `community`, `role`, `challenge`, `domain` and `now` from the `expect.json` key named by `<key>`, which defaults to `eligibility`. The presented grant must be a role VAC: `AuthorityCredential`, `issuerScope` public, scope the community, action `role:vetter`, `maxAttenuation` 0. `now` must fall inside its validity window. As with the card, `did:key` DIDs are judged offline.
+
+`check-keyring-card.sh` runs both directions: the card Keyring's applicant sends, and the vetted/1 statement (`statement-v1.json` with `session.json`) and eligibility presentation (`eligibility-v1.json`, key `eligibilityV1`) Keyring's vetter makes. `BIFOLD_DIR` points it at a bifold checkout other than the submodule.
 
 Measured on 2026-09-25: on bifold main (`eaa563d3`), Keyring's statement was refused with `Binding("cardDigestMultibase")`, because Keyring hashed the card with its proof. keyring-bifold#116 fixes that, and both directions then pass.
 
