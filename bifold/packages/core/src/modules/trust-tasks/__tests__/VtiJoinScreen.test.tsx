@@ -6,7 +6,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -15,7 +15,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
-import { emitCommunityChanged } from '../module/communityChanged'
+import { emitCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { asksFrom } from '../screens/VtiJoin'
 
@@ -286,6 +286,33 @@ describe('I want to join a community', () => {
       return tree
     }
     afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
+
+    // 238: the community holds no request this phone sent. Said, with the way
+    // to send it again; the plain ways in alone said nothing of what happened.
+    it('a request that never reached the community: said, and Send it again starts it over', async () => {
+      const tree = await standAt({ kind: 'none', lost: true })
+      expect(tree.getByTestId(testIdWithKey('JoinRequestLost'))).toHaveTextContent(/Join\.RequestLost/)
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinSendAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinAsContinue'))).toBeTruthy()
+    })
+
+    it('a request merely unanswered is not said to be lost', async () => {
+      const tree = await standAt({ kind: 'sent', submission })
+      expect(tree.queryByTestId(testIdWithKey('JoinRequestLost'))).toBeNull()
+    })
+
+    it('a late answer about the request makes the screen ask again, at once', async () => {
+      await standAt({ kind: 'sent', submission })
+      mockReadJoinState.mockClear()
+      await act(async () => {
+        DeviceEventEmitter.emit(VTI_JOIN_STATUS_LATE_EVENT, { communityDid: linked })
+      })
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
 
     // The several-agents device check (R2): with B current, A's membership
     // showed as B's ("You're a member"), and A was never offered.

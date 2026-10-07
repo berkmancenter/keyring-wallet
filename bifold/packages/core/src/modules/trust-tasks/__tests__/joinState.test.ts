@@ -156,6 +156,25 @@ describe('where a join stands', () => {
     })
   })
 
+  // 238: a request lost on the way. The community, asked, holds none: said as
+  // lost, so the screen can say it never arrived. A request merely unanswered
+  // (a timeout) stays sent: silence is not an answer.
+  it('a sent request the community holds none of is lost; one it does not answer stays sent', async () => {
+    const lostStore = memoryStore({ submission: sent() }).store
+    const none = jest.fn(async () => undefined)
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: lostStore, status: none })).resolves.toEqual({
+      kind: 'none',
+      lost: true,
+    })
+    const quietStore = memoryStore({ submission: sent() }).store
+    const silent = jest.fn(async () => {
+      throw new Error('vtiAgent: the community did not answer')
+    })
+    await expect(
+      readJoinState(agent, COMMUNITY, { communityStore: quietStore, status: silent })
+    ).resolves.toMatchObject({ kind: 'sent' })
+  })
+
   it('member, or removed once the card is revoked', async () => {
     const { store } = memoryStore({ membership: card })
     const ok = async () => ({ revoked: false })
@@ -210,11 +229,11 @@ describe('where a join stands', () => {
     })
   })
 
-  it('none, when the community holds no such request', async () => {
+  it('none, and lost, when the community holds no such request', async () => {
     const { store } = memoryStore({ submission: sent() })
     await expect(
       readJoinState(agent, COMMUNITY, { communityStore: store, status: async () => undefined })
-    ).resolves.toEqual({ kind: 'none' })
+    ).resolves.toEqual({ kind: 'none', lost: true })
   })
 
   it('rejected, with the code and the community’s own words', async () => {

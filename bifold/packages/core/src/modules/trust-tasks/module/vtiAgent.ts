@@ -22,6 +22,7 @@ import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
+import { DeviceEventEmitter } from 'react-native'
 
 import { signDocumentProof } from '../documentProof'
 import { purposeForDocumentType } from './proofPurpose'
@@ -56,6 +57,7 @@ import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
+import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
 import {
@@ -639,6 +641,14 @@ class VtiAgentController {
       `vtiAgent: ${entry.communityDid} answered ${taskName(entry.type)} after its clock ran out — kept for the next caller`
     )
     this.listeners.forEach((listener) => listener())
+    // Where a join request stands, answered late: whoever shows it asks again.
+    if (entry.type === STATUS) {
+      try {
+        DeviceEventEmitter.emit(VTI_JOIN_STATUS_LATE_EVENT, { communityDid: entry.communityDid })
+      } catch {
+        // A listener's failure is the listener's.
+      }
+    }
   }
 
   private dropExpiredHolds(now = Date.now()): void {

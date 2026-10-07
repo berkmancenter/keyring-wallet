@@ -30,6 +30,14 @@ export const COMMUNITY_CHANGED_EVENT = 'vti:community-changed'
 export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
 
 /**
+ * A community answered where a join request stands after the ask's clock ran
+ * out (`{ communityDid }`). The answer is kept for the next caller; a screen
+ * that shows the request asks again and gets it at once (238: a request lost
+ * on the way left Join on "Sent" with the answer already in hand).
+ */
+export const VTI_JOIN_STATUS_LATE_EVENT = 'vti:join-status-late'
+
+/**
  * An identity's keys are back in memory (`{ did }`) — after an unlock or a
  * restart nothing signs as it until then, so its inbox signs in on this cue
  * instead of at its next look.
