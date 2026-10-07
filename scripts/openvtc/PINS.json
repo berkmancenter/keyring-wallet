@@ -51,10 +51,10 @@
     },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
-      "sha": "e49816c",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's TUI (interop harness) now runs: it takes vta-service 0.45 (#395) and adds the PCS hidden-vetting client (#396).",
+      "sha": "8991f9ca",
+      "commitDate": "2026-10-04",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag v0.4.0, the TUI build the gate uses (vta-sdk 0.62.0, messaging-sdk 0.32.1). Does not contain the VTI-67 may_claim fix (1ba289e4, #456), which is on main only.",
       "watch": [
         "openvtc/src/ui/pages/",
         "openvtc/src/state_handler/vetting_actions.rs",
