@@ -51,7 +51,7 @@
     },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
-      "sha": "8991f9ca",
+      "sha": "8991f9c",
       "commitDate": "2026-10-04",
       "pinnedOn": "2026-10-07",
       "why": "Tag v0.4.0, the TUI build the gate uses (vta-sdk 0.62.0, messaging-sdk 0.32.1). Does not contain the VTI-67 may_claim fix (1ba289e4, #456), which is on main only.",
