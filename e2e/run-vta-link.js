@@ -281,7 +281,7 @@ async function linkByAddress(driver, entry) {
   if (connect) await connect.click();
   else await tapTestId(driver, "AgentCreateConnect", 15000);
   // A refusal, expected or not, lands back on the address step in AgentCreateError.
-  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /This is a community's agent\. Link Keyring to your personal agent instead\./, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /community's agent/i /* 236: "This is a community's agent. Link Keyring…"; 239: "This code is for a community's agent. …" */, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
   const by = Date.now() + (wanted ? wanted.waitMs : 240000);
   let state = "";
   while (Date.now() < by && !state) {
@@ -598,7 +598,7 @@ async function linkViaScan(driver) {
   await screenshot(driver, "link-m1-key-scan");
   const grantedSince = new Date(Date.now() - 2000).toISOString();
   execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
-  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /This is a community's agent\. Link Keyring to your personal agent instead\./, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /community's agent/i /* 236: "This is a community's agent. Link Keyring…"; 239: "This code is for a community's agent. …" */, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
   const by = Date.now() + (wanted ? wanted.waitMs : 240000);
   let state = "";
   while (Date.now() < by && !state) {
