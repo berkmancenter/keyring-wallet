@@ -50,7 +50,8 @@
     "my-agent": "node run-my-agent.js",
     "my-agent:ios": "PLATFORM=ios node run-my-agent.js",
     "lock-probe": "node run-lock-probe.mjs",
-    "push-off-probe": "node run-push-off-probe.mjs"
+    "push-off-probe": "node run-push-off-probe.mjs",
+    "push-on-probe": "EXPECT=on node run-push-off-probe.mjs"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",

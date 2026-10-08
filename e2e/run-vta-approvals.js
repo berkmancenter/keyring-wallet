@@ -17,9 +17,11 @@
  *   host  → the rule and the approver are removed; the link's keys too, unless
  *           E2E_KEEP_APP=1 hands the phone on to another step
  *
- * The task is `vta/contexts/get` on a context id that does not exist: it
- * changes nothing on the agent, and once consent is given its answer is
- * "not found" rather than "consent required".
+ * The task is `vta/contexts/get` on a context this run creates for the purpose
+ * and deletes at the end. It has to exist: an agent from vta-service 0.50.0
+ * answers "not found" for a context that does not, before it looks at any
+ * consent rule (0.49.0 held that request for consent first), so a made-up id
+ * no longer proves anything.
  *
  * Usage: PLATFORM=android|ios [UDID=… | ANDROID_UDID=…] node run-vta-approvals.js
  *   RUNNER_VTA      the runner agent's pnm slug (default bob; never a person's own agent)
@@ -71,6 +73,7 @@ function rules() {
 let d;
 let failed = true;
 let approver;
+let probeContext;
 try {
   // The phone's key on the agent. A key the phone rotated onto is recorded as
   // created by whoever granted its temporary key: the temporary key itself for
@@ -90,6 +93,12 @@ try {
 
   const rulesBefore = rules();
   if (rulesBefore.length) throw new Error(`"${SLUG}" already has ${rulesBefore.length} approval rule(s): another run is using it, or left them`);
+  // The context the request will ask for, made before the rule exists so that
+  // making it needs no consent. A fresh id each run: the same request has the
+  // same approval code, and the agent would reuse an earlier grant.
+  probeContext = `e2e-approvals-${Date.now()}`;
+  log(`probe context: ${lastLine(pnm(["contexts", "create", "--id", probeContext, "--name", "e2e approvals probe"]))}`);
+  if (/consent required|not found/i.test(pnm(["contexts", "get", probeContext]))) throw new Error(`the probe context "${probeContext}" cannot be read back before the rule is set`);
   log(`approver set: ${lastLine(pnm(["approvals", "approvers", "add", SET, approver]))}`);
   log(`rule: ${lastLine(pnm(["approvals", "require", TASK, "--consent", "--set", SET]))}`);
   if (!rules().length) throw new Error("the consent rule did not take");
@@ -100,9 +109,8 @@ try {
   await tapTestId(d, "MyAgent", 15000);
   await tapTestId(d, "AgentSegment_manage", 15000).catch(() => undefined);
 
-  // The request. A fresh id each run: the same request has the same approval
-  // code, and the agent would reuse an earlier grant.
-  const contextId = `e2e-approvals-${Date.now()}`;
+  // The request: read the probe context, which the rule now holds for consent.
+  const contextId = probeContext;
   const asked = pnm(["contexts", "get", contextId], 180000);
   if (!/consent required/i.test(asked)) throw new Error(`the request was not held for consent: ${lastLine(asked)}`);
   log(`request held: ${lastLine(asked)}`);
@@ -131,6 +139,7 @@ try {
   // The same request again: it must now pass the consent gate.
   const again = pnm(["contexts", "get", contextId], 120000);
   if (/consent required/i.test(again)) throw new Error(`still held after the approval: ${lastLine(again)}`);
+  if (/not found/i.test(again)) throw new Error(`the approved request did not read the probe context: ${lastLine(again)}`);
   log(`the same request again: ${lastLine(again)}`);
 
   failed = false;
@@ -147,6 +156,8 @@ try {
   // shared runner agent holds every later run's request.
   log(`rule removed: ${lastLine(pnm(["approvals", "remove", TASK]))}`);
   if (approver) log(`approver removed: ${lastLine(pnm(["approvals", "approvers", "remove", SET, approver]))}`);
+  // After the rule is gone, so removing the probe context needs no consent.
+  if (probeContext) log(`probe context removed: ${lastLine(pnm(["contexts", "delete", "--yes", probeContext]))}`);
   try {
     log(`rules after: ${rules().length}`);
   } catch (err) {
