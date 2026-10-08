@@ -591,10 +591,20 @@ async function linkCase(driver, which) {
     // 15 min away trips the wallet's own 5-minute inactivity lock: unlock first (239 rerun: the check met Enter PIN).
     await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
     await unlockIfLocked(driver);
-    const waiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
+    // The unlock lands on the home tab (239: Contacts), not on Create: go back to My Agent, where the link that was
+    // under way shows again, either Create still waiting or the Continue card (#353/#355), never Check again or an error.
+    let waiting = await existsTestId(driver, "AgentCreateWaiting", 3000);
+    let cont = false;
+    if (!waiting) {
+      await (await waitForTestId(driver, "MyAgent", 15000)).click();
+      await sleep(2000);
+      waiting = await existsTestId(driver, "AgentCreateWaiting", 8000);
+      cont = !waiting && (await existsTestId(driver, "MyAgentContinueLink", 5000));
+    }
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
+    const failed = (await existsTestId(driver, "AgentCreateError", 500)) || (await existsTestId(driver, "VtaLinkError", 500));
     await screenshot(driver, which);
-    return row(waiting && !checkAgain, `after 15 min in the background: AgentCreateWaiting ${waiting} · Check again ${checkAgain}`);
+    return row((waiting || cont) && !checkAgain && !failed, `after 15 min in the background (and the wallet's own 5-min lock): AgentCreateWaiting ${waiting} · MyAgentContinueLink ${cont} · Check again ${checkAgain} · an error ${failed}`);
   }
   if (which === "link-try-again") {
     const view = await hostLink({ afterGrant: async () => block(true) });
