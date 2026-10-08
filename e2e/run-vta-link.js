@@ -512,6 +512,8 @@ async function linkCase(driver, which) {
     console.log("[e2e] app force-stopped with the code out; granting");
     grant(did);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
+    await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
     await unlockIfLocked(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
     const cont = await existsTestId(driver, "MyAgentContinueLink", 20000);
