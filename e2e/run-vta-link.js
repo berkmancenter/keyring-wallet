@@ -579,32 +579,46 @@ async function linkCase(driver, which) {
       `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
   }
   if (which === "create-window-paused") {
-    await addressCode();
+    // UI/UX (10-08, from 59feae2f): two cases in one install.
+    // (1) create-window-paused-short: away 3 min, under the wallet's 5-min inactivity lock: Create is still waiting
+    //     (AgentCreateWaiting), its window paused while in the background rather than counting it.
+    // (2) create-window-paused: away 15 min: the lock signs the person out and the navigator restarts on the first tab,
+    //     so Create and its window are gone; the link itself lives on (showingKey, the same key), so My Agent offers
+    //     MyAgentContinueLink, which opens VtaLink with that key (VtaLinkShowTheCode). Not VtaLinkResumed (nothing was
+    //     restarted). Fails on Check again, an error, Try again, or a different key.
+    const did = await addressCode();
     await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
-    // Home, then back after 15 min. One 900 s "mobile: backgroundApp" call outlived the HTTP client (239 gate:
-    // UND_ERR_HEADERS_TIMEOUT), so the wait is the driver's, with the session kept alive.
+    console.log("[e2e] the app in the background 180 s");
+    sh("input", "keyevent", "3");
+    await idle(180000);
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    await sleep(3000);
+    const shortWaiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
+    const shortCheck = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
+    const shortLocked = await existsTestId(driver, "EnterPIN", 1000);
+    await screenshot(driver, `${which}-short`);
+    console.log(`ROW create-window-paused-short ${shortWaiting && !shortCheck && !shortLocked ? "PASS" : "FAIL"} — after 3 min in the background: AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}`);
     console.log("[e2e] the app in the background 900 s");
     sh("input", "keyevent", "3");
     await idle(900000);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
-    // 15 min away trips the wallet's own 5-minute inactivity lock: unlock first (239 rerun: the check met Enter PIN).
     await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
     await unlockIfLocked(driver);
-    // The unlock lands on the home tab (239: Contacts), not on Create: go back to My Agent, where the link that was
-    // under way shows again, either Create still waiting or the Continue card (#353/#355), never Check again or an error.
-    let waiting = await existsTestId(driver, "AgentCreateWaiting", 3000);
-    let cont = false;
-    if (!waiting) {
-      await (await waitForTestId(driver, "MyAgent", 15000)).click();
-      await sleep(2000);
-      waiting = await existsTestId(driver, "AgentCreateWaiting", 8000);
-      cont = !waiting && (await existsTestId(driver, "MyAgentContinueLink", 5000));
+    await (await waitForTestId(driver, "MyAgent", 15000)).click();
+    const cont = await existsTestId(driver, "MyAgentContinueLink", 15000);
+    let same = false;
+    let tryAgain = false;
+    if (cont) {
+      await tapTestId(driver, "MyAgentContinueLink", 10000);
+      if (!(await existsTestId(driver, "VtaLinkManualDid", 3000))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+      same = (await words("VtaLinkManualDid")).replace(/\s+/g, "") === did;
+      tryAgain = await existsTestId(driver, "VtaLinkTryAgain", 1000);
     }
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     const failed = (await existsTestId(driver, "AgentCreateError", 500)) || (await existsTestId(driver, "VtaLinkError", 500));
     await screenshot(driver, which);
-    return row((waiting || cont) && !checkAgain && !failed, `after 15 min in the background (and the wallet's own 5-min lock): AgentCreateWaiting ${waiting} · MyAgentContinueLink ${cont} · Check again ${checkAgain} · an error ${failed}`);
+    return row(cont && same && !tryAgain && !checkAgain && !failed, `after 15 min away (the wallet's lock signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed}`);
   }
   if (which === "link-try-again") {
     const view = await hostLink({ afterGrant: async () => block(true) });

@@ -28,6 +28,6 @@ for c in ${LINK_CASES:-create-window-paused link-no-answer}; do
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
     LINK_MODE=manual LINK_CASE=$c BLOCK_HOST=$RUNNER_MEDIATOR_HOST RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL \
     PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always perl -e 'alarm 2400; exec @ARGV' node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
-  r=$(grep -m1 "^ROW $c " "$LEG_DIR/$c.out")
+  r=$(grep -E "^ROW $c(-[a-z]+)? " "$LEG_DIR/$c.out")
   if [ -n "$r" ]; then echo "$r"; else row "$c" FAIL "rc=$rc, no row: $(grep -E '❌|Error:' "$LEG_DIR/$c.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
 done
