@@ -527,13 +527,17 @@ try {
     if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
     let scanSaid = "";
     if (await existsTestId(d, "PasteUrlButton", 10000)) {
-      await pasteLinkOnScanScreen(d, E.B_DID);
+      // The scanner refuses it in its own error card ("Keyring can't use this code" + Try Again), which the paste
+      // helper reports as a refused paste: here that refusal is the row (239 gate: the helper's throw stopped R8).
+      await pasteLinkOnScanScreen(d, E.B_DID).catch((e) => log(`R8 scan: ${String(e.message).split("\n")[0]}`));
       for (const until = Date.now() + 30000; Date.now() < until && !scanSaid; await sleep(1000)) {
         const src = await d.getPageSource();
         scanSaid = (src.match(/(?:text|content-desc)="([^"]*already has that agent[^"]*)"/i) || [])[1] || "";
       }
     }
     await shot(d, "agents-r8-scan-existing");
+    if (await existsTestId(d, "Try Again", 1500)) await tapTestId(d, "Try Again", 5000).catch(() => undefined);
+    await d.back().catch(() => undefined);
     row("add-existing-scan-refused", /already has that agent/i.test(scanSaid), scanSaid ? `"${scanSaid}"` : "no \"already has that agent\" words after pasting B's address");
     await myAgent(d);
     if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
