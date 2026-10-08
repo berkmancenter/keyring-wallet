@@ -269,7 +269,23 @@ async function linkTo(d, did, slug) {
 /** The chips' Add, brought back into view first: after a switch the home can sit scrolled past the chip strip, and
  * Android leaves off-screen views out of the tree (239: R9 found no AgentSwitcherAdd). */
 async function tapAdd(d) {
-  const el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 4, { direction: "up" }).catch(() => undefined);
+  let el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 3, { direction: "up" }).catch(() => undefined);
+  // Add is the last item of the chips' horizontal strip: with two agents it can sit off to the right, out of the tree
+  // (239: R9 after R8's switches). Swipe the strip leftwards until it shows.
+  for (let i = 0; i < 4 && !el; i++) {
+    const strip = byTestId(d, "AgentChips");
+    if (!(await strip.isExisting().catch(() => false))) break;
+    const { x, y } = await strip.getLocation();
+    const { width, height } = await strip.getSize();
+    const cy = Math.floor(y + height / 2);
+    await d.action("pointer").move({ x: Math.floor(x + width * 0.85), y: cy }).down().pause(100).move({ x: Math.floor(x + width * 0.15), y: cy, duration: 400 }).up().perform();
+    await sleep(800);
+    if (await existsTestId(d, "AgentSwitcherAdd", 1500)) el = byTestId(d, "AgentSwitcherAdd");
+  }
+  if (!el) {
+    await shot(d, "agents-add-missing");
+    await dumpSource(d, "agents-add-missing").catch(() => undefined);
+  }
   if (el) await el.click();
   else await tapTestId(d, "AgentSwitcherAdd", 15000);
 }
