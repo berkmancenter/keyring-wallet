@@ -942,8 +942,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       )
     // "A different community" is always in reach, from the community a person
     // is already in too: a member's card used to offer only "Open" (IN-102).
+    // The success state hid it once, and a member opening Join found no way to
+    // a second community (IN-142).
     const different =
-      standing.kind !== 'member' && (current === 'which' || !differentInBody) ? (
+      standing.kind === 'member' || current === 'which' || !differentInBody ? (
         <Button
           title={t('Join.Different')}
           buttonType={ButtonType.Secondary}
