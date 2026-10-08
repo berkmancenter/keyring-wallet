@@ -568,6 +568,9 @@ async function linkCase(driver, which) {
     await idle(900000);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
+    // 15 min away trips the wallet's own 5-minute inactivity lock: unlock first (239 rerun: the check met Enter PIN).
+    await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
+    await unlockIfLocked(driver);
     const waiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     await screenshot(driver, which);
