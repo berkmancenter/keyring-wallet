@@ -49,6 +49,9 @@ fi
 if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryAgain; then
   line() { grep -m1 "^$2" "$1" | cut -c1-200; }
   if selected swap-held-try-again || selected swap-held-no-retry; then
+    # swap-refused's deny policy outranks the consent rule: without removing it first the held swap is refused
+    # instead (239 gate).
+    echo "  policy off: $(pnm "$RUNNER_MAIN_SLUG" policy delete "$POL" | tail -1 | cut -c1-60)"; sleep 3
     echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
     echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
     HOOK="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
