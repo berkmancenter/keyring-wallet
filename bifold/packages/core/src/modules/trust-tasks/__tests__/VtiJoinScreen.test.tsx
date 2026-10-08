@@ -11,7 +11,7 @@ import { DeviceEventEmitter, StyleSheet } from 'react-native'
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
-import { Screens } from '../../../types/navigators'
+import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
@@ -383,6 +383,20 @@ describe('I want to join a community', () => {
       expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaAgent, { highlightCommunity: linked })
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenCommunity'))))
       expect(navigation.replace).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
+    })
+
+    // IN-142: a member of one community opened Join and found no way to another.
+    it('a member can still reach a different community', async () => {
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      const tree = await standAt({ kind: 'member', membership: {} })
+      const different = tree.getByTestId(testIdWithKey('JoinScanCommunity'))
+      expect(different).toHaveTextContent('Join.Different')
+      await act(async () => fireEvent.press(different))
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        Stacks.ConnectStack,
+        expect.objectContaining({ screen: Screens.Scan })
+      )
     })
 
     it('sent and not yet answered: says so, and whether the invitation went with it; Check again asks', async () => {
