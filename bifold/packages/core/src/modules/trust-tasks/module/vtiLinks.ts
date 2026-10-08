@@ -26,7 +26,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
-import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { vtaAgent } from './vtaAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
@@ -142,6 +142,22 @@ export function otherDidMessage(did: string): string {
 
 /** The host inside a did:webvh — what a person recognises — else the DID. */
 const didHost = (did: string) => did.split(':')[3] ?? did
+
+/**
+ * Whether the phone is part-way through joining `communityDid`: it holds an
+ * identity for it and is not yet a member. A failed read counts as under way,
+ * so a ticket is never applied to the wrong join by mistake.
+ */
+async function joinUnderWay(agent: Agent, communityDid: string): Promise<boolean> {
+  try {
+    const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
+    if (!persona) return false
+    const memberships = await new GenericRecordsCommunityStore(agent).listMemberships()
+    return !memberships.some((m) => m.communityDid === communityDid && isCurrentMembership(m))
+  } catch {
+    return true
+  }
+}
 
 /**
  * An agent scanned on a phone already linked to one: added beside it, as My
@@ -352,7 +368,10 @@ export async function routeKeyringAgentLink(
       // refused here, before the vetting screen is switched to that community —
       // switching first would make the screen's own check compare the ticket
       // with itself and pass (p220 item 3). With no community chosen yet, the
-      // ticket's community is the one being joined.
+      // ticket's community is the one being joined. Only a join still under
+      // way counts: a community left, removed from the phone, or already
+      // joined stays remembered, and a member could never be vetted into a
+      // second community (IN-144).
       let ticketCommunity: string | undefined
       try {
         ticketCommunity = parseTicketUri(trimmed).community
@@ -360,7 +379,7 @@ export async function routeKeyringAgentLink(
         // an unreadable ticket is reported by the vetting screen, where it is used
       }
       const chosen = communityTarget.getChosen()?.communityDid
-      if (ticketCommunity && chosen && ticketCommunity !== chosen) {
+      if (ticketCommunity && chosen && ticketCommunity !== chosen && (await joinUnderWay(agent, chosen))) {
         throw new KeyringLinkError(
           "This vetter's code is for a different community than the one you're joining.",
           new VettingTicketError('otherCommunity', ticketCommunity)
