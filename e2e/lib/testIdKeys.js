@@ -58,5 +58,12 @@ export function cardPrimaryIds(source) {
   for (const m of source.matchAll(/(?:com\.ariesbifold:id\/)?(AgentCommunityPrimary_[A-Za-z0-9_-]+)"/g)) {
     if (!ids.includes(m[1])) ids.push(m[1]);
   }
+  // Android's page source leaves out what is below the fold, so a card whose
+  // button has not scrolled into view shows only its header: name the button
+  // from the card's handle, for the caller to scroll to.
+  for (const m of source.matchAll(/(?:com\.ariesbifold:id\/)?AgentCommunityCard_([A-Za-z0-9_-]+)"/g)) {
+    const id = `AgentCommunityPrimary_${m[1]}`;
+    if (!ids.includes(id)) ids.push(id);
+  }
   return ids;
 }

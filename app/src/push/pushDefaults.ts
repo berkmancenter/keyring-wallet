@@ -8,8 +8,11 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { vtaAgent } from '@bifold/core'
+import { ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import i18n from 'i18next'
+import Toast from 'react-native-toast-message'
 import messaging from '@react-native-firebase/messaging'
 import { Platform } from 'react-native'
 import { Config } from 'react-native-config'
@@ -20,29 +23,68 @@ import BCLogger from '@/utils/logger'
 
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
-import { enablePushWake, type PushWakeDeps } from './pushWake'
+import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
+import { enablePushWake, type KeptWakeHandle, type PushWakeDeps, type WakeHandleStore } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
 function apnsEnvironment(): 'sandbox' | 'production' {
   return Config.PUSH_APNS_ENVIRONMENT === 'production' ? 'production' : 'sandbox'
 }
 
-/** This phone's platform push token, or undefined without permission or a token. */
+/**
+ * This phone's platform push token, or undefined without permission or a token.
+ * Reached only when the person turns notifications on: it is what first lets
+ * the platform push service issue this install a token (pushPlatform.ts).
+ */
 export async function platformPushRegistration(): Promise<PushRegistration | undefined> {
   const m = messaging()
   const status = await m.hasPermission()
   if (status !== messaging.AuthorizationStatus.AUTHORIZED && status !== messaging.AuthorizationStatus.PROVISIONAL) {
     return undefined
   }
+  await startPlatformPush(Platform.OS, m)
   if (Platform.OS === 'ios') {
     // The gateway sends to APNs directly with Keyring's own key, so it needs
-    // the APNs device token, not Firebase's.
-    await m.registerDeviceForRemoteMessages()
-    const token = await m.getAPNSToken()
+    // the APNs device token, not Firebase's. On a first registration it can
+    // arrive just after registering returns: wait for it.
+    const token = await waitForApnsToken(() => m.getAPNSToken())
     return token ? { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() } : undefined
   }
   const token = await m.getToken()
   return token ? { platform: 'fcm', token } : undefined
+}
+
+const HANDLE_KEY_PREFIX = 'keyring.push.handle.'
+
+/** Each agent's wake handle, kept on this phone (see {@link WakeHandleStore}). */
+export const appWakeHandles: WakeHandleStore & { count(): Promise<number> } = {
+  get: async (agentDid) => {
+    const raw = await AsyncStorage.getItem(HANDLE_KEY_PREFIX + agentDid)
+    return raw ? (JSON.parse(raw) as KeptWakeHandle) : undefined
+  },
+  set: async (agentDid, kept) => {
+    await AsyncStorage.setItem(HANDLE_KEY_PREFIX + agentDid, JSON.stringify(kept))
+  },
+  count: async () => (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(HANDLE_KEY_PREFIX)).length,
+}
+
+/**
+ * The gateway refused a new handle: this phone's token is at its limit. Said
+ * in plain words, and logged with how many agents hold a handle here.
+ */
+export function showHandleLimit(): void {
+  void appWakeHandles
+    .count()
+    .catch(() => -1)
+    .then((agentsWithHandles) =>
+      BCLogger.info('push wake: too many handles for this push token', { agentsWithHandles })
+    )
+  Toast.show({
+    type: ToastType.Warn,
+    text1: i18n.t('PushNotifications.HandleLimitTitle'),
+    text2: i18n.t('PushNotifications.HandleLimitBody'),
+    visibilityTime: 10000,
+  })
 }
 
 /** {@link PushWakeDeps} for the running app. */
@@ -52,6 +94,7 @@ export function appPushWakeDeps(agent: Agent): PushWakeDeps {
     agentDid: () => vtaAgent.agentAddress(),
     pushRegistration: platformPushRegistration,
     setWake: (wake, opts) => vtaAgent.setThisDeviceWake(agent, wake, opts),
+    handles: appWakeHandles,
   }
 }
 
@@ -74,6 +117,23 @@ export async function notificationPermissionStatus(): Promise<PermissionState> {
   return fromAndroid((await checkNotifications()).status)
 }
 
+/**
+ * Whether the phone lets Keyring show notifications right now, for a person
+ * who has already turned them on. Not {@link notificationPermissionStatus}:
+ * on Android, react-native-permissions' `checkNotifications` never answers
+ * BLOCKED — it reads `areNotificationsEnabled()` and answers GRANTED or DENIED
+ * (RNPermissionsModuleImpl.checkNotifications) — and that function reads DENIED
+ * as "not asked yet". For someone who turned notifications on, DENIED can only
+ * mean they were switched off since.
+ */
+export async function notificationsAllowedNow(): Promise<PermissionState> {
+  const raw = Platform.OS === 'ios' ? await messaging().hasPermission() : (await checkNotifications()).status
+  const state = Platform.OS === 'ios' ? fromIos(raw as number) : raw === RESULTS.GRANTED ? 'granted' : 'denied'
+  // The platform's own answer, whenever it is not "allowed": what a clear was based on.
+  if (state !== 'granted') BCLogger.info('push permission read', { os: Platform.OS, raw, state })
+  return state
+}
+
 /** Ask for the notification permission (Android 13+ and iOS show the system prompt). */
 export async function requestNotificationPermission(): Promise<PermissionState> {
   if (Platform.OS === 'ios') return fromIos(await messaging().requestPermission())
@@ -92,6 +152,8 @@ export function appPushNotificationsConfig(): PushNotificationsConfig | undefine
     requestPermission: requestNotificationPermission,
     enableWake: (agent) => enablePushWake(appPushWakeDeps(agent)),
     clearWake: (agent) => vtaAgent.clearThisDeviceWake(agent),
+    stopPlatformPush: () => stopPlatformPush(Platform.OS, messaging()),
     log: (message, data) => BCLogger.info(message, data),
+    onHandleLimit: showHandleLimit,
   })
 }

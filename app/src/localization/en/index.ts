@@ -73,6 +73,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Create Trusted Connections",
     "ConnectionsParagraph": "Connect directly with trusted contacts. Both parties confirm — no middleman, no platform. Always private, on your device.",
+    // Page 3b: Agent
+    "AgentHeading": "Your Own Agent",
+    "AgentParagraph": "Not that kind of agent — this one works for you online, even when your phone is off. It keeps your identities and cards, and asks you before it does anything important.",
     // Page 4: Security
     "SecurityHeading": "Secure by Design",
     "SecurityParagraph": "Protected by PIN and optional biometrics. Your data never leaves your device.",
@@ -219,6 +222,8 @@ const translation = {
     "Tip14": "Even revoked or expired credentials can be usable if the organization doesn't request for it",
   },
   "Init": {
+    "MessageServiceTitle": "Keyring couldn't reach its message service",
+    "MessageServiceBody": "Your wallet and everything in it are fine. The service that carries Keyring's messages didn't answer. Check that this phone is online, then try again. If it is, the service may be down for a while.",
     "Retry": "Retry",
     "Starting": "Starting...",
     "FetchingPreferences": "Fetching preferences...",
@@ -231,6 +236,8 @@ const translation = {
     "GiveFeedback": "Give Feedback",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Notifications can't reach this agent yet",
+    "HandleLimitBody": "This phone is registered with the push service for as many agents as it allows, so notifications for this agent may not arrive. Keyring keeps working, and requests still wait in Requests.",
     "NotificationsOffTitle": "Notifications for Keyring are turned off",
   },
   "AddCredentialSlider": {

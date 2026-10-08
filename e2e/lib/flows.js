@@ -362,6 +362,17 @@ export async function completeOnboarding(
       return;
     }
 
+    // The notifications step (wallet #300, a build that names a push gateway):
+    // PUSH_STEP=notnow declines it ("Not now"), anything else accepts it.
+    if (await existsTestId(driver, "PushNotificationNotNow", 1000)) {
+      const declining = process.env.PUSH_STEP === "notnow";
+      const key = declining ? "PushNotificationNotNow" : "PushNotificationContinue";
+      await tapTestId(driver, key);
+      lastAction = key;
+      console.log(`[e2e] ${driver.e2ePlatform}: notifications step — tapped ${key}`);
+      continue;
+    }
+
     // interstitials: PIN explainer, biometry screen, etc.
     let tapped = false;
     for (const key of ["ContinueCreatePIN", "Continue"]) {

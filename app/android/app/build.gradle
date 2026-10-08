@@ -120,6 +120,11 @@ android {
         // release app. Every other build is unchanged.
         if (project.hasProperty("keyringPushTest")) {
             applicationIdSuffix ".pushtest"
+            // react-native-config finds BuildConfig by the application ID. With
+            // the suffix that class does not exist (BuildConfig stays in the
+            // namespace), and every Config value reads as empty: no mediator,
+            // no push gateway. Name the package it is really in.
+            resValue "string", "build_config_package", "asml.bkc.harvard.wallet"
         }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion

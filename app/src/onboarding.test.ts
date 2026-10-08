@@ -48,3 +48,24 @@ describe('generateOnboardingWorkflowSteps: the R-Card task', () => {
     expect(tasks.find((t) => t.name === Screens.RCardOnboarding)?.completed).toBe(true)
   })
 })
+
+describe('generateOnboardingWorkflowSteps: the notifications task', () => {
+  const pushTask = (pushConfig: unknown, didConsiderPushNotifications: boolean) => {
+    const state = { ...initialState, onboarding: { ...initialState.onboarding, didConsiderPushNotifications } }
+    const withPush = { enablePushNotifications: pushConfig } as Parameters<typeof generateOnboardingWorkflowSteps>[1]
+    return generateOnboardingWorkflowSteps(state, withPush, 0, null).find((t) => t.name === Screens.PushNotifications)
+  }
+  const pushConfig = { status: jest.fn(), setup: jest.fn(), toggle: jest.fn() }
+
+  test('is never shown by a build that names no push gateway', () => {
+    expect(pushTask(undefined, false)?.completed).toBe(true)
+  })
+
+  test('is shown by a build that names a push gateway, until the person answers it', () => {
+    expect(pushTask(pushConfig, false)?.completed).toBe(false)
+  })
+
+  test('is done once answered, whether the person allowed notifications or not', () => {
+    expect(pushTask(pushConfig, true)?.completed).toBe(true)
+  })
+})
