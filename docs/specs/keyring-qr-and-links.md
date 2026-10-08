@@ -97,9 +97,7 @@ After `unknown-flow` or `unsupported-version` a consumer MUST NOT try another fl
 6. **Failures are generic** (section 3 UI outcomes).
 7. **Texts outside this document** are `not-ours` and unchanged: `keyring://vta/enrol`, links to approvals, community and invitation links, ticket links, bare DIDs, OpenID4VCI offers, DIDComm v1 invitations.
 
-## 8. The legacy formats (version 0)
-
-### 8.1 The Farm's JSON
+## 8. The legacy format (version 0)
 
 The Farm's existing code is a JSON object `{"vta_did":"did:webvh:…","callback_url":"https://…"}`: the contact is `vta_did`; the endpoint and the secret are `callback_url`. The text MUST be an I-JSON object (RFC 7493: no duplicate member names, compared after escape processing). A reader requires the two keys and **ignores any other, reporting `legacy.<key>` in document order**. (Keyring today rejects an extra key; the Farm keeps the QR frozen until a Keyring release ignores unknown keys, so the vectors encode that release.) `callback_url` is `https` on a host that meets section 6 rule 6 and is on the consumer's list (`ic3.dev`, `firstperson.dev`), has no userinfo, port, fragment or control character, at most 512 characters; `vta_did` is a `did:webvh` DID of at most 256 characters.
 
@@ -107,13 +105,11 @@ Reading order: not a JSON object or no `callback_url` key: `not-ours`; channel n
 
 The callback is bearer and is never logged. **Sunset:** accepted until the first Keyring release that ignores unknown keys has been available for a period set by the Farm and Keyring owners, after which the Farm stops emitting it.
 
-### 8.2 The sign-in proposal's custom-scheme form (version 0, optional)
-
-The sign-in proposal's QR is `keyring://oob?v=1&svc=<DID>&id=<handle>`: host `oob`, no path. A reader MAY accept it, and SHOULD only if a portal ships it before the container exists; a producer SHOULD emit the container instead (a custom scheme does not open from a generic camera and any app may register it, RFC 8252 section 8.1; annex E, 8.4). It is the sign-in trigger of section 5 in another container: `svc` is the contact, `id` the handle, the flow is the sign-in flow at 0.1 (implied), and there is no `_exp`, so the inviter's `expiresAt` governs. The text starts `keyring://oob?` (scheme and host case-insensitive), else `not-ours`. The query is read as in section 3. In order: whitespace or a control character `bad-grammar`; `#` `fragment`; `v`, `svc` or `id` repeated `repeated-param`; `v` absent `missing-param`, not `1` `unsupported-version`; `svc` absent `missing-param`, not matching the grammar of `_from` `bad-value`; `id` likewise by the grammar of `_id`. **Every other parameter is ignored and reported `legacy.<name>`** (the proposal rejects unknown parameters; annex E, 8.4 says which side moves). Sections 6 and 7 apply unchanged.
+**No other legacy form.** The VTC portal emits the container link (section 3) from the start, and Keyring reads no `keyring://oob` form (annex E, 8.4).
 
 ## 9. Conformance
 
-Two classes. A **reader** conforms if it returns the expected result for every trigger vector under the file's `config`, for every `selectionVectors` case when it implements section 6 rule 5, and for every `legacyOobVectors` case when it implements section 8.2. A **producer** conforms if every trigger it emits is accepted by a conforming reader under a configuration that lists its flow, and it meets section 7 rule 5. The vectors cover container Y only; a reader that implements it implements "the container" of this document. Each vector has `input`, `channel` (`scan`, `deeplink`, `paste`) and `expect` (`outcome`, then `reason` and `ui`, or `via`, `from`, `id`, `exp`, `flow`, `task`, `ignored`, and `callbackUrl` for legacy). Flows match by whole Type URI. `config.skew` is the clock allowance.
+Two classes. A **reader** conforms if it returns the expected result for every trigger vector under the file's `config`, and for every `selectionVectors` case when it implements section 6 rule 5. A **producer** conforms if every trigger it emits is accepted by a conforming reader under a configuration that lists its flow, and it meets section 7 rule 5. The vectors cover container Y only; a reader that implements it implements "the container" of this document. Each vector has `input`, `channel` (`scan`, `deeplink`, `paste`) and `expect` (`outcome`, then `reason` and `ui`, or `via`, `from`, `id`, `exp`, `flow`, `task`, `ignored`, and `callbackUrl` for legacy). Flows match by whole Type URI. `config.skew` is the clock allowance.
 
 **What no vector can test:** section 6 rules 1 to 4 (confirmation, approval, what is displayed, the key), rule 5's fresh resolution and same-binding reply, rule 6's resolved-address check, rule 7 (the first request), rule 8, section 7 rules 2 to 5 and 7, DID verification itself, and what any phone does with a link. **They test a reader's parsing only, not Keyring's parsers.**
 

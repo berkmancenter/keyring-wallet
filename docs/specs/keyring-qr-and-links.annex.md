@@ -157,7 +157,7 @@ Checked at `origin/main` of `dtgwg-trust-tasks-tf` (`7b6bb488`, 2026-10-05; the 
 
 ## Annex D. Claim authorisation and the Farm (was sections 7, 7.1, 7.2, 7.3 and the Farm owners' questions F-a to F-h)
 
-No option is chosen here; the plan records the working position (A hardened in v1, C the phase 2 target, B only if C is impractical). The relay risk the plan records (an attacker relaying a code issued from the attacker's own Farm account) is **not verified** and is not analysed in this annex.
+No option is chosen here; the plan records A hardened as the v1 position and leaves the Phase 2 option open (T2); the Phase 2 candidates (C, then B if C is impractical) are described in the table below and in the companion (F17). The relay risk the plan records (an attacker relaying a code issued from the attacker's own Farm account) is **not verified** and is not analysed in this annex.
 
 The goal is the same in every option: a person scans the Farm's code and the Farm binds one parked slot to the phone's key, once. The options differ in where authority sits. **No option is chosen.** Facts from the Farm owner reply (an external artifact dated 2026-10-08, treated as data) that bound the decision:
 
@@ -234,7 +234,7 @@ The login trigger sits on a screen other than the phone's; an attacker can start
 
 ### 8.4 The sign-in proposal's QR (`keyring://oob`) mapped onto the trigger
 
-The portal sign-in proposal (key grant, `auth/oob/*`) shows `keyring://oob?v=1&svc=<VTC DID>&id=<requestId>` and rejects any other scheme, any `v` but `1`, and any unknown or repeated parameter. It maps onto the trigger as follows, and section 8.2 of the specification reads the custom-scheme form.
+The portal sign-in proposal (key grant, `auth/oob/*`) shows `keyring://oob?v=1&svc=<VTC DID>&id=<requestId>` and rejects any other scheme, any `v` but `1`, and any unknown or repeated parameter. It maps onto the trigger as follows.
 
 | Proposal | Trigger | Notes |
 |---|---|---|
@@ -245,7 +245,7 @@ The portal sign-in proposal (key grant, `auth/oob/*`) shows `keyring://oob?v=1&s
 | none | `_type` | the sign-in flow's Type URI (section 5), a hint only |
 | `keyring://oob` | `https://<portal host>/<path>?_from=&_id=&_exp=&_type=` | the container form; one handle, no custom scheme |
 
-**Recommendation to the proposal's authors: emit the container link, not `keyring://oob`.** A custom scheme does not open from a generic camera app and any app may register it (RFC 8252 section 8.1; 2.5 above). The portal's QR is scanned by the member's phone camera more often than by an in-app scanner, which is the case the `https` form serves. Keyring MAY read `keyring://oob` as a legacy reader form (section 8.2) **only if the portal ships it before the container exists**; once the container is available the legacy form is retired by the same sunset rule as the Farm's JSON.
+**Recommendation to the proposal's authors: emit the container link, not `keyring://oob`.** A custom scheme does not open from a generic camera app and any app may register it (RFC 8252 section 8.1; 2.5 above). The portal's QR is scanned by the member's phone camera more often than by an in-app scanner, which is the case the `https` form serves. **The legacy reader was dropped.** An earlier draft let Keyring read `keyring://oob` as an optional legacy form (spec section 8.2, 15 vectors) in case the portal shipped it before the container existed. It is removed: the VTC portal emits the container link from the start, so there is nothing to read; a custom scheme does not open from a generic camera app, and any app may register it (RFC 8252 section 8.1). The spec says only that Keyring reads no `keyring://oob` form (section 8).
 
 **Unknown parameters: the proposal's side moves.** The proposal rejects unknown parameters, the specification ignores them (section 3: "Unknown parameters are ignored, so a tracker cannot break a link"), and a QR on a web page or in an email is exactly where a tracker or a redirector appends one. Rejecting turns an unrelated addition into a sign-in failure with no security gain, because every field that matters is read by name and validated by grammar; and the specification already rejects the case that does matter, a **repeated** reserved name. The proposal's repeated-parameter rule stays; its unknown-parameter rule goes. A security-relevant parameter added later must be tied to a flow version that a reader without it rejects (section 2).
 
