@@ -854,7 +854,7 @@ async function linkManually(driver) {
     await waitForTestId(driver, "VtaLinkError", 120000);
     const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
     await screenshot(driver, "link-refused-community-agent");
-    if (!/This is a community's agent\. Link Keyring to your personal agent instead\./.test(said)) {
+    if (!/community's agent/i.test(said)) { // 236's and 239's wordings both
       throw new Error(`the link was not refused as a community's agent: "${said.slice(0, 160)}"`);
     }
     if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked after refusing a community's agent");
