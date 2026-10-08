@@ -15,16 +15,35 @@
 #     a running emulator's udid), and stopAppium() leaves emulators alone.
 # Run `scripts/emu.sh status` at the start of every gate script.
 #
-# Thresholds (env): EMU_MIN_FREE_GB (3), EMU_MIN_PRESSURE_FREE (25 %),
-# EMU_MAX_SWAP_GB (8). State: $EMU_STATE_DIR (~/.cache/keyring-e2e/emu).
+# Thresholds (env): EMU_MIN_FREE_GB (macOS 3, Linux 8), EMU_MIN_PRESSURE_FREE
+# (25 %), EMU_MAX_SWAP_GB (macOS 8, Linux 16). State: $EMU_STATE_DIR
+# (~/.cache/keyring-e2e/emu).
+#
+# Linux (KVM): the same contract, plus what a headless host needs. Memory comes
+# from /proc/meminfo (MemAvailable; "pressure-free" is MemAvailable/MemTotal;
+# swap is SwapTotal - SwapFree — a shared Linux host keeps a few idle GB swapped
+# out, hence the higher default ceiling). The emulator starts headless
+# (-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect; EMU_HEADLESS=0
+# shows the window) and with explicit DNS servers, because the guest otherwise
+# had no DNS on this host (2026-10-01: ping by IP worked, by name did not, so the
+# app never reached its mediator). EMU_DNS_SERVERS (8.8.8.8,1.1.1.1; empty to
+# leave the emulator's default). For a clean first lap: `start <avd> -- -wipe-data`.
 set -u
 
+OS=$(uname -s)
 STATE_DIR=${EMU_STATE_DIR:-$HOME/.cache/keyring-e2e/emu}
 PID_FILE=$STATE_DIR/emulator.pid
-EMULATOR=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}/emulator/emulator
-MIN_FREE_GB=${EMU_MIN_FREE_GB:-3}
+if [ "$OS" = Linux ]; then DEFAULT_SDK=$HOME/Android/Sdk; else DEFAULT_SDK=$HOME/Library/Android/sdk; fi
+EMULATOR=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$DEFAULT_SDK}}/emulator/emulator
+if [ "$OS" = Linux ]; then
+  MIN_FREE_GB=${EMU_MIN_FREE_GB:-8}
+  MAX_SWAP_GB=${EMU_MAX_SWAP_GB:-16}
+else
+  MIN_FREE_GB=${EMU_MIN_FREE_GB:-3}
+  MAX_SWAP_GB=${EMU_MAX_SWAP_GB:-8}
+fi
 MIN_PRESSURE_FREE=${EMU_MIN_PRESSURE_FREE:-25}
-MAX_SWAP_GB=${EMU_MAX_SWAP_GB:-8}
+DNS_SERVERS=${EMU_DNS_SERVERS-8.8.8.8,1.1.1.1}
 
 die() { echo "emu.sh: $*" >&2; exit 1; }
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
@@ -38,7 +57,21 @@ emulator_pids() { pgrep -x emulator 2>/dev/null; pgrep -f '/qemu-system-' 2>/dev
 # pid file: "<pid> <serial> <avd> <started-utc>"
 read_state() { [ -f "$PID_FILE" ] && read -r S_PID S_SERIAL S_AVD S_AT < "$PID_FILE"; }
 
+memory_report_linux() {
+  local total avail swap_total swap_free psi
+  total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+  avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
+  swap_total=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
+  swap_free=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo)
+  FREE_GB=$(( avail / 1048576 ))
+  PRESSURE_FREE=$(( avail * 100 / total ))
+  SWAP_GB=$(( (swap_total - swap_free) / 1048576 ))
+  psi=$(awk '/^some/ {print $3}' /proc/pressure/memory 2>/dev/null)
+  echo "memory: available ${FREE_GB} GB (${PRESSURE_FREE}% of RAM), swap used ${SWAP_GB} GB${psi:+, PSI some $psi}"
+}
+
 memory_report() {
+  [ "$OS" = Linux ] && { memory_report_linux; return; }
   local page free inactive pressure swap
   page=$(sysctl -n hw.pagesize)
   free=$(vm_stat | awk '/Pages free/ {gsub("\\.","",$3); print $3}')
@@ -85,6 +118,11 @@ cmd_start() {
     esac
   done
   [ -x "$EMULATOR" ] || die "no emulator binary at $EMULATOR"
+  if [ "$OS" = Linux ]; then
+    [ -r /dev/kvm ] && [ -w /dev/kvm ] || die "/dev/kvm is not usable by $(id -un) (add yourself to the kvm group)"
+    [ "${EMU_HEADLESS:-1}" = 1 ] && extra=(-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect ${extra[@]+"${extra[@]}"})
+    [ -n "$DNS_SERVERS" ] && extra=(-dns-server "$DNS_SERVERS" ${extra[@]+"${extra[@]}"})
+  fi
   local running pids
   running=$(adb_emulators | xargs); pids=$(emulator_pids | sort -u | xargs)
   [ -z "$running" ] && [ -z "$pids" ] || die "an emulator is already running (adb: ${running:-none}; pids: ${pids:-none}) — one at a time"
@@ -108,6 +146,16 @@ cmd_start() {
   done
   [ -n "$booted" ] || { echo "not booted after 360 s; stopping it" >&2; cmd_stop; exit 1; }
   echo "booted: $serial"
+  # A guest that cannot resolve names fails far later and far less clearly
+  # (the app's mediator "never answers"), so say so now.
+  if [ "$OS" = Linux ]; then
+    local dns_ok=
+    for i in $(seq 1 15); do
+      adb -s "$serial" shell ping -c 1 -W 2 dns.google > /dev/null 2>&1 && { dns_ok=1; break; }
+      sleep 2
+    done
+    if [ -n "$dns_ok" ]; then echo "guest DNS: ok"; else echo "WARNING: the guest cannot resolve dns.google — set EMU_DNS_SERVERS, or check the host network" >&2; fi
+  fi
 }
 
 cmd_stop() {

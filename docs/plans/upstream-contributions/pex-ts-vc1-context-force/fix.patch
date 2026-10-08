@@ -1,0 +1,103 @@
+From ca5e46e8f531ea0f46f34be6e3f6a752a69633bf Mon Sep 17 00:00:00 2001
+From: "Brendan A. Miller" <code+os@brendanmiller.com>
+Date: Tue, 29 Sep 2026 17:48:27 -0700
+Subject: [PATCH] fix: only default to VC 1.1 base context when caller supplies
+ none
+
+constructPresentations() unconditionally force-appended the VC 1.1
+credentials context (https://www.w3.org/2018/credentials/v1) onto
+whatever base context the caller supplied via
+opts.basePresentationPayload['@context']. A caller that passes its own
+base context (e.g. a VC 2.0 context array such as
+https://www.w3.org/ns/credentials/v2) has already made a deliberate
+choice; force-appending v1 anyway produces a VerifiablePresentation
+whose @context mixes v1 and v2 credential vocabularies. Signing such a
+VP over a VC2.0-shaped credential then fails downstream with a JSON-LD
+"redefine a protected term" error, because the mixed context redefines
+terms the credential's own v2-family context already fixed.
+
+Only default to v1 when the caller supplied no base context at all
+(context.length === 0).
+
+Also removes an accidental `it.only` in test/PEX.spec.ts that was
+silently limiting this file's suite to 1 of 52 tests (confirmed this
+predates this change: it reproduces against this commit's parent with
+only the `.only` removed). Fixing it surfaces two pre-existing,
+unrelated failures in this file ("should pass with jwt vp with
+submission data" and "...generates the submission as external"),
+which fail identically against the unmodified lib/PEX.ts and appear to
+be caused by descriptor-id drift between the pdSchema fixtures in
+those tests (id '1') and what vp_permanentResidentCard.jwt's evaluated
+submission expects ('prc_type'). Left unfixed here as out of scope for
+this change; flagging for a maintainer to look into separately.
+
+Signed-off-by: Brendan A. Miller <code+os@brendanmiller.com>
+---
+ lib/PEX.ts       | 10 +++++++++-
+ test/PEX.spec.ts | 22 +++++++++++++++++++++-
+ 2 files changed, 30 insertions(+), 2 deletions(-)
+
+diff --git a/lib/PEX.ts b/lib/PEX.ts
+index c08a66d..6e040c4 100644
+--- a/lib/PEX.ts
++++ b/lib/PEX.ts
+@@ -347,7 +347,15 @@ export class PEX {
+         ? opts.basePresentationPayload['@context']
+         : [opts.basePresentationPayload['@context']]
+       : [];
+-    if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++    // Only default to the VC 1.1 base context when the caller supplied no base context at all.
++    // The previous unconditional `!context.includes(v1)` check force-appended the v1 context onto
++    // any caller-supplied base context (e.g. a VC 2.0 context array), producing a VP whose context
++    // mixes v1 and v2 credential vocabularies. Signing such a VP over a VC2.0-shaped credential
++    // (e.g. with Ed25519Signature2018) then fails downstream with a JSON-LD "redefine a protected
++    // term" error, because the mixed context redefines terms the VC's own v2-family context already
++    // fixed. A caller that supplies its own base context has already made a deliberate choice; this
++    // must not silently overwrite it.
++    if (context.length === 0) {
+       context.push('https://www.w3.org/2018/credentials/v1');
+     }
+ 
+diff --git a/test/PEX.spec.ts b/test/PEX.spec.ts
+index 3141663..0a1cbd8 100644
+--- a/test/PEX.spec.ts
++++ b/test/PEX.spec.ts
+@@ -1250,7 +1250,7 @@ describe('evaluate', () => {
+     });
+   });
+ 
+-  it.only('when single presentation is passed, it defaults to non-external submission', function () {
++  it('when single presentation is passed, it defaults to non-external submission', function () {
+     const pdSchema: PresentationDefinitionV2 = {
+       id: '00000000-0000-0000-0000-000000000000',
+       input_descriptors: [
+@@ -1283,6 +1283,26 @@ describe('evaluate', () => {
+     });
+   });
+ 
++  it('constructPresentations defaults the base context to VC 1.1 when the caller supplies none', function () {
++    const pex: PEX = new PEX();
++    const vc = getFileAsJson('./test/dif_pe_examples/vc/vc-PermanentResidentCard.json');
++    const presentations = pex.constructPresentations(vc);
++    const presentation = presentations[0] as IPresentation;
++    expect(presentation['@context']).toEqual(['https://www.w3.org/2018/credentials/v1']);
++  });
++
++  it('constructPresentations does not force-append the VC 1.1 context onto a caller-supplied base context', function () {
++    const pex: PEX = new PEX();
++    const vc = getFileAsJson('./test/dif_pe_examples/vc/vc-PermanentResidentCard.json');
++    const presentations = pex.constructPresentations(vc, {
++      basePresentationPayload: {
++        '@context': ['https://www.w3.org/ns/credentials/v2'],
++      } as IPresentation,
++    });
++    const presentation = presentations[0] as IPresentation;
++    expect(presentation['@context']).toEqual(['https://www.w3.org/ns/credentials/v2']);
++  });
++
+   it('when single presentation is passed with presentationSubmissionLocation.EXTERNAL, it generates the submission as external', function () {
+     const pdSchema: PresentationDefinitionV2 = {
+       id: '00000000-0000-0000-0000-000000000000',
+-- 
+2.43.0
+

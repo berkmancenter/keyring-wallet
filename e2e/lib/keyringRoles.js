@@ -356,6 +356,8 @@ export async function makeDriver({ platform, app, udid, deviceName, keepState = 
   const caps = platform === "android" ? { ...androidCaps() } : { ...iosCaps() };
   if (platform === "android" && udid) {
     delete caps["appium:avd"];
+    delete caps["appium:avdLaunchTimeout"];
+    delete caps["appium:avdReadyTimeout"];
     caps["appium:udid"] = udid;
   }
   if (platform !== "android" && deviceName) caps["appium:deviceName"] = deviceName;
