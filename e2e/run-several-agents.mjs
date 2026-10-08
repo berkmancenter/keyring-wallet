@@ -431,6 +431,51 @@ try {
     await sleep(8000);
   }
 
+  // R11 (239 finding, UI/UX 10-08): an Add whose key swap is held by an approval rule on B's agent, then Back: the
+  // phone returns to A (current), and B is not left in the chips. The rule goes on B's runner (the gate's) for this
+  // row only and comes off whatever happens; the held temporary key on B goes in the leg's cleanup.
+  if (ROWS.includes("R11")) {
+    t0.R11 = Date.now();
+    const TASK = "https://trusttasks.org/spec/acl/swap-key/0.1";
+    const SET = "gate-r11-held";
+    log(`R11: approver set ${pnm(E.B_SLUG, "approvals", "approvers", "add", SET, E.A_DID).trim().split("\n").pop()?.slice(0, 60)}`);
+    log(`R11: rule ${pnm(E.B_SLUG, "approvals", "require", TASK, "--consent", "--set", SET).trim().split("\n").pop()?.slice(0, 60)}`);
+    await sleep(3000);
+    let said = "";
+    try {
+      await myAgent(d);
+      const before = await homeName(d);
+      await tapAdd(d);
+      await owner(d, "add agent (held)");
+      if (await existsTestId(d, "VtaLinkByAddress", 8000)) await tapTestId(d, "VtaLinkByAddress", 10000);
+      (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(E.B_DID);
+      await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+      await waitForTestId(d, "AgentCreateOwnerCode", 60000);
+      if (!(await existsTestId(d, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(d, "AgentCreateShowCode", 6)).click();
+      const temp = (await textOf(d, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+      execFileSync("bash", [ENROL, temp, E.B_SLUG, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+      await (await scrollToTestId(d, "AgentCreateConnect", 6).catch(() => byTestId(d, "AgentCreateConnect"))).click();
+      await owner(d, "connect (held)").catch(() => undefined);
+      for (const until = Date.now() + 240000; Date.now() < until && !said; ) {
+        if (await existsTestId(d, "AgentCreateError", 2000)) said = (await textOf(d, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+        else if (await existsTestId(d, "VtaLinkError", 500)) said = (await textOf(d, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+      }
+      await shot(d, "agents-r11-held");
+      for (let i = 0; i < 4 && !(await existsTestId(d, "MyAgent", 2000)); i++) await d.back().catch(() => undefined);
+      await myAgent(d);
+      const now = await homeName(d);
+      const rows = await switcherRows(d).catch(() => []);
+      const current = rows.find((r) => /Current/.test(r.desc))?.desc ?? "";
+      const bListed = rows.some((r) => r.desc.includes(E.B_NAME));
+      await shot(d, "agents-r11-after-back");
+      row("swap-held-add-returns", /holding this phone's link/i.test(said) && now.includes(E.A_NAME) && (!rows.length || current.includes(E.A_NAME)) && !bListed,
+        `held "${said.slice(0, 60)}" · back on "${now}" (was "${before}") · current "${current}" · B in the chips ${bListed}`);
+    } finally {
+      log(`R11: rule off ${pnm(E.B_SLUG, "approvals", "remove", TASK).trim().split("\n").pop()?.slice(0, 60)}`);
+      log(`R11: approver off ${pnm(E.B_SLUG, "approvals", "approvers", "remove", SET, E.A_DID).trim().split("\n").pop()?.slice(0, 60)}`);
+    }
+  }
+
   if (ROWS.includes("R1")) {
     t0.R1 = Date.now();
     await openSwitcher(d);

@@ -61,14 +61,24 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     a=$(echo "$t" | grep -oE 'ACL [0-9]+ → [0-9]+'); grow=$(echo "$a" | awk '{print ($4 > $2)}')
     row swap-held-try-again "$([[ $s == "TRYAGAIN shown"* && $t == "TRYAGAIN-LINKED yes"* && $grow == 0 ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${t:-no TRYAGAIN-LINKED line}"
     row swap-held-no-retry "$([[ $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "${n:-no NO-RETRY line}"
+    # 239 finding: after a held swap the agent must not stay listed; scanning it again starts a link.
+    if selected swap-held-rescan; then
+      echo "  rule (again, for the rescan run): $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
+      L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 \
+        perl -e 'alarm 1200; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-rescan.out" 2>&1; rc=$?
+      x=$(line "$LEG_DIR/held-rescan.out" RESCAN)
+      row swap-held-rescan "$([[ $x == "RESCAN ok"* ]] && echo PASS || echo FAIL)" "rc=$rc · ${x:-no RESCAN line}"
+    fi
     echo "  rule off (again): $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
   fi
   if selected swap-refused-no-try-again; then
     pnm "$RUNNER_MAIN_SLUG" policy list | grep -q "$POL" || echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"
-    L env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 \
+    L env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 RESCAN_AFTER=1 \
       perl -e 'alarm 1200; exec @ARGV' node run-vta-link.js > "$LEG_DIR/refused-scan.out" 2>&1; rc=$?
     s=$(line "$LEG_DIR/refused-scan.out" "TRYAGAIN "); n=$(line "$LEG_DIR/refused-scan.out" NO-RETRY)
     row swap-refused-no-try-again "$([[ $s == "TRYAGAIN absent"* && $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${n:-no NO-RETRY line}"
+    x=$(line "$LEG_DIR/refused-scan.out" RESCAN)
+    row swap-refused-rescan "$([[ $x == "RESCAN ok"* ]] && echo PASS || echo FAIL)" "${x:-no RESCAN line} (the refused agent not left listed)"
   fi
 else
   row swap-held-try-again SKIP "this build has no VtaLinkTryAgain (bifold #355)"

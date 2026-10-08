@@ -380,6 +380,20 @@ async function afterRefusal(driver, said, temporaryDid) {
     const ok = kept && (control === 0 || after.length === 0);
     console.log(`NO-RETRY ${ok ? "ok" : "retried"} · screen ${kept ? "kept the refusal 30 s" : `changed to ${seen}`} · ${logHalf} · control ${control}`);
   }
+  if (process.env.RESCAN_AFTER === "1") {
+    // 239 finding (UI/UX, 10-08): a swap held or refused once left the agent listed, so scanning it again said
+    // "This phone already has that agent". After the refusal, scan the same agent again: a link must start.
+    for (let i = 0; i < 4 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await driver.back().catch(() => undefined);
+    await (await waitForTestId(driver, "MyAgent", 15000)).click();
+    await sleep(1500);
+    const entry = (await existsTestId(driver, "VtaLinkScanAgain", 3000)) ? "VtaLinkScanAgain" : "LinkYourAgentButton";
+    await tapTestId(driver, entry, 15000).catch(() => undefined);
+    await pasteLinkOnScanScreen(driver, did).catch((e) => console.log(`[e2e] rescan: ${String(e.message).split("\n")[0]}`));
+    const started = await existsTestId(driver, "VtaLinkForOtherPhone", 30000);
+    const already = /already has that agent/i.test(await driver.getPageSource());
+    await screenshot(driver, "link-rescan-after-refusal");
+    console.log(`RESCAN ${started && !already ? "ok" : "refused"} · a link started ${started} · "already has that agent" ${already}`);
+  }
   if (process.env.TRY_AGAIN_HOOK) {
     const size = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
     const before = size();
