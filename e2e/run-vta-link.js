@@ -547,12 +547,15 @@ async function linkCase(driver, which) {
       return row(intro && after === before + 1, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ACL entries ${before} → ${after}`);
     }
     const cont = await existsTestId(driver, "MyAgentContinueLink", 30000);
-    console.log("[e2e] not granted yet; granting now");
-    grant(did);
     if (cont) await tapTestId(driver, "MyAgentContinueLink", 10000);
     const resumed = await existsTestId(driver, "VtaLinkResumed", 20000);
+    // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
+    // from the screen before it can be read (239 rerun: "same key false" on an empty read, though it linked).
     if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 4).catch(() => undefined))?.click().catch(() => undefined);
-    const same = (await words("VtaLinkManualDid")).replace(/\s+/g, "") === did;
+    const shown = (await words("VtaLinkManualDid")).replace(/\s+/g, "");
+    const same = shown === did;
+    console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
+    grant(did);
     if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await tapTestId(driver, "VtaLinkCheckGrant", 10000);
     const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
     const after = aclSize();
