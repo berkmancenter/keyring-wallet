@@ -273,9 +273,19 @@ A pool of built, parked VTA slots with a replenisher and a claim service; a call
 
 ---
 
-## 9. Sequencing
+## 9. Remaining steps
 
-Ours first, no counterpart needed: Phase 0 (K0, K1a, K1b), then Phase 0b (K3a, K1c); K1d waits for T3, a device run and the domain owner. With the Farm owners: ship K0 and tell them the release, then Phase 1, then Phase 2 and the claim option; obtain `vtafarm-api` (§12). B's counterpart work (trust tasks, VTC, portal) runs on its own schedule and K4 starts per Later. Prove with the lab first, per the `vti-lab-and-field` skill: a local stack we own carries B's claims about the VTC only if it runs a VTC build that has the routes; claims about the Farm need the Farm. Neither flow is a phase of the parent plan: under its dependency rule they block nothing.
+Nothing below has started unless stated. No dates; none of these block another plan. Ours first, the counterpart steps in the order they unblock work. Prove with the lab first, per the `vti-lab-and-field` skill: a local stack we own carries B's claims about the VTC only if it runs a VTC build that has the routes; claims about the Farm need the Farm.
+
+1. **Brendan sends the Trust Over IP proposal** (`keyring-qr-and-links.toip-proposal.md`: host `link.trustoverip.org`, namespace `registry.trustoverip.org/dtg/flow/`). Nothing is agreed until Trust Over IP confirms; formal Trust Over IP linkage or registration of `trusttasks.org` is a separate ask.
+2. **Run the four device tests** (fragment kept by camera apps, several wallets on one host, fragment delivered to the app, no-wallet fallback: annex B, C13, C14 and the rest of C1 to C14) **before anything is built on the fragment container.** If a camera or OS drops the fragment, the container needs a fallback design (§11 T8).
+3. **Brendan decides:** B8 (Trust Over IP-prefixed identifiers now as labelled proposals, recommended, or an interim prefix); B9 (propose renaming `auth/oob`, recommended, for example `auth/handoff`, a one-line change in spec section 5); T2 (claim authorisation for Phase 2; option A for v1).
+4. **Ask the Trust Tasks expert** for the exact meaning and source of "trigger" (§1).
+5. **Ask the VTC owners** whether they endorse the sign-in proposal (V3) and whether VTA policy allows `vault/sign-trust-task` for `auth/oob/respond` (V4). Ask before any K4 work.
+6. **Ask the Farm owner** the open questions in §11 (F1 to F13, including browser sign-in, F13) and for the current `vtafarm-api` docs or source. The Farm's claim QR stays frozen until a Keyring release ignores unknown keys.
+7. **Keyring code PRs, not this PR:** parser tolerance for unknown keys (flip the extra-member test), the `allowedHostOf` fix, deep-link log redaction at `TabStack.tsx`; then Phase 0b (biometric at claim, the `acl/list` sole-super-administrator check, "temporary instance" wording), Phase 1 (SIOPv2 login module, grant-kind ownership signal, Farm credential), K4 (`vault/sign-trust-task` wrapper, describe verification, number matching, respond), and Phase 2 (trigger profile reader on the shared host, claim-option decision, camera support).
+8. **Housekeeping:** run `node scripts/openvtc/setup-external.mjs` after a free-memory check so the VTI and openvtc clones sit on their pins; spike a real Farm `did:webvh` log resolving on Hermes and a tampered log being rejected.
+9. **Reviewers:** the Farm owner reads the Farm-facing artifact; the VTC owners and B's authors read spec section 5, the sign-in sections and the recommendations to them (annex E 8.4); Trust Over IP editors read the proposal; the Trust Tasks expert reads "trigger" and the identifiers.
 
 ---
 
