@@ -90,6 +90,22 @@ async function doneFlow(d) {
   const open = await existsTestId(d, "JoinOpenCommunity", 1500);
   await screenshot(d, "join-done-member").catch(() => undefined);
   row("join-done-member", check && done, `JoinMemberCheck ${check} · JoinDone ${done} · JoinOpenCommunity ${open}`);
+  // IN-142 (239 re-pin): a member's Join still offers "A different community", and it opens the scanner (#344 hid
+  // it, a dead end for joining a second community).
+  const other = await scrollToTestId(d, "JoinScanCommunity", 4, { from: 0.5 }).catch(() => undefined);
+  let scanner = false;
+  if (other) {
+    await other.click();
+    for (let i = 0; i < 3 && !scanner; i++) {
+      scanner = await existsTestId(d, "PasteUrlButton", 5000);
+      if (!scanner && (await existsTestId(d, "Continue", 1500))) await tapTestId(d, "Continue", 5000).catch(() => undefined);
+    }
+    await screenshot(d, "member-join-different-community").catch(() => undefined);
+    await d.back().catch(() => undefined);
+    await existsTestId(d, "JoinMemberCheck", 10000);
+  }
+  row("member-join-different-community", Boolean(other) && scanner, `JoinScanCommunity on a member's Join ${Boolean(other)} · the scanner opened ${scanner} (IN-142)`);
+  await scrollToTestId(d, "JoinDone", 4, { from: 0.5 }).catch(() => undefined);
   if (!done) return row("join-done-highlight", false, "no JoinDone to tap");
   await tapTestId(d, "JoinDone", 10000);
   const home = await existsTestId(d, "AgentHome", 15000);
