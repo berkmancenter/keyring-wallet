@@ -21,6 +21,8 @@ permissions:
 jobs:
   release:
     name: Release
+    # The @bifold npm scope belongs to upstream bifold-wallet; this fork can't publish to it.
+    if: github.repository == 'openwallet-foundation/bifold-wallet'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout bifold-wallet
