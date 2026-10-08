@@ -466,6 +466,19 @@ async function linkCase(driver, which) {
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
+  // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
+  // Share and Copy, so a text read came back empty).
+  const linkKey = async () => {
+    if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 3).catch(() => undefined))?.click().catch(() => undefined);
+    const text = (await words("VtaLinkManualDid")).replace(/\s+/g, "");
+    if (text) return text;
+    const copy = await scrollToTestId(driver, "VtaLinkCopyKey", 4).catch(() => undefined);
+    if (!copy) return "";
+    await copy.click();
+    await sleep(1000);
+    const raw = Buffer.from(String(await driver.getClipboard("plaintext").catch(() => "")), "base64").toString("utf8");
+    return (raw.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  };
   const notLinked = async () => /was not linked/i.test(await driver.getPageSource());
   const row = (ok, detail) => { console.log(`ROW ${which} ${ok ? "PASS" : "FAIL"} — ${detail}`); return ok; };
   const before = aclSize();
@@ -551,8 +564,7 @@ async function linkCase(driver, which) {
     const resumed = await existsTestId(driver, "VtaLinkResumed", 20000);
     // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
     // from the screen before it can be read (239 rerun: "same key false" on an empty read, though it linked).
-    if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 4).catch(() => undefined))?.click().catch(() => undefined);
-    const shown = (await words("VtaLinkManualDid")).replace(/\s+/g, "");
+    const shown = await linkKey();
     const same = shown === did;
     console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
     grant(did);
@@ -628,8 +640,7 @@ async function linkCase(driver, which) {
     let tryAgain = false;
     if (cont) {
       await tapTestId(driver, "MyAgentContinueLink", 10000);
-      if (!(await existsTestId(driver, "VtaLinkManualDid", 3000))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 4).catch(() => undefined))?.click().catch(() => undefined);
-      same = (await words("VtaLinkManualDid")).replace(/\s+/g, "") === did;
+      same = (await linkKey()) === did;
       tryAgain = await existsTestId(driver, "VtaLinkTryAgain", 1000);
     }
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
