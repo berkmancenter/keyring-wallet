@@ -76,9 +76,9 @@ After `unknown-flow` or `unsupported-version` a consumer MUST NOT try another fl
 | Flow | Slug | Type URI, version 0.1 (proposed) | Contact | Expiry | Contact on the `from` list |
 |---|---|---|---|---|---|
 | claim a parked VTA | `vta-claim` | `https://registry.trustoverip.org/dtg/flow/vta-claim/0.1` | the Farm's claim-service DID | required | required |
-| sign in to a community portal | `auth/oob/describe` | `https://registry.trustoverip.org/dtg/flow/auth/oob/describe/0.1` | the community's DID | required, at most 300 seconds (120 recommended) | no (the wallet must already know the community; wallet policy) |
+| sign in to a community portal | `community-sign-in` | `https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1` | the community's DID | required, at most 300 seconds (120 recommended) | no (the wallet must already know the community; wallet policy) |
 
-**These identifiers are provisional and private until Trust Over IP registers them.** Framework 0.7.0, Private and Unpublished Trust Task Specifications: a private specification's Type URI "MUST NOT be served from, or claim to identify a resource at, the `https://trusttasks.org/` domain", so neither flow claims it; a re-host is a different identifier "unless and until the registry policy explicitly aliases them". `vta-claim` has no upstream task. The `auth/oob/*` family is a third-party proposal's, not a published specification; the hint names its first task as the wallet sends it (`describe`). Its family name shares only the word "oob" with DIDComm's out-of-band messages and has nothing to do with them; renaming it (for example `auth/handoff`) is recommended and undecided, and changes only the slug here (annex E 8.4, annex H). **The wallet's own host is never part of a flow identifier.**
+**These identifiers are provisional and private until Trust Over IP registers them.** Framework 0.7.0, Private and Unpublished Trust Task Specifications: a private specification's Type URI "MUST NOT be served from, or claim to identify a resource at, the `https://trusttasks.org/` domain", so neither flow claims it; a re-host is a different identifier "unless and until the registry policy explicitly aliases them". Neither flow has an upstream task. **A flow identifier names a flow, not the Trust Task a wallet sends first:** the task or tasks a flow uses are the inviter's and the wallet's business, may be renamed or replaced without moving the identifier, and are not named here (annex E 8.4 describes one third-party proposal's). **The wallet's own host is never part of a flow identifier.**
 
 ## 6. After the trigger
 
@@ -110,7 +110,7 @@ Reading order: not a JSON object or no `callback_url` key: `not-ours`; channel n
 
 The callback is bearer and is never logged. **Sunset:** accepted until the first Keyring release that ignores unknown keys has been available for a period set by the Farm and Keyring owners, after which the Farm stops emitting it.
 
-**No other legacy form.** The VTC portal emits the container link (section 3) from the start, and Keyring reads no `keyring://oob` form (annex E, 8.4).
+**No other legacy form.** A portal emits the container link (section 3) from the start; no other custom-scheme form is read (annex E, 8.4).
 
 ## 9. Conformance
 
