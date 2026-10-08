@@ -36,12 +36,13 @@ try {
     src = await d.getPageSource();
     meet = pos("Meet a vetter");
   }
-  const heading = pos("One vetter must confirm who you are");
+  // The vetter's way in, as 239 words it (the request's "One vetter must confirm who you are" was a paraphrase).
+  const heading = pos("A statement from one of its vetters");
   const toggle = (src.match(/resource-id="com\.ariesbifold:id\/JoinWaysOthersToggle"[^>]*bounds="\[\d+,(\d+)\]/) || [])[1];
   const toggleY = toggle === undefined ? undefined : Number(toggle);
   await screenshot(d, "outside-join-meet-vetter").catch(() => undefined);
-  const ok = ways && meet !== undefined && heading !== undefined && (toggleY === undefined || meet < toggleY);
-  console.log(`ROW outside-join-meet-vetter ${ok ? "PASS" : "FAIL"} — JoinWays ${ways} · "One vetter must confirm who you are" ${heading !== undefined ? `at y ${heading}` : "absent"} · "Meet a vetter" ${meet !== undefined ? `at y ${meet}` : "not shown without opening See them"} · See them ${toggleY !== undefined ? `at y ${toggleY}` : "absent"} (IN-149; read-only, nothing tapped on Join)`);
+  const ok = ways && meet !== undefined && heading !== undefined && heading < meet && (toggleY === undefined || meet < toggleY);
+  console.log(`ROW outside-join-meet-vetter ${ok ? "PASS" : "FAIL"} — JoinWays ${ways} · "A statement from one of its vetters" ${heading !== undefined ? `at y ${heading}` : "absent"} · "Meet a vetter" ${meet !== undefined ? `at y ${meet}` : "not shown without opening See them"} · See them ${toggleY !== undefined ? `at y ${toggleY}` : "absent"} (IN-149; read-only, nothing tapped on Join)`);
   await d.back().catch(() => undefined);
   process.exitCode = ok ? 0 : 3;
 } catch (e) {
