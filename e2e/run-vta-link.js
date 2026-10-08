@@ -540,7 +540,7 @@ async function linkCase(driver, which) {
     if (noAnswer) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
     const linked = noAnswer && (await ready());
     const after = aclSize();
-    return row(noAnswer && !failed && linked && after === before + 1, `"didn't answer" + Check again ${noAnswer} · a failure instead ${failed} · linked after unblocking ${linked} · ACL ${before} → ${after}`);
+    return row(noAnswer && !failed && linked && after === before + 1, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): "didn't answer" + Check again ${noAnswer} · a failure instead ${failed} · linked after unblocking ${linked} · ACL ${before} → ${after}`);
   }
   if (which === "create-window-paused") {
     await addressCode();
@@ -568,7 +568,7 @@ async function linkCase(driver, which) {
     if (tryAgain) await tapTestId(driver, "VtaLinkTryAgain", 10000);
     const done = tryAgain && (await waitForTestId(driver, "VtaLinkDone", 240000).then(() => true, () => false));
     const after = aclSize();
-    return row(tryAgain && done && after <= mid, `"not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
+    return row(tryAgain && done && after <= mid, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses): "not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
   }
   return row(false, `no such LINK_CASE ${which}`);
 }
