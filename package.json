@@ -55,6 +55,9 @@
     "e2e:vrc:photo:android-only": "cd e2e && npm run vrc-exchange:photo:android-only",
     "e2e:vrc:trading-card": "cd e2e && npm run vrc-exchange:trading-card",
     "e2e:vrc:trading-card:android-only": "cd e2e && npm run vrc-exchange:trading-card:android-only",
+    "e2e:vrc:check": "cd e2e && npm run check:vrc:witnessed --",
+    "e2e:vrc:check:strict": "cd e2e && npm run check:vrc:strict --",
+    "e2e:vrc:check:self-test": "cd e2e && npm run check:vrc:self-test",
     "e2e:check-device-budget": "cd e2e && node check-device-budget.js",
     "e2e:approver": "cd e2e && npm run approver-exchange",
     "e2e:approver:android-only": "cd e2e && npm run approver-exchange:android-only",
@@ -117,9 +120,12 @@
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
     "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
+    "@bifold/dtg-vocab": "portal:bifold/packages/dtg-vocab",
     "json-canonicalize": "2.0.0",
     "rxjs": "7.8.2",
-    "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch"
+    "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch",
+    "@animo-id/pex@npm:^6.1.1": "patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch",
+    "@credo-ts/core@npm:0.7.1-pr-2704-20260909134930": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {

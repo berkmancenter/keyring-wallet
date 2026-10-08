@@ -42,7 +42,7 @@ function portInUse(port) {
  * docs/plans/openvtc-integration-plan/2026-09-02-bam.md). Catch it here,
  * before wasting a full install+onboarding cycle on it.
  */
-async function checkMetroIsThisWorktree() {
+export async function checkMetroIsThisWorktree() {
   if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
   // The process listening on THIS port — not the first Metro in `ps`, which on
   // a shared machine can be another worktree's Metro on another port.
@@ -734,17 +734,29 @@ export async function tapText(driver, text, timeout = 30000) {
   return el;
 }
 
+// Filename-safe device identifier — deviceTag()'s ":" separator isn't. Two
+// devices on the same platform (e.g. two Android phones) produce identical
+// `<label>-<platform>-<timestamp>` names otherwise, indistinguishable except
+// by which log lines happen to be nearby — this cost a real investigation
+// its first hour (2026-09-29): a screenshot/dump pair was matched to the
+// wrong device, and the wrong device's fully-onboarded final state was
+// mistaken for the failing device's, sending the diagnosis in a wrong
+// direction before session-ID cross-referencing corrected it.
+function fileSafeDeviceTag(driver) {
+  return deviceTag(driver).replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 export async function dumpSource(driver, label) {
   const src = await driver.getPageSource();
   const { writeFileSync } = await import("node:fs");
-  const file = runPath(`${label}-${driver.e2ePlatform}-${Date.now()}.xml`);
+  const file = runPath(`${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.xml`);
   writeFileSync(file, src);
   console.log(`[e2e] page source dumped: ${file}`);
   return file;
 }
 
 export async function screenshot(driver, label) {
-  const file = runPath(`${label}-${driver.e2ePlatform}-${Date.now()}.png`);
+  const file = runPath(`${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.png`);
   await driver.saveScreenshot(file);
   console.log(`[e2e] screenshot: ${file}`);
   return file;

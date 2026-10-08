@@ -1,0 +1,20 @@
+{
+  "name": "ref-07h-vsc-credo-suites",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 07h — a VSC signed and verified through Credo 0.7's real proof-suite path (both shipped suites), with the D6 subject-issuer check run against a credential Credo itself verified",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.7.1-pr-2704-20260909134930",
+    "@credo-ts/core": "0.7.1-pr-2704-20260909134930",
+    "@credo-ts/node": "0.7.1-pr-2704-20260909134930",
+    "json-canonicalize": "2.0.0",
+    "@digitalcredentials/data-integrity": "^2.6.0",
+    "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "^1.3.0",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0"
+  }
+}

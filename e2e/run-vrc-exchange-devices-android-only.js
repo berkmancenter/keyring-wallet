@@ -27,6 +27,7 @@ import "./lib/cli-guard.js";
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import { enforceCredentialCheck, filterKeepingContinuations, saveIssuedCredentialFiles, saveReactNativeJsLines } from "./lib/vrcCapture.js";
 
 import {
   createSession,
@@ -114,50 +115,32 @@ async function ensureMetro() {
 
 /** Filter + save the attestation-relevant logcat lines for one or more android udids. */
 function dumpAndroidAttestationLogs(udids) {
+  const checkFiles = [];
   for (const udid of udids) {
     try {
       mkdirSync("artifacts", { recursive: true });
-      const raw = execSync(`adb -s ${udid} logcat -d`, {
+      const raw = execSync(`adb -s ${udid} logcat -d -v threadtime`, {
         maxBuffer: 64 * 1024 * 1024,
       }).toString();
-      const lines = raw
-        .split("\n")
-        .filter((l) => /VRC:|Attestation|BiometricSignature|GoogleAttestation/i.test(l));
+      const lines = filterKeepingContinuations(raw, /VRC:|HW:|Attestation|BiometricSignature|GoogleAttestation/i);
       const file = `artifacts/attestation-logcat-${udid}-${Date.now()}.txt`;
       writeFileSync(file, lines.join("\n"));
+      checkFiles.push(file);
       console.log(`[e2e] android (${udid}) attestation log lines saved: ${file} (${lines.length} lines)`);
+      console.log(`[e2e] android (${udid}) ReactNativeJS lines saved: ${saveReactNativeJsLines(udid, raw)}`);
 
-      // Extract slim issued-credential JSON dumps (PEMs already omitted in-app).
-      let n = 0;
-      for (const line of raw.split("\n")) {
-        const marker = "[VRC:IssuedCredentialJSON]";
-        const idx = line.indexOf(marker);
-        if (idx < 0) continue;
-        const payload = line.slice(idx + marker.length).trim();
-        // payload: side=… exchange=… record=… {json}
-        const jsonStart = payload.indexOf("{");
-        if (jsonStart < 0) continue;
-        const meta = payload.slice(0, jsonStart).trim();
-        const side = (meta.match(/side=(\w+)/) || [])[1] || "unknown";
-        try {
-          const obj = JSON.parse(payload.slice(jsonStart));
-          const types = (obj.type || []).join("-") || "credential";
-          const out = `artifacts/issued-credential-${udid}-${side}-${types}-${Date.now()}-${n++}.json`;
-          writeFileSync(out, JSON.stringify(obj, null, 2));
-          console.log(`[e2e] issued credential dump: ${out}`);
-          if (obj.proof) {
-            console.log(
-              `[e2e]   proof.type=${obj.proof.type} proofPurpose=${obj.proof.proofPurpose}`
-            );
-          }
-        } catch (e) {
-          console.warn(`[e2e] could not parse IssuedCredentialJSON: ${e.message}`);
-        }
+      // One issued-credential-<udid>-<side>-<n>.json per captured VRC (PEMs
+      // already elided in-app).
+      for (const f of saveIssuedCredentialFiles(udid, lines.join("\n"))) {
+        console.log(`[e2e] issued credential dump: ${f}`);
+        checkFiles.push(f);
       }
     } catch (e) {
       console.warn(`[e2e] logcat capture failed for ${udid} (non-fatal): ${e.message}`);
     }
   }
+  // This run exists to issue a VRC: no credential captured is a failure.
+  if (checkFiles.length) enforceCredentialCheck(checkFiles);
 }
 
 // ---------- run ----------

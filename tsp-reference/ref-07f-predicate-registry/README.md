@@ -49,10 +49,17 @@ predate #47.
 **Act 3 — Keyring in #47's shape.** The production VWC, re-expressed mechanically,
 is **accepted**. The legacy captured VWC is rejected for missing `taskContext` — a
 real Keyring self-finding (the `vrc-reference` demo path predates Trust Task Context
-Binding). With the type string gone, Keyring's real `isWitnessCredential()` stops
-recognising the credential and `isPeerVrcCredential()` claims it, so today's wallet
-would file it under Contacts. Dispatching on the accept-list routes it correctly:
-**for a wallet, the accept-list is the dispatch table**, not only an allowlist.
+Binding). **Originally found, and since fixed** (VSC migration plan §6 V3, Alberto's
+2026-09-17 review finding A11): with the type string gone, Keyring's real
+`isWitnessCredential()` stopped recognising the credential and `isPeerVrcCredential()`
+claimed it, so the wallet filed it under Contacts. `isPeerVrcCredential()` now
+dispatches on `@bifold/dtg-vocab`'s real accept-list (plan §6 V1) instead of a bare
+type-string negation, and correctly excludes it. This rung still keeps its own local
+accept-list (built from #52's issue-body example, a different placeholder namespace
+than the real registry V1 settled on) for the format-level checks above and below —
+only the check against Keyring's real `credentialTypes.ts` functions uses the real
+namespace, for exactly this reason: **for a wallet, the accept-list is the dispatch
+table**, not only an allowlist, so testing the real dispatch needs the real namespace.
 
 **Act 4 — what a generic verifier can enforce.** Unknown predicate, proposed
 predicate, missing `taskContext`, wrong object kind and a mistyped `witnessContext`

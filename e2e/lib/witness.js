@@ -128,8 +128,13 @@ export async function startWitness({
   publicUrl,
   tunnel = !publicUrl,
   name = process.env.WITNESS_NAME || "e2e-witness",
-  port = Number(process.env.WITNESS_PORT || 9002),
-  webPort = Number(process.env.WITNESS_WEB_PORT || 9003),
+  // Not 9002/9003: those collide with an unrelated stray witness-server
+  // Docker container that's been observed squatting on 9003 on at least one
+  // shared dev machine (a completely different, unmanaged checkout — see
+  // 2026-09-29 e2e run notes). 9102/9103 avoid that specific known conflict;
+  // set WITNESS_PORT/WITNESS_WEB_PORT explicitly if these ever collide too.
+  port = Number(process.env.WITNESS_PORT || 9102),
+  webPort = Number(process.env.WITNESS_WEB_PORT || 9103),
   readyTimeoutMs = 180000,
   // Serve DIDComm v2 beside v1 (WITNESS_DIDCOMM_VERSIONS=v1,v2): the witness
   // then also publishes an out-of-band/2.0 invitation, returned as
@@ -223,6 +228,20 @@ export async function startWitness({
       // dismiss it. The locality-specific runner overrides this to
       // "required" before calling startWitness.
       WITNESS_LOCALITY_POLICY: process.env.WITNESS_LOCALITY_POLICY || "off",
+      // Off by default, regardless of what a developer's local
+      // bifold/packages/witness-server/.env has committed to
+      // WITNESS_LLM_ENABLED — same rationale as MEDIATOR_INVITATION_URL
+      // above (dotenv never overrides a variable already present in the
+      // environment), and the same class of bug: a real Anthropic API call
+      // per witness message adds unpredictable, sometimes 10s+ latency per
+      // hop, which a fixed-timeout assertion has no way to account for.
+      // Missed when the transport/wallet/locality overrides above were
+      // written — found 2026-09-29 when a live attended run's per-hop
+      // message latency (15-45s+ observed in device logcat) turned out to
+      // correlate with a local .env's WITNESS_LLM_ENABLED=true leaking
+      // through. Set WITNESS_LLM_ENABLED=true explicitly to deliberately
+      // test the LLM path.
+      WITNESS_LLM_ENABLED: process.env.WITNESS_LLM_ENABLED || "false",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

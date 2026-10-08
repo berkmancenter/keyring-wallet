@@ -1,0 +1,54 @@
+diff --git a/dist/browser/lib/PEX.js b/dist/browser/lib/PEX.js
+index 07e065fd164eaf55a184fc5acbf1844f12ac57d9..008676165b8c498dc63681fe939cfcb430f8fe18 100644
+--- a/dist/browser/lib/PEX.js
++++ b/dist/browser/lib/PEX.js
+@@ -208,7 +208,10 @@ class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        // Keyring patch: only default to the VC 1.1 base context when the
++        // caller supplied no base context at all. See dist/main/lib/PEX.js
++        // for the full rationale.
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts === null || opts === void 0 ? void 0 : opts.presentationSubmission) {
+diff --git a/dist/main/lib/PEX.js b/dist/main/lib/PEX.js
+index 07e065fd164eaf55a184fc5acbf1844f12ac57d9..e9ff5bba6a56c239cfea2f30b42323242bb27299 100644
+--- a/dist/main/lib/PEX.js
++++ b/dist/main/lib/PEX.js
+@@ -208,7 +208,16 @@ class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        // Keyring patch: only default to the VC 1.1 base context when the
++        // caller supplied no base context at all. The previous unconditional
++        // `!context.includes(v1)` check force-appended the v1 context onto
++        // any caller-supplied base context (e.g. a VC 2.0 context array),
++        // producing a VP whose context mixes v1 and v2 credential vocabularies.
++        // Signing such a VP over a VC2.0-shaped credential (e.g. with
++        // Ed25519Signature2018) then fails downstream with a JSON-LD
++        // "redefine a protected term" error, because the mixed context
++        // redefines terms the VC's own v2-family context already fixed.
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts === null || opts === void 0 ? void 0 : opts.presentationSubmission) {
+diff --git a/dist/module/lib/PEX.js b/dist/module/lib/PEX.js
+index a6bda3f17a0566ea9971286b54ba48e278ab2e2e..ac32c5188c4f3b92dd5ff6f7c4ff710877dcb010 100644
+--- a/dist/module/lib/PEX.js
++++ b/dist/module/lib/PEX.js
+@@ -205,7 +205,10 @@ export class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        // Keyring patch: only default to the VC 1.1 base context when the
++        // caller supplied no base context at all. See dist/main/lib/PEX.js
++        // for the full rationale.
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts?.presentationSubmission) {

@@ -23,6 +23,9 @@ const packageDirs = [
   // @bifold/credo-tsp-adapter: Askar-backed implementations of trust-tasks's
   // tsp-core ports (SigningKey/KeyAgreement/VidResolver)
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/credo-tsp-adapter')),
+  // @bifold/dtg-vocab: Predicate Handling (cred-spec C4) and a mirrored copy
+  // of the dtgwg-vsc-registry's predicate vocabulary
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/dtg-vocab')),
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.
@@ -35,6 +38,7 @@ const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/react-hooks',
   '@bifold/trust-tasks',
   '@bifold/credo-tsp-adapter',
+  '@bifold/dtg-vocab',
 ]
 const bifoldSourceDirByPackage = {}
 for (const dir of packageDirs) {
