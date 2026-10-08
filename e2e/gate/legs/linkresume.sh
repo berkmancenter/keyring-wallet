@@ -22,7 +22,7 @@ cd "$E2E"
 # The host-code cases (link-host-sleep, link-host-lock-after-grant, host-code-lapsed, link-try-again) need an https
 # callback on ic3.dev or firstperson.dev (agentHostConnection.ts, AGENT_HOST_SITES): the gate's local http page cannot
 # serve one, so for 239 they are unit-only (vtaAgentHostLink) plus manual. LINK_CASES overrides.
-for c in ${LINK_CASES:-link-address-resume}; do
+for c in ${LINK_CASES:-link-address-resume link-address-resume-later}; do
   selected "$c" || continue
   adb -s $E uninstall $BID >/dev/null 2>&1
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \

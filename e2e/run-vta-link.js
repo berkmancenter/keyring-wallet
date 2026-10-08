@@ -511,24 +511,39 @@ async function linkCase(driver, which) {
     await screenshot(driver, which);
     return row(Boolean(said) && !tryAgain && state !== "submitted", `said "${said.slice(0, 90)}" · Try again ${tryAgain} · host offer ${state}`);
   }
-  if (which === "link-address-resume") {
+  if (which === "link-address-resume" || which === "link-address-resume-later") {
+    // #355's resume (UI/UX, 10-08): on relaunch the app finds no link but a young temporary key, shows it again and
+    // checks it once. Granted before the relaunch: it links on its own, straight to the introduction (the
+    // showingKey / MyAgentContinueLink state lasts only that check). Granted after (-later): the check says "not yet",
+    // My Agent offers MyAgentContinueLink, VtaLink shows VtaLinkResumed with the same key (VtaLinkShowTheCode), and
+    // VtaLinkCheckGrant links. Either way the ACL gains exactly one entry (the swap leaves the long-term key there).
+    const later = which === "link-address-resume-later";
     const did = await addressCode();
     sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
-    console.log("[e2e] app force-stopped with the code out; granting");
-    grant(did);
+    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grant(did); }
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
     await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
     await unlockIfLocked(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    const cont = await existsTestId(driver, "MyAgentContinueLink", 20000);
+    if (!later) {
+      const intro = await existsTestId(driver, "AgentIntro", 60000);
+      const after = aclSize();
+      await screenshot(driver, which);
+      return row(intro && after === before + 1, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ACL entries ${before} → ${after}`);
+    }
+    const cont = await existsTestId(driver, "MyAgentContinueLink", 30000);
+    console.log("[e2e] not granted yet; granting now");
+    grant(did);
     if (cont) await tapTestId(driver, "MyAgentContinueLink", 10000);
     const resumed = await existsTestId(driver, "VtaLinkResumed", 20000);
-    const same = resumed && (await driver.getPageSource()).includes(did.slice(-16));
-    const linked = await ready();
+    if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+    const same = (await words("VtaLinkManualDid")).replace(/\s+/g, "") === did;
+    if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await tapTestId(driver, "VtaLinkCheckGrant", 10000);
+    const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
     const after = aclSize();
     await screenshot(driver, which);
-    return row(cont && resumed && linked && after === before + 1, `MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} (same key shown ${same}) · linked ${linked} · ACL ${before} → ${after}`);
+    return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
   }
   if (which === "link-no-answer") {
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
