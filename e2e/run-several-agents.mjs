@@ -266,6 +266,14 @@ async function linkTo(d, did, slug) {
   return temp;
 }
 
+/** The chips' Add, brought back into view first: after a switch the home can sit scrolled past the chip strip, and
+ * Android leaves off-screen views out of the tree (239: R9 found no AgentSwitcherAdd). */
+async function tapAdd(d) {
+  const el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 4, { direction: "up" }).catch(() => undefined);
+  if (el) await el.click();
+  else await tapTestId(d, "AgentSwitcherAdd", 15000);
+}
+
 async function openSwitcher(d) {
   await myAgent(d);
   // 236 (#316): the agents are chips, always shown; there is no AgentSwitcherOpen to tap.
@@ -427,7 +435,7 @@ try {
     t0.R1 = Date.now();
     await openSwitcher(d);
     await shot(d, "agents-r1-switcher-one");
-    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await tapAdd(d);
     await owner(d, "add agent");
     const tempB = await linkTo(d, E.B_DID, E.B_SLUG);
     // 237: the new agent's introduction can play first (1 of 3), then the "added" card: skip the one, wait for the other.
@@ -497,7 +505,7 @@ try {
     const aclCount = () => { const t = pnm(E.B_SLUG, "acl", "list", "--json"); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
     const before = aclCount();
     await myAgent(d);
-    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await tapAdd(d);
     await owner(d, "add agent (existing)");
     if (await existsTestId(d, "VtaLinkByAddress", 8000)) await tapTestId(d, "VtaLinkByAddress", 10000);
     (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(E.B_DID);
@@ -522,7 +530,7 @@ try {
     } else row("add-existing-switch", false, "no AgentCreateSwitchToExisting");
     // By scan: Add, the scanner, B's bare address pasted.
     await myAgent(d);
-    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await tapAdd(d);
     await owner(d, "add agent (existing, scan)");
     if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
     let scanSaid = "";
@@ -559,7 +567,7 @@ try {
       const n0 = logLines().length;
       const before = aclA();
       await myAgent(d);
-      await tapTestId(d, "AgentSwitcherAdd", 15000);
+      await tapAdd(d);
       await owner(d, `add a community's agent (${way})`);
       if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
       let said = "";
