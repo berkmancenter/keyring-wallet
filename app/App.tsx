@@ -1,6 +1,7 @@
 import {
   animatedComponents,
   AnimatedComponentsProvider,
+  APPROVALS_LINK,
   AuthProvider,
   ContainerProvider,
   ErrorModal,
@@ -9,6 +10,7 @@ import {
   MainContainer,
   NavContainer,
   NetworkProvider,
+  openAppLink,
   StoreProvider,
   Stacks,
   ThemeProvider,
@@ -33,7 +35,7 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
-import { onPushWake } from '@/push/pushHandlers'
+import { onPushWake, openApprovalsOnTap } from '@/push/pushHandlers'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
@@ -51,6 +53,8 @@ messaging().setBackgroundMessageHandler(async (message) =>
   onPushWake('background', message, (m, d) => BCLogger.info(m, d))
 )
 messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
+// Tapping the wake notification opens the waiting approvals, after unlocking.
+openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), () => openAppLink(APPROVALS_LINK))
 
 const App = () => {
   const { t } = useTranslation()
