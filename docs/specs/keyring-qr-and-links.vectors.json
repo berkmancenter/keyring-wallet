@@ -1,0 +1,3372 @@
+{
+  "title": "Keyring QR and link triggers: conformance vectors",
+  "status": "DRAFT",
+  "date": "2026-10-08",
+  "author": "bm",
+  "spec": "keyring-qr-and-links.md",
+  "registryRevision": 0,
+  "config": {
+    "now": 1791460800,
+    "nowIso": "2026-10-08T12:00:00Z",
+    "maxLinkLength": 1536,
+    "maxInvitationBytes": 1024,
+    "handleLength": [
+      16,
+      128
+    ],
+    "containers": [
+      "oob",
+      "url"
+    ],
+    "fromAllowList": [
+      "ic3.dev",
+      "firstperson.dev"
+    ],
+    "legacyCallbackAllowList": [
+      "ic3.dev",
+      "firstperson.dev"
+    ],
+    "acceptedAuthorities": [
+      "trusttasks.org",
+      "tasks.example.org"
+    ],
+    "flows": {
+      "vta-claim": {
+        "channels": [
+          "scan",
+          "deeplink",
+          "paste"
+        ],
+        "expRequired": true,
+        "fromMustBeAllowListed": true,
+        "supported": {
+          "0": [
+            1
+          ]
+        }
+      },
+      "auth/cross-device/claim": {
+        "channels": [
+          "scan",
+          "deeplink",
+          "paste"
+        ],
+        "expRequired": true,
+        "fromMustBeAllowListed": false,
+        "supported": {
+          "0": [
+            1
+          ]
+        }
+      },
+      "example-stable": {
+        "testOnly": true,
+        "channels": [
+          "scan",
+          "deeplink",
+          "paste"
+        ],
+        "expRequired": false,
+        "fromMustBeAllowListed": false,
+        "supported": {
+          "1": "any"
+        }
+      }
+    },
+    "legacyChannels": [
+      "scan"
+    ],
+    "notes": "A trigger is a hint and confers no authority; nothing here tests what a consumer does after accepting one. Each vector gives input (the scanned, opened or pasted text) and channel (scan unless stated). An accept lists via (oob, url or legacy-json), from (the contact DID), id (the handle, null for the legacy format), exp (unix seconds or null), flow (the registered slug, or null when no hint was given), task (the hint as Type URI, major, minor, or null) and ignored (members the reader did not read: invitation.x, body.x, query.x, legacy.x); a legacy accept also lists callbackUrl. config.now is the reader clock; no vector depends on any other time. ui is derived from reason: update = unknown-flow, unsupported-version; expired = expired; scan-only = wrong-channel; not-ours is outside the spec; invalid = every other reason. Legacy reasons (spec 9): missing-param (a required key is absent), bad-value (a required key has the wrong type or form), callback-not-allowed (callback_url is a string that fails the host or length rules). The OOB container and the URL container are both listed so the container decision (spec 2.3, T1) costs only deleting the groups of the one not chosen: URL vectors are the group valid-url and every vector whose input has a _from parameter; OOB vectors are the rest. The authority tasks.example.org and the slug example-stable are test-only. The URL parameter names (_from, _id, _exp, _type, _tp) are placeholders. Where the legacy format carries an extra key, the expectation is the behaviour of the Keyring release that ignores unknown keys (plan Phase 0); no earlier release does that. Transport hint (spec 1 and 6.2.1): the optional member tp (container Y _tp, names separated by a dot; container X body.tp, an array of strings) lists binding names; a name outside config.transportNames, an empty or repeated name is dropped and reported as tp.<name>; a hint that is not an array of strings (X) is ignored whole and reported as body.tp; the member appears in an accept result only when at least one usable name remains. The hint never rejects a trigger. selectionVectors is a second list with its own shape (the contact's DID document and the wallet's configuration in, a selection outcome out); it tests spec 6.2.1 only and a reader of the trigger need not run it.",
+    "transportNames": [
+      "didcomm",
+      "https",
+      "tsp"
+    ],
+    "selection": {
+      "serviceTypeToBinding": {
+        "DIDCommMessaging": "didcomm",
+        "TrustTaskHTTPS": "https"
+      },
+      "unmappedTypes": "any other service type, including TSPTransport (reserved, not a verified service type), is not a candidate",
+      "consumer": {
+        "supported": [
+          "didcomm",
+          "https"
+        ],
+        "preference": [
+          "didcomm",
+          "https"
+        ],
+        "hintBreaksTies": false
+      },
+      "outcomes": {
+        "select": "binding and endpoint taken from the DID document; the first request and the reply use that binding",
+        "no-common-transport": "nothing is sent; ui unreachable",
+        "reject": "nothing is sent; reasons did-document-unverified; callback-not-allowed as in the trigger reader"
+      },
+      "ui": {
+        "unreachable": "This service can't be reached from your wallet."
+      },
+      "notes": "The preference order here is a test fixture and says nothing about Keyring's order (plan T7, undecided). DIDComm accept (media types) and the order of services in the document do not select a binding."
+    }
+  },
+  "vectors": [
+    {
+      "id": "valid-claim-oob",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-keyring-alias",
+      "group": "valid",
+      "note": "keyring:// is the https link with the scheme replaced",
+      "input": "keyring://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-scheme-uppercase",
+      "group": "valid",
+      "input": "HTTPS://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-host-uppercase",
+      "group": "valid",
+      "input": "https://FARM.IC3.DEV/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-surrounding-whitespace",
+      "group": "valid",
+      "input": "  \nhttps://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ\n ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-any-link-host",
+      "group": "valid",
+      "note": "a trigger never causes a request, so the host of the link is not checked; trust comes from the contact (from)",
+      "input": "https://anything.example.net/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-extra-query-param-ignored",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&utm=1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "query.utm"
+        ]
+      }
+    },
+    {
+      "id": "valid-claim-oob-deeplink",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-oob-paste",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "paste",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-oob-no-flow-hint",
+      "group": "valid",
+      "note": "the flow hint is optional; the consumer then chooses what its first request is (spec open question T5)",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsIjoiT3BlbiJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": null,
+        "task": null,
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-oob-no-body",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMH0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": null,
+        "task": null,
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-oob-no-expiry-no-hint",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImJvZHkiOnsiZ29hbCI6Ik9wZW4ifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": null,
+        "flow": null,
+        "task": null,
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-oob-unknown-members-ignored",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsInkiOjJ9LCJ4IjoxfQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "invitation.x",
+          "body.y"
+        ]
+      }
+    },
+    {
+      "id": "valid-oob-known-didcomm-members-not-ignored",
+      "group": "valid",
+      "note": "created_time and body.accept are DIDComm members this profile never reads and does not report",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImFjY2VwdCI6WyJkaWRjb21tL3YyIl19LCJjcmVhdGVkX3RpbWUiOjE3OTE0NjA3OTV9",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-oob",
+      "group": "valid",
+      "input": "https://portal.example.org/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1WdGNTY2lkOnBvcnRhbC5leGFtcGxlLm9yZzpjb21tdW5pdGllczphbHBoYSIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvYXV0aC9jcm9zcy1kZXZpY2UvY2xhaW0vMC4xIn19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-oob-deeplink",
+      "group": "channel",
+      "note": "a stock camera hands the link over as a deep link, so login is accepted there; the controls are the inviter-signed requester screen and number matching (spec 8.2), not the channel",
+      "input": "https://portal.example.org/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1WdGNTY2lkOnBvcnRhbC5leGFtcGxlLm9yZzpjb21tdW5pdGllczphbHBoYSIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvYXV0aC9jcm9zcy1kZXZpY2UvY2xhaW0vMC4xIn19",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-oob-paste",
+      "group": "channel",
+      "input": "https://portal.example.org/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1WdGNTY2lkOnBvcnRhbC5leGFtcGxlLm9yZzpjb21tdW5pdGllczphbHBoYSIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvYXV0aC9jcm9zcy1kZXZpY2UvY2xhaW0vMC4xIn19",
+      "channel": "paste",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-handle-128-chars",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUEiLCJmcm9tIjoiZGlkOndlYnZoOlFtRmFybVNjaWQ6Y2xhaW1zLmljMy5kZXYiLCJleHBpcmVzX3RpbWUiOjE3OTE0NjExMDAsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-handle-16-chars",
+      "group": "valid",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoiQUFBQUFBQUFBQUFBQUFBQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "AAAAAAAAAAAAAAAA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-url",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-url-keyring-alias",
+      "group": "valid-url",
+      "input": "keyring://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-url-params-reordered",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_type=https://trusttasks.org/spec/vta-claim/0.1&_exp=1791461100&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_from=did:webvh:QmFarmScid:claims.ic3.dev",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-url-extra-param-ignored",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&utm=1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "query.utm"
+        ]
+      }
+    },
+    {
+      "id": "valid-claim-url-deeplink",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-claim-url-paste",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "paste",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-url-no-flow-hint",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": null,
+        "task": null,
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-url-minimal",
+      "group": "valid-url",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": null,
+        "flow": null,
+        "task": null,
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-url",
+      "group": "valid-url",
+      "input": "https://portal.example.org/c?_from=did:webvh:QmVtcScid:portal.example.org:communities:alpha&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-url-deeplink",
+      "group": "channel",
+      "input": "https://portal.example.org/c?_from=did:webvh:QmVtcScid:portal.example.org:communities:alpha&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-url-paste",
+      "group": "valid-url",
+      "input": "https://portal.example.org/c?_from=did:webvh:QmVtcScid:portal.example.org:communities:alpha&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+      "channel": "paste",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmVtcScid:portal.example.org:communities:alpha",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "auth/cross-device/claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "version-draft-major-zero-exact-minor",
+      "group": "versioning",
+      "note": "MAJOR 0 is draft: only the implemented MINORs are accepted",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "version-draft-major-zero-other-minor",
+      "group": "versioning",
+      "note": "a draft MINOR may break, so 0.2 is not read as 0.1",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMiJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "version-draft-major-zero-minor-zero",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "version-unknown-major",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzEuMCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "version-unknown-major-high-minor",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzIuNyJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "version-stable-any-minor",
+      "group": "versioning",
+      "note": "example-stable is a test-only flow configured at MAJOR 1; a MINOR of a supported MAJOR is accepted",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvZXhhbXBsZS1zdGFibGUvMS4wIn19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "example-stable",
+        "task": {
+          "type": "https://trusttasks.org/spec/example-stable/1.0",
+          "major": 1,
+          "minor": 0
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "version-stable-higher-minor-accepted",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvZXhhbXBsZS1zdGFibGUvMS43In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "example-stable",
+        "task": {
+          "type": "https://trusttasks.org/spec/example-stable/1.7",
+          "major": 1,
+          "minor": 7
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "version-stable-other-major",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvZXhhbXBsZS1zdGFibGUvMi4wIn19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "version-leading-zero-minor",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMDEifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "version-missing-minor",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "version-three-part",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMS4wIn19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "hint-with-fragment",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSNyZXF1ZXN0In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "hint-with-query",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMT9hPWIifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "hint-not-a-uri-bare-goal-code",
+      "group": "versioning",
+      "note": "goal_code carries a Type URI, not a bare string: a bare string has no namespace",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJ2dGEtY2xhaW0ifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "hint-not-a-string",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOjd9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "hint-empty-string",
+      "group": "versioning",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiIifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "authority-second-accepted-authority",
+      "group": "authority",
+      "note": "the consumer accepts a SET of authorities (config.acceptedAuthorities) so a producer can move before every wallet is replaced",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3Rhc2tzLmV4YW1wbGUub3JnL3NwZWMvdnRhLWNsYWltLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://tasks.example.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "authority-unknown",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3JlZ2lzdHJ5LmV4YW1wbGUubmV0L3NwZWMvdnRhLWNsYWltLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "authority-lookalike-suffix",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnLmV2aWwuZXhhbXBsZS9zcGVjL3Z0YS1jbGFpbS8wLjEifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "authority-private-did-url-form",
+      "group": "authority",
+      "note": "a private Type URI form is a different identifier (framework: private and registry URIs are distinct)",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJkaWQ6d2Vidmg6UW1QdWI6ZXhhbXBsZS5vcmc6L3NwZWMvdnRhLWNsYWltLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "authority-private-urn-form",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJ1cm46ZXhhbXBsZTphY21lOnNwZWM6dnRhLWNsYWltOjAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "authority-http-scheme",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIn19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "flow-unknown-slug",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWhhbmRvdmVyLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "flow-binding-uri-as-hint",
+      "group": "authority",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL2JpbmRpbmcvZGlkY29tbS8wLjEvZW52ZWxvcGUifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "flow-unknown-checked-before-expiry",
+      "group": "authority",
+      "note": "static checks come before the clock",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MDc5OSwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWhhbmRvdmVyLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "expiry-one-second-left",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MDgwMSwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791460801,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "expiry-equal-to-now",
+      "group": "expiry",
+      "note": "at or after expires_time the trigger is not acted on",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MDgwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
+      }
+    },
+    {
+      "id": "expiry-past",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ1NzIwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
+      }
+    },
+    {
+      "id": "expiry-zero",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
+      }
+    },
+    {
+      "id": "expiry-url-past",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460799&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
+      }
+    },
+    {
+      "id": "expiry-url-future",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791547200&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791547200,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "expiry-string",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6IjE3OTE0NjExMDAiLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-negative",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6LTEsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-fractional",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMC41LCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-boolean",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6dHJ1ZSwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-url-not-digits",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=soon&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-url-leading-zero",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=01791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-url-decimal",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100.5&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-url-negative",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=-5&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-required-claim-oob",
+      "group": "expiry",
+      "note": "vta-claim registers expRequired: the offer window is minutes, and the inviter enforces it",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-required-claim-url",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-required-login-oob",
+      "group": "expiry",
+      "input": "https://portal.example.org/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1WdGNTY2lkOnBvcnRhbC5leGFtcGxlLm9yZzpjb21tdW5pdGllczphbHBoYSIsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL2F1dGgvY3Jvc3MtZGV2aWNlL2NsYWltLzAuMSJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-required-login-url",
+      "group": "expiry",
+      "input": "https://portal.example.org/c?_from=did:webvh:QmVtcScid:portal.example.org:communities:alpha&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https://trusttasks.org/spec/auth/cross-device/claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expiry-not-required-stable-flow",
+      "group": "expiry",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL2V4YW1wbGUtc3RhYmxlLzEuMCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": null,
+        "flow": "example-stable",
+        "task": {
+          "type": "https://trusttasks.org/spec/example-stable/1.0",
+          "major": 1,
+          "minor": 0
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "from-domain-not-allowed",
+      "group": "from",
+      "note": "vta-claim registers fromMustBeAllowListed",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmV4YW1wbGUub3JnIiwiZXhwaXJlc190aW1lIjoxNzkxNDYxMTAwLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "from-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-domain-lookalike-suffix",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmV2aWxpYzMuZGV2IiwiZXhwaXJlc190aW1lIjoxNzkxNDYxMTAwLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "from-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-domain-allowed-name-under-other",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmljMy5kZXYuZXhhbXBsZS5jb20iLCJleHBpcmVzX3RpbWUiOjE3OTE0NjExMDAsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "from-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-domain-subdomain-allowed",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmEuYi5maXJzdHBlcnNvbi5kZXYiLCJleHBpcmVzX3RpbWUiOjE3OTE0NjExMDAsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmScid:a.b.firstperson.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "from-checked-before-expiry",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmV4YW1wbGUub3JnIiwiZXhwaXJlc190aW1lIjoxNzkxNDYwNzk5LCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "from-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-missing",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-url-missing",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_from=&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "empty-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-not-a-did",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJodHRwczovL2Zhcm0uaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-not-a-string",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOjcsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-did-key",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6a2V5Ono2TWtoYVhnQlpEdm90RGtMNTI1N2ZhaXp0aUdpQzJRdEtMR3Bibm5FR3RhMmRvSyIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-has-fragment",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiNrZXktMSIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-has-query",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldj9zZXJ2aWNlPXgiLCJleHBpcmVzX3RpbWUiOjE3OTE0NjExMDAsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-url-not-a-did",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_from=https://farm.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "from-over-256",
+      "group": "from",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1TY2lkOmFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-missing",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-too-short",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoiYWJjMTIzIiwiZnJvbSI6ImRpZDp3ZWJ2aDpRbUZhcm1TY2lkOmNsYWltcy5pYzMuZGV2IiwiZXhwaXJlc190aW1lIjoxNzkxNDYxMTAwLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-too-long",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoiQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiZnJvbSI6ImRpZDp3ZWJ2aDpRbUZhcm1TY2lkOmNsYWltcy5pYzMuZGV2IiwiZXhwaXJlc190aW1lIjoxNzkxNDYxMTAwLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-bad-char",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEguQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-padding",
+      "group": "handle",
+      "note": "base64url without padding",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQT09IiwiZnJvbSI6ImRpZDp3ZWJ2aDpRbUZhcm1TY2lkOmNsYWltcy5pYzMuZGV2IiwiZXhwaXJlc190aW1lIjoxNzkxNDYxMTAwLCJib2R5Ijp7ImdvYWxfY29kZSI6Imh0dHBzOi8vdHJ1c3R0YXNrcy5vcmcvc3BlYy92dGEtY2xhaW0vMC4xIiwiZ29hbCI6IlNldCB1cCB5b3VyIGFnZW50In19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-not-a-string",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoxMjM0NTY3ODkwMTIzNDU2ODAsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-url-missing",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_exp=1791461100",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "id-url-too-short",
+      "group": "handle",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=abc&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-wrong-type",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8xLjEvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "wrong-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-missing-type",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJpZCI6InEzVm43WmsyWG85UnQxTHdQYjRIZEEiLCJmcm9tIjoiZGlkOndlYnZoOlFtRmFybVNjaWQ6Y2xhaW1zLmljMy5kZXYiLCJleHBpcmVzX3RpbWUiOjE3OTE0NjExMDAsImJvZHkiOnsiZ29hbF9jb2RlIjoiaHR0cHM6Ly90cnVzdHRhc2tzLm9yZy9zcGVjL3Z0YS1jbGFpbS8wLjEiLCJnb2FsIjoiU2V0IHVwIHlvdXIgYWdlbnQifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "wrong-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-attachment-present",
+      "group": "invitation",
+      "note": "a trigger carries no task body; an attachment is never read, never dispatched and never ignored silently",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9LCJhdHRhY2htZW50cyI6W3siaWQiOiJhMCIsIm1lZGlhX3R5cGUiOiJhcHBsaWNhdGlvbi9qc29uIiwiZGF0YSI6eyJqc29uIjp7InR5cGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSJ9fX1dfQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "attachments-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-attachments-empty-array",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9LCJhdHRhY2htZW50cyI6W119",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "invitation-attachments-not-an-array",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9LCJhdHRhY2htZW50cyI6IngifQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "attachments-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-body-not-an-object",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6IngifQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-goal-not-a-string",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOjV9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-duplicate-member",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiJ9",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-duplicate-member-in-body",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImJvZHkiOnsiZ29hbCI6ImEiLCJnb2FsIjoiYiJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-json-array",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=WzFd",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-not-json",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=bm90IGpzb24",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "invitation-json-null",
+      "group": "invitation",
+      "input": "https://farm.ic3.dev/c?_oob=bnVsbA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-invitation",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "length-invitation-exactly-1024-bytes",
+      "group": "length",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9LCJ4IjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "invitation.x"
+        ]
+      }
+    },
+    {
+      "id": "length-invitation-1025-bytes",
+      "group": "length",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9LCJ4IjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIn0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "too-long",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "length-link-exactly-1536",
+      "group": "length",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&utm=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "query.utm"
+        ]
+      }
+    },
+    {
+      "id": "length-link-1537",
+      "group": "length",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&utm=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "too-long",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "length-checked-before-anything-else",
+      "group": "length",
+      "input": "ftp://x/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "too-long",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-http-url",
+      "group": "link",
+      "input": "http://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "insecure-scheme",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-http-oob",
+      "group": "link",
+      "input": "http://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "insecure-scheme",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-other-scheme",
+      "group": "link",
+      "input": "ftp://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-plain-https-page",
+      "group": "link",
+      "input": "https://farm.ic3.dev/claim/AbC123",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-ordinary-page-with-from-param",
+      "group": "link",
+      "note": "unrelated links with a from or id parameter are not triggers: the markers are _oob and _from",
+      "input": "https://shop.example.com/cart?from=email&id=7",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-keyring-enrol-not-ours",
+      "group": "link",
+      "note": "the lab enrolment link has no marker, so it is outside this document",
+      "input": "keyring://vta/enrol?o=eyJhIjoxfQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-keyring-approvals-not-ours",
+      "group": "link",
+      "input": "keyring://vta/approvals",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-bare-did",
+      "group": "link",
+      "input": "did:webvh:QmScid:ic3.dev:vtas:x",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-fragment-after-query",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ#frag",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "fragment",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-fragment-in-path",
+      "group": "link",
+      "note": "the query is after the fragment delimiter, so there is no query to read",
+      "input": "https://farm.ic3.dev/c#x?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "link-host-leading-dot",
+      "group": "link",
+      "input": "https://.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-leading-dot-subdomain",
+      "group": "link",
+      "input": "https://.farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-empty-label",
+      "group": "link",
+      "input": "https://a..ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-trailing-dot",
+      "group": "link",
+      "input": "https://farm.ic3.dev./c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-userinfo",
+      "group": "link",
+      "input": "https://user@farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-userinfo-lookalike",
+      "group": "link",
+      "input": "https://ic3.dev@example.com/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-port",
+      "group": "link",
+      "input": "https://farm.ic3.dev:8443/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-ip-literal-v6",
+      "group": "link",
+      "input": "https://[::1]/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-hyphen-edge",
+      "group": "link",
+      "input": "https://-a.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-host-single-label",
+      "group": "link",
+      "input": "https://localhost/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-no-path",
+      "group": "link",
+      "input": "https://farm.ic3.dev?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-path-dot-segment",
+      "group": "link",
+      "input": "https://farm.ic3.dev/a/../b?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-path-control-char",
+      "group": "link",
+      "input": "https://farm.ic3.dev/a\u0001b?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-path-bad-percent",
+      "group": "link",
+      "input": "https://farm.ic3.dev/a%zz?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-interior-space",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA &x=1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-trailing-ampersand",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-param-without-equals",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?flag&_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-extra-param-bad-value",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?utm=a+b&_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-extra-param-percent",
+      "group": "link",
+      "note": "no value is percent-decoded",
+      "input": "https://farm.ic3.dev/c?utm=a%20b&_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-duplicate-from",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_from=did:webvh:QmFarmScid:claims.ic3.dev",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "repeated-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-duplicate-id",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "repeated-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-duplicate-oob",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "repeated-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-duplicate-unknown-param",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?utm=1&utm=2&_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "repeated-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-both-forms-oob-and-from",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&_from=did:webvh:QmFarmScid:claims.ic3.dev",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "both-forms",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-empty-oob",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_oob=",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "empty-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-empty-from",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "empty-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-empty-unknown-param",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&utm=",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "empty-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-oobid-unsupported",
+      "group": "link",
+      "note": "a trigger never causes a fetch; DIDComm _oobid (a GET whose response format DIDComm does not define) is not part of this profile",
+      "input": "https://farm.ic3.dev/c?_oobid=7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-form",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-oobid-keyring-alias",
+      "group": "link",
+      "input": "keyring://farm.ic3.dev/c?_oobid=7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-form",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "link-oobid-with-oob",
+      "group": "link",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ&_oobid=7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "both-forms",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-plus-and-slash",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=ab+/cd",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-padding",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCJ9fQ==",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-standard-alphabet-slash",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=+//+",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-percent-encoded",
+      "group": "base64url",
+      "note": "the value is not percent-decoded",
+      "input": "https://farm.ic3.dev/c?_oob=ab%2Dcd",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-dot",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=ab.cd",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-impossible-length",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=abcde",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "b64-invalid-utf8",
+      "group": "base64url",
+      "input": "https://farm.ic3.dev/c?_oob=__79_A",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-base64url",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-valid",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [],
+        "callbackUrl": "https://farm.ic3.dev/v1/claim/AbC123xYz"
+      }
+    },
+    {
+      "id": "legacy-key-order-and-whitespace",
+      "group": "legacy-json",
+      "input": "  {\n \"callback_url\": \"https://farm.ic3.dev/v1/claim/AbC123xYz\",\n \"vta_did\": \"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\" }\n",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [],
+        "callbackUrl": "https://farm.ic3.dev/v1/claim/AbC123xYz"
+      }
+    },
+    {
+      "id": "legacy-extra-key-ignored",
+      "group": "legacy-json",
+      "note": "target behaviour from the Keyring release that ignores unknown keys (plan Phase 0). Keyring releases before it reject an extra key (parseAgentHostQr), which is why the Farm keeps the QR frozen until that release ships",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\",\"admin_did\":\"did:key:z6Mk\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [
+          "legacy.admin_did"
+        ],
+        "callbackUrl": "https://farm.ic3.dev/v1/claim/AbC123xYz"
+      }
+    },
+    {
+      "id": "legacy-extra-keys-ignored-in-order",
+      "group": "legacy-json",
+      "input": "{\"v\":1,\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\",\"x\":2}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [
+          "legacy.v",
+          "legacy.x"
+        ],
+        "callbackUrl": "https://farm.ic3.dev/v1/claim/AbC123xYz"
+      }
+    },
+    {
+      "id": "legacy-missing-did",
+      "group": "legacy-json",
+      "input": "{\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-did-not-webvh",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:key:z6Mk\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-did-not-a-string",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":5,\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-not-a-string",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":5}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-value",
+        "ui": "invalid"
+      },
+      "note": "callback_url is not a string: a type error, bad-value (spec 9), not a host failure"
+    },
+    {
+      "id": "legacy-callback-not-allowed",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://example.com/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-http",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"http://farm.ic3.dev/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-lookalike",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://evilic3.dev/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-allowed-name-under-other",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://ic3.dev.example.com/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-userinfo",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://ic3.dev@example.com/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-port",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev:8443/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-leading-dot",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://.ic3.dev/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-empty-label",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://a..ic3.dev/claim/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-fragment",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/claim/x#frag\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-fragment-no-path",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev#frag\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-control-char-in-path",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/claim/\\u0000x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-over-512",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "legacy-callback-exactly-512",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [],
+        "callbackUrl": "https://farm.ic3.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "legacy-callback-uppercase-host",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://FARM.IC3.DEV/c\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "legacy-json",
+        "from": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "id": null,
+        "exp": null,
+        "flow": "vta-claim",
+        "task": null,
+        "ignored": [],
+        "callbackUrl": "https://FARM.IC3.DEV/c"
+      }
+    },
+    {
+      "id": "legacy-from-deeplink",
+      "group": "legacy-json",
+      "note": "JSON is QR-only",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "reject",
+        "reason": "wrong-channel",
+        "ui": "scan-only"
+      }
+    },
+    {
+      "id": "legacy-from-paste",
+      "group": "legacy-json",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}",
+      "channel": "paste",
+      "expect": {
+        "outcome": "reject",
+        "reason": "wrong-channel",
+        "ui": "scan-only"
+      }
+    },
+    {
+      "id": "legacy-array",
+      "group": "legacy-json",
+      "input": "[{\"vta_did\":\"did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a\",\"callback_url\":\"https://farm.ic3.dev/v1/claim/AbC123xYz\"}]",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "legacy-no-callback-key",
+      "group": "legacy-json",
+      "input": "{\"hello\":\"world\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "not-ours"
+      }
+    },
+    {
+      "id": "tp-url-known-names",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=https.didcomm",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "https",
+          "didcomm"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "tp-url-single-name",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=didcomm",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "didcomm"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "tp-url-unknown-name-ignored",
+      "group": "transport-hint",
+      "note": "an unknown name is dropped and reported; the rest of the hint and the trigger stand",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=carrier-pigeon.https",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "https"
+        ],
+        "ignored": [
+          "tp.carrier-pigeon"
+        ]
+      }
+    },
+    {
+      "id": "tp-url-all-names-unknown",
+      "group": "transport-hint",
+      "note": "no usable name: the member is absent from the result; the trigger is accepted",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=carrier-pigeon",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "tp.carrier-pigeon"
+        ]
+      }
+    },
+    {
+      "id": "tp-url-duplicate-name",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=https.https",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "https"
+        ],
+        "ignored": [
+          "tp.https"
+        ]
+      }
+    },
+    {
+      "id": "tp-url-empty-element",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=https..didcomm",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "https",
+          "didcomm"
+        ],
+        "ignored": [
+          "tp."
+        ]
+      }
+    },
+    {
+      "id": "tp-url-name-case-exact",
+      "group": "transport-hint",
+      "note": "names are compared as exact strings",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=HTTPS",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "tp.HTTPS"
+        ]
+      }
+    },
+    {
+      "id": "tp-url-repeated",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=https&_tp=didcomm",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "repeated-param",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "tp-url-empty-value",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_tp=",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "empty-value",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "tp-oob-known-names",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCIsInRwIjpbImRpZGNvbW0iLCJodHRwcyJdfX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "didcomm",
+          "https"
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "id": "tp-oob-unknown-name-ignored",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCIsInRwIjpbInF1aWMiLCJkaWRjb21tIl19fQ",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "tp": [
+          "didcomm"
+        ],
+        "ignored": [
+          "tp.quic"
+        ]
+      }
+    },
+    {
+      "id": "tp-oob-not-an-array",
+      "group": "transport-hint",
+      "note": "a hint that is not an array of strings is ignored as a whole and reported; the trigger is accepted",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCIsInRwIjoiaHR0cHMifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "body.tp"
+        ]
+      }
+    },
+    {
+      "id": "tp-oob-non-string-element",
+      "group": "transport-hint",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCIsInRwIjpbImh0dHBzIiw3XX19",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "body.tp"
+        ]
+      }
+    },
+    {
+      "id": "endpoint-member-url-ignored",
+      "group": "endpoint-in-text",
+      "note": "a trigger defines no endpoint: any such member is unknown, ignored and reported, never used. Selection vectors cover what a wallet then does",
+      "input": "https://farm.ic3.dev/c?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://trusttasks.org/spec/vta-claim/0.1&_endpoint=https://evil.example/trust-tasks",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "query._endpoint"
+        ]
+      }
+    },
+    {
+      "id": "endpoint-member-oob-ignored",
+      "group": "endpoint-in-text",
+      "input": "https://farm.ic3.dev/c?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiIsImlkIjoicTNWbjdaazJYbzlSdDFMd1BiNEhkQSIsImZyb20iOiJkaWQ6d2Vidmg6UW1GYXJtU2NpZDpjbGFpbXMuaWMzLmRldiIsImV4cGlyZXNfdGltZSI6MTc5MTQ2MTEwMCwiYm9keSI6eyJnb2FsX2NvZGUiOiJodHRwczovL3RydXN0dGFza3Mub3JnL3NwZWMvdnRhLWNsYWltLzAuMSIsImdvYWwiOiJTZXQgdXAgeW91ciBhZ2VudCIsImVuZHBvaW50IjoiaHR0cHM6Ly9ldmlsLmV4YW1wbGUvdHJ1c3QtdGFza3MifX0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "oob",
+        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "type": "https://trusttasks.org/spec/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "body.endpoint"
+        ]
+      }
+    }
+  ],
+  "selectionVectors": [
+    {
+      "id": "sel-didcomm-only",
+      "group": "transport-selection",
+      "note": "one supported service",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-https-only",
+      "group": "transport-selection",
+      "note": "one supported service",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://claims.ic3.dev",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-both-wallet-preference-wins",
+      "group": "transport-selection",
+      "note": "document order lists https first; the wallet's own preference (didcomm first) decides",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            },
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-both-document-order-reversed",
+      "group": "transport-selection",
+      "note": "same result when the document order is reversed",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            },
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-matches-type-not-id",
+      "group": "transport-selection",
+      "note": "the service id is misleading; the type decides",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#didcomm",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://claims.ic3.dev",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-didcomm-accept-is-not-a-selector",
+      "group": "transport-selection",
+      "note": "accept lists media types for the message; it does not choose a transport, so https is not preferred because the didcomm service lists a profile",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            },
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm",
+                  "accept": [
+                    "didcomm/v2"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-hint-names-binding-not-offered",
+      "group": "transport-selection",
+      "note": "the hint cannot add a candidate",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            }
+          ]
+        },
+        "tp": [
+          "tsp"
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-hint-does-not-override-preference",
+      "group": "transport-selection",
+      "note": "hintBreaksTies is false: the hint orders nothing for this wallet",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            },
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            }
+          ]
+        },
+        "tp": [
+          "https",
+          "didcomm"
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://claims.ic3.dev/didcomm",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-tsp-only-no-common",
+      "group": "transport-selection",
+      "note": "a TSP-only inviter: no supported binding",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tsp",
+              "type": "TSPTransport",
+              "serviceEndpoint": "tsp://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "ui": "unreachable",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-no-service",
+      "group": "transport-selection",
+      "note": "a document with no service",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": []
+        }
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "ui": "unreachable",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-unrelated-service-only",
+      "group": "transport-selection",
+      "note": "a service type the wallet has no binding for",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#ld",
+              "type": "LinkedDomains",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "ui": "unreachable",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-https-binding-requires-https-url",
+      "group": "transport-selection",
+      "note": "the https binding's serviceEndpoint is an https: URL; an http: one is not a candidate",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "http://claims.ic3.dev"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "ui": "unreachable",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-endpoint-in-text-ignored",
+      "group": "transport-selection",
+      "note": "an endpoint offered by the text and absent from the DID document is ignored and never used (spec 6.2.1 rule 7); the document's endpoint is taken",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        },
+        "textEndpoint": "https://evil.example/trust-tasks"
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://claims.ic3.dev",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-endpoint-in-text-matches-document",
+      "group": "transport-selection",
+      "note": "an endpoint in the text that equals the document's is ignored like any other; the document's is taken",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": true,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            }
+          ]
+        },
+        "textEndpoint": "https://claims.ic3.dev"
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://claims.ic3.dev",
+        "endpointSource": "did-document"
+      }
+    },
+    {
+      "id": "sel-document-unverified",
+      "group": "transport-selection",
+      "note": "the DID document is not verifiable (did:webvh log fails): nothing is sent",
+      "input": {
+        "contact": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "didDocument": {
+          "verified": false,
+          "service": [
+            {
+              "id": "#tt",
+              "type": "TrustTaskHTTPS",
+              "serviceEndpoint": "https://claims.ic3.dev"
+            },
+            {
+              "id": "#didcomm",
+              "type": "DIDCommMessaging",
+              "serviceEndpoint": [
+                {
+                  "uri": "https://claims.ic3.dev/didcomm"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "outcome": "reject",
+        "reason": "did-document-unverified",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-legacy-callback-allow-listed",
+      "group": "transport-selection",
+      "note": "the one exception: the legacy Farm callback on an allow-listed host (the contact is the slot DID, vta_did, as in spec 9)",
+      "input": {
+        "contact": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "didDocument": {
+          "verified": true,
+          "service": []
+        },
+        "legacyCallback": "https://farm.ic3.dev/v1/claim/AbC123xYz"
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "legacy-callback",
+        "endpoint": "https://farm.ic3.dev/v1/claim/AbC123xYz",
+        "endpointSource": "legacy-callback"
+      }
+    },
+    {
+      "id": "sel-legacy-callback-not-allow-listed",
+      "group": "transport-selection",
+      "note": "a legacy callback on a host outside the list (the contact is the slot DID, vta_did, as in spec 9)",
+      "input": {
+        "contact": "did:webvh:QmSlotScid:farm.ic3.dev:vtas:7f3a",
+        "didDocument": {
+          "verified": true,
+          "service": []
+        },
+        "legacyCallback": "https://evil.example/v1/claim/AbC123xYz"
+      },
+      "expect": {
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "sent": false
+      }
+    }
+  ]
+}

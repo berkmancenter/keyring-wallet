@@ -92,7 +92,7 @@ The VTA's ACL rows are independent, so a second full administrator is a second r
 
 ## 5. The Farm asks (upstream)
 
-**U1 — show an enrolment QR, and receive the phone's key.** No copy and paste in either direction. After _Create session_, the Farm shows a QR code, and the same text as a link, of Keyring's existing enrolment offer (`packages/trust-tasks/src/enrolment/offer.ts`):
+**U1 — show an enrolment QR, and receive the phone's key.** _Superseded as a Farm ask: the Farm builds one claim payload instead (today the legacy `{vta_did, callback_url}` JSON, later a trigger link; it never uses a `keyring://` form), see [`../one-scan-and-vtc-sign-in-plan.md`](../one-scan-and-vtc-sign-in-plan.md) §10. The enrolment offer stays for the lab and self-hosted path._ No copy and paste in either direction. After _Create session_, the Farm shows a QR code, and the same text as a link, of Keyring's existing enrolment offer (`packages/trust-tasks/src/enrolment/offer.ts`):
 
 ```
 keyring://vta/enrol?o=<base64url(JSON)>
