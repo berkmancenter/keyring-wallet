@@ -47,3 +47,10 @@ if [ "$APPROVE" = 0 ] && [ "$RID" != - ]; then
   echo "  decline $RID: $(JOIN_DECIDE_REASON='gate: a join left waiting on purpose' c_admin join-decide "$RID" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
 fi
 driver_rc waiting-driver "$drc" "$LEG_DIR/waiting.out"
+# IN-149 (#363), read-only: an outside community's Join lists "Meet a vetter" among the usable ways. Nothing is tapped
+# on Join and nothing is joined; skipped without OUTSIDE_VTC_DID.
+if [ -n "${OUTSIDE_VTC_DID:-}" ]; then
+  E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 OUTSIDE_VTC_DID=$OUTSIDE_VTC_DID \
+    perl -e 'alarm 300; exec @ARGV' node run-join-outside.mjs > "$LEG_DIR/outside.out" 2>&1; orc=$?
+  take_rows "$LEG_DIR/outside.out"; driver_rc outside-driver "$orc" "$LEG_DIR/outside.out"
+fi
