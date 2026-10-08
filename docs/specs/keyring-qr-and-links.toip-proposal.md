@@ -57,3 +57,7 @@ No device has been tested. Four questions are open: whether a camera app keeps t
 ## What Keyring will do meanwhile
 
 Use its own already-declared host, `wallet.asml.berkmancenter.org`, as an interim link host that opens only Keyring, keep scanning in-app, and not put that host in any flow identifier. No dates are committed.
+
+## Next steps
+
+Keyring runs the four device tests (annex B, C13, C14 and the rest of C1 to C14) and keeps the interim host and the in-app scanner meanwhile. Nothing proceeds on the fragment container until those tests report, and if a camera or OS drops the fragment the format needs a different answer there. Of Trust Over IP I ask, in order, the six decisions listed above: the host, its operator, listing approval, change control, the home for the flow identifiers, and acceptance of the fragment profile. Nothing here is agreed until you confirm. Formal Trust Over IP linkage or registration of `trusttasks.org` is a separate question that I will raise separately. I have no dates to give.
