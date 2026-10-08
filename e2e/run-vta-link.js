@@ -526,23 +526,37 @@ async function linkCase(driver, which) {
     return row(cont && resumed && linked && after === before + 1, `MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} (same key shown ${same}) · linked ${linked} · ACL ${before} → ${after}`);
   }
   if (which === "link-no-answer") {
+    // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
+    // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
+    // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.
+    // The cut is the whole Farm: every ic3.dev host shares the blocked Cloudflare addresses, the agent too.
     const did = await addressCode();
     grant(did);
+    const mark = Date.now();
     block(true);
-    await (await scrollToTestId(driver, "AgentCreateConnect", 6).catch(() => byTestId(driver, "AgentCreateConnect"))).click();
-    let noAnswer = false;
-    for (const until = Date.now() + 240000; Date.now() < until && !noAnswer; ) {
-      noAnswer = (await existsTestId(driver, "AgentCreateCheckAgain", 2000)) && /didn.t answer/i.test(await driver.getPageSource());
-      if (await existsTestId(driver, "AgentCreateError", 300)) break;
+    let failedEarly = false;
+    let waited = 0;
+    for (const until = Date.now() + 660000; Date.now() < until; ) {
+      if (await existsTestId(driver, "AgentCreateError", 1500)) break;
+      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000)) && !(await existsTestId(driver, "AgentCreateError", 500))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      waited = Math.round((Date.now() - mark) / 1000);
+      await idle(20000);
     }
-    const failed = await existsTestId(driver, "AgentCreateError", 500);
+    const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
+    const said = unreachable ? await words("AgentCreateError") : "";
+    const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
+    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    let marks = 0;
+    try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
     await screenshot(driver, `${which}-blocked`);
     block(false);
     await sleep(3000);
-    if (noAnswer) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
-    const linked = noAnswer && (await ready());
+    if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    const linked = checkAgain && (await ready());
     const after = aclSize();
-    return row(noAnswer && !failed && linked && after === before + 1, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): "didn't answer" + Check again ${noAnswer} · a failure instead ${failed} · linked after unblocking ${linked} · ACL ${before} → ${after}`);
+    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
   }
   if (which === "create-window-paused") {
     await addressCode();
