@@ -57,6 +57,22 @@ describe('the community link', () => {
     expect(communityTarget.get()?.communityDid).toBe(community)
   })
 
+  // 240, iPhone: a vetter for two communities opened the same desk from both
+  // cards. A community a link had shown earlier won over the one chosen.
+  it('choosing a community stops showing another one a link showed earlier', () => {
+    communityTarget.set({ communityDid: 'did:webvh:QmOther:vtc.other.example', name: 'Other' })
+    communityTarget.choose(community)
+    expect(communityTarget.getViewing()).toBeUndefined()
+    expect(communityTarget.get()?.communityDid).toBe(community)
+  })
+
+  it('choosing the community a link is showing keeps showing it, name and all', () => {
+    communityTarget.set({ communityDid: community, name: 'Lab' })
+    communityTarget.choose(community)
+    expect(communityTarget.getViewing()).toEqual({ communityDid: community, name: 'Lab' })
+    expect(communityTarget.get()).toEqual({ communityDid: community, name: 'Lab' })
+  })
+
   it('viewing a link changes nothing kept; making an identity chooses the community, kept across launches', async () => {
     communityTarget.clear()
     communityTarget.set({ communityDid: community, name: 'Kept' })

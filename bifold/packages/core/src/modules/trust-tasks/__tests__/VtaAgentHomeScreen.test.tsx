@@ -587,6 +587,37 @@ describe('Your agent — after linking', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
   })
 
+  // 240, iPhone: grants in two communities, and both "Open the vetting desk"
+  // opened the same one: a community a link had shown earlier won.
+  it('with grants in two communities, each desk button opens its own community', async () => {
+    mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
+    const other = 'did:webvh:QmOther:vtc.other.example'
+    const otherPersona = {
+      ...persona,
+      tags: { ...persona.tags, key: other },
+      content: { ...(persona as { content: object }).content, communityDid: other, did: 'did:webvh:QmOtherPersona:x' },
+    }
+    const otherGrant = {
+      ...grant,
+      tags: { ...grant.tags, key: 'urn:uuid:grant-other' },
+      content: {
+        ...(grant as { content: object }).content,
+        communityDid: other,
+        subjectDid: 'did:webvh:QmOtherPersona:x',
+        credential: { id: 'urn:uuid:grant-other', issuer: other },
+      },
+    }
+    communityTarget.set({ communityDid: other, name: 'Shown by a link' })
+    const tree = await renderHome([persona, grant, otherPersona, otherGrant])
+    await act(async () =>
+      fireEvent.press(tree.getByTestId(testIdWithKey(`AgentOpenDesk_${communityCardKey(communityDid)}`)))
+    )
+    expect(communityTarget.get()?.communityDid).toBe(communityDid)
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey(`AgentOpenDesk_${communityCardKey(other)}`))))
+    expect(communityTarget.get()?.communityDid).toBe(other)
+    communityTarget.clear()
+  })
+
   it('a revoked grant says so, and offers no desk', async () => {
     mockGrantState.mockResolvedValue({ state: 'revoked', checkedAt: '2026-09-22T00:00:00Z' })
     const tree = await renderHome([persona, grant])

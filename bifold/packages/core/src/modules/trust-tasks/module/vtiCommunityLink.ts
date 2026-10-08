@@ -169,7 +169,15 @@ class CommunityTarget {
     const known = this.published.get(communityDid)
     const base = this.viewing?.communityDid === communityDid ? this.viewing : { communityDid }
     const link: CommunityLink = known && !base.published ? { ...base, name: known, published: true } : base
-    if (this.chosen?.communityDid === link.communityDid && this.chosen.name === link.name) return
+    // A community a link showed earlier, other than this one, is no longer
+    // shown: screens read the shown one first, and every vetting desk opened
+    // on it, whichever desk was chosen (240, iPhone: two grants, one desk).
+    const staleViewing = Boolean(this.viewing && this.viewing.communityDid !== communityDid)
+    if (staleViewing) this.viewing = undefined
+    if (this.chosen?.communityDid === link.communityDid && this.chosen.name === link.name) {
+      if (staleViewing) this.notify()
+      return
+    }
     this.chosen = link
     this.notify()
     keep(link)
