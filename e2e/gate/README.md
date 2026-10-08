@@ -32,6 +32,13 @@ Farm runner identities, admin credentials and the community's REST credential ar
 `~/.keyring-fleet/gate/env/` (`farm.env`, `lab.env`), which `gate.sh` reads. Nothing in `e2e/gate/` names a
 Farm DID, slug or secret. A leg reads `RUNNER_A_SLUG`, `C_DID` and the rest from the environment.
 
+## A worktree's packages
+
+The gate runs from a git worktree, which has no installed packages of its own. Two links are needed: `e2e/node_modules`
+for the drivers, and `node_modules` at the root for the enrolment page, which loads `qrcode` relative to the repo root
+(`scripts/openvtc/local-vti-stack/enrol-page/server.mjs`). Without the root one, every host-code link fails with
+"Cannot find module 'qrcode'" and a 500 from `/api/offers` (239 gate, linkwait).
+
 ## State
 
 Everything a run makes goes under `~/.keyring-fleet/gate/`, never `/private/tmp`, which a reboot wipes:

@@ -438,6 +438,13 @@ async function linkCase(driver, which) {
     for (const t of ["iptables", "ip6tables"]) try { sh(t, on ? "-I" : "-D", "OUTPUT", "-d", host, "-j", "REJECT"); } catch { /* the other family */ }
     console.log(`[e2e] ${host} ${on ? "blocked" : "unblocked"}`);
   };
+  // A long wait keeps the Appium session alive (newCommandTimeout is 300-600 s): one cheap command every 30 s.
+  const idle = async (ms) => {
+    for (const until = Date.now() + ms; Date.now() < until; ) {
+      await sleep(Math.min(30000, Math.max(0, until - Date.now())));
+      await driver.getWindowRect().catch(() => undefined);
+    }
+  };
   const aclSize = () => (aclDids().match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/g) || []).length;
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   const notLinked = async () => /was not linked/i.test(await driver.getPageSource());
@@ -490,7 +497,7 @@ async function linkCase(driver, which) {
     const offered = await api("POST", "/api/offers");
     await openLinkFlow(driver, offered.link);
     console.log("[e2e] on the confirm screen 330 s");
-    await sleep(330000);
+    await idle(330000);
     await tapTestId(driver, "VtaLinkButton", 15000);
     let said = "";
     for (const until = Date.now() + 30000; Date.now() < until && !said; await sleep(1000)) said = (await driver.getPageSource()).match(/(?:text|content-desc)="([^"]*expired or was already used[^"]*)"/i)?.[1] ?? "";
@@ -538,8 +545,12 @@ async function linkCase(driver, which) {
   if (which === "create-window-paused") {
     await addressCode();
     await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
+    // Home, then back after 15 min. One 900 s "mobile: backgroundApp" call outlived the HTTP client (239 gate:
+    // UND_ERR_HEADERS_TIMEOUT), so the wait is the driver's, with the session kept alive.
     console.log("[e2e] the app in the background 900 s");
-    await driver.execute("mobile: backgroundApp", { seconds: 900 });
+    sh("input", "keyevent", "3");
+    await idle(900000);
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
     const waiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
