@@ -152,15 +152,57 @@ export interface JoinHolds {
 const ADMISSIONS: readonly string[] = ['automatic', 'review']
 const ISSUERS: readonly string[] = ['any', 'community', 'recognised']
 
+/** Where a community that runs hidden vetting publishes its parameters, under `vetting.ext`. */
+export const HIDDEN_VETTING_EXT = 'org.openvtc.hidden-vetting'
+
 /**
- * A criterion's `requirementsDigest`, recomputed: the digest of the criterion
- * as received with that one member removed and nothing else changed
- * (manifest/0.3, Computing `requirementsDigest`).
+ * The hidden-vetting parameters a community leaves out of the digest: how it
+ * runs its vetting (draw rate, live labels, events), which it may change while
+ * applicants gather. Its suite and keys stay in. VTI vta-sdk
+ * `HIDDEN_VETTING_OPERATIONAL` (#1977, 2026-10-06).
  */
-export function criterionDigest(criterion: VtiCriterion): string {
+export const HIDDEN_VETTING_OPERATIONAL = [
+  'vetterLabels',
+  'tokenLabels',
+  'dripPerTick',
+  'tickLength',
+  'events',
+] as const
+
+/** The criterion without its digest member: what was digested before VTI #1977. */
+function digestedWhole(criterion: VtiCriterion): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { requirementsDigest: _published, ...rest } = criterion
-  return digestMultibase(rest)
+  return rest
+}
+
+/**
+ * A criterion's `requirementsDigest`, recomputed: the digest of the criterion
+ * as received with that one member removed (manifest/0.3, Computing
+ * `requirementsDigest`), and, for a community that runs hidden vetting, its
+ * operational parameters too (`HIDDEN_VETTING_OPERATIONAL`), as VTI computes
+ * it since #1977. A criterion without hidden vetting digests the same either way.
+ */
+export function criterionDigest(criterion: VtiCriterion): string {
+  const rest = digestedWhole(criterion)
+  const vetting = rest.vetting as { ext?: Record<string, unknown> } | undefined
+  const hidden = vetting?.ext?.[HIDDEN_VETTING_EXT]
+  if (!vetting?.ext || !hidden || typeof hidden !== 'object' || Array.isArray(hidden)) return digestMultibase(rest)
+  const kept = Object.fromEntries(
+    Object.entries(hidden as Record<string, unknown>).filter(
+      ([member]) => !(HIDDEN_VETTING_OPERATIONAL as readonly string[]).includes(member)
+    )
+  )
+  return digestMultibase({ ...rest, vetting: { ...vetting, ext: { ...vetting.ext, [HIDDEN_VETTING_EXT]: kept } } })
+}
+
+/**
+ * Whether `published` is this criterion's digest under either rule: VTI's
+ * since #1977, or the whole criterion, as a community on an earlier VTI
+ * still computes it.
+ */
+function digestMatches(criterion: VtiCriterion, published: string): boolean {
+  return criterionDigest(criterion) === published || digestMultibase(digestedWhole(criterion)) === published
 }
 
 /** The credential types a DCQL query names (`credentials[].meta.type_values`), each once. */
@@ -190,7 +232,7 @@ function faultOf(criterion: VtiCriterion, wire: JoinWire): Pick<JoinWay, 'unusab
     // SHA-256 in base58btc — the recommended form, and the only one compared
     // here: equal strings in one encoding are equal bytes. Another encoding is
     // echoed as the community gave it.
-    if (published.startsWith('zQm') && criterionDigest(criterion) !== published) {
+    if (published.startsWith('zQm') && !digestMatches(criterion, published)) {
       return fault('digestMismatch', `published ${published}, recomputed ${criterionDigest(criterion)}`)
     }
   }
