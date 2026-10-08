@@ -1,10 +1,7 @@
 {
-  "title": "Keyring QR and link triggers: conformance vectors",
+  "title": "One-scan trigger links: conformance vectors",
   "status": "DRAFT",
-  "date": "2026-10-08",
-  "author": "bm",
   "spec": "keyring-qr-and-links.md",
-  "registryRevision": 0,
   "config": {
     "now": 1791460800,
     "nowIso": "2026-10-08T12:00:00Z",
@@ -14,18 +11,18 @@
       22,
       128
     ],
-    "fromAllowList": [
-      "ic3.dev",
-      "firstperson.dev"
+    "aliasSchemes": [
+      "examplewallet"
     ],
-    "legacyCallbackAllowList": [
-      "ic3.dev",
-      "firstperson.dev"
+    "fromAllowList": [
+      "example.com",
+      "example.net"
     ],
     "flows": [
       {
         "flow": "vta-claim",
         "typeBase": "https://registry.trustoverip.org/dtg/flow/vta-claim",
+        "status": "draft",
         "expRequired": true,
         "fromMustBeAllowListed": true,
         "supported": {
@@ -37,6 +34,7 @@
       {
         "flow": "community-sign-in",
         "typeBase": "https://registry.trustoverip.org/dtg/flow/community-sign-in",
+        "status": "draft",
         "expRequired": true,
         "fromMustBeAllowListed": false,
         "supported": {
@@ -48,6 +46,7 @@
       {
         "flow": "example-stable",
         "typeBase": "https://tasks.example.org/spec/example-stable",
+        "status": "stable",
         "testOnly": true,
         "expRequired": false,
         "fromMustBeAllowListed": false,
@@ -56,18 +55,14 @@
         }
       }
     ],
-    "legacyChannels": [
-      "scan"
-    ],
     "ui": {
       "update": "This code needs a newer version of the app.",
       "expired": "This code has expired. Get a new one.",
-      "scan-only": "Scan the code on the website's screen.",
       "unreachable": "This service can't be reached from your wallet.",
       "invalid": "This code can't be used.",
-      "pass-on": "No message from this reader: the text goes to the consumer's other handlers."
+      "pass-on": "No message: the text goes to the consumer's other handlers, unchanged."
     },
-    "notes": "Spec section 9 defines how to use this file. A trigger is a hint; nothing here tests what a consumer does after accepting one. input is the scanned, opened or pasted text and channel is scan, deeplink or paste. An accept lists via (url or legacy-json), from, id (null for legacy), exp (epoch seconds or null), flow (the config label, or null for an unhinted trigger), task (uri, major, minor, or null) and ignored (members not read, in document order: fragment._x for a reserved-prefix name this version does not define, legacy.x). The trigger is the fragment of the link; reserved names in the query are never read. Parameters whose names do not begin with an underscore are ignored and never reported. flows are matched by the whole Type URI minus its version segment, never by slug. config.skew is the clock-skew allowance in seconds: a trigger is expired when exp + skew <= now. The authority prefix https://registry.trustoverip.org/dtg/flow/ is a provisional proposal to Trust Over IP, not registered; tasks.example.org and the flow example-stable are test-only. ui is derived from reason: update = unknown-flow, unsupported-version; expired = expired; scan-only = wrong-channel; pass-on = not-ours; invalid = every other reason; unreachable is a selection outcome. selectionVectors has its own shape (a DID document in, a selection outcome out) and tests spec section 6 rule 5 only; each service endpoint is judged by the host rules of spec section 6 rule 6. Reasons and ui are as for the other vectors.",
+    "notes": "Spec section 7 defines how to use this file. input is the scanned, opened or pasted text; channel is scan, deeplink or paste and never changes a core result. An accept lists via (url), from, id, exp (or null), flow (the config label, or null when there is no hint), task (uri, major, minor, or null) and ignored (fragment.<name> for each unknown name that begins with an underscore, in document order). Flows match by the whole URI without its version segment. A draft flow accepts only the listed MINORs; a stable flow accepts any MINOR of a listed MAJOR. A trigger is expired when exp + skew <= now. The host example.com and the prefix https://registry.trustoverip.org/dtg/flow/ are fixtures and proposals: the prefix is not registered; tasks.example.org, example-stable and the alias scheme examplewallet are test-only. ui follows the reason as in spec section 3. selectionVectors take a DID document and test spec section 5 rule 5 only; the consumer's preference order there is a fixture. legacyVectors test the annex's legacy reader (annex F), not the core, under config.legacy.",
     "selection": {
       "serviceTypeToBinding": {
         "DIDCommMessaging": "didcomm",
@@ -89,19 +84,33 @@
         "no-common-transport": "no candidate: nothing is sent; ui unreachable",
         "reject": "nothing is sent; reason did-document-unverified; ui invalid"
       },
-      "notes": "The preference order is a test fixture and says nothing about Keyring's order. DIDComm accept (media types) and the order of services of different types do not select a binding; among candidates of one type the first in document order wins."
+      "notes": "The preference order is a test fixture, not any wallet's order. DIDComm accept and the order of services of different types do not choose a binding; among candidates of one type the first in document order wins. A service whose endpoint fails the host rules or is not https is not a candidate."
+    },
+    "legacy": {
+      "channels": [
+        "scan"
+      ],
+      "callbackAllowList": [
+        "ic3.dev",
+        "firstperson.dev"
+      ],
+      "ui": {
+        "scan-only": "Scan the code on the website's screen.",
+        "invalid": "This code can't be used."
+      },
+      "notes": "Annex F. The legacy reader runs only on text the core passes on (not-ours). It reports ignored members as legacy.<key> in document order and adds callbackUrl to an accept."
     }
   },
   "vectors": [
     {
       "id": "valid-claim-encoded",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -116,12 +125,12 @@
     {
       "id": "valid-claim-raw",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -174,14 +183,14 @@
       }
     },
     {
-      "id": "valid-keyring-alias",
+      "id": "valid-alias-scheme",
       "group": "valid",
-      "input": "keyring://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "examplewallet://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -196,12 +205,12 @@
     {
       "id": "valid-params-reordered",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1&_exp=1791461100&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev",
+      "input": "https://link.trustoverip.org/t#_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1&_exp=1791461100&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -216,12 +225,12 @@
     {
       "id": "valid-surrounding-whitespace",
       "group": "valid",
-      "input": " \nhttps://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1\t ",
+      "input": " \nhttps://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1\t ",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -236,12 +245,12 @@
     {
       "id": "valid-unhinted-with-exp",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": null,
@@ -252,12 +261,12 @@
     {
       "id": "valid-unhinted-no-exp",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": null,
         "flow": null,
@@ -268,12 +277,12 @@
     {
       "id": "valid-stable-higher-minor",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Ftasks.example.org%2Fspec%2Fexample-stable%2F1.7",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Ftasks.example.org%2Fspec%2Fexample-stable%2F1.7",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": null,
         "flow": "example-stable",
@@ -308,12 +317,12 @@
     {
       "id": "ignored-tracker-appended",
       "group": "ignored",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&utm_source=mail&fbclid=IwAR%3Dx%2By",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&utm_source=mail&fbclid=IwAR%3Dx%2By",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -328,12 +337,12 @@
     {
       "id": "ignored-tracker-plus-and-bad-percent",
       "group": "ignored",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&ref=a+b%20c&q=%zz%",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&ref=a+b%20c&q=%zz%",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -348,12 +357,12 @@
     {
       "id": "ignored-tracker-bare-and-repeated",
       "group": "ignored",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&gclid&utm=1&utm=2",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&gclid&utm=1&utm=2",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -368,12 +377,12 @@
     {
       "id": "ignored-unknown-underscore-reported",
       "group": "ignored",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_b=1&_a=2",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_b=1&_a=2",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -391,12 +400,12 @@
     {
       "id": "ignored-endpoint-member",
       "group": "ignored",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&endpoint=https%3A%2F%2Fevil.example%2Fx&_endpoint=https%3A%2F%2Fevil.example%2Fx",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&endpoint=https%3A%2F%2Fevil.example%2Fx&_endpoint=https%3A%2F%2Fevil.example%2Fx",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
         "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791461100,
         "flow": "vta-claim",
@@ -435,7 +444,7 @@
     {
       "id": "not-ours-unreserved-names",
       "group": "not-ours",
-      "input": "https://farm.ic3.dev/c?from=did:webvh:QmFarmScid:claims.ic3.dev&id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://farm.example.com/c?from=did:webvh:QmInviterScid:claims.example.com&id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -447,7 +456,7 @@
       "id": "qmark-inside-fragment",
       "group": "params",
       "note": "a ? inside the fragment is not a separator: the name is x?_from, which is not reserved, so _from is missing",
-      "input": "https://link.trustoverip.org/t#x?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#x?_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -458,7 +467,7 @@
     {
       "id": "insecure-scheme",
       "group": "link",
-      "input": "http://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "http://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -469,7 +478,7 @@
     {
       "id": "too-long",
       "group": "link",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -480,7 +489,7 @@
     {
       "id": "bad-grammar-space",
       "group": "link",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&x=a b",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&x=a b",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -491,7 +500,7 @@
     {
       "id": "bad-grammar-second-hash",
       "group": "link",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1#frag",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1#frag",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -502,7 +511,7 @@
     {
       "id": "bad-authority-port",
       "group": "link",
-      "input": "https://farm.ic3.dev:8443/c#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://farm.example.com:8443/c#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -513,7 +522,7 @@
     {
       "id": "bad-authority-ipv4",
       "group": "link",
-      "input": "https://203.0.113.7/c#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://203.0.113.7/c#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -524,7 +533,7 @@
     {
       "id": "bad-authority-hex-ipv4",
       "group": "link",
-      "input": "https://0x7f.1/c#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://0x7f.1/c#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -535,7 +544,7 @@
     {
       "id": "bad-authority-single-label",
       "group": "link",
-      "input": "https://localhost/c#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://localhost/c#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -546,7 +555,7 @@
     {
       "id": "bad-authority-empty-label",
       "group": "link",
-      "input": "https://a..ic3.dev/c#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://a..example.com/c#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -557,7 +566,7 @@
     {
       "id": "repeated-param-id",
       "group": "params",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -568,7 +577,7 @@
     {
       "id": "repeated-param-encoded-name",
       "group": "params",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&%5Ffrom=x",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&%5Ffrom=x",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -590,7 +599,7 @@
     {
       "id": "bad-from-not-webvh",
       "group": "from",
-      "input": "https://link.trustoverip.org/t#_from=did%3Aweb%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did%3Aweb%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -601,7 +610,7 @@
     {
       "id": "bad-from-path",
       "group": "from",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev%3Av1&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com%3Av1&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -612,7 +621,7 @@
     {
       "id": "bad-from-port",
       "group": "from",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev%253A8080&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com%253A8080&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -623,7 +632,7 @@
     {
       "id": "bad-from-ip-host",
       "group": "from",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3A203.0.113.7&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3A203.0.113.7&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -634,7 +643,7 @@
     {
       "id": "bad-id-missing",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -645,7 +654,7 @@
     {
       "id": "bad-id-short",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4Hd",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4Hd",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -656,7 +665,7 @@
     {
       "id": "bad-id-long",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -667,7 +676,7 @@
     {
       "id": "bad-id-plus",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1+wPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1+wPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -678,7 +687,7 @@
     {
       "id": "bad-id-percent20",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1%20wPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1%20wPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -689,7 +698,7 @@
     {
       "id": "bad-id-invalid-percent",
       "group": "handle",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1%zzPb4HdA",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1%zzPb4HdA",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -700,7 +709,7 @@
     {
       "id": "bad-exp-float",
       "group": "exp",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100.0",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100.0",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -711,7 +720,7 @@
     {
       "id": "bad-exp-exponent",
       "group": "exp",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1.7914611e9",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1.7914611e9",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -722,7 +731,7 @@
     {
       "id": "bad-exp-beyond-2-53",
       "group": "exp",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=9007199254740992",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=9007199254740992",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -733,7 +742,7 @@
     {
       "id": "missing-exp-claim",
       "group": "exp",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -755,7 +764,7 @@
     {
       "id": "bad-type-bare-word",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=vta-claim",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=vta-claim",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -766,7 +775,7 @@
     {
       "id": "bad-type-leading-zero-minor",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.01",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.01",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -777,7 +786,7 @@
     {
       "id": "unknown-flow-registry-authority",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Ftrusttasks.org%2Fspec%2Fvta-claim%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Ftrusttasks.org%2Fspec%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -788,7 +797,7 @@
     {
       "id": "unknown-flow-same-slug-other-authority",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Ftasks.example.org%2Fspec%2Fvta-claim%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Ftasks.example.org%2Fspec%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -799,7 +808,7 @@
     {
       "id": "unsupported-version-major",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F1.0",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F1.0",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -810,7 +819,7 @@
     {
       "id": "unsupported-version-draft-minor",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.2",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.2",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -821,7 +830,7 @@
     {
       "id": "from-not-allowed",
       "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmFarmScid%3Aclaims.evilic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmInviterScid%3Aclaims.evilexample.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
@@ -829,6 +838,974 @@
         "ui": "invalid"
       }
     },
+    {
+      "id": "query-form-claim",
+      "group": "container",
+      "note": "the previous query container: the reserved names in the query are not read",
+      "input": "https://link.trustoverip.org/t?_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "query-form",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "valid-query-names-not-read",
+      "group": "container",
+      "note": "reserved names in the query are never read, even beside a fragment trigger",
+      "input": "https://link.trustoverip.org/t?_from=did:webvh:QmOther:evil.example&_id=bbbbbbbbbbbbbbbbbbbbbb#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "ignored-tracker-in-query",
+      "group": "ignored",
+      "note": "a tracker appends to the query, which is not read",
+      "input": "https://link.trustoverip.org/t?utm_source=mail&fbclid=IwAR%3Dx%2By#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-other-host",
+      "group": "valid",
+      "note": "the host is not part of the contract",
+      "input": "https://example.org/open#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "unknown-flow-other-group",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/other/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unknown-flow",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "not-ours-fragment-section",
+      "group": "not-ours",
+      "input": "https://example.com/page#section",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "pass-on"
+      }
+    },
+    {
+      "id": "bad-authority-userinfo",
+      "group": "authority",
+      "input": "https://user@link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-trailing-dot",
+      "group": "authority",
+      "input": "https://link.trustoverip.org./t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-ipv6",
+      "group": "authority",
+      "input": "https://[::1]/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-numeric-last-label",
+      "group": "authority",
+      "input": "https://link.123/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-dot-local",
+      "group": "authority",
+      "input": "https://printer.local/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-home-arpa",
+      "group": "authority",
+      "input": "https://nas.home.arpa/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-sub-localhost",
+      "group": "authority",
+      "input": "https://app.localhost/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-underscore",
+      "group": "authority",
+      "input": "https://link_host.example.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-hyphen-edge",
+      "group": "authority",
+      "input": "https://-link.example.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-authority-label-64",
+      "group": "authority",
+      "input": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-authority",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "valid-uppercase-scheme-and-host",
+      "group": "valid",
+      "input": "HTTPS://LINK.TRUSTOVERIP.ORG/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-no-path",
+      "group": "valid",
+      "input": "https://link.trustoverip.org#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-empty-sequences",
+      "group": "valid",
+      "input": "https://link.trustoverip.org/t#&&_from=did:webvh:QmInviterScid:claims.example.com&&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-at-max-length",
+      "group": "valid",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "valid-login-deeplink",
+      "group": "valid",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:portal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
+      "channel": "deeplink",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:portal.community.example",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791460920,
+        "flow": "community-sign-in",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "ignored-unknown-underscore-repeated",
+      "group": "ignored",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_x=1&_x=2",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "fragment._x",
+          "fragment._x"
+        ]
+      }
+    },
+    {
+      "id": "ignored-name-case-differs",
+      "group": "ignored",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&_From=did:webvh:QmOther:evil.example",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": [
+          "fragment._From"
+        ]
+      }
+    },
+    {
+      "id": "missing-from-case-differs",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_From=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-empty",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-uppercase-host",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:Claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-scid-too-long",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-scid-symbol",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:Qm-Scid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-local-host",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:printer.local&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-from-too-long",
+      "group": "from",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddd.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-from",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-id-dot",
+      "group": "handle",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4Hd.",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-id",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "valid-id-max-length",
+      "group": "handle",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "bad-exp-leading-zero",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=01791461100",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-exp-negative",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=-1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-exp-empty",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "expired-unhinted",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "expired",
+        "ui": "expired"
+      }
+    },
+    {
+      "id": "missing-exp-login",
+      "group": "exp",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "missing-exp",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-type-http",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=http://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-type-no-version",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-type-query",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fvta-claim%3Fx%2F0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-type",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "unsupported-version-stable-major",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_type=https://tasks.example.org/spec/example-stable/2.0",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "unsupported-version",
+        "ui": "update"
+      }
+    },
+    {
+      "id": "from-allowed-second-list-entry",
+      "group": "flow",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:example.net&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:example.net",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    },
+    {
+      "id": "bad-grammar-tab",
+      "group": "link",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&x=a\tb",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "bad-grammar-del",
+      "group": "link",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&x=ab",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "bad-grammar",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "not-ours-http-plain",
+      "group": "not-ours",
+      "input": "http://example.com/page",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "pass-on"
+      }
+    },
+    {
+      "id": "not-ours-json",
+      "group": "not-ours",
+      "input": " {\"vta_did\":\"did:webvh:QmSlotScid:slot.example.com\",\"callback_url\":\"https://example.com/x\"}",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "not-ours",
+        "ui": "pass-on"
+      }
+    },
+    {
+      "id": "query-form-with-other-fragment",
+      "group": "container",
+      "input": "https://link.trustoverip.org/t?_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA#section",
+      "channel": "scan",
+      "expect": {
+        "outcome": "reject",
+        "reason": "query-form",
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "valid-non-ascii-space-in-ignored-value",
+      "group": "ignored",
+      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmInviterScid:claims.example.com&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1&note=a b",
+      "channel": "scan",
+      "expect": {
+        "outcome": "accept",
+        "via": "url",
+        "from": "did:webvh:QmInviterScid:claims.example.com",
+        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
+        "exp": 1791461100,
+        "flow": "vta-claim",
+        "task": {
+          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+          "major": 0,
+          "minor": 1
+        },
+        "ignored": []
+      }
+    }
+  ],
+  "selectionVectors": [
+    {
+      "id": "sel-didcomm-only",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://mediator.example.com/didcomm"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://mediator.example.com/didcomm",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-wallet-preference-beats-document-order",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://api.example.com/tt"
+          },
+          {
+            "id": "#b",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://mediator.example.com/didcomm"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://mediator.example.com/didcomm",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-matched-by-type-not-id",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#didcomm",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://api.example.com/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://api.example.com/tt",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-no-service",
+      "input": {
+        "verified": true,
+        "services": []
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-text-endpoint-ignored",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://mediator.example.com/didcomm"
+          }
+        ],
+        "textEndpoint": "https://evil.example/x"
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://mediator.example.com/didcomm",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-unverified-document",
+      "input": {
+        "verified": false,
+        "services": [
+          {
+            "id": "#a",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://mediator.example.com/didcomm"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "reject",
+        "reason": "did-document-unverified",
+        "sent": false,
+        "ui": "invalid"
+      }
+    },
+    {
+      "id": "sel-ipv4-endpoint",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://203.0.113.7/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-hex-ipv4-endpoint",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://0x7f.1/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-loopback-and-lan-names",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://localhost/tt"
+          },
+          {
+            "id": "#b",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://printer.local/tt"
+          },
+          {
+            "id": "#c",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://nas.home.arpa/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-same-type-first-bad-second-good",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://10.0.0.5/tt"
+          },
+          {
+            "id": "#b",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://api.example.com/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://api.example.com/tt",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-unmapped-type-only",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#t",
+            "type": "TSPTransport",
+            "endpoint": "https://tsp.example.com/"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-http-endpoint",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "http://api.example.com/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-userinfo-endpoint",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://u@api.example.com/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "no-common-transport",
+        "sent": false,
+        "ui": "unreachable"
+      }
+    },
+    {
+      "id": "sel-first-of-type-wins",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://m1.example.com/"
+          },
+          {
+            "id": "#b",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://m2.example.com/"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "didcomm",
+        "endpoint": "https://m1.example.com/",
+        "source": "did-document",
+        "sent": false
+      }
+    },
+    {
+      "id": "sel-bad-preferred-falls-to-next-binding",
+      "input": {
+        "verified": true,
+        "services": [
+          {
+            "id": "#a",
+            "type": "DIDCommMessaging",
+            "endpoint": "https://10.0.0.5/"
+          },
+          {
+            "id": "#b",
+            "type": "TrustTaskHTTPS",
+            "endpoint": "https://api.example.com/tt"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "select",
+        "binding": "https",
+        "endpoint": "https://api.example.com/tt",
+        "source": "did-document",
+        "sent": false
+      }
+    }
+  ],
+  "legacyVectors": [
     {
       "id": "legacy-valid",
       "group": "legacy",
@@ -944,329 +1921,36 @@
       }
     },
     {
-      "id": "query-form-claim",
-      "group": "container",
-      "note": "the previous query container: the reserved names in the query are not read",
-      "input": "https://link.trustoverip.org/t?_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
+      "id": "legacy-callback-http",
+      "group": "legacy",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"http://farm.ic3.dev/api/v1/connect/abc123\"}",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
-        "reason": "query-form",
+        "reason": "bad-value",
         "ui": "invalid"
       }
     },
     {
-      "id": "valid-query-names-not-read",
-      "group": "container",
-      "note": "reserved names in the query are never read, even beside a fragment trigger",
-      "input": "https://link.trustoverip.org/t?_from=did:webvh:QmOther:evil.example&_id=bbbbbbbbbbbbbbbbbbbbbb#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
-        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
-        "exp": 1791461100,
-        "flow": "vta-claim",
-        "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-          "major": 0,
-          "minor": 1
-        },
-        "ignored": []
-      }
-    },
-    {
-      "id": "ignored-tracker-in-query",
-      "group": "ignored",
-      "note": "a tracker appends to the query, which is not read",
-      "input": "https://link.trustoverip.org/t?utm_source=mail&fbclid=IwAR%3Dx%2By#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
-        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
-        "exp": 1791461100,
-        "flow": "vta-claim",
-        "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-          "major": 0,
-          "minor": 1
-        },
-        "ignored": []
-      }
-    },
-    {
-      "id": "valid-interim-host",
-      "group": "valid",
-      "note": "the host is not part of the contract: any host meeting the host rules",
-      "input": "https://wallet.asml.berkmancenter.org/l#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
-        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
-        "exp": 1791461100,
-        "flow": "vta-claim",
-        "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-          "major": 0,
-          "minor": 1
-        },
-        "ignored": []
-      }
-    },
-    {
-      "id": "valid-other-host",
-      "group": "valid",
-      "note": "the host is not part of the contract",
-      "input": "https://example.org/open#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "url",
-        "from": "did:webvh:QmFarmScid:claims.ic3.dev",
-        "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
-        "exp": 1791461100,
-        "flow": "vta-claim",
-        "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/vta-claim/0.1",
-          "major": 0,
-          "minor": 1
-        },
-        "ignored": []
-      }
-    },
-    {
-      "id": "unknown-flow-other-group",
-      "group": "flow",
-      "input": "https://link.trustoverip.org/t#_from=did:webvh:QmFarmScid:claims.ic3.dev&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/other/flow/vta-claim/0.1",
+      "id": "legacy-callback-port",
+      "group": "legacy",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev:8443/api/v1/connect/abc123\"}",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
-        "reason": "unknown-flow",
-        "ui": "update"
-      }
-    },
-    {
-      "id": "not-ours-fragment-section",
-      "group": "not-ours",
-      "input": "https://example.com/page#section",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "not-ours",
-        "ui": "pass-on"
-      }
-    }
-  ],
-  "selectionVectors": [
-    {
-      "id": "sel-didcomm-only",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "DIDCommMessaging",
-            "endpoint": "https://mediator.ic3.dev/didcomm"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "select",
-        "binding": "didcomm",
-        "endpoint": "https://mediator.ic3.dev/didcomm",
-        "source": "did-document",
-        "sent": false
-      }
-    },
-    {
-      "id": "sel-wallet-preference-beats-document-order",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://api.ic3.dev/tt"
-          },
-          {
-            "id": "#b",
-            "type": "DIDCommMessaging",
-            "endpoint": "https://mediator.ic3.dev/didcomm"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "select",
-        "binding": "didcomm",
-        "endpoint": "https://mediator.ic3.dev/didcomm",
-        "source": "did-document",
-        "sent": false
-      }
-    },
-    {
-      "id": "sel-matched-by-type-not-id",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#didcomm",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://api.ic3.dev/tt"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "select",
-        "binding": "https",
-        "endpoint": "https://api.ic3.dev/tt",
-        "source": "did-document",
-        "sent": false
-      }
-    },
-    {
-      "id": "sel-no-service",
-      "input": {
-        "verified": true,
-        "services": []
-      },
-      "expect": {
-        "outcome": "no-common-transport",
-        "sent": false,
-        "ui": "unreachable"
-      }
-    },
-    {
-      "id": "sel-text-endpoint-ignored",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "DIDCommMessaging",
-            "endpoint": "https://mediator.ic3.dev/didcomm"
-          }
-        ],
-        "textEndpoint": "https://evil.example/x"
-      },
-      "expect": {
-        "outcome": "select",
-        "binding": "didcomm",
-        "endpoint": "https://mediator.ic3.dev/didcomm",
-        "source": "did-document",
-        "sent": false
-      }
-    },
-    {
-      "id": "sel-unverified-document",
-      "input": {
-        "verified": false,
-        "services": [
-          {
-            "id": "#a",
-            "type": "DIDCommMessaging",
-            "endpoint": "https://mediator.ic3.dev/didcomm"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "reject",
-        "reason": "did-document-unverified",
-        "sent": false,
+        "reason": "bad-value",
         "ui": "invalid"
       }
     },
     {
-      "id": "sel-ipv4-endpoint",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://203.0.113.7/tt"
-          }
-        ]
-      },
+      "id": "legacy-callback-too-long",
+      "group": "legacy",
+      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "channel": "scan",
       "expect": {
-        "outcome": "no-common-transport",
-        "sent": false,
-        "ui": "unreachable"
-      }
-    },
-    {
-      "id": "sel-hex-ipv4-endpoint",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://0x7f.1/tt"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "no-common-transport",
-        "sent": false,
-        "ui": "unreachable"
-      }
-    },
-    {
-      "id": "sel-loopback-and-lan-names",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://localhost/tt"
-          },
-          {
-            "id": "#b",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://printer.local/tt"
-          },
-          {
-            "id": "#c",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://nas.home.arpa/tt"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "no-common-transport",
-        "sent": false,
-        "ui": "unreachable"
-      }
-    },
-    {
-      "id": "sel-same-type-first-bad-second-good",
-      "input": {
-        "verified": true,
-        "services": [
-          {
-            "id": "#a",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://10.0.0.5/tt"
-          },
-          {
-            "id": "#b",
-            "type": "TrustTaskHTTPS",
-            "endpoint": "https://api.ic3.dev/tt"
-          }
-        ]
-      },
-      "expect": {
-        "outcome": "select",
-        "binding": "https",
-        "endpoint": "https://api.ic3.dev/tt",
-        "source": "did-document",
-        "sent": false
+        "outcome": "reject",
+        "reason": "callback-not-allowed",
+        "ui": "invalid"
       }
     }
   ]

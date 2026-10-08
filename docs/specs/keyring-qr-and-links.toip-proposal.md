@@ -1,63 +1,45 @@
-# Proposal: a shared link host and a flow namespace for scan-to-start exchanges
+# Proposal: a shared link host and a flow namespace for one-scan links
 
-**Status:** DRAFT, not sent. From Brendan Miller to the Trust Tasks and registry editors. Nothing here has been agreed by Trust Over IP, and every name below is a proposal. The working spec is [`keyring-qr-and-links.md`](./keyring-qr-and-links.md) (with its [annex](./keyring-qr-and-links.annex.md), section H, and test vectors).
+**Status:** DRAFT, not sent. From Brendan Miller to the Trust Tasks and registry editors. Trust Over IP has agreed to nothing here; every name is a proposal. The link format is specified in [`keyring-qr-and-links.md`](./keyring-qr-and-links.md).
 
 ## The problem
 
-A person scans one QR code, or taps one link, from an ordinary camera app, and the wallet they already have set up opens. The party showing the code (a VTA provider, a community portal) does not know which wallet that is, and a page with one button per wallet is not one scan. The first two flows that need this are claiming a parked VTA and signing in to a community portal.
+A person scans one QR code from an ordinary camera app, and the wallet they already use opens. The party showing the code cannot know which wallet that is, and a page with one button per wallet is not one scan. On both iOS and Android the operating system picks the app from files the link's host publishes, so one link can open any of several wallets only if one host lists them all.
 
-## What I am proposing
+## What I propose
 
-**1. A registry namespace for the flows, starting with two.** `https://registry.trustoverip.org/dtg/flow/<slug>/<MAJOR>.<MINOR>`, with `vta-claim/0.1` (claim a parked VTA) and `community-sign-in/0.1` (sign in to a community portal). A flow identifier names the flow, not the Trust Task a wallet sends first, so a task can be renamed without touching it. The group `dtg` and the vocabulary name `flow` are my guesses at your conventions, and I would rather you correct them. Until you register or decline them they are provisional private identifiers; nothing claims `trusttasks.org`.
-
-**2. `link.trustoverip.org` as a shared link host.** It would serve two static association files (`/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`) and one small fallback page for people with no wallet. Each participating wallet is listed by a reviewed pull request that carries its iOS team and bundle identifiers and its Android package name and SHA-256 certificate fingerprints. This is the only way one link can open any of several wallets: the operating system picks the app from files the link's host publishes.
-
-**3. The link format.** The trigger is in the URL fragment, so the host never receives it:
+1. **A shared link host, `link.trustoverip.org`.** It serves two static association files, `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`, and one small fallback page for people with no wallet. A wallet is listed by a reviewed pull request giving its iOS team and bundle identifiers and its Android package name and certificate fingerprints. I suggest a dedicated host rather than `registry.trustoverip.org` because these files decide which apps open every link, so they need their own change control, and the fallback page is a running service.
+2. **A flow namespace, `https://registry.trustoverip.org/dtg/flow/<slug>/<MAJOR>.<MINOR>`**, starting with `vta-claim/0.1` (claim a parked VTA) and `community-sign-in/0.1` (sign in to a community portal). A flow identifier names a flow, not the Trust Task a wallet sends first. `dtg` and `flow` are my guesses at your conventions; please correct them.
+3. **The link format**, as a profile the Trust Tasks task force could adopt. The trigger is in the URL fragment, which browsers never send to a server, so the host never sees it:
 
 ```
 https://link.trustoverip.org/t#_from=did:webvh:QmExampleScid:example.org&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100
 https://link.trustoverip.org/t#_from=did:webvh:QmExampleScid:example.org&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100&_type=https://registry.trustoverip.org/dtg/flow/vta-claim/0.1
 ```
 
-`_from` names the inviter's DID, `_id` is an opaque handle that grants nothing by itself, `_exp` is an expiry, `_type` is an optional flow hint. The link carries no task, endpoint or key; the wallet resolves the DID and takes the endpoint from the DID document. The host is not part of the format: a wallet reads the same parameters on any host it has claimed.
-
-## Why a dedicated host and not `registry.trustoverip.org`
-
-As I read the registry's repository, it serves static identifier documents that others configure verifiers against. Association files decide which apps open every flow's links, so they need their own change control and blast radius (a bad edit or a key rotation touches every wallet and every inviter), and a fallback page is a service with its own availability and header requirements. I would keep them apart.
+`_from` is the inviter's DID, `_id` an opaque handle that grants nothing, `_exp` an expiry, `_type` an optional flow hint. The link carries no task, endpoint or key: the wallet resolves the DID and takes the endpoint from the DID document. A wallet reads the same fragment on any host, so a different host changes nothing in the format.
 
 ## Hosting requirements
 
-- Both association files at `/.well-known/` on `link.trustoverip.org` itself, over HTTPS with a valid certificate and **no redirects** (Apple and Android both require this). `assetlinks.json` is served as `application/json`; I have not confirmed whether Apple requires a particular media type for the other file.
-- A fallback page with no analytics and no third-party scripts, a minimal Content Security Policy, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, and no script that reads `location.hash`. Because the fragment is never sent in a request, request logs cannot hold it, but a script on the page could read it, and a redirect that lacks a fragment lets the client re-apply the original one to the target (RFC 9110, sections 10.2.2 and 17.11). So the page does not redirect.
-- The page names the wallets listed in the files and links to each one's store page; it never shows or stores the handle.
+- Both files on the host itself over HTTPS with a valid certificate and no redirects; `assetlinks.json` served as `application/json`.
+- A fallback page with no analytics or third-party scripts, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, no script that reads the fragment, and no redirects, because a redirect without its own fragment carries the original one to the target (RFC 9110 sections 10.2.2 and 17.11). It names the listed wallets and links to their store pages.
+- The host holds no secret. It never receives a handle, a DID or a key.
 
 ## What I am asking you to decide
 
-1. Will Trust Over IP host `link.trustoverip.org`, or name another host? (The spec does not change if the host does.)
+1. Will Trust Over IP run `link.trustoverip.org`, or name another host?
 2. Who operates it, and in which account?
-3. Who approves a wallet's listing, on what evidence, and how quickly?
-4. What is the change control for the association files, and what happens on key rotation or when a wallet is removed?
-5. Is a `flow` vocabulary under `/dtg/` the right home for these flow identifiers, with `MAJOR.MINOR` versions? Or should they be registered somewhere else?
-6. Is the fragment trigger format acceptable to the Trust Tasks task force as a profile, and is it right to read the invitation as the enclosing exchange whose `threadId` the handle is, for `parentThreadId`?
+3. Who approves a wallet's listing, on what evidence?
+4. What is the change control for the association files, including certificate rotation and removing a wallet?
+5. Is a `flow` vocabulary under `/dtg/`, with `MAJOR.MINOR` versions, the right home for flow identifiers, or should they go elsewhere?
+6. Should the Trust Tasks task force take the link format as a profile, and is it right to carry the handle as `parentThreadId`, reading the invitation as the exchange that contains the wallet's first request?
 
-## What Trust Over IP is not asked to do
+## Alternatives I considered
 
-Hold any secret. The fragment is never sent to the host, so the host never sees a handle, a DID or a key. It would hold public wallet identifiers and a page.
+- **A shared custom scheme.** Any app can register a scheme (RFC 8252 section 8.1: "indeterminate as to which app will receive"), and I could not confirm that camera apps open one.
+- **One link or button per wallet.** The page this is meant to avoid.
+- **A DIDComm out-of-band invitation.** A receiving agent may create a connection before it reads the goal, the text is about twice as long, and the payload sits in the query, which the host receives.
 
-## Alternatives considered
+## What I have not verified
 
-- **A shared custom scheme.** Any app can register a scheme (RFC 8252, section 8.1: it is "indeterminate as to which app will receive" the request), camera apps often do not open one, and OpenID4VCI's default scheme is the precedent and carries that weakness.
-- **Per-wallet hosts.** Each inviter shows a link or button per wallet. That is the many-buttons page this is meant to avoid.
-- **A DIDComm out-of-band link.** The receiving agent creates a connection before it can look at the goal, and the text is about twice the size.
-
-## What is not verified
-
-No device has been tested. Four questions are open: whether a camera app keeps the fragment when it opens a link in a browser and when it hands it to an app, on iOS and Android; what iOS and Android do when more than one installed wallet is listed for the host; whether the fragment reaches the app (iOS `NSUserActivity.webpageURL`, Android intent data); and what happens with no wallet installed. If the fragment does not survive on a platform, the format needs a different answer there. I have also not verified that the registry would take flow documents or `MAJOR.MINOR` versions: its documents describe predicates with integer versions, and Trust Task specifications are registered at `trusttasks.org`.
-
-## What Keyring will do meanwhile
-
-Use its own already-declared host, `wallet.asml.berkmancenter.org`, as an interim link host that opens only Keyring, keep scanning in-app, and not put that host in any flow identifier. No dates are committed.
-
-## Next steps
-
-Keyring runs the four device tests (annex B, C13, C14 and the rest of C1 to C14) and keeps the interim host and the in-app scanner meanwhile. Nothing proceeds on the fragment container until those tests report, and if a camera or OS drops the fragment the format needs a different answer there. Of Trust Over IP I ask, in order, the six decisions listed above: the host, its operator, listing approval, change control, the home for the flow identifiers, and acceptance of the fragment profile. Nothing here is agreed until you confirm. Formal Trust Over IP linkage or registration of `trusttasks.org` is a separate question that I will raise separately. I have no dates to give.
+No phone has been tested. I do not yet know whether camera apps keep the fragment when they open a link in a browser or hand it to an app, what each OS does when several installed wallets are listed for one host, whether the fragment reaches the app, or what a person with no wallet sees. If a platform drops the fragment, the format needs a different answer there. I have also not confirmed that the registry would take flow identifiers: its documents describe credential predicates with integer versions, and Trust Task specifications are registered at `trusttasks.org`.
