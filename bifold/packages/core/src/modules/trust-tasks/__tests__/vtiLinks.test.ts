@@ -21,8 +21,13 @@ import {
 // invitation on My Agent.
 
 const mockSaveInvitation = jest.fn(async () => undefined)
+const mockMemberships: { communityDid: string; removal?: unknown }[] = []
 jest.mock('../module/VtiCommunityStore', () => ({
-  GenericRecordsCommunityStore: jest.fn(() => ({ saveInvitation: mockSaveInvitation })),
+  ...jest.requireActual('../module/VtiCommunityStore'),
+  GenericRecordsCommunityStore: jest.fn(() => ({
+    saveInvitation: mockSaveInvitation,
+    listMemberships: async () => mockMemberships,
+  })),
 }))
 jest.mock('../module/vtiInvitation', () => ({
   isVtiInvitationLink: (url: string) => url.startsWith('keyring://vti/invitation?c='),
@@ -231,8 +236,11 @@ describe("a vetter's ticket", () => {
     beforeEach(() => communityTarget.clear())
     afterEach(() => communityTarget.clear())
 
-    it('is refused, typed, before the vetting screen is switched to it', async () => {
-      communityTarget.choose('did:webvh:Qm:mine')
+    afterEach(() => mockMemberships.splice(0))
+
+    it('is refused, typed, before the vetting screen is switched to it, while that join is under way', async () => {
+      // An identity made for the chosen community, and not yet a member.
+      communityTarget.choose(mockPersona.communityDid)
       const navigate = jest.fn()
       const attempt = routeKeyringAgentLink(ticket, {} as never, navigate)
       await expect(attempt).rejects.toBeInstanceOf(KeyringLinkError)
@@ -241,8 +249,28 @@ describe("a vetter's ticket", () => {
       })
       expect(navigate).not.toHaveBeenCalled()
       expect(communityTarget.getViewing()).toBeUndefined()
-      expect(communityTarget.getChosen()?.communityDid).toBe('did:webvh:Qm:mine')
+      expect(communityTarget.getChosen()?.communityDid).toBe(mockPersona.communityDid)
       expect(pendingVettingTicket.take()).toBeUndefined()
+    })
+
+    // IN-144: the chosen community is remembered after it is left or removed,
+    // and after joining it; neither may block a ticket for another community.
+    it('is taken when the chosen community was left or removed from the phone', async () => {
+      communityTarget.choose('did:webvh:Qm:gone')
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(ticket, {} as never, navigate)
+      expect(communityTarget.getViewing()?.communityDid).toBe('did:webvh:Qm:community')
+      expect(navigate).toHaveBeenCalledWith('VtiVetting')
+      expect(pendingVettingTicket.take()).toBe(ticket)
+    })
+
+    it('is taken when the phone is already a member of the chosen community', async () => {
+      communityTarget.choose(mockPersona.communityDid)
+      mockMemberships.push({ communityDid: mockPersona.communityDid })
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(ticket, {} as never, navigate)
+      expect(navigate).toHaveBeenCalledWith('VtiVetting')
+      expect(pendingVettingTicket.take()).toBe(ticket)
     })
 
     it('is taken when it is for the chosen community', async () => {
