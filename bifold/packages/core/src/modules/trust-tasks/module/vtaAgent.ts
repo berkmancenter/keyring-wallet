@@ -1653,6 +1653,9 @@ export class VtaAgentController {
     // every linked agent, and a link no longer replaces another one's record.
     await links.use?.(vtaDid)
     this.set({ ownsAgent: owner })
+    // Kept until the swap settles: a swap the agent does not make undoes the
+    // link, and an "Add" then still goes back to the agent before.
+    const addingFrom = this.addingFrom
     if (this.addingFrom && this.addingFrom !== vtaDid) {
       this.set({ addingAgent: false, addedAgent: { from: this.addingFrom, added: vtaDid } })
     } else if (this.state.addingAgent) {
@@ -1670,7 +1673,16 @@ export class VtaAgentController {
         if (!swapDone && !(await this.swapStillOpen(error, identities, vtaDid))) {
           // Settled on the VTA's word that the swap never happened (or it was
           // refused outright): the attempt failed, as before, and is forgotten.
+          // The list of agents is read again, as the link was added to it: an
+          // agent left on it read as already on the phone, so a held swap
+          // offered no Try again and a scan of it said "already linked".
           await links.clear().catch(() => undefined)
+          if (addingFrom && addingFrom !== vtaDid) {
+            // An "Add" that did not finish: back is still back to the agent before.
+            this.addingFrom = addingFrom
+            this.set({ addingAgent: true, addedAgent: undefined })
+          }
+          await this.refreshAgents(agent).catch(() => undefined)
           throw error
         }
         // The swap's outcome is not known yet. Linked, offline: the next

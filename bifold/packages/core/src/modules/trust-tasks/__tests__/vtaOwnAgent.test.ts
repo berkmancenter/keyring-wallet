@@ -979,6 +979,12 @@ describe('a link whose swap onto the long-term key does not happen says why', ()
     expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'held' })
     expect(mockVta.acl.has(TEMPORARY)).toBe(true)
     expect(disk.link).toBeUndefined()
+    // 239 gate (linkfail, swap held): the agent stayed on the phone's list
+    // after the link was undone, so it read as linked: no key to try again
+    // with, and a scan of it said "already on this phone".
+    expect((vta.getState().agents ?? []).map((a) => a.vtaDid)).not.toContain(VTA)
+    expect(vta.hasAgent(VTA)).toBe(false)
+    expect(await vta.pendingLinkKey(agent, VTA)).toMatchObject({ vtaDid: VTA, did: TEMPORARY })
   })
 
   it('refused: the failure says the agent refused', async () => {
