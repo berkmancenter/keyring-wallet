@@ -25,7 +25,7 @@ E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL
   perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 APPROVE=1; [ "${WAITING_DECLINE:-}" = 1 ] && APPROVE=0
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME PERSONA_SHOTS=$LEG_DIR/persona-did \
-  JOIN_APPROVE=$APPROVE C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
+  JOIN_APPROVE=$APPROVE C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" COMMUNITY_B_DID="${COMMUNITY_B_DID:-}" COMMUNITY_B_TICKET_CMD="${COMMUNITY_B_TICKET_CMD:-}" \
   perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^PERSONA-DID|^WAITING-STATUS|^JOIN-IDENTITY-NAME' "$LEG_DIR/waiting.out" | cut -c1-220
 take_rows "$LEG_DIR/waiting.out"   # flow B's rows (a)–(d) when approved

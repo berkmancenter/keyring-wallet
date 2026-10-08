@@ -114,6 +114,39 @@ async function doneFlow(d) {
   row("join-done-highlight", home && lit, `Your agent ${home} · AgentCommunityHighlighted ${lit}`);
 }
 
+/**
+ * IN-144 (#362): a member of C, and again after leaving C, scans a vetter's ticket for another community B: Get vetted
+ * opens for B with the ticket in hand, and the scanner says nothing about a "different community". Read-only on B (the
+ * request is not sent). B is a parameter: COMMUNITY_B_DID and COMMUNITY_B_TICKET_CMD (a shell command printing a fresh
+ * vetting-ticket: link for B, from a B vetter on a runner); without them the rows are SKIP.
+ */
+async function otherTicketFlow(d, me) {
+  const B = process.env.COMMUNITY_B_DID;
+  const cmd = process.env.COMMUNITY_B_TICKET_CMD;
+  if (!B || !cmd) {
+    for (const n of ["member-scan-other-ticket", "left-scan-other-ticket"]) console.log(`ROW ${n} SKIP — SKIP: no community B (COMMUNITY_B_DID / COMMUNITY_B_TICKET_CMD unset)`);
+    return;
+  }
+  const scan = async (name, when) => {
+    const ticket = execFileSync("bash", ["-c", cmd], { encoding: "utf8", timeout: 120000 }).trim().split("\n").pop();
+    if (!/^vetting-ticket:/.test(ticket)) return row(name, false, `${when}: no vetting-ticket from COMMUNITY_B_TICKET_CMD ("${ticket.slice(0, 40)}")`);
+    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+    await pasteLinkFromHome(d, ticket).catch((e) => log(`${name}: ${String(e.message).split("\n")[0]}`));
+    const field = await scrollToTestId(d, "VettingTicketInput", 6).catch(() => undefined);
+    const held = field ? String((await field.getAttribute("text").catch(() => "")) || "").trim() : "";
+    const different = /different community/i.test(await d.getPageSource());
+    await screenshot(d, name).catch(() => undefined);
+    row(name, held === ticket && !different, `${when}: Get vetted holds B's ticket ${held === ticket} · "different community" shown ${different} (IN-144)`);
+    await d.back().catch(() => undefined);
+  };
+  await scan("member-scan-other-ticket", "a member of C");
+  // Leave C (the community removes the member, as the leg's cleanup would), then scan again.
+  const said = admin("member-remove", me, "gate: IN-144, left before the second scan").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+  log(`left C: ${said.trim()}`);
+  await sleep(10000);
+  await scan("left-scan-other-ticket", "after leaving C");
+}
+
 /** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
 async function approvedFlow(d, me) {
   const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
@@ -154,6 +187,7 @@ async function approvedFlow(d, me) {
   await screenshot(d, "join-approved-wallet").catch(() => undefined);
   row("join-approved-wallet", shown, shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s`);
   if (is238) await doneFlow(d);
+  await otherTicketFlow(d, me);
 }
 
 let d;
