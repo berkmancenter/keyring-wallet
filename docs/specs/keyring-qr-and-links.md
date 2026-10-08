@@ -1,9 +1,9 @@
 # QR codes and links that trigger an exchange: claiming an agent and signing in
 
-**Status:** DRAFT, dated 2026-10-08, author bm. Not adopted by any party; nothing here is implemented on the Farm or portal side and Keyring's parsers do not read these formats. Sections 1 to 9 are normative and name no Keyring internals. Everything else (a second container, Farm design, camera and domain notes, Keyring implementation notes) is in the non-normative [annex](./keyring-qr-and-links.annex.md).
+**Status:** DRAFT, dated 2026-10-08, author bm. Not adopted by any party; nothing here is implemented on the Farm or portal side and Keyring's parsers do not read these formats. Sections 1 to 9 are normative and name no Keyring internals. Everything else (a second container, Farm design, camera, link-host and device-test notes, Keyring implementation notes) is in the non-normative [annex](./keyring-qr-and-links.annex.md).
 **Keywords:** MUST, MUST NOT, SHOULD and MAY are used as in BCP 14 (RFC 2119 and RFC 8174): they carry that force only in capitals. **Vectors:** [`keyring-qr-and-links.vectors.json`](./keyring-qr-and-links.vectors.json) (section 9).
 **Upstream pieces that are only drafts:** the Trust Tasks framework (Working Draft 0.7.0, `dtgwg-trust-tasks-tf` `origin/main` `7b6bb488`), its `didcomm/0.2` binding (`status: draft`) and `trust-task-discovery` (`status: draft`, versions 0.1 to 0.3). "Trigger" is an unconfirmed working name: upstream defines no such term in a task document (the push binding's Trigger role and "A hint is a trigger to re-read" in `vtc/admin/events/event/0.1` are the only uses).
-**Open (none decided):** the claim-authorisation option (T2), link domains (T3), a URL contact (T4), the first request with no hint (T5), limits (T6). The container is a working position in the plan (container Y, WP3); T7 was withdrawn with the `tp` hint. The plan records working positions; this document stays neutral.
+**Open (none decided):** the claim-authorisation option (T2), the shared link host (T3: `link.trustoverip.org` is a proposal to Trust Over IP, not agreed; annex H), the flow-identifier namespace (the registry prefix of section 5 is a proposal, not registered), a URL contact (T4), the first request with no hint (T5), limits (T6). The container (container Y, a fragment link) is a working position in the plan (WP3); T7 was withdrawn with the `tp` hint. The plan records working positions; this document stays neutral. **No device has been tested with these links** (annex B, tests C1 to C14).
 
 ## 1. Model
 
@@ -25,27 +25,30 @@ The contact and the handle never carry a secret; a handle is a lookup key (secti
 
 ## 3. Container and reading order
 
-**One container (container Y): an `https` link with a small fixed query.** `https://<host>/<path>?_from=<DID>&_id=<handle>[&_exp=<n>][&_type=<URI>]`. `keyring://<host>/<path>?…` is an alias for Keyring's own scanner with the same host, path and query, never the form a camera is expected to open. The names begin with `_` so that they cannot collide with a site's own.
+**One container (container Y): an `https` link whose fragment is the trigger.** `https://<host>/<path>#_from=<DID>&_id=<handle>[&_exp=<n>][&_type=<URI>]`, for example `https://link.trustoverip.org/t#_from=did:webvh:QmExampleScid:example.org&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791461100`. The names begin with `_` so that they cannot collide with a site's own. `keyring://<host>/<path>#…` is an alias for Keyring's own scanner with the same host, path and fragment, never the form a camera is expected to open.
+
+**The trigger is in the fragment so that the host never receives it.** A client sends no fragment in a request (RFC 9110 section 7.1: the target URI "excludes the reference's fragment component"; section 10.1.3: `Referer` omits it), so the link host, a fallback-page server, a CDN and a link-preview fetch see the path and nothing else. **The host is not part of the contract:** a reader accepts the same parameters on any host that meets section 6 rule 6. Which wallet a camera opens is decided by the operating system from files the host publishes (annex B). The proposed shared host is `link.trustoverip.org` (not agreed; annex H); until a shared host exists an inviter's host opens only the wallets associated with it.
+
+**The query is never read.** A link that carries a reserved name only in its query is `query-form`, not a trigger; one that also carries a trigger in its fragment is read from the fragment and its query is ignored whole.
 
 **Parsing is standard.**
 
-- The query is the text between the first `?` and the first `#` (RFC 3986 section 3.4: so `…/c#x?_from=…` has no query).
-- It is parsed by `application/x-www-form-urlencoded` parsing (WHATWG URL Standard, 5.1): split on `&`, skip empty sequences, split each at the first `=`, replace `+` with U+0020, percent-decode **once**, decode as UTF-8 without BOM. A malformed percent sequence stays as written. Names are compared case-sensitively after decoding.
+- The trigger is the text after the first `#` (RFC 3986 section 3.5), so a `?` inside it is part of a name or value. It is parsed by `application/x-www-form-urlencoded` parsing (WHATWG URL Standard, 5.1): split on `&`, skip empty sequences, split each at the first `=`, replace `+` with U+0020, percent-decode **once**, decode as UTF-8 without BOM. A malformed percent sequence stays as written. Names are compared case-sensitively after decoding. A second `#` is `bad-grammar`.
 - A decoded value that does not match its field's grammar is rejected by that field's rule, and no field grammar admits U+0020 or `%`: so `+`, `%20` and a doubly-encoded value (`%253A`) are `bad-*`.
 - A conforming emitter (`URLSearchParams`, Python `urlencode`) writes `did%3Awebvh%3A…`; raw colons and slashes read the same.
 
 **Unknown parameters are ignored, so a tracker cannot break a link.**
 
 - Only `_from`, `_id`, `_exp` and `_type` are read.
-- A name that begins with `_` and is not one of them is ignored and reported as `query.<name>`; any other name (`utm_source`, `fbclid`, a bare `gclid`, a repeat of any of them) is ignored and not reported, whatever its value. `ignored` lists reports in document order.
+- A name that begins with `_` and is not one of them is ignored and reported as `fragment.<name>`; any other name (`utm_source`, `fbclid`, a bare `gclid`, a repeat of any of them) is ignored and not reported, whatever its value. A tracker appends to the query, which is not read. `ignored` lists reports in document order.
 - A **reserved name that repeats** is rejected (`repeated-param`), after decoding, so `%5Ffrom` counts as `_from`.
 
 **Reading order.** Stop at the first failure. Reason codes are for tests; section 7 rule 6 governs what a person sees.
 
 1. Trim ASCII whitespace (TAB, LF, FF, CR, SPACE); over 1,536 characters: `too-long`.
 2. Starts with `{` or `[`: the legacy format, section 8.
-3. No `scheme://`, a scheme other than `https`, `keyring`, `http` (scheme is case-insensitive), or no reserved name in the query: `not-ours`. `http` with a reserved name: `insecure-scheme`.
-4. Whitespace or a control character anywhere: `bad-grammar`. A `#` anywhere: `fragment`.
+3. No `scheme://` or a scheme other than `https`, `keyring`, `http` (scheme is case-insensitive): `not-ours`. No reserved name in the fragment: `query-form` if the query (the text between the first `?` and the first `#`) has one, else `not-ours`. `http`: `insecure-scheme`.
+4. Whitespace or a control character anywhere, or a second `#`: `bad-grammar`.
 5. Authority has userinfo or a port, or its host (after WHATWG host parsing) does not meet the host rules of section 6 rule 6: `bad-authority`.
 6. A reserved name repeats: `repeated-param`.
 7. `_from` absent: `missing-from`; present and not matching section 2: `bad-from`. `_id` absent or not matching: `bad-id`. `_exp` present and not matching: `bad-exp`.
@@ -56,11 +59,11 @@ The contact and the handle never carry a secret; a handle is a lookup key (secti
 
 A reader MAY check in another order only if it reports the same result.
 
-**UI outcomes** (the only messages; a reader MUST NOT say which field failed or whether a host was on a list): `update` (`unknown-flow`, `unsupported-version`): "This code needs a newer version of the app."; `expired` (`expired`): "This code has expired. Get a new one."; `scan-only` (`wrong-channel`): "Scan the code on the website's screen."; `unreachable` (`no-common-transport`): "This service can't be reached from your wallet."; `pass-on` (`not-ours`): no message, the text goes to the consumer's other handlers; `invalid` (every other reason): "This code can't be used."
+**UI outcomes** (the only messages; a reader MUST NOT say which field failed or whether a host was on a list): `update` (`unknown-flow`, `unsupported-version`): "This code needs a newer version of the app."; `expired` (`expired`): "This code has expired. Get a new one."; `scan-only` (`wrong-channel`): "Scan the code on the website's screen."; `unreachable` (`no-common-transport`): "This service can't be reached from your wallet."; `pass-on` (`not-ours`): no message, the text goes to the consumer's other handlers; `invalid` (every other reason, `query-form` included): "This code can't be used."
 
 ## 4. Flow identifiers and versions
 
-A flow is named once, by its **Type URI**, compared by its **whole string** (framework 0.7.0, Type URI: "A Type URI identifies a specification by its whole string, never by its slug alone"). A consumer implements a list of Type URIs minus their version; the same slug under another authority is `unknown-flow`, and so is a registry URI no one has registered. 
+A flow is named once, by its **Type URI**, compared by its **whole string** (framework 0.7.0, Type URI: "A Type URI identifies a specification by its whole string, never by its slug alone"). A consumer implements a list of Type URIs minus their version; the same slug under another authority is `unknown-flow`, and so is a registry URI no one has registered, a different group (`…/other/flow/vta-claim/0.1`) included. 
 
 MINOR is additive and MAJOR breaking (framework, Compatibility Rules): a consumer at `M.N` SHOULD accept `M.K` for `K > N` where it can ignore members it does not know, and MUST reject a MAJOR it does not implement ("A `MAJOR` mismatch is never forward-compatible"; the framework's error code is `unsupportedVersion`, this document's test reason is `unsupported-version`). 
 At MAJOR 0 a task is draft and a MINOR may break, so a consumer accepts only the MINORs it implements. Both tasks below are drafts at MAJOR 0, so **inviters keep the previous version working until the named wallets have shipped the new one** (framework, Migrating Between Versions: "Update receivers first"). 
@@ -68,12 +71,14 @@ After `unknown-flow` or `unsupported-version` a consumer MUST NOT try another fl
 
 ## 5. Registry (provisional)
 
-| Flow | Type URI, version 0.1 | Contact | Expiry | Contact on the `from` list |
-|---|---|---|---|---|
-| claim a parked VTA | `https://wallet.asml.berkmancenter.org/trust-tasks/spec/vta-claim/0.1` | the Farm's claim-service DID | required | required |
-| sign in to a community portal | `https://wallet.asml.berkmancenter.org/trust-tasks/spec/auth/oob/describe/0.1` | the community's DID | required, at most 300 seconds (120 recommended) | no (the wallet must already know the community; wallet policy) |
+**Authority prefix (the one provisional string): `https://registry.trustoverip.org/dtg/flow/`.** A Type URI is this prefix, the flow's slug and the version: `<prefix><slug>/<MAJOR>.<MINOR>`. The prefix is a **proposal to Trust Over IP, not registered and not agreed** (annex H); if Trust Over IP names another, only this string changes, in the table, the vectors' `typeBase` and a consumer's list.
 
-**These are private identifiers, provisional.** Framework 0.7.0, Private and Unpublished Trust Task Specifications: a private specification's Type URI "MUST NOT be served from, or claim to identify a resource at, the `https://trusttasks.org/` domain", so neither flow claims it; a re-host under the registry is a different identifier "unless and until the registry policy explicitly aliases them". `vta-claim` has no upstream task; the `auth/oob/*` family is a third-party proposal's, not a published specification, and the hint names its first task as the wallet sends it (`describe`); it shares only the word "oob" with DIDComm's out-of-band messages and has nothing to do with them (annex E, 8.4). The authority host is a proposal and is not served yet; the plan holds the transition note.
+| Flow | Slug | Type URI, version 0.1 (proposed) | Contact | Expiry | Contact on the `from` list |
+|---|---|---|---|---|---|
+| claim a parked VTA | `vta-claim` | `https://registry.trustoverip.org/dtg/flow/vta-claim/0.1` | the Farm's claim-service DID | required | required |
+| sign in to a community portal | `auth/oob/describe` | `https://registry.trustoverip.org/dtg/flow/auth/oob/describe/0.1` | the community's DID | required, at most 300 seconds (120 recommended) | no (the wallet must already know the community; wallet policy) |
+
+**These identifiers are provisional and private until Trust Over IP registers them.** Framework 0.7.0, Private and Unpublished Trust Task Specifications: a private specification's Type URI "MUST NOT be served from, or claim to identify a resource at, the `https://trusttasks.org/` domain", so neither flow claims it; a re-host is a different identifier "unless and until the registry policy explicitly aliases them". `vta-claim` has no upstream task. The `auth/oob/*` family is a third-party proposal's, not a published specification; the hint names its first task as the wallet sends it (`describe`). Its family name shares only the word "oob" with DIDComm's out-of-band messages and has nothing to do with them; renaming it (for example `auth/handoff`) is recommended and undecided, and changes only the slug here (annex E 8.4, annex H). **The wallet's own host is never part of a flow identifier.**
 
 ## 6. After the trigger
 
@@ -93,7 +98,7 @@ After `unknown-flow` or `unsupported-version` a consumer MUST NOT try another fl
 2. **No secret, no endpoint, no task body in the text.** A handle alone is a bearer wherever the inviter treats possession as authority; proof of possession by the claimant's own key does not change that in a pool claim, since the claimant picks its key. How a claim is authorised is open (T2, annex D).
 3. **Nothing is spent on a GET.** A link preview, mail scanner or browser fetch of the link MUST NOT consume the handle; it is spent only on the signed request. A trigger causes no fetch by reference.
 4. **A consumer MUST NOT log, show in an error, toast or analytics, or send anywhere but to the inviter (in the first request) the text, the handle or the contact.** It logs at most the class of a link (scheme, flow, "trigger") and redacts before any logger runs.
-5. **Producers (the inviter):** (a) the handle MUST be at least 128 bits from a CSPRNG, written as unpadded base64url (22 characters); (b) `_exp` MUST be no later than the inviter's own lifetime for the handle; (c) any page that carries or displays the link MUST be served with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, MUST NOT load third-party scripts, and the inviter SHOULD NOT log the query; (d) the link carries exactly the four reserved names, each at most once; a standard form encoder is fine and consumers decode it; (e) a page that offers a `keyring://` button MUST NOT do so for a handle that can be spent (RFC 8252 section 8.1: another app may register the scheme); (f) the contact's DID document MUST publish the service the consumer selects.
+5. **Producers (the inviter):** (a) the handle MUST be at least 128 bits from a CSPRNG, written as unpadded base64url (22 characters); (b) `_exp` MUST be no later than the inviter's own lifetime for the handle; (c) any page that carries or displays the link MUST be served with `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, MUST NOT load third-party scripts, and MUST NOT copy the fragment into a request, a log or a script that sends it; a redirect from a page that carries the link MUST give its target an explicit (possibly empty) fragment, because a client otherwise re-applies the original fragment to the target (RFC 9110 section 10.2.2, section 17.11); (d) the link carries exactly the four reserved names, each at most once, in the fragment and not in the query; a standard form encoder is fine and consumers decode it; (e) a page that offers a `keyring://` button MUST NOT do so for a handle that can be spent (RFC 8252 section 8.1: another app may register the scheme); (f) the contact's DID document MUST publish the service the consumer selects.
 6. **Failures are generic** (section 3 UI outcomes).
 7. **Texts outside this document** are `not-ours` and unchanged: `keyring://vta/enrol`, links to approvals, community and invitation links, ticket links, bare DIDs, OpenID4VCI offers, DIDComm v1 invitations.
 
@@ -109,11 +114,11 @@ The callback is bearer and is never logged. **Sunset:** accepted until the first
 
 ## 9. Conformance
 
-Two classes. A **reader** conforms if it returns the expected result for every trigger vector under the file's `config`, and for every `selectionVectors` case when it implements section 6 rule 5. A **producer** conforms if every trigger it emits is accepted by a conforming reader under a configuration that lists its flow, and it meets section 7 rule 5. The vectors cover container Y only; a reader that implements it implements "the container" of this document. Each vector has `input`, `channel` (`scan`, `deeplink`, `paste`) and `expect` (`outcome`, then `reason` and `ui`, or `via`, `from`, `id`, `exp`, `flow`, `task`, `ignored`, and `callbackUrl` for legacy). Flows match by whole Type URI. `config.skew` is the clock allowance.
+Two classes. A **reader** conforms if it returns the expected result for every trigger vector under the file's `config`, and for every `selectionVectors` case when it implements section 6 rule 5. A **producer** conforms if every trigger it emits is accepted by a conforming reader under a configuration that lists its flow, and it meets section 7 rule 5. The vectors cover the fragment container only; a reader that implements it implements "the container" of this document. Each vector has `input`, `channel` (`scan`, `deeplink`, `paste`) and `expect` (`outcome`, then `reason` and `ui`, or `via`, `from`, `id`, `exp`, `flow`, `task`, `ignored`, and `callbackUrl` for legacy). Flows match by whole Type URI. `config.skew` is the clock allowance.
 
 **What no vector can test:** section 6 rules 1 to 4 (confirmation, approval, what is displayed, the key), rule 5's fresh resolution and same-binding reply, rule 6's resolved-address check, rule 7 (the first request), rule 8, section 7 rules 2 to 5 and 7, DID verification itself, and what any phone does with a link. **They test a reader's parsing only, not Keyring's parsers.**
 
 ## 10. Change process and references
 
 A new flow is a written proposal (Type URI, inviter, expiry, `from` list, vectors) with one named owner each for the Farm, the VTC portals and Keyring. A published Type URI is never edited. Owners and the home of this document are to be named (annex G, Q10; proposed home: a Trust Tasks task-force document, not agreed).
-References: BCP 14 (RFC 2119, RFC 8174); RFC 3986; RFC 7493 (I-JSON); RFC 6761, 6762, 8375; RFC 8252 sections 7.1, 7.2, 8.1; WHATWG URL Standard (5.1); DIDComm v2.1 (Out Of Band Messages); Trust Tasks framework 0.7.0 draft (Type URI, Private and Unpublished Trust Task Specifications, Audience Binding, Compatibility Rules, Migrating Between Versions, Consumer Requirements, `threadId` and `parentThreadId`), `bindings/didcomm/0.2`, `bindings/https/0.3`, `bindings/push/0.1`, `trust-task-discovery/0.1` to `0.3` (all draft).
+References: BCP 14 (RFC 2119, RFC 8174); RFC 3986 sections 3.4 and 3.5; RFC 7493 (I-JSON); RFC 9110 sections 7.1, 10.1.3, 10.2.2, 17.11; RFC 6761, 6762, 8375; RFC 8252 sections 7.1, 7.2, 8.1; WHATWG URL Standard (5.1); DIDComm v2.1 (Out Of Band Messages); Trust Tasks framework 0.7.0 draft (Type URI, Private and Unpublished Trust Task Specifications, Audience Binding, Compatibility Rules, Migrating Between Versions, Consumer Requirements, `threadId` and `parentThreadId`), `bindings/didcomm/0.2`, `bindings/https/0.3`, `bindings/push/0.1`, `trust-task-discovery/0.1` to `0.3` (all draft).
