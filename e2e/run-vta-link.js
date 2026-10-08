@@ -381,7 +381,7 @@ async function afterRefusal(driver, said, temporaryDid) {
     console.log(`NO-RETRY ${ok ? "ok" : "retried"} · screen ${kept ? "kept the refusal 30 s" : `changed to ${seen}`} · ${logHalf} · control ${control}`);
   }
   if (process.env.TRY_AGAIN_HOOK) {
-    const size = () => (aclDids().match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/g) || []).length;
+    const size = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
     const before = size();
     execFileSync("bash", ["-c", process.env.TRY_AGAIN_HOOK], { stdio: "inherit" });
     await sleep(3000);
@@ -445,7 +445,12 @@ async function linkCase(driver, which) {
       await driver.getWindowRect().catch(() => undefined);
     }
   };
-  const aclSize = () => (aclDids().match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/g) || []).length;
+  // Entries, from the JSON listing: the text listing names two DIDs per entry (subject, "created by"), and counting
+  // its DIDs doubled every change (239 rerun read one new entry as "3 → 5").
+  const aclSize = () => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
+  };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   const notLinked = async () => /was not linked/i.test(await driver.getPageSource());
   const row = (ok, detail) => { console.log(`ROW ${which} ${ok ? "PASS" : "FAIL"} — ${detail}`); return ok; };
