@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-29",
+  "updated": "2026-10-07",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "afcf2470",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the local lab now runs (vta-service 0.45.1; #1835 and #1840 make every community call a signed Trust Task). From now on the lab follows upstream main, and the Farm was reset today. card-verify moves with it: trust-tasks-rs 0.24.6 and affinidi-data-integrity 0.7.13, per afcf2470's Cargo.lock.",
+      "sha": "49f5f1be",
+      "commitDate": "2026-10-07",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag VTI-Eucalyptus (vta-service 0.56.0, vta-sdk 0.64.2), the release milestone after Dogwood. vta-sdk here accepts only the DTG v1 shapes (vetted/1 StatementCredential, role VAC); card-verify moved to them in the same pull request.",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -41,20 +41,20 @@
     },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
-      "sha": "da432130",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's mediator now runs: #905 stops a TSP payload sent right after a relationship invite from being dropped (the O10/VTI-52 lost-reply shape).",
+      "sha": "a1611baa",
+      "commitDate": "2026-10-06",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag VTI-Eucalyptus: affinidi-messaging-sdk 0.33.2, the version openvtc 0.5.0 builds with.",
       "watch": [
         "crates/messaging/affinidi-messaging-mediator/"
       ]
     },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
-      "sha": "e49816c",
-      "commitDate": "2026-09-29",
-      "pinnedOn": "2026-09-29",
-      "why": "Latest main, which the lab's TUI (interop harness) now runs: it takes vta-service 0.45 (#395) and adds the PCS hidden-vetting client (#396).",
+      "sha": "2a4fa2b",
+      "commitDate": "2026-10-06",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag VTI-Eucalyptus: openvtc 0.5.0 (#481; no v0.5.0 git tag), vta-sdk 0.63.3, messaging-sdk 0.33.2. Carries the VTI-67 may_claim fix (#456) that v0.4.0 lacked.",
       "watch": [
         "openvtc/src/ui/pages/",
         "openvtc/src/state_handler/vetting_actions.rs",
@@ -93,10 +93,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "bdae1cf9",
-      "commitDate": "2026-09-21",
-      "pinnedOn": "2026-09-21",
-      "why": "Specifications for vtc/join-requests/withdraw/0.1 and supplement/0.1, which the client now implements (VTI-03 client half).",
+      "sha": "7b6bb488",
+      "commitDate": "2026-10-05",
+      "pinnedOn": "2026-10-07",
+      "why": "Tag trust-tasks-v0.27.7, the trust-tasks-rs version VTI vta-service-v0.55.0 builds with. Publishes the hidden-vetting task specs (vtc/vetting/hidden/{publish,show,withdraw}/0.1, vtc/vetting/pcs-challenge/0.1), vtc/vetting/vetters/event-mode/0.1, and the hidden path in vetting/attestation/0.1, so they can be cited and used as fixtures at a pin.",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
@@ -105,7 +105,9 @@
         "bindings/didcomm-v1/",
         "bindings/tsp/",
         "trust-tasks-ts/",
-        "ceremonies/"
+        "ceremonies/",
+        "specs/vtc/vetting/",
+        "specs/vetting/"
       ]
     },
     "dtgwg-cred-spec": {
@@ -130,6 +132,18 @@
         "context/",
         "predicates/",
         "registry.config.json"
+      ]
+    },
+    "predicate-credential-system": {
+      "url": "https://github.com/OpenVTC/predicate-credential-system.git",
+      "sha": "62de5ab",
+      "commitDate": "2026-09-28",
+      "pinnedOn": "2026-10-06",
+      "why": "The source of the published crate predicate-credential-system 0.1.0 (tag predicate-credential-system-v0.1.0), so citations in the zero-knowledge work name a pinned commit. Main is 3 commits ahead with a dependency bump only (affinidi-did-resolver-cache-sdk 0.8.40), not yet released.",
+      "watch": [
+        "src/",
+        "Cargo.toml",
+        "docs/"
       ]
     }
   },

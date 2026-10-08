@@ -81,6 +81,22 @@ describe('tapping the wake notification', () => {
   })
 })
 
+// On Android Firebase reads a tap that launched the app from the current
+// activity's intent, which does not exist yet while modules load: called there,
+// the cold-start tap was dropped and the app opened on My Agent (232).
+describe('where App registers the tap', () => {
+  const app = fs.readFileSync(path.join(APP, 'App.tsx'), 'utf8')
+
+  it('is inside the App component, after it has mounted, not at module load', () => {
+    const component = app.indexOf('const App = () => {')
+    const call = app.indexOf('openApprovalsOnTap(Config.PUSH_GATEWAY_URL')
+    expect(component).toBeGreaterThan(-1)
+    expect(call).toBeGreaterThan(component)
+    expect(app.slice(component, call)).toMatch(/useEffect\(\(\) =>\s*$/)
+    expect(app.split('openApprovalsOnTap(').length - 1).toBe(1)
+  })
+})
+
 // On iOS the gateway's wake goes straight to APNs, so Firebase messaging never
 // reports its tap; the app's own notification delegate does (AppDelegate.mm).
 // It is native code no jest test runs, so this pins the two values it shares

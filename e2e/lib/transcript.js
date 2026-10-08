@@ -19,7 +19,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const artifacts = path.join(here, "..", "artifacts");
+// The gate runner gives each leg its own E2E_RUN_DIR (runDir.js); otherwise e2e/artifacts, as before.
+const artifacts = process.env.E2E_RUN_DIR || path.join(here, "..", "artifacts");
 
 export let transcriptPath;
 
@@ -48,7 +49,9 @@ if (process.env.E2E_NO_TRANSCRIPT !== "1") {
     }
 
     // Relative, because that is what a reader pastes back into a command.
-    writeLine(`[e2e] transcript: artifacts/${path.basename(transcriptPath)}`);
+    writeLine(
+      `[e2e] transcript: ${process.env.E2E_RUN_DIR ? transcriptPath : `artifacts/${path.basename(transcriptPath)}`}`
+    );
   } catch {
     // No artifacts directory, a read-only checkout: run without a transcript
     // rather than refusing to run at all.

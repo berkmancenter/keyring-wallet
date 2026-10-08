@@ -35,6 +35,23 @@ export class PushGatewayRefusal extends Error {
   }
 }
 
+/**
+ * The gateway refused because this push token already has as many handles as
+ * it keeps (GATEWAY_MAX_HANDLES_PER_TOKEN, 4 by default): no new agent can be
+ * given a wake channel until old handles lapse (an hour after they are
+ * unprovisioned) or the token changes.
+ */
+export function isHandleLimitRefusal(error: unknown): boolean {
+  // vti-push-gateway e542a9d7: `taskFailed`, "task failed: too many handles
+  // for this push token" (store.rs:129, api.rs:388-398). `taskFailed` alone
+  // also covers a platform with no sender and the gateway's other limits.
+  return (
+    error instanceof PushGatewayRefusal &&
+    error.code === 'taskFailed' &&
+    /too many handles for this push token/i.test(error.message)
+  )
+}
+
 type Fetch = (
   input: string,
   init: { method: string; headers: Record<string, string>; body: string }

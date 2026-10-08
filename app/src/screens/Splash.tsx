@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import KeyRingLogoWhite from '@assets/img/Keyring_Logo_White.svg'
 import { BCState } from '@/store'
+import { initFailureShown, initFailureWords } from '@/utils/initFailure'
 import { reportProblem } from '@/utils/logger'
 
 const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
@@ -38,12 +39,16 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
   const gradientColors = GradientTheme?.headerGradient?.colors ?? ['#2E4953', '#622C62', '#6E121D']
   const gradientLocations = GradientTheme?.headerGradient?.locations ?? [0.00962, 0.50962, 1]
 
+  // What the card says: plain words when the message service did not answer (IN-75).
+  const failureWords = useMemo(() => initFailureWords(initError?.cause ?? initError), [initError])
+
   const report = useCallback(() => {
     if (initError) {
-      reportProblem(initError)
+      // The report says what the card said, not the error's own description.
+      reportProblem(initError, initFailureShown(failureWords, t))
     }
     setReported(true)
-  }, [initError])
+  }, [initError, failureWords, t])
 
   const steps: string[] = useMemo(
     () => [
@@ -192,9 +197,10 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
             <View style={styles.errorBoxContainer}>
               <InfoBox
                 notificationType={InfoBoxType.Error}
-                title={t('Error.Title2026')}
-                description={t('Error.Message2026')}
-                message={initError?.message || t('Error.Unknown')}
+                title={t(failureWords.title)}
+                description={t(failureWords.description)}
+                // The error's own text stays in the problem report when the card has plain words for it.
+                message={failureWords.showRawText ? initError?.message || t('Error.Unknown') : undefined}
                 onCallToActionLabel={t('Init.Retry')}
                 onCallToActionPressed={handleErrorCallToActionPressed}
                 secondaryCallToActionTitle={reported ? t('Error.Reported') : t('Error.ReportThisProblem')}

@@ -34,7 +34,15 @@ test("finds each card's button once, on either platform's source", () => {
     '<node resource-id="com.ariesbifold:id/AgentCommunityPrimary_abc-1r9wi7g" text="Continue your vetting"/>';
   assert.deepEqual(cardPrimaryIds(ios), ["AgentCommunityPrimary_keyring-test-vtc-0gfh0vg"]);
   assert.deepEqual(cardPrimaryIds(android), ["AgentCommunityPrimary_abc-1r9wi7g"]);
-  assert.deepEqual(cardPrimaryIds('<node resource-id="AgentCommunityCard_x"/>'), []);
+  // A card whose button is below the fold (left out of Android's page source)
+  // names its button from the card's handle, for the caller to scroll to (54bfbaf).
+  assert.deepEqual(cardPrimaryIds('<node resource-id="AgentCommunityCard_x"/>'), ["AgentCommunityPrimary_x"]);
+  // A card whose button is in the source is named once, not twice.
+  assert.deepEqual(
+    cardPrimaryIds('<node resource-id="AgentCommunityCard_x"/><node resource-id="AgentCommunityPrimary_x"/>'),
+    ["AgentCommunityPrimary_x"]
+  );
+  assert.deepEqual(cardPrimaryIds('<node resource-id="AgentCommunityHeader_x"/>'), []);
 });
 
 test("only the desk and continuing a vetting are doors into Vetting", () => {

@@ -4,10 +4,11 @@ import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
+import { runPath } from "./runDir.js";
 
 // The host port this worktree's Metro serves on; a second worktree runs its
 // own on another port (Android reaches it via debug_http_host, see below).
@@ -103,8 +104,7 @@ export async function ensureAppium() {
       );
     }
   }
-  mkdirSync("artifacts", { recursive: true });
-  const logFile = "artifacts/appium.log";
+  const logFile = runPath("appium.log");
   console.log(`[e2e] starting appium on :${APPIUM_PORT} (log: ${logFile})`);
   const log = createWriteStream(logFile, { flags: "w" });
   appiumProc = spawn(
@@ -519,9 +519,37 @@ export async function tapElement(driver, el) {
   return el;
 }
 
+/**
+ * Swipe until the element ends above the tab bar, when a tab bar is on screen. A tap at an element
+ * that exists below the fold (iOS reports it) or ends behind the bar lands on the bar instead: the
+ * 236 gate's vetter tapped the ticket's Details toggle that way and ended on the Wallet tab.
+ * Returns whether it is clear; true when there is no tab bar to clear.
+ */
+export async function liftAboveTabBar(driver, key, tries = 4, { log = false } = {}) {
+  const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
+  const tab = await box(byTestId(driver, "MyAgent")).catch(() => undefined);
+  if (!tab) return true;
+  for (let i = 0; i <= tries; i++) {
+    const r = await box(byTestId(driver, key)).catch(() => undefined);
+    if (!r) return false;
+    // With log: where it is after each swipe, so a page that does not move shows as the same y.
+    if (log) console.log(`[e2e] lift ${key}: try ${i}, y=${Math.round(r.y)}..${Math.round(r.y + r.height)}, tab bar at y=${Math.round(tab.y)}`);
+    if (r.y + r.height <= tab.y - 8 && r.y >= 0) return true;
+    if (i === tries) break;
+    const { width, height } = await driver.getWindowSize();
+    const x = Math.floor(width / 2);
+    await driver.action("pointer").move({ x, y: Math.floor(height * 0.65) }).down().pause(80).move({ x, y: Math.floor(height * 0.35), duration: 400 }).up().perform();
+    await sleep(700);
+  }
+  return false;
+}
+
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
+  // Not a refusal: a sheet's button over the tab bar is tappable where it is. Said, so a tap that lands
+  // on a tab instead shows in the log.
+  if (!(await liftAboveTabBar(driver, key))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
   const cx = Math.floor(x + width / 2);
@@ -720,18 +748,15 @@ function fileSafeDeviceTag(driver) {
 
 export async function dumpSource(driver, label) {
   const src = await driver.getPageSource();
-  const { writeFileSync, mkdirSync } = await import("node:fs");
-  mkdirSync("artifacts", { recursive: true });
-  const file = `artifacts/${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.xml`;
+  const { writeFileSync } = await import("node:fs");
+  const file = runPath(`${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.xml`);
   writeFileSync(file, src);
   console.log(`[e2e] page source dumped: ${file}`);
   return file;
 }
 
 export async function screenshot(driver, label) {
-  const { mkdirSync } = await import("node:fs");
-  mkdirSync("artifacts", { recursive: true });
-  const file = `artifacts/${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.png`;
+  const file = runPath(`${label}-${fileSafeDeviceTag(driver)}-${Date.now()}.png`);
   await driver.saveScreenshot(file);
   console.log(`[e2e] screenshot: ${file}`);
   return file;

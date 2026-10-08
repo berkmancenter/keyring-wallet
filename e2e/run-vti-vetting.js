@@ -27,6 +27,8 @@ import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
+import { capturePersonaDid } from "./lib/personaDid.js";
+import { communityCardKey } from "./lib/testIdKeys.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -51,6 +53,14 @@ const platforms = (process.env.PLATFORMS || "android,ios").split(",");
 const REFUSAL = process.env.E2E_REFUSAL || "";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
+/** Run the shell command an E2E_* hook variable names, if set; it must exit 0. */
+function hook(name) {
+  const cmd = process.env[name];
+  if (!cmd) return;
+  console.log(`[e2e] ${name}: ${cmd}`);
+  execFileSync("/bin/bash", ["-c", cmd], { stdio: "inherit", timeout: 600000 });
+}
+
 /** One vtc-admin call, as the lab's community administrator; returns its JSON. */
 function admin(...args) {
   const env = Object.fromEntries(
@@ -366,7 +376,11 @@ try {
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");
     await checkVettingStep(vetter, "desk, ticket issued");
-    await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
+    // APPLICANT_NO_RESET=1: the person comes as they are (e.g. removed by the
+    // community, still holding its card) — no Leave first, so the Join screen
+    // shows what such a person sees.
+    if (process.env.APPLICANT_NO_RESET === "1") console.log("[e2e] applicant reset skipped (APPLICANT_NO_RESET): the wallet comes as it is");
+    else await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
     await roles.applicant.start(
       applicant,
       {
@@ -381,8 +395,10 @@ try {
     await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
     await roles.applicant.awaitAccepted(applicant, {}, o);
     await screenshot(applicant, "vetting-02-accepted");
+    await capturePersonaDid(applicant, "VettingRequestMine", "kk-applicant-request-card");
     await checkVettingStep(applicant, "applicant, request accepted");
     await roles.vetter.awaitRequest(vetter, {}, o);
+    await capturePersonaDid(vetter, "VettingDeskApplicant", "kk-vetter-desk");
     await checkVettingStep(vetter, "desk, a request waiting");
     const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
     const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
@@ -407,15 +423,68 @@ try {
     // The applicant waits for the statement; away and back, the step stays.
     if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
+    await capturePersonaDid(vetter, "VettingCheckApplicant", "kk-vetter-step4");
+    // A gate leg that changes the world around the attest — the Farm 0.47
+    // gate's (c) makes the community unreachable for it, so the desk must
+    // choose the statement shape by the vetter's own grant — runs its own
+    // command on either side. Each must exit 0.
+    hook("E2E_BEFORE_ATTEST");
     await roles.vetter.attest(vetter, o);
     await screenshot(vetter, "vetting-06-attested");
     await checkVettingStep(vetter, "desk, statement issued");
+    hook("E2E_AFTER_ATTEST");
     await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
     await screenshot(applicant, "vetting-07-checklist");
     await checkVettingStep(applicant, "applicant, ready to apply");
     const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
+    if (process.env.EXPECT_APPLY === "review") {
+      // A community on join 0.3 whose vetting criterion is `review`: meeting
+      // it refers the application to an administrator. The screen must say
+      // so and not "member"; this runner then approves it as the
+      // administrator, and the applicant must end as a member at the
+      // community and on the screen.
+      await screenshot(applicant, "vetting-08-referred");
+      if (outcome !== "pending") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not that an administrator will review`);
+      const referred = await roles.textOf(applicant, "VettingSubmissionState").catch(() => "");
+      console.log(`[e2e] ${applicant.e2ePlatform}: after Apply — "${referred.replace(/\s+/g, " ")}"`);
+      const pending = (admin("join-list", "pending").items ?? []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      const request = pending[0];
+      if (!request) throw new Error("the community lists no pending join request to approve");
+      if ((admin("members").items ?? []).some((m) => m.did === request.applicantDid)) throw new Error("the applicant is a member before any approval");
+      console.log(`[e2e] community: request ${request.id} pending, applicant …${String(request.applicantDid).slice(-22)}`);
+      const approvedAt = Date.now();
+      admin("join-decide", request.id, "approved");
+      console.log("[e2e] the administrator approved it");
+      let screen = "";
+      for (const until = Date.now() + 120000; Date.now() < until && !screen; await sleep(4000)) {
+        if ((await roles.stepIdOf(applicant, "applicant").catch(() => "")) === "member") screen = "the vetting screen";
+      }
+      if (!screen) {
+        // The vetting screen may not ask again by itself: where the person stands is on Join.
+        const did = process.env.KEYRING_COMMUNITY_DID;
+        await roles.openLinkViaOs(applicant, `keyring://vti/community?d=${encodeURIComponent(did)}&n=${encodeURIComponent(process.env.KEYRING_COMMUNITY_NAME || "community")}`);
+        for (const until = Date.now() + 90000; Date.now() < until && !screen; await sleep(4000)) {
+          if (await existsTestId(applicant, "JoinCheckAgain", 1000)) await tapTestIdByCoordinates(applicant, "JoinCheckAgain").catch(() => undefined);
+          const standing = await roles.textOf(applicant, "JoinStandingText").catch(() => "");
+          if (/member of/i.test(standing)) screen = `Join ("${standing.replace(/\s+/g, " ")}")`;
+        }
+      }
+      await screenshot(applicant, "vetting-09-member-after-approval");
+      const member = (admin("members").items ?? []).find((m) => m.did === request.applicantDid);
+      console.log(`[e2e] after the approval: community member=${Boolean(member)}; screen says member on ${screen || "NOTHING"} (${((Date.now() - approvedAt) / 1000).toFixed(0)} s)`);
+      if (!member) throw new Error("the community does not list the applicant as a member after the approval");
+      if (!screen) throw new Error("the phone does not show membership after the approval");
+      printSuccess("vti-vetting — vetted, referred to an administrator, approved, member");
+      process.exitCode = 0;
+      throw Object.assign(new Error("done"), { done: true });
+    }
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
+    if (process.env.KEYRING_COMMUNITY_DID) {
+      await byTestId(applicant, "MyAgent").click().catch(() => undefined);
+      await sleep(2000);
+      await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card");
+    }
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
     if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
     printSuccess("vti-vetting");
@@ -546,9 +615,26 @@ try {
     if (!communityDid) throw new Error("APPLICANT_DOOR=link needs KEYRING_COMMUNITY_DID");
     const name = process.env.KEYRING_COMMUNITY_NAME || "keyring-test";
     await pasteLinkFromHome(applicant, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(name)}`);
-    await waitForTestId(applicant, "JoinAsks", 60000);
-    const asks = await textOf(applicant, "JoinAsks").catch(() => "");
+    // A community with one way in shows what it asks (JoinAsks); one with
+    // several shows its ways in (JoinWays). Start is the same button.
+    let card = "";
+    for (const until = Date.now() + 60000; !card && Date.now() < until; ) {
+      if (await existsTestId(applicant, "JoinAsks", 1500)) card = "JoinAsks";
+      else if (await existsTestId(applicant, "JoinWays", 1500)) card = "JoinWays";
+    }
+    if (!card) throw new Error(`${applicant.e2ePlatform}: neither JoinAsks nor JoinWays on the community's Join screen`);
+    const asks = card === "JoinAsks" ? await textOf(applicant, "JoinAsks").catch(() => "") : "ways in (JoinWays)";
     console.log(`[e2e] ${applicant.e2ePlatform}: the community asks — ${asks.replace(/\s+/g, " ").slice(0, 160)}`);
+    // What the "what it asks" screen is made of, for a before/after comparison
+    // of the screen itself: which of its parts are there, and a picture.
+    if (process.env.JOIN_SCREEN_RECORD) {
+      const parts = {};
+      for (const id of ["JoinAsks", "JoinStart", "JoinNoInvitationBypass", "JoinWays", "JoinWaysTitle"]) parts[id] = await existsTestId(applicant, id, 1500);
+      const start = parts.JoinStart ? await textOf(applicant, "JoinStart").catch(() => "") : "";
+      console.log(`[e2e] join screen parts ${JSON.stringify(parts)} start="${start}" asks=${JSON.stringify(asks.replace(/\s+/g, " "))}`);
+      await screenshot(applicant, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+      await dumpSource(applicant, `join-asks-${process.env.JOIN_SCREEN_RECORD}`);
+    }
     await (await waitForTestId(applicant, "JoinStart", 30000)).click();
     await waitForTestId(applicant, "JoinMakeIdentity", 30000);
     await tapTestIdByCoordinates(applicant, "JoinAsContinue");

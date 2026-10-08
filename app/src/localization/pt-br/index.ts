@@ -72,6 +72,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Crie conexões confiáveis",
     "ConnectionsParagraph": "Construa relacionamentos diretos e mútuos com pessoas que você conhece. Ao contrário de seguir nas redes sociais, ambas as partes confirmam a conexão.\n\nSuas conexões ficam no seu dispositivo, sob seu controle — não gerenciadas por nenhuma plataforma.",
+    // Page 3b: Agent
+    "AgentHeading": "Seu próprio agente",
+    "AgentParagraph": "Nada de agente secreto: este trabalha para você online, mesmo com o telefone desligado. Ele guarda suas identidades e seus cartões, e pergunta a você antes de fazer qualquer coisa importante.",
     // Page 4: Security
     "SecurityHeading": "Proteja sua carteira",
     "SecurityParagraph": "Sua carteira é protegida por um PIN que você cria. Para conveniência, você também pode habilitar Face ID ou Touch ID para desbloquear sua carteira rapidamente e verificar ações como criar novas conexões.\n\nSeus dados biométricos nunca saem do seu dispositivo — são usados apenas para desbloquear o acesso e confirmar suas ações. Você pode habilitar ou desabilitar a qualquer momento nas Configurações.",
@@ -214,6 +217,8 @@ const translation = {
     "Tip14": "Even revoked or expired credentials can be usable if the organisation doesn't request for it (PT-BR)",
   },
   "Init": {
+    "MessageServiceTitle": "O Keyring não conseguiu falar com o seu serviço de mensagens",
+    "MessageServiceBody": "Sua carteira e tudo o que há nela estão bem. O serviço que transporta as mensagens do Keyring não respondeu. Verifique se este telefone está online e tente de novo. Se estiver, o serviço pode ficar fora do ar por um tempo.",
     "Retry": "Retry (PT-BR)",
     "Starting": "Starting... (PT-BR)",
     "FetchingPreferences": "Fetching preferences... (PT-BR)",
@@ -226,6 +231,8 @@ const translation = {
     "GiveFeedback": "Give Feedback (PT-BR)",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "As notificações ainda não chegam a este agente",
+    "HandleLimitBody": "Este telefone está registrado no serviço de notificações para tantos agentes quanto ele permite, então as notificações deste agente podem não chegar. O Keyring continua funcionando, e as solicitações continuam esperando em Solicitações.",
     "NotificationsOffTitle": "As notificações para o Keyring estão desativadas",
   },
   "AddCredentialSlider": {

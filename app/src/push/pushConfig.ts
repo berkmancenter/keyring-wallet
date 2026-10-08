@@ -9,11 +9,13 @@
  *
  * - `status` / `setup`: the notification permission, read or requested.
  * - `toggle(true)`: make this phone wakeable by its agent (`enablePushWake`).
- * - `toggle(false)`: stop its agent waking it (`device/set-wake` with no handle).
+ * - `toggle(false)`: stop its agent waking it (`device/set-wake` with no handle),
+ *   and withdraw this install's token from the platform push service.
  */
 import type { Config } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 
+import { isHandleLimitRefusal } from './pushGateway'
 import type { PushWakeOutcome } from './pushWake'
 
 export type PushNotificationsConfig = NonNullable<Config['enablePushNotifications']>
@@ -25,7 +27,11 @@ export interface PushConfigDeps {
   requestPermission(): Promise<PermissionState>
   enableWake(agent: Agent): Promise<PushWakeOutcome>
   clearWake(agent: Agent): Promise<unknown>
+  /** Withdraw this install's token from the platform push service. */
+  stopPlatformPush(): Promise<void>
   log(message: string, data?: Record<string, unknown>): void
+  /** The gateway keeps no more handles for this phone's token: say so to the person. */
+  onHandleLimit?(): void
 }
 
 /** The configuration, or undefined when the build names no push gateway. */
@@ -37,6 +43,7 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
     toggle: async (state: boolean, agent: Agent) => {
       // A refusal from the gateway or the agent is logged, never thrown into
       // the Settings screen: push is optional and the app works without it.
+      let held = false
       try {
         if (state) {
           const outcome = await deps.enableWake(agent)
@@ -46,8 +53,26 @@ export function pushNotificationsConfig(deps: PushConfigDeps): PushNotifications
           deps.log('push wake: cleared')
         }
       } catch (e) {
+        held = heldForApproval(e)
         deps.log('push wake: failed', { enable: state, error: e instanceof Error ? e.message : String(e) })
+        if (isHandleLimitRefusal(e)) deps.onHandleLimit?.()
+      }
+      // Turned off: the platform push service forgets this install too, even
+      // if the agent could not be told (it may be unreachable or unlinked).
+      // Not when an approval rule held the change: the agent kept the wake
+      // channel, bifold puts the switch back on, and the token must still work.
+      if (!state && !held) {
+        try {
+          await deps.stopPlatformPush()
+        } catch (e) {
+          deps.log('push platform: stop failed', { error: e instanceof Error ? e.message : String(e) })
+        }
       }
     },
   }
+}
+
+/** The agent held set-wake for an approval (bifold's device refusal `awaitingApproval`). */
+function heldForApproval(error: unknown): boolean {
+  return (error as { reason?: unknown } | null)?.reason === 'awaitingApproval'
 }

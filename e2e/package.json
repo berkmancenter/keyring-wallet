@@ -10,6 +10,7 @@
     "check:vrc:witnessed": "node check-vrc-credentials.mjs --expect v5 --require-storage StrongBox,TEE,SecureEnclave",
     "check:vrc:strict": "node check-vrc-credentials.mjs --expect v5 --require-storage StrongBox,TEE,SecureEnclave --strict-markers",
     "preflight:real-devices": "node preflight-real-devices.mjs",
+    "test:lib": "node --test lib/*.test.mjs",
     "vrc-exchange": "node run-vrc-exchange.js",
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
     "vrc-exchange:tsp": "node run-vrc-exchange-tsp.js",
