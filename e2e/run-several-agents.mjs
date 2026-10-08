@@ -537,7 +537,8 @@ try {
     }
     await shot(d, "agents-r8-scan-existing");
     if (await existsTestId(d, "Try Again", 1500)) await tapTestId(d, "Try Again", 5000).catch(() => undefined);
-    await d.back().catch(() => undefined);
+    // Out of the scanner and the link screen behind it, back to the tabs (239 rerun: one Back left no tab bar).
+    for (let i = 0; i < 4 && !(await existsTestId(d, "MyAgent", 2000)); i++) await d.back().catch(() => undefined);
     row("add-existing-scan-refused", /already has that agent/i.test(scanSaid), scanSaid ? `"${scanSaid}"` : "no \"already has that agent\" words after pasting B's address");
     await myAgent(d);
     if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
