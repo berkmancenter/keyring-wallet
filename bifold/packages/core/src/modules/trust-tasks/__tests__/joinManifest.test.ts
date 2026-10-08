@@ -6,12 +6,21 @@
  * vtc-service 0.49.0 published (see fixtures/join-0.3/README.md). So the
  * digest and the reading are checked against values Keyring did not compute.
  */
-import { criterionDigest, joinAsks, readManifest, type VtiCriterion, type VtiManifest } from '../module/joinManifest'
+import {
+  criterionDigest,
+  HIDDEN_VETTING_EXT,
+  joinAsks,
+  readManifest,
+  type VtiCriterion,
+  type VtiManifest,
+} from '../module/joinManifest'
+import { digestMultibase } from '@bifold/trust-tasks'
 
 import invalidExamples from './fixtures/join-0.3/manifest-invalid-examples.json'
 import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
 import vtc049 from './fixtures/join-0.3/vtc-0.49.0-answers.json'
 import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
+import firstVtc from './fixtures/join-0.3/first-vtc-hidden-vetting-2026-10-08.json'
 
 const example = (title: string): VtiManifest => {
   const found = specExamples.find((e) => e.title.startsWith(title))
@@ -38,8 +47,16 @@ describe('requirementsDigest', () => {
     (e.document.payload.criteria as VtiCriterion[]).map((c) => [`${e.title} — ${c.id}`, c] as const)
   )
 
+  // The specification's hidden-vetting example digests the whole criterion,
+  // operational parameters included; VTI leaves those out since #1977. Either
+  // is accepted (IN-149), so each printed value must be one of the two.
+  const eitherRule = (criterion: VtiCriterion) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { requirementsDigest: _d, ...whole } = criterion
+    return [criterionDigest(criterion), digestMultibase(whole)]
+  }
   it.each(specCriteria)('recomputes to the value the specification prints: %s', (_name, criterion) => {
-    expect(criterionDigest(criterion)).toBe(criterion.requirementsDigest)
+    expect(eitherRule(criterion)).toContain(criterion.requirementsDigest)
   })
 
   it.each(vtiDefaults.criteria.map((c) => [c.id, c] as const))(
@@ -218,5 +235,51 @@ describe('the ways in, at manifest/0.2', () => {
   it('does not read an empty list as "not accepting": 0.2 never said what it meant', () => {
     expect(joinAsks(readManifest({ criteria: [] }, '0.2')).accepting).toBe(true)
     expect(joinAsks({ criteria: [] }).wire).toBe('0.2')
+  })
+})
+
+// IN-149: a community that runs hidden vetting leaves its operational
+// parameters out of the digest (VTI #1977). Keyring digested them, so the
+// vetting way of every such community read as changed and was hidden.
+describe('requirementsDigest of a community that runs hidden vetting', () => {
+  const first = readManifest(firstVtc.manifest03.payload as Partial<VtiManifest>, '0.3')
+  const vetted = first.criteria.find((c) => c.id === 'vetted-member') as VtiCriterion
+  const hidden = (c: VtiCriterion) =>
+    (c.vetting as unknown as { ext: Record<string, Record<string, unknown>> }).ext[HIDDEN_VETTING_EXT]
+  const copy = (c: VtiCriterion): VtiCriterion => JSON.parse(JSON.stringify(c))
+
+  it.each(first.criteria.map((c) => [c.id, c] as const))(
+    'recomputes to the value The First VTC published: %s',
+    (_id, criterion) => {
+      expect(criterionDigest(criterion)).toBe(criterion.requirementsDigest)
+    }
+  )
+
+  it('its vetting way is usable, not taken for a changed one', () => {
+    const way = joinAsks(first).ways.find((w) => w.id === 'vetted-member')
+    expect(way).toMatchObject({ usable: true })
+    expect(way?.unusableBecause).toBeUndefined()
+  })
+
+  it('a new draw rate or live period leaves the digest as it was', () => {
+    const changed = copy(vetted)
+    Object.assign(hidden(changed), { dripPerTick: 5, tokenLabels: ['token/2026-11'], vetterLabels: ['vetter/2026-11'] })
+    expect(criterionDigest(changed)).toBe(vetted.requirementsDigest)
+  })
+
+  it('a new key is a change: the way is not offered under keys it was not shown with', () => {
+    const rekeyed = copy(vetted)
+    hidden(rekeyed).tokenKey = 'zDifferent'
+    const manifest = { ...first, criteria: [rekeyed] }
+    expect(joinAsks(manifest).ways[0]).toMatchObject({ usable: false, unusableBecause: 'digestMismatch' })
+  })
+
+  it('a community on an earlier VTI, which digested the whole criterion, still matches', () => {
+    const before = copy(vetted)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { requirementsDigest: _d, ...whole } = before
+    before.requirementsDigest = digestMultibase(whole)
+    const manifest = { ...first, criteria: [before] }
+    expect(joinAsks(manifest).ways[0]).toMatchObject({ usable: true })
   })
 })
