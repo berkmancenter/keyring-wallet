@@ -35,8 +35,8 @@
         }
       },
       {
-        "flow": "login",
-        "typeBase": "https://registry.trustoverip.org/dtg/flow/auth/oob/describe",
+        "flow": "community-sign-in",
+        "typeBase": "https://registry.trustoverip.org/dtg/flow/community-sign-in",
         "expRequired": true,
         "fromMustBeAllowListed": false,
         "supported": {
@@ -136,7 +136,7 @@
     {
       "id": "valid-login-encoded",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fauth%2Foob%2Fdescribe%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fcommunity-sign-in%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
@@ -144,9 +144,9 @@
         "from": "did:webvh:QmCommScid:portal.community.example",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791460920,
-        "flow": "login",
+        "flow": "community-sign-in",
         "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/auth/oob/describe/0.1",
+          "uri": "https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
           "major": 0,
           "minor": 1
         },
@@ -156,7 +156,7 @@
     {
       "id": "valid-login-paste",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fauth%2Foob%2Fdescribe%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460920&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fcommunity-sign-in%2F0.1",
       "channel": "paste",
       "expect": {
         "outcome": "accept",
@@ -164,9 +164,9 @@
         "from": "did:webvh:QmCommScid:portal.community.example",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791460920,
-        "flow": "login",
+        "flow": "community-sign-in",
         "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/auth/oob/describe/0.1",
+          "uri": "https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
           "major": 0,
           "minor": 1
         },
@@ -288,7 +288,7 @@
     {
       "id": "valid-exp-inside-skew",
       "group": "valid",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460501&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fauth%2Foob%2Fdescribe%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460501&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fcommunity-sign-in%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "accept",
@@ -296,9 +296,9 @@
         "from": "did:webvh:QmCommScid:portal.community.example",
         "id": "q3Vn7Zk2Xo9Rt1LwPb4HdA",
         "exp": 1791460501,
-        "flow": "login",
+        "flow": "community-sign-in",
         "task": {
-          "uri": "https://registry.trustoverip.org/dtg/flow/auth/oob/describe/0.1",
+          "uri": "https://registry.trustoverip.org/dtg/flow/community-sign-in/0.1",
           "major": 0,
           "minor": 1
         },
@@ -744,7 +744,7 @@
     {
       "id": "expired-at-skew",
       "group": "exp",
-      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460500&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fauth%2Foob%2Fdescribe%2F0.1",
+      "input": "https://link.trustoverip.org/t#_from=did%3Awebvh%3AQmCommScid%3Aportal.community.example&_id=q3Vn7Zk2Xo9Rt1LwPb4HdA&_exp=1791460500&_type=https%3A%2F%2Fregistry.trustoverip.org%2Fdtg%2Fflow%2Fcommunity-sign-in%2F0.1",
       "channel": "scan",
       "expect": {
         "outcome": "reject",
