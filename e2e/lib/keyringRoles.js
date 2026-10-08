@@ -913,8 +913,16 @@ export async function readTicketLink(d) {
     const isOpen = async () =>
       (await byTestId(d, "VettingTicketLink").isExisting().catch(() => false)) ||
       /hide/i.test(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => ""));
-    for (let i = 0; i < 2 && !(await isOpen()); i++) {
-      await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
+    for (let i = 0; i < 3 && !(await isOpen()); i++) {
+      if (i === 0) await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
+      else {
+        // XCUITest's element click sometimes does not fire this Pressable (239 final pin: two clicks, label still
+        // "Details", while the desk is unchanged since a passing run): press its centre with a pointer instead.
+        const el = byTestId(d, "VettingTicketLinkDetailsToggle");
+        const { x, y } = await el.getLocation();
+        const { width, height } = await el.getSize();
+        await d.action("pointer").move({ x: Math.floor(x + Math.min(width, 120) / 2), y: Math.floor(y + height / 2) }).down().pause(120).up().perform();
+      }
       for (let w = 0; w < 5 && !(await isOpen()); w++) await sleep(1000);
       console.log(`[e2e] ticket Details tap ${i + 1}: label "${(await textOf(d, "VettingTicketLinkDetailsToggle").catch(() => "?")).trim()}"`);
       await screenshot(d, `ticket-details-tap-${i + 1}`).catch(() => undefined);
