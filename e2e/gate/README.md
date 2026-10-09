@@ -21,7 +21,8 @@ Each part below removes one of those.
 | `gate.sh` | The runner: `gate.sh <command> [options]` |
 | `legs/<name>.sh` | One leg each: `kk` (K↔K and id305), `p1` (P1 and approvals), `testreq`, `agents`, `waiting`, `smoke-ios`, `smoke-android`, `devices` |
 | `lib.sh` | Shared shell: emulator and simulator slots, runner-key cleanup, the build cache, row parsing |
-| `watch.sh` | The auto-start poller, run by launchd (`gate.plist.example`) |
+| `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
+| `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
 `steady.js`, `pnm.js` and `runDir.js`.
@@ -55,6 +56,7 @@ e2e/gate/gate.sh run --pin <sha> --legs kk,p1      # some legs
 e2e/gate/gate.sh rerun <run-id> --only-failed      # only the rows that FAILed or did not run, same builds
 e2e/gate/gate.sh dry --golden                      # these drivers against the shipped build, before a candidate
 e2e/gate/gate.sh watch --pr <n>                    # start `run` when that pin PR merges and its builds finish
+e2e/gate/gate.sh watch --main                      # continuous gating: a run for every new green push build of main
 e2e/gate/gate.sh report <run-id>                   # the run's rows, per leg, with wall-clock
 ```
 
@@ -110,3 +112,34 @@ each with its own `E2E_RUN_DIR` and Appium port. Below that, they run one after 
 Every leg records when it started. On exit it removes the phone keys it made on each runner since then, the
 approval rules and approver sets it set, and its test members of the community. The report says what it
 removed and what it found left over.
+
+## Continuous gating on main
+
+`gate.sh watch --main` runs for ever: every five minutes (`GATE_WATCH_INTERVAL`) it asks `green.mjs` for the newest
+main commit with a green push build. If no gate run exists for that commit, it requests the commit's push-on
+Android build once, waits up to an hour for it, and runs the gate. A commit that was gated, green or red, is not
+gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`).
+
+- **Not while the Mac is busy.** The loop skips a cycle while another gate holds a live lock, while an xcodebuild,
+  cargo, docker build or emulator process is running (executable names), while a Gradle build runs (its wrapper
+  client; idle Gradle daemons, which stay up for hours, do not count),
+  or while any simulator is booted (Simulator.app being open is not a signal).
+- **One push-on build per gated commit.** Each new green main commit gets one Android push-on dispatch (about 40
+  minutes of a free public-repository runner), so the push legs have a build; `watch-requested-<sha8>` records it.
+- **Its own checkout.** The watcher runs from a checkout nobody edits (`~/.keyring-fleet/gate/wt-main`, on main),
+  fast-forwarded to `origin/main` before each run when it is clean; a lane's working checkout never feeds an auto-run.
+  Like any gate worktree it needs `e2e/node_modules` (`npm ci` in `e2e/`) and a root `node_modules` link.
+- **One gate at a time.** `run` and `rerun` take `~/.keyring-fleet/gate/run.lock.d` (the running shell's pid inside)
+  and wait while another gate holds it; a lock whose owner is gone is taken over by an atomic rename, and a lock
+  with no pid yet counts as live for its first minute. `hold-start` still pauses a run for another
+  lane's device build.
+- **Green means green.** `green.mjs` accepts a run only when its head commit is the one asked about, its status is
+  `completed` and its conclusion is exactly `success`. An empty conclusion is pending. Two hand-written watchers
+  read these wrong in one week (an empty check taken as done; a job name split on a space).
+- **Downloads retry** five times a minute apart; the 239 auto-start lost its gate to two transient download failures.
+- **Install:** fill in `gate-main.plist.example`, copy it to `~/Library/LaunchAgents/org.keyring.gate-watch-main.plist`
+  and `launchctl bootstrap gui/$(id -u) <that file>`. The Mac's owner decides; it is a lasting change. Stop with
+  `launchctl bootout gui/$(id -u)/org.keyring.gate-watch-main`. The log is `~/.keyring-fleet/gate/watch-main.log`.
+- **Keep the Mac awake.** A closed lid put the Mac to sleep for three hours in the middle of the 239 gate, and
+  `caffeinate` does not prevent lid-closed sleep. The owner runs once: `sudo pmset -a disablesleep 1` (and
+  `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.

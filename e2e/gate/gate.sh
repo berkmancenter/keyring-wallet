@@ -5,6 +5,7 @@
 #   gate.sh rerun <run-id> --only-failed                      the rows that failed or never ran, same builds
 #   gate.sh dry --golden [--legs a,b]                         the drivers on the shipped build ($GATE_HOME/golden)
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
+#   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
 . "$(dirname "$0")/lib.sh"
 
@@ -98,6 +99,7 @@ cmd_run() {
   esac; done
   [ -n "$pin" ] || usage
   gate_env; use_build "$pin"
+  run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -116,6 +118,7 @@ cmd_rerun() {
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
   gate_env; use_build "$pin"
+  run_lock
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   local leg rc s e names
@@ -138,9 +141,78 @@ cmd_dry() {
   cmd_run --pin "$golden" --kind dry "$@"
 }
 
+# One gate at a time on this Mac, whoever started it. The lock is a directory holding the owner's pid. The pid is
+# the shell that runs the gate (sh -c 'echo $PPID': in a subshell, $$ is still the parent's, and bash 3.2 has no
+# BASHPID), so a run killed hard leaves a dead owner, and a lock with a dead owner is taken over. The takeover is
+# an atomic rename, so two waiters cannot both remove it; a lock with no pid yet is live for its first minute.
+lock_live() {
+  local d=$1 p now m; p=$(cat "$d/pid" 2>/dev/null)
+  if [ -n "$p" ]; then kill -0 "$p" 2>/dev/null; return; fi
+  now=$(date +%s); m=$(stat -f %m "$d" 2>/dev/null || echo "$now"); [ $((now - m)) -lt 60 ]
+}
+run_lock() {
+  local d=$GATE_HOME/run.lock.d tag=$$.$RANDOM
+  while ! mkdir "$d" 2>/dev/null; do
+    if lock_live "$d"; then say "another gate is running (pid $(cat "$d/pid" 2>/dev/null || echo ?)); waiting"; sleep 60
+    elif mv "$d" "$d.stale.$tag" 2>/dev/null; then say "stale run lock (pid $(cat "$d.stale.$tag/pid" 2>/dev/null || echo ?)) taken over"; rm -rf "$d.stale.$tag"
+    else sleep 5; fi
+  done
+  # The running shell's pid, written by a child through a plain redirection. Not $(sh -c 'echo $PPID'): a command
+  # substitution forks first, so that pid is a shell that is already gone, and the lock would read as stale at once.
+  sh -c 'echo $PPID' > "$d/pid"
+  trap 'rm -rf "$GATE_HOME/run.lock.d"' EXIT
+}
+
+# The Mac is shared: a build, a test run, an emulator or a booted simulator that belongs to someone else means
+# "not now". Executable names, plus one fixed token for the Gradle wrapper client (never a pattern that could match a
+# waiter's own command line: concurrent waiters deadlocked that way on 10-08). Simulator.app being open is not a
+# signal; a booted simulator is.
+mac_busy() {
+  ps -axo comm= | awk '$0 ~ /(xcodebuild|cargo|rustc|docker-buildx|qemu-system|emulator)$/ {n++} END {exit !n}' && return 0
+  # A Gradle build: the wrapper client lives only while a build runs; idle daemons stay up for hours and do not count.
+  ps -axo args= | grep -q '[G]radleWrapperMain' && return 0
+  xcrun simctl list devices booted 2>/dev/null | grep -q '(Booted)'
+}
+
+# The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a
+# run. Anything else and the cycle is skipped, so a report never reads as a main gate when the harness was not main's.
+watch_checkout_ready() {
+  local b; b=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  [ "$b" = main ] || { say "checkout $REPO is on $b, not main: not running"; return 1; }
+  [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || { say "checkout $REPO has local changes: not running"; return 1; }
+  git -C "$REPO" fetch -q origin main && git -C "$REPO" merge -q --ff-only origin/main || { say "fast-forward of $REPO failed: not running"; return 1; }
+}
+
+cmd_watch_main() {
+  gate_env
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
+  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
+  while :; do
+    pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
+    if [ -n "$pair" ] && [ "$pair" != none ]; then
+      sha=${pair%% *}; run=${pair##* }
+      if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
+      elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      elif ! watch_checkout_ready; then :
+      else
+        say "new green main build ${sha:0:8} (run $run)"
+        req=$GATE_HOME/watch-requested-${sha:0:8}
+        if [ ! -f "$req" ]; then
+          if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
+          else say "push-on build not requested: push legs will be skipped"; fi
+        fi
+        for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60; done
+        ( cmd_run --pin "$sha" ) || say "gate for ${sha:0:8} ended with status $?"
+      fi
+    fi
+    sleep "$interval"
+  done
+}
+
 # Wait for the pin PR to merge, ask for a push-on Android build of the merge commit, wait for both builds, then run.
 # Runs in the foreground: start it with nohup (or the launchd plist), never as an agent tool's background job.
 cmd_watch() {
+  [ "${1:-}" = --main ] && { cmd_watch_main; return; }
   [ "${1:-}" = --pr ] && [ -n "${2:-}" ] || usage
   local pr=$2 st m i runs
   gate_env
