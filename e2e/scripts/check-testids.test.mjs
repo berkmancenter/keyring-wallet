@@ -1,10 +1,12 @@
 // node --test e2e/scripts/check-testids.test.mjs
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 
-import { checkReferences, extractReferences, isKnownKey, isKnownStem, knownIds, listDriverFiles, runCheck, tokenize } from './check-testids.mjs'
+import { checkReferences, coverageGaps, extractReferences, isKnownKey, isKnownStem, knownIds, listDriverFiles, runCheck, tokenize } from './check-testids.mjs'
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'check-testids')
 
@@ -125,6 +127,61 @@ test('raw com.ariesbifold:id/ strings: keys, stems before a substitution or a tr
   )
 })
 
+test('a substitution is lexed with the full rules: a quote inside a regex in `${...}` does not open a string', () => {
+  const src = [
+    'const cmd = `x \'${a.replace(/\'/g, "")}\'`;',
+    "tapTestId(d, 'After');",
+    'const url = `${s.replace(/["\']+/g, "")}/${b}`; // "quotes" inside a regex, then a comment',
+    'const nested = `outer ${cond ? `in ${x.replace(/`/g, "")}` : "y"} ${`${z}`}`;',
+    "existsTestId(d, 'Last');",
+  ].join('\n')
+  const tokens = tokenize(src)
+  assert.deepEqual(coverageGaps(src, tokens), [])
+  assert.deepEqual(
+    refsOf(src).map((r) => [r.value, r.line]),
+    [
+      ['After', 2],
+      ['Last', 5],
+    ]
+  )
+  // the substitution's tokens stay on the template, not in the stream
+  const first = tokens.find((t) => t.type === 'template')
+  assert.deepEqual(
+    first.inner.map((t) => t.type),
+    ['ident', 'punct', 'ident', 'punct', 'regex', 'punct', 'string', 'punct']
+  )
+})
+
+test('a helper call inside a template substitution is a reference', () => {
+  const src = [
+    'console.log(`got ${await textOf(d, "Known")}`);',
+    'log(`${(await existsTestId(d, "Deep")) ? `yes ${await textOf(d, `Row_${k}`)}` : "no"} ${d.$("~com.ariesbifold:id/Raw")}`);',
+  ].join('\n')
+  assert.deepEqual(
+    refsOf(src).map((r) => [r.kind, r.value, r.via, r.line]),
+    [
+      ['key', 'Known', 'textOf', 1],
+      ['key', 'Deep', 'existsTestId', 2],
+      ['stem', 'Row_', 'textOf', 2],
+      ['key', 'Raw', 'raw', 2],
+    ]
+  )
+})
+
+test('a source the tokens do not cover is refused: an unclosed template, or tokens stopping before the end', () => {
+  const open = ['const a = `never closed', 'tapTestId(d, "Unseen");', 'tapTestId(d, "AlsoUnseen");', '', ''].join('\n')
+  assert.deepEqual(coverageGaps(open, tokenize(open)), ['template literal opened at line 1 is never closed'])
+  assert.throws(() => extractReferences(open), /not fully tokenized: template literal opened at line 1/)
+  const comment = ['tapTestId(d, "Seen");', '/* an unclosed block comment', 'tapTestId(d, "Unseen");', '', '', '', 'tapTestId(d, "AlsoUnseen");'].join('\n')
+  assert.deepEqual(coverageGaps(comment, tokenize(comment)), ['tokens stop at line 1, the source goes on to line 7'])
+  assert.throws(() => extractReferences(comment), /not fully tokenized/)
+  // a short trailing comment, blank lines and an empty source are fine
+  const fine = ['tapTestId(d, "Seen");', '// the end', '', ''].join('\n')
+  assert.deepEqual(coverageGaps(fine, tokenize(fine)), [])
+  assert.deepEqual(coverageGaps('', tokenize('')), [])
+  assert.deepEqual(coverageGaps('\n\n', tokenize('\n\n')), [])
+})
+
 test('a helper definition is not a reference', () => {
   const src = ['export async function tapTestId(driver, key, timeout = 30000) {', '  const el = await waitForTestId(driver, key, timeout);', '}'].join('\n')
   assert.deepEqual(
@@ -189,4 +246,28 @@ test('fixture tree passes once the allowlist covers what is left (an explicit al
   })
   assert.equal(result.ok, true)
   assert.deepEqual(result.files, [])
+})
+
+test('a driver the tokenizer cannot cover fails with its reason, and the other drivers are still checked', () => {
+  // Built here, not committed: a driver with an unclosed template is not valid
+  // JavaScript, and CI parse-checks every .js file under e2e.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'check-testids-'))
+  try {
+    fs.mkdirSync(path.join(root, 'lib'))
+    fs.writeFileSync(path.join(root, 'lib', 'testids.json'), JSON.stringify({ keys: { Settings: [] }, stems: {}, raw: {} }))
+    fs.writeFileSync(path.join(root, 'run-broken.js'), ['// the template on line 2 is never closed, so line 3 is never seen', 'const banner = `opened', 'await tapTestId(d, "Gone");', ''].join('\n'))
+    fs.writeFileSync(path.join(root, 'run-fine.js'), 'await tapTestId(d, "Settings");\n')
+    const result = runCheck({ root })
+    assert.equal(result.ok, false)
+    assert.deepEqual(
+      result.files.map((f) => [f.file, f.error, f.unknown, f.invalid]),
+      [['run-broken.js', 'not fully tokenized: template literal opened at line 2 is never closed', [], []]]
+    )
+    assert.equal(result.totals.unreadable, 1)
+    assert.equal(result.totals.files, 2)
+    assert.equal(result.totals.checked, 1) // run-fine.js
+    assert.equal(result.totals.unknown, 0)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
 })

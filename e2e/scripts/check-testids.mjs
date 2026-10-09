@@ -26,6 +26,11 @@
  * such a key only ever matches an id built straight from a label (the
  * allowlist says which those are).
  *
+ * A file the tokenizer cannot cover to its end (a template literal never
+ * closed, tokens stopping well before the last line) fails the check: its
+ * references past that point were never seen, and "all known" must not be
+ * said of them.
+ *
  *   node e2e/scripts/check-testids.mjs          exit 1 and list unknown keys per file:line
  *   node e2e/scripts/check-testids.mjs --json   the same, as one JSON object
  *
@@ -65,24 +70,17 @@ const KEYWORDS_BEFORE_REGEX = new Set(['return', 'typeof', 'instanceof', 'in', '
  *   { type: 'ident' | 'number' | 'punct' | 'string' | 'template' | 'regex', value, line }
  * A template token carries `parts`: [{ text, sub }] in order, `sub` true when
  * a `${...}` follows that text, and `inner`: the tokens of its substitutions,
- * kept on the template (not in the stream, so an argument stays one token) so
- * a raw prefix string inside `${...}` is still seen. Comments are dropped.
+ * kept on the template (not in the stream, so an argument stays one token).
+ * A substitution is lexed with the same rules as the top level (strings,
+ * regexes, comments, nested templates), up to the `}` that closes it, so a
+ * quote inside a regex in `${...}` does not open a string. Comments are
+ * dropped. A template that reaches the end of the source without its closing
+ * backtick is marked `unterminated`.
  */
 export const tokenize = (src) => {
-  const tokens = []
   let i = 0
   let line = 1
   const n = src.length
-  const push = (type, value, extra) => tokens.push({ type, value, line, ...extra })
-  const lastSignificant = () => tokens[tokens.length - 1]
-
-  const regexAllowed = () => {
-    const t = lastSignificant()
-    if (!t) return true
-    if (t.type === 'punct') return PUNCT_BEFORE_REGEX.has(t.value)
-    if (t.type === 'ident') return KEYWORDS_BEFORE_REGEX.has(t.value)
-    return false
-  }
 
   // Reads a template literal starting at the backtick at `i`; returns the token and advances.
   const readTemplate = () => {
@@ -108,25 +106,8 @@ export const tokenize = (src) => {
         parts.push({ text, sub: true })
         text = ''
         i += 2
-        // tokenize the substitution until its matching close brace
-        let depth = 1
-        const subStart = i
-        while (i < n && depth > 0) {
-          const d = src[i]
-          if (d === '{') depth++
-          else if (d === '}') depth--
-          else if (d === '`') {
-            readTemplate() // skip a nested template as a unit
-            continue
-          } else if (d === '"' || d === "'") {
-            readString(d)
-            continue
-          } else if (d === '\n') line++
-          if (depth > 0) i++
-        }
-        const subSrc = src.slice(subStart, i)
-        i++ // closing brace
-        for (const t of tokenize(subSrc)) inner.push({ ...t, line: startLine })
+        inner.push(...lex(true)) // stops at the unmatched `}` that closes the substitution
+        if (src[i] === '}') i++
         continue
       }
       if (c === '\n') line++
@@ -134,7 +115,7 @@ export const tokenize = (src) => {
       i++
     }
     parts.push({ text, sub: false })
-    return { type: 'template', value: text, line: startLine, parts, inner }
+    return { type: 'template', value: text, line: startLine, parts, inner, unterminated: true }
   }
 
   const readString = (quote) => {
@@ -160,78 +141,128 @@ export const tokenize = (src) => {
     return { type: 'string', value: text, line: startLine }
   }
 
-  while (i < n) {
-    const c = src[i]
-    if (c === '\n') {
-      line++
-      i++
-      continue
+  /**
+   * Lexes from `i` to the end of the source or, when `inSubstitution`, to the
+   * `}` that closes the enclosing `${` (left unconsumed), returning the tokens.
+   */
+  const lex = (inSubstitution) => {
+    const tokens = []
+    let depth = 0 // braces opened inside this substitution
+    const push = (type, value) => tokens.push({ type, value, line })
+
+    const regexAllowed = () => {
+      const t = tokens[tokens.length - 1]
+      if (!t) return true
+      if (t.type === 'punct') return PUNCT_BEFORE_REGEX.has(t.value)
+      if (t.type === 'ident') return KEYWORDS_BEFORE_REGEX.has(t.value)
+      return false
     }
-    if (c === ' ' || c === '\t' || c === '\r') {
-      i++
-      continue
-    }
-    if (c === '/' && src[i + 1] === '/') {
-      while (i < n && src[i] !== '\n') i++
-      continue
-    }
-    if (c === '/' && src[i + 1] === '*') {
-      i += 2
-      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
-        if (src[i] === '\n') line++
+
+    while (i < n) {
+      const c = src[i]
+      if (c === '\n') {
+        line++
         i++
+        continue
       }
-      i += 2
-      continue
-    }
-    if (c === '"' || c === "'") {
-      tokens.push(readString(c))
-      continue
-    }
-    if (c === '`') {
-      tokens.push(readTemplate())
-      continue
-    }
-    if (c === '/' && regexAllowed()) {
-      const startLine = line
-      let j = i + 1
-      let inClass = false
-      while (j < n && src[j] !== '\n') {
-        if (src[j] === '\\') j += 2
-        else if (src[j] === '[') (inClass = true), j++
-        else if (src[j] === ']') (inClass = false), j++
-        else if (src[j] === '/' && !inClass) break
-        else j++
+      if (c === ' ' || c === '\t' || c === '\r') {
+        i++
+        continue
       }
-      j++ // closing slash
-      while (j < n && /[a-z]/i.test(src[j])) j++
-      tokens.push({ type: 'regex', value: src.slice(i, j), line: startLine })
-      i = j
-      continue
+      if (c === '/' && src[i + 1] === '/') {
+        while (i < n && src[i] !== '\n') i++
+        continue
+      }
+      if (c === '/' && src[i + 1] === '*') {
+        i += 2
+        while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+          if (src[i] === '\n') line++
+          i++
+        }
+        i += 2
+        continue
+      }
+      if (c === '"' || c === "'") {
+        tokens.push(readString(c))
+        continue
+      }
+      if (c === '`') {
+        tokens.push(readTemplate())
+        continue
+      }
+      if (c === '/' && regexAllowed()) {
+        const startLine = line
+        let j = i + 1
+        let inClass = false
+        while (j < n && src[j] !== '\n') {
+          if (src[j] === '\\') j += 2
+          else if (src[j] === '[') (inClass = true), j++
+          else if (src[j] === ']') (inClass = false), j++
+          else if (src[j] === '/' && !inClass) break
+          else j++
+        }
+        j++ // closing slash
+        while (j < n && /[a-z]/i.test(src[j])) j++
+        tokens.push({ type: 'regex', value: src.slice(i, j), line: startLine })
+        i = j
+        continue
+      }
+      if (/[A-Za-z_$]/.test(c)) {
+        let j = i
+        while (j < n && /[A-Za-z0-9_$]/.test(src[j])) j++
+        push('ident', src.slice(i, j))
+        i = j
+        continue
+      }
+      if (/[0-9]/.test(c)) {
+        let j = i
+        while (j < n && /[0-9A-Za-z_.]/.test(src[j])) j++
+        push('number', src.slice(i, j))
+        i = j
+        continue
+      }
+      if (c === '=' && src[i + 1] === '>') {
+        push('punct', '=>')
+        i += 2
+        continue
+      }
+      if (inSubstitution) {
+        if (c === '{') depth++
+        else if (c === '}') {
+          if (depth === 0) return tokens // the substitution's own close brace
+          depth--
+        }
+      }
+      push('punct', c)
+      i++
     }
-    if (/[A-Za-z_$]/.test(c)) {
-      let j = i
-      while (j < n && /[A-Za-z0-9_$]/.test(src[j])) j++
-      push('ident', src.slice(i, j))
-      i = j
-      continue
-    }
-    if (/[0-9]/.test(c)) {
-      let j = i
-      while (j < n && /[0-9A-Za-z_.]/.test(src[j])) j++
-      push('number', src.slice(i, j))
-      i = j
-      continue
-    }
-    if (c === '=' && src[i + 1] === '>') {
-      push('punct', '=>')
-      i += 2
-      continue
-    }
-    push('punct', c)
-    i++
+    return tokens
   }
-  return tokens
+
+  return lex(false)
+}
+
+/** The last line of the source that has anything on it (1-based; 0 for an empty source). */
+const lastContentLine = (src) => {
+  const lines = src.split('\n')
+  let last = lines.length
+  while (last > 0 && lines[last - 1].trim() === '') last--
+  return last
+}
+
+/**
+ * Why the tokens may not cover the whole source: a template never closed (it
+ * swallows the rest of the file), or the tokens stopping well before the end.
+ * A file with a gap must fail the check rather than pass with references unseen.
+ */
+export const coverageGaps = (src, tokens) => {
+  const gaps = []
+  const open = tokens.find((t) => t.type === 'template' && t.unterminated)
+  if (open) gaps.push(`template literal opened at line ${open.line} is never closed`)
+  const last = tokens[tokens.length - 1]
+  const end = lastContentLine(src)
+  if (end > 0 && (!last || last.line < end - 3)) gaps.push(`tokens stop at line ${last ? last.line : 0}, the source goes on to line ${end}`)
+  return gaps
 }
 
 // --------------------------------------------------------------- extraction
@@ -332,16 +363,12 @@ const rawPrefixed = (token) => {
   return out
 }
 
-/**
- * Every testID reference in one driver file.
- * @returns {{ kind: 'key' | 'stem' | 'dynamic', value: string, line: number, via: string }[]}
- */
-export const extractReferences = (src) => {
-  const tokens = tokenize(src)
-  const refs = []
-  for (let k = 0; k < tokens.length - 1; k++) {
+/** Appends every testID reference in a token stream to `refs`, descending into template substitutions. */
+const scanTokens = (tokens, refs) => {
+  for (let k = 0; k < tokens.length; k++) {
     const t = tokens[k]
-    if (t.type === 'ident' && Object.hasOwn(HELPERS, t.value) && tokens[k + 1].type === 'punct' && tokens[k + 1].value === '(') {
+    const next = tokens[k + 1]
+    if (t.type === 'ident' && Object.hasOwn(HELPERS, t.value) && next && next.type === 'punct' && next.value === '(') {
       // not a definition: `function tapTestId(` / `const tapTestId = (`
       const prev = tokens[k - 1]
       if (prev && prev.type === 'ident' && (prev.value === 'function' || prev.value === 'async')) continue
@@ -351,17 +378,25 @@ export const extractReferences = (src) => {
       if (t.value === 'waitStable' && args[2]) for (const r of absentKeys(args[2])) refs.push({ ...r, via: 'waitStable.absent' })
     }
     if (t.type === 'string' || t.type === 'template') {
-      for (const r of rawInside(t)) refs.push({ ...r, via: 'raw' })
+      for (const r of rawPrefixed(t)) refs.push({ ...r, via: 'raw' })
     }
+    if (t.type === 'template') scanTokens(t.inner, refs) // a helper call or a raw id inside `${...}`
   }
-  return refs
 }
 
-/** Raw prefix strings in a token and, for a template, in its substitutions. */
-const rawInside = (token) => {
-  const out = rawPrefixed(token)
-  for (const t of token.inner ?? []) if (t.type === 'string' || t.type === 'template') out.push(...rawInside(t))
-  return out
+/**
+ * Every testID reference in one driver file.
+ * Throws when the tokens do not cover the whole source (see coverageGaps):
+ * a reference the tokenizer never reached must not pass as known.
+ * @returns {{ kind: 'key' | 'stem' | 'dynamic', value: string, line: number, via: string }[]}
+ */
+export const extractReferences = (src) => {
+  const tokens = tokenize(src)
+  const gaps = coverageGaps(src, tokens)
+  if (gaps.length) throw new Error(`not fully tokenized: ${gaps.join('; ')}`)
+  const refs = []
+  scanTokens(tokens, refs)
+  return refs
 }
 
 // --------------------------------------------------------------- comparison
@@ -454,11 +489,22 @@ export const runCheck = ({ root = e2eDir, manifests, allow } = {}) => {
   const allowed = allow ?? (fs.existsSync(path.join(libDir, 'testids.allow.json')) ? loadJson(path.join(libDir, 'testids.allow.json')) : {})
   const known = knownIds(loaded)
   const files = []
-  const totals = { files: 0, checked: 0, dynamic: 0, allowed: 0, unknown: 0, invalid: 0 }
+  const totals = { files: 0, checked: 0, dynamic: 0, allowed: 0, unknown: 0, invalid: 0, unreadable: 0 }
+  const used = new Set()
   for (const file of listDriverFiles(root)) {
     const rel = path.relative(root, file).split(path.sep).join('/')
-    const result = checkReferences(extractReferences(fs.readFileSync(file, 'utf8')), known, allowed)
     totals.files++
+    let refs
+    try {
+      refs = extractReferences(fs.readFileSync(file, 'utf8'))
+    } catch (e) {
+      // A file the tokenizer could not cover: its references are unknown, so it fails.
+      totals.unreadable++
+      files.push({ file: rel, unknown: [], invalid: [], error: e.message })
+      continue
+    }
+    for (const r of refs) used.add(r.value)
+    const result = checkReferences(refs, known, allowed)
     totals.checked += result.checked
     totals.dynamic += result.dynamic
     totals.allowed += result.allowed
@@ -467,10 +513,9 @@ export const runCheck = ({ root = e2eDir, manifests, allow } = {}) => {
     if (result.unknown.length || result.invalid.length) files.push({ file: rel, unknown: result.unknown, invalid: result.invalid })
   }
   // An allowlist entry nothing uses any more is noise: say so, without failing.
-  const used = new Set()
-  for (const file of listDriverFiles(root)) for (const r of extractReferences(fs.readFileSync(file, 'utf8'))) used.add(r.value)
   const stale = Object.keys(allowed).filter((k) => !used.has(k))
-  return { ok: totals.unknown === 0 && totals.invalid === 0, totals, files, stale, known: { keys: known.keys.size, stems: known.stems.size } }
+  const ok = totals.unknown === 0 && totals.invalid === 0 && totals.unreadable === 0
+  return { ok, totals, files, stale, known: { keys: known.keys.size, stems: known.stems.size } }
 }
 
 const main = () => {
@@ -482,6 +527,7 @@ const main = () => {
   }
   const { totals, known } = result
   for (const f of result.files) {
+    if (f.error) console.error(`${f.file}: ${f.error}`)
     for (const r of f.invalid) console.error(`${f.file}:${r.line}: INVALID key "${r.value}" (whitespace) via ${r.via}`)
     for (const r of f.unknown) console.error(`${f.file}:${r.line}: unknown ${r.kind} "${r.value}" via ${r.via}`)
   }
@@ -491,7 +537,7 @@ const main = () => {
     console.log(`testids: all known; ${summary}`)
     return
   }
-  console.error(`testids: ${totals.unknown} unknown, ${totals.invalid} invalid; ${summary}`)
+  console.error(`testids: ${totals.unknown} unknown, ${totals.invalid} invalid, ${totals.unreadable} files not fully read; ${summary}`)
   process.exit(1)
 }
 
