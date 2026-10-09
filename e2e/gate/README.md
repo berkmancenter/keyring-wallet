@@ -121,7 +121,8 @@ Android build once, waits up to an hour for it, and runs the gate. A commit that
 gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`).
 
 - **Not while the Mac is busy.** The loop skips a cycle while another gate holds a live lock, while an xcodebuild,
-  java (gradle), cargo, docker build or emulator process is running (executable names, never command-line patterns),
+  cargo, docker build or emulator process is running (executable names), while a Gradle build runs (its wrapper
+  client; idle Gradle daemons, which stay up for hours, do not count),
   or while any simulator is booted (Simulator.app being open is not a signal).
 - **One push-on build per gated commit.** Each new green main commit gets one Android push-on dispatch (about 40
   minutes of a free public-repository runner), so the push legs have a build; `watch-requested-<sha8>` records it.

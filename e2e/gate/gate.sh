@@ -151,21 +151,26 @@ lock_live() {
   now=$(date +%s); m=$(stat -f %m "$d" 2>/dev/null || echo "$now"); [ $((now - m)) -lt 60 ]
 }
 run_lock() {
-  local d=$GATE_HOME/run.lock.d me; me=$(sh -c 'echo $PPID')
+  local d=$GATE_HOME/run.lock.d tag=$$.$RANDOM
   while ! mkdir "$d" 2>/dev/null; do
     if lock_live "$d"; then say "another gate is running (pid $(cat "$d/pid" 2>/dev/null || echo ?)); waiting"; sleep 60
-    elif mv "$d" "$d.stale.$me" 2>/dev/null; then say "stale run lock (pid $(cat "$d.stale.$me/pid" 2>/dev/null || echo ?)) taken over"; rm -rf "$d.stale.$me"
+    elif mv "$d" "$d.stale.$tag" 2>/dev/null; then say "stale run lock (pid $(cat "$d.stale.$tag/pid" 2>/dev/null || echo ?)) taken over"; rm -rf "$d.stale.$tag"
     else sleep 5; fi
   done
-  echo "$me" > "$d/pid"
+  # The running shell's pid, written by a child through a plain redirection. Not $(sh -c 'echo $PPID'): a command
+  # substitution forks first, so that pid is a shell that is already gone, and the lock would read as stale at once.
+  sh -c 'echo $PPID' > "$d/pid"
   trap 'rm -rf "$GATE_HOME/run.lock.d"' EXIT
 }
 
 # The Mac is shared: a build, a test run, an emulator or a booted simulator that belongs to someone else means
-# "not now". Executable names only (never `pgrep -f` patterns: concurrent waiters matched each other and
-# deadlocked on 10-08). Simulator.app being open is not a signal; a booted simulator is.
+# "not now". Executable names, plus one fixed token for the Gradle wrapper client (never a pattern that could match a
+# waiter's own command line: concurrent waiters deadlocked that way on 10-08). Simulator.app being open is not a
+# signal; a booted simulator is.
 mac_busy() {
-  ps -axo comm= | awk '$0 ~ /(xcodebuild|java|cargo|rustc|docker-buildx|qemu-system|emulator)$/ {n++} END {exit !n}' && return 0
+  ps -axo comm= | awk '$0 ~ /(xcodebuild|cargo|rustc|docker-buildx|qemu-system|emulator)$/ {n++} END {exit !n}' && return 0
+  # A Gradle build: the wrapper client lives only while a build runs; idle daemons stay up for hours and do not count.
+  ps -axo args= | grep -q '[G]radleWrapperMain' && return 0
   xcrun simctl list devices booted 2>/dev/null | grep -q '(Booted)'
 }
 
