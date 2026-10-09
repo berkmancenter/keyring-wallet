@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 import type { ConnectedWitness } from '../context/WitnessConnectionProvider'
@@ -281,6 +282,7 @@ const WitnessConnections: React.FC = () => {
       <TouchableOpacity
         style={[styles.witnessItem, isActive && styles.activeWitnessItem]}
         onPress={handlePress}
+        testID={testIdWithKey('WitnessItem')}
         accessible={true}
         accessibilityRole="radio"
         accessibilityState={{ checked: isActive }}
@@ -315,6 +317,7 @@ const WitnessConnections: React.FC = () => {
         <TouchableOpacity
           style={styles.removeButton}
           onPress={() => handleRemove(item)}
+          testID={testIdWithKey('WitnessRemove')}
           accessible={true}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name}`}
@@ -355,6 +358,7 @@ const WitnessConnections: React.FC = () => {
           </ThemedText>
           <TouchableOpacity
             onPress={dismissNotification}
+            testID={testIdWithKey('WitnessNotificationDismiss')}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Dismiss notification"

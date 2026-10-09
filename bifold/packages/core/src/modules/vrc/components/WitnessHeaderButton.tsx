@@ -5,6 +5,7 @@ import { TouchableOpacity, StyleSheet, View, Animated, Easing } from 'react-nati
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ContactStackParams, Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 
 const BlinkingDot: React.FC = () => {
@@ -40,6 +41,7 @@ const WitnessHeaderButton: React.FC = () => {
     <TouchableOpacity
       style={styles.button}
       onPress={handlePress}
+      testID={testIdWithKey('WitnessHeaderButton')}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={isActive ? `Witnesses — ${connectedWitness!.name} active` : 'View witness connections'}

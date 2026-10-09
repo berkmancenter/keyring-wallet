@@ -378,7 +378,11 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
                     )}
                   </View>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={formState.photo ? handleRemovePhoto : handlePickPhoto} disabled={pickingPhoto}>
+                <TouchableOpacity
+                  onPress={formState.photo ? handleRemovePhoto : handlePickPhoto}
+                  disabled={pickingPhoto}
+                  testID={testIdWithKey('RCardPhotoAction')}
+                >
                   <ThemedText style={styles.photoActionText}>
                     {pickingPhoto
                       ? t('RCardOnboarding.Fields.PhotoProcessing')

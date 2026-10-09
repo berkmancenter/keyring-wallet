@@ -7,6 +7,7 @@ import { useTheme } from '../../../contexts/theme'
 import { ContactStackParams, Screens, Stacks } from '../../../types/navigators'
 import Link from '../../../components/texts/Link'
 import { ThemedText } from '../../../components/texts/ThemedText'
+import { testIdWithKey } from '../../../utils/testable'
 
 const CIRCLE_SIZE = 180
 const CIRCLE_COLOR = 'rgba(163, 73, 164, 0.18)'
@@ -65,6 +66,7 @@ const EmptyListConnections: React.FC<EmptyListConnectionsProps> = ({ navigation 
         style={styles.link}
         linkText={t('Connections.WhatAreConnections' as any)}
         onPress={navigateToWhatAreConnections}
+        testID={testIdWithKey('WhatAreConnections?')}
       />
     </View>
   )

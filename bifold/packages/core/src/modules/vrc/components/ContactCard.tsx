@@ -79,11 +79,17 @@ const styles = StyleSheet.create({
   },
 })
 
-const ContactCard: React.FC<ContactCardProps> = ({ contact, hardwareVerified, onPress }) => {
+const ContactCard: React.FC<ContactCardProps> = ({
+  contact,
+  hardwareVerified,
+  onPress,
+  testID = testIdWithKey('ContactCard'),
+}) => {
   return (
     <TouchableOpacity
       style={styles.itemContainer}
       onPress={onPress}
+      testID={testID}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={`Contact: ${contact.issuer.name}`}

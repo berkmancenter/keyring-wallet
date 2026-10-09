@@ -35,6 +35,7 @@ export const MyAgentIds = {
   linkOtherPhoneHint: 'LinkOtherPhoneHint',
   enrolCard: 'MyAgentEnrolCard',
   connectMyAgentButton: 'ConnectMyAgentButton',
+  devices: 'AgentDevices',
   error: 'MyAgentError',
   holdingError: 'MyAgentHoldingError',
 } as const

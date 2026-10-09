@@ -310,7 +310,9 @@ const VtaAgentHome: React.FC = () => {
     }
     setOptions({
       headerLeft: () => null,
-      headerRight: () => <AgentSettingsButton onPress={() => go(Screens.VtaAgentSettings)} />,
+      headerRight: () => (
+        <AgentSettingsButton onPress={() => go(Screens.VtaAgentSettings)} testID={testIdWithKey('AgentSettings')} />
+      ),
     })
     // `go` is a fresh closure each render over the same navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
