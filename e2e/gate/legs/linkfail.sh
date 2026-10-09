@@ -65,23 +65,27 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     fi
     # 239 finding: after a held swap the agent must not stay listed; scanning it again starts a link.
     if selected swap-held-rescan; then
-      # 239 gate: once the rescan sat on "Securing this phone's key…" past a 30 s wait. Run it RESCAN_RUNS times
-      # (2) with RESCAN_WAIT_MS (180 s) and the emulator's whole log from the row's start, so slow and stuck differ.
+      # The held swap first, then the rule lifted, then the same agent scanned again: the phone keeps its granted key,
+      # so the rescan goes back to the swap and must finish the link with it (no new key, the ACL not growing, the
+      # agent listed once). With the rule left on, the agent holds the swap again for its ~181 s consent wait (239
+      # final pin: the app was not stuck). The emulator's log from the row's start, RESCAN_RUNS runs (1).
       ok=0; d=""
-      for i in $(seq 1 "${RESCAN_RUNS:-2}"); do
+      LIFT="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
+      for i in $(seq 1 "${RESCAN_RUNS:-1}"); do
         echo "  rule (again, for rescan run $i): $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
         adb -s $E logcat -c 2>/dev/null; adb -s $E logcat -v threadtime > "$LEG_DIR/held-rescan-$i.logcat" 2>&1 & lc=$!
-        L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 RESCAN_WAIT_MS=${RESCAN_WAIT_MS:-180000} \
+        L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 RESCAN_LIFT_HOOK="$LIFT" RESCAN_WAIT_MS=${RESCAN_WAIT_MS:-240000} \
           perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-rescan-$i.out" 2>&1; rc=$?
         kill "$lc" 2>/dev/null; wait "$lc" 2>/dev/null
         # The app's own lines: its pids from the log (it is reinstalled each run), plus ReactNativeJS.
         pids=$(grep -oE "Start proc [0-9]+:$BID" "$LEG_DIR/held-rescan-$i.logcat" | grep -oE '[0-9]+' | sort -u | tr '\n' '|' | sed 's/|$//')
         grep -E "ReactNativeJS${pids:+| (${pids}) }" "$LEG_DIR/held-rescan-$i.logcat" > "$LEG_DIR/held-rescan-$i.app.logcat"
-        x=$(line "$LEG_DIR/held-rescan-$i.out" "RESCAN ")
-        [[ $x == "RESCAN ok"* ]] && ok=$((ok + 1))
-        d="$d · run $i: rc=$rc ${x:-no RESCAN line}"
+        x=$(grep -m1 "^RESCAN-LINKED " "$LEG_DIR/held-rescan-$i.out")
+        [[ $x == "RESCAN-LINKED yes"* && $x == *"a new key asked false"* && $x == *'"already has that agent" false'* && $x == *"grew false"* && $x == *"listed once true"* ]] && ok=$((ok + 1))
+        k=$(grep -E "pending successor|kept did|key swap (did not|completed)|swapped" "$LEG_DIR/held-rescan-$i.app.logcat" | sed -E 's/^.*ReactNativeJS: //; s/did:[A-Za-z0-9:._%-]+/<did>/g' | tail -3 | tr '\n' '|' | cut -c1-200)
+        d="$d · run $i: rc=$rc ${x:-no RESCAN-LINKED line} · log: ${k:-none}"
       done
-      row swap-held-rescan "$([ $ok -eq "${RESCAN_RUNS:-2}" ] && echo PASS || echo FAIL)" "$ok of ${RESCAN_RUNS:-2} started a link$d"
+      row swap-held-rescan "$([ $ok -eq "${RESCAN_RUNS:-1}" ] && echo PASS || echo FAIL)" "$ok of ${RESCAN_RUNS:-1} finished the link with the kept key$d"
     fi
     echo "  rule off (again): $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
   fi

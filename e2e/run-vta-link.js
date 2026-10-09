@@ -383,6 +383,13 @@ async function afterRefusal(driver, said, temporaryDid) {
   if (process.env.RESCAN_AFTER === "1") {
     // 239 finding (UI/UX, 10-08): a swap held or refused once left the agent listed, so scanning it again said
     // "This phone already has that agent". After the refusal, scan the same agent again: a link must start.
+    // RESCAN_LIFT_HOOK (held swap): lift the rule first; the phone keeps its granted key, so the rescan goes straight
+    // back to the swap and must finish the link with that key: no new key asked, the ACL not growing, one agent.
+    const lift = process.env.RESCAN_LIFT_HOOK;
+    const aclSize = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const aclBefore = lift ? aclSize() : -1;
+    const tempBefore = lift ? aclDids().includes(temporaryDid) : false;
+    if (lift) { execFileSync("bash", ["-c", lift], { stdio: "inherit" }); await sleep(3000); }
     for (let i = 0; i < 4 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await driver.back().catch(() => undefined);
     await (await waitForTestId(driver, "MyAgent", 15000)).click();
     await sleep(1500);
@@ -392,6 +399,37 @@ async function afterRefusal(driver, said, temporaryDid) {
     // How long the link screen sits on "Securing this phone's key…" before the next screen: RESCAN_WAIT_MS bounds it
     // (239: 30 s was not enough to tell slow from stuck on the held rescan).
     const waitMs = Number(process.env.RESCAN_WAIT_MS || 30000);
+    if (lift) {
+      const t1 = Date.now();
+      let linked = false;
+      let newKey = false;
+      let error = false;
+      while (Date.now() - t1 < waitMs && !linked && !error) {
+        linked = await existsTestId(driver, "VtaLinkDone", 2000);
+        if (!newKey && (await existsTestId(driver, "VtaLinkForOtherPhone", 300))) newKey = true;
+        if (!linked && (await existsTestId(driver, "VtaLinkError", 300))) error = true;
+      }
+      const secs = ((Date.now() - t1) / 1000).toFixed(1);
+      const already = /already has that agent/i.test(await driver.getPageSource());
+      await screenshot(driver, "link-rescan-lifted");
+      const aclAfter = aclSize();
+      const tempAfter = aclDids().includes(temporaryDid);
+      // One agent on this phone: My Agent lists it once (the chips, or none when it is the only one).
+      let rows = -1;
+      if (linked) {
+        await tapTestId(driver, "VtaLinkDone", 5000).catch(() => undefined);
+        await sleep(2000);
+        for (let i = 0; i < 4 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await driver.back().catch(() => undefined);
+        await (await waitForTestId(driver, "MyAgent", 15000)).click().catch(() => undefined);
+        await sleep(2000);
+        if (await existsTestId(driver, "AgentIntroSkip", 2000)) await tapTestId(driver, "AgentIntroSkip", 5000).catch(() => undefined);
+        rows = (await driver.$$(`//*[starts-with(@resource-id,"com.ariesbifold:id/AgentSwitcherRow_")]`)).length;
+        await screenshot(driver, "link-rescan-lifted-agent");
+      }
+      console.log(`RESCAN-LINKED ${linked ? "yes" : "no"} · ${linked ? `after ${secs} s` : error ? `an error after ${secs} s` : `not within ${waitMs / 1000} s`} · a new key asked ${newKey} · "already has that agent" ${already} · ACL ${aclBefore} → ${aclAfter} grew ${aclAfter > aclBefore} · the kept key in the ACL ${tempBefore} → ${tempAfter} · agents listed ${rows} listed once ${rows >= 0 && rows <= 1}`);
+      if (linked) runTempDids.push(temporaryDid);
+      return;
+    }
     const t0 = Date.now();
     let securingSeen = false;
     let started = false;
