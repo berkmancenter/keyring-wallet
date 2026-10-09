@@ -35,5 +35,7 @@ export const MyAgentIds = {
   linkOtherPhoneHint: 'LinkOtherPhoneHint',
   enrolCard: 'MyAgentEnrolCard',
   connectMyAgentButton: 'ConnectMyAgentButton',
+  error: 'MyAgentError',
+  holdingError: 'MyAgentHoldingError',
 } as const
 export type MyAgentId = (typeof MyAgentIds)[keyof typeof MyAgentIds]

@@ -565,7 +565,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               </Text>
             ))}
             {holdingError ? (
-              <SaidFailure said={holdingError} testID="MyAgentHoldingError" style={styles.error} />
+              <SaidFailure said={holdingError} testID={MyAgentIds.holdingError} style={styles.error} />
             ) : null}
           </View>
         </>
@@ -666,7 +666,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
               </Pressable>
             ) : null}
-            {connectError ? <SaidFailure said={connectError} testID="MyAgentError" style={styles.error} /> : null}
+            {connectError ? <SaidFailure said={connectError} testID={MyAgentIds.error} style={styles.error} /> : null}
           </View>
 
           {holdings}
@@ -745,7 +745,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         {/* A removed phone's card already says what happened and what to do; the
             failed sign-in behind it is that removal, not a second, unknown failure. */}
         {failure && vta.link.kind !== 'revoked' ? (
-          <SaidFailure said={failure} testID="MyAgentError" style={styles.error} />
+          <SaidFailure said={failure} testID={MyAgentIds.error} style={styles.error} />
         ) : null}
         {/* Only when there is an agent to connect to — a linked one or one the
             build names. With neither, "Link your agent" above is the way in,

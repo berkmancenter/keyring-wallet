@@ -53,7 +53,7 @@ import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReaso
 
 import { DeviceNameField } from './DeviceNamePrompt'
 import { openScanner } from './openScanner'
-import { VtaCreateAgentIds } from './VtaCreateAgent.ids'
+import { VtaCreateAgentIds, type VtaCreateAgentId } from './VtaCreateAgent.ids'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { linkFailureText } from './linkFailureWords'
@@ -426,7 +426,7 @@ const VtaCreateAgent: React.FC = () => {
             ? 'address'
             : step
 
-  const errorLine = (key: string) =>
+  const errorLine = (key: VtaCreateAgentId) =>
     error ? (
       <>
         <ThemedText style={styles.error} testID={testIdWithKey(key)}>
@@ -508,7 +508,7 @@ const VtaCreateAgent: React.FC = () => {
     )
     actions = (
       <>
-        {errorLine('AgentCreateError')}
+        {errorLine(VtaCreateAgentIds.createError)}
         {existingAgent && agent ? (
           <Button
             title={t('VtaLink.SwitchToIt')}
@@ -636,7 +636,7 @@ const VtaCreateAgent: React.FC = () => {
             {t('CreateAgent.Unreachable')}
           </ThemedText>
         ) : (
-          errorLine('AgentCreateError')
+          errorLine(VtaCreateAgentIds.createError)
         )}
         {pollExpired ? (
           <Button
@@ -775,7 +775,7 @@ const VtaCreateAgent: React.FC = () => {
     )
     actions = (
       <>
-        {errorLine('AgentCreateError')}
+        {errorLine(VtaCreateAgentIds.createError)}
         {/* One filled button: Scan until there is a code, then adding it (#30). */}
         <Button
           title={t('CreateAgent.ScanItsCode')}

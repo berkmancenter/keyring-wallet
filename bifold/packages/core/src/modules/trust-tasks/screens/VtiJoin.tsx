@@ -522,7 +522,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedWhere)}>
                 {called.technical}
               </ThemedText>
-              <DidDetails did={communityDid} testIdStem="JoinSuggested" />
+              <DidDetails did={communityDid} testIdStem={VtiJoinIds.suggested} />
             </View>
           ) : null}
         </>
@@ -921,7 +921,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               label={t('Join.SeeFullPersonaId')}
               hint={tp('VtaLink.ShowIdentityCodeHint')}
               copy
-              testIdStem="JoinStandingIdentity"
+              testIdStem={VtiJoinIds.standingIdentity}
             />
           </View>
         ) : null}
