@@ -752,7 +752,7 @@ const Developer: React.FC = () => {
         <SectionRow
           title={t('Developer.Environment')}
           accessibilityLabel={t('Developer.Environment')}
-          testID={testIdWithKey(t('Developer.Environment').toLowerCase())}
+          testID={testIdWithKey('environment')}
           onPress={() => {
             setEnvironmentModalVisible(true)
           }}
