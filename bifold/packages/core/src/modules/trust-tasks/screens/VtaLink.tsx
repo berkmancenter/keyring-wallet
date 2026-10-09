@@ -49,6 +49,7 @@ import { openScanner } from './openScanner'
 import { linkFailureText } from './linkFailureWords'
 import { clearJustErased, ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { shareableKey } from './shareableKey'
+import { VtaLinkIds } from './VtaLink.ids'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
 export function agentHost(vtaDid: string): string | undefined {
@@ -231,7 +232,7 @@ const VtaLink: React.FC = () => {
         // An agent host's QR: which agent, and the site the code came from,
         // before this phone sends anything — accepting makes it an admin.
         body = (
-          <View style={styles.card} testID={testIdWithKey('VtaLinkConfirm')}>
+          <View style={styles.card} testID={testIdWithKey(VtaLinkIds.confirm)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('VtaLink.Host.ConfirmTitle', {
                 label: agentDisplayName(link, t),
@@ -239,11 +240,11 @@ const VtaLink: React.FC = () => {
               })}
             </ThemedText>
             <ThemedText>{t('VtaLink.Host.ConfirmBody')}</ThemedText>
-            <ThemedText testID={testIdWithKey('VtaLinkHostSite')}>
+            <ThemedText testID={testIdWithKey(VtaLinkIds.hostSite)}>
               {t('VtaLink.Host.CodeFrom', { site: link.offerUrl, interpolation: { escapeValue: false } })}
             </ThemedText>
             <ThemedText variant="labelTitle">{t('VtaLink.Host.AgentAddress')}</ThemedText>
-            <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkAgentAddress')} selectable>
+            <ThemedText style={styles.key} testID={testIdWithKey(VtaLinkIds.agentAddress)} selectable>
               {link.vtaDid}
             </ThemedText>
           </View>
@@ -255,7 +256,7 @@ const VtaLink: React.FC = () => {
               buttonType={ButtonType.Primary}
               onPress={onConfirm}
               disabled={link.kind === 'submitting'}
-              testID={testIdWithKey('VtaLinkButton')}
+              testID={testIdWithKey(VtaLinkIds.button)}
               accessibilityLabel={t('VtaLink.Host.Connect')}
             >
               {link.kind === 'submitting' ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
@@ -264,18 +265,18 @@ const VtaLink: React.FC = () => {
               title={t('VtaLink.Host.NotNow')}
               buttonType={ButtonType.Secondary}
               onPress={onCancel}
-              testID={testIdWithKey('VtaLinkCancel')}
+              testID={testIdWithKey(VtaLinkIds.cancel)}
             />
           </>
         )
         break
       }
       body = (
-        <View style={styles.card} testID={testIdWithKey('VtaLinkConfirm')}>
+        <View style={styles.card} testID={testIdWithKey(VtaLinkIds.confirm)}>
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('VtaLink.ConfirmTitle', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
-          {host ? <ThemedText testID={testIdWithKey('VtaLinkHost')}>{host}</ThemedText> : null}
+          {host ? <ThemedText testID={testIdWithKey(VtaLinkIds.host)}>{host}</ThemedText> : null}
           <ThemedText>{t('VtaLink.ConfirmBody')}</ThemedText>
         </View>
       )
@@ -286,7 +287,7 @@ const VtaLink: React.FC = () => {
             buttonType={ButtonType.Primary}
             onPress={onConfirm}
             disabled={link.kind === 'submitting'}
-            testID={testIdWithKey('VtaLinkButton')}
+            testID={testIdWithKey(VtaLinkIds.button)}
             accessibilityLabel={t('VtaLink.LinkThisPhone')}
           >
             {link.kind === 'submitting' ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
@@ -295,7 +296,7 @@ const VtaLink: React.FC = () => {
             title={t('VtaLink.DontLink')}
             buttonType={ButtonType.Secondary}
             onPress={onCancel}
-            testID={testIdWithKey('VtaLinkCancel')}
+            testID={testIdWithKey(VtaLinkIds.cancel)}
           />
         </>
       )
@@ -305,7 +306,7 @@ const VtaLink: React.FC = () => {
       if (link.via === 'host') {
         // The host is setting the agent up; there is no code to compare.
         body = (
-          <View style={styles.card} testID={testIdWithKey('VtaLinkHostSettingUp')}>
+          <View style={styles.card} testID={testIdWithKey(VtaLinkIds.hostSettingUp)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('VtaLink.Host.SettingUpTitle')}
             </ThemedText>
@@ -317,7 +318,7 @@ const VtaLink: React.FC = () => {
             ) : (
               <View style={styles.row}>
                 <ActivityIndicator color={ColorPalette.brand.primary} />
-                <ThemedText style={{ flex: 1 }} testID={testIdWithKey('VtaLinkState')}>
+                <ThemedText style={{ flex: 1 }} testID={testIdWithKey(VtaLinkIds.state)}>
                   {t('VtaLink.Host.SettingUpWaiting')}
                 </ThemedText>
               </View>
@@ -329,7 +330,7 @@ const VtaLink: React.FC = () => {
             title={t('VtaLink.StopLinking')}
             buttonType={ButtonType.Secondary}
             onPress={onCancel}
-            testID={testIdWithKey('VtaLinkCancel')}
+            testID={testIdWithKey(VtaLinkIds.cancel)}
           />
         )
         break
@@ -342,7 +343,7 @@ const VtaLink: React.FC = () => {
           <ThemedText>{t('VtaLink.CheckCodeBody')}</ThemedText>
           <ThemedText
             style={styles.code}
-            testID={testIdWithKey('VtaLinkCode')}
+            testID={testIdWithKey(VtaLinkIds.code)}
             accessibilityLabel={link.code.split('').join(' ')}
             selectable
           >
@@ -350,7 +351,7 @@ const VtaLink: React.FC = () => {
           </ThemedText>
           <View style={styles.row}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
-            <ThemedText testID={testIdWithKey('VtaLinkState')}>{t('VtaLink.WaitingForGrant')}</ThemedText>
+            <ThemedText testID={testIdWithKey(VtaLinkIds.state)}>{t('VtaLink.WaitingForGrant')}</ThemedText>
           </View>
         </View>
       )
@@ -359,7 +360,7 @@ const VtaLink: React.FC = () => {
           title={t('VtaLink.StopLinking')}
           buttonType={ButtonType.Secondary}
           onPress={onCancel}
-          testID={testIdWithKey('VtaLinkCancel')}
+          testID={testIdWithKey(VtaLinkIds.cancel)}
         />
       )
       break
@@ -372,7 +373,7 @@ const VtaLink: React.FC = () => {
         // cover both: copy this phone's code into that box, or scan it from the
         // other phone. No Share; this phone notices by itself once it's added.
         body = (
-          <View style={styles.card} testID={testIdWithKey('VtaLinkForOtherPhone')}>
+          <View style={styles.card} testID={testIdWithKey(VtaLinkIds.forOtherPhone)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('VtaLink.AddThisPhone')}
             </ThemedText>
@@ -381,18 +382,18 @@ const VtaLink: React.FC = () => {
               value={link.did}
               size={Math.min(windowWidth - 2 * (20 + 16 + 16), 260)}
               quietZone={16}
-              testID={testIdWithKey('VtaLinkKeyQr')}
+              testID={testIdWithKey(VtaLinkIds.keyQr)}
             />
             <Pressable
               onPress={() => setKeyShown(!keyShown)}
               accessibilityRole="button"
               accessibilityState={{ expanded: keyShown }}
-              testID={testIdWithKey('VtaLinkShowAsText')}
+              testID={testIdWithKey(VtaLinkIds.showAsText)}
             >
               <ThemedText style={styles.muted}>{keyShown ? t('VtaLink.HideText') : t('VtaLink.ShowAsText')}</ThemedText>
             </Pressable>
             {keyShown ? (
-              <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
+              <ThemedText style={styles.key} testID={testIdWithKey(VtaLinkIds.manualDid)} selectable>
                 {link.did}
               </ThemedText>
             ) : null}
@@ -405,7 +406,7 @@ const VtaLink: React.FC = () => {
                 in red it came and went between checks and read as a failure
                 (iPhone 11, 2026-10-01). Said once the wait has run out. */}
             {link.noAnswer && phonePollExpired ? (
-              <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
+              <ThemedText style={styles.error} testID={testIdWithKey(VtaLinkIds.noAnswer)}>
                 {t('VtaLink.NoAnswer', {
                   label: agentDisplayNameStart(link, t),
                   interpolation: { escapeValue: false },
@@ -415,7 +416,7 @@ const VtaLink: React.FC = () => {
             {/* The screen's status, with the buttons: under the QR it was cut
                 off at the bottom of the scroll (228). */}
             {phonePollUntil !== undefined ? (
-              <View style={styles.row} testID={testIdWithKey('VtaLinkWaitingForPhone')}>
+              <View style={styles.row} testID={testIdWithKey(VtaLinkIds.waitingForPhone)}>
                 <ActivityIndicator color={ColorPalette.brand.primary} />
                 <ThemedText style={{ flex: 1 }}>{t('VtaLink.WaitingToBeAdded')}</ThemedText>
               </View>
@@ -428,7 +429,7 @@ const VtaLink: React.FC = () => {
                   setPhonePollExpired(false)
                   onCheckGrant()
                 }}
-                testID={testIdWithKey('VtaLinkCheckAgain')}
+                testID={testIdWithKey(VtaLinkIds.checkAgain)}
               />
             ) : null}
             {/* In the bar, never under the QR: there it fell below the fold on a
@@ -443,7 +444,7 @@ const VtaLink: React.FC = () => {
                   Clipboard.setString(link.did)
                   setCopied(true)
                 }}
-                testID={testIdWithKey('VtaLinkCopyKey')}
+                testID={testIdWithKey(VtaLinkIds.copyKey)}
               />
               <Button
                 title={t('VtaLink.ShareKey')}
@@ -451,21 +452,21 @@ const VtaLink: React.FC = () => {
                 onPress={() =>
                   void Share.share(shareableKey(t, agentDisplayName(link, t), link.did)).catch(() => undefined)
                 }
-                testID={testIdWithKey('VtaLinkShareKey')}
+                testID={testIdWithKey(VtaLinkIds.shareKey)}
               />
             </View>
             <Button
               title={t('VtaLink.StopLinking')}
               buttonType={ButtonType.Secondary}
               onPress={onCancel}
-              testID={testIdWithKey('VtaLinkCancel')}
+              testID={testIdWithKey(VtaLinkIds.cancel)}
             />
           </>
         )
         break
       }
       body = (
-        <View style={styles.card} testID={testIdWithKey('VtaLinkShowingKey')}>
+        <View style={styles.card} testID={testIdWithKey(VtaLinkIds.showingKey)}>
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('VtaLink.GiveKeyTitle')}
           </ThemedText>
@@ -475,7 +476,7 @@ const VtaLink: React.FC = () => {
           {/* Picked back up after a sleep, a lock or a restart: the same key,
               which the agent may already hold (IN-135). */}
           {link.resumed ? (
-            <ThemedText variant="bold" testID={testIdWithKey('VtaLinkResumed')}>
+            <ThemedText variant="bold" testID={testIdWithKey(VtaLinkIds.resumed)}>
               {t('VtaLink.ResumedHint')}
             </ThemedText>
           ) : null}
@@ -484,7 +485,7 @@ const VtaLink: React.FC = () => {
               Share, Copy and "I've been added" below the fold — a tester had
               to scroll a wall of characters to find the buttons and reported
               the screen as hidden controls and weird text (#25). */}
-          <ThemedText style={styles.muted} testID={testIdWithKey('VtaLinkShareKeyHint')}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtaLinkIds.shareKeyHint)}>
             {t('VtaLink.ShareKeyHint')}
           </ThemedText>
           <Button
@@ -495,7 +496,7 @@ const VtaLink: React.FC = () => {
                 .then(() => setShared(true))
                 .catch(() => undefined)
             }
-            testID={testIdWithKey('VtaLinkShareKey')}
+            testID={testIdWithKey(VtaLinkIds.shareKey)}
           />
           <Button
             title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
@@ -504,13 +505,13 @@ const VtaLink: React.FC = () => {
               Clipboard.setString(link.did)
               setCopied(true)
             }}
-            testID={testIdWithKey('VtaLinkCopyKey')}
+            testID={testIdWithKey(VtaLinkIds.copyKey)}
           />
           {/* Where the admin adds it, in view: behind "Show the code and how to
               add it" nobody found it (Alberto, relinking after Unlink, 219).
               The code itself stays behind its own toggle: a ~350-character
               did:peer is for pasting, not reading. */}
-          <View style={{ gap: 4 }} testID={testIdWithKey('VtaLinkGiveKeyHow')}>
+          <View style={{ gap: 4 }} testID={testIdWithKey(VtaLinkIds.giveKeyHow)}>
             <ThemedText variant="bold">{t('VtaLink.GiveKeyHowTitle')}</ThemedText>
             <ThemedText>{t('VtaLink.GiveKeyHow')}</ThemedText>
             <ThemedText style={styles.muted}>{t('VtaLink.GiveKeyHowTerminal')}</ThemedText>
@@ -519,14 +520,14 @@ const VtaLink: React.FC = () => {
             onPress={() => setKeyShown(!keyShown)}
             accessibilityRole="button"
             accessibilityState={{ expanded: keyShown }}
-            testID={testIdWithKey('VtaLinkShowTheCode')}
+            testID={testIdWithKey(VtaLinkIds.showTheCode)}
           >
             <ThemedText style={styles.muted}>
               {keyShown ? t('VtaLink.HideTheCode') : t('VtaLink.ShowTheCode')}
             </ThemedText>
           </Pressable>
           {keyShown ? (
-            <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
+            <ThemedText style={styles.key} testID={testIdWithKey(VtaLinkIds.manualDid)} selectable>
               {link.did}
             </ThemedText>
           ) : null}
@@ -539,7 +540,7 @@ const VtaLink: React.FC = () => {
               to it lands below the fold on a phone: the answer was under the
               bottom of the screen while the question stayed pinned to it. */}
           {link.notYet ? (
-            <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNotYet')}>
+            <ThemedText style={styles.error} testID={testIdWithKey(VtaLinkIds.notYet)}>
               {t('VtaLink.NotAddedYet')}
             </ThemedText>
           ) : null}
@@ -547,7 +548,7 @@ const VtaLink: React.FC = () => {
               may have been lost on the way back. Either way the person is told
               rather than left watching a spinner. */}
           {link.noAnswer ? (
-            <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
+            <ThemedText style={styles.error} testID={testIdWithKey(VtaLinkIds.noAnswer)}>
               {t('VtaLink.NoAnswer', { label: agentDisplayNameStart(link, t), interpolation: { escapeValue: false } })}
             </ThemedText>
           ) : null}
@@ -558,7 +559,7 @@ const VtaLink: React.FC = () => {
             }
             onPress={onCheckGrant}
             disabled={link.checking}
-            testID={testIdWithKey('VtaLinkCheckGrant')}
+            testID={testIdWithKey(VtaLinkIds.checkGrant)}
           >
             {link.checking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
@@ -566,7 +567,7 @@ const VtaLink: React.FC = () => {
             title={t('VtaLink.StopLinking')}
             buttonType={ButtonType.Secondary}
             onPress={onCancel}
-            testID={testIdWithKey('VtaLinkCancel')}
+            testID={testIdWithKey(VtaLinkIds.cancel)}
           />
         </>
       )
@@ -577,7 +578,7 @@ const VtaLink: React.FC = () => {
         <View style={styles.card}>
           <View style={styles.row}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
-            <ThemedText testID={testIdWithKey('VtaLinkState')}>
+            <ThemedText testID={testIdWithKey(VtaLinkIds.state)}>
               {link.step === 'rotating' ? t('VtaLink.StepRotating') : t('VtaLink.StepConnecting')}
             </ThemedText>
           </View>
@@ -587,14 +588,14 @@ const VtaLink: React.FC = () => {
 
     case 'linked':
       body = (
-        <View style={styles.card} testID={testIdWithKey('VtaLinkDone')}>
+        <View style={styles.card} testID={testIdWithKey(VtaLinkIds.done)}>
           <View style={styles.row}>
             <Icon name="check-circle" size={24} color={ColorPalette.semantic.success} />
             <ThemedText variant="headingThree" accessibilityRole="header">
               {t('VtaLink.Linked')}
             </ThemedText>
           </View>
-          <ThemedText testID={testIdWithKey('VtaLinkLinkedBody')}>
+          <ThemedText testID={testIdWithKey(VtaLinkIds.linkedBody)}>
             {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
           <DeviceNameField value={deviceName} onChange={setDeviceName} onSubmit={() => void onDone()} />
@@ -606,7 +607,7 @@ const VtaLink: React.FC = () => {
           buttonType={ButtonType.Primary}
           onPress={() => void onDone()}
           disabled={naming}
-          testID={testIdWithKey('VtaLinkContinue')}
+          testID={testIdWithKey(VtaLinkIds.continue)}
         >
           {naming ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
         </Button>
@@ -629,14 +630,14 @@ const VtaLink: React.FC = () => {
               {link.lastError ? t('VtaLink.FailedTitle') : t('VtaLink.NothingToLink')}
             </ThemedText>
             {link.lastError ? (
-              <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
+              <ThemedText style={styles.error} testID={testIdWithKey(VtaLinkIds.error)}>
                 {failureText(link.lastError)}
               </ThemedText>
             ) : null}
             {/* The key this phone was granted stays on that agent's list: a VTA
                 refuses a self-delete, so its admin is the one to remove it. */}
             {link.lastError?.reason === 'communityAgent' ? (
-              <ThemedText testID={testIdWithKey('VtaLinkCommunityAgentCleanup')}>
+              <ThemedText testID={testIdWithKey(VtaLinkIds.communityAgentCleanup)}>
                 {t('VtaLink.FailedCommunityAgentCleanup')}
               </ThemedText>
             ) : null}
@@ -648,12 +649,12 @@ const VtaLink: React.FC = () => {
                   onPress={() => setErrorOpen((open) => !open)}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: errorOpen }}
-                  testID={testIdWithKey('VtaLinkErrorDetailsToggle')}
+                  testID={testIdWithKey(VtaLinkIds.errorDetailsToggle)}
                 >
                   <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
                 </Pressable>
                 {errorOpen ? (
-                  <ThemedText style={styles.muted} selectable testID={testIdWithKey('VtaLinkErrorDetail')}>
+                  <ThemedText style={styles.muted} selectable testID={testIdWithKey(VtaLinkIds.errorDetail)}>
                     {link.lastError.detail}
                   </ThemedText>
                 ) : null}
@@ -677,14 +678,14 @@ const VtaLink: React.FC = () => {
               onPress={() => {
                 if (agent) void vtaAgent.resumeLink(agent, retryKeyFor)
               }}
-              testID={testIdWithKey('VtaLinkTryAgain')}
+              testID={testIdWithKey(VtaLinkIds.tryAgain)}
             />
           ) : null}
           <Button
             title={t('VtaLink.ScanAgain')}
             buttonType={retryKeyFor ? ButtonType.Secondary : ButtonType.Primary}
             onPress={onScanAgain}
-            testID={testIdWithKey('VtaLinkScanAgain')}
+            testID={testIdWithKey(VtaLinkIds.scanAgain)}
           />
           <Button
             title={t('VtaLink.UseAgentAddress')}
@@ -695,7 +696,7 @@ const VtaLink: React.FC = () => {
                 { byAddress: true }
               )
             }
-            testID={testIdWithKey('VtaLinkByAddress')}
+            testID={testIdWithKey(VtaLinkIds.byAddress)}
           />
         </>
       )
