@@ -8,6 +8,7 @@ import Link from '../../../components/texts/Link'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, TabStacks } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
 
 const CARD_MARGIN = 20
 const CIRCLE_SIZE = 120
@@ -109,7 +110,11 @@ const WhatAreConnections: React.FC<WhatAreConnectionsProps> = ({ navigation }) =
             </View>
             <ThemedText style={{ marginTop: 16 }}>
               {`${t('WhatAreConnections.ManageConnections' as any)} `}
-              <Link linkText={t('WhatAreConnections.MessagesLink' as any) as string} onPress={goToMessages} />
+              <Link
+                linkText={t('WhatAreConnections.MessagesLink' as any) as string}
+                onPress={goToMessages}
+                testID={testIdWithKey('Messages')}
+              />
             </ThemedText>
           </ScrollView>
         </View>

@@ -31,7 +31,10 @@ const corner = StyleSheet.create({
 })
 
 /** The gear: Agent settings. A dot when something there wants a look. */
-export const AgentSettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+export const AgentSettingsButton: React.FC<{ onPress: () => void; testID?: string }> = ({
+  onPress,
+  testID = testIdWithKey('AgentSettings'),
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   return (
@@ -41,7 +44,7 @@ export const AgentSettingsButton: React.FC<{ onPress: () => void }> = ({ onPress
       hitSlop={hitSlop}
       accessibilityRole="button"
       accessibilityLabel={t('VtaLink.AgentSettings')}
-      testID={testIdWithKey('AgentSettings')}
+      testID={testID}
     >
       <Icon name="cog-outline" size={ICON_SIZE} color={ColorPalette.brand.headerIcon} />
     </Pressable>

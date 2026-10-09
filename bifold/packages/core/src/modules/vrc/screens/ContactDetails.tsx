@@ -524,6 +524,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           onPress={handleViewMessages}
           accessibilityLabel={t('ContactDetails.ViewMessages')}
           accessibilityRole="button"
+          testID={testIdWithKey('ContactViewMessages')}
           style={[styles.viewMessagesRow, !connectionId && { opacity: 0.5 }]}
           disabled={!connectionId}
         >
@@ -572,6 +573,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           onPress={handleRemoveContact}
           accessibilityLabel={t('ContactDetails.RemoveContact')}
           accessibilityRole="button"
+          testID={testIdWithKey('ContactRemove')}
           style={styles.removeButton}
         >
           <ThemedText style={styles.removeButtonText}>{t('ContactDetails.RemoveContact')}</ThemedText>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Switch } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { NavigationProp, ParamListBase } from '@react-navigation/native'
 import { useStore } from '../../../contexts/store'
+import { testIdWithKey } from '../../../utils/testable'
 
 interface WitnessChatBannerProps {
   connectionId: string
@@ -44,6 +45,7 @@ export const WitnessChatBanner: React.FC<WitnessChatBannerProps> = ({ connection
           <Switch
             value={useWitnessing}
             onValueChange={handleToggleWitnessing}
+            testID={testIdWithKey('WitnessingSwitch')}
             trackColor={{ false: TOGGLE_INACTIVE_COLOR, true: TOGGLE_ACTIVE_COLOR }}
             thumbColor="#FFFFFF"
           />
@@ -53,6 +55,7 @@ export const WitnessChatBanner: React.FC<WitnessChatBannerProps> = ({ connection
           <Switch
             value={enableReporting}
             onValueChange={handleToggleReporting}
+            testID={testIdWithKey('WitnessReportingSwitch')}
             trackColor={{ false: TOGGLE_INACTIVE_COLOR, true: TOGGLE_ACTIVE_COLOR }}
             thumbColor="#FFFFFF"
           />

@@ -6,6 +6,8 @@ import importPlugin from 'eslint-plugin-import'
 import reactHooks from 'eslint-plugin-react-hooks'
 import jestPlugin from 'eslint-plugin-jest'
 
+import requireTestId from './eslint-rules/require-testid.mjs'
+
 export default [
   {
     settings: {
@@ -153,6 +155,26 @@ export default [
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
+    // Interactive controls carry a testID the test drivers can find. Fork-owned modules
+    // (trust-tasks, vrc) fail on a miss; the rest of core warns while the inherited
+    // backlog is cleared. Test files are exempt.
+    files: ['packages/core/src/**/*.{jsx,tsx}'],
+    ignores: ['**/*.test.{jsx,tsx}', '**/__tests__/**', '**/__mocks__/**'],
+    plugins: {
+      keyring: { rules: { 'require-testid': requireTestId } },
+    },
+    rules: {
+      'keyring/require-testid': 'warn',
+    },
+  },
+  {
+    files: ['packages/core/src/modules/trust-tasks/**/*.{jsx,tsx}', 'packages/core/src/modules/vrc/**/*.{jsx,tsx}'],
+    ignores: ['**/*.test.{jsx,tsx}', '**/__tests__/**', '**/__mocks__/**'],
+    rules: {
+      'keyring/require-testid': 'error',
     },
   },
 ]

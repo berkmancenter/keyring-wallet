@@ -16,7 +16,10 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
-export const DevicesCard: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+export const DevicesCard: React.FC<{ onPress: () => void; testID?: string }> = ({
+  onPress,
+  testID = testIdWithKey('AgentDevices'),
+}) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const styles = StyleSheet.create({
@@ -38,7 +41,7 @@ export const DevicesCard: React.FC<{ onPress: () => void }> = ({ onPress }) => {
       accessibilityRole="button"
       accessibilityLabel={t('Devices.Title')}
       accessibilityHint={t('Devices.CardHint')}
-      testID={testIdWithKey('AgentDevices')}
+      testID={testID}
     >
       <Icon name="cellphone-link" size={28} color={ColorPalette.brand.primary} />
       <View style={styles.text}>

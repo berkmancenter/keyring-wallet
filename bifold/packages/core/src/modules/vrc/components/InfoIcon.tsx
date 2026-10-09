@@ -187,7 +187,7 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
 
       {/* Popup Menu */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={handleMenuClose}>
-        <Pressable style={styles.menuOverlay} onPress={handleMenuClose}>
+        <Pressable style={styles.menuOverlay} onPress={handleMenuClose} testID={testIdWithKey('ContactMenuOverlay')}>
           <View
             style={[
               styles.menuContainer,
@@ -204,6 +204,7 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
                 onPress={handleViewContact}
                 accessibilityLabel={t('ContactDetails.ViewContact')}
                 accessibilityRole="menuitem"
+                testID={testIdWithKey('ContactMenuViewContact')}
               >
                 <Icon name="account-outline" size={20} color={ColorPalette.brand.text} />
                 <ThemedText style={styles.menuItemText}>{t('ContactDetails.ViewContact')}</ThemedText>
@@ -216,6 +217,7 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
               onPress={handleDeletePress}
               accessibilityLabel={t('ContactDetails.RemoveContact')}
               accessibilityRole="menuitem"
+              testID={testIdWithKey('ContactMenuRemoveContact')}
             >
               <Icon name="delete-outline" size={20} color={ColorPalette.semantic.error} />
               <ThemedText style={[styles.menuItemText, styles.deleteText]}>
