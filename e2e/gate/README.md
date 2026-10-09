@@ -120,13 +120,17 @@ main commit with a green push build. If no gate run exists for that commit, it r
 Android build once, waits up to an hour for it, and runs the gate. A commit that was gated, green or red, is not
 gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`).
 
-- **Not while the Mac is busy.** The loop skips a cycle while another gate holds the lock or an xcodebuild, gradle,
-  jest, cargo, docker build, emulator or Simulator process is running (executable names, never command-line patterns).
+- **Not while the Mac is busy.** The loop skips a cycle while another gate holds a live lock, while an xcodebuild,
+  java (gradle), cargo, docker build or emulator process is running (executable names, never command-line patterns),
+  or while any simulator is booted (Simulator.app being open is not a signal).
+- **One push-on build per gated commit.** Each new green main commit gets one Android push-on dispatch (about 40
+  minutes of a free public-repository runner), so the push legs have a build; `watch-requested-<sha8>` records it.
 - **Its own checkout.** The watcher runs from a checkout nobody edits (`~/.keyring-fleet/gate/wt-main`, on main),
   fast-forwarded to `origin/main` before each run when it is clean; a lane's working checkout never feeds an auto-run.
   Like any gate worktree it needs `e2e/node_modules` (`npm ci` in `e2e/`) and a root `node_modules` link.
-- **One gate at a time.** `run` takes `~/.keyring-fleet/gate/run.lock.d` (the owner's pid inside) and waits while
-  another gate holds it; a lock whose owner is gone is taken over. `hold-start` still pauses a run for another
+- **One gate at a time.** `run` and `rerun` take `~/.keyring-fleet/gate/run.lock.d` (the running shell's pid inside)
+  and wait while another gate holds it; a lock whose owner is gone is taken over by an atomic rename, and a lock
+  with no pid yet counts as live for its first minute. `hold-start` still pauses a run for another
   lane's device build.
 - **Green means green.** `green.mjs` accepts a run only when its head commit is the one asked about, its status is
   `completed` and its conclusion is exactly `success`. An empty conclusion is pending. Two hand-written watchers
