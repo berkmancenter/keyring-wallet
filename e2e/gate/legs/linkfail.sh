@@ -48,12 +48,13 @@ fi
 # by itself on foreground. A build without VtaLinkTryAgain skips these.
 if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryAgain; then
   line() { grep -m1 "^$2" "$1" | cut -c1-200; }
-  if selected swap-held-try-again || selected swap-held-no-retry; then
+  if selected swap-held-try-again || selected swap-held-no-retry || selected swap-held-rescan; then
     # swap-refused's deny policy outranks the consent rule: without removing it first the held swap is refused
     # instead (239 gate).
     echo "  policy off: $(pnm "$RUNNER_MAIN_SLUG" policy delete "$POL" | tail -1 | cut -c1-60)"; sleep 3
     echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
     echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
+    if selected swap-held-try-again || selected swap-held-no-retry; then
     HOOK="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
     L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld TRY_AGAIN_EXPECT=yes NO_RETRY_CHECK=1 TRY_AGAIN_HOOK="$HOOK" \
       perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-scan.out" 2>&1; rc=$?
@@ -61,13 +62,26 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     a=$(echo "$t" | grep -oE 'ACL [0-9]+ → [0-9]+'); grow=$(echo "$a" | awk '{print ($4 > $2)}')
     row swap-held-try-again "$([[ $s == "TRYAGAIN shown"* && $t == "TRYAGAIN-LINKED yes"* && $grow == 0 ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${t:-no TRYAGAIN-LINKED line}"
     row swap-held-no-retry "$([[ $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "${n:-no NO-RETRY line}"
+    fi
     # 239 finding: after a held swap the agent must not stay listed; scanning it again starts a link.
     if selected swap-held-rescan; then
-      echo "  rule (again, for the rescan run): $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
-      L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 \
-        perl -e 'alarm 1200; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-rescan.out" 2>&1; rc=$?
-      x=$(line "$LEG_DIR/held-rescan.out" RESCAN)
-      row swap-held-rescan "$([[ $x == "RESCAN ok"* ]] && echo PASS || echo FAIL)" "rc=$rc · ${x:-no RESCAN line}"
+      # 239 gate: once the rescan sat on "Securing this phone's key…" past a 30 s wait. Run it RESCAN_RUNS times
+      # (2) with RESCAN_WAIT_MS (180 s) and the emulator's whole log from the row's start, so slow and stuck differ.
+      ok=0; d=""
+      for i in $(seq 1 "${RESCAN_RUNS:-2}"); do
+        echo "  rule (again, for rescan run $i): $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
+        adb -s $E logcat -c 2>/dev/null; adb -s $E logcat -v threadtime > "$LEG_DIR/held-rescan-$i.logcat" 2>&1 & lc=$!
+        L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 RESCAN_WAIT_MS=${RESCAN_WAIT_MS:-180000} \
+          perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > "$LEG_DIR/held-rescan-$i.out" 2>&1; rc=$?
+        kill "$lc" 2>/dev/null; wait "$lc" 2>/dev/null
+        # The app's own lines: its pids from the log (it is reinstalled each run), plus ReactNativeJS.
+        pids=$(grep -oE "Start proc [0-9]+:$BID" "$LEG_DIR/held-rescan-$i.logcat" | grep -oE '[0-9]+' | sort -u | tr '\n' '|' | sed 's/|$//')
+        grep -E "ReactNativeJS${pids:+| (${pids}) }" "$LEG_DIR/held-rescan-$i.logcat" > "$LEG_DIR/held-rescan-$i.app.logcat"
+        x=$(line "$LEG_DIR/held-rescan-$i.out" "RESCAN ")
+        [[ $x == "RESCAN ok"* ]] && ok=$((ok + 1))
+        d="$d · run $i: rc=$rc ${x:-no RESCAN line}"
+      done
+      row swap-held-rescan "$([ $ok -eq "${RESCAN_RUNS:-2}" ] && echo PASS || echo FAIL)" "$ok of ${RESCAN_RUNS:-2} started a link$d"
     fi
     echo "  rule off (again): $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
   fi

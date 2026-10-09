@@ -389,10 +389,23 @@ async function afterRefusal(driver, said, temporaryDid) {
     const entry = (await existsTestId(driver, "VtaLinkScanAgain", 3000)) ? "VtaLinkScanAgain" : "LinkYourAgentButton";
     await tapTestId(driver, entry, 15000).catch(() => undefined);
     await pasteLinkOnScanScreen(driver, did).catch((e) => console.log(`[e2e] rescan: ${String(e.message).split("\n")[0]}`));
-    const started = await existsTestId(driver, "VtaLinkForOtherPhone", 30000);
+    // How long the link screen sits on "Securing this phone's key…" before the next screen: RESCAN_WAIT_MS bounds it
+    // (239: 30 s was not enough to tell slow from stuck on the held rescan).
+    const waitMs = Number(process.env.RESCAN_WAIT_MS || 30000);
+    const t0 = Date.now();
+    let securingSeen = false;
+    let started = false;
+    while (Date.now() - t0 < waitMs) {
+      if (await existsTestId(driver, "VtaLinkForOtherPhone", 1000)) { started = true; break; }
+      if (!securingSeen && /Securing this phone/i.test(await driver.getPageSource().catch(() => ""))) {
+        securingSeen = true;
+        console.log(`RESCAN-SECURING seen at ${((Date.now() - t0) / 1000).toFixed(1)} s (${new Date().toISOString()})`);
+      }
+    }
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
     const already = /already has that agent/i.test(await driver.getPageSource());
     await screenshot(driver, "link-rescan-after-refusal");
-    console.log(`RESCAN ${started && !already ? "ok" : "refused"} · a link started ${started} · "already has that agent" ${already}`);
+    console.log(`RESCAN ${started && !already ? "ok" : "refused"} · a link started ${started} · "already has that agent" ${already} · next screen ${started ? `after ${secs} s` : `not within ${waitMs / 1000} s`} · "Securing" seen ${securingSeen}`);
   }
   if (process.env.TRY_AGAIN_HOOK) {
     const size = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
