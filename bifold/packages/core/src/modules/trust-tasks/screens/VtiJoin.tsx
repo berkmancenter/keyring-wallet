@@ -63,6 +63,7 @@ const wholeWord = (did: string): string => {
 }
 import { useTakingLong } from './useTakingLong'
 import { useRoomAboveTabBar } from './aboveTabBar'
+import { VtiJoinIds } from './VtiJoin.ids'
 
 type Step = 'which' | 'asks' | 'as'
 
@@ -388,7 +389,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
-          <ThemedText testID={testIdWithKey('JoinNeedsAgent')}>{t('Join.NeedsAgent')}</ThemedText>
+          <ThemedText testID={testIdWithKey(VtiJoinIds.needsAgent)}>{t('Join.NeedsAgent')}</ThemedText>
           {/* The way to it, as "I was invited" offers: a community's code can
               arrive before any agent is linked (the phone's camera, a link).
               The community stays chosen for when the person comes back. */}
@@ -396,7 +397,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             title={t('VtaLink.LinkYourAgent')}
             buttonType={ButtonType.Primary}
             onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtaLink)}
-            testID={testIdWithKey('JoinLinkAgent')}
+            testID={testIdWithKey(VtiJoinIds.linkAgent)}
           />
         </View>
       </SafeAreaView>
@@ -409,21 +410,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // It sits in the actions, above the button that failed, so it cannot fall
   // below the fold (221).
   const errorLine = error ? (
-    <View style={styles.card} testID={testIdWithKey('JoinErrorCard')}>
-      <ThemedText style={styles.error} testID={testIdWithKey('JoinError')}>
+    <View style={styles.card} testID={testIdWithKey(VtiJoinIds.errorCard)}>
+      <ThemedText style={styles.error} testID={testIdWithKey(VtiJoinIds.error)}>
         {t(error.line)}
       </ThemedText>
       <Pressable
         onPress={() => setErrorOpen((open) => !open)}
         accessibilityRole="button"
         accessibilityState={{ expanded: errorOpen }}
-        testID={testIdWithKey('JoinErrorDetailsToggle')}
+        testID={testIdWithKey(VtiJoinIds.errorDetailsToggle)}
       >
         <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
       </Pressable>
       {errorOpen ? (
         <ScrollView style={styles.errorDetail}>
-          <ThemedText style={styles.muted} selectable testID={testIdWithKey('JoinErrorDetail')}>
+          <ThemedText style={styles.muted} selectable testID={testIdWithKey(VtiJoinIds.errorDetail)}>
             {error.detail}
           </ThemedText>
         </ScrollView>
@@ -481,16 +482,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               DID's handle stands as the identifier, not as a name; the full DID
               waits behind Details. */}
           {communityDid ? (
-            <View style={styles.card} testID={testIdWithKey('JoinSuggested')}>
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.suggested)}>
               <View style={styles.row}>
                 <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
                 {called.name || nameRead === communityDid ? (
-                  <ThemedText variant="bold" testID={testIdWithKey('JoinSuggestedName')}>
+                  <ThemedText variant="bold" testID={testIdWithKey(VtiJoinIds.suggestedName)}>
                     {called.name ?? t('Join.Unnamed')}
                   </ThemedText>
                 ) : (
                   // Not "unnamed" before the community has been asked: say it is being asked.
-                  <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedChecking')}>
+                  <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedChecking)}>
                     {t('Join.CheckingName')}
                   </ThemedText>
                 )}
@@ -501,7 +502,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   does not have, and sending two of us hunting a configuration
                   leak that did not exist (report #23). */}
               {!standing || standing.kind === 'none' ? (
-                <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedSource')}>
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedSource)}>
                   {remembered ? t('Join.Remembered') : t('Join.Suggested')}
                 </ThemedText>
               ) : null}
@@ -509,16 +510,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   (a lab that was only ever on someone's Mac). Say so beside
                   "a different community" rather than forget a real choice. */}
               {remembered && unreachable === communityDid ? (
-                <ThemedText style={styles.muted} testID={testIdWithKey('JoinRememberedUnreachable')}>
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.rememberedUnreachable)}>
                   {t('Join.RememberedUnreachable')}
                 </ThemedText>
               ) : null}
               {called.name && called.claimed ? (
-                <ThemedText style={styles.muted} testID={testIdWithKey('JoinNameClaimed')}>
+                <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.nameClaimed)}>
                   {t('Join.NameFromLink')}
                 </ThemedText>
               ) : null}
-              <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedWhere')}>
+              <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedWhere)}>
                 {called.technical}
               </ThemedText>
               <DidDetails did={communityDid} testIdStem="JoinSuggested" />
@@ -537,14 +538,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               }
               buttonType={ButtonType.Primary}
               onPress={() => setStep('asks')}
-              testID={testIdWithKey('JoinThisCommunity')}
+              testID={testIdWithKey(VtiJoinIds.thisCommunity)}
             />
           ) : null}
           <Button
             title={communityDid ? t('Join.Different') : t('Join.ScanLink')}
             buttonType={communityDid ? ButtonType.Secondary : ButtonType.Primary}
             onPress={() => openScanner(navigation)}
-            testID={testIdWithKey('JoinScanCommunity')}
+            testID={testIdWithKey(VtiJoinIds.scanCommunity)}
           />
         </>
       )
@@ -557,13 +558,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           title={t('Join.Different')}
           buttonType={ButtonType.Tertiary}
           onPress={() => openScanner(navigation)}
-          testID={testIdWithKey('JoinScanCommunity')}
+          testID={testIdWithKey(VtiJoinIds.scanCommunity)}
         />
       )
       const toInvited = () =>
         (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
       const waysTitle = (
-        <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('JoinWaysTitle')}>
+        <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey(VtiJoinIds.waysTitle)}>
           {t('Join.Ways.Title', named)}
         </ThemedText>
       )
@@ -572,7 +573,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         body = (
           <>
             {waysTitle}
-            <View style={styles.card} testID={testIdWithKey('JoinVersionUnsupported')}>
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.versionUnsupported)}>
               <ThemedText>{t('Join.Ways.VersionUnsupported', named)}</ThemedText>
             </View>
           </>
@@ -585,7 +586,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         body = (
           <>
             {waysTitle}
-            <View style={styles.card} testID={testIdWithKey('JoinNotAccepting')}>
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.notAccepting)}>
               <ThemedText>{t('Join.Ways.NotAccepting', named)}</ThemedText>
             </View>
             {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
@@ -603,7 +604,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               title={t('VtaLink.IWasInvited')}
               buttonType={ButtonType.Primary}
               onPress={toInvited}
-              testID={testIdWithKey('JoinGoInvited')}
+              testID={testIdWithKey(VtiJoinIds.goInvited)}
             />
           ) : ways.button !== 'none' ? (
             <Button
@@ -630,7 +631,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   setStep('as')
                 }
               }}
-              testID={testIdWithKey('JoinStart')}
+              testID={testIdWithKey(VtiJoinIds.start)}
             />
           ) : null
         // The other door: the review way the phone meets as it stands.
@@ -642,7 +643,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               setPlainRequest(true)
               setStep('as')
             }}
-            testID={testIdWithKey('JoinAsk')}
+            testID={testIdWithKey(VtiJoinIds.ask)}
           />
         ) : null
         // Two things to do: each button sits under the way it acts on, below
@@ -671,7 +672,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           <>
             {waysTitle}
             {changed ? (
-              <ThemedText testID={testIdWithKey('JoinChanged')}>{t('Join.Ways.Changed', named)}</ThemedText>
+              <ThemedText testID={testIdWithKey(VtiJoinIds.changed)}>{t('Join.Ways.Changed', named)}</ThemedText>
             ) : null}
             <JoinWaysCard
               card={ways}
@@ -698,7 +699,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               }
             />
             {noVetting ? (
-              <ThemedText style={styles.muted} testID={testIdWithKey('JoinNoVetting')}>
+              <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.noVetting)}>
                 {t('Join.Ways.NoVetting', named)}
               </ThemedText>
             ) : null}
@@ -726,7 +727,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           </ThemedText>
           {/* The lines below are separate nodes, so the card says the whole
               sentence itself — for a screen reader, and for the harness. */}
-          <View style={styles.card} testID={testIdWithKey('JoinAsks')} accessible accessibilityLabel={asksSentence}>
+          <View
+            style={styles.card}
+            testID={testIdWithKey(VtiJoinIds.asks)}
+            accessible
+            accessibilityLabel={asksSentence}
+          >
             {asks?.invitationOnly ? (
               <ThemedText>{t('Join.AsksInvitationOnly')}</ThemedText>
             ) : asks?.kind === 'open' ? (
@@ -757,7 +763,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             )}
           </View>
           {asks?.kind === 'vetting' && !asks.invitationAdmits ? (
-            <ThemedText testID={testIdWithKey('JoinNoInvitationBypass')}>
+            <ThemedText testID={testIdWithKey(VtiJoinIds.noInvitationBypass)}>
               {t('Join.AsksNoInvitationBypass', { community: name, interpolation: { escapeValue: false } })}
             </ThemedText>
           ) : null}
@@ -774,14 +780,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               onPress={() =>
                 (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
               }
-              testID={testIdWithKey('JoinGoInvited')}
+              testID={testIdWithKey(VtiJoinIds.goInvited)}
             />
           ) : (
             <Button
               title={t('Join.Start')}
               buttonType={ButtonType.Primary}
               onPress={() => setStep('as')}
-              testID={testIdWithKey('JoinStart')}
+              testID={testIdWithKey(VtiJoinIds.start)}
             />
           )}
           {/* A community a link brought stays the one shown, so reopening Join
@@ -800,7 +806,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('Join.AsTitle')}
           </ThemedText>
-          <View testID={testIdWithKey('JoinMakeIdentity')}>
+          <View testID={testIdWithKey(VtiJoinIds.makeIdentity)}>
             <JoinAs
               community={called.name}
               options={joinAs.options}
@@ -819,12 +825,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             buttonType={ButtonType.Primary}
             onPress={() => void onJoinAs()}
             disabled={busy}
-            testID={testIdWithKey('JoinAsContinue')}
+            testID={testIdWithKey(VtiJoinIds.asContinue)}
           >
             {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
           {preparingLong ? (
-            <ThemedText style={{ textAlign: 'center' }} testID={testIdWithKey('PreparingSlow')}>
+            <ThemedText style={{ textAlign: 'center' }} testID={testIdWithKey(VtiJoinIds.preparingSlow)}>
               {t('Invited.PreparingSlow')}
             </ThemedText>
           ) : null}
@@ -839,9 +845,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     const waiting = standing.kind === 'sent' || standing.kind === 'pending'
     const withInvitation = waiting && standing.submission.withInvitation
     const standingCard = (
-      <View style={styles.card} testID={testIdWithKey('JoinStanding')}>
+      <View style={styles.card} testID={testIdWithKey(VtiJoinIds.standing)}>
         {waiting ? (
-          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('JoinRequestSent')}>
+          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey(VtiJoinIds.requestSent)}>
             {t('Join.RequestSentTitle')}
           </ThemedText>
         ) : null}
@@ -850,13 +856,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             name="check-circle"
             size={40}
             color={ColorPalette.semantic.success}
-            testID={testIdWithKey('JoinMemberCheck')}
+            testID={testIdWithKey(VtiJoinIds.memberCheck)}
           />
         ) : null}
         <ThemedText
           variant={standing.kind === 'member' ? 'headingThree' : undefined}
           accessibilityRole={standing.kind === 'member' ? 'header' : undefined}
-          testID={testIdWithKey('JoinStandingText')}
+          testID={testIdWithKey(VtiJoinIds.standingText)}
         >
           {standing.kind === 'member'
             ? tp('Join.StandingMember')
@@ -878,23 +884,23 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                         : tp('Join.StandingLeft')}
         </ThemedText>
         {waiting ? (
-          <ThemedText testID={testIdWithKey('JoinWillShow')}>{t('Join.WillShowWhenAccepted')}</ThemedText>
+          <ThemedText testID={testIdWithKey(VtiJoinIds.willShow)}>{t('Join.WillShowWhenAccepted')}</ThemedText>
         ) : null}
         {withInvitation ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingInvitation')}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingInvitation)}>
             {t('Join.StandingWithInvitation')}
           </ThemedText>
         ) : null}
         {standing.kind === 'deferred'
           ? standing.needs.map((need, i) => (
-              <ThemedText key={i} testID={testIdWithKey('JoinStandingNeed')}>
+              <ThemedText key={i} testID={testIdWithKey(VtiJoinIds.standingNeed)}>
                 {'• '}
                 {joinNeedWords(need, t)}
               </ThemedText>
             ))
           : null}
         {standing.kind === 'rejected' && standing.reason ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingReason')}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingReason)}>
             {tp('Join.StandingReason', { reason: standing.reason })}
           </ThemedText>
         ) : null}
@@ -904,10 +910,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             The whole DID, with Copy, behind its toggle (as on Your agent, #305). */}
         {(standing.kind === 'sent' || standing.kind === 'pending' || standing.kind === 'deferred') &&
         standing.submission.personaDid ? (
-          <View testID={testIdWithKey('JoinStandingIdentity')}>
+          <View testID={testIdWithKey(VtiJoinIds.standingIdentity)}>
             {/* "You asked to join as", then the word, a size up (Alberto, 238). */}
             <ThemedText style={styles.muted}>{t('Join.AskedAs')}</ThemedText>
-            <ThemedText variant="headingFour" testID={testIdWithKey('JoinStandingIdentityName')}>
+            <ThemedText variant="headingFour" testID={testIdWithKey(VtiJoinIds.standingIdentityName)}>
               {wholeWord(standing.submission.personaDid)}
             </ThemedText>
             <DidDetails
@@ -923,7 +929,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             vetting path was seen to carry on with the earlier one (IN-104).
             A removal already says "You can ask to join again." itself. */}
         {mayJoinAgain && standing.kind !== 'removed' ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingAgain')}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingAgain)}>
             {t('Join.StandingAgain')}
           </ThemedText>
         ) : null}
@@ -950,7 +956,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           title={t('Join.Different')}
           buttonType={ButtonType.Secondary}
           onPress={() => openScanner(navigation)}
-          testID={testIdWithKey('JoinScanCommunity')}
+          testID={testIdWithKey(VtiJoinIds.scanCommunity)}
         />
       ) : null
     const go = (screen: string, params?: object) =>
@@ -966,7 +972,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               title={t('Global.Done')}
               buttonType={ButtonType.Primary}
               onPress={() => go(Screens.VtaAgent, { highlightCommunity: communityDid })}
-              testID={testIdWithKey('JoinDone')}
+              testID={testIdWithKey(VtiJoinIds.done)}
             />
             <Button
               title={t('Join.ViewCommunity')}
@@ -977,7 +983,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   { communityDid }
                 )
               }
-              testID={testIdWithKey('JoinOpenCommunity')}
+              testID={testIdWithKey(VtiJoinIds.openCommunity)}
             />
           </>
         ) : standing.kind === 'sent' || standing.kind === 'pending' ? (
@@ -986,7 +992,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             buttonType={ButtonType.Primary}
             onPress={() => void onCheckAgain()}
             disabled={checking}
-            testID={testIdWithKey('JoinCheckAgain')}
+            testID={testIdWithKey(VtiJoinIds.checkAgain)}
           >
             {checking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
@@ -995,7 +1001,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             title={t('VtaLink.ContinueVetting')}
             buttonType={ButtonType.Primary}
             onPress={() => go(Screens.VtiVetting)}
-            testID={testIdWithKey('JoinContinueVetting')}
+            testID={testIdWithKey(VtiJoinIds.continueVetting)}
           />
         ) : (
           <Button
@@ -1005,7 +1011,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               setAgain(true)
               setStep('asks')
             }}
-            testID={testIdWithKey('JoinAgain')}
+            testID={testIdWithKey(VtiJoinIds.again)}
           />
         )}
         {different}
@@ -1030,12 +1036,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           styles.content,
           whichCentred ? { justifyContent: 'center', paddingBottom: 20 } : { paddingBottom: 20 + roomAboveTabBar },
         ]}
-        testID={testIdWithKey('JoinScroll')}
+        testID={testIdWithKey(VtiJoinIds.scroll)}
       >
         {/* The request this phone sent never reached the community (it says
             it holds none): said, with the way to send it again (238). */}
         {standing?.kind === 'none' && standing.lost && step !== 'as' ? (
-          <View style={styles.card} testID={testIdWithKey('JoinRequestLost')}>
+          <View style={styles.card} testID={testIdWithKey(VtiJoinIds.requestLost)}>
             <ThemedText>{t('Join.RequestLost', { community: name, interpolation: { escapeValue: false } })}</ThemedText>
             <Button
               title={t('Join.SendAgain')}
@@ -1044,7 +1050,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 setPlainRequest(true)
                 setStep('as')
               }}
-              testID={testIdWithKey('JoinSendAgain')}
+              testID={testIdWithKey(VtiJoinIds.sendAgain)}
             />
           </View>
         ) : null}
@@ -1052,7 +1058,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         {actions ? (
           <View
             style={[styles.actions, whichCentred ? { marginTop: 8 } : undefined]}
-            testID={testIdWithKey('JoinActions')}
+            testID={testIdWithKey(VtiJoinIds.actions)}
           >
             {actions}
           </View>
