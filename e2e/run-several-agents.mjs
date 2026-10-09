@@ -393,8 +393,12 @@ async function openC(d) {
 async function askToJoinC(d, tag) {
   const before = new Set((json(admin("join-list")).items ?? []).map((r) => r.id));
   await openC(d);
-  // A refused (or withdrawn, left) standing offers "Join again" first (R10 after R5's decline).
-  if (await existsTestId(d, "JoinAgain", 3000)) await tapTestId(d, "JoinAgain", 10000);
+  // A refused (or withdrawn, left) standing offers "Join again" first (R10 after R5's decline). It sits in the actions
+  // under the read-only ways list, below the fold on a phone (239 final pin): scroll down to it when the standing
+  // says "You can ask to join again".
+  let again = await existsTestId(d, "JoinAgain", 3000);
+  if (!again && (await existsTestId(d, "JoinStandingAgain", 2000))) again = Boolean(await scrollToTestId(d, "JoinAgain", 6, { from: 0.6, both: false }).catch(() => undefined));
+  if (again) await tapTestId(d, "JoinAgain", 10000);
   await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
   const askId = (await existsTestId(d, "JoinAsk", 3000)) ? "JoinAsk" : "JoinStart";
   await tapTestId(d, askId, 15000);
