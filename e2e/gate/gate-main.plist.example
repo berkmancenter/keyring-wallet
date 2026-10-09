@@ -21,7 +21,9 @@
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- launchd gives no PATH worth having: name the node that runs the drivers (the one appium is installed under),
+         then homebrew, then the system dirs including /usr/sbin, where sysctl lives (scripts/emu.sh needs it). -->
+    <key>PATH</key><string>/Users/USERNAME/.nvm/versions/node/v20.19.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>GATE_WATCH_INTERVAL</key><string>300</string>
   </dict>
   <key>RunAtLoad</key><true/>

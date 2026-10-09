@@ -137,6 +137,11 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   `completed` and its conclusion is exactly `success`. An empty conclusion is pending. Two hand-written watchers
   read these wrong in one week (an empty check taken as done; a job name split on a space).
 - **Downloads retry** five times a minute apart; the 239 auto-start lost its gate to two transient download failures.
+- **PATH is yours to set.** launchd starts the watcher with almost no PATH. The example names the node that runs
+  the drivers (appium is installed under it), homebrew, and the system directories including `/usr/sbin`, where
+  `sysctl` lives; without that the first automatic gate (10-09) failed in 24 s with `spawn appium ENOENT`, and the
+  memory check read 0 GB so no Android leg started. A plist edit takes effect only after `bootout` and `bootstrap`,
+  and never bootout while a run is in progress: the run is a child of the watcher.
 - **Install:** fill in `gate-main.plist.example`, copy it to `~/Library/LaunchAgents/org.keyring.gate-watch-main.plist`
   and `launchctl bootstrap gui/$(id -u) <that file>`. The Mac's owner decides; it is a lasting change. Stop with
   `launchctl bootout gui/$(id -u)/org.keyring.gate-watch-main`. The log is `~/.keyring-fleet/gate/watch-main.log`.
