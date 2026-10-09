@@ -41,6 +41,7 @@ import {
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { ApprovalDetails } from './ApprovalDetails'
 import { DevicesCard } from './DevicesCard'
+import { MyAgentIds } from './MyAgent.ids'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
@@ -348,7 +349,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     vtaDid && communityDid ? (
       <Pressable
         style={styles.hero}
-        testID={testIdWithKey('MyAgentVettingRow')}
+        testID={testIdWithKey(MyAgentIds.vettingRow)}
         accessibilityRole="button"
         accessibilityLabel={`${t('Vetting.Title')}. ${seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}`}
         onPress={() => navigation.navigate(Screens.VtiVetting)}
@@ -357,13 +358,13 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <Icon name={seat === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
           <Text style={styles.heroTitle}>{t('Vetting.Title')}</Text>
         </View>
-        <View style={styles.badge} testID={testIdWithKey('MyAgentVettingSeat')}>
+        <View style={styles.badge} testID={testIdWithKey(MyAgentIds.vettingSeat)}>
           <Text style={styles.badgeText}>
             {seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
           </Text>
         </View>
         <Text style={styles.heroText}>{seat === 'vetter' ? t('Vetting.HeroVetter') : t('Vetting.HeroApplicant')}</Text>
-        <View style={styles.heroButton} testID={testIdWithKey('MyAgentVettingOpen')}>
+        <View style={styles.heroButton} testID={testIdWithKey(MyAgentIds.vettingOpen)}>
           <Text style={styles.heroButtonText}>
             {seat === 'vetter' ? t('Vetting.OpenDesk') : t('Vetting.GetVetted')}
           </Text>
@@ -379,10 +380,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       {vtaDid && communityDid ? (
         <>
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Identity')}</Text>
-          <View style={styles.card} testID={testIdWithKey('MyAgentIdentityCard')}>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.identityCard)}>
             {persona ? (
               <>
-                <Text style={styles.value} testID={testIdWithKey('MyAgentPersonaDid')}>
+                <Text style={styles.value} testID={testIdWithKey(MyAgentIds.personaDid)}>
                   {persona.did}
                 </Text>
                 <Text style={styles.label}>{t('MyAgent.ShareIdentity')}</Text>
@@ -390,7 +391,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                     not this phone is a member yet: an applicant holds a persona
                     and vetting state to leave too. */}
                 <Pressable
-                  testID={testIdWithKey('MyAgentOpenCommunity')}
+                  testID={testIdWithKey(MyAgentIds.openCommunity)}
                   accessibilityRole="link"
                   onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
                 >
@@ -402,7 +403,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <Text style={styles.value}>{t('MyAgent.NoIdentity')}</Text>
                 <Pressable
                   style={styles.button}
-                  testID={testIdWithKey('CreateIdentityButton')}
+                  testID={testIdWithKey(MyAgentIds.createIdentityButton)}
                   accessibilityRole="button"
                   disabled={busy !== undefined}
                   onPress={onCreateIdentity}
@@ -424,7 +425,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           {vta.awaitingConsentFor ? (
             <View style={styles.row}>
               <ActivityIndicator color={ColorPalette.brand.primary} />
-              <Text style={styles.value} testID={testIdWithKey('MyAgentAwaitingConsent')}>
+              <Text style={styles.value} testID={testIdWithKey(MyAgentIds.awaitingConsent)}>
                 {t('MyAgent.AwaitingConsent', {
                   task: shortTask(vta.awaitingConsentFor),
                   interpolation: { escapeValue: false },
@@ -433,14 +434,14 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             </View>
           ) : null}
           {vta.approvals.length === 0 ? (
-            <Text style={styles.value} testID={testIdWithKey('MyAgentNoApprovals')}>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noApprovals)}>
               {vta.status === 'connected'
                 ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}`
                 : t('MyAgent.NoApprovals')}
             </Text>
           ) : (
             vta.approvals.map((approval) => (
-              <View key={approval.id} style={styles.card} testID={testIdWithKey('MyAgentApprovalCard')}>
+              <View key={approval.id} style={styles.card} testID={testIdWithKey(MyAgentIds.approvalCard)}>
                 <Text style={styles.value}>
                   {t('MyAgent.ApprovalAsks', {
                     requester: shortDid(approval.requester),
@@ -456,7 +457,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                   <View style={styles.row}>
                     <Pressable
                       style={[styles.button, { flex: 1 }]}
-                      testID={testIdWithKey('ApproveConsentButton')}
+                      testID={testIdWithKey(MyAgentIds.approveConsentButton)}
                       accessibilityRole="button"
                       disabled={deciding !== undefined}
                       onPress={() => onDecide(approval.id, 'approve')}
@@ -465,7 +466,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                     </Pressable>
                     <Pressable
                       style={[styles.button, { flex: 1, backgroundColor: ColorPalette.grayscale.mediumGrey }]}
-                      testID={testIdWithKey('DenyConsentButton')}
+                      testID={testIdWithKey(MyAgentIds.denyConsentButton)}
                       accessibilityRole="button"
                       disabled={deciding !== undefined}
                       onPress={() => onDecide(approval.id, 'deny')}
@@ -476,7 +477,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 ) : (
                   <Text
                     style={approval.status === 'failed' ? styles.error : styles.value}
-                    testID={testIdWithKey('MyAgentApprovalDecided')}
+                    testID={testIdWithKey(MyAgentIds.approvalDecided)}
                   >
                     {approval.status === 'approved'
                       ? t('MyAgent.Approved')
@@ -493,12 +494,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
       <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Invitations')}</Text>
       {invitations.length === 0 ? (
-        <Text style={styles.value} testID={testIdWithKey('MyAgentNoInvitations')}>
+        <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noInvitations)}>
           {t('MyAgent.NoInvitations')}
         </Text>
       ) : (
         invitations.map((invitation) => (
-          <View key={invitation.id} style={styles.card} testID={testIdWithKey('MyAgentInvitationCard')}>
+          <View key={invitation.id} style={styles.card} testID={testIdWithKey(MyAgentIds.invitationCard)}>
             <Text style={styles.value}>{shortDid(invitation.communityDid)}</Text>
             <Text style={styles.label}>{t('MyAgent.InvitedAs', { role: invitation.role })}</Text>
             {persona && invitation.subjectDid !== persona.did ? (
@@ -506,7 +507,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             ) : (
               <Pressable
                 style={styles.button}
-                testID={testIdWithKey('JoinCommunityButton')}
+                testID={testIdWithKey(MyAgentIds.joinCommunityButton)}
                 accessibilityRole="button"
                 disabled={busy !== undefined}
                 onPress={() => onJoin(invitation)}
@@ -524,7 +525,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         <Pressable
           key={m.communityDid}
           style={styles.card}
-          testID={testIdWithKey('MyAgentMembershipCard')}
+          testID={testIdWithKey(MyAgentIds.membershipCard)}
           accessibilityRole="button"
           onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid: m.communityDid })}
         >
@@ -533,7 +534,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.value}>{t('MyAgent.Member')}</Text>
           </View>
           <Text style={styles.value}>{shortDid(m.communityDid)}</Text>
-          <Text style={styles.label} testID={testIdWithKey('MyAgentMembershipRole')}>
+          <Text style={styles.label} testID={testIdWithKey(MyAgentIds.membershipRole)}>
             {m.role} · {viaText(m.via)}
           </Text>
           <Text style={styles.label}>{t('MyAgent.MemberSince', { date: localDate(m.grantedAt) })}</Text>
@@ -542,7 +543,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       {communityDid && !memberships.some((m) => m.communityDid === communityDid) ? (
         <Pressable
           style={styles.card}
-          testID={testIdWithKey('MyAgentCommunityRow')}
+          testID={testIdWithKey(MyAgentIds.communityRow)}
           accessibilityRole="button"
           onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
         >
@@ -557,7 +558,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       {activity.length > 0 || holdingError ? (
         <>
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Activity')}</Text>
-          <View style={styles.card} testID={testIdWithKey('MyAgentActivity')}>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.activity)}>
             {activity.map((line, i) => (
               <Text key={i} style={styles.value}>
                 {line}
@@ -595,12 +596,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
           <View style={styles.row}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
-            <Text style={styles.value} testID={testIdWithKey('MyAgentConnecting')}>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.connecting)}>
               {connectingStep}
             </Text>
           </View>
           {vta.awaitingConsentFor ? (
-            <Text style={styles.label} testID={testIdWithKey('MyAgentAwaitingConsent')}>
+            <Text style={styles.label} testID={testIdWithKey(MyAgentIds.awaitingConsent)}>
               {t('MyAgent.AwaitingConsent', {
                 task: shortTask(vta.awaitingConsentFor),
                 interpolation: { escapeValue: false },
@@ -622,43 +623,43 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               title={t('VtaLink.OpenYourAgent')}
               buttonType={ButtonType.Secondary}
               onPress={() => navigation.navigate(Screens.VtaAgent)}
-              testID={testIdWithKey('OpenYourAgentButton')}
+              testID={testIdWithKey(MyAgentIds.openYourAgentButton)}
             />
           ) : null}
           {/* My devices, one tap from here: where the owner adds another device
               or removes a lost one (own_agent_subtask.md §4). Also on the agent
               screen; this is where "Claim your agent" returns to. */}
           {vta.link.kind === 'linked' ? <DevicesCard onPress={() => navigation.navigate(Screens.VtaDevices)} /> : null}
-          <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.card)}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
               <Text style={styles.value}>{t('MyAgent.Connected')}</Text>
             </View>
             <Text style={styles.label}>{t('MyAgent.Host')}</Text>
-            <Text style={styles.value} testID={testIdWithKey('MyAgentHost')}>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.host)}>
               {state.host ?? vta.vtaDid ?? ''}
             </Text>
             {vta.managerDid ? (
               <>
                 <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
-                <Text style={styles.value} testID={testIdWithKey('MyAgentManagerDid')}>
+                <Text style={styles.value} testID={testIdWithKey(MyAgentIds.managerDid)}>
                   {shortDid(vta.managerDid)}
                 </Text>
               </>
             ) : null}
             <Text style={styles.label}>{t('MyAgent.YourIdentity')}</Text>
-            <Text style={styles.value} testID={testIdWithKey('MyAgentDid')}>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.did)}>
               {state.did ? shortDid(state.did) : t('MyAgent.NoCommunitySession')}
             </Text>
             {state.status === 'connected' && state.peerLeg ? (
-              <Text style={styles.label} testID={testIdWithKey('MyAgentPeerLeg')}>
+              <Text style={styles.label} testID={testIdWithKey(MyAgentIds.peerLeg)}>
                 {state.peerLeg === 'tsp' ? t('MyAgent.PeerLegTsp') : t('MyAgent.PeerLegDidComm')}
               </Text>
             ) : null}
             {!state.did && communityDid ? (
               <Pressable
                 style={styles.button}
-                testID={testIdWithKey('ConnectCommunityButton')}
+                testID={testIdWithKey(MyAgentIds.connectCommunityButton)}
                 accessibilityRole="button"
                 onPress={onConnect}
               >
@@ -696,7 +697,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         {vta.link.kind === 'revoked' ? <RemovedPhoneCard link={vta.link} /> : null}
         {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? <ErasedNotice /> : null}
         {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? (
-          <View style={styles.card} testID={testIdWithKey('MyAgentLinkCard')}>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.linkCard)}>
             {/* One sentence and one way in, then the way without a code
                 (Alberto, 239). The scanner takes every code there is: the
                 agent's page, its host's, or another phone's. "Set up a new
@@ -710,32 +711,32 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 title={t('VtaLink.ContinueLinking')}
                 buttonType={ButtonType.Primary}
                 onPress={() => navigation.navigate(Screens.VtaLink)}
-                testID={testIdWithKey('MyAgentContinueLink')}
+                testID={testIdWithKey(MyAgentIds.continueLink)}
               />
             ) : null}
             <Button
               title={t('VtaLink.ScanAgentCode')}
               buttonType={ButtonType.Primary}
               onPress={onLinkAgent}
-              testID={testIdWithKey('LinkYourAgentButton')}
+              testID={testIdWithKey(MyAgentIds.linkYourAgentButton)}
             />
             <Button
               title={t('VtaLink.UseAgentAddress')}
               buttonType={ButtonType.Tertiary}
               onPress={() => navigation.navigate(Screens.VtaCreateAgent, { byAddress: true })}
-              testID={testIdWithKey('LinkByAddressButton')}
+              testID={testIdWithKey(MyAgentIds.linkByAddressButton)}
             />
             {/* Adding this phone is done on the phone that already has the
                 agent: it shows the code this one scans. */}
-            <Text style={styles.label} testID={testIdWithKey('LinkOtherPhoneHint')}>
+            <Text style={styles.label} testID={testIdWithKey(MyAgentIds.linkOtherPhoneHint)}>
               {t('VtaLink.OtherPhoneHint')}
             </Text>
           </View>
         ) : null}
         {vtaDid ? (
-          <View style={styles.card} testID={testIdWithKey('MyAgentEnrolCard')}>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.enrolCard)}>
             <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
-            <Text style={styles.mono} testID={testIdWithKey('MyAgentManagerDid')} selectable>
+            <Text style={styles.mono} testID={testIdWithKey(MyAgentIds.managerDid)} selectable>
               {managerDid ?? '…'}
             </Text>
             <Text style={styles.label}>{t('MyAgent.EnrolHint')}</Text>
@@ -753,7 +754,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <>
             <Pressable
               style={styles.button}
-              testID={testIdWithKey('ConnectMyAgentButton')}
+              testID={testIdWithKey(MyAgentIds.connectMyAgentButton)}
               accessibilityRole="button"
               onPress={onConnect}
             >
