@@ -30,7 +30,9 @@
  *   DEVICE_PIN      Android: set this screen lock after the link and type it into the owner
  *                   check. Since keyring-bifold #317 Approve asks for the owner (Face ID, or
  *                   the device PIN), and a phone with no lock cannot approve at all.
- *   CARD_ROWS=1     #321's row: the card says "<who> asks your agent to <what>", no DID in it.
+ *   CARD_ROWS=1     the card in plain words (#321, #328): "<who> asks your agent to <what>" with no DID, no "run "
+ *                   and no raw task name; the task's technical name only behind RequestTaskToggle; and the card
+ *                   saying what the task does (ApprovalTaskDoes + ApprovalOutcomeUnknown, or ApprovalOutcome).
  *   OWNER_ROWS=1    Android, with DEVICE_PIN: #317's rows. Approve asks; a cancelled check
  *                   leaves the request waiting; Decline (a second request) does not ask.
  */
@@ -54,7 +56,7 @@ const UDID = PLATFORM === "android" ? process.env.ANDROID_UDID || process.env.UD
 const TASK = "https://trusttasks.org/spec/vta/contexts/get/1.0";
 const SET = process.env.APPROVER_SET || "e2e-approvals";
 
-const link = JSON.parse(readFileSync(path.join(here, "artifacts", "last-link.json"), "utf8"));
+const link = JSON.parse(readFileSync(path.join(process.env.E2E_RUN_DIR || path.join(here, "artifacts"), "last-link.json"), "utf8"));
 const SLUG = process.env.RUNNER_VTA || process.env.VTA_SLUG || link.slug;
 if (SLUG !== link.slug) throw new Error(`the phone was linked to "${link.slug}", not "${SLUG}"`);
 
@@ -181,7 +183,11 @@ try {
   const added = listAcl({ slug: SLUG, pnmHome: link.pnmHome }).filter((e) => !before.has(e.subject));
   const chain = ownedBy(added, link.tempDid).filter((e) => e.subject !== link.tempDid);
   const duringLink = added.filter((e) => String(e.createdAt) <= link.at);
-  if (chain.length) approver = chain.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1).subject;
+  // The link run names this phone's rotated key (heirs in last-link.json): take it when it is on the agent. Side by
+  // side another leg links a phone to the same agent, and then "the one key added during the link" is two (237 gate).
+  const heir = (link.heirs ?? []).filter((h) => added.some((e) => e.subject === h)).at(-1);
+  if (heir) approver = heir;
+  else if (chain.length) approver = chain.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1).subject;
   else if (duringLink.length === 1) approver = duringLink[0].subject;
   else if (duringLink.length > 1) throw new Error(`${duringLink.length} keys were added to "${SLUG}" during the link: cannot tell which is this phone's`);
   if (!approver) throw new Error(`no key of this phone on "${SLUG}": link it first (run-vta-link.js with E2E_KEEP_APP=1)`);
@@ -240,7 +246,22 @@ try {
   const asks = (await existsTestId(d, "RequestAsks", 1500)) ? (await textOf(d, "RequestAsks")).trim() : "";
   const does = (await existsTestId(d, "ApprovalTaskDoes", 1000)) ? (await textOf(d, "ApprovalTaskDoes")).trim() : "";
   log(`card says: "${asks}" · task "${does}"`);
-  if (process.env.CARD_ROWS === "1") row("321 card names the action and requester", /asks your agent to \S/.test(asks) && !/did:/i.test(asks) && Boolean(does), `"${asks}" · "${does}"`);
+  if (process.env.CARD_ROWS === "1") {
+    const plain = /asks your agent to \S/.test(asks) && !/did:/i.test(asks) && !/\brun\b/i.test(asks) && !/vta\//i.test(asks);
+    row("card in plain words", plain, `"${asks}"`);
+    // The raw task name lives behind "Technical name" (RequestTaskToggle → RequestTaskDid), never in the sentence.
+    let technical = "";
+    if (await scrollToTestId(d, "RequestTaskToggle", 3).catch(() => undefined)) {
+      await tapTestId(d, "RequestTaskToggle", 5000).catch(() => undefined);
+      technical = (await existsTestId(d, "RequestTaskDid", 5000)) ? (await textOf(d, "RequestTaskDid")).trim() : "";
+    }
+    row("card technical name behind the toggle", /contexts\/get/.test(technical), technical ? `"${technical}"` : "no RequestTaskToggle / RequestTaskDid");
+    // What it would do: the agent's own effects (ApprovalOutcome), else Keyring's words with the caution line.
+    const outcome = await existsTestId(d, "ApprovalOutcome", 1000);
+    const unknown = await existsTestId(d, "ApprovalOutcomeUnknown", 1000);
+    row("card says what it would do", outcome || (Boolean(does) && unknown), outcome ? "the agent's effects (ApprovalOutcome)" : `"${does}"${unknown ? " + ApprovalOutcomeUnknown" : " (no ApprovalOutcomeUnknown)"}`);
+    await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
+  }
   if (OWNER_ROWS) {
     // #317: Approve asks for the owner; a cancelled check leaves the request as it was.
     await tapTestId(d, "ApproveConsentButton", 10000);

@@ -546,10 +546,13 @@ export async function liftAboveTabBar(driver, key, tries = 4, { log = false } = 
 
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
-  await el.waitForDisplayed({ timeout });
+  // Lift it into view first: an element below the fold (iOS reports it) is not "displayed" until it scrolls up,
+  // so waiting for that before the lift timed out on the ticket's Details toggle (237 gate, kk).
+  await liftAboveTabBar(driver, key).catch(() => false);
+  await el.waitForDisplayed({ timeout: 10000 }).catch(() => undefined);
   // Not a refusal: a sheet's button over the tab bar is tappable where it is. Said, so a tap that lands
   // on a tab instead shows in the log.
-  if (!(await liftAboveTabBar(driver, key))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
+  if (!(await liftAboveTabBar(driver, key, 0))) console.log(`[e2e] testID=${key} ends at or below the tab bar's top; tapping it there`);
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
   const cx = Math.floor(x + width / 2);
@@ -666,6 +669,21 @@ export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, d
   }
 }
 
+// WDA's isDisplayed can say false for a button the page source shows visible="true" and on screen (239 kk: the
+// vetter's Open session at y 554 of 874, six swipes, never "displayed"). On iOS, accept visible="true" with the
+// element's rect inside the window.
+async function onScreenIos(driver, el) {
+  if (driver.e2ePlatform !== "ios" && !driver.isIOS) return false;
+  try {
+    if ((await el.getAttribute("visible")) !== "true") return false;
+    const r = await driver.getElementRect(el.elementId);
+    const w = await driver.getWindowRect();
+    return r.width > 0 && r.height > 0 && r.y >= 0 && r.y + r.height <= w.height && r.x >= 0 && r.x + r.width <= w.width;
+  } catch {
+    return false;
+  }
+}
+
 async function scrollOnce(driver, key, maxSwipes, from, direction) {
   await clearSiblingNoticeIfUp(driver);
   // An upward swipe starts well below the top: on an iPad the app can run in a
@@ -674,7 +692,7 @@ async function scrollOnce(driver, key, maxSwipes, from, direction) {
   const [startY, endY] = direction === "up" ? [0.3, Math.max(from, 0.75)] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);
-    if ((await el.isExisting()) && (await el.isDisplayed())) return el;
+    if ((await el.isExisting()) && ((await el.isDisplayed()) || (await onScreenIos(driver, el)))) return el;
     const { width, height } = await driver.getWindowRect();
     await driver
       .action("pointer")

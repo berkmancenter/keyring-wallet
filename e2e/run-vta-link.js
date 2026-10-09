@@ -83,7 +83,14 @@ const LINK_MODE = process.env.LINK_MODE || "qr";
 const JOURNEY = process.env.JOURNEY === "1";
 // EXPECT_REFUSAL=communityAgent (with LINK_MODE=manual and RUNNER_VTA naming a
 // community's own agent): pass when the phone refuses to link it (bifold #306).
+// EXPECT_REFUSAL=swapHeld | swapRefused (LINK_MODE=manual): the agent keeps the
+// phone's first key, because a consent rule holds acl/swap-key or a policy
+// denies it, and the phone must say why in words (bifold #325, VtaLink.SwapFailed).
 const EXPECT_REFUSAL = process.env.EXPECT_REFUSAL || "";
+const SWAP_FAILED = {
+  swapHeld: { words: /holding this phone's link until someone approves it/, waitMs: 300000 },
+  swapRefused: { words: /refused to finish linking this phone/, waitMs: 180000 },
+};
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
@@ -121,12 +128,48 @@ async function assertAgentNamed(driver, key, where) {
   throw new Error(`${where} says "${shown}", not the agent's own name "${name}"`);
 }
 
+/**
+ * 238 (bifold #340): the introduction's words and buttons are centred together in AgentIntro. Prints
+ * `INTRO-CENTRE ok|off <space above the first line> <space below the buttons>` (within 24 px is ok), or nothing
+ * on a build without AgentIntroButtons.
+ */
+async function introCentre(driver) {
+  try {
+    if (!(await existsTestId(driver, "AgentIntroButtons", 2000))) return;
+    const box = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
+    const intro = await box(byTestId(driver, "AgentIntro"));
+    const buttons = await box(byTestId(driver, "AgentIntroButtons"));
+    // The topmost element inside AgentIntro's rectangle, from the page source (an element's own child query found
+    // nothing on iOS, 238 gate): iOS gives x/y/width/height in points, Android bounds in pixels, as getLocation does.
+    let top = Infinity;
+    for (const [tag] of (await driver.getPageSource()).matchAll(/<[A-Za-z.]+ [^>]*>/g)) {
+      if (/AgentIntro"/.test(tag)) continue;
+      let r;
+      const b = tag.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (b) r = { x: +b[1], y: +b[2], width: b[3] - b[1], height: b[4] - b[2] };
+      else {
+        const n = (k) => Number((tag.match(new RegExp(` ${k}="(-?\\d+)"`)) || [])[1]);
+        r = { x: n("x"), y: n("y"), width: n("width"), height: n("height") };
+      }
+      if (!(r.height > 0) || Number.isNaN(r.y)) continue;
+      const inside = r.x >= intro.x - 1 && r.y >= intro.y - 1 && r.x + r.width <= intro.x + intro.width + 1 && r.y + r.height <= intro.y + intro.height + 1;
+      if (inside && !(r.y <= intro.y + 1 && r.height >= intro.height - 2)) top = Math.min(top, r.y);
+    }
+    const above = Math.round(top - intro.y);
+    const below = Math.round(intro.y + intro.height - (buttons.y + buttons.height));
+    console.log(`INTRO-CENTRE ${Math.abs(above - below) <= 24 ? "ok" : "off"} ${above} ${below}`);
+  } catch (e) {
+    console.log(`INTRO-CENTRE off unmeasured: ${String(e.message).split("\n")[0].slice(0, 80)}`);
+  }
+}
+
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
   // An agent with other phones on it first offers "Your other phones"; keep them all.
   if (await passNewPhoneOfferIfShown(driver, 8000)) console.log("[e2e] other-phones offer: kept them all (Done)");
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
+  await introCentre(driver);
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
   await waitForTestId(driver, "AgentHome", 30000);
   await assertAgentNamed(driver, "AgentHomeName", "the agent screen");
@@ -179,24 +222,622 @@ async function openAgentHome(driver) {
  * The no-QR link: name the agent, show the key, grant it by hand — ending on
  * "Linked". Returns the phone's temporary key, recorded for the cleanup.
  */
+/**
+ * The link by the agent's address on 237 and later (bifold #338, #339): My Agent's "No code? Use your agent's
+ * address" (LinkByAddressButton), or the link screen's VtaLinkByAddress, opens VtaCreateAgent at the address
+ * step. Address → Continue → the code card (AgentCreateOwnerCode) → "Show the code" → the phone's did:key in
+ * AgentCreateOwnerDid → the host grants it → Connect → AgentCreateReady → Done. A phone with no screen lock (a
+ * simulator, an emulator before its PIN) takes the device path there and asks no owner check. Refusals show in
+ * AgentCreateError, worded as the link screen words them. Returns the phone's temporary key, for the cleanup.
+ */
+// 237's refusal of a phone with no screen lock, on the address step (CreateAgent.NeedsScreenLock*).
+const NEEDS_LOCK = /To protect your agent, turn on .*(passcode|screen lock)/i;
+
+/** AgentCreateError's words, and the original text under its Details (printed as LINK-ERROR). */
+async function createErrorSaid(driver) {
+  const said = (await textOf(driver, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+  let detail = "";
+  if (await existsTestId(driver, "AgentCreateErrorDetailsToggle", 1000)) {
+    await tapTestId(driver, "AgentCreateErrorDetailsToggle", 5000).catch(() => undefined);
+    detail = (await textOf(driver, "AgentCreateErrorDetail").catch(() => "")).replace(/\s+/g, " ").trim();
+  }
+  console.log(`LINK-ERROR "${said}" · detail "${detail.slice(0, 300)}"`);
+  return said;
+}
+
+async function linkByAddress(driver, entry) {
+  await tapTestId(driver, entry, 30000);
+  const address = await waitForTestId(driver, "AgentCreateAddressInput", 30000);
+  await address.setValue(runnerVtaDid());
+  await (await scrollToTestId(driver, "AgentCreateAddressContinue", 4).catch(() => byTestId(driver, "AgentCreateAddressContinue"))).click();
+  // The code step, or a refusal back on the address (AgentCreateError). Before bifold #339 a phone with no screen
+  // lock is refused here ("To protect your agent, turn on … first"); #339 goes on as a device (AgentCreateAsDevice).
+  for (const until = Date.now() + 60000; Date.now() < until; ) {
+    if (await existsTestId(driver, "AgentCreateOwnerCode", 2000)) break;
+    if (await existsTestId(driver, "AgentCreateError", 1000)) {
+      const said = await createErrorSaid(driver);
+      await screenshot(driver, "link-address-refused-early");
+      if (NEEDS_LOCK.test(said)) throw Object.assign(new Error(`the address path needs a screen lock on this build: "${said}"`), { needsLock: true });
+      throw new Error(`the address link failed before its code: "${said}"`);
+    }
+  }
+  await waitForTestId(driver, "AgentCreateOwnerCode", 5000);
+  if (!(await existsTestId(driver, "AgentCreateOwnerDid", 2000))) {
+    const show = await scrollToTestId(driver, "AgentCreateShowCode", 6).catch(() => undefined);
+    if (show) await show.click();
+    else await tapTestId(driver, "AgentCreateShowCode", 15000);
+  }
+  await scrollToTestId(driver, "AgentCreateOwnerDid", 4).catch(() => undefined);
+  const temporaryDid = (await textOf(driver, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+  if (!/^did:/.test(temporaryDid)) throw new Error(`no code in AgentCreateOwnerDid: "${temporaryDid.slice(0, 60)}"`);
+  runTempDids.push(temporaryDid);
+  const asDevice = await existsTestId(driver, "AgentCreateAsDevice", 500);
+  console.log(`[e2e] phone shows its code ${temporaryDid.slice(0, 32)}… (address path${asDevice ? ", as a device: no screen lock" : ""})`);
+  console.log(`LINK-PATH address ${asDevice ? "as-device" : "owner"}`);
+  await screenshot(driver, "link-m1-key-address");
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
+  execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const connect = await scrollToTestId(driver, "AgentCreateConnect", 6).catch(() => undefined);
+  if (connect) await connect.click();
+  else await tapTestId(driver, "AgentCreateConnect", 15000);
+  // A refusal, expected or not, lands back on the address step in AgentCreateError.
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /community's agent/i /* 236: "This is a community's agent. Link Keyring…"; 239: "This code is for a community's agent. …" */, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const by = Date.now() + (wanted ? wanted.waitMs : 240000);
+  let state = "";
+  while (Date.now() < by && !state) {
+    if (await existsTestId(driver, "AgentCreateReady", 2000)) state = "ready";
+    else if (await existsTestId(driver, "AgentCreateError", 1000)) state = "error";
+    else if (await existsTestId(driver, "AgentCreateCheckAgain", 500)) await tapTestId(driver, "AgentCreateCheckAgain", 5000).catch(() => undefined);
+  }
+  if (state === "error" || wanted) {
+    const said = state === "error" ? await createErrorSaid(driver) : "";
+    await screenshot(driver, `link-address-${EXPECT_REFUSAL || "error"}`);
+    if (!wanted) throw new Error(`the address link failed: "${said.slice(0, 200)}"`);
+    if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no AgentCreateError)"}"`);
+    console.log(EXPECT_REFUSAL === "communityAgent" ? `[e2e] refused as a community's agent: "${said}"` : `[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
+    return temporaryDid;
+  }
+  if (state !== "ready") throw new Error("the address link never reached AgentCreateReady in 240 s");
+  await screenshot(driver, "link-m2-linked-address");
+  if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+  console.log("[e2e] the temporary key is no longer in the ACL");
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
+  await tapTestId(driver, "AgentCreateDone", 15000);
+  await passNewPhoneOfferIfShown(driver);
+  return temporaryDid;
+}
+
+/**
+ * VtaLink's scan branch (237: a pasted or scanned bare agent address, f7 10-07): the card VtaLinkForOtherPhone
+ * shows the phone's key as a QR; "Show as text" (VtaLinkShowAsText) puts the did:key in VtaLinkManualDid. The
+ * screen polls by itself (VtaLinkWaitingForPhone; VtaLinkCheckAgain once its window ends), so: read the key,
+ * have the host grant it, and wait for VtaLinkDone, or VtaLinkError for the refusal rows. No screen lock needed.
+ */
+/**
+ * The phone's key on the scan branch: as text behind VtaLinkShowAsText when the card offers it, else by Copy
+ * (VtaLinkCopyKey) and the device clipboard (237's card showed only Copy, Share and Stop linking, 10-07).
+ */
+async function scanBranchKey(driver) {
+  if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+    const show = await scrollToTestId(driver, "VtaLinkShowAsText", 3).catch(() => undefined);
+    if (show) await show.click();
+  }
+  if (await scrollToTestId(driver, "VtaLinkManualDid", 3).catch(() => undefined)) return (await textOf(driver, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  await tapTestId(driver, "VtaLinkCopyKey", 15000);
+  await sleep(1000);
+  const raw = await driver.getClipboard("plaintext").catch(() => "");
+  const text = Buffer.from(String(raw), "base64").toString("utf8");
+  const did = (text.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  console.log(`[e2e] key read by Copy (clipboard): ${did.slice(0, 32)}…`);
+  return did;
+}
+
+/**
+ * bifold #355 (239), on VtaLink after an expected refusal; each part only when the leg asks for it. Prints lines the
+ * leg turns into rows:
+ *   TRY_AGAIN_EXPECT=yes|no   `TRYAGAIN shown|absent` (a held swap offers Try again; a refused one, or a
+ *                             community's agent, does not)
+ *   NO_RETRY_CHECK=1          `NO-RETRY ok|retried …`: after background → foreground the refusal stays (VtaLinkError,
+ *                             same words, no checking state, polled 30 s) and logcat has no new "[TrustTasks:VtaClient]
+ *                             asked|greeted <agent DID>" line. A positive control first: the attempt itself logged
+ *                             "asked <agent DID>"; without it only the screen half counts (Android only)
+ *   TRY_AGAIN_HOOK=<shell>    runs it (the leg lifts the rule that held the swap), presses Try again, and prints
+ *                             `TRYAGAIN-LINKED yes|no` with the ACL size before and after (the same key: no growth)
+ */
+async function afterRefusal(driver, said, temporaryDid) {
+  const did = runnerVtaDid();
+  const logcat = () => { try { return execFileSync("adb", ["-s", driver.e2eUdid, "logcat", "-d", "-v", "time"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n"); } catch { return []; } };
+  const asked = (lines) => lines.filter((l) => l.includes("[TrustTasks:VtaClient]") && l.includes(did) && /\b(asked|greeted)\b/.test(l));
+  if (process.env.TRY_AGAIN_EXPECT) {
+    const shown = Boolean(await scrollToTestId(driver, "VtaLinkTryAgain", 3).catch(() => undefined));
+    console.log(`TRYAGAIN ${shown ? "shown" : "absent"} (expected ${process.env.TRY_AGAIN_EXPECT === "yes" ? "shown" : "absent"})`);
+  }
+  if (process.env.NO_RETRY_CHECK === "1" && driver.e2ePlatform === "android") {
+    const before = logcat();
+    const control = asked(before).length;
+    await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
+    let kept = true;
+    let seen = "";
+    for (let i = 0; i < 30 && kept; i++) {
+      await sleep(1000);
+      const now = (await textOf(driver, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+      const checking = (await existsTestId(driver, "VtaLinkCheckGrant", 200)) || (await existsTestId(driver, "VtaLinkWaitingForPhone", 200));
+      if (now !== said || checking) { kept = false; seen = checking ? "a checking state" : `"${now.slice(0, 80)}"`; }
+    }
+    const seenBefore = new Set(before);
+    const after = asked(logcat()).filter((l) => !seenBefore.has(l));
+    const logHalf = control > 0 ? (after.length === 0 ? "no new sign-in lines" : `${after.length} new line(s): ${after[0].slice(0, 120)}`) : "control missing: no \"asked <agent>\" line from the attempt, the log half does not count";
+    const ok = kept && (control === 0 || after.length === 0);
+    console.log(`NO-RETRY ${ok ? "ok" : "retried"} · screen ${kept ? "kept the refusal 30 s" : `changed to ${seen}`} · ${logHalf} · control ${control}`);
+  }
+  if (process.env.RESCAN_AFTER === "1") {
+    // 239 finding (UI/UX, 10-08): a swap held or refused once left the agent listed, so scanning it again said
+    // "This phone already has that agent". After the refusal, scan the same agent again: a link must start.
+    // RESCAN_LIFT_HOOK (held swap): lift the rule first; the phone keeps its granted key, so the rescan goes straight
+    // back to the swap and must finish the link with that key: no new key asked, the ACL not growing, one agent.
+    const lift = process.env.RESCAN_LIFT_HOOK;
+    const aclSize = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const aclBefore = lift ? aclSize() : -1;
+    const tempBefore = lift ? aclDids().includes(temporaryDid) : false;
+    if (lift) { execFileSync("bash", ["-c", lift], { stdio: "inherit" }); await sleep(3000); }
+    for (let i = 0; i < 4 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await driver.back().catch(() => undefined);
+    await (await waitForTestId(driver, "MyAgent", 15000)).click();
+    await sleep(1500);
+    const entry = (await existsTestId(driver, "VtaLinkScanAgain", 3000)) ? "VtaLinkScanAgain" : "LinkYourAgentButton";
+    await tapTestId(driver, entry, 15000).catch(() => undefined);
+    await pasteLinkOnScanScreen(driver, did).catch((e) => console.log(`[e2e] rescan: ${String(e.message).split("\n")[0]}`));
+    // How long the link screen sits on "Securing this phone's key…" before the next screen: RESCAN_WAIT_MS bounds it
+    // (239: 30 s was not enough to tell slow from stuck on the held rescan).
+    const waitMs = Number(process.env.RESCAN_WAIT_MS || 30000);
+    if (lift) {
+      const t1 = Date.now();
+      let linked = false;
+      let newKey = false;
+      let error = false;
+      while (Date.now() - t1 < waitMs && !linked && !error) {
+        linked = await existsTestId(driver, "VtaLinkDone", 2000);
+        if (!newKey && (await existsTestId(driver, "VtaLinkForOtherPhone", 300))) newKey = true;
+        if (!linked && (await existsTestId(driver, "VtaLinkError", 300))) error = true;
+      }
+      const secs = ((Date.now() - t1) / 1000).toFixed(1);
+      const already = /already has that agent/i.test(await driver.getPageSource());
+      await screenshot(driver, "link-rescan-lifted");
+      const aclAfter = aclSize();
+      const tempAfter = aclDids().includes(temporaryDid);
+      // One agent on this phone: My Agent lists it once (the chips, or none when it is the only one).
+      let rows = -1;
+      if (linked) {
+        await tapTestId(driver, "VtaLinkDone", 5000).catch(() => undefined);
+        await sleep(2000);
+        for (let i = 0; i < 4 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await driver.back().catch(() => undefined);
+        await (await waitForTestId(driver, "MyAgent", 15000)).click().catch(() => undefined);
+        await sleep(2000);
+        if (await existsTestId(driver, "AgentIntroSkip", 2000)) await tapTestId(driver, "AgentIntroSkip", 5000).catch(() => undefined);
+        rows = (await driver.$$(`//*[starts-with(@resource-id,"com.ariesbifold:id/AgentSwitcherRow_")]`)).length;
+        await screenshot(driver, "link-rescan-lifted-agent");
+      }
+      console.log(`RESCAN-LINKED ${linked ? "yes" : "no"} · ${linked ? `after ${secs} s` : error ? `an error after ${secs} s` : `not within ${waitMs / 1000} s`} · a new key asked ${newKey} · "already has that agent" ${already} · ACL ${aclBefore} → ${aclAfter} grew ${aclAfter > aclBefore} · the kept key in the ACL ${tempBefore} → ${tempAfter} · agents listed ${rows} listed once ${rows >= 0 && rows <= 1}`);
+      if (linked) runTempDids.push(temporaryDid);
+      return;
+    }
+    const t0 = Date.now();
+    let securingSeen = false;
+    let started = false;
+    while (Date.now() - t0 < waitMs) {
+      if (await existsTestId(driver, "VtaLinkForOtherPhone", 1000)) { started = true; break; }
+      if (!securingSeen && /Securing this phone/i.test(await driver.getPageSource().catch(() => ""))) {
+        securingSeen = true;
+        console.log(`RESCAN-SECURING seen at ${((Date.now() - t0) / 1000).toFixed(1)} s (${new Date().toISOString()})`);
+      }
+    }
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    const already = /already has that agent/i.test(await driver.getPageSource());
+    await screenshot(driver, "link-rescan-after-refusal");
+    console.log(`RESCAN ${started && !already ? "ok" : "refused"} · a link started ${started} · "already has that agent" ${already} · next screen ${started ? `after ${secs} s` : `not within ${waitMs / 1000} s`} · "Securing" seen ${securingSeen}`);
+  }
+  if (process.env.TRY_AGAIN_HOOK) {
+    const size = () => { const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" }); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const before = size();
+    execFileSync("bash", ["-c", process.env.TRY_AGAIN_HOOK], { stdio: "inherit" });
+    await sleep(3000);
+    const btn = await scrollToTestId(driver, "VtaLinkTryAgain", 3).catch(() => undefined);
+    let linked = false;
+    if (btn) {
+      await btn.click();
+      for (const until = Date.now() + 240000; Date.now() < until && !linked; ) {
+        linked = await existsTestId(driver, "VtaLinkDone", 2000);
+        if (!linked && (await existsTestId(driver, "VtaLinkError", 500)) && !(await existsTestId(driver, "VtaLinkCheckGrant", 300))) break;
+      }
+    }
+    const after = size();
+    await screenshot(driver, "link-try-again");
+    console.log(`TRYAGAIN-LINKED ${linked ? "yes" : "no"} · button ${Boolean(btn)} · ACL ${before} → ${after}`);
+    if (linked) runTempDids.push(temporaryDid);
+  }
+}
+
+/**
+ * IN-135 (bifold #351-#355, 239): a link that survives the phone going away, and says when it can't. One case per
+ * run (LINK_CASE); prints `ROW <case> PASS|FAIL — …` and returns whether it passed. Android emulator; the leg roots it
+ * for the mediator block (BLOCK_HOST: the agent's own mediator, f7) and lifts every rule in its cleanup.
+ *   link-host-sleep            host code: lock the phone PAUSE_S (150) right after Link, then unlock: it links, with no
+ *                              "This phone was not linked"
+ *   link-host-lock-after-grant host code: lock right after the host grants (the phone awaited), unlock: it links
+ *   link-address-resume        address path: the code shown, the app force-stopped, the grant made, the app
+ *                              relaunched: My Agent offers MyAgentContinueLink, VtaLink shows VtaLinkResumed with the
+ *                              same key, and it links; the ACL grows by one
+ *   link-no-answer             address path: the agent's mediator blocked through Connect: "didn't answer" with
+ *                              AgentCreateCheckAgain (not a failure, the same key); unblocked, Check again links; ACL +1
+ *   host-code-lapsed           host code: on the confirm screen for 5 min 30 s, then Link: "expired or was already
+ *                              used", no Try again, and the host's offer never submitted
+ *   create-window-paused       address path: Copy the code, the app in the background 15 min: still waiting
+ *                              (AgentCreateWaiting), not Check again
+ *   link-try-again             host code: the mediator blocked once granted, until "This phone was not linked" with
+ *                              VtaLinkTryAgain (about 14 min); unblocked, Try again links with the same key, no ACL growth
+ */
+async function linkCase(driver, which) {
+  const udid = driver.e2eUdid;
+  const sh = (...a) => execFileSync("adb", ["-s", udid, "shell", ...a], { encoding: "utf8" });
+  const PAUSE_S = Number(process.env.PAUSE_S || 150);
+  const lockFor = async (s) => {
+    sh("input", "keyevent", "26");
+    await sleep(s * 1000);
+    sh("input", "keyevent", "26");
+    await sleep(1500);
+    try { sh("wm", "dismiss-keyguard"); } catch { /* none */ }
+    await sleep(2000);
+  };
+  const block = (on) => {
+    const host = process.env.BLOCK_HOST;
+    if (!host) throw new Error(`${which} needs BLOCK_HOST`);
+    for (const t of ["iptables", "ip6tables"]) try { sh(t, on ? "-I" : "-D", "OUTPUT", "-d", host, "-j", "REJECT"); } catch { /* the other family */ }
+    console.log(`[e2e] ${host} ${on ? "blocked" : "unblocked"}`);
+  };
+  // A long wait keeps the Appium session alive (newCommandTimeout is 300-600 s): one cheap command every 30 s.
+  const idle = async (ms) => {
+    for (const until = Date.now() + ms; Date.now() < until; ) {
+      await sleep(Math.min(30000, Math.max(0, until - Date.now())));
+      await driver.getWindowRect().catch(() => undefined);
+    }
+  };
+  // Entries, from the JSON listing: the text listing names two DIDs per entry (subject, "created by"), and counting
+  // its DIDs doubled every change (239 rerun read one new entry as "3 → 5").
+  const aclSize = () => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
+  };
+  const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
+  // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
+  // Share and Copy, so a text read came back empty).
+  const linkKey = async () => {
+    if (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) await (await scrollToTestId(driver, "VtaLinkShowTheCode", 3).catch(() => undefined))?.click().catch(() => undefined);
+    const text = (await words("VtaLinkManualDid")).replace(/\s+/g, "");
+    if (text) return text;
+    const copy = await scrollToTestId(driver, "VtaLinkCopyKey", 4).catch(() => undefined);
+    if (!copy) return "";
+    await copy.click();
+    await sleep(1000);
+    const raw = Buffer.from(String(await driver.getClipboard("plaintext").catch(() => "")), "base64").toString("utf8");
+    return (raw.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  };
+  const notLinked = async () => /was not linked/i.test(await driver.getPageSource());
+  const row = (ok, detail) => { console.log(`ROW ${which} ${ok ? "PASS" : "FAIL"} — ${detail}`); return ok; };
+  const before = aclSize();
+  const hostLink = async ({ afterLink, afterGrant } = {}) => {
+    const offered = await api("POST", "/api/offers");
+    assertOfferForRunner(offered.link);
+    await openLinkFlow(driver, offered.link);
+    await tapTestId(driver, "VtaLinkButton", 15000);
+    if (afterLink) await afterLink(offered);
+    await waitForTestId(driver, "VtaLinkCode", 60000);
+    const view = await waitForState(offered.offer.n, "submitted");
+    runTempDids.push(view.did);
+    await api("POST", `/api/offers/${offered.offer.n}/grant`);
+    if (afterGrant) await afterGrant(view);
+    return view;
+  };
+  const addressCode = async () => {
+    await tapTestId(driver, "LinkByAddressButton", 30000).catch(() => tapTestId(driver, "VtaLinkByAddress", 15000));
+    (await waitForTestId(driver, "AgentCreateAddressInput", 30000)).setValue(runnerVtaDid());
+    await (await scrollToTestId(driver, "AgentCreateAddressContinue", 4).catch(() => byTestId(driver, "AgentCreateAddressContinue"))).click();
+    await waitForTestId(driver, "AgentCreateOwnerCode", 60000);
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 6)).click();
+    await scrollToTestId(driver, "AgentCreateOwnerDid", 4).catch(() => undefined);
+    const did = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "");
+    runTempDids.push(did);
+    return did;
+  };
+  const grant = (did) => execFileSync("bash", [ENROL_MANAGER, did, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const ready = async (ms = 240000) => {
+    for (const until = Date.now() + ms; Date.now() < until; ) {
+      if ((await existsTestId(driver, "AgentCreateReady", 2000)) || (await existsTestId(driver, "VtaLinkDone", 500))) return true;
+      if (await existsTestId(driver, "AgentCreateError", 300)) return false;
+    }
+    return false;
+  };
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(1500);
+
+  if (which === "link-host-sleep" || which === "link-host-lock-after-grant") {
+    const pauseAt = which === "link-host-sleep" ? "afterLink" : "afterGrant";
+    await hostLink({ [pauseAt]: async () => { console.log(`[e2e] locking the phone ${PAUSE_S} s (${pauseAt})`); await lockFor(PAUSE_S); } });
+    const done = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false);
+    const bad = await notLinked();
+    await screenshot(driver, which);
+    return row(done && !bad, `locked ${PAUSE_S} s ${pauseAt === "afterLink" ? "while setting up" : "after the grant"}; Linked ${done}; "was not linked" ${bad}`);
+  }
+  if (which === "host-code-lapsed") {
+    const offered = await api("POST", "/api/offers");
+    await openLinkFlow(driver, offered.link);
+    console.log("[e2e] on the confirm screen 330 s");
+    await idle(330000);
+    await tapTestId(driver, "VtaLinkButton", 15000);
+    let said = "";
+    for (const until = Date.now() + 30000; Date.now() < until && !said; await sleep(1000)) said = (await driver.getPageSource()).match(/(?:text|content-desc)="([^"]*expired or was already used[^"]*)"/i)?.[1] ?? "";
+    const tryAgain = await existsTestId(driver, "VtaLinkTryAgain", 1500);
+    const state = (await api("GET", `/api/offers/${offered.offer.n}`).catch(() => ({})))?.state ?? "?";
+    await screenshot(driver, which);
+    return row(Boolean(said) && !tryAgain && state !== "submitted", `said "${said.slice(0, 90)}" · Try again ${tryAgain} · host offer ${state}`);
+  }
+  if (which === "link-address-resume" || which === "link-address-resume-later") {
+    // #355's resume (UI/UX, 10-08): on relaunch the app finds no link but a young temporary key, shows it again and
+    // checks it once. Granted before the relaunch: it links on its own, straight to the introduction (the
+    // showingKey / MyAgentContinueLink state lasts only that check). Granted after (-later): the check says "not yet",
+    // My Agent offers MyAgentContinueLink, VtaLink shows VtaLinkResumed with the same key (VtaLinkShowTheCode), and
+    // VtaLinkCheckGrant links. Either way the ACL gains exactly one entry (the swap leaves the long-term key there).
+    const later = which === "link-address-resume-later";
+    const did = await addressCode();
+    sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grant(did); }
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
+    await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
+    await unlockIfLocked(driver);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    if (!later) {
+      const intro = await existsTestId(driver, "AgentIntro", 60000);
+      const after = aclSize();
+      await screenshot(driver, which);
+      return row(intro && after === before + 1, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ACL entries ${before} → ${after}`);
+    }
+    const cont = await existsTestId(driver, "MyAgentContinueLink", 30000);
+    if (cont) await tapTestId(driver, "MyAgentContinueLink", 10000);
+    const resumed = await existsTestId(driver, "VtaLinkResumed", 20000);
+    // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
+    // from the screen before it can be read (239 rerun: "same key false" on an empty read, though it linked).
+    const shown = await linkKey();
+    const same = shown === did;
+    console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
+    grant(did);
+    if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await tapTestId(driver, "VtaLinkCheckGrant", 10000);
+    const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
+    const after = aclSize();
+    await screenshot(driver, which);
+    return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
+  }
+  if (which === "link-no-answer") {
+    // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
+    // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
+    // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.
+    // The cut is the whole Farm: every ic3.dev host shares the blocked Cloudflare addresses, the agent too.
+    const did = await addressCode();
+    grant(did);
+    const mark = Date.now();
+    block(true);
+    let failedEarly = false;
+    let waited = 0;
+    for (const until = Date.now() + 660000; Date.now() < until; ) {
+      if (await existsTestId(driver, "AgentCreateError", 1500)) break;
+      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000)) && !(await existsTestId(driver, "AgentCreateError", 500))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      waited = Math.round((Date.now() - mark) / 1000);
+      await idle(20000);
+    }
+    const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
+    const said = unreachable ? await words("AgentCreateError") : "";
+    const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
+    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    let marks = 0;
+    try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
+    await screenshot(driver, `${which}-blocked`);
+    block(false);
+    await sleep(3000);
+    if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    const linked = checkAgain && (await ready());
+    const after = aclSize();
+    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+  }
+  if (which === "create-window-paused") {
+    // UI/UX (10-08, from 59feae2f): two cases in one install.
+    // (1) create-window-paused-short: away 3 min, under the wallet's 5-min inactivity lock: Create is still waiting
+    //     (AgentCreateWaiting), its window paused while in the background rather than counting it.
+    // (2) create-window-paused: away 15 min: the lock signs the person out and the navigator restarts on the first tab,
+    //     so Create and its window are gone; the link itself lives on (showingKey, the same key), so My Agent offers
+    //     MyAgentContinueLink, which opens VtaLink with that key (VtaLinkShowTheCode). Not VtaLinkResumed (nothing was
+    //     restarted). Fails on Check again, an error, Try again, or a different key.
+    const did = await addressCode();
+    await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
+    console.log("[e2e] the app in the background 180 s");
+    sh("input", "keyevent", "3");
+    await idle(180000);
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    await sleep(3000);
+    const shortWaiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
+    const shortCheck = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
+    const shortLocked = await existsTestId(driver, "EnterPIN", 1000);
+    await screenshot(driver, `${which}-short`);
+    console.log(`ROW create-window-paused-short ${shortWaiting && !shortCheck && !shortLocked ? "PASS" : "FAIL"} — after 3 min in the background: AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}`);
+    console.log("[e2e] the app in the background 900 s");
+    sh("input", "keyevent", "3");
+    await idle(900000);
+    await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
+    await sleep(3000);
+    await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
+    await unlockIfLocked(driver);
+    await (await waitForTestId(driver, "MyAgent", 15000)).click();
+    const cont = await existsTestId(driver, "MyAgentContinueLink", 15000);
+    let same = false;
+    let tryAgain = false;
+    if (cont) {
+      await tapTestId(driver, "MyAgentContinueLink", 10000);
+      same = (await linkKey()) === did;
+      tryAgain = await existsTestId(driver, "VtaLinkTryAgain", 1000);
+    }
+    const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
+    const failed = (await existsTestId(driver, "AgentCreateError", 500)) || (await existsTestId(driver, "VtaLinkError", 500));
+    await screenshot(driver, which);
+    return row(cont && same && !tryAgain && !checkAgain && !failed, `after 15 min away (the wallet's lock signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed}`);
+  }
+  if (which === "link-try-again") {
+    const view = await hostLink({ afterGrant: async () => block(true) });
+    let tryAgain = false;
+    for (const until = Date.now() + 1080000; Date.now() < until && !tryAgain; await sleep(10000)) tryAgain = (await existsTestId(driver, "VtaLinkTryAgain", 2000)) && (await notLinked());
+    await screenshot(driver, `${which}-failed`);
+    block(false);
+    await sleep(3000);
+    const mid = aclSize();
+    if (tryAgain) await tapTestId(driver, "VtaLinkTryAgain", 10000);
+    const done = tryAgain && (await waitForTestId(driver, "VtaLinkDone", 240000).then(() => true, () => false));
+    const after = aclSize();
+    return row(tryAgain && done && after <= mid, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses): "not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
+  }
+  return row(false, `no such LINK_CASE ${which}`);
+}
+
+async function linkViaScan(driver) {
+  await waitForTestId(driver, "VtaLinkForOtherPhone", 45000);
+  const temporaryDid = await scanBranchKey(driver);
+  if (!/^did:/.test(temporaryDid)) throw new Error(`no key in VtaLinkManualDid: "${temporaryDid.slice(0, 60)}"`);
+  runTempDids.push(temporaryDid);
+  console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}… (scan branch)`);
+  await screenshot(driver, "link-m1-key-scan");
+  const grantedSince = new Date(Date.now() - 2000).toISOString();
+  execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+  const wanted = EXPECT_REFUSAL === "communityAgent" ? { words: /community's agent/i /* 236: "This is a community's agent. Link Keyring…"; 239: "This code is for a community's agent. …" */, waitMs: 120000 } : SWAP_FAILED[EXPECT_REFUSAL];
+  const by = Date.now() + (wanted ? wanted.waitMs : 240000);
+  let state = "";
+  while (Date.now() < by && !state) {
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) state = "done";
+    else if (await existsTestId(driver, "VtaLinkError", 1000)) state = "error";
+    else if (await existsTestId(driver, "VtaLinkCheckAgain", 500)) await tapTestId(driver, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+  }
+  if (state === "error" || wanted) {
+    const said = state === "error" ? (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim() : "";
+    if (state === "error") {
+      // The raw text behind Details (SaidFailure: VtaLinkErrorDetailsToggle → VtaLinkErrorDetail).
+      const toggle = await scrollToTestId(driver, "VtaLinkErrorDetailsToggle", 3).catch(() => undefined);
+      if (toggle) await toggle.click().catch(() => undefined);
+      const detail = (await scrollToTestId(driver, "VtaLinkErrorDetail", 3).then(() => textOf(driver, "VtaLinkErrorDetail"), () => "")).replace(/\s+/g, " ").trim();
+      console.log(`LINK-ERROR "${said}" · detail "${detail}"`);
+    }
+    await screenshot(driver, `link-scan-${EXPECT_REFUSAL || "error"}`);
+    if (!wanted) throw new Error(`the link failed: "${said.slice(0, 200)}"`);
+    if (!wanted.words.test(said)) throw new Error(`the link did not say ${wanted.words}: "${said.slice(0, 200) || "(no VtaLinkError)"}"`);
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked though the link should have failed");
+    console.log(EXPECT_REFUSAL === "communityAgent" ? `[e2e] refused as a community's agent: "${said}"` : `[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
+    await afterRefusal(driver, said, temporaryDid);
+    return temporaryDid;
+  }
+  if (state !== "done") throw new Error("the scan-branch link never reached VtaLinkDone in 240 s");
+  await screenshot(driver, "link-m2-linked-scan");
+  if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+  console.log("[e2e] the temporary key is no longer in the ACL");
+  if (aclBefore) {
+    try {
+      const heir = heirOf({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, since: grantedSince, taken: runHeirs });
+      if (heir) {
+        runHeirs.push(heir);
+        console.log(`[acl] this run's rotated key: ${heir.slice(0, 40)}…`);
+      } else console.log("[acl] no rotated key found for this run — cleanup follows the chain alone");
+    } catch (e) {
+      console.log(`[acl] could not read the rotated key: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  }
+  await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
+  return temporaryDid;
+}
+
 async function linkManually(driver) {
+  // #339: the link screen's own address entry (VtaLinkByAddress) goes to the address path.
+  if (await existsTestId(driver, "VtaLinkByAddress", 1500)) return linkByAddress(driver, "VtaLinkByAddress");
   // From My Agent, unless the link screen is already open (after an unlink it is).
   if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    // A phone its agent no longer accepts (its key removed): My Agent says so and offers "Link again", the
+    // scanner, in place of "Scan your agent's code". Re-seating the gate's vetter goes this way. bifold #339 offers
+    // the address there too (VtaLinkByAddress): that first.
+    if (await existsTestId(driver, "VtaLinkByAddress", 3000)) return linkByAddress(driver, "VtaLinkByAddress");
+    if (await existsTestId(driver, "VtaLinkScanAgain", 5000)) {
+      console.log(`[e2e] link: no longer linked ("${(await textOf(driver, "VtaLinkError").catch(() => "")).trim().slice(0, 80)}"); Link again`);
+      await tapTestId(driver, "VtaLinkScanAgain", 15000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      return linkViaScan(driver);
+    }
+    if (process.env.LINK_VIA === "scan") {
+      // The scan branch on purpose, on any build: "Scan your agent's code", paste the bare address, VtaLink's scan card.
+      await tapTestId(driver, "LinkYourAgentButton", 30000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      console.log("[e2e] link: LINK_VIA=scan, pasted the agent's address on the scanner");
+      return linkViaScan(driver);
+    } else if (await existsTestId(driver, "LinkWithoutQrButton", 3000)) {
+      await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    } else if (process.env.LINK_VIA === "address") {
+      // The address path on purpose (VtaCreateAgent). Before #339 it needs a screen lock first (DeviceCannotOwn).
+      return linkByAddress(driver, "LinkByAddressButton");
+    } else {
+      // bifold #339 (238): "Link by address" is the one way in by address, and a phone with no screen lock goes on
+      // as a device. On 237 the same button refuses a phone with no lock: then the scan branch below, as 237's gate.
+      if (await existsTestId(driver, "LinkByAddressButton", 3000)) {
+        try {
+          return await linkByAddress(driver, "LinkByAddressButton");
+        } catch (e) {
+          if (!e?.needsLock) throw e;
+          console.log(`[e2e] link: ${e.message}; the scan branch instead (237)`);
+          await driver.back().catch(() => undefined);
+          await (await waitForTestId(driver, "MyAgent", 30000)).click();
+        }
+      }
+      // 237 (bifold #338, without #339): My Agent's "Scan your agent's code" opens the scanner, and the agent's
+      // bare address pasted there starts the "add this phone" link on VtaLink, which needs no screen lock.
+      console.log("LINK-PATH scan");
+      await tapTestId(driver, "LinkYourAgentButton", 30000);
+      await pasteLinkOnScanScreen(driver, runnerVtaDid());
+      console.log("[e2e] link: pasted the agent's address on the scanner (237's way in without a code)");
+      return linkViaScan(driver);
+    }
   }
   // "Link without QR" can land straight on the address screen, and then the
   // intermediate control is never there to tap — the same shape as the
   // "Show my code" race below: ask for the GOAL first, and treat the
   // waypoint as optional. Measured on the candidate tree 2026-09-23, where
   // the run died waiting 15s for a step the flow had already passed.
-  if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
-    await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+  // After a pasted address the link screen already knows the agent: no address to type.
+  // 236's address screen shows "Show my code" beside an empty address field: that one still needs the address.
+  const knowsAgent =
+    (await existsTestId(driver, "VtaLinkManualDid", 3000)) ||
+    (await existsTestId(driver, "VtaLinkShowTheCode", 1500)) ||
+    ((await existsTestId(driver, "VtaLinkShowMyCode", 1500)) && !(await existsTestId(driver, "VtaLinkAgentAddress", 1500)));
+  if (!knowsAgent) {
+    if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
+      await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+    }
+    const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
+    // Return on the keyboard submits the address, as a person would — on iOS.
+    await address.setValue(`${runnerVtaDid()}\n`);
   }
-  const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
-  // Return on the keyboard submits the address, as a person would — on iOS.
-  await address.setValue(`${runnerVtaDid()}\n`);
   // The key is revealed by "Show my code", which the screen enables once the
   // address looks like a DID — it does not appear on submit. Measured on
   // Android, 2026-09-22: the run waited out 60s on a screen that was only
@@ -339,11 +980,22 @@ async function linkManually(driver) {
     await waitForTestId(driver, "VtaLinkError", 120000);
     const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
     await screenshot(driver, "link-refused-community-agent");
-    if (!/This is a community's agent\. Link Keyring to your personal agent instead\./.test(said)) {
+    if (!/community's agent/i.test(said)) { // 236's and 239's wordings both
       throw new Error(`the link was not refused as a community's agent: "${said.slice(0, 160)}"`);
     }
     if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked after refusing a community's agent");
     console.log(`[e2e] refused as a community's agent: "${said}"`);
+    return temporaryDid;
+  }
+  if (SWAP_FAILED[EXPECT_REFUSAL]) {
+    // bifold #325: the swap onto the long-term key did not happen, and the screen says why.
+    const want = SWAP_FAILED[EXPECT_REFUSAL];
+    await waitForTestId(driver, "VtaLinkError", want.waitMs);
+    const said = (await textOf(driver, "VtaLinkError")).replace(/\s+/g, " ").trim();
+    await screenshot(driver, `link-${EXPECT_REFUSAL}`);
+    if (!want.words.test(said)) throw new Error(`the failed swap did not say ${want.words}: "${said.slice(0, 200)}"`);
+    if (await existsTestId(driver, "VtaLinkDone", 2000)) throw new Error("the phone shows Linked though the swap failed");
+    console.log(`[e2e] swap failed as expected (${EXPECT_REFUSAL}): "${said}"`);
     return temporaryDid;
   }
   await waitForTestId(driver, "VtaLinkDone", 180000);
@@ -395,7 +1047,7 @@ async function openManage(driver) {
   }
 }
 
-/** Bring "Join another community" into reach: after #297 a member finds it behind the corner Join button. */
+/** Bring "Join another community" into reach: behind the corner Join button on 236 (#316); a row on 237 (#337). */
 async function openJoinDoors(driver) {
   if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
   if (!(await existsTestId(driver, "AgentJoinCommunity", 1500)) && (await existsTestId(driver, "AgentJoinCorner", 3000))) {
@@ -403,10 +1055,16 @@ async function openJoinDoors(driver) {
   }
 }
 
-/** Into Join: the doors' "Join a community", or (236, bifold #316) the corner menu's Join. */
+/**
+ * Into Join: before joining, the doors' "Join a community" (AgentJoinCommunity); after, on 237 (bifold #337) the
+ * "Join another community" row at the end of Your agent (AgentJoinAnother); on 236 the corner menu's Join.
+ */
 async function tapJoinDoor(driver) {
   await openJoinDoors(driver);
   if (await existsTestId(driver, "AgentJoinMenuJoin", 2000)) return tapTestId(driver, "AgentJoinMenuJoin", 10000);
+  if (await existsTestId(driver, "AgentJoinCommunity", 1500)) return tapTestId(driver, "AgentJoinCommunity", 15000);
+  const another = await scrollToTestId(driver, "AgentJoinAnother", 8).catch(() => undefined);
+  if (another) return another.click();
   await scrollToTestId(driver, "AgentJoinCommunity", 8);
   return tapTestId(driver, "AgentJoinCommunity", 15000);
 }
@@ -915,7 +1573,8 @@ async function openLinkFlow(driver, link) {
  */
 function keepForNextStep({ before, tempDid, heirs = [] }) {
   try {
-    const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts", "last-link.json");
+    // In the leg's own folder when the gate gives one: two legs linking side by side must not share this file.
+    const file = path.join(process.env.E2E_RUN_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts"), "last-link.json");
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, heirs, before: [...before], at: new Date().toISOString() }, null, 2));
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid, heirs);
@@ -972,10 +1631,15 @@ try {
     await completeOnboarding(driver, { firstName: "Link", lastName: "Phone" });
   }
 
-  if (LINK_MODE === "manual") {
+  if (process.env.LINK_CASE) {
+    // IN-135 (239): one link case, its row printed by linkCase; 3 when that row failed.
+    process.exitCode = (await linkCase(driver, process.env.LINK_CASE)) ? 0 : 3;
+  } else if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
     await linkManually(driver);
-    if (EXPECT_REFUSAL === "communityAgent") {
+    if (SWAP_FAILED[EXPECT_REFUSAL]) {
+      printSuccess(`VTA LINK SWAP FAILED AS EXPECTED — ${EXPECT_REFUSAL}, said in words`);
+    } else if (EXPECT_REFUSAL === "communityAgent") {
       // After a refusal nothing of the agent stays: the link screen, not My Agent's home.
       if (await existsTestId(driver, "AgentHomeName", 3000)) throw new Error("an agent home shows after refusing a community's agent");
       printSuccess("VTA LINK REFUSED — a community's own agent (nothing kept)");

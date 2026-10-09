@@ -3,7 +3,7 @@
  * Several agents on one phone (bifold #277–#281) and a refusal on Your agent (#282), on an Android
  * built app. Rows, run in this order whatever ROWS lists:
  *   R1 add a second agent and keep the first; switch to it
- *   R2 an identity belongs to its agent: Join on B suggests A, which already has one in C
+ *   R2 an identity belongs to its agent: A joins C; on B, Join offers no chooser and goes ahead with B (#334)
  *   R5 a refusal reaches Your agent: the card's own status, and "Check now" if the session holds another identity
  *   R3 requests from the other agent ("Ask me before…" on A, a held task, Requests on B)
  *   R6 both agents join one community; both memberships survive a relaunch; the Wallet names each card's agent
@@ -25,7 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { byTestId, dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
-import { handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, unlockIfLocked } from "./lib/flows.js";
+import { pasteLinkOnScanScreen, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, unlockIfLocked } from "./lib/flows.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 
@@ -102,7 +102,17 @@ async function stop(d, why) {
 async function myAgent(d) {
   await tapTestId(d, "MyAgent", 15000);
   await sleep(1500);
-  for (let i = 0; i < 10 && !(await existsTestId(d, "AgentHome", 1000)); i++) await unlockIfLocked(d);
+  for (let i = 0; i < 10 && !(await existsTestId(d, "AgentHome", 1000)); i++) {
+    // An added agent's introduction comes when Your agent first shows it, which can be well after its link's Done
+    // (238 gate: up at R1's switcher read, after a 15 s wait had passed): skip it wherever it shows.
+    if (await existsTestId(d, "AgentIntroSkip", 500)) {
+      log("an agent's introduction is up: Skip");
+      await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+      await sleep(1000);
+      continue;
+    }
+    await unlockIfLocked(d);
+  }
 }
 
 async function homeName(d) {
@@ -127,8 +137,100 @@ async function waitSwitched(d, wantName) {
   log(`switch wait: ${((Date.now() - t) / 1000).toFixed(1)} s · AgentSwitching seen ${sawSwitching}`);
 }
 
+/** VtaLink's scan branch: the key as text (VtaLinkShowAsText → VtaLinkManualDid), grant, it polls by itself. */
+/** How many Wallet cards name C (CredentialName), after closing the Wallet's first-visit tour. */
+async function walletCardsForC(d) {
+  await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+  await sleep(2000);
+  for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+  return (await d.$$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${E.C_NAME}")`)).length;
+}
+let walletBefore = -1;
+
+/** The phone's key on VtaLink's scan branch: as text behind Show as text, else by Copy and the clipboard (237). */
+async function scanKey(d) {
+  await waitForTestId(d, "VtaLinkForOtherPhone", 45000);
+  let temp = "";
+  if (await scrollToTestId(d, "VtaLinkShowAsText", 3).then((e) => e.click().then(() => true), () => false)) {
+    await scrollToTestId(d, "VtaLinkManualDid", 3).catch(() => undefined);
+    temp = (await textOf(d, "VtaLinkManualDid")).replace(/\s+/g, "").trim();
+  } else {
+    // 237's card offers only Copy: read the key from the clipboard.
+    await tapTestId(d, "VtaLinkCopyKey", 15000);
+    await sleep(1000);
+    const text = Buffer.from(String(await d.getClipboard("plaintext").catch(() => "")), "base64").toString("utf8");
+    temp = (text.match(/did:[a-z0-9]+:[A-Za-z0-9._:%-]+/) || [""])[0];
+  }
+  return temp;
+}
+
+async function linkScanTo(d, did, slug) {
+  const temp = await scanKey(d);
+  log(`link to ${slug} (scan branch): the phone shows ${temp.slice(0, 30)}…; granting`);
+  execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+  const by = Date.now() + 240000;
+  while (Date.now() < by && !(await existsTestId(d, "VtaLinkDone", 2000))) {
+    if (await existsTestId(d, "VtaLinkError", 500)) throw new Error(`the link failed: "${(await textOf(d, "VtaLinkError")).slice(0, 160)}"`);
+    if (await existsTestId(d, "VtaLinkCheckAgain", 500)) await tapTestId(d, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+  }
+  await tapTestId(d, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(d).catch(() => undefined);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it.
+  if (await existsTestId(d, "AgentIntro", 15000)) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
+  return temp;
+}
+
+/** The address path (VtaCreateAgent, bifold #338/#339), from its address step: code, grant, Connect, Done. */
+let doneLanding;
+
+async function linkByAddressTo(d, did, slug) {
+  (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(did);
+  await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+  await waitForTestId(d, "AgentCreateOwnerCode", 60000);
+  if (!(await existsTestId(d, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(d, "AgentCreateShowCode", 6)).click();
+  await scrollToTestId(d, "AgentCreateOwnerDid", 4).catch(() => undefined);
+  const temp = (await textOf(d, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+  log(`link to ${slug} (address path): the phone shows ${temp.slice(0, 30)}…; granting`);
+  execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+  await (await scrollToTestId(d, "AgentCreateConnect", 6).catch(() => byTestId(d, "AgentCreateConnect"))).click();
+  await owner(d, "connect").catch(() => undefined);
+  const by = Date.now() + 240000;
+  while (Date.now() < by && !(await existsTestId(d, "AgentCreateReady", 2000))) {
+    if (await existsTestId(d, "AgentCreateError", 500)) throw new Error(`the address link failed: "${(await textOf(d, "AgentCreateError")).slice(0, 160)}"`);
+    if (await existsTestId(d, "AgentCreateCheckAgain", 500)) await tapTestId(d, "AgentCreateCheckAgain", 5000).catch(() => undefined);
+  }
+  await tapTestId(d, "AgentCreateDone", 15000);
+  await sleep(2000);
+  await shot(d, "add-done-2s");
+  await passNewPhoneOfferIfShown(d).catch(() => undefined);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it. 239 (#349): Done lands on Your agent, so it comes at once;
+  // on 238 Done went back to the link panel and it came only once My Agent was opened. Recorded for R1's row.
+  doneLanding = { intro: await existsTestId(d, "AgentIntro", 15000), linkPanel: await existsTestId(d, "VtaLinkByAddress", 500) };
+  log(`Done landed: introduction ${doneLanding.intro} · link panel ${doneLanding.linkPanel}`);
+  if (doneLanding.intro) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
+  return temp;
+}
+
 /** The no-QR link to `did` (slug for the grant), from a link screen already open. */
 async function linkTo(d, did, slug) {
+  // 237: Add can open the scanner: paste the agent's bare address, then VtaLink's scan branch.
+  if (await existsTestId(d, "PasteUrlButton", 3000)) {
+    await pasteLinkOnScanScreen(d, did);
+    return linkScanTo(d, did, slug);
+  }
+  // #338/#339: no "Link without a QR code" here, the address path instead (VtaCreateAgent).
+  if (!(await existsTestId(d, "VtaLinkAgentAddress", 3000)) && !(await existsTestId(d, "VtaLinkWithoutQr", 1500))) {
+    for (const entry of ["VtaLinkByAddress", "LinkByAddressButton"]) if (await existsTestId(d, entry, 1500)) { await tapTestId(d, entry, 10000); break; }
+    if (await existsTestId(d, "AgentCreateAddressInput", 15000)) return linkByAddressTo(d, did, slug);
+  }
   if (!(await existsTestId(d, "VtaLinkAgentAddress", 3000))) await tapTestId(d, "VtaLinkWithoutQr", 15000).catch(() => undefined);
   const address = await waitForTestId(d, "VtaLinkAgentAddress", 20000);
   await address.setValue(`${did}\n`);
@@ -155,8 +257,39 @@ async function linkTo(d, did, slug) {
   await waitForTestId(d, "VtaLinkDone", 180000);
   await tapTestId(d, "VtaLinkContinue", 15000);
   await passNewPhoneOfferIfShown(d).catch(() => undefined);
-  for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  // The new agent's introduction can come several seconds after Done (238 gate: missed at 2 s, and the switcher
+  // read behind it was empty): wait for it, then skip it.
+  if (await existsTestId(d, "AgentIntro", 15000)) {
+    if (await existsTestId(d, "AgentIntroSkip", 2000)) await tapTestId(d, "AgentIntroSkip", 5000);
+    else for (let i = 0; i < 3; i++) if (await existsTestId(d, "AgentIntroNext", 2000)) await tapTestId(d, "AgentIntroNext", 5000);
+  }
   return temp;
+}
+
+/** The chips' Add, brought back into view first: after a switch the home can sit scrolled past the chip strip, and
+ * Android leaves off-screen views out of the tree (239: R9 found no AgentSwitcherAdd). */
+async function tapAdd(d) {
+  // Up only: scrollToTestId's default also tries the other way, which carried the strip off the top (239 final pin, R9).
+  let el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 3, { direction: "up", both: false }).catch(() => undefined);
+  if (!el) await scrollToTestId(d, "AgentChips", 3, { direction: "up", both: false }).catch(() => undefined);
+  // Add is the last item of the chips' horizontal strip: with two agents it can sit off to the right, out of the tree
+  // (239: R9 after R8's switches). Swipe the strip leftwards until it shows.
+  for (let i = 0; i < 4 && !el; i++) {
+    const strip = byTestId(d, "AgentChips");
+    if (!(await strip.isExisting().catch(() => false))) break;
+    const { x, y } = await strip.getLocation();
+    const { width, height } = await strip.getSize();
+    const cy = Math.floor(y + height / 2);
+    await d.action("pointer").move({ x: Math.floor(x + width * 0.85), y: cy }).down().pause(100).move({ x: Math.floor(x + width * 0.15), y: cy, duration: 400 }).up().perform();
+    await sleep(800);
+    if (await existsTestId(d, "AgentSwitcherAdd", 1500)) el = byTestId(d, "AgentSwitcherAdd");
+  }
+  if (!el) {
+    await shot(d, "agents-add-missing");
+    await dumpSource(d, "agents-add-missing").catch(() => undefined);
+  }
+  if (el) await el.click();
+  else await tapTestId(d, "AgentSwitcherAdd", 15000);
 }
 
 async function openSwitcher(d) {
@@ -260,6 +393,12 @@ async function openC(d) {
 async function askToJoinC(d, tag) {
   const before = new Set((json(admin("join-list")).items ?? []).map((r) => r.id));
   await openC(d);
+  // A refused (or withdrawn, left) standing offers "Join again" first (R10 after R5's decline). It sits in the actions
+  // under the read-only ways list, below the fold on a phone (239 final pin): scroll down to it when the standing
+  // says "You can ask to join again".
+  let again = await existsTestId(d, "JoinAgain", 3000);
+  if (!again && (await existsTestId(d, "JoinStandingAgain", 2000))) again = Boolean(await scrollToTestId(d, "JoinAgain", 6, { from: 0.6, both: false }).catch(() => undefined));
+  if (again) await tapTestId(d, "JoinAgain", 10000);
   await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
   const askId = (await existsTestId(d, "JoinAsk", 3000)) ? "JoinAsk" : "JoinStart";
   await tapTestId(d, askId, 15000);
@@ -314,20 +453,100 @@ try {
     await sleep(8000);
   }
 
+  // R11 (239 finding, UI/UX 10-08): an Add whose key swap is held by an approval rule on B's agent, then Back: the
+  // phone returns to A (current), and B is not left in the chips. The rule goes on B's runner (the gate's) for this
+  // row only and comes off whatever happens; the held temporary key on B goes in the leg's cleanup.
+  // H: the agent whose swap is held, on a runner that ENFORCES approval rules (239 final: B's openvtc runner ignored the
+  // rule and the link simply completed). Defaults to B.
+  const H = { slug: E.H_SLUG || E.B_SLUG, did: E.H_DID || E.B_DID, name: E.H_NAME || E.B_NAME };
+  if (ROWS.includes("R11")) {
+    t0.R11 = Date.now();
+    const TASK = "https://trusttasks.org/spec/acl/swap-key/0.1";
+    const SET = "gate-r11-held";
+    log(`R11: approver set ${pnm(H.slug, "approvals", "approvers", "add", SET, E.A_DID).trim().split("\n").pop()?.slice(0, 60)}`);
+    log(`R11: rule ${pnm(H.slug, "approvals", "require", TASK, "--consent", "--set", SET).trim().split("\n").pop()?.slice(0, 60)}`);
+    await sleep(3000);
+    let said = "";
+    try {
+      await myAgent(d);
+      const before = await homeName(d);
+      await tapAdd(d);
+      await owner(d, "add agent (held)");
+      if (await existsTestId(d, "VtaLinkByAddress", 8000)) await tapTestId(d, "VtaLinkByAddress", 10000);
+      (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(H.did);
+      await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+      await waitForTestId(d, "AgentCreateOwnerCode", 60000);
+      if (!(await existsTestId(d, "AgentCreateOwnerDid", 2000))) await (await scrollToTestId(d, "AgentCreateShowCode", 6)).click();
+      const temp = (await textOf(d, "AgentCreateOwnerDid")).replace(/\s+/g, "").trim();
+      execFileSync("bash", [ENROL, temp, H.slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+      await (await scrollToTestId(d, "AgentCreateConnect", 6).catch(() => byTestId(d, "AgentCreateConnect"))).click();
+      await owner(d, "connect (held)").catch(() => undefined);
+      for (const until = Date.now() + 240000; Date.now() < until && !said; ) {
+        if (await existsTestId(d, "AgentCreateError", 2000)) said = (await textOf(d, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+        else if (await existsTestId(d, "VtaLinkError", 500)) said = (await textOf(d, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+      }
+      await shot(d, "agents-r11-held");
+      for (let i = 0; i < 4 && !(await existsTestId(d, "MyAgent", 2000)); i++) await d.back().catch(() => undefined);
+      await myAgent(d);
+      const now = await homeName(d);
+      const rows = await switcherRows(d).catch(() => []);
+      const current = rows.find((r) => /Current/.test(r.desc))?.desc ?? "";
+      const bListed = rows.some((r) => r.desc.includes(H.name));
+      await shot(d, "agents-r11-after-back");
+      row("swap-held-add-returns", /holding this phone's link/i.test(said) && now.includes(E.A_NAME) && (!rows.length || current.includes(E.A_NAME)) && !bListed,
+        `held "${said.slice(0, 60)}" · back on "${now}" (was "${before}") · current "${current}" · ${H.name} in the chips ${bListed}`);
+    } finally {
+      log(`R11: rule off ${pnm(H.slug, "approvals", "remove", TASK).trim().split("\n").pop()?.slice(0, 60)}`);
+      log(`R11: approver off ${pnm(H.slug, "approvals", "approvers", "remove", SET, E.A_DID).trim().split("\n").pop()?.slice(0, 60)}`);
+    }
+  }
+
   if (ROWS.includes("R1")) {
     t0.R1 = Date.now();
     await openSwitcher(d);
     await shot(d, "agents-r1-switcher-one");
-    await tapTestId(d, "AgentSwitcherAdd", 15000);
+    await tapAdd(d);
     await owner(d, "add agent");
     const tempB = await linkTo(d, E.B_DID, E.B_SLUG);
-    await waitForTestId(d, "AgentAddedCard", 60000).catch(() => undefined);
+    // 237: the new agent's introduction can play first (1 of 3), then the "added" card: skip the one, wait for the other.
+    for (const until = Date.now() + 60000; Date.now() < until; ) {
+      if (await existsTestId(d, "AgentAddedCard", 1500)) break;
+      if (await existsTestId(d, "AgentIntroSkip", 800)) await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+      else if (await existsTestId(d, "AgentIntroNext", 500)) await tapTestId(d, "AgentIntroNext", 5000).catch(() => undefined);
+      else if (await existsTestId(d, "AgentHome", 500)) break;
+    }
+    // The card sits on the new agent's home and can come a moment after it, or below the fold (238: the loop broke
+    // on AgentHome before it showed, Keep was never tapped, and the new agent stayed current): look for it.
+    // 238: after Add's Done the app is not on Your agent; the new agent's introduction, and the "added" card behind
+    // it, render when Your agent is opened (1007-1509: nothing for 3.5 min until the My Agent tab was tapped). Open it
+    // (myAgent skips the introduction), then look for Keep.
+    // #349 (239): Done lands on Your agent, so after the introduction the Keep card is there without the tab.
+    let keepAtOnce = false;
+    if (doneLanding?.intro) for (const until = Date.now() + 15000; Date.now() < until && !keepAtOnce; ) {
+      keepAtOnce = Boolean(await scrollToTestId(d, "AgentAddedKeep", 2, { from: 0.6 }).catch(() => undefined));
+      if (!keepAtOnce) await sleep(1000);
+    }
+    row("add-done-lands", Boolean(doneLanding?.intro) && keepAtOnce, `after Done: introduction ${doneLanding?.intro ?? "?"}, link panel ${doneLanding?.linkPanel ?? "?"}; Keep card without opening My Agent ${keepAtOnce} (#349)`);
+    await myAgent(d);
+    for (const until = Date.now() + 30000; Date.now() < until; ) {
+      if (await existsTestId(d, "AgentIntroSkip", 500)) {
+        log("R1: the new agent's introduction is up: Skip");
+        await tapTestId(d, "AgentIntroSkip", 5000).catch(() => undefined);
+        await sleep(1500);
+        continue;
+      }
+      if (await scrollToTestId(d, "AgentAddedKeep", 2, { from: 0.6 }).catch(() => undefined)) break;
+      await sleep(1000);
+    }
     const cardEl = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentAddedCard")`);
     let card = "";
     if (await cardEl.isExisting().catch(() => false)) for (const c of await cardEl.$$(".//*")) { const t = await c.getAttribute("text").catch(() => ""); if (t) card += `${t} `; }
     log(`R1: added card "${card?.slice(0, 160)}"`);
-    await tapTestId(d, "AgentAddedKeep", 15000);
-    await owner(d, "keep");
+    const keep = (await existsTestId(d, "AgentAddedKeep", 3000)) ? byTestId(d, "AgentAddedKeep") : await scrollToTestId(d, "AgentAddedKeep", 3, { from: 0.6 }).catch(() => undefined);
+    if (keep) {
+      await keep.click();
+      await owner(d, "keep");
+    } else log("R1: no AgentAddedKeep card after the link (the app went on to the agent)");
     await openSwitcher(d);
     const rows = await switcherRows(d);
     const others = rows.filter((r) => !/Current/.test(r.desc));
@@ -349,6 +568,115 @@ try {
     console.log(`TEMP_B ${tempB}`);
   }
 
+  // R8 (IN-132, bifold #350): Add an agent this phone already has (B). By address: refused with "This phone already
+  // has that agent." and "Switch to it", no code, no key added to B; Switch to it lands on B. By scan: refused.
+  if (ROWS.includes("R8")) {
+    t0.R8 = Date.now();
+    const aclCount = () => { const t = pnm(E.B_SLUG, "acl", "list", "--json"); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const before = aclCount();
+    await myAgent(d);
+    await tapAdd(d);
+    await owner(d, "add agent (existing)");
+    if (await existsTestId(d, "VtaLinkByAddress", 8000)) await tapTestId(d, "VtaLinkByAddress", 10000);
+    (await waitForTestId(d, "AgentCreateAddressInput", 15000)).setValue(E.B_DID);
+    await (await scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => byTestId(d, "AgentCreateAddressContinue"))).click();
+    let said = "";
+    let code = false;
+    for (const until = Date.now() + 30000; Date.now() < until && !said && !code; ) {
+      if (await existsTestId(d, "AgentCreateError", 1000)) said = (await textOf(d, "AgentCreateError").catch(() => "")).replace(/\s+/g, " ").trim();
+      else code = await existsTestId(d, "AgentCreateOwnerCode", 1000);
+    }
+    const switchBtn = await scrollToTestId(d, "AgentCreateSwitchToExisting", 3).catch(() => undefined);
+    await shot(d, "agents-r8-add-existing");
+    const after = aclCount();
+    row("add-existing-refused", /already has that agent/i.test(said) && Boolean(switchBtn) && !code && before >= 0 && after === before, `said "${said}" · Switch to it ${Boolean(switchBtn)} · code step ${code} · B's ACL ${before} → ${after}`);
+    if (switchBtn) {
+      await switchBtn.click();
+      await owner(d, "switch to existing").catch(() => undefined);
+      await waitSwitched(d, E.B_NAME).catch(() => undefined);
+      await myAgent(d);
+      const now = await homeName(d);
+      row("add-existing-switch", now.includes(E.B_NAME), `Switch to it → home "${now}"`);
+    } else row("add-existing-switch", false, "no AgentCreateSwitchToExisting");
+    // By scan: Add, the scanner, B's bare address pasted.
+    await myAgent(d);
+    await tapAdd(d);
+    await owner(d, "add agent (existing, scan)");
+    if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+    let scanSaid = "";
+    if (await existsTestId(d, "PasteUrlButton", 10000)) {
+      // The scanner refuses it in its own error card ("Keyring can't use this code" + Try Again), which the paste
+      // helper reports as a refused paste: here that refusal is the row (239 gate: the helper's throw stopped R8).
+      await pasteLinkOnScanScreen(d, E.B_DID).catch((e) => log(`R8 scan: ${String(e.message).split("\n")[0]}`));
+      for (const until = Date.now() + 30000; Date.now() < until && !scanSaid; await sleep(1000)) {
+        const src = await d.getPageSource();
+        scanSaid = (src.match(/(?:text|content-desc)="([^"]*already has that agent[^"]*)"/i) || [])[1] || "";
+      }
+    }
+    await shot(d, "agents-r8-scan-existing");
+    if (await existsTestId(d, "Try Again", 1500)) await tapTestId(d, "Try Again", 5000).catch(() => undefined);
+    // Out of the scanner and the link screen behind it, back to the tabs (239 rerun: one Back left no tab bar).
+    for (let i = 0; i < 4 && !(await existsTestId(d, "MyAgent", 2000)); i++) await d.back().catch(() => undefined);
+    row("add-existing-scan-refused", /already has that agent/i.test(scanSaid), scanSaid ? `"${scanSaid}"` : "no \"already has that agent\" words after pasting B's address");
+    await myAgent(d);
+    if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
+    log(`R8 done in ${since("R8")}`);
+  }
+
+  // R9 (IN-138, bifold #356): an Add that fails returns to the agent the phone was on (A), by each way out: back, the
+  // My Agent tab, or the scanner then the tab. The failure: a community's own agent, scanned (CA_DID), refused once
+  // its key is granted. Proof: A's home and A current, no link card, A online within 30 s, no key added to A, and
+  // logcat's "[VTI] agent switch: to … done in N ms" (the return ran; nothing re-linked).
+  if (ROWS.includes("R9") && E.CA_DID && E.CA_SLUG) {
+    t0.R9 = Date.now();
+    const aclA = () => { const t = pnm(E.A_SLUG, "acl", "list", "--json"); try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; } };
+    const logLines = () => { try { return readFileSync(E.LOGCAT, "utf8").split("\n"); } catch { return []; } };
+    await myAgent(d);
+    if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
+    for (const way of ["back", "tab", "scanner"]) {
+      const n0 = logLines().length;
+      const before = aclA();
+      await myAgent(d);
+      await tapAdd(d);
+      await owner(d, `add a community's agent (${way})`);
+      if (await existsTestId(d, "VtaLinkScanAgain", 8000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+      let said = "";
+      if (await existsTestId(d, "PasteUrlButton", 10000)) {
+        await pasteLinkOnScanScreen(d, E.CA_DID);
+        const temp = await scanKey(d).catch(() => "");
+        if (temp) execFileSync("bash", [ENROL, temp, E.CA_SLUG, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+        for (const until = Date.now() + 240000; Date.now() < until && !said; ) {
+          if (await existsTestId(d, "VtaLinkError", 2000)) said = (await textOf(d, "VtaLinkError").catch(() => "")).replace(/\s+/g, " ").trim();
+          else if (await existsTestId(d, "VtaLinkCheckAgain", 500)) await tapTestId(d, "VtaLinkCheckAgain", 5000).catch(() => undefined);
+        }
+      }
+      await shot(d, `agents-r9-refused-${way}`);
+      // Out, the way under test.
+      if (way === "back") await d.back();
+      else if (way === "tab") await tapTestId(d, "MyAgent", 10000);
+      else {
+        if (await existsTestId(d, "VtaLinkScanAgain", 3000)) await tapTestId(d, "VtaLinkScanAgain", 10000);
+        await sleep(1500);
+        await d.back();
+        await tapTestId(d, "MyAgent", 10000);
+      }
+      await sleep(3000);
+      const home = await existsTestId(d, "AgentHome", 15000);
+      const name = home ? await homeName(d) : "";
+      const rows = await switcherRows(d).catch(() => []);
+      const current = rows.find((r) => /Current/.test(r.desc))?.desc ?? "";
+      const linkCard = (await existsTestId(d, "MyAgentLinkCard", 1000)) || (await existsTestId(d, "AgentHomeLink", 500));
+      let status = "";
+      for (const until = Date.now() + 30000; Date.now() < until && !/online/i.test(status); await sleep(1500)) status = await txt(d, "VtaStatusText");
+      const after = aclA();
+      const switched = logLines().slice(n0).find((l) => l.includes("[VTI] agent switch: to") && l.includes("done in")) || "";
+      await shot(d, `agents-r9-returned-${way}`);
+      const ok = /community's agent/i.test(said) && name.includes(E.A_NAME) && current.includes(E.A_NAME) && !linkCard && /online/i.test(status) && before >= 0 && after === before && Boolean(switched);
+      row(`add-fail-return-${way}`, ok, `refused "${said.slice(0, 70)}" · home "${name}" · current "${current}" · link card ${linkCard} · status "${status}" · A's ACL ${before} → ${after} · ${switched ? `logcat "${switched.slice(switched.indexOf("agent switch")).slice(0, 70)}"` : "no agent-switch line"}`);
+    }
+    log(`R9 done in ${since("R9")}`);
+  }
+
   if (ROWS.includes("R2")) {
     t0.R2 = Date.now();
     if (!(await homeName(d)).includes(E.A_NAME)) await switchToOther(d, E.A_NAME);
@@ -358,28 +686,17 @@ try {
     await sleep(5000);
     await switchToOther(d, E.B_NAME);
     await openC(d);
-    const withAgent = await existsTestId(d, "JoinWithAgent", 15000);
-    const suggested = (await rowText(d, "JoinAgentSuggested")) || (await rowText(d, "JoinWithAgent"));
+    // bifold #334 took Join's agent chooser away: on B, Join offers no other agent and goes ahead with B.
+    const chooser = (await existsTestId(d, "JoinWithAgent", 6000)) || (await existsTestId(d, "JoinUseSuggestedAgent", 1500)) || (await existsTestId(d, "JoinAgentSuggested", 1500));
+    await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
+    const ask = (await existsTestId(d, "JoinAsk", 4000)) || (await existsTestId(d, "JoinStart", 1500)) || (await existsTestId(d, "JoinWays", 1500));
+    const standingOnB = await txt(d, "JoinStandingText");
     await shot(d, "agents-r2-join-on-b");
     await dumpSource(d, "agents-r2-join-on-b").catch(() => undefined);
-    const standingOnB = await txt(d, "JoinStandingText");
-    log(`R2: Join standing on B: "${standingOnB}"`);
-    log(`R2: on B, Join shows JoinWithAgent ${withAgent} · suggested "${suggested}" · home still B: ${(await homeName(d).catch(() => "")) || "(not on home)"}`);
-    row("R2 suggests A", withAgent && (suggested ?? "").includes(E.A_NAME) && !standingOnB, `JoinWithAgent ${withAgent}; suggested "${suggested}"; standing on B "${standingOnB}"`);
-    if (await existsTestId(d, "JoinUseSuggestedAgent", 5000)) {
-      await tapTestId(d, "JoinUseSuggestedAgent", 15000);
-      await owner(d, "use suggested");
-      await sleep(4000);
-      await myAgent(d);
-      const nameAfter = await homeName(d);
-      await scrollToTestId(d, `AgentCommunityStatus_${C_KEY}`, 4).catch(() => undefined);
-      const cStatus = await txt(d, `AgentCommunityStatus_${C_KEY}`);
-      log(`R2: after "use suggested": home "${nameAfter}" · C card "${cStatus}" (${since("R2")})`);
-      row("R2 use suggested", nameAfter.includes(E.A_NAME) && /member/i.test(cStatus ?? ""), `home "${nameAfter}", C "${cStatus}"`);
-    } else {
-      row("R2 use suggested", false, "no JoinUseSuggestedAgent on B's Join");
-      await d.back().catch(() => undefined);
-    }
+    log(`R2: on B, Join shows a chooser ${chooser} · its own way in ${ask} · standing on B "${standingOnB}" (${since("R2")})`);
+    row("R2 Join on B goes ahead with B", !chooser && ask && !standingOnB, `chooser ${chooser}; way in ${ask}; standing on B "${standingOnB}"`);
+    await d.back().catch(() => undefined);
+    await switchToOther(d, E.A_NAME);
   }
 
   if (ROWS.includes("R7")) {
@@ -466,6 +783,7 @@ try {
     console.log(`R5-SWITCH-B ${new Date().toISOString()}`);
     await switchToOther(d, E.B_NAME);
     await myAgent(d);
+    let heldStatus = "";
     const holds = async (tag) => {
       await scrollToTestId(d, `AgentCommunityCard_${C_KEY}`, 6).catch(() => undefined);
       const card = await existsTestId(d, `AgentCommunityCard_${C_KEY}`, 1500);
@@ -473,6 +791,7 @@ try {
       const check = await existsTestId(d, `AgentCommunityCheck_${C_KEY}`, 800);
       await shot(d, `agents-r5-holds-${tag}`);
       await dumpSource(d, `agents-r5-holds-${tag}`).catch(() => undefined);
+      heldStatus = status || heldStatus;
       log(`R5 holds (${tag}): AgentCommunityCard ${card} · status "${status}" · AgentCommunityCheck ${check}`);
     };
     await holds("0s");
@@ -482,11 +801,15 @@ try {
     const hasCheck = await existsTestId(d, `AgentCommunityCheck_${C_KEY}`, 5000);
     const tc = Date.now();
     if (hasCheck) await tapTestId(d, `AgentCommunityCheck_${C_KEY}`, 5000);
-    let refused = null;
+    // Looking for "Check now" swipes; with none, the card can be off screen now (237: status read null). Back to it.
+    else await scrollToTestId(d, `AgentCommunityStatus_${C_KEY}`, 6).catch(() => undefined);
+    // Without "Check now", a refusal the card already showed while it held (0 s / 30 s) is the card learning it by itself.
+    let refused = !hasCheck && /turned down/i.test(heldStatus) ? heldStatus : null;
     let toast = null;
     for (const until = Date.now() + 30000; Date.now() < until && !refused; await sleep(1000)) {
       toast = toast ?? (await txt(d, "ToastTitle"));
-      const st = await txt(d, `AgentCommunityStatus_${C_KEY}`);
+      // The status as the hold check reads it (rowText: the line, or its children on Android): txt() read null on 237.
+      const st = (await rowText(d, `AgentCommunityStatus_${C_KEY}`)) || (await txt(d, `AgentCommunityStatus_${C_KEY}`));
       if (/turned down/i.test(st ?? "") || /turned down/i.test(toast ?? "")) refused = st ?? toast;
     }
     await shot(d, "agents-r5-refusal");
@@ -500,6 +823,20 @@ try {
       row("R5 refusal on the card by itself", Boolean(refused), `no Check now needed; "${refused}"`);
       console.log('NOT-REACHED R5 "Check now": the session held this identity, so the card learned the refusal by itself');
     }
+  }
+
+  // R10 (#348): B joins C too (approved), so the Wallet holds two cards for C: A's (R2) and B's. R4 then unlinks B,
+  // and B's card must leave the Wallet (wallet-hidden-unlinked in R4).
+  if (ROWS.includes("R10")) {
+    t0.R10 = Date.now();
+    await switchToOther(d, E.B_NAME);
+    const req = await askToJoinC(d, "R10 on B");
+    log(`R10: admin approves: ${admin("join-decide", req.id, "approved").trim().split("\n").filter((l) => /->/.test(l)).pop()}`);
+    console.log(`R10_MEMBER ${req.applicantDid}`);
+    for (const until = Date.now() + 90000; Date.now() < until && walletBefore < 2; await sleep(5000)) walletBefore = await walletCardsForC(d);
+    await shot(d, "agents-r10-wallet-two");
+    row("wallet-both-cards", walletBefore === 2, `${walletBefore} Wallet card(s) name ${E.C_NAME} with A and B both members (want 2)`);
+    await switchToOther(d, E.A_NAME);
   }
 
   if (ROWS.includes("R3")) {
@@ -660,6 +997,14 @@ try {
     const phoneOnB = (process.env.B_PHONE && bAcl.includes(process.env.B_PHONE)) || false;
     log(`R4: others left ${left.length} · home "${name}" · B's ACL still has the phone: ${phoneOnB}`);
     row("R4 unlink B", left.length === 0 && name.includes(E.A_NAME) && !phoneOnB, `others ${left.length}; home "${name}"; on B's ACL ${phoneOnB}`);
+    // #348: B's card leaves the Wallet once B is unlinked; A's stays (the mirror re-runs on unlink: ~10 s).
+    if (walletBefore >= 0) {
+      let now = walletBefore;
+      for (const until = Date.now() + 20000; Date.now() < until && now !== walletBefore - 1; await sleep(4000)) now = await walletCardsForC(d);
+      await shot(d, "agents-r4-wallet-after-unlink");
+      row("wallet-hidden-unlinked", walletBefore === 2 && now === 1, `Wallet cards for ${E.C_NAME}: ${walletBefore} with B linked → ${now} after unlinking B (want 1: A's)`);
+      await myAgent(d);
+    }
     // Unlink lives under Manage: a segment in the old layout (01:18:17Z), the AgentSettings toggle in K6
     // (VtaAgentHome.tsx f0dd6e12, settingsOpen; 09:52:01Z). Open whichever this build has, once.
     if (await existsTestId(d, "AgentSegment_manage", 1500)) {
@@ -675,7 +1020,9 @@ try {
     await owner(d, "unlink A");
     let linkOffered = false;
     for (const until = Date.now() + 30000; Date.now() < until && !linkOffered; await sleep(1000)) {
-      linkOffered = (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
+      // 238 (#339): the unlinked phone shows VtaLink's "Scan a link code" / "No code? Use your agent's address"
+      // (VtaLinkByAddress), or Your agent's own "Link your agent" (AgentHomeLink).
+      linkOffered = (await existsTestId(d, "VtaLinkByAddress", 500)) || (await existsTestId(d, "AgentHomeLink", 500)) || (await existsTestId(d, "LinkWithoutQrButton", 500)) || (await existsTestId(d, "LinkYourAgentButton", 500)) || (await existsTestId(d, "LinkByAddressButton", 500)) || (await existsTestId(d, "VtaLinkWithoutQr", 500)) || (await existsTestId(d, "VtaLinkAgentAddress", 500)) || Boolean(await d.$('android=new UiSelector().textContains("Link without a QR code")').isExisting().catch(() => false));
     }
     await shot(d, "agents-r4-unlinked");
     row("R4 unlink the last", linkOffered, linkOffered ? "the phone offers to link an agent" : "no link offer");
