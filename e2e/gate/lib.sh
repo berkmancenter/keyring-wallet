@@ -67,9 +67,10 @@ fetch_run() {
   local run=$1 dir=$2 try
   if ls "$dir"/keyring-* >/dev/null 2>&1; then return 0; fi
   mkdir -p "$dir"
-  for try in 1 2 3; do
+  # Five tries a minute apart: the 239 auto-start lost its gate to two "check your internet connection" failures.
+  for try in 1 2 3 4 5; do
     gh run download "$run" -R $GH_REPO -D "$dir.part" >> "$dir.log" 2>&1 && { mv "$dir.part"/* "$dir"/ && rmdir "$dir.part"; break; }
-    say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 20
+    say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 60
   done
   local z; for z in "$dir"/keyring-ios-sim-*/keyring-sim.zip; do [ -f "$z" ] && (cd "$(dirname "$z")" && [ -d KeyRing.app ] || unzip -q -o keyring-sim.zip); done
   ls "$dir"/keyring-* >/dev/null 2>&1

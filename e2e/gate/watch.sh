@@ -1,11 +1,17 @@
 #!/bin/bash
-# Start the gate when a pin PR merges and its builds are green. Runs in the foreground, so either:
+# Start the gate when a pin PR merges and its builds are green (watch.sh <pr>), or keep gating every new green
+# push build of main (watch.sh --main, under launchd with gate-main.plist.example). Runs in the foreground, so either:
 #   nohup e2e/gate/watch.sh <pr> &                     (from a shell; its own session, so it survives that shell)
 #   launchctl load ~/Library/LaunchAgents/<label>.plist (gate.plist.example: survives sessions; the Mac owner's call)
 # Never start it as an agent tool's background job: one of those was stopped by its 2-hour limit mid-gate (236).
 set -u
-PR=${1:?usage: watch.sh <pin-pr-number>}
+PR=${1:?usage: watch.sh <pin-pr-number> | watch.sh --main}
 GATE_HOME=${GATE_HOME:-$HOME/.keyring-fleet/gate}; mkdir -p "$GATE_HOME"
+if [ "$PR" = --main ]; then
+  LOG=$GATE_HOME/watch-main.log
+  echo "watch main started $(date -u +%T)Z (pid $$)" >> "$LOG"
+  exec perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' "$(dirname "$0")/gate.sh" watch --main >> "$LOG" 2>&1
+fi
 LOG=$GATE_HOME/watch-$PR.log
 echo "watch #$PR started $(date -u +%T)Z (pid $$)" >> "$LOG"
 # In its own session (setsid): a process group shared with whatever started it can be stopped with it. On 10-06

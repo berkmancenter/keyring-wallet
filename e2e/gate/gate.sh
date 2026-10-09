@@ -5,6 +5,7 @@
 #   gate.sh rerun <run-id> --only-failed                      the rows that failed or never ran, same builds
 #   gate.sh dry --golden [--legs a,b]                         the drivers on the shipped build ($GATE_HOME/golden)
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
+#   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
 . "$(dirname "$0")/lib.sh"
 
@@ -98,6 +99,7 @@ cmd_run() {
   esac; done
   [ -n "$pin" ] || usage
   gate_env; use_build "$pin"
+  run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -138,9 +140,68 @@ cmd_dry() {
   cmd_run --pin "$golden" --kind dry "$@"
 }
 
+# One gate at a time on this Mac, whoever started it. The lock is a directory holding the owner's pid; a lock whose
+# owner is gone is taken over. Released when the command that took it exits (a subshell, for the watcher).
+run_lock() {
+  local d=$GATE_HOME/run.lock.d p
+  while ! mkdir "$d" 2>/dev/null; do
+    p=$(cat "$d/pid" 2>/dev/null)
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then say "another gate is running (pid $p); waiting"; sleep 60
+    else say "stale run lock (pid ${p:-?}); taking it over"; rm -rf "$d"; fi
+  done
+  echo $$ > "$d/pid"
+  trap 'rm -rf "$GATE_HOME/run.lock.d"' EXIT
+}
+
+# Continuous gating: every GATE_WATCH_INTERVAL seconds (default 300), find the newest main commit with a green push
+# build (green.mjs: a tested answer, not ad hoc jq). If no gate run exists for that commit yet, ask once for its
+# push-on Android build, wait up to an hour for it, and run the gate. A commit that was gated, green or red, is
+# not gated again by this loop: reruns are a person's call (`rerun --only-failed`). Runs in the foreground, for
+# ever: start it through watch.sh --main under launchd (gate-main.plist.example), never as an agent tool's job.
+# The Mac is shared: a build, a test run or an emulator that belongs to someone else means "not now". Executable
+# names only (never `pgrep -f` patterns: concurrent waiters matched each other and deadlocked on 10-08).
+mac_busy() {
+  ps -axo comm= | awk '$0 ~ /(xcodebuild|gradle|jest|cargo|rustc|docker-buildx|qemu-system|emulator|Simulator)$/ {n++} END {exit !n}'
+}
+
+# The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a run.
+watch_checkout_ready() {
+  local b; b=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  [ "$b" = main ] || { say "checkout $REPO is on $b, not main: running as is"; return 0; }
+  [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || { say "checkout $REPO has local changes: not fast-forwarding"; return 0; }
+  git -C "$REPO" fetch -q origin main && git -C "$REPO" merge -q --ff-only origin/main || say "fast-forward of $REPO failed: running as is"
+}
+
+cmd_watch_main() {
+  gate_env
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
+  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
+  while :; do
+    pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
+    if [ -n "$pair" ] && [ "$pair" != none ]; then
+      sha=${pair%% *}; run=${pair##* }
+      if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
+      elif [ -d "$GATE_HOME/run.lock.d" ] || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      else
+        say "new green main build ${sha:0:8} (run $run)"
+        watch_checkout_ready
+        req=$GATE_HOME/watch-requested-${sha:0:8}
+        if [ ! -f "$req" ]; then
+          if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
+          else say "push-on build not requested: push legs will be skipped"; fi
+        fi
+        for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60; done
+        ( cmd_run --pin "$sha" ) || say "gate for ${sha:0:8} ended with status $?"
+      fi
+    fi
+    sleep "$interval"
+  done
+}
+
 # Wait for the pin PR to merge, ask for a push-on Android build of the merge commit, wait for both builds, then run.
 # Runs in the foreground: start it with nohup (or the launchd plist), never as an agent tool's background job.
 cmd_watch() {
+  [ "${1:-}" = --main ] && { cmd_watch_main; return; }
   [ "${1:-}" = --pr ] && [ -n "${2:-}" ] || usage
   local pr=$2 st m i runs
   gate_env

@@ -47,12 +47,14 @@ on:
 permissions:
   contents: read
 
-# One run at a time per branch and per push setting. A push-on dispatch and a
+# One run at a time per commit and per push setting. A push-on dispatch and a
 # push-off build are different builds, so they do not cancel each other; a
-# newer run of the same kind still replaces an older one. (inputs.push is
-# empty on a push to main, which is a push-off build.)
+# repeated run of the same commit and kind still replaces an older one. The
+# commit is in the group so that a later merge to main cannot cancel a pinned
+# release's build (238 lost its build that way and had to be re-dispatched on
+# a cut branch). (inputs.push is empty on a push to main, a push-off build.)
 concurrency:
-  group: test-builds-${{ github.ref }}-push-${{ inputs.push || 'off' }}
+  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}
   cancel-in-progress: true
 
 jobs:

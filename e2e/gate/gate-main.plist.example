@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A LaunchAgent that keeps `watch.sh --main` running: a gate for every new green push build of main.
+     Installing it is a lasting change to the Mac: ask its owner first. Fill in the two absolute paths, copy to
+     ~/Library/LaunchAgents/org.keyring.gate-watch-main.plist, then
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.keyring.gate-watch-main.plist
+     To stop it:
+       launchctl bootout gui/$(id -u)/org.keyring.gate-watch-main
+     KeepAlive restarts the watcher if it exits (a `die` inside a run ends only that run's subshell, not the loop).
+     The checkout it runs from is the watcher's own (~/.keyring-fleet/gate/wt-main, on main, never a lane's working
+     checkout); it needs e2e/node_modules and a root node_modules link; gh must be
+     authenticated for the user, and ~/.keyring-fleet/gate/env/farm.env filled in. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>org.keyring.gate-watch-main</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/USERNAME/.keyring-fleet/gate/wt-main/e2e/gate/watch.sh</string>
+    <string>--main</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>GATE_WATCH_INTERVAL</key><string>300</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>/Users/USERNAME/.keyring-fleet/gate/launchd-watch-main.log</string>
+  <key>StandardErrorPath</key><string>/Users/USERNAME/.keyring-fleet/gate/launchd-watch-main.log</string>
+</dict>
+</plist>
