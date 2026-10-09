@@ -56,10 +56,14 @@ const leftmostOperand = (node) => {
 /**
  * Classifies the argument handed to testIdWithKey. A literal is a key, a
  * template or concatenation with a literal head is a stem, a conditional
- * contributes both branches, and anything else is a derived expression the
- * manifest records but cannot name.
+ * contributes both branches, an element or property access on a same-file
+ * lookup table contributes every string value of that table (rule 6), and
+ * anything else is a derived expression the manifest records but cannot name.
+ * `ctx` is { sourceFile, relPath, out, tables }.
  */
-const classifyArgument = (node, sourceFile, out, loc) => {
+const classifyArgument = (node, ctx) => {
+  const { sourceFile, relPath, out } = ctx
+  const loc = relPath
   const n = unwrap(node)
   if (isStringLiteral(n)) {
     out.keys.push({ key: n.text, loc })
@@ -84,35 +88,59 @@ const classifyArgument = (node, sourceFile, out, loc) => {
     return
   }
   if (ts.isConditionalExpression(n)) {
-    classifyArgument(n.whenTrue, sourceFile, out, loc)
-    classifyArgument(n.whenFalse, sourceFile, out, loc)
+    classifyArgument(n.whenTrue, ctx)
+    classifyArgument(n.whenFalse, ctx)
     return
+  }
+  // 6: inputTestId[usage] / ids.root where the table is an object literal declared in this file.
+  // Every string value of the table is a key the call can produce; the call stays listed as derived.
+  if ((ts.isElementAccessExpression(n) || ts.isPropertyAccessExpression(n)) && ts.isIdentifier(n.expression)) {
+    const table = localObjectLiteral(ctx, n.expression.text)
+    if (table) collectIdsMapValues(table, out, relPath)
   }
   out.derived.push({ loc, expr: node.getText(sourceFile) })
 }
 
-const collectIdsMapValues = (objectLiteral, out, sourceFile, relPath) => {
+/** Every string value of an object literal, nested maps included; computed property names count. */
+const collectIdsMapValues = (objectLiteral, out, relPath) => {
   for (const prop of objectLiteral.properties) {
     if (!ts.isPropertyAssignment(prop)) continue
     const value = unwrap(prop.initializer)
     if (isStringLiteral(value)) {
-      out.keys.push({ key: value.text, loc: locOf(sourceFile, prop, relPath) })
+      out.keys.push({ key: value.text, loc: relPath })
     } else if (ts.isObjectLiteralExpression(value)) {
-      collectIdsMapValues(value, out, sourceFile, relPath)
+      collectIdsMapValues(value, out, relPath)
     }
   }
+}
+
+/**
+ * The object literal a `const <name> = { ... }` declaration anywhere in the
+ * file initialises, or undefined. Resolved once per file and cached in ctx.
+ */
+const localObjectLiteral = (ctx, name) => {
+  if (!ctx.tables) {
+    ctx.tables = new Map()
+    const visit = (node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+        const init = unwrap(node.initializer)
+        if (ts.isObjectLiteralExpression(init) && !ctx.tables.has(node.name.text)) ctx.tables.set(node.name.text, init)
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(ctx.sourceFile)
+  }
+  return ctx.tables.get(name)
 }
 
 const hasExportModifier = (node) =>
   (ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []) : []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
 
-const locOf = (sourceFile, node, relPath) => {
-  const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-  return `${relPath}:${line + 1}`
-}
-
 /**
- * Extracts every testID the given source contributes.
+ * Extracts every testID the given source contributes. Every entry's `loc` is
+ * the file path (`relPath`), never a line: the manifest must only change when
+ * an id is added, removed, renamed or moved to another file, not when a line
+ * shifts, or every UI change would conflict on it.
  * @param {string} text   file contents
  * @param {string} relPath path to report, relative to packages/core (e.g. src/screens/Home.tsx)
  * @returns {{keys: {key: string, loc: string}[], stems: {stem: string, loc: string}[],
@@ -122,16 +150,17 @@ export const extractFromSource = (text, relPath) => {
   const kind = relPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(relPath, text, ts.ScriptTarget.Latest, true, kind)
   const out = { keys: [], stems: [], raw: [], derived: [] }
+  const ctx = { sourceFile, relPath, out }
 
   const visit = (node) => {
-    // 1, 2, 4: testIdWithKey(...) anywhere, including tabBarTestID: testIdWithKey('X')
+    // 1, 2, 4, 6: testIdWithKey(...) anywhere, including tabBarTestID: testIdWithKey('X')
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === HELPER_NAME &&
       node.arguments.length > 0
     ) {
-      classifyArgument(node.arguments[0], sourceFile, out, locOf(sourceFile, node, relPath))
+      classifyArgument(node.arguments[0], ctx)
     }
 
     // 3: export const <Name>Ids = { k: 'Literal', ... } as const
@@ -139,7 +168,7 @@ export const extractFromSource = (text, relPath) => {
       for (const decl of node.declarationList.declarations) {
         if (!ts.isIdentifier(decl.name) || !decl.name.text.endsWith(IDS_MAP_SUFFIX) || !decl.initializer) continue
         const init = unwrap(decl.initializer)
-        if (ts.isObjectLiteralExpression(init)) collectIdsMapValues(init, out, sourceFile, relPath)
+        if (ts.isObjectLiteralExpression(init)) collectIdsMapValues(init, out, relPath)
       }
     }
 
@@ -147,10 +176,10 @@ export const extractFromSource = (text, relPath) => {
     if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === 'testID' && node.initializer) {
       const init = node.initializer
       if (isStringLiteral(init)) {
-        out.raw.push({ key: init.text, loc: locOf(sourceFile, node, relPath) })
+        out.raw.push({ key: init.text, loc: relPath })
       } else if (ts.isJsxExpression(init) && init.expression) {
         const inner = unwrap(init.expression)
-        if (isStringLiteral(inner)) out.raw.push({ key: inner.text, loc: locOf(sourceFile, node, relPath) })
+        if (isStringLiteral(inner)) out.raw.push({ key: inner.text, loc: relPath })
       }
     }
 
@@ -184,15 +213,6 @@ export const listSourceFiles = (srcDir) => {
 
 // ------------------------------------------------------------------ manifest
 
-const compareLoc = (a, b) => {
-  const [pa, la] = splitLoc(a)
-  const [pb, lb] = splitLoc(b)
-  return pa < pb ? -1 : pa > pb ? 1 : la - lb
-}
-const splitLoc = (loc) => {
-  const i = loc.lastIndexOf(':')
-  return [loc.slice(0, i), Number(loc.slice(i + 1))]
-}
 const compareString = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 
 const groupSorted = (entries, field) => {
@@ -202,7 +222,7 @@ const groupSorted = (entries, field) => {
     map.get(e[field]).add(e.loc)
   }
   const result = {}
-  for (const k of [...map.keys()].sort(compareString)) result[k] = [...map.get(k)].sort(compareLoc)
+  for (const k of [...map.keys()].sort(compareString)) result[k] = [...map.get(k)].sort(compareString)
   return result
 }
 
@@ -214,8 +234,10 @@ const groupSorted = (entries, field) => {
 export const buildManifest = (perFile, { generatedFrom, prefix = PREFIX }) => {
   const all = { keys: [], stems: [], raw: [], derived: [] }
   for (const r of perFile) for (const s of MANIFEST_SECTIONS) all[s].push(...r[s])
+  const seen = new Set()
   const derived = all.derived
-    .sort((a, b) => compareLoc(a.loc, b.loc) || compareString(a.expr, b.expr))
+    .sort((a, b) => compareString(a.loc, b.loc) || compareString(a.expr, b.expr))
+    .filter(({ loc, expr }) => !seen.has(`${loc} ${expr}`) && seen.add(`${loc} ${expr}`))
     .map(({ loc, expr }) => ({ [loc]: expr }))
   return {
     generatedFrom,
@@ -301,7 +323,7 @@ const derivedId = (entry) => {
   return `${loc} ${entry[loc]}`
 }
 
-/** Names what `next` adds to and removes from `current`, section by section; generatedFrom is ignored. */
+/** Names what `next` adds to, removes from and moves between files in `current`, section by section; generatedFrom is ignored. */
 export const diffManifests = (current, next) => {
   const diff = {}
   for (const section of MANIFEST_SECTIONS) {
@@ -311,7 +333,7 @@ export const diffManifests = (current, next) => {
     const setB = new Set(b)
     const added = b.filter((k) => !setA.has(k))
     const removed = a.filter((k) => !setB.has(k))
-    // Same names but a call site moved or was added: still a stale file.
+    // Same name but produced by a different set of files (an id moved to another screen): still a stale file.
     const moved =
       section === 'derived'
         ? []
@@ -378,7 +400,7 @@ const main = () => {
       }
       for (const k of d.added) console.error(`  + ${section}: ${k}`)
       for (const k of d.removed) console.error(`  - ${section}: ${k}`)
-      for (const k of d.moved) console.error(`  ~ ${section}: ${k} (call sites changed)`)
+      for (const k of d.moved) console.error(`  ~ ${section}: ${k} (files changed)`)
     }
     process.exit(1)
   }

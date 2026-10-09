@@ -34,15 +34,15 @@ test('rule 1 and 4: literal arguments, in JSX and in tabBarTestID, are keys', ()
   assert.deepEqual(r.stems, [])
   assert.deepEqual(r.raw, [])
   assert.deepEqual(r.derived, [])
-  const root = r.keys.find((k) => k.key === 'FixtureRoot')
-  assert.equal(root.loc, 'scripts/__fixtures__/helper-literals.tsx:11')
+  // Locations are files, never lines, so a shifted line does not change the manifest.
+  assert.ok(r.keys.every((k) => k.loc === 'scripts/__fixtures__/helper-literals.tsx'))
 })
 
 test('rule 2: a literal head before ${ or + is a stem; an empty head is derived', () => {
   const r = extractFixture('helper-dynamic.tsx')
   assert.deepEqual(r.stems.map((s) => s.stem).sort(), ['FixtureRowA_', 'FixtureRowName_', 'FixtureRow_'])
   assert.deepEqual(keysOf(r), ['FixtureRowOther'])
-  assert.deepEqual(r.derived, [{ loc: 'scripts/__fixtures__/helper-dynamic.tsx:11', expr: '`${row.id}Trailing`' }])
+  assert.deepEqual(r.derived, [{ loc: 'scripts/__fixtures__/helper-dynamic.tsx', expr: '`${row.id}Trailing`' }])
 })
 
 test('rule 3: every string value of an exported *Ids map is a key, nested maps included', () => {
@@ -53,7 +53,32 @@ test('rule 3: every string value of an exported *Ids map is a key, nested maps i
     'FixtureScreenStepFirst',
     'FixtureScreenStepSecond',
   ])
-  assert.equal(r.keys.find((k) => k.key === 'FixtureScreenRoot').loc, 'scripts/__fixtures__/ids-map.ts:3')
+  assert.equal(r.keys.find((k) => k.key === 'FixtureScreenRoot').loc, 'scripts/__fixtures__/ids-map.ts')
+})
+
+test('rule 6: a key read from a same-file lookup table contributes every value of the table', () => {
+  const r = extractFixture('lookup-table.tsx')
+  assert.deepEqual(
+    [...new Set(keysOf(r))],
+    [
+      'FixtureAttestationEnterPIN',
+      'FixtureBiometricsEnterPIN',
+      'FixtureContinue',
+      'FixtureSave',
+      'FixtureSettingEnterPIN',
+    ]
+  )
+  assert.ok(r.keys.every((k) => k.loc === 'scripts/__fixtures__/lookup-table.tsx'))
+  // The call sites themselves stay derived, and a table that is not declared in the file is not resolved.
+  assert.deepEqual(
+    r.derived.map((d) => d.expr),
+    ['inputTestId[usage]', 'buttonTestId[usage]', 'buttonTestId.check', 'ids.root']
+  )
+  assert.deepEqual(r.raw, [])
+  assert.deepEqual(r.stems, [])
+  // A table read twice yields each value once in the manifest.
+  const m = buildManifest([r], { generatedFrom: 'x' })
+  assert.deepEqual(m.keys.FixtureContinue, ['scripts/__fixtures__/lookup-table.tsx'])
 })
 
 test('rule 5: a testID prop without the helper is raw, a passed-through prop is not recorded', () => {
@@ -72,60 +97,66 @@ test('derived: calls and variables are recorded with their expression text', () 
   )
 })
 
-test('buildManifest sorts keys and call sites and merges duplicates', () => {
-  const a = extractFromSource(`testIdWithKey('Zed'); testIdWithKey('Alpha')`, 'src/b.ts')
+test('buildManifest sorts keys and files, merges duplicates and is unchanged by a shifted line', () => {
+  const a = extractFromSource(`testIdWithKey('Zed'); testIdWithKey('Alpha'); testIdWithKey(label)`, 'src/b.ts')
   const b = extractFromSource(`\n\ntestIdWithKey('Alpha'); testIdWithKey(\`Alpha_\${x}\`)`, 'src/a.ts')
   const m = buildManifest([a, b], { generatedFrom: 'abc' })
   assert.equal(m.generatedFrom, 'abc')
   assert.equal(m.prefix, PREFIX)
   assert.deepEqual(Object.keys(m.keys), ['Alpha', 'Zed'])
-  assert.deepEqual(m.keys.Alpha, ['src/a.ts:3', 'src/b.ts:1'])
-  assert.deepEqual(m.stems, { Alpha_: ['src/a.ts:3'] })
+  assert.deepEqual(m.keys.Alpha, ['src/a.ts', 'src/b.ts'])
+  assert.deepEqual(m.stems, { Alpha_: ['src/a.ts'] })
   assert.deepEqual(m.raw, {})
-  assert.deepEqual(m.derived, [])
+  assert.deepEqual(m.derived, [{ 'src/b.ts': 'label' }])
   assert.equal(formatManifest(m), formatManifest(buildManifest([b, a], { generatedFrom: 'abc' })))
+  const shifted = extractFromSource(
+    `\n\n\ntestIdWithKey('Zed');\ntestIdWithKey('Alpha');\ntestIdWithKey(label)`,
+    'src/b.ts'
+  )
+  assert.equal(formatManifest(m), formatManifest(buildManifest([shifted, b], { generatedFrom: 'abc' })))
+  assert.deepEqual(diffManifests(m, buildManifest([shifted, b], { generatedFrom: 'def' })), {})
 })
 
 test('formatManifest writes valid JSON, one-line arrays that fit and expanded ones that do not', () => {
-  const long = Array.from({ length: 12 }, (_, i) => `src/modules/some/long/path/Component${i}.tsx:${100 + i}`)
+  const long = Array.from({ length: 12 }, (_, i) => `src/modules/some/long/path/Component${i}.tsx`)
   const m = {
     generatedFrom: 'x',
     prefix: PREFIX,
-    keys: { A: ['src/a.ts:1'], B: long },
+    keys: { A: ['src/a.ts'], B: long },
     stems: {},
     raw: {},
-    derived: [{ 'src/a.ts:2': 'label' }],
+    derived: [{ 'src/a.ts': 'label' }],
   }
   const text = formatManifest(m)
   assert.deepEqual(JSON.parse(text), m)
-  assert.ok(text.includes('\n  "keys": {\n    "A": ["src/a.ts:1"],\n    "B": [\n      "src/'))
-  assert.ok(text.endsWith('"derived": [\n    {\n      "src/a.ts:2": "label"\n    }\n  ]\n}\n'))
+  assert.ok(text.includes('\n  "keys": {\n    "A": ["src/a.ts"],\n    "B": [\n      "src/'))
+  assert.ok(text.endsWith('"derived": [\n    {\n      "src/a.ts": "label"\n    }\n  ]\n}\n'))
 })
 
-test('diffManifests names added, removed and moved entries and ignores generatedFrom', () => {
+test('diffManifests names added, removed and moved-between-files entries and ignores generatedFrom', () => {
   const current = {
     generatedFrom: 'old',
     prefix: PREFIX,
-    keys: { A: ['src/a.ts:1'], B: ['src/b.ts:1'] },
-    stems: { S_: ['src/s.ts:1'] },
+    keys: { A: ['src/a.ts'], B: ['src/b.ts'] },
+    stems: { S_: ['src/s.ts'] },
     raw: {},
-    derived: [{ 'src/d.ts:1': 'x' }],
+    derived: [{ 'src/d.ts': 'x' }],
   }
   const same = { ...current, generatedFrom: 'new' }
   assert.deepEqual(diffManifests(current, same), {})
   const next = {
     generatedFrom: 'new',
     prefix: PREFIX,
-    keys: { A: ['src/a.ts:9'], C: ['src/c.ts:1'] },
+    keys: { A: ['src/moved.ts'], C: ['src/c.ts'] },
     stems: {},
-    raw: { R: ['src/r.tsx:1'] },
+    raw: { R: ['src/r.tsx'] },
     derived: [],
   }
   assert.deepEqual(diffManifests(current, next), {
     keys: { added: ['C'], removed: ['B'], moved: ['A'] },
     stems: { added: [], removed: ['S_'], moved: [] },
     raw: { added: ['R'], removed: [], moved: [] },
-    derived: { added: [], removed: ['src/d.ts:1 x'], moved: [] },
+    derived: { added: [], removed: ['src/d.ts x'], moved: [] },
   })
 })
 

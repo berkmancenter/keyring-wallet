@@ -12,10 +12,10 @@ time rather than at the next gate.
 {
   "generatedFrom": "<bifold commit the file was generated at>",
   "prefix": "com.ariesbifold:id/",
-  "keys": { "AgentCreateDone": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx:850"] },
-  "stems": { "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx:74"] },
-  "raw": { "ListCredentialsRoot": ["src/screens/ListCredentials.tsx:268"] },
-  "derived": [{ "src/navigators/TabStack.tsx:339": "t('TabStack.Messages')" }]
+  "keys": { "AgentCreateDone": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"] },
+  "stems": { "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"] },
+  "raw": { "ListCredentialsRoot": ["src/screens/ListCredentials.tsx"] },
+  "derived": [{ "src/navigators/TabStack.tsx": "t('TabStack.Messages')" }]
 }
 ```
 
@@ -23,7 +23,11 @@ time rather than at the next gate.
   `tabBarTestID: testIdWithKey('...')`) and every string value of an exported
   `<Name>Ids` map, the screen-contract pattern
   (`export const VettingIds = { root: 'VettingRoot' } as const`). Both branches
-  of a conditional count. The runtime id is `prefix + key`.
+  of a conditional count. So does every string value of a lookup table declared
+  in the same file and read by the call (`testIdWithKey(inputTestId[usage])`
+  with `const inputTestId = { [Usage.Check]: 'AppSettingChangedEnterPIN', ... }`,
+  the `PINVerify` pattern); the call itself is also listed under `derived`. The
+  runtime id is `prefix + key`.
 - `stems`: the literal head of a dynamic key, `AgentDevice_` for
   ``testIdWithKey(`AgentDevice_${key}`)`` or `testIdWithKey('AgentDevice_' + key)`.
   Most end in `_`; a few older ones do not (`Dismiss`, `button-`). The runtime
@@ -36,15 +40,19 @@ time rather than at the next gate.
   see them. A key derived from translated text changes with the language and is
   a cleanup candidate.
 
-Each entry maps to the call sites that produce it (`path:line`, relative to
-`packages/core`), sorted, so the file is deterministic for a given tree.
+Each entry maps to the files that produce it (paths relative to
+`packages/core`), sorted, so the file is deterministic for a given tree. Lines
+are deliberately not recorded: nearly every UI change shifts lines, and a
+manifest that changed with them would go stale between a PR's last push and its
+merge and conflict between concurrent branches. The file changes only when an
+id is added, removed, renamed or moved to another file.
 
 The generator walks the TypeScript AST of `src/**/*.{ts,tsx}` (no type
 checker), skipping `__tests__/` and `*.test.*`.
 
 ## When it changes
 
-Whenever a `testID` is added, removed, renamed or moved to another line. After
+Whenever a `testID` is added, removed, renamed or moved to another file. After
 such a change, regenerate and commit the result alongside it:
 
 ```sh
@@ -55,11 +63,12 @@ yarn testids:test     # the extractor's own tests (node:test, not jest)
 ```
 
 `generatedFrom` records the commit the file was generated at and is ignored by
-the check, so an unrelated commit does not make the file stale. Moving a call
-site does: the drivers use the locations to find where an id lives.
+the check, so an unrelated commit does not make the file stale. Neither does
+editing a file around its ids: only the set of ids, or the set of files an id
+lives in, counts.
 
 CI runs the check in the `Linting and formatter` job of `quality.yaml`, after
-the linter. A failing check prints the added (`+`), removed (`-`) and moved
+the linter. A failing check prints the added (`+`), removed (`-`) and moved-between-files
 (`~`) entries; the fix is to run `yarn testids` and commit.
 
 ## Who reads it
