@@ -269,7 +269,9 @@ async function linkTo(d, did, slug) {
 /** The chips' Add, brought back into view first: after a switch the home can sit scrolled past the chip strip, and
  * Android leaves off-screen views out of the tree (239: R9 found no AgentSwitcherAdd). */
 async function tapAdd(d) {
-  let el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 3, { direction: "up" }).catch(() => undefined);
+  // Up only: scrollToTestId's default also tries the other way, which carried the strip off the top (239 final pin, R9).
+  let el = (await existsTestId(d, "AgentSwitcherAdd", 2000)) ? byTestId(d, "AgentSwitcherAdd") : await scrollToTestId(d, "AgentSwitcherAdd", 3, { direction: "up", both: false }).catch(() => undefined);
+  if (!el) await scrollToTestId(d, "AgentChips", 3, { direction: "up", both: false }).catch(() => undefined);
   // Add is the last item of the chips' horizontal strip: with two agents it can sit off to the right, out of the tree
   // (239: R9 after R8's switches). Swipe the strip leftwards until it shows.
   for (let i = 0; i < 4 && !el; i++) {
