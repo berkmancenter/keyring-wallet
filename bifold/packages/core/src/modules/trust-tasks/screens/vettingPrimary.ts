@@ -9,6 +9,7 @@
  *
  * @module trust-tasks/screens/vettingPrimary
  */
+import { VtiVettingIds, type VtiVettingId } from './VtiVetting.ids'
 
 /**
  * The desk's steps. 'share' is a ticket cut on this visit and not yet used:
@@ -19,20 +20,20 @@ export type VetterStep = 'ticket' | 'share' | 'request' | 'match' | 'waitCard' |
 export type ApplicantStep = 'member' | 'name' | 'waiting' | 'match' | 'send' | 'checking' | 'apply' | 'ticket'
 
 /** The testID (stem) of the desk step's one filled button; none while there is only waiting to do. */
-export function deskPrimary(step: VetterStep): string | undefined {
+export function deskPrimary(step: VetterStep): VtiVettingId | undefined {
   switch (step) {
     case 'ticket':
-      return 'VettingNewTicketButton'
+      return VtiVettingIds.newTicketButton
     case 'share':
-      return 'VettingCopyTicketLink'
+      return VtiVettingIds.copyTicketLink
     case 'request':
-      return 'VettingOpenSessionButton'
+      return VtiVettingIds.openSessionButton
     case 'match':
-      return 'VettingCodesMatch'
+      return VtiVettingIds.codesMatch
     case 'check':
-      return 'VettingAttestButton'
+      return VtiVettingIds.attestButton
     case 'done':
-      return 'VettingVetSomeoneElse'
+      return VtiVettingIds.vetSomeoneElse
     case 'waitCard':
       return undefined
   }
@@ -46,21 +47,21 @@ export interface ApplicantPrimaryState {
 }
 
 /** The testID (stem) of the applicant step's one filled button; none while there is only waiting to do. */
-export function applicantPrimary(step: ApplicantStep, state: ApplicantPrimaryState): string | undefined {
-  const askVetter = state.ticketLinkReady ? 'VettingRequestButton' : 'VettingScanTicketButton'
+export function applicantPrimary(step: ApplicantStep, state: ApplicantPrimaryState): VtiVettingId | undefined {
+  const askVetter = state.ticketLinkReady ? VtiVettingIds.requestButton : VtiVettingIds.scanTicketButton
   switch (step) {
     case 'member':
-      return 'VettingGoToMyAgent'
+      return VtiVettingIds.goToMyAgent
     case 'name':
-      return 'VettingStartButton'
+      return VtiVettingIds.startButton
     case 'ticket':
       return askVetter
     case 'match':
-      return 'VettingCodesMatch'
+      return VtiVettingIds.codesMatch
     case 'send':
-      return 'VettingSendCardButton'
+      return VtiVettingIds.sendCardButton
     case 'apply':
-      return state.meets ? 'VettingApplyButton' : askVetter
+      return state.meets ? VtiVettingIds.applyButton : askVetter
     case 'waiting':
     case 'checking':
       return undefined

@@ -39,6 +39,7 @@ import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
 import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
+import { VtiCommunityIds } from './VtiCommunity.ids'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
 const detailOf = (err: unknown): string => {
@@ -216,17 +217,17 @@ const VtiCommunity: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('CommunityScroll')}>
+      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey(VtiCommunityIds.scroll)}>
         {/* What it is called, not what it is keyed by. The DID was the
             headline here; it is the only checkable thing on the screen, so it
             stays — one tap away, in the same place as every other detail. */}
         <View style={styles.card}>
           <Text style={styles.label}>{t('MyAgent.Community')}</Text>
-          <Text style={styles.value} testID={testIdWithKey('CommunityName')}>
+          <Text style={styles.value} testID={testIdWithKey(VtiCommunityIds.name)}>
             {called.name ?? t('Join.Unnamed')}
           </Text>
           {called.name && called.claimed ? (
-            <Text style={styles.label} testID={testIdWithKey('CommunityNameClaimed')}>
+            <Text style={styles.label} testID={testIdWithKey(VtiCommunityIds.nameClaimed)}>
               {t('Join.NameFromLink')}
             </Text>
           ) : null}
@@ -234,12 +235,12 @@ const VtiCommunity: React.FC = () => {
             onPress={() => setShowDetails(!showDetails)}
             accessibilityRole="button"
             accessibilityState={{ expanded: showDetails }}
-            testID={testIdWithKey('CommunityDetailsToggle')}
+            testID={testIdWithKey(VtiCommunityIds.detailsToggle)}
           >
             <Text style={[styles.label, { textDecorationLine: 'underline' }]}>{t('VtaLink.Details')}</Text>
           </Pressable>
           {showDetails ? (
-            <Text style={styles.value} selectable testID={testIdWithKey('CommunityDid')}>
+            <Text style={styles.value} selectable testID={testIdWithKey(VtiCommunityIds.did)}>
               {communityDid}
             </Text>
           ) : null}
@@ -253,7 +254,7 @@ const VtiCommunity: React.FC = () => {
           />
         ) : null}
         {membership ? (
-          <View style={styles.card} testID={testIdWithKey('CommunityMember')}>
+          <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.member)}>
             <View style={styles.row}>
               <Icon name="check-circle" size={24} color={ColorPalette.semantic.success} />
               <Text style={[styles.value, { flex: 1 }]}>
@@ -263,13 +264,13 @@ const VtiCommunity: React.FC = () => {
                 })}
               </Text>
             </View>
-            <Text style={styles.label} testID={testIdWithKey('CommunityMemberSince')}>
+            <Text style={styles.label} testID={testIdWithKey(VtiCommunityIds.memberSince)}>
               {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
             </Text>
             {vetsHere ? (
               <Pressable
                 style={styles.button}
-                testID={testIdWithKey('CommunityOpenDesk')}
+                testID={testIdWithKey(VtiCommunityIds.openDesk)}
                 accessibilityRole="button"
                 onPress={() => {
                   communityTarget.choose(communityDid)
@@ -287,7 +288,7 @@ const VtiCommunity: React.FC = () => {
         )}
         {busy && !manifest && !membership ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
         {manifest && !membership ? (
-          <View style={styles.card} testID={testIdWithKey('CommunityCriteria')}>
+          <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.criteria)}>
             {manifest.criteria.map((criterion, index) => (
               <View style={styles.row} key={criterion.id ?? String(index)}>
                 <Icon name="circle-medium" size={20} color={ColorPalette.brand.primary} />
@@ -299,20 +300,20 @@ const VtiCommunity: React.FC = () => {
 
         {error ? (
           <View style={styles.card}>
-            <Text style={styles.error} testID={testIdWithKey('CommunityError')}>
+            <Text style={styles.error} testID={testIdWithKey(VtiCommunityIds.error)}>
               {error}
             </Text>
             {refusalCode ? (
               <Pressable
                 accessibilityRole="button"
-                testID={testIdWithKey('CommunityRefusalDetails')}
+                testID={testIdWithKey(VtiCommunityIds.refusalDetails)}
                 onPress={() => setShowDetails((shown) => !shown)}
               >
                 <Text style={{ ...TextTheme.normal, color: ColorPalette.brand.link }}>{t('MyAgent.Details')}</Text>
               </Pressable>
             ) : null}
             {showDetails && refusalCode ? (
-              <Text style={styles.label} testID={testIdWithKey('CommunityRefusalCode')}>
+              <Text style={styles.label} testID={testIdWithKey(VtiCommunityIds.refusalCode)}>
                 {refusalCode}
               </Text>
             ) : null}
@@ -322,7 +323,7 @@ const VtiCommunity: React.FC = () => {
         {manifest && !membership && !heldElsewhere ? (
           <Pressable
             style={styles.button}
-            testID={testIdWithKey('ApplyToCommunityButton')}
+            testID={testIdWithKey(VtiCommunityIds.applyToCommunityButton)}
             accessibilityRole="button"
             onPress={onApply}
           >
@@ -331,7 +332,7 @@ const VtiCommunity: React.FC = () => {
         ) : null}
 
         {!holds || heldElsewhere ? null : confirmingLeave ? (
-          <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
+          <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.leaveCommunityConfirmCard)}>
             <Text style={styles.value}>
               {t('Community.LeaveExplains', {
                 community: communityLabelOf(communityDid, t),
@@ -348,7 +349,9 @@ const VtiCommunity: React.FC = () => {
               <Pressable
                 key={choice}
                 style={styles.row}
-                testID={testIdWithKey(choice === 'purge' ? 'LeaveCommunityPurge' : 'LeaveCommunityTombstone')}
+                testID={testIdWithKey(
+                  choice === 'purge' ? VtiCommunityIds.leaveCommunityPurge : VtiCommunityIds.leaveCommunityTombstone
+                )}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: keep === choice }}
                 disabled={leaving}
@@ -366,7 +369,7 @@ const VtiCommunity: React.FC = () => {
             ))}
             <Pressable
               style={[styles.button, { backgroundColor: ColorPalette.semantic.error }]}
-              testID={testIdWithKey('LeaveCommunityConfirm')}
+              testID={testIdWithKey(VtiCommunityIds.leaveCommunityConfirm)}
               accessibilityRole="button"
               disabled={leaving}
               onPress={() => void onLeave()}
@@ -379,7 +382,7 @@ const VtiCommunity: React.FC = () => {
             </Pressable>
             <Pressable
               style={[styles.button, { backgroundColor: ColorPalette.grayscale.mediumGrey }]}
-              testID={testIdWithKey('LeaveCommunityStay')}
+              testID={testIdWithKey(VtiCommunityIds.leaveCommunityStay)}
               accessibilityRole="button"
               disabled={leaving}
               onPress={() => setConfirmingLeave(false)}
@@ -395,7 +398,7 @@ const VtiCommunity: React.FC = () => {
               styles.button,
               { backgroundColor: 'transparent', borderWidth: 1, borderColor: ColorPalette.semantic.error },
             ]}
-            testID={testIdWithKey('LeaveCommunityRetry')}
+            testID={testIdWithKey(VtiCommunityIds.leaveCommunityRetry)}
             accessibilityRole="button"
             disabled={leaving}
             onPress={() => void onLeave()}
@@ -414,7 +417,7 @@ const VtiCommunity: React.FC = () => {
               styles.button,
               { backgroundColor: 'transparent', borderWidth: 1, borderColor: ColorPalette.semantic.error },
             ]}
-            testID={testIdWithKey('LeaveCommunityButton')}
+            testID={testIdWithKey(VtiCommunityIds.leaveCommunityButton)}
             accessibilityRole="button"
             onPress={() => setConfirmingLeave(true)}
           >

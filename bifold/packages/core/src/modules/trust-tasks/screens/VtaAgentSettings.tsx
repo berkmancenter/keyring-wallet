@@ -34,6 +34,7 @@ import { agentDisplayName, withAgentName } from './agentName'
 import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { shortTask } from './RequestCard'
 import { forgetAgentHoldings, ownHoldings } from './VtaAgentHome'
+import { VtaAgentSettingsIds } from './VtaAgentSettings.ids'
 import { useVtaLinkWithClock } from './VtaStatus'
 import { useRoomAboveTabBar } from './aboveTabBar'
 import { SectionRule } from './SectionRule'
@@ -104,7 +105,7 @@ const VtaAgentSettings: React.FC = () => {
   if (link.kind !== 'linked') {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-        <View style={styles.content} testID={testIdWithKey('AgentSettingsScreen')}>
+        <View style={styles.content} testID={testIdWithKey(VtaAgentSettingsIds.screen)}>
           <ThemedText>{t('VtaLink.NothingToLink')}</ThemedText>
         </View>
       </SafeAreaView>
@@ -141,9 +142,13 @@ const VtaAgentSettings: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} testID={testIdWithKey('AgentSettingsScreen')}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.content}
+        testID={testIdWithKey(VtaAgentSettingsIds.screen)}
+      >
         {/* What to call it on this phone: an agent made with pnm gives no name. */}
-        <View style={styles.card} testID={testIdWithKey('AgentNameCard')}>
+        <View style={styles.card} testID={testIdWithKey(VtaAgentSettingsIds.nameCard)}>
           <ThemedText variant="labelTitle" accessibilityRole="header">
             {t('VtaLink.NameAgent')}
           </ThemedText>
@@ -159,21 +164,21 @@ const VtaAgentSettings: React.FC = () => {
             returnKeyType="done"
             onSubmitEditing={() => void saveName(nameDraft)}
             accessibilityLabel={t('VtaLink.NameAgent')}
-            testID={testIdWithKey('AgentNameInput')}
+            testID={testIdWithKey(VtaAgentSettingsIds.nameInput)}
           />
           <Button
             title={t('VtaLink.NameAgentSave')}
             buttonType={ButtonType.Primary}
             disabled={savingName || !nameDraft.trim() || nameDraft.trim() === currentName?.label}
             onPress={() => void saveName(nameDraft)}
-            testID={testIdWithKey('AgentNameSave')}
+            testID={testIdWithKey(VtaAgentSettingsIds.nameSave)}
           />
           {currentName?.source === 'nickname' ? (
             <Pressable
               onPress={() => void saveName('')}
               accessibilityRole="button"
               style={styles.row}
-              testID={testIdWithKey('AgentNameReset')}
+              testID={testIdWithKey(VtaAgentSettingsIds.nameReset)}
             >
               <ThemedText style={styles.link}>{t('VtaLink.NameAgentReset')}</ThemedText>
             </Pressable>
@@ -184,7 +189,7 @@ const VtaAgentSettings: React.FC = () => {
         {otherAgents.length > 0 ? (
           <>
             <SectionRule />
-            <View style={styles.card} testID={testIdWithKey('AgentOthers')}>
+            <View style={styles.card} testID={testIdWithKey(VtaAgentSettingsIds.others)}>
               <ThemedText variant="labelTitle" accessibilityRole="header">
                 {t('VtaLink.OtherAgents')}
               </ThemedText>
@@ -209,7 +214,7 @@ const VtaAgentSettings: React.FC = () => {
                 </View>
               ))}
               {unlinkTarget ? (
-                <View style={{ gap: 8 }} testID={testIdWithKey('AgentUnlinkOtherCard')}>
+                <View style={{ gap: 8 }} testID={testIdWithKey(VtaAgentSettingsIds.unlinkOtherCard)}>
                   <ThemedText variant="labelTitle" accessibilityRole="header">
                     {t('VtaLink.UnlinkTitle', { agent: nameOf(unlinkTarget), interpolation: { escapeValue: false } })}
                   </ThemedText>
@@ -227,13 +232,13 @@ const VtaAgentSettings: React.FC = () => {
                       setUnlinkTarget(undefined)
                       if (agent && target) void vtaAgent.unlinkAgent(agent, target)
                     }}
-                    testID={testIdWithKey('AgentUnlinkOtherConfirm')}
+                    testID={testIdWithKey(VtaAgentSettingsIds.unlinkOtherConfirm)}
                   />
                   <Button
                     title={t('Global.Cancel')}
                     buttonType={ButtonType.Secondary}
                     onPress={() => setUnlinkTarget(undefined)}
-                    testID={testIdWithKey('AgentUnlinkOtherCancel')}
+                    testID={testIdWithKey(VtaAgentSettingsIds.unlinkOtherCancel)}
                   />
                 </View>
               ) : null}
@@ -246,7 +251,7 @@ const VtaAgentSettings: React.FC = () => {
         {state.awaitingConsentFor ? (
           <View style={[styles.card, styles.row]}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
-            <ThemedText style={{ flex: 1 }} testID={testIdWithKey('AgentAwaitingConsent')}>
+            <ThemedText style={{ flex: 1 }} testID={testIdWithKey(VtaAgentSettingsIds.awaitingConsent)}>
               {t('MyAgent.AwaitingConsent', {
                 task: shortTask(state.awaitingConsentFor),
                 interpolation: { escapeValue: false },
@@ -265,7 +270,7 @@ const VtaAgentSettings: React.FC = () => {
 
         {/* Each section set apart, its heading in one style, as on "Your agent" (Alberto, 238). */}
         <SectionRule />
-        <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
+        <View style={styles.card} testID={testIdWithKey(VtaAgentSettingsIds.activity)}>
           <ThemedText variant="labelTitle" accessibilityRole="header">
             {t('VtaLink.Did')}
           </ThemedText>
@@ -287,13 +292,13 @@ const VtaAgentSettings: React.FC = () => {
             onPress={() => setDetailsOpen(!detailsOpen)}
             accessibilityRole="button"
             accessibilityState={{ expanded: detailsOpen }}
-            testID={testIdWithKey('AgentDetailsToggle')}
+            testID={testIdWithKey(VtaAgentSettingsIds.detailsToggle)}
           >
             <Icon name={detailsOpen ? 'chevron-down' : 'chevron-right'} size={20} color={TextTheme.normal.color} />
             <ThemedText variant="labelTitle">{t('VtaLink.Details')}</ThemedText>
           </Pressable>
           {detailsOpen ? (
-            <View testID={testIdWithKey('AgentDetails')}>
+            <View testID={testIdWithKey(VtaAgentSettingsIds.details)}>
               <ThemedText style={styles.muted}>{t('VtaLink.DetailsAgent')}</ThemedText>
               <ThemedText style={styles.mono} selectable>
                 {link.vtaDid}
@@ -313,18 +318,22 @@ const VtaAgentSettings: React.FC = () => {
           title={t('VtaLink.Unlink')}
           buttonType={ButtonType.Tertiary}
           onPress={() => setUnlinkOpen(true)}
-          testID={testIdWithKey('AgentUnlink')}
+          testID={testIdWithKey(VtaAgentSettingsIds.unlink)}
         />
         {unlinkOpen ? (
-          <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
-            <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
+          <View style={styles.card} testID={testIdWithKey(VtaAgentSettingsIds.unlinkCard)}>
+            <ThemedText
+              variant="labelTitle"
+              accessibilityRole="header"
+              testID={testIdWithKey(VtaAgentSettingsIds.unlinkTitle)}
+            >
               {t('VtaLink.UnlinkTitle', { agent: thisName, interpolation: { escapeValue: false } })}
             </ThemedText>
-            <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>
+            <ThemedText testID={testIdWithKey(VtaAgentSettingsIds.unlinkBody)}>
               {t(link.connection.kind === 'gone' ? 'VtaLink.UnlinkBodyGone' : 'VtaLink.UnlinkBody')}
             </ThemedText>
             {otherAgents.length > 0 ? (
-              <ThemedText testID={testIdWithKey('AgentUnlinkNext')}>
+              <ThemedText testID={testIdWithKey(VtaAgentSettingsIds.unlinkNext)}>
                 {t('VtaLink.UnlinkNext', {
                   agent: nameOf(otherAgents[0].vtaDid),
                   interpolation: { escapeValue: false },
@@ -335,13 +344,13 @@ const VtaAgentSettings: React.FC = () => {
               title={t('VtaLink.UnlinkConfirm')}
               buttonType={ButtonType.Critical}
               onPress={unlink}
-              testID={testIdWithKey('AgentUnlinkConfirm')}
+              testID={testIdWithKey(VtaAgentSettingsIds.unlinkConfirm)}
             />
             <Button
               title={t('Global.Cancel')}
               buttonType={ButtonType.Secondary}
               onPress={() => setUnlinkOpen(false)}
-              testID={testIdWithKey('AgentUnlinkCancel')}
+              testID={testIdWithKey(VtaAgentSettingsIds.unlinkCancel)}
             />
           </View>
         ) : null}
