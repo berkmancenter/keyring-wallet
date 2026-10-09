@@ -170,6 +170,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # Full history and tags, so the notes step can find the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -654,6 +656,20 @@ jobs:
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
             CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
+          fi
+
+          # A release's own Play notes win, as on the promotion, but only when
+          # this release changed the file, so one release's notes never ship
+          # with the next. Lines starting with # are the file's instructions.
+          PLAY_NOTES=.github/play/whats-new.md
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
+          if [ -s "$PLAY_NOTES" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$PLAY_NOTES" 2>/dev/null)" ]; then
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$PLAY_NOTES" | sed '/./,$!d' | head -c 500 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              CLEAN_MSG="$FROM_FILE"
+              echo "using $PLAY_NOTES"
+            fi
           fi
 
           {
