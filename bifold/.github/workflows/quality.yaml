@@ -62,6 +62,17 @@ jobs:
             yarn lint || echo "::warning::Full-repo lint failed (known debt); not blocking main pushes yet"
           fi
 
+      - name: testids extractor tests
+        run: |
+          node --test packages/core/scripts/gen-testids.test.mjs
+
+      - name: testids manifest is current
+        run: |
+          # packages/core/testids.json lists every testID key in core; the wallet's e2e
+          # drivers read it. A PR that adds, removes, renames or moves a testID must
+          # regenerate it (`yarn testids` in packages/core) so the drivers see the change.
+          node packages/core/scripts/gen-testids.mjs --check
+
   test:
     runs-on: ubuntu-22.04
     name: Testing
