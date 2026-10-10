@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f0239c44382f9378e19b66f859ec3e63d1290e2c",
+  "generatedFrom": "85f6d40b32e028b57ca2af50ea42e00d555a641c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -12,65 +12,65 @@
     "AcceptDevCredentialsSwitchElement": ["src/screens/Developer.tsx"],
     "AddContact": ["src/screens/Messages.tsx"],
     "AddProfile": ["src/modules/vrc/screens/MyProfiles.tsx"],
-    "AgentActivity": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentAddedCard": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentAddedKeep": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentAddedUse": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentActivity": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentAddedCard": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentAddedKeep": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentAddedUse": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentApprovalBanner": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentApprovalCard": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "AgentApprovalDecided": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "AgentAskMeRow": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
-    "AgentAwaitingConsent": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentBackupAdd": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupAdded": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupAddressQr": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupAddressQrCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupAddressText": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupCodeInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupCopyAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupEnterCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupNext": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupNone": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupOtherKinds": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupPasteCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupScanButton": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupScanCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupScanThisHeading": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupShareAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentBackupShowAsText": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCatchingUp": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentAwaitingConsent": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentBackupAdd": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupAdded": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupAddressQr": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupAddressQrCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupAddressText": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupCodeInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupCopyAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupEnterCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupNext": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupNone": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupOtherKinds": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupPasteCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupScanButton": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupScanCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupScanThisHeading": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupShareAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentBackupShowAsText": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCatchingUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentChips": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
-    "AgentCommunityHighlighted": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentContinueVetting": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentCreateAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateAddressContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateAddressInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateAsDevice": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateCheckAgain": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateConnect": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateCopyCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateDone": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateError": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateIntro": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateJoin": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOpenHost": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOwnerBody": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOwnerCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOwnerDid": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOwnerHow": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateOwnerHowToggle": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreatePasteAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateProgress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateReady": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateScanAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateScroll": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateShareCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateShowCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateSwitchToExisting": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentCreateWaiting": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
-    "AgentDetails": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentDetailsToggle": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
+    "AgentCommunityHighlighted": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentContinueVetting": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentCreateAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateAddressContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateAddressInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateAsDevice": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateCheckAgain": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateConnect": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateCopyCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateDone": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateError": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateIntro": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateJoin": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOpenHost": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOwnerBody": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOwnerCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOwnerDid": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOwnerHow": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateOwnerHowToggle": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreatePasteAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateProgress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateReady": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateScanAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateScroll": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateShareCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateShowCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateSwitchToExisting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateWaiting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentDetails": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentDetailsToggle": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
     "AgentDeviceAdd": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceError": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceList": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
@@ -78,81 +78,87 @@
     "AgentDeviceOnlyThis": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRemoved": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRename": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
-    "AgentDevices": ["src/modules/trust-tasks/screens/DevicesCard.tsx"],
-    "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentDevices": [
+      "src/modules/trust-tasks/screens/DevicesCard.tsx",
+      "src/modules/trust-tasks/screens/MyAgent.ids.ts"
+    ],
+    "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGetCards": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsButton": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsHint": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsProgress": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsResult": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
-    "AgentGone": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentGoneLinkNew": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentGoneWhy": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentHolds": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentHoldsStale": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentHome": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentHomeLeaving": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentHomeLink": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentGone": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGoneLinkNew": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGoneWhy": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHolds": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHoldsStale": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHome": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHomeLeaving": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHomeLink": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHomeName": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
-    "AgentHomeTitle": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentIntro": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentIntroButtons": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentIntroNext": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentIntroSkip": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentInvitationWaiting": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentInvited": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentJoinAnother": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentJoinCommunity": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentJourneyJoined": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentJourneyRow": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentHomeTitle": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentIntro": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentIntroButtons": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentIntroNext": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentIntroSkip": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentInvitationWaiting": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentInvited": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentJoinAnother": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentJoinCommunity": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentJourneyJoined": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentJourneyRow": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentMembershipRow": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
-    "AgentNameCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentNameInput": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentNameReset": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentNameSave": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentNextInvitation": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentNextStep": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentNextStepText": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentOpenDesk": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentNameCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentNameInput": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentNameReset": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentNameSave": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentNextInvitation": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentNextStep": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentNextStepText": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentOpenDesk": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentOtherWaiting": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
-    "AgentOthers": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
+    "AgentOthers": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
     "AgentRequests": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsAll": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsRow": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsRowCount": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
-    "AgentSeat": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentSeat": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentSectionRule": ["src/modules/trust-tasks/screens/SectionRule.tsx"],
-    "AgentSettings": ["src/modules/trust-tasks/screens/AgentHeaderButtons.tsx"],
-    "AgentSettingsScreen": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
+    "AgentSettings": [
+      "src/modules/trust-tasks/screens/AgentHeaderButtons.tsx",
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx"
+    ],
+    "AgentSettingsScreen": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
     "AgentShareIdentity": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentSwitcher": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
     "AgentSwitcherAdd": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
     "AgentSwitcherCurrent": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
     "AgentSwitching": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
-    "AgentTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentUnlink": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkBody": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkCancel": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkConfirm": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkNext": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkOtherCancel": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkOtherCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkOtherConfirm": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
-    "AgentUnlinkTitle": ["src/modules/trust-tasks/screens/VtaAgentSettings.tsx"],
+    "AgentTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentUnlink": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkBody": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkCancel": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkConfirm": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkNext": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkOtherCancel": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkOtherCard": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkOtherConfirm": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentUnlinkTitle": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
     "AgentUnreachable": ["src/modules/trust-tasks/screens/AgentUnreachableNotice.tsx"],
     "AgentUnreachableRetry": ["src/modules/trust-tasks/screens/AgentUnreachableNotice.tsx"],
-    "AgentVetterCard": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
-    "AgentVetterLapsed": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "AgentVetterCard": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentVetterLapsed": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AllowCameraUse": ["src/components/modals/CameraDisclosureModal.tsx"],
     "AppGuides": ["src/screens/Settings.tsx"],
     "AppSettingCancel": ["src/screens/PINVerify.tsx"],
     "AppSettingChangedEnterPIN": ["src/screens/PINVerify.tsx"],
     "AppSettingSave": ["src/screens/PINVerify.tsx"],
-    "ApplyToCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
+    "ApplyToCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "ApprovalDigest": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalDigestToggle": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalMatchCode": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
@@ -161,7 +167,7 @@
     "ApprovalSubject": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalTaskDoes": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApproveConsentButton": [
-      "src/modules/trust-tasks/screens/MyAgent.tsx",
+      "src/modules/trust-tasks/screens/MyAgent.ids.ts",
       "src/modules/trust-tasks/screens/RequestCard.tsx"
     ],
     "AskMe": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
@@ -241,24 +247,24 @@
     "CommunityCardDetails": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardFrom": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardOpenCommunity": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
-    "CommunityCriteria": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityDetailsToggle": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityDid": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityError": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
+    "CommunityCriteria": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityDetailsToggle": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityDid": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityError": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityHeldElsewhere": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityHeldElsewhereText": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
-    "CommunityMember": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityMemberSince": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityName": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityNameClaimed": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityOpenDesk": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityRefusalCode": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "CommunityRefusalDetails": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
+    "CommunityMember": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityMemberSince": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityName": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityNameClaimed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityOpenDesk": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityRefusalCode": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityRefusalDetails": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityRemoveHere": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityRemoveHereCancel": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityRemoveHereCard": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityRemoveHereConfirm": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
-    "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
+    "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityUseHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "ConfigureMediator": ["src/screens/Settings.tsx"],
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
@@ -266,16 +272,23 @@
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
-    "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
+    "ConnectCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectionInviterCapabilitySwitchElement": ["src/screens/Developer.tsx"],
     "ConnectionLoading": ["src/screens/Connection.tsx"],
     "Contact": ["src/components/listItems/ContactListItem.tsx"],
     "ContactAddedToYourWallet": ["src/screens/CredentialOfferAccept.tsx"],
     "ContactAvatarImage": ["src/modules/vrc/components/ContactCard.tsx", "src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactCard": ["src/modules/vrc/components/ContactCard.tsx", "src/modules/vrc/screens/ListContacts.tsx"],
     "ContactMenu": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuOverlay": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuRemoveContact": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuViewContact": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactOnTheWay": ["src/screens/CredentialOfferAccept.tsx"],
+    "ContactRemove": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ContactViewMessages": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "Contacts": ["src/navigators/TabStack.tsx"],
+    "ContactsList": ["src/modules/vrc/screens/WhatAreContacts.tsx"],
     "Continue": [
       "src/components/forms/WalletNameForm.tsx",
       "src/components/modals/CameraDisclosureModal.tsx",
@@ -286,7 +299,7 @@
     ],
     "ContinueCreatePIN": ["src/screens/PINExplainer.tsx"],
     "CopyToClipboard": ["src/screens/JSONDetails.tsx"],
-    "CreateIdentityButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
+    "CreateIdentityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "CreatePIN": ["src/screens/PINCreate.tsx"],
     "CredentialAddedToYourWallet": ["src/screens/CredentialOfferAccept.tsx"],
     "CredentialCard": [
@@ -354,7 +367,7 @@
       "src/screens/CredentialOffer.tsx"
     ],
     "DenyConsentButton": [
-      "src/modules/trust-tasks/screens/MyAgent.tsx",
+      "src/modules/trust-tasks/screens/MyAgent.ids.ts",
       "src/modules/trust-tasks/screens/RequestCard.tsx"
     ],
     "DevVerifierTemplatesSwitchElement": ["src/screens/Developer.tsx"],
@@ -463,77 +476,77 @@
     "IssuerName": ["src/modules/openid/screens/OpenIDCredentialDetails.tsx", "src/screens/CredentialDetails.tsx"],
     "JSONDetails": ["src/screens/CredentialDetails.tsx", "src/screens/ProofRequest.tsx"],
     "JSONDetails.ScrollView": ["src/screens/JSONDetails.tsx"],
-    "JoinActions": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinAgain": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
+    "JoinActions": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAs": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
-    "JoinAsContinue": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
+    "JoinAsContinue": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAsCreateProfile": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
     "JoinAsNoProfile": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
     "JoinAsOption": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
-    "JoinAsk": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinAsks": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinChanged": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinCheckAgain": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "JoinContinueVetting": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinDone": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinError": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinErrorCard": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinErrorDetail": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinErrorDetailsToggle": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinGoInvited": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinLinkAgent": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinMakeIdentity": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinMemberCheck": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinNameClaimed": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinNeedsAgent": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinNoInvitationBypass": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinNoVetting": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinNotAccepting": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinOpenCommunity": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinRememberedUnreachable": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinRequestLost": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinRequestSent": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinScanCommunity": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinScroll": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSendAgain": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStanding": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingAgain": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingIdentity": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingIdentityName": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingInvitation": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingNeed": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingReason": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStandingText": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinStart": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSuggested": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSuggestedChecking": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSuggestedName": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSuggestedSource": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinSuggestedWhere": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinThisCommunity": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinVersionUnsupported": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
+    "JoinAsk": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinAsks": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinChanged": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinCheckAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "JoinContinueVetting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinDone": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinError": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinErrorCard": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinErrorDetail": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinErrorDetailsToggle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinGoInvited": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinLinkAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinMakeIdentity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinMemberCheck": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinNameClaimed": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinNeedsAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinNoInvitationBypass": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinNoVetting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinNotAccepting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinOpenCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinRememberedUnreachable": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinRequestLost": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinRequestSent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinScanCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinScroll": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSendAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStanding": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingIdentity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingIdentityName": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingInvitation": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingNeed": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingReason": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStandingText": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinStart": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSuggested": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSuggestedChecking": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSuggestedName": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSuggestedSource": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinSuggestedWhere": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinThisCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinVersionUnsupported": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinWays": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysMissing": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysNoneUsable": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthers": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthersToggle": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
-    "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
-    "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.tsx"],
+    "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "KeysMoved": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedOk": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "Language": ["src/screens/Settings.tsx"],
-    "LeaveCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityConfirm": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityConfirmCard": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityPurge": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityRetry": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityStay": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LeaveCommunityTombstone": ["src/modules/trust-tasks/screens/VtiCommunity.tsx"],
-    "LinkByAddressButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "LinkOtherPhoneHint": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "LinkYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
+    "LeaveCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityConfirm": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityConfirmCard": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityPurge": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityRetry": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityStay": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LeaveCommunityTombstone": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "LinkByAddressButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "LinkOtherPhoneHint": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "LinkYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "LinkedProfileAvatarImage": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "Loading": ["src/components/animated/LoadingSpinner.tsx"],
     "LoadingActivityIndicator": ["src/components/animated/LoadingIndicator.tsx"],
@@ -552,32 +565,36 @@
     "LostPhone": ["src/modules/trust-tasks/screens/LostPhoneCard.tsx"],
     "LostPhoneRotate": ["src/modules/trust-tasks/screens/LostPhoneCard.tsx"],
     "LostPhoneState": ["src/modules/trust-tasks/screens/LostPhoneCard.tsx"],
+    "Message": ["src/navigators/TabStack.tsx"],
+    "Messages": ["src/modules/vrc/screens/WhatAreConnections.tsx"],
     "MyAgent": ["src/navigators/TabStack.tsx"],
-    "MyAgentActivity": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentApprovalCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentApprovalDecided": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentAwaitingConsent": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentCommunityRow": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentConnecting": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentContinueLink": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentDid": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentEnrolCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentHost": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentIdentityCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentInvitationCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentLinkCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentManagerDid": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentMembershipCard": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentMembershipRole": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentNoApprovals": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentNoInvitations": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentOpenCommunity": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentPeerLeg": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentPersonaDid": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentVettingOpen": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentVettingRow": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentVettingSeat": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
+    "MyAgentActivity": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentApprovalCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentApprovalDecided": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentAwaitingConsent": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentCommunityRow": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentConnecting": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentContinueLink": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentDid": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentEnrolCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentHoldingError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentHost": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentIdentityCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentInvitationCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentLinkCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentManagerDid": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentMembershipCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentMembershipRole": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentNoApprovals": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentNoInvitations": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentOpenCommunity": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentPeerLeg": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentPersonaDid": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentVettingOpen": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentVettingRow": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentVettingSeat": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyQRCodeInstruction": ["src/components/misc/QRScanner.tsx"],
     "MyQRCodeTitle": ["src/components/misc/QRScanner.tsx"],
     "MyQRContact": ["src/components/misc/QRScanner.tsx"],
@@ -598,7 +615,7 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
-    "OpenYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
+    "OpenYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "PasteFromClipboard": ["src/screens/PasteUrl.tsx"],
     "PasteNothing": ["src/screens/PasteUrl.tsx"],
     "PasteRead": ["src/screens/PasteUrl.tsx"],
@@ -607,7 +624,10 @@
     "PredicateInput": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateName": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateValue": ["src/components/misc/VerifierCredentialCard.tsx"],
-    "PreparingSlow": ["src/modules/trust-tasks/screens/VtiInvited.tsx", "src/modules/trust-tasks/screens/VtiJoin.tsx"],
+    "PreparingSlow": [
+      "src/modules/trust-tasks/screens/VtiInvited.tsx",
+      "src/modules/trust-tasks/screens/VtiJoin.ids.ts"
+    ],
     "PreventAutoLockSwitchElement": ["src/screens/Developer.tsx"],
     "Primary": ["src/components/modals/AppGuideModal.tsx"],
     "ProfileCard": ["src/screens/Settings.tsx"],
@@ -628,10 +648,12 @@
     "PushNotificationSettings": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationSwitch": ["src/screens/TogglePushNotifications.tsx"],
     "PushNotificationWhatItSays": ["src/components/views/PushNotificationsContent.tsx"],
+    "QR Code": ["src/navigators/TabStack.tsx"],
     "QRCodeExchangeDescription": [
       "src/components/modals/QRCodeExchangeSlider.tsx",
       "src/modules/vrc/components/QRCodeExchangeSlider.tsx"
     ],
+    "QRCodeExchangeDismiss": ["src/modules/vrc/components/QRCodeExchangeSlider.tsx"],
     "QRCodeExchangeTitle": [
       "src/components/modals/QRCodeExchangeSlider.tsx",
       "src/modules/vrc/components/QRCodeExchangeSlider.tsx"
@@ -642,6 +664,7 @@
     "RCardLabelInput": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RCardLastNameInput": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RCardOrganizationInput": ["src/modules/vrc/screens/RCardForm.tsx"],
+    "RCardPhotoAction": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RCardPhotoCropCancel": ["src/modules/vrc/screens/RCardPhotoCropModal.tsx"],
     "RCardPhotoCropConfirm": ["src/modules/vrc/screens/RCardPhotoCropModal.tsx"],
     "RCardPhotoCropImage": ["src/modules/vrc/screens/RCardPhotoCropModal.tsx"],
@@ -760,102 +783,103 @@
     "VerifierLoading": ["src/screens/MobileVerifierLoading.tsx"],
     "Version": ["src/screens/PINEnter.tsx", "src/screens/Settings.tsx"],
     "VersionNumber": ["src/components/misc/ErrorBoundary.tsx", "src/components/misc/InfoBox.tsx"],
-    "VettingAlreadyApplied": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingAlreadyMember": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingApplicantStep_identity": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingApplyButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingAttestButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCardClaim": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCardSentAt": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingChecklist": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCodesDiffer": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCodesMatch": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCopyTicketLink": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingCreateIdentityButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskClearButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskEmpty": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskFinished": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskFinishedIdentity": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskFinishedName": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskFinishedRequest": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskFinishedToggle": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskRequest": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDeskStatus": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingDiscounted": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
+    "VettingAlreadyApplied": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingAlreadyMember": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingApplicantStep_identity": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingApplyButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingAttestButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCardClaim": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCardSentAt": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingChecklist": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCodesDiffer": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCodesMatch": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCopyTicketLink": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingCreateIdentityButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskClearButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskEmpty": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskFinished": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskFinishedIdentity": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskFinishedName": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskFinishedRequest": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskFinishedToggle": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskRequest": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDeskStatus": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingDiscounted": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingEligibilityUnchecked": ["src/modules/trust-tasks/screens/EligibilityNote.tsx"],
     "VettingEligibilityUncheckedReason": ["src/modules/trust-tasks/screens/EligibilityNote.tsx"],
-    "VettingEndSession": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
+    "VettingEndSession": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingEnvelopeRefused": ["src/modules/trust-tasks/screens/EnvelopeRefusalNote.tsx"],
     "VettingEnvelopeRefusedReason": ["src/modules/trust-tasks/screens/EnvelopeRefusalNote.tsx"],
-    "VettingGoToMyAgent": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingGrantUnchecked": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingGrantUncheckedReason": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingIndependence": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingJoinCommunity": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingLegalNameInput": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingLegalNameWhy": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingLinkAgent": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingMatchCode": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingMatchStep": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingMemberDone": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingNameFromProfile": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingNeeds": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingNeedsAgent": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingNeedsCommunity": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingNewTicketButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingOpenSessionButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingProfileNameInput": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingProfilePublished": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingPublishProfileButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingReadingHeld": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingReplaceRequest": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingReplaceRequestCard": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRequestButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRequestCard": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRequestStatus": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRequestVetter": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRequirements": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingRoleBadge": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingScanTicketButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSeatBanner": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSeatHint": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSendCardButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSessionEnded": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStanding": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStandingAsk": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStandingLine": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStandingNoTicket": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStartButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStatementIssued": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStatementRefused": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStatementRefusedDetails": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingStepIndicator": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSubmission": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingSubmissionState": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketCard": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketCode": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketInput": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketLink": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketLinkDetailsToggle": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketQr": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingTicketRefused": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingUnreadableAge": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingUseProfileName": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
-    "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkByAddress": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCancel": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCheckAgain": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCheckGrant": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCode": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCommunityAgentCleanup": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkConfirm": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkContinue": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkCopyKey": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkDone": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
+    "VettingError": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingGoToMyAgent": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingGrantUnchecked": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingGrantUncheckedReason": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingIndependence": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingJoinCommunity": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingLegalNameInput": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingLegalNameWhy": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingLinkAgent": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingMatchCode": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingMatchStep": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingMemberDone": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingNameFromProfile": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingNeeds": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingNeedsAgent": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingNeedsCommunity": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingNewTicketButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingOpenSessionButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingProfileNameInput": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingProfilePublished": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingPublishProfileButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingReadingHeld": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingReplaceRequest": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingReplaceRequestCard": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRequestButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRequestCard": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRequestStatus": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRequestVetter": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRequirements": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingRoleBadge": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingScanTicketButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSeatBanner": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSeatHint": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSendCardButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSessionEnded": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStanding": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStandingAsk": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStandingLine": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStandingNoTicket": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStartButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStatementIssued": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStatementRefused": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStatementRefusedDetails": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingStepIndicator": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSubmission": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSubmissionState": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketCard": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketCode": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketInput": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketLink": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketLinkDetailsToggle": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketQr": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingTicketRefused": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingUnreadableAge": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingUseProfileName": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkByAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCancel": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCheckAgain": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCheckGrant": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCode": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCommunityAgentCleanup": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkConfirm": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkContinue": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkCopyKey": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkDone": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkErase": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "VtaLinkEraseConfirm": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "VtaLinkEraseError": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
@@ -864,54 +888,68 @@
     "VtaLinkErased": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "VtaLinkError": [
       "src/modules/trust-tasks/screens/RemovedPhoneCard.tsx",
-      "src/modules/trust-tasks/screens/VtaLink.tsx"
+      "src/modules/trust-tasks/screens/VtaLink.ids.ts"
     ],
-    "VtaLinkErrorDetail": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkErrorDetailsToggle": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkForOtherPhone": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkGiveKeyHow": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkHost": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkHostSettingUp": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkHostSite": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
+    "VtaLinkErrorDetail": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkErrorDetailsToggle": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkForOtherPhone": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkGiveKeyHow": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkHost": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkHostSettingUp": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkHostSite": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkHostStepElapsed": ["src/modules/trust-tasks/screens/HostSetupSteps.tsx"],
     "VtaLinkHostSteps": ["src/modules/trust-tasks/screens/HostSetupSteps.tsx"],
-    "VtaLinkKeyQr": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkLinkedBody": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkManualDid": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkNoAnswer": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkNotYet": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkResumed": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
+    "VtaLinkKeyQr": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkLinkedBody": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkManualDid": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkNoAnswer": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkNotYet": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkResumed": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkScanAgain": [
       "src/modules/trust-tasks/screens/RemovedPhoneCard.tsx",
-      "src/modules/trust-tasks/screens/VtaLink.tsx"
+      "src/modules/trust-tasks/screens/VtaLink.ids.ts"
     ],
-    "VtaLinkShareKey": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkShareKeyHint": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkShowAsText": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkShowTheCode": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkShowingKey": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
+    "VtaLinkShareKey": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkShareKeyHint": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkShowAsText": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkShowTheCode": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkShowingKey": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkState": [
       "src/modules/trust-tasks/screens/HostSetupSteps.tsx",
-      "src/modules/trust-tasks/screens/VtaLink.tsx"
+      "src/modules/trust-tasks/screens/VtaLink.ids.ts"
     ],
-    "VtaLinkTryAgain": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
-    "VtaLinkWaitingForPhone": ["src/modules/trust-tasks/screens/VtaLink.tsx"],
+    "VtaLinkTryAgain": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkWaitingForPhone": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaOfflineBanner": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
     "VtaStatusDot": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
     "VtaStatusLine": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
     "VtaStatusText": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
-    "WhatIsMyAgent": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
+    "Wallet": ["src/navigators/TabStack.tsx"],
+    "WhatAreConnections?": ["src/modules/vrc/components/EmptyListConnections.tsx"],
+    "WhatAreContacts?": ["src/modules/vrc/components/EmptyContactsList.tsx"],
+    "WhatIsMyAgent": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "WhereToUseLink": ["src/screens/ScanHelp.tsx"],
     "WitnessChoiceCancel": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
     "WitnessChoiceProceedWithout": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
+    "WitnessDeactivate": ["src/modules/vrc/components/WitnessStatusBanner.tsx"],
     "WitnessErrorCancel": ["src/modules/vrc/components/WitnessErrorDialog.tsx"],
     "WitnessErrorProceedWithout": ["src/modules/vrc/components/WitnessErrorDialog.tsx"],
     "WitnessErrorRetry": ["src/modules/vrc/components/WitnessErrorDialog.tsx"],
+    "WitnessHeaderButton": ["src/modules/vrc/components/WitnessHeaderButton.tsx"],
+    "WitnessItem": ["src/modules/vrc/screens/WitnessConnections.tsx"],
+    "WitnessNotificationDismiss": ["src/modules/vrc/screens/WitnessConnections.tsx"],
+    "WitnessRemove": ["src/modules/vrc/screens/WitnessConnections.tsx"],
     "WitnessReporting": ["src/screens/Settings.tsx"],
+    "WitnessReportingSwitch": ["src/modules/vrc/components/WitnessChatBanner.tsx"],
+    "WitnessStatusBanner": ["src/modules/vrc/components/WitnessStatusBanner.tsx"],
+    "WitnessStatusClose": ["src/modules/vrc/components/WitnessStatusBanner.tsx"],
+    "WitnessStatusOverlay": ["src/modules/vrc/components/WitnessStatusBanner.tsx"],
     "WitnessVerifiedBanner": ["src/modules/vrc/components/WitnessVerifiedBanner.tsx"],
     "WitnessVerifiedIcon": ["src/modules/vrc/components/WitnessVerifiedBanner.tsx"],
     "WitnessVerifiedSubtitle": ["src/modules/vrc/components/WitnessVerifiedBanner.tsx"],
     "WitnessVerifiedTitle": ["src/modules/vrc/components/WitnessVerifiedBanner.tsx"],
+    "WitnessViewDetails": ["src/modules/vrc/components/WitnessStatusBanner.tsx"],
+    "WitnessingSwitch": ["src/modules/vrc/components/WitnessChatBanner.tsx"],
     "dataRetentionOff": ["src/screens/DataRetention.tsx"],
     "dataRetentionOn": ["src/screens/DataRetention.tsx"],
     "zoom": ["src/components/misc/VerifierCredentialCard.tsx", "src/components/record/RecordBinaryField.tsx"]
@@ -990,12 +1028,9 @@
       "src/modules/vrc/components/ContactCard.tsx",
       "src/modules/vrc/screens/ContactDetails.tsx"
     ],
-    "MyAgentError": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
-    "MyAgentHoldingError": ["src/modules/trust-tasks/screens/MyAgent.tsx"],
     "MyQRIdentityCode": ["src/components/misc/QRScanner.tsx"],
     "SecureExchangeBadge": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "VetterHeaderBackground": ["src/components/views/VetterHeaderBackground.tsx"],
-    "VettingError": ["src/modules/trust-tasks/screens/VtiVetting.tsx"],
     "WitnessRecord": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessSection": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessedBadge": ["src/modules/vrc/screens/ContactDetails.tsx"]
@@ -1038,6 +1073,114 @@
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Toggle`"
     },
     {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.activity"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.approvalCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.approvalDecided"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.approveConsentButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.awaitingConsent"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.card"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.communityRow"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.connectCommunityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.connectMyAgentButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.connecting"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.continueLink"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.createIdentityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.denyConsentButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.devices"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.did"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.enrolCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.host"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.identityCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.invitationCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.joinCommunityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.linkByAddressButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.linkCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.linkOtherPhoneHint"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.linkYourAgentButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.managerDid"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.membershipCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.membershipRole"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.noApprovals"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.noInvitations"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openYourAgentButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.peerLeg"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.personaDid"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.vettingOpen"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.vettingRow"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.vettingSeat"
+    },
+    {
       "src/modules/trust-tasks/screens/SaidFailure.tsx": "`${testID}Detail`"
     },
     {
@@ -1045,6 +1188,312 @@
     },
     {
       "src/modules/trust-tasks/screens/SaidFailure.tsx": "testID"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.addedCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.addedKeep"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.addedUse"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.catchingUp"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.communityHighlighted"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.continueVetting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.doors"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.gaveUp"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.gone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.goneLinkNew"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.goneTryAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.goneWhy"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holds"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsStale"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.home"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.homeLeaving"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.homeLink"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.homeTitle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.intro"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.introButtons"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.introNext"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.introSkip"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.invitationWaiting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.invited"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.joinAnother"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.joinCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.journey"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.journeyJoined"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.journeyRow"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.nextInvitation"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.nextStep"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.nextStepText"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.openDesk"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.seat"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.tryAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.vetterCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.vetterLapsed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.whatIsMyAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.activity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.awaitingConsent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.details"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.detailsToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.nameCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.nameInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.nameReset"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.nameSave"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.others"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.screen"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlink"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkBody"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkCancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkConfirm"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkNext"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkOtherCancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkOtherCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkOtherConfirm"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkTitle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAdd"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAdded"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAddressQr"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAddressQrCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAddressText"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupCodeInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupCopyAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupEnterCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupNext"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupNone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupOtherKinds"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupPasteCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupScanButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupScanCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupScanThisHeading"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupShareAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupShowAsText"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAddressContinue"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAddressInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAsDevice"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createCheckAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createConnect"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createContinue"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createCopyCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createDone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createError"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createIntro"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createJoin"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOpenHost"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOwnerBody"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOwnerCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOwnerDid"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOwnerHow"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createOwnerHowToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createPasteAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createProgress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createReady"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createScanAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createScroll"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createShareCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createShowCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createSwitchToExisting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createWaiting"
     },
     {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "`${key}Detail`"
@@ -1056,16 +1505,556 @@
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "key"
     },
     {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.agentAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.button"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.byAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.cancel"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.checkAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.checkGrant"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.code"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.communityAgentCleanup"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.confirm"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.continue"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.copyKey"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.done"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.errorDetail"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.errorDetailsToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.forOtherPhone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.giveKeyHow"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.host"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.hostSettingUp"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.hostSite"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.keyQr"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.linkedBody"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.manualDid"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.noAnswer"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.notYet"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.resumed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.scanAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.shareKey"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.shareKeyHint"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.showAsText"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.showTheCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.showingKey"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.state"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.tryAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.waitingForPhone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.applyToCommunityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.criteria"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.detailsToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.did"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityConfirm"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityConfirmCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityPurge"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityRetry"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityStay"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.leaveCommunityTombstone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.member"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.memberSince"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.name"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.nameClaimed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.openDesk"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.refusalCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.refusalDetails"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.scroll"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.actions"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.again"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.asContinue"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.ask"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.asks"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.changed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.checkAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.continueVetting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.done"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.errorCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.errorDetail"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.errorDetailsToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.goInvited"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.linkAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.makeIdentity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.memberCheck"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.nameClaimed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.needsAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.noInvitationBypass"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.noVetting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.notAccepting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.openCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.preparingSlow"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.rememberedUnreachable"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.requestLost"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.requestSent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.scanCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.scroll"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.sendAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standing"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingIdentity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingIdentityName"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingInvitation"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingNeed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingReason"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.standingText"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.start"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.suggested"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.suggestedChecking"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.suggestedName"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.suggestedSource"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.suggestedWhere"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.thisCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.versionUnsupported"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.waysTitle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.willShow"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.alreadyApplied"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.alreadyMember"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.applicantStepIdentity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.applyButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.attestButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.cardClaim"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.cardSentAt"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.checklist"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.codesDiffer"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.codesMatch"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.copyTicketLink"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.createIdentityButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskClearButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskEmpty"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskFinished"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskFinishedIdentity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskFinishedName"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskFinishedRequest"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskFinishedToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskRequest"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.deskStatus"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.discounted"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.endSession"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.goToMyAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.grantUnchecked"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.grantUncheckedReason"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.independence"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.joinCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.legalNameInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.legalNameWhy"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.linkAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.matchCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.matchStep"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.memberDone"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.nameFromProfile"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.needs"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.needsAgent"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.needsCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.newTicketButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.openSessionButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.profileNameInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.profilePublished"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.publishProfileButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.readingHeld"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.replaceRequest"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.replaceRequestCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.requestButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.requestCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.requestStatus"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.requestVetter"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.requirements"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.roleBadge"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.scanTicketButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.seatBanner"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.seatHint"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.sendCardButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.sessionEnded"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.standing"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.standingAsk"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.standingLine"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.standingNoTicket"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.startButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.statementIssued"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.statementRefused"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.statementRefusedDetails"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.stepIndicator"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.submission"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.submissionState"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketCode"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketLink"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketLinkDetailsToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketQr"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.ticketRefused"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.unreadableAge"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.useProfileName"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vetSomeoneElse"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.withdrawButton"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.youVetFor"
+    },
+    {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "requestTestKey(r.requestDocumentId)"
-    },
-    {
-      "src/navigators/TabStack.tsx": "t('TabStack.Messages')"
-    },
-    {
-      "src/navigators/TabStack.tsx": "t('TabStack.QRCode')"
-    },
-    {
-      "src/navigators/TabStack.tsx": "t('TabStack.Wallet')"
     },
     {
       "src/screens/AutoLock.tsx": "testID"
