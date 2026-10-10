@@ -66,7 +66,13 @@ function hook(name) {
   execFileSync("/bin/bash", ["-c", cmd], { stdio: "inherit", timeout: 600000 });
 }
 
-/** One vtc-admin call, as the lab's community administrator; returns its JSON. */
+/** How long one vtc-admin call may take; the gate's `c_admin` wrapper used the same 90 s alarm. */
+const ADMIN_TIMEOUT_MS = 90000;
+/**
+ * One vtc-admin call, as the lab's community administrator; returns its JSON.
+ * A community that does not answer within ADMIN_TIMEOUT_MS throws, so the
+ * caller (a row, or the ceremony) fails on its own, not on the leg's alarm.
+ */
 function admin(...args) {
   const env = Object.fromEntries(
     readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
@@ -75,7 +81,13 @@ function admin(...args) {
   const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
   const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
   const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json");
-  const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8" });
+  let out;
+  try {
+    out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8", timeout: ADMIN_TIMEOUT_MS });
+  } catch (err) {
+    if (err?.code === "ETIMEDOUT") throw new Error(`vtc-admin ${args[0]} gave no answer in ${ADMIN_TIMEOUT_MS / 1000} s (${base})`);
+    throw err;
+  }
   const json = out.slice(out.indexOf("{"));
   return json ? JSON.parse(json) : undefined;
 }
