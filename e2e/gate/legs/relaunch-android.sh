@@ -8,7 +8,7 @@
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL RUNNER_MAIN_NAME RUNNER_B_SLUG RUNNER_B_DID RUNNER_B_NAME C_DID C_NAME C_REST C_ADMIN_CRED PNM_BIN
 NEW_APK=$APK_OFF; NEW_W=$CAND_WALLET; NEW_B=$CAND_BIFOLD
 PREV_APK=$NEW_APK; PREV_W=$NEW_W
-leg_begin relaunch-android "$(shasum -a 256 "$NEW_APK" | cut -c1-12)"
+leg_begin relaunch-android "$(shasum -a 256 "$NEW_APK" | cut -c1-12)" "$NEW_APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; { [ -n "${LCL:-}" ] && kill "$LCL" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop

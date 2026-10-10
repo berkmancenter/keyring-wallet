@@ -7,7 +7,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN C_DID C_NAME C_REST C_ADMIN_CRED OPENVTC_BIN OPENVTC_VERSION TUI_FX TUI_PROFILE TUI_PERSONA
 APK=${APK_ON:-}; [ -f "$APK" ] || APK=$APK_OFF
-leg_begin p1 "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin p1 "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5570; AP=
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1

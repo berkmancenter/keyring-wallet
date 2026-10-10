@@ -6,7 +6,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL RUNNER_MAIN_NAME RUNNER_B_SLUG RUNNER_B_DID RUNNER_B_NAME PNM_BIN
 APK=${APK_ON:-}; [ -f "$APK" ] || broken "no push-on build for this candidate"
-leg_begin push2 "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin push2 "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() { adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; keys_since "$RUNNER_B_SLUG" "$T0"; }
