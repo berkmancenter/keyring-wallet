@@ -10,9 +10,18 @@ name: Gate smoke (CI runners)
 #   gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref <branch> -f wallet-sha=<sha> -f platform=ios
 #
 # With no run id and no sha it takes the newest green push build of main. It also runs by itself after every
-# green test build of main. The job fails only when a ROW says FAIL (or the leg broke before its rows).
+# green test build of main, and on a pull request that changes the smoke's own files (a workflow_dispatch of a
+# file that is not yet on main is refused, so a PR is how a change to this workflow is tried). The job fails
+# only when a ROW says FAIL (or the leg broke before its rows).
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gate-smoke.yml
+      - e2e/gate/legs/smoke-ci.sh
+      - e2e/gate/ci/**
+      - e2e/run-welcome.mjs
   workflow_dispatch:
     inputs:
       run-id:
