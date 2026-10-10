@@ -178,6 +178,51 @@ mac_busy() {
   xcrun simctl list devices booted 2>/dev/null | grep -q '(Booted)'
 }
 
+# A laptop in a bag is not a gate machine: a closed lid with no display behind it sleeps the Mac, and every leg
+# stalls with it (239 gate, 10-09: three hours). Stable means the lid is open, or an external display is attached (a
+# closed MacBook on a desk, driving a monitor, stays awake). There is no power-adapter condition: dropped, 10-10.
+lid_closed() { ioreg -r -k AppleClamshellState -d 4 2>/dev/null | grep -q '"AppleClamshellState" = Yes'; }
+# Displays other than the built-in panel, from system_profiler, which names each display's connection type
+# (Internal for the panel) in about 0.2 s. Not `ioreg -l | grep -c IODisplayConnect`: on Apple silicon that matches
+# a class table in IOKitDiagnostics and reads 1 with nothing attached, and AppleCLCD2 nodes read 0 here.
+external_displays() {
+  system_profiler SPDisplaysDataType 2>/dev/null | awk '/^ *Connection Type: / && !/Connection Type: Internal$/ {n++} END {print n + 0}'
+}
+mac_stable() {
+  lid_closed || return 0
+  local n; n=$(external_displays)
+  [ "${n:-0}" -gt 0 ] && return 0
+  say "the Mac is not stable (lid closed, no external display): not running"; return 1
+}
+
+# The Mac's Sleep entries in pmset's log between two of the run's UTC stamps (started=, ended=), as the log prints
+# them (local time with its zone). Each candidate line is converted with its own zone, so a DST change between the
+# two stamps cannot move it; lines before the run's local date, less a day of slack, are not converted at all.
+sleep_during() {
+  local s e from line ts t
+  s=$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "${1%Z}" +%s 2>/dev/null) || return 1
+  e=$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "${2%Z}" +%s 2>/dev/null) || return 1
+  from=$(date -j -r $((s - 86400)) +%Y-%m-%d)
+  pmset -g log 2>/dev/null | awk -v f="$from" '/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} [-+][0-9]{4} Sleep  / && substr($0, 1, 10) >= f' | while IFS= read -r line; do
+    ts=${line:0:25}
+    t=$(date -j -f '%Y-%m-%d %H:%M:%S %z' "$ts" +%s 2>/dev/null) || continue
+    [ "$t" -ge "$s" ] && [ "$t" -le "$e" ] && echo "$ts"
+  done
+  return 0
+}
+# A run that spans a sleep has no verdict: its legs waited out the sleep and their timeouts fired on the wrong
+# clock. Record it in the run's meta; the report prints it first.
+mark_interrupted() {
+  local rd=$1 s e when n
+  s=$(grep '^started=' "$rd/meta" | cut -d= -f2); e=$(grep '^ended=' "$rd/meta" | cut -d= -f2)
+  [ -n "$s" ] && [ -n "$e" ] || return 0
+  when=$(sleep_during "$s" "$e") || return 0
+  [ -n "$when" ] || return 0
+  n=$(echo "$when" | wc -l | tr -d ' ')
+  echo "interrupted=sleep $(echo "$when" | head -1)$([ "$n" -gt 1 ] && echo " (and $((n - 1)) more)")" >> "$rd/meta"
+  say "run $(basename "$rd") INTERRUPTED: the Mac slept at $(echo "$when" | head -1) ($n sleep entries in its span); its verdict is not a verdict"
+}
+
 # The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a
 # run. Anything else and the cycle is skipped, so a report never reads as a main gate when the harness was not main's.
 watch_checkout_ready() {
@@ -189,7 +234,7 @@ watch_checkout_ready() {
 
 cmd_watch_main() {
   gate_env
-  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i rd
   say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
   while :; do
     pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
@@ -197,6 +242,7 @@ cmd_watch_main() {
       sha=${pair%% *}; run=${pair##* }
       if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
       elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      elif ! mac_stable; then :
       elif ! watch_checkout_ready; then :
       else
         say "new green main build ${sha:0:8} (run $run)"
@@ -207,6 +253,7 @@ cmd_watch_main() {
         fi
         for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60; done
         ( cmd_run --pin "$sha" ) || say "gate for ${sha:0:8} ended with status $?"
+        rd=$(ls -d "$GATE_HOME"/runs/*-"${sha:0:8}"-gate 2>/dev/null | sort | tail -1); [ -z "$rd" ] || mark_interrupted "$rd"
       fi
     fi
     sleep "$interval"
@@ -239,6 +286,8 @@ cmd_watch() {
 # Rows per leg, and the wall-clock from the first leg's start to the last leg's end.
 cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
+  local intr; intr=$(grep '^interrupted=' "$rd/meta" | cut -d= -f2-)
+  [ -z "$intr" ] || echo "INTERRUPTED (${intr%% *}) ${intr#* }: the Mac slept during this run; its rows are not a verdict"
   echo "== $1 · $(grep -E '^(wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
   local leg rc s e first= last=0
   while IFS=$'\t' read -r leg rc s e; do
