@@ -114,6 +114,21 @@ Every leg records when it started. On exit it removes the phone keys it made on 
 approval rules and approver sets it set, and its test members of the community. The report says what it
 removed and what it found left over.
 
+## Where a gate runs
+
+The rule, agreed 10-10:
+
+- **The full gate runs on the Mac, through the watcher, while the Mac is stable**: the lid is open, or an
+  external display is attached. The watcher checks this before every start (`mac_stable` in `gate.sh`) and skips
+  the cycle otherwise, with the reason in its log. There is no power-adapter condition.
+- **When the Mac is not stable, the CI smoke workflow is the signal** (`gate-smoke.yml`, on its own branch): it
+  runs on every main build, on GitHub's runners, with no Farm rows and no secrets. It is a smoke, not a gate.
+- **A full gate is not started on a laptop in a bag.** A closed lid with no display sleeps the Mac, every leg stalls,
+  and the rows that time out say nothing about the build. A run that spans a sleep is reported as interrupted (below),
+  not as red.
+- The watcher's plist is read once, at bootstrap: an edit needs `launchctl bootout` and then `bootstrap`, and never
+  during a run, because the run is a child of the watcher.
+
 ## Continuous gating on main
 
 `gate.sh watch --main` runs for ever: every five minutes (`GATE_WATCH_INTERVAL`) it asks `green.mjs` for the newest
@@ -125,6 +140,15 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   cargo, docker build or emulator process is running (executable names), while a Gradle build runs (its wrapper
   client; idle Gradle daemons, which stay up for hours, do not count),
   or while any simulator is booted (Simulator.app being open is not a signal).
+- **Not while the Mac is not stable.** The loop also skips a cycle while the lid is closed and no external display is
+  attached (`mac_stable`). The lid is read from `ioreg -r -k AppleClamshellState -d 4` (`Yes` = closed); the displays
+  from `system_profiler SPDisplaysDataType`, counting every `Connection Type` other than `Internal`, about 0.2 s.
+  `ioreg -l | grep -c IODisplayConnect` is not a count on Apple silicon: it matches a class table and reads 1 with
+  nothing attached.
+- **A run that spans a sleep has no verdict.** After each run the watcher reads `pmset -g log` for a `Sleep` entry
+  between the run's `started=` and `ended=` (the log is in local time with its zone; each entry is converted with
+  that zone). One found, it appends `interrupted=sleep <when>` to the run's `meta` and says so; `report` then prints
+  `INTERRUPTED (sleep)` first. The legs ran as they always do; only the reading of their rows changes. Rerun by hand.
 - **One push-on build per gated commit.** Each new green main commit gets one Android push-on dispatch (about 40
   minutes of a free public-repository runner), so the push legs have a build; `watch-requested-<sha8>` records it.
 - **Its own checkout.** The watcher runs from a checkout nobody edits (`~/.keyring-fleet/gate/wt-main`, on main),
@@ -147,8 +171,9 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   and `launchctl bootstrap gui/$(id -u) <that file>`. The Mac's owner decides; it is a lasting change. Stop with
   `launchctl bootout gui/$(id -u)/org.keyring.gate-watch-main`. The log is `~/.keyring-fleet/gate/watch-main.log`.
 - **Keep the Mac awake.** A closed lid put the Mac to sleep for three hours in the middle of the 239 gate, and
-  `caffeinate` does not prevent lid-closed sleep. The owner runs once: `sudo pmset -a disablesleep 1` (and
-  `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.
+  `caffeinate` does not prevent lid-closed sleep. The stable-Mac check keeps a gate from starting in that state; it
+  cannot stop a lid closing mid-run, which the sleep marking below then reports. The owner can also run once:
+  `sudo pmset -a disablesleep 1` (and `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.
 - **A sleep is marked, not judged.** After each leg the gate reads `pmset -g log`. A sleep inside the leg adds an
   `ENV Mac slept …` line to its `leg.log`, shown in the report above the rows: those rows are no verdict on the app.
   (Auto-run 1009-1608: a 682 s clamshell sleep ended both kk iOS sessions by Appium's 300 s `newCommandTimeout`,
