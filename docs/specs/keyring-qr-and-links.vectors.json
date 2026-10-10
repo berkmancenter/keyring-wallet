@@ -94,7 +94,7 @@
       "invalid": "This code can't be used.",
       "pass-on": "No message: the text goes to the consumer's other handlers, unchanged."
     },
-    "notes": "Spec section 7 defines how to use this file. input is the scanned, opened or pasted text; channel is scan, deeplink or paste and never changes a core result. An accept lists via (url), from, id, exp (or null), flow (the config label, or null when there is no hint), task (uri, major, minor, or null) and ignored (fragment.<name> for each unknown name that begins with an underscore, in document order). task.uri is the resolved flow URI: a path-form _type (one leading /) is resolved against https:// and the link's host, lowercased, whatever the link's scheme. Flows match by the whole resolved URI without its version segment. A resolved flow whose path, without its version segment, is that of a configured flow on a different host is wrong-host (ui invalid). A draft flow accepts only the listed MINORs; a stable flow accepts any MINOR of a listed MAJOR. allowedVidTypes lists the DID methods a flow accepts as its contact (any other is from-not-allowed), or is any. _from is read under vidSyntax; host rules on a contact's host apply at resolution and no vector tests them. A handle is 22 to 43 characters of base64url, not of a length in handleMalformedLengths, and canonical (handleCanonical). A trigger is expired when exp + skew <= now. The host link.trustoverip.org and the prefix https://link.trustoverip.org/vti/flow/ are proposals: neither is agreed or registered. tasks.example.org, invite.example.org, the flows example-stable and badge-pickup, and the alias scheme examplewallet are test-only. ui follows the reason as in spec section 3. selectionVectors take a DID document and test spec section 5 rule 5 only; the consumer's preference order there is a fixture. legacyVectors test the annex's legacy reader (annex F), not the core, under config.legacy.",
+    "notes": "Spec section 7 defines how to use this file. input is the scanned, opened or pasted text; channel is scan, deeplink or paste and never changes a core result. An accept lists via (url), from, id, exp (or null), flow (the config label, or null when there is no hint), task (uri, major, minor, or null) and ignored (fragment.<name> for each unknown name that begins with an underscore, in document order). task.uri is the resolved flow URI: a path-form _type (one leading /) is resolved against https:// and the link's host, lowercased, whatever the link's scheme. Flows match by the whole resolved URI without its version segment. A resolved flow whose path, without its version segment, is that of a configured flow on a different host is wrong-host (ui invalid). A draft flow accepts only the listed MINORs; a stable flow accepts any MINOR of a listed MAJOR. allowedVidTypes lists the DID methods a flow accepts as its contact (any other is from-not-allowed), or is any. _from is read under vidSyntax; host rules on a contact's host apply at resolution and no vector tests them. A handle is 22 to 43 characters of base64url, not of a length in handleMalformedLengths, and canonical (handleCanonical). A trigger is expired when exp + skew <= now. The host link.trustoverip.org and the prefix https://link.trustoverip.org/vti/flow/ are proposals: neither is agreed or registered. tasks.example.org, invite.example.org, the flows example-stable and badge-pickup, and the alias scheme examplewallet are test-only. ui follows the reason as in spec section 3. selectionVectors take a DID document and test spec section 5 rule 5 only; the consumer's preference order there is a fixture.",
     "selection": {
       "serviceTypeToBinding": {
         "DIDCommMessaging": "didcomm",
@@ -117,20 +117,6 @@
         "reject": "nothing is sent; reason did-document-unverified; ui invalid"
       },
       "notes": "The preference order is a test fixture, not any wallet's order. DIDComm accept and the order of services of different types do not choose a binding; among candidates of one type the first in document order wins. A service endpoint is a candidate when it is an https URL with no userinfo whose host meets the host rules, or a DID (DID Core syntax); any other endpoint, including an http URL, is not a candidate."
-    },
-    "legacy": {
-      "channels": [
-        "scan"
-      ],
-      "callbackAllowList": [
-        "ic3.dev",
-        "firstperson.dev"
-      ],
-      "ui": {
-        "scan-only": "Scan the code on the website's screen.",
-        "invalid": "This code can't be used."
-      },
-      "notes": "Annex F. The legacy reader runs only on text the core passes on (not-ours). It reports ignored members as legacy.<key> in document order and adds callbackUrl to an accept."
     }
   },
   "vectors": [
@@ -2753,155 +2739,6 @@
         "endpoint": "https://api.example.com/tt",
         "source": "did-document",
         "sent": false
-      }
-    }
-  ],
-  "legacyVectors": [
-    {
-      "id": "legacy-valid",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "legacy-json",
-        "from": "did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev",
-        "id": null,
-        "exp": null,
-        "flow": null,
-        "task": null,
-        "callbackUrl": "https://farm.ic3.dev/api/v1/connect/abc123",
-        "ignored": []
-      }
-    },
-    {
-      "id": "legacy-unknown-keys-ignored-in-order",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"zed\":1,\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\",\"extra\":{\"a\":1}}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "accept",
-        "via": "legacy-json",
-        "from": "did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev",
-        "id": null,
-        "exp": null,
-        "flow": null,
-        "task": null,
-        "callbackUrl": "https://farm.ic3.dev/api/v1/connect/abc123",
-        "ignored": [
-          "legacy.zed",
-          "legacy.extra"
-        ]
-      }
-    },
-    {
-      "id": "legacy-from-paste",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\"}",
-      "channel": "paste",
-      "expect": {
-        "outcome": "reject",
-        "reason": "wrong-channel",
-        "ui": "scan-only"
-      }
-    },
-    {
-      "id": "legacy-missing-vta-did",
-      "group": "legacy",
-      "input": "{\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "missing-param",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-callback-not-a-string",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":5}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-duplicate-key",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\",\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-escaped-duplicate-key",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\",\"\\u0076ta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-vta-did-not-webvh",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:web:x.example\",\"callback_url\":\"https://farm.ic3.dev/api/v1/connect/abc123\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-callback-host-not-listed",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://evilic3.dev/x\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "callback-not-allowed",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-callback-http",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"http://farm.ic3.dev/api/v1/connect/abc123\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-callback-port",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev:8443/api/v1/connect/abc123\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "bad-value",
-        "ui": "invalid"
-      }
-    },
-    {
-      "id": "legacy-callback-too-long",
-      "group": "legacy",
-      "input": "{\"vta_did\":\"did:webvh:QmSlotScid:brave-otter-k7.pool.ic3.dev\",\"callback_url\":\"https://farm.ic3.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
-      "channel": "scan",
-      "expect": {
-        "outcome": "reject",
-        "reason": "callback-not-allowed",
-        "ui": "invalid"
       }
     }
   ]

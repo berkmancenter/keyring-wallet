@@ -1,6 +1,6 @@
 # One-scan trigger links: annex (non-normative)
 
-**Status:** DRAFT. Nothing here is a requirement; where it differs from the [spec](./keyring-qr-and-links.md), the spec wins. Rationale, link hosting, device tests, alternatives, upstream fit, one consumer's legacy format, and where each source was read. Plans, owners and history are in [`docs/plans/one-scan-and-vtc-sign-in-plan.md`](../plans/one-scan-and-vtc-sign-in-plan.md) and its dated companion.
+**Status:** DRAFT. Nothing here is a requirement; where it differs from the [spec](./keyring-qr-and-links.md), the spec wins. Rationale, link hosting, device tests, alternatives, upstream fit, and where each source was read. Plans, owners and history are in [`docs/plans/one-scan-and-vtc-sign-in-plan.md`](../plans/one-scan-and-vtc-sign-in-plan.md) and its dated companion.
 
 ## A. Opening a link from a camera app
 
@@ -113,22 +113,7 @@ The vectors cannot show what a phone does with a link. These runs use real devic
 - **A reader-side link limit.** It breaks links that something appended to (D).
 - **The QR holder as the endpoint** (two phones, or a device with no server). Out of scope: the code would have to carry routing data and need a proximity check, as CTAP 2.2 hybrid does. Not defined here.
 
-## F. One consumer's legacy format: Keyring and the VTA Farm's claim QR
-
-This is not part of the core. Keyring reads one older text, the VTA Farm's claim QR, as one of its other handlers (spec section 3, `pass-on`). The vectors' `legacyVectors` test this reader under `config.legacy`. The text is a JSON object `{"vta_did": "did:webvh:…", "callback_url": "https://…"}`; `vta_did` is the contact and `callback_url` is both the endpoint and the secret, so the format is bearer. The Farm keeps its QR unchanged until a Keyring release reads it with unknown members ignored; this reader describes that release.
-
-After the core's step 1 (trim, length), stop at the first failure:
-
-1. Not a JSON object, or no `callback_url` member: `not-ours`.
-2. Not scanned (opened as a link or pasted): `wrong-channel` (message: "Scan the code on the website's screen.").
-3. A duplicate member name anywhere, compared "after processing any escaped characters" (RFC 7493 section 2.3): `bad-value`.
-4. No `vta_did`: `missing-param`.
-5. `vta_did` is not a string `did:webvh:…` of at most 256 characters, or `callback_url` is not a string: `bad-value`.
-6. `callback_url` is not `https://`, or has userinfo, a port, a fragment or a control character: `bad-value`.
-7. Its host fails the host rules or is not equal to or under `ic3.dev` or `firstperson.dev`, or it is longer than 512 characters: `callback-not-allowed`.
-8. Accept, reporting every other member as `legacy.<key>` in document order, with `callbackUrl`.
-
-## G. Upstream fit, and where sources were read
+## F. Upstream fit, and where sources were read
 
 **Upstream Trust Tasks that bear on this** (`dtgwg-trust-tasks-tf`; all `status: draft`). Read at the fetched `origin/main` `7b6bb488` unless noted; most are not in the pinned commit `bdae1cf9`, whose framework is version 0.5.
 
