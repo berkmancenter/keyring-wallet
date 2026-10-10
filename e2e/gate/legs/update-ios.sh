@@ -10,7 +10,7 @@ NEW_APP=$CAND_APP; NEW_W=$CAND_WALLET; NEW_B=$CAND_BIFOLD
 PREV=${GATE_PREV_PIN:-$(cat "$GATE_HOME/golden")}
 use_build "$PREV" >/dev/null; PREV_APP=$CAND_APP; PREV_W=$CAND_WALLET
 CAND_APP=$NEW_APP; CAND_WALLET=$NEW_W; CAND_BIFOLD=$NEW_B
-leg_begin update-ios "$(shasum -a 256 "$PREV_APP/main.jsbundle" | cut -c1-12)→$(shasum -a 256 "$NEW_APP/main.jsbundle" | cut -c1-12)"
+leg_begin update-ios "$(shasum -a 256 "$PREV_APP/main.jsbundle" | cut -c1-12)→$(shasum -a 256 "$NEW_APP/main.jsbundle" | cut -c1-12)" "$NEW_APP"
 T0=$(stamp); SIM=$SMOKE_SIM_UDID; LS=
 wda_stop() { local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$SIM" | grep -v grep | awk '{print $1}'); do kill "$p"; done; }
 fin() { [ -n "$LS" ] && kill "$LS" 2>/dev/null; wda_stop; sim_down "$SIM"; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; }

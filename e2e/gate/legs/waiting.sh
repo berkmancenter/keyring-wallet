@@ -8,7 +8,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN C_DID C_NAME C_REST C_ADMIN_CRED
 APK=$APK_OFF
-leg_begin waiting "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin waiting "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"

@@ -10,7 +10,7 @@ NEW_APK=$APK_OFF; NEW_W=$CAND_WALLET; NEW_B=$CAND_BIFOLD
 PREV=${GATE_PREV_PIN:-$(cat "$GATE_HOME/golden")}
 use_build "$PREV" >/dev/null; PREV_APK=$APK_OFF; PREV_W=$CAND_WALLET
 APK_OFF=$NEW_APK; CAND_WALLET=$NEW_W; CAND_BIFOLD=$NEW_B
-leg_begin update-android "$(shasum -a 256 "$PREV_APK" | cut -c1-12)→$(shasum -a 256 "$NEW_APK" | cut -c1-12)"
+leg_begin update-android "$(shasum -a 256 "$PREV_APK" | cut -c1-12)→$(shasum -a 256 "$NEW_APK" | cut -c1-12)" "$NEW_APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop

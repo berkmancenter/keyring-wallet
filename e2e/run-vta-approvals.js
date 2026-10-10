@@ -35,6 +35,11 @@
  *                   saying what the task does (ApprovalTaskDoes + ApprovalOutcomeUnknown, or ApprovalOutcome).
  *   OWNER_ROWS=1    Android, with DEVICE_PIN: #317's rows. Approve asks; a cancelled check
  *                   leaves the request waiting; Decline (a second request) does not ask.
+ *
+ * The rows (lib/rows.js) are the side checks; the approval itself is the run's exit code, which the p1 leg
+ * reads as its "approvals" row: 0 when the request was held, approved and let through, 1 when not. A FAIL row
+ * does not change that exit code. The #321 card rows SKIP as "build lacks RequestAsks" on a build before them;
+ * "317 cancel keeps it waiting" needs "317 Approve asks the owner".
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
@@ -47,6 +52,8 @@ import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sle
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { listAcl, ownedBy, removeRunKeys } from "./lib/aclCleanup.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
+import { buildLacks } from "./lib/buildHas.js";
+import { createRows } from "./lib/rows.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PNM_LOCKED = path.resolve(here, "../scripts/openvtc/pnm-locked");
@@ -88,7 +95,9 @@ function pnm(args, timeout = 120000) {
 }
 const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
 const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
-const row = (name, ok, detail) => console.log(`ROW ${name} ${ok ? "PASS" : "FAIL"} — ${detail}`);
+const rows = createRows({ label: "vta-approvals" });
+const ASKS = "317 Approve asks the owner";
+const row = (name, ok, detail, opts) => rows.row(name, () => ({ ok, detail }), opts);
 function adb(...args) {
   try {
     return execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8", timeout: 30000 });
@@ -211,6 +220,7 @@ try {
 
   await ensureAppium();
   d = await makeDriver({ platform: PLATFORM, udid: UDID, deviceName: process.env.IOS_DEVICE_NAME, keepState: true });
+  rows.setDriver(d);
   await unlockToHome(d);
   if (PIN_DEV) {
     adb("shell", "locksettings", "set-pin", PIN_DEV);
@@ -247,19 +257,20 @@ try {
   const does = (await existsTestId(d, "ApprovalTaskDoes", 1000)) ? (await textOf(d, "ApprovalTaskDoes")).trim() : "";
   log(`card says: "${asks}" · task "${does}"`);
   if (process.env.CARD_ROWS === "1") {
+    const lacksCard = buildLacks("RequestAsks", { platform: PLATFORM });
     const plain = /asks your agent to \S/.test(asks) && !/did:/i.test(asks) && !/\brun\b/i.test(asks) && !/vta\//i.test(asks);
-    row("card in plain words", plain, `"${asks}"`);
+    await row("card in plain words", plain, `"${asks}"`, { skip: lacksCard });
     // The raw task name lives behind "Technical name" (RequestTaskToggle → RequestTaskDid), never in the sentence.
     let technical = "";
     if (await scrollToTestId(d, "RequestTaskToggle", 3).catch(() => undefined)) {
       await tapTestId(d, "RequestTaskToggle", 5000).catch(() => undefined);
       technical = (await existsTestId(d, "RequestTaskDid", 5000)) ? (await textOf(d, "RequestTaskDid")).trim() : "";
     }
-    row("card technical name behind the toggle", /contexts\/get/.test(technical), technical ? `"${technical}"` : "no RequestTaskToggle / RequestTaskDid");
+    await row("card technical name behind the toggle", /contexts\/get/.test(technical), technical ? `"${technical}"` : "no RequestTaskToggle / RequestTaskDid", { skip: lacksCard });
     // What it would do: the agent's own effects (ApprovalOutcome), else Keyring's words with the caution line.
     const outcome = await existsTestId(d, "ApprovalOutcome", 1000);
     const unknown = await existsTestId(d, "ApprovalOutcomeUnknown", 1000);
-    row("card says what it would do", outcome || (Boolean(does) && unknown), outcome ? "the agent's effects (ApprovalOutcome)" : `"${does}"${unknown ? " + ApprovalOutcomeUnknown" : " (no ApprovalOutcomeUnknown)"}`);
+    await row("card says what it would do", outcome || (Boolean(does) && unknown), outcome ? "the agent's effects (ApprovalOutcome)" : `"${does}"${unknown ? " + ApprovalOutcomeUnknown" : " (no ApprovalOutcomeUnknown)"}`, { skip: lacksCard });
     await scrollToTestId(d, "ApproveConsentButton", 3).catch(() => undefined);
   }
   if (OWNER_ROWS) {
@@ -267,7 +278,7 @@ try {
     await tapTestId(d, "ApproveConsentButton", 10000);
     const asked = await authWindow(8000);
     await screenshot(d, "vta-approvals-owner-prompt").catch(() => log("screenshot vta-approvals-owner-prompt not taken (the owner check is a secure window)"));
-    row("317 Approve asks the owner", Boolean(asked), asked ? asked.slice(0, 100) : "no owner check within 8 s of Approve");
+    await row(ASKS, Boolean(asked), asked ? asked.slice(0, 100) : "no owner check within 8 s of Approve");
     // Cancel: Back until the prompt is gone. One Back left Android's BiometricPrompt up (236 rerun, 13:48Z: the
     // secure window still there 11 s later), which hid the card and stopped the second Approve.
     let promptGone = !asked;
@@ -283,7 +294,7 @@ try {
     const said = (page.match(/text="[^"]{6,160}"/g) ?? []).filter((t) => /confirm|cancel|owner|lock|not approved|try again/i.test(t)).slice(0, 3);
     const heldNow = /consent required/i.test(pnm(["contexts", "get", contextId], 120000));
     await screenshot(d, "vta-approvals-owner-cancelled").catch(() => log("screenshot vta-approvals-owner-cancelled not taken (the owner check is a secure window)"));
-    row("317 cancel keeps it waiting", Boolean(asked) && promptGone && still && heldNow, `prompt gone ${promptGone}; card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`);
+    await row("317 cancel keeps it waiting", Boolean(asked) && promptGone && still && heldNow, `prompt gone ${promptGone}; card still there ${still}; agent still holds it ${heldNow}; on screen ${JSON.stringify(said)}`, { needs: [ASKS] });
   }
   // An iPhone's wake channel was cleared during an approval (236, under review): read the agent's
   // pushCapable for this phone before and after, so the run shows whether Approve's owner check
@@ -296,7 +307,7 @@ try {
   await sleep(5000);
   const pushAfter = pushCapableOf(approver);
   console.log(`PUSH-CAPABLE ${PLATFORM} before Approve ${pushBefore}, after ${pushAfter}`);
-  if (pushBefore === "true") row("push stays on through Approve", pushAfter === "true", `pushCapable ${pushBefore} → ${pushAfter}`);
+  if (pushBefore === "true") await row("push stays on through Approve", pushAfter === "true", `pushCapable ${pushBefore} → ${pushAfter}`);
   const decided = await textOf(d, "AgentApprovalDecided");
   log(`after Approve: "${decided}"`);
   if (!/approved/i.test(decided)) throw new Error(`the phone did not show the approval as given: "${decided}"`);
@@ -341,7 +352,7 @@ try {
       decided2 = (await existsTestId(d, "AgentApprovalDecided", 2000)) ? await textOf(d, "AgentApprovalDecided") : "";
       await screenshot(d, "vta-approvals-declined").catch(() => log("screenshot vta-approvals-declined not taken (the owner check is a secure window)"));
     }
-    row("317 Decline does not ask", card2 && !prompted && gone, card2 ? `owner check ${prompted ? "SHOWN" : "none"}; card cleared ${gone}; "${decided2}"` : `no card for the second request (held ${held2}: ${lastLine(asked2)})`);
+    await row("317 Decline does not ask", card2 && !prompted && gone, card2 ? `owner check ${prompted ? "SHOWN" : "none"}; card cleared ${gone}; "${decided2}"` : `no card for the second request (held ${held2}: ${lastLine(asked2)})`);
   }
 
   failed = false;

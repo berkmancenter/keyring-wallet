@@ -13,10 +13,6 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { byTestId, existsTestId, scrollToTestId, sleep, tapTestId } from "./driver.js";
 
-/**
- * Whether an element sits wholly above the tab bar (bifold #322: the last line of a page used to end behind it).
- * Prints `FOOT <name> clear|HIDDEN — …` and returns true/false, or undefined when either rect cannot be read.
- */
 /** An element's box. WebdriverIO elements have no getRect(); location and size together are the rect. */
 async function rectOf(el) {
   const { x, y } = await el.getLocation();
@@ -24,22 +20,39 @@ async function rectOf(el) {
   return { x, y, width, height };
 }
 
-export async function footClear(d, id, name = id) {
+/**
+ * Whether an element sits wholly above the tab bar (bifold #322: the last line of a page used to end behind it):
+ * `{ state: "clear" | "HIDDEN" | "unread", detail }`, printed as `FOOT <name> <state> — <detail>`.
+ */
+export async function footCheck(d, id, name = id) {
+  let state;
+  let detail;
   try {
     const r = await rectOf(byTestId(d, id));
     const tab = await rectOf(byTestId(d, "MyAgent"));
     const bottom = Math.round(r.y + r.height);
     const top = Math.round(tab.y);
-    const ok = bottom <= top;
-    console.log(`FOOT ${name} ${ok ? "clear" : "HIDDEN"} — ${id} ends at y=${bottom}, the tab bar starts at y=${top}`);
-    return ok;
+    state = bottom <= top ? "clear" : "HIDDEN";
+    detail = `${id} ends at y=${bottom}, the tab bar starts at y=${top}`;
   } catch (e) {
-    console.log(`FOOT ${name} unread — ${String(e.message).split("\n")[0].slice(0, 200)}`);
-    return undefined;
+    state = "unread";
+    detail = String(e.message).split("\n")[0].slice(0, 200);
   }
+  console.log(`FOOT ${name} ${state} — ${detail}`);
+  return { state, detail };
 }
 
-export async function capturePersonaDid(d, stem, name) {
+/** `footCheck` as true/false, or undefined when either rect cannot be read. */
+export async function footClear(d, id, name = id) {
+  const { state } = await footCheck(d, id, name);
+  return state === "unread" ? undefined : state === "clear";
+}
+
+/**
+ * `rows` (lib/rows.js), when given, also records the foot check as the row `foot-<name>`: PASS when clear, FAIL
+ * with the state and detail otherwise — the row kk.sh used to re-derive from the FOOT line.
+ */
+export async function capturePersonaDid(d, stem, name, { rows } = {}) {
   const dir = process.env.PERSONA_SHOTS;
   if (!dir) return undefined;
   try {
@@ -72,7 +85,8 @@ export async function capturePersonaDid(d, stem, name) {
     const did = String((await el.getAttribute(ios ? "label" : "text").catch(() => "")) || "").replace(/\s+/g, "");
     await d.saveScreenshot(path.join(dir, `${name}.png`)).catch(() => undefined);
     console.log(`PERSONA-DID ${name} ${did || "(empty)"}`);
-    await footClear(d, `${stem}Did`, name);
+    const foot = await footCheck(d, `${stem}Did`, name);
+    if (rows) await rows.row(`foot-${name}`, () => ({ ok: foot.state === "clear", detail: foot.state === "clear" ? foot.detail : `${foot.state} ${foot.detail}` }));
     return did || undefined;
   } catch (e) {
     console.log(`PERSONA-DID ${name} (capture failed: ${String(e.message).split("\n")[0].slice(0, 100)})`);

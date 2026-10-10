@@ -9,7 +9,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL RUNNER_A_DID PNM_BIN
 APK=$APK_OFF
-leg_begin linkfail "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin linkfail "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572; SET=gate-swap-held; TASK=https://trusttasks.org/spec/acl/swap-key/0.1; POL=gate-deny-swap-key
 fin() {
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"

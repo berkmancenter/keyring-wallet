@@ -147,6 +147,16 @@ for n,ms in (j.get('approverSets') or {}).items():
   echo "  $slug after: $(pnm "$slug" approvals list | tr -d ' \n' | grep -oE '\{"approverSets.*' | cut -c1-80)"
 }
 
+# ---- build capabilities: does the build's JS bundle hold a testID key? (e2e/lib/buildHas.js) ----
+
+# The cached answers, one file per build, under the gate's home.
+export BUILDHAS_CACHE_DIR=${BUILDHAS_CACHE_DIR:-$GATE_HOME/buildhas}
+# build_has <key> [apk | .app]: exit 0 when the build holds the key, 1 when it lacks it, 2 when no build is known.
+# Without a file it reads what the leg exported (ANDROID_APK or APK_OFF; IOS_APP or CAND_APP), so name the file.
+build_has() { node "$E2E/lib/buildHas.js" has "$1" ${2:+--build "$2"} >/dev/null 2>&1; }
+# build_caps [apk | .app]: how many of the manifests' keys the build holds, "<present>/<total>", or "-".
+build_caps() { local c; c=$(node "$E2E/lib/buildHas.js" caps ${1:+--build "$1"} 2>/dev/null); echo "${c:--}"; }
+
 # ---- rows ----
 
 # One leg's rows from its log, as "<status>\t<name>\t<detail>".
@@ -155,10 +165,13 @@ leg_rows() { grep -E '^ROW ' "$1" | sed -E 's/^ROW (.*) (PASS|FAIL|SKIP) — (.*
 # ---- a leg's own lines (the same contract as e2e/lib/rows.js) ----
 
 LEG_NAME=""; LEG_T0=0; LEG_FAILS=0; LEG_PASS=0; LEG_SKIP=0; LEG_BROKEN=""
-# LEG_HEADS_EXTRA, when a leg sets it, is appended to the HEADS line (the CI leg names its device there).
+# leg_begin <leg> <build sha> [apk | .app]: the HEADS line; with the build file, caps=<n> is how many of the
+# manifests' testID keys that build holds (build_caps), "-" without one. LEG_HEADS_EXTRA, when a leg sets it, is
+# appended after caps (the CI leg names its device there).
 leg_begin() {
   LEG_NAME=$1; LEG_T0=$(date +%s); LEG_START=$(stamp)
-  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -)${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
+  local caps=-; [ -n "${3:-}" ] && caps=$(build_caps "$3" | cut -d/ -f1)
+  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -) caps=$caps${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
   trap leg_end EXIT
 }
 # row <name> PASS|FAIL|SKIP <detail>; a name not in E2E_ONLY_ROWS (when set) is reported as not selected.

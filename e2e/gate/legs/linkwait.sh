@@ -6,7 +6,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN RUNNER_MEDIATOR_HOST
 APK=$APK_OFF
-leg_begin linkwait "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin linkwait "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 if ! unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkResumed; then
   row linkwait SKIP "this build has no VtaLinkResumed (bifold #353)"; exit 0
 fi

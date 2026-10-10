@@ -5,7 +5,7 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_A_SLUG RUNNER_A_DID RUNNER_A_URL RUNNER_A_NAME RUNNER_B_SLUG RUNNER_B_DID RUNNER_B_URL RUNNER_B_NAME C_DID C_NAME C_REST C_ADMIN_CRED PNM_BIN COMMUNITY_AGENT_SLUG COMMUNITY_AGENT_DID
 APK=${APK_ON:-}; [ -f "$APK" ] || APK=$APK_OFF
-leg_begin agents "$(shasum -a 256 "$APK" | cut -c1-12)"
+leg_begin agents "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1

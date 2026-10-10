@@ -6,7 +6,8 @@
  * The drivers' side: every literal handed to the testID helper family
  * (byTestId, waitForTestId, tapTestId, tapTestIdReliable, tapTestIdByCoordinates,
  * scrollToTestId, existsTestId, existsRawId, findScrolling, waitStable and its
- * `absent` list, tapLifted, textOf) and every raw "com.ariesbifold:id/<key>"
+ * `absent` list, tapLifted, textOf, and the build-capability pair buildHas and
+ * buildLacks, whose key is their first argument) and every raw "com.ariesbifold:id/<key>"
  * string, across e2e/run-*.{js,mjs}, e2e/lib/*.{js,mjs} (unit tests excluded:
  * their fixture ids are not selectors) and e2e/openvtc/*.{js,mjs}. A template
  * literal with substitutions yields a stem: the text before its first `${`.
@@ -56,6 +57,8 @@ export const HELPERS = {
   waitStable: 1,
   tapLifted: 1,
   textOf: 1,
+  buildHas: 0,
+  buildLacks: 0,
 }
 
 const e2eDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')

@@ -116,3 +116,51 @@ test("HEADS and DONE lines in the runner's format", async () => {
 test("no label is a mistake in the driver, said at once", () => {
   assert.throws(() => createRows({}), /no label/);
 });
+
+test("a `skip` reason (the build lacks the feature) skips the row without running it, saying why", async () => {
+  const { rows, lines } = leg();
+  let ran = false;
+  await rows.row("settings-section-rules", async () => (ran = true), { skip: "build lacks AgentSectionRule" });
+  await rows.row("home-sections", async () => true, { skip: undefined });
+  assert.equal(ran, false);
+  assert.deepEqual(lines, ["ROW settings-section-rules SKIP — build lacks AgentSectionRule", "ROW home-sections PASS — ok"]);
+  assert.equal(rows.exitCode(), EXIT_PASS);
+});
+
+test("--only-failed: a row runs when the row it needs was left out of the selection (it passed last time)", async () => {
+  const { rows, lines } = leg({ only: selectedRows({ E2E_ONLY_ROWS: "test request held" }) });
+  await rows.row("switch on (owner check)", async () => true);
+  await rows.row("test request held", async () => ({ ok: true, detail: "asking now" }), { needs: ["switch on (owner check)"] });
+  assert.deepEqual(lines, ["ROW switch on (owner check) SKIP — not selected", "ROW test request held PASS — asking now"]);
+  // A need skipped for any other reason still blocks.
+  rows.skip("card", "not on iOS");
+  await rows.row("approve", async () => true, { needs: ["card"] });
+  assert.equal(lines.at(-1), "ROW approve SKIP — not selected");
+});
+
+test("a need skipped on purpose blocks; a need skipped for a build lacking it blocks too", async () => {
+  const { rows, lines } = leg();
+  rows.skip("card", "not on iOS");
+  await rows.row("approve", async () => true, { needs: ["card"] });
+  await rows.row("chip-row-fits", async () => true, { skip: "build lacks AgentChips" });
+  await rows.row("chip-strip-edges", async () => true, { needs: ["chip-row-fits"] });
+  assert.equal(lines[1], 'ROW approve SKIP — needs "card", which was SKIP');
+  assert.equal(lines[3], 'ROW chip-strip-edges SKIP — needs "chip-row-fits", which was SKIP');
+});
+
+test("outcome: how a row ended, or undefined before it ran", async () => {
+  const { rows } = leg();
+  assert.equal(rows.outcome("a"), undefined);
+  await rows.row("a", async () => true);
+  await rows.row("b", async () => false);
+  await rows.row("c", async () => true, { needs: ["b"] });
+  assert.deepEqual([rows.outcome("a"), rows.outcome("b"), rows.outcome("c")], ["PASS", "FAIL", "SKIP"]);
+});
+
+test("HEADS carries caps when given: a count, or buildCaps()'s object", () => {
+  const { rows, lines } = leg();
+  rows.heads({ wallet: "18ced16f", bifold: "5fb10bc2", build: "d2a08f28669a", harness: "abcdef01", caps: 814 });
+  rows.heads({ wallet: "18ced16f", bifold: "5fb10bc2", build: "d2a08f28669a", harness: "abcdef01", caps: { present: 805, total: 852 } });
+  assert.equal(lines[0], "HEADS approvals wallet=18ced16f bifold=5fb10bc2 build=d2a08f28669a harness=abcdef01 caps=814");
+  assert.equal(lines[1], "HEADS approvals wallet=18ced16f bifold=5fb10bc2 build=d2a08f28669a harness=abcdef01 caps=805");
+});

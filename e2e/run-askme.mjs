@@ -5,6 +5,10 @@
  * request" → the request shows as a notification and in Requests → Decline clears it →
  * switch the rule off. The runner's own rules are read before, during and after.
  *
+ * Rows through lib/rows.js, each as soon as it is known: "no lock: refusal shown" (DEVICE_PIN), "switch on (owner
+ * check)", "test request held" (needs the switch), "notification + Requests" (needs the request), "approve clears
+ * it" / "decline clears it" (needs the card), "switch off". Exit 0 all pass or skipped, 3 any fail, 1 the run broke.
+ *
  *   E2E_APP_ID=<pkg> UDID=emulator-5572 RUNNER_VTA=<slug> PNM_BIN=<pnm> node run-askme.mjs
  */
 import "./lib/cli-guard.js";
@@ -13,13 +17,17 @@ import { dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, sc
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { handleBiometricConfirmIfPresent, unlockIfLocked } from "./lib/flows.js";
 import { APP_ID } from "./lib/config.js";
+import { createRows } from "./lib/rows.js";
 
 const { UDID, RUNNER_VTA, PNM_BIN } = process.env;
 const TASK = "https://trusttasks.org/spec/vta/contexts/create/1.0";
 const utc = () => new Date().toISOString().slice(11, 23) + "Z";
 const log = (s) => console.log(`[e2e] ${utc()} ${s}`);
-const rows = [];
-const row = (name, ok, what) => rows.push([name, ok, what]);
+const rows = createRows({ label: "askme" });
+const SWITCH_ON = "switch on (owner check)";
+const HELD = "test request held";
+const CARD = "notification + Requests";
+const row = (name, ok, what, opts) => rows.row(name, () => ({ ok, detail: what }), opts);
 const txt = async (d, id) => ((await existsTestId(d, id, 800)) ? (await textOf(d, id).catch(() => "")).replace(/\s+/g, " ").trim() : null);
 const rules = () => {
   try {
@@ -93,6 +101,7 @@ let d;
 try {
   await ensureAppium();
   d = await makeDriver({ platform: "android", udid: UDID, keepState: true });
+  rows.setDriver(d);
   await d.activateApp(APP_ID);
   await unlockToHome(d);
   log(`runner rules before: ${JSON.stringify(rules())}`);
@@ -116,7 +125,7 @@ try {
     }
     await screenshot(d, "askme-0-no-lock");
     log(`0: no screen lock → AskMeError "${words}" · switch ${await switchState(d)}`);
-    row("no lock: refusal shown", Boolean(words) && /screen lock|lock screen|PIN|passcode/i.test(words ?? ""), `"${words}"`);
+    await row("no lock: refusal shown", Boolean(words) && /screen lock|lock screen|PIN|passcode/i.test(words ?? ""), `"${words}"`);
     adb("shell", "locksettings", "set-pin", PIN_DEV);
     log("device PIN set (after the link)");
     // react-native-keychain keys stay usable 5 s after a device-credential auth, and set-pin is one:
@@ -144,7 +153,7 @@ try {
   const during = rules();
   log(`2: switch ${on} · error "${await txt(d, "AskMeError")}" · runner rules ${JSON.stringify(during)}`);
   await screenshot(d, "askme-2-on");
-  row("switch on (owner check)", on === "true" && JSON.stringify(during).includes("contexts/create"), `switch ${on}; runner ${JSON.stringify(during)}`);
+  await row(SWITCH_ON, on === "true" && JSON.stringify(during).includes("contexts/create"), `switch ${on}; runner ${JSON.stringify(during)}`);
 
   if (process.env.ONOFF_ONLY !== "1") {
   // 3 — send a test request.
@@ -158,7 +167,7 @@ try {
   }
   log(`3: after the send (${((Date.now() - t0) / 1000).toFixed(1)} s): "${tested}"`);
   await screenshot(d, "askme-3-sent");
-  row("test request held", /Your agent is asking you now/i.test(tested ?? ""), `"${tested}"`);
+  await row(HELD, /Your agent is asking you now/i.test(tested ?? ""), `"${tested}"`, { needs: [SWITCH_ON] });
 
   // 4 — a notification and a card in Requests.
   let posted = false;
@@ -179,7 +188,7 @@ try {
   }
   await screenshot(d, "askme-4-requests");
   log(`4: a request card in Requests: ${card ? "yes" : "NO"}`);
-  row("notification + Requests", card, `card ${card ? "shown" : "absent"}; notification ${posted ? "posted" : "not posted (foreground)"}`);
+  await row(CARD, card, `card ${card ? "shown" : "absent"}; notification ${posted ? "posted" : "not posted (foreground)"}`, { needs: [HELD] });
 
   // 5 — Approve (DECIDE=approve: a test request approved from the phone, 235 gate) or Decline clears it.
   if (card && process.env.DECIDE === "approve") {
@@ -199,7 +208,7 @@ try {
     await screenshot(d, "askme-5-approved");
     await dumpSource(d, "askme-5-approved").catch(() => undefined);
     log(`5: after Approve (${((Date.now() - t5) / 1000).toFixed(1)} s): card still there ${left}; Approve enabled "${enabled}"; on screen ${JSON.stringify(words)}`);
-    row("approve clears it", !left, left ? `the card stays; Approve enabled "${enabled}"; ${JSON.stringify(words)}` : "cleared");
+    await row("approve clears it", !left, left ? `the card stays; Approve enabled "${enabled}"; ${JSON.stringify(words)}` : "cleared", { needs: [CARD] });
   } else if (card) {
     await tapTestId(d, "DenyConsentButton", 5000);
     // A decision may step down a version first (0.2 refused after 5.8 s on a 0.52.0 runner, 17:23Z).
@@ -209,7 +218,7 @@ try {
       left = await existsTestId(d, "DenyConsentButton", 500);
     }
     log(`5: after Decline, a card still waits: ${left}`);
-    row("decline clears it", !left, left ? "a card still waits" : "cleared");
+    await row("decline clears it", !left, left ? "a card still waits" : "cleared", { needs: [CARD] });
   }
 
   } // end of steps 3–5
@@ -236,11 +245,11 @@ try {
   const after = rules();
   await screenshot(d, "askme-6-off");
   log(`6: switch ${off} · runner rules ${JSON.stringify(after)}`);
-  row("switch off", off === "false" && !JSON.stringify(after).includes("contexts/create"), `switch ${off}; runner ${JSON.stringify(after)}`);
+  await row("switch off", off === "false" && !JSON.stringify(after).includes("contexts/create"), `switch ${off}; runner ${JSON.stringify(after)}`);
 } catch (err) {
   log(`error: ${err.message}`);
+  rows.fatal(err);
   if (d) await screenshot(d, "askme-failure").catch(() => undefined);
-  process.exitCode = 1;
 } finally {
   if (PIN_DEV) {
     try {
@@ -250,8 +259,8 @@ try {
       log(`device PIN NOT cleared: ${String(e.message).slice(0, 120)}`);
     }
   }
-  for (const [n, ok, what] of rows) console.log(`ROW ${n} ${ok ? "PASS" : "FAIL"} — ${what}`);
-  if (rows.some(([, ok]) => !ok)) process.exitCode = 3;
+  rows.summary();
+  process.exitCode = rows.exitCode();
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();
 }
