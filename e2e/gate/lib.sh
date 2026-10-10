@@ -102,18 +102,41 @@ emu_stop() { "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
-# gate_sweep: before any leg, take off every runner what a gate leg may have left there: approval rules, approver
-# sets, and the gate's own policies (ids starting "gate-", e.g. linkfail's gate-deny-swap-key). A leg cleans up after
-# itself, and a stop runs that cleanup (leg_begin's trap), but a run killed outright cannot: 1009-1608 was killed in
-# linkfail and left an acl/swap-key consent rule on the main runner for a day, so the next run's links were held
-# with auth:consent_required. Called by run and rerun right after the run lock, so it never sweeps under a running
-# gate. Says what it removed, runner by runner.
+# gate_sweep: before any leg, take off every runner what a gate leg creates and may have left there, and nothing
+# else. A leg cleans up after itself, and a stop runs that cleanup (leg_begin's trap), but a run killed outright
+# cannot: 1009-1608 was killed in linkfail and left an acl/swap-key consent rule on the main runner for a day, so the
+# next run's links were held with auth:consent_required. Runner A is also used by hand (the UI/UX lane's approvals
+# screens), so the sweep is limited to the gate's own: the task types in GATE_RULE_TASKS, the members of approver sets
+# named gate-* or e2e-approvals (or $APPROVER_SET), and policies whose id starts "gate-". Anything else is logged as
+# "foreign … left in place", visible but not destroyed. Called by run and rerun right after the run lock, so it never
+# sweeps under a running gate. A runner named twice is swept once.
+GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
-  local slug seen=" " pol
+  local slug seen=" " pol kind a b
   for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
     [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     say "sweep $slug"
-    rules_clear "$slug" | sed 's/^/  /'
+    pnm "$slug" approvals list --json | GATE_RULE_TASKS="$GATE_RULE_TASKS" GATE_SETS_EXTRA="${APPROVER_SET:-}" python3 -c "
+import os,sys,json,re
+t=sys.stdin.read(); j=json.loads(t[t.index('{'):]) if '{' in t else {}
+tasks=set(os.environ['GATE_RULE_TASKS'].split())
+extra=os.environ.get('GATE_SETS_EXTRA') or ''
+ours=lambda n: n.startswith('gate-') or n=='e2e-approvals' or (extra and n==extra)
+for r in j.get('rules',[]):
+    tt=r.get('taskType','')
+    print(('rule' if tt in tasks else 'foreign-rule'), tt, r.get('approverSet') or r.get('set') or '-')
+for n,ms in (j.get('approverSets') or {}).items():
+    if ours(n):
+        for m in ms: print('member', n, m)
+    else: print('foreign-set', n, len(ms))
+" | while read -r kind a b; do
+      case $kind in
+        rule) pnm "$slug" approvals remove "$a" >/dev/null; say "  $slug rule removed: $a"; sleep 2 ;;
+        member) pnm "$slug" approvals approvers remove "$a" "$b" >/dev/null; say "  $slug approver removed from $a"; sleep 2 ;;
+        foreign-rule) say "  $slug foreign rule left in place: $a (set $b)" ;;
+        foreign-set) say "  $slug foreign approver set left in place: $a ($b members)" ;;
+      esac
+    done
     for pol in $(pnm "$slug" policy list 2>/dev/null | grep -oE 'gate-[A-Za-z0-9_-]+' | sort -u); do
       say "  $slug policy removed: $pol ($(pnm "$slug" policy delete "$pol" | tail -1 | cut -c1-60))"
     done

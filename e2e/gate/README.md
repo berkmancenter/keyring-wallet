@@ -223,8 +223,9 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   fast-forwarded to `origin/main` before each run when it is clean; a lane's working checkout never feeds an auto-run.
   Like any gate worktree it needs `e2e/node_modules` (`npm ci` in `e2e/`) and a root `node_modules` link.
 - **A clean start, and a clean stop.** After it takes the run lock, every `run` and `rerun` sweeps the runners
-  (`gate_sweep`): approval rules, approver sets, and the gate's own policies (ids starting `gate-`) come off, and the
-  log says what was removed. A stop (a bootout, a ctrl-C) is passed to the legs, whose trap runs their cleanup, and
+  (`gate_sweep`), limited to what the gate itself creates: the rules for acl/swap-key/0.1 and vta/contexts/get/1.0,
+  the members of approver sets named `gate-*` or `e2e-approvals`, and policies whose id starts `gate-`. Each removal
+  is logged; any other rule or set (runner A is also used by hand) is logged as "foreign … left in place" and kept. A stop (a bootout, a ctrl-C) is passed to the legs, whose trap runs their cleanup, and
   the runner waits up to `GATE_STOP_WAIT` seconds (150) for them; the plist gives launchd 180 s (`ExitTimeOut`). A
   hard kill or a power loss cannot clean up, which is what the sweep is for: run 1009-1608 was killed in linkfail
   and left an acl/swap-key consent rule on the main runner for a day, and the next links were held with
