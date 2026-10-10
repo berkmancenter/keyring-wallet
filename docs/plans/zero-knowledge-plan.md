@@ -254,7 +254,7 @@ This is the same asymmetry the *named* path already documents in `bifold/package
 Measured and read on 2026-10-10, and these numbers are why the 10-11 decision was takeable rather than a leap. **The four costs in the last bullet are accepted, not solved** — an unaudited library in the shipped app, arkworks across three architectures, a prototype dependency, and no agent-side approval gate on this path. §6.0 records what the rungs then measured on top of this reading.
 
 - **It is not cryptography we would write.** `openvtc-vetting-pcs` is published on crates.io (0.5.0, Apache-2.0, 2026-10-03) and its `ApplicantEngine` already carries the whole state machine — `new`, `id`, `snapshot`, `restore`, `held`, `statement_meta`, `receive`, `replace`, `submit`. The work is a Rust→UniFFI native module plus key storage and screens, which is the shape of both our hardware-attestation module and upstream's own mobile agent.
-- **Speed is not a constraint.** The library's own bench at k = 5, run here: prove 11.7 ms, verify 10.4 ms, attest 2.5 ms (§2.2). Several times that on a phone is still imperceptible in this ceremony. This also reproduces upstream's "≈12 ms" claim independently, which until now this plan could only cite.
+- **Speed is not a constraint, and this no longer rests on an allowance.** Measured on an **iPhone 16**: prove **7.8 ms at k = 3**, **12.2 ms at k = 5**, five repetitions with a 7.8–8.1 ms spread (`ref-31`). That is within 15% of the laptop, so the earlier reasoning — a laptop bench plus "several times that is still imperceptible" — was conservative rather than necessary. It also reproduces upstream's "≈12 ms" claim independently on the hardware that matters. **A caution for anyone else measuring:** the iOS simulator is **2× slower than the phone it simulates** (16.1 ms at k = 3), so simulator numbers here are unrelated to device performance, not a safe upper bound.
 - **The real costs are supply chain, not latency.** An unaudited proof library inside the shipped app — upstream keeps it off by default in their own service for that reason (C6a); arkworks across three architectures in the app's build; a dependency whose own header calls it a *"Throwaway prototype … Nothing here is production code"*; and the loss of the hardware-attested approval, which is what §3.2 duty 1 exists for.
 - **What a pure-JavaScript path would cost, and why it is not the plan.** No JS implementation of this construction exists, so it would mean writing the scheme ourselves on `@noble/curves`, and `ref-03d` measured Hermes at roughly 15× Node on the primitives — seconds, not milliseconds, for a proof of this shape. Ruled out on both counts.
 
@@ -362,6 +362,7 @@ is the index, not a substitute for them.
 | `ref-27-pcs-flow` | The whole protocol with upstream's own engines: the community's verifier accepts our submission, and the anonymity claim is `assert!`ed — no tag matches an enrolled identifier, no voucher DID appears on the wire |
 | `ref-28-pcs-conformance` | What a client sends validates against the **published** `vetting/attestation/0.1` schema at a pin — and it caught a real bug in ref-27 that every engine in the flow had accepted |
 | `ref-29-pcs-swift` | The generated Swift runs, on the host and inside an iOS runtime, with identical proof sizes. Saved state is **166 bytes**, which settles §3.4's custody shape practically |
+| `ref-31-pcs-device` | **The real measurement: 7.8 ms to prove at k = 3 on an iPhone 16** (iOS 18.7.8), five repetitions, spread 7.8–8.1 ms — within 15% of the laptop, and **2× faster than the iOS simulator**, which was therefore the pessimistic measurement rather than the optimistic one |
 | `ref-30-pcs-kotlin` | The generated Kotlin runs on a JVM and **the three languages agree** — 166 B of state byte for byte, prove 7.5 ms at k = 3 against Swift's 7.4 ms and the library's own bench, so neither bridge costs anything measurable. The runtime dependency is JNA and nothing else |
 
 **Three findings from the ladder that constrain the app** rather than the crypto:
@@ -373,9 +374,8 @@ to render.
 
 **What the ladder has not proven, and what each gap needs:**
 
-- **No real device.** Every number is host, simulator or JVM, and a simulator is explicitly
-  not quotable as phone performance in either direction. A device run needs a slot from
-  the lane holding the phones.
+- ~~**No real device.**~~ **Closed 2026-10-11 for iOS** by `ref-31` on an iPhone 16. The
+  remaining device gap is Android: nothing has run on ART.
 - **No Android runtime.** `ref-30` runs the Kotlin on a JVM, and `ref-26` proved the
   `.so` files build — but a JVM on a laptop is not ART on a phone, and nothing has yet
   run one. That is an instrumentation test on an emulator or a device.
