@@ -88,7 +88,9 @@ jobs:
               echo "No JS/TS files changed; skipping lint"
               exit 0
             fi
-            echo "$CHANGED" | xargs eslint --color
+            # Through yarn: eslint is a workspace dev dependency, not on the runner's PATH (a bare
+            # `xargs eslint` exits 127, which went unseen while the changed-files list came out empty).
+            echo "$CHANGED" | xargs yarn eslint --color
           else
             yarn lint || echo "::warning::Full-repo lint failed (known debt); not blocking main pushes yet"
           fi
