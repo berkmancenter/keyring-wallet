@@ -17,6 +17,9 @@
  *
  * DEVICE_PIN: the emulator's screen-lock PIN, set by the caller after the first link. Adding or renaming a device
  * is an owner act, confirmed in the system's BiometricPrompt; the PIN is typed only into that window.
+ *
+ * Rows through lib/rows.js; "devices rename changes the label" needs "devices ACL label is the name" (no device
+ * was added to rename). Exit 0 all pass or skipped, 3 any fail, 1 the run broke.
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
@@ -25,6 +28,7 @@ import { dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, sc
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { pasteLinkFromHome } from "./lib/flows.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
+import { createRows } from "./lib/rows.js";
 
 const E = process.env;
 const UDID = E.UDID;
@@ -33,11 +37,9 @@ const PNM = E.PNM_BIN;
 const PIN = E.DEVICE_PIN || "";
 const ROWS = (E.ROWS || "in124 devices identity scanbeside").split(/\s+/);
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
-const results = [];
-const row = (name, ok, detail) => {
-  results.push({ name, ok, detail });
-  console.log(`ROW ${name} ${ok ? "PASS" : "FAIL"} — ${detail}`);
-};
+const rows = createRows({ label: "release-235" });
+const ACL_LABEL = "devices ACL label is the name";
+const row = (name, ok, detail, opts) => rows.row(name, () => ({ ok, detail }), opts);
 const adb = (...a) => execFileSync("adb", ["-s", UDID, ...a], { encoding: "utf8", timeout: 30000 });
 const shot = (d, name) => rawScreenshot(d, name).catch(() => undefined);
 const said = async (d, id) => ((await existsTestId(d, id, 1500)) ? (await textOf(d, id).catch(() => "")).replace(/\s+/g, " ").trim() : null);
@@ -126,6 +128,7 @@ const extraKeys = [];
 try {
   await ensureAppium();
   d = await makeDriver({ platform: "android", udid: UDID, keepState: true });
+  rows.setDriver(d);
   await d.activateApp(E.E2E_APP_ID);
   // The PIN screen can submit itself on the last digit and be gone before the helper finds its Enter
   // (21:56Z: "Enter not found", the app already on Contacts). Home is what counts.
@@ -145,7 +148,7 @@ try {
     await shot(d, "release235-in124-devices");
     const error = outcome === "error" ? await said(d, "AgentDeviceError") : null;
     log(`My devices after ${((Date.now() - t) / 1000).toFixed(1)} s: ${outcome || "neither"}${error ? ` ("${error}")` : ""}`);
-    row(
+    await row(
       "in124 My devices loads or says it didn't answer (15 s)",
       outcome === "list" || (outcome === "error" && /Your agent didn't answer\. Try again\./.test(error ?? "")),
       outcome ? `${outcome}${error ? `: "${error}"` : ""}` : "neither the list nor the no-answer line within 15 s"
@@ -171,7 +174,7 @@ try {
     const defaultName = String((await nameField.getAttribute("text")) || "").trim();
     log(`the name field reads "${defaultName}"`);
     await shot(d, "release235-device-name-default");
-    row('devices name defaults to "Computer"', defaultName === "Computer", `the field reads "${defaultName}"`);
+    await row('devices name defaults to "Computer"', defaultName === "Computer", `the field reads "${defaultName}"`);
     await scrollToTestId(d, "AgentBackupAdd", 4).catch(() => undefined);
     await tapTestId(d, "AgentBackupAdd", 15000);
     await owner("add another device");
@@ -180,7 +183,7 @@ try {
       await sleep(1500);
       added = aclEntry(code);
     }
-    row('devices ACL label is the name', added?.label === defaultName, added ? `label "${added.label}"` : "the code never reached the ACL");
+    await row(ACL_LABEL, added?.label === defaultName, added ? `label "${added.label}"` : "the code never reached the ACL");
 
     // Rename it beside Remove: the newest row named like it.
     await waitForTestId(d, "AgentDeviceList", 30000);
@@ -214,7 +217,7 @@ try {
     }
     const newName = `Gate desk ${Date.now() % 10000}`;
     if (!mine) {
-      row("devices rename changes the label", false, `no device row named "${defaultName}" on My devices`);
+      await row("devices rename changes the label", false, `no device row named "${defaultName}" on My devices`, { needs: [ACL_LABEL] });
     } else {
       await tapTestId(d, `AgentDeviceRename_${mine.key}`, 15000);
       const rename = await waitForTestId(d, "DeviceNameInput", 15000);
@@ -228,7 +231,7 @@ try {
         renamed = aclEntry(code);
       }
       await shot(d, "release235-device-renamed");
-      row("devices rename changes the label", renamed?.label === newName, `label "${renamed?.label ?? "-"}" (wanted "${newName}")`);
+      await row("devices rename changes the label", renamed?.label === newName, `label "${renamed?.label ?? "-"}" (wanted "${newName}")`, { needs: [ACL_LABEL] });
     }
     // The device wording (#307): the add screen and the list say "device", not "computer".
     const words = (await d.getPageSource()).match(/text="[^"]*(device|Device)[^"]*"/g) ?? [];
@@ -248,7 +251,7 @@ try {
       did = await said(d, `AgentCommunityIdentity_${key}Did`);
     }
     await shot(d, "release235-identity-code");
-    row(
+    await row(
       'identity "Show the code they see" shows the identity',
       Boolean(has && /Show the code they see/.test(label ?? "") && /^did:/.test(did ?? "")),
       has ? `toggle "${label}", code "${(did ?? "").slice(0, 40)}…"` : "no identity toggle on the community card"
@@ -267,7 +270,7 @@ try {
     for (const id of offered) if (!at && (await existsTestId(d, id, 1500))) at = id;
     await shot(d, "release235-scan-beside");
     await dumpSource(d, "release235-scan-beside").catch(() => undefined);
-    row("scanbeside another agent is offered beside, not refused", !refused && Boolean(at), refused ? 'the phone said "already linked"' : at ? `the link flow opened (${at})` : "neither the link flow nor a refusal");
+    await row("scanbeside another agent is offered beside, not refused", !refused && Boolean(at), refused ? 'the phone said "already linked"' : at ? `the link flow opened (${at})` : "neither the link flow nor a refusal");
     // Leave without linking it: Stop linking returns to the current agent (vtiLinks cancelLink).
     if (await existsTestId(d, "VtaLinkCancel", 2000)) await tapTestId(d, "VtaLinkCancel", 10000).catch(() => undefined);
     else await d.back().catch(() => undefined);
@@ -275,11 +278,11 @@ try {
   }
 } catch (e) {
   console.log(`[e2e] error: ${e.message.split("\n")[0]}`);
+  rows.fatal(e);
   if (d) {
     await shot(d, "release235-failure");
     await dumpSource(d, "release235-failure").catch(() => undefined);
   }
-  process.exitCode = 1;
 } finally {
   for (const k of extraKeys) {
     try {
@@ -291,6 +294,6 @@ try {
   }
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();
-  for (const r of results) console.log(`SUMMARY ${r.name} ${r.ok ? "PASS" : "FAIL"} — ${r.detail}`);
-  if (results.some((r) => !r.ok)) process.exitCode = 1;
+  rows.summary();
+  process.exitCode = rows.exitCode();
 }

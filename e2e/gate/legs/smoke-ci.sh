@@ -51,7 +51,9 @@ welcome_try() {
 }
 welcome_rows() {
   local note; note=$(printf '%s' "${1:-}" | sed -e 's/[\/&\\]/\\&/g')
-  grep -E '^(ROW|LEG)' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
+  # The driver prints its rows through rows.js, which ends with its own "LEG welcome DONE" line; only its ROW lines
+  # and a BROKEN line belong in this leg's log (the leg prints its own DONE).
+  grep -E '^ROW |^LEG [^ ]+ BROKEN' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
   driver_rc "welcome-driver-$PLATFORM" "$WELCOME_RC" "$WELCOME_OUT"
 }
 # Android: a System UI ANR dialog (the emulator's own, on a loaded runner) covers the app and the driver finds no
