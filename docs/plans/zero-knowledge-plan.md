@@ -222,16 +222,32 @@ The protocol, the services and the message definitions are upstream's to build; 
 | Vetter availability | **No "accepting requests" toggle** in hidden mode. Decline individually | The toggle is the busy-vetter signal hidden mode removes |
 | Personal vetting limit | A vetter wanting to do less than their allowance sets it as a local preference; the agent still collects on the normal schedule | The preference never becomes visible to the community |
 | Attest | Hardware-attested step-up approval of the attest step | [[VETTING-DESIGN]]'s stated target gate (§3.2) |
-| Applicant checklist | Rendered from the attestations the applicant's agent has already verified on receipt | A bad or unbacked attestation surfaces at the session, not at submit |
+| Applicant checklist | **Not a count of what is held** — see §4.1.3, measured. It renders the community's own answer: what it counted and what it still needs. The agent verifies each attestation on receipt, but verified-and-held is not the same as counted | A bad or unbacked attestation surfaces at the session, not at submit |
 | Anonymity set | Warn when the published bucketed live-vetter count is below a floor. The manifest carries `vetterCountBucket` ([[PCS-DESIGN]] `:346`, `:378`, `:601`) | *"With 3 vetters and k = 2, 'hidden' means little"* (`:346`) |
 | Submit timing | The app may delay submitting after the last session, and never shows or sends a finer timestamp than it must | Exact timings correlate a session with a submission |
 | Withdrawal | A vetter withdrawing an attestation is sent from a fresh identifier; the UI never routes it through the member or session DID | The mediator would otherwise see who sent it |
 | Mixed criteria | A community's criterion is either named or hidden, never both, and the UI says which is in force | Otherwise one person can be counted twice, once under each mode |
 | A criterion the client cannot honour | **Fail closed.** If a community marks its hidden-vetting parameters as a criterion the client must understand, a Keyring that does not implement the mode refuses the criterion and says so — it never falls back to collecting named statements | Gathering named statements for a criterion whose purpose is that it never receives them would hand the community exactly what the mode withholds, and the user would not know |
-| Applicant checklist, again | In hidden mode there are **no statement credentials to hold**, so the checklist cannot be a list of held credentials. It renders what the agent has verified and counted | A UI that lists credentials shows an empty checklist to an applicant who has in fact been vetted three times |
+| Applicant checklist, again | In hidden mode there are **no statement credentials to hold**, so the checklist cannot be a list of held credentials either. It renders what the community answered. It renders what the agent has verified and counted | A UI that lists credentials shows an empty checklist to an applicant who has in fact been vetted three times |
 | Submitting, and re-submitting | The freshness challenge is minted by the community and spent when the proof is counted. Answering a "needs more" outcome means asking for a **fresh** challenge and building a fresh proof; the app never re-sends a stored proof | A proof verifies as often as it is submitted, so a challenge that survives its first use is not a freshness anchor |
 
 Keyring as vetter is new scope. The vetting subtask makes Keyring the *applicant* (its P6) and tests against a headless openvtc vetter (its §2.5). Z1 needs both roles in Keyring, and both roles re-run against upstream's own clients.
+
+### 4.1.3 A produced proof is not an accepted proof, and the client must not pretend otherwise
+
+Measured in `tsp-reference/ref-27-pcs-flow` on 2026-10-11, with the published engines: offering **one** voucher's attestation **twice** produced this sequence —
+
+- the engine **accepted** the duplicate and reported holding two;
+- it **built a submission** from them without complaint;
+- the community **counted them as one voucher** and answered `satisfied = false`, `needs: 1`.
+
+Distinctness is therefore enforced where it must be, at verification, and the client is deliberately dumb. Three rules follow, and they are UI rules rather than cryptographic ones:
+
+1. **Never present a built proof as an outcome.** "Your proof is ready" must not read as "you are in".
+2. **Never count held attestations as progress.** Two from one voucher look like two on the phone and count as one at the community, so a counting checklist tells a user they are ready when they are not.
+3. **Render the community's `needs`.** The engine reports what is still required rather than a verdict, which is what a screen should show.
+
+This is the same asymmetry the *named* path already documents in `bifold/packages/trust-tasks/src/vetting/evaluate.ts`: the client counts vouchers by DID while a community counts by member record, so *"the client can be optimistic where the community is not. It can never be the other way round."* Hidden mode inherits it under a different mechanism.
 
 ### 4.1.2 What the phone path would actually cost, if it is ever chosen
 
