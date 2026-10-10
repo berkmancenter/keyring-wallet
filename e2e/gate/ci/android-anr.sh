@@ -8,7 +8,7 @@
 set -u
 S=${1:?emulator serial}
 adb_() { adb -s "$S" "$@"; }
-anr_window() { adb_ shell dumpsys window windows 2>/dev/null | tr -d '\r' | grep -oE 'Application Not Responding: [A-Za-z0-9._]+' | head -1; }
+anr_window() { adb_ shell dumpsys window 2>/dev/null | tr -d '\r' | grep -oE 'Application Not Responding: [A-Za-z0-9._]+' | head -1; }
 w=$(anr_window)
 [ -n "$w" ] || exit 0
 echo "ANR dialog up: $w"

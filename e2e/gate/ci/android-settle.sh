@@ -6,6 +6,8 @@
 # or when the time is up. Prints one "settle:" line with what it saw (the ci step mark around it gives the time).
 # Why: on run 38045665103 System UI hung during a 195 s boot on a cold runner, and its ANR dialog covered the
 # app from before the plain launch to the welcome driver (both welcome rows FAIL); local runs never show it.
+# The focus comes from `dumpsys window` (the whole dump), as the leg's rows read it: `dumpsys window windows`
+# gave no mCurrentFocus line on API 33 (run 38046778116's settle saw focus=[?] and ran to its 90 s).
 set -u
 S=${1:?emulator serial} MAX=${2:-90}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -15,7 +17,7 @@ cores=$(adb_ shell nproc 2>/dev/null | tr -d '\r'); case $cores in ''|*[!0-9]*) 
 adb_ shell wm dismiss-keyguard >/dev/null 2>&1
 while :; do
   boot=$(adb_ shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  focus=$(adb_ shell dumpsys window windows 2>/dev/null | tr -d '\r' | grep -E 'mCurrentFocus|mFocusedApp' | tr -s ' ' | tr '\n' ' ')
+  focus=$(adb_ shell dumpsys window 2>/dev/null | tr -d '\r' | grep -E 'mCurrentFocus|mFocusedApp' | tr -s ' ' | tr '\n' ' ')
   load=$(adb_ shell cat /proc/loadavg 2>/dev/null | tr -d '\r' | cut -d' ' -f1-3)
   last="boot_completed=${boot:-?} load=[${load:-?}] cores=$cores focus=[${focus:-?}]"
   if echo "$focus" | grep -q 'Not Responding'; then
