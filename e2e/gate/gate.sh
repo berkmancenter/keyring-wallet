@@ -36,6 +36,10 @@ run_leg() {
   E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1
   rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
+  # A sleep inside the leg (pmset's log) makes its rows no verdict on the app (1009-1608: a 682 s clamshell sleep
+  # ended both kk iOS sessions by Appium's newCommandTimeout). Marked, not hidden: the rows stay as they ran.
+  local slept; slept=$(node "$GATE_SRC/sleeps.mjs" --from "$s" --to "$e" 2>/dev/null)
+  if [ -n "$slept" ]; then echo "$slept" | sed 's/^/ENV /' >> "$dir/leg.log"; say "$leg: ENV — $(echo "$slept" | paste -sd';' -)"; fi
   say "$leg: exit $rc in $(( (e - s) / 60 )) min · $(leg_rows "$dir/leg.log" | cut -f1 | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
 }
 
@@ -241,6 +245,7 @@ cmd_report() {
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s
     [ "$e" -gt "$last" ] && last=$e
     printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
+    grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
     leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
   done < "$rd/legs.tsv"
   echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"

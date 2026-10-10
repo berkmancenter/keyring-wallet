@@ -23,6 +23,7 @@ Each part below removes one of those.
 | `lib.sh` | Shared shell: emulator and simulator slots, runner-key cleanup, the build cache, row parsing |
 | `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
 | `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
+| `sleeps.mjs` | Did the Mac sleep during a leg? Read from `pmset -g log` (`node --test e2e/gate/sleeps.test.mjs`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
 `steady.js`, `pnm.js` and `runDir.js`.
@@ -148,3 +149,7 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
 - **Keep the Mac awake.** A closed lid put the Mac to sleep for three hours in the middle of the 239 gate, and
   `caffeinate` does not prevent lid-closed sleep. The owner runs once: `sudo pmset -a disablesleep 1` (and
   `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.
+- **A sleep is marked, not judged.** After each leg the gate reads `pmset -g log`. A sleep inside the leg adds an
+  `ENV Mac slept …` line to its `leg.log`, shown in the report above the rows: those rows are no verdict on the app.
+  (Auto-run 1009-1608: a 682 s clamshell sleep ended both kk iOS sessions by Appium's 300 s `newCommandTimeout`,
+  which stays at 300 s so a real hang still shows.)
