@@ -1,31 +1,31 @@
 #!/usr/bin/env node
 /**
- * bifold #347: a join request that never reached the community is said, and sent again. On a linked Android phone
- * (emulator) with no open request for C, the way the UI/UX lane gave for forcing it (10-07):
- *   1. the phone's network off (airplane mode); C's link → Ask to join → continue: the ask cannot leave the phone
- *   2. the network back; leave Join and open C's link again: Join reads the stored request as sent, asks C for its
- *      status, gets notFound, and shows JoinRequestLost
- *   3. JoinSendAgain → JoinAsContinue: a fresh request, which C lists
- * Rows (lib/rows.js: a failing row never stops the rest; each needs the one before it):
- *   lost-ask-offline       what Join showed with the network off (an error line, or "Sent"); FAIL only if the ask
- *                          reached C anyway (then the case was not forced)
- *   join-lost-request      JoinRequestLost after reopening, within 120 s
- *   join-lost-send-again   after JoinSendAgain, Join is waiting again and C lists a new pending request
- * The Join screen is driven through lib/pages/join.js. Prints `LOST_REQ <id>` for the request sent again, so the
- * caller declines it.
- *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME=… C_ADMIN="<rest> <did> <cred>" node run-join-lost.mjs
+ * bifold #347, the part a device can prove: a join ask that cannot reach the community says so. On a linked Android
+ * phone (emulator) with no open request for C, the community's messaging host is blocked (BLOCK_HOST, iptables on the
+ * rootable emulator; airplane mode without it) once the ask is in view, before it is tapped; then Ask to join →
+ * continue. Everything up to the send (the session with C's mediator, the manifest) needs that host, so the ask fails
+ * before the phone records a request.
+ * Row (lib/rows.js):
+ *   lost-ask-offline-error   PASS needs all three: Join shows an error line (quoted in the detail), C's pending list
+ *                            is unchanged, and Join never shows JoinRequestSent
+ * A request recorded as sent whose delivery then fails (said lost, and sent again) cannot be forced from the phone:
+ * no cut lands between the record and the send. bifold holds it in joinLostRequest.test.tsx (red before #347).
+ * Prints `ARRIVED_REQ <id>` for any request that reached C anyway, so the caller declines it.
+ *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME=… C_ADMIN="<rest> <did> <cred>" [BLOCK_HOST=…] node run-join-lost.mjs
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsTestId, sleep, stopAppium, tapTestId, ensureAppium, screenshot } from "./lib/driver.js";
+import { existsTestId, sleep, stopAppium, ensureAppium, screenshot } from "./lib/driver.js";
 import { makeDriver, unlockToHome } from "./lib/keyringRoles.js";
 import { createRows } from "./lib/rows.js";
 import { join, readStanding } from "./lib/pages/join.js";
 
 const C_DID = process.env.C_DID;
 const C_NAME = process.env.C_NAME || "Keyring Lab Community";
+// The app tries C's mediator a few times (8 s a socket) after making the identity (up to 2 min).
+const ERROR_WAIT_MS = 180000;
 const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const admin = (...a) =>
   execFileSync("node", [ADMIN, ...(process.env.C_ADMIN || "").split(" ").filter(Boolean), ...a], { encoding: "utf8", timeout: 90000, stdio: ["ignore", "pipe", "pipe"] });
@@ -42,9 +42,8 @@ const online = () => {
     return false;
   }
 };
-// BLOCK_HOST (239, the UI/UX lane): cut only the community's messaging host (iptables on the rootable emulator), so
-// the persona is made and the request recorded as sent, and only its delivery fails. Without it, airplane mode,
-// which on 238 cut the network before the persona existed (nothing was recorded, so nothing could be lost).
+// BLOCK_HOST: cut only the community's messaging host (iptables on the rootable emulator), so the phone's own
+// mediator and its VTA stay reachable and only C cannot be. Without it, airplane mode cuts everything.
 const BLOCK = process.env.BLOCK_HOST || "";
 const blockRule = (op) => {
   for (const t of ["iptables", "ip6tables"]) {
@@ -66,11 +65,7 @@ const network = async (on) => {
   for (let i = 0; i < 20 && online() !== on; i++) await sleep(1000);
   log(`network ${on ? "on" : "off"}: online ${online()}`);
 };
-const rows = createRows({
-  label: "lostreq",
-  // Each needs the one before it; declared here so a rerun of one alone (gate.sh rerun --only-failed) runs its needs.
-  needs: { "join-lost-request": ["lost-ask-offline"], "join-lost-send-again": ["join-lost-request"] },
-});
+const rows = createRows({ label: "lostreq" });
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 
 let d;
@@ -85,7 +80,7 @@ try {
   });
   const before = pendingIds();
 
-  // 1 — the ask, with the network off: once the ask is in view, before it is tapped.
+  // The ask, with C unreachable: once the ask is in view, before it is tapped.
   await join.openCommunity(d, { did: C_DID, name: C_NAME });
   await join.ask(d, {
     beforeTap: async () => {
@@ -93,57 +88,41 @@ try {
       netOff = true;
     },
   });
-  await sleep(20000);
-  const after = await readStanding(d);
-  const offline = (after.error ?? "") || (after.requestSent ? `"Sent" (${after.standingText ?? ""})` : "");
-  // Still making the identity (it needs the agent, so the network): nothing was recorded as sent, so nothing can be
-  // lost. Seen on the 238 gate: "Getting your identity ready…" with the network off.
-  const stillMaking = !offline && (await d.getPageSource()).includes("Getting your identity ready");
-  await screenshot(d, "lost-ask-offline").catch(() => undefined);
-  log(`with the network off, Join shows: ${offline || "(no error line, no standing)"}`);
+  // Wait for what the screen answers, an error line or "Request sent", not a fixed time.
+  const t0 = Date.now();
+  let seen = await readStanding(d);
+  let everSent = seen.requestSent;
+  while (!seen.error && !seen.requestSent && Date.now() - t0 < ERROR_WAIT_MS) {
+    await sleep(5000);
+    seen = await readStanding(d);
+    everSent = everSent || seen.requestSent;
+  }
+  const waited = Math.round((Date.now() - t0) / 1000);
+  await screenshot(d, "lost-ask-offline-error").catch(() => undefined);
+  // The busy button reads "Getting your identity ready…" for the whole join, not only the identity step.
+  const busy = !seen.error && !seen.requestSent && (await d.getPageSource()).includes("Getting your identity ready");
+  const shown = seen.error ? `error "${seen.error}"` : seen.requestSent ? `"Request sent" (${seen.standingText ?? ""})` : busy ? "still busy" : "no error line, no standing";
+  log(`with ${BLOCK || "the network"} cut, after ${waited} s Join shows: ${shown}`);
 
-  // 2 — the network back; Join opened again.
+  // C's list, with the host back: nothing new may be there.
   await network(true);
   netOff = false;
   await sleep(10000);
   const arrived = [...pendingIds()].filter((id) => !before.has(id));
-  if (stillMaking) {
-    rows.skip("lost-ask-offline", "the network went off while the identity was still being made: no request was recorded as sent, so the loss was not forced");
-    rows.skip("join-lost-request", "not forced (see lost-ask-offline)");
-    rows.skip("join-lost-send-again", "not forced (see lost-ask-offline)");
-  } else if (arrived.length) {
-    await rows.row("lost-ask-offline", () => ({ ok: false, detail: `the ask reached C anyway (${arrived.join(", ")}): the loss was not forced; Join showed ${offline || "nothing"}` }));
-    arrived.forEach((id) => console.log(`LOST_REQ ${id}`));
-    rows.skip("join-lost-request", "the request was not lost");
-    rows.skip("join-lost-send-again", "the request was not lost");
-  } else {
-    await rows.row("lost-ask-offline", () => ({ ok: true, detail: `C has no new request; Join showed ${offline || "nothing"}` }));
-    await rows.row("join-lost-request", async () => {
-      await tapTestId(d, "MyAgent", 15000).catch(() => undefined);
-      await join.openCommunity(d, { did: C_DID, name: C_NAME });
-      const { lost, words, checked, standingText } = (await join.awaitLost(d, { timeoutMs: 120000, checkAgainAfterMs: 30000 })).value;
-      await screenshot(d, "join-lost-request").catch(() => undefined);
-      return {
-        ok: lost && /didn.t reach/i.test(words),
-        detail: lost ? `"${words}"${checked ? " (after Check again)" : ""}` : `no JoinRequestLost in 120 s; Join shows "${standingText ?? ""}"`,
-      };
-    });
-
-    // 3 — send it again.
-    await rows.row("join-lost-send-again", async () => {
-      const before2 = pendingIds();
-      await join.sendAgain(d);
-      const waiting = (await join.awaitSent(d, { timeoutMs: 120000, required: false })).value.shown === "standing";
-      let fresh = [];
-      for (const until = Date.now() + 90000; Date.now() < until && !fresh.length; await sleep(3000)) fresh = [...pendingIds()].filter((id) => !before2.has(id));
-      fresh.forEach((id) => console.log(`LOST_REQ ${id}`));
-      await screenshot(d, "join-lost-send-again").catch(() => undefined);
-      return { ok: waiting && fresh.length === 1, detail: `Join waiting ${waiting} ("${(await readStanding(d)).standingText ?? ""}"); C lists ${fresh.length} new pending request(s)` };
-    });
-  }
+  arrived.forEach((id) => console.log(`ARRIVED_REQ ${id}`));
+  await rows.row("lost-ask-offline-error", () => {
+    const wrong = [
+      !seen.error && `no error line in ${waited} s (${shown})`,
+      arrived.length > 0 && `the ask reached C anyway (${arrived.join(", ")})`,
+      everSent && `Join showed JoinRequestSent ("${seen.standingText ?? ""}")`,
+    ].filter(Boolean);
+    return wrong.length
+      ? { ok: false, detail: wrong.join("; ") }
+      : { ok: true, detail: `error "${seen.error}" after ${waited} s; C's pending list unchanged (${before.size}); no JoinRequestSent` };
+  });
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);
-  if (d) await screenshot(d, "join-lost-failure").catch(() => undefined);
+  if (d) await screenshot(d, "lost-ask-offline-failure").catch(() => undefined);
   rows.fatal(e);
 } finally {
   if (netOff) await network(true).catch(() => undefined);

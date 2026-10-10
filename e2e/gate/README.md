@@ -19,7 +19,7 @@ Each part below removes one of those.
 | Path | What |
 |---|---|
 | `gate.sh` | The runner: `gate.sh <command> [options]` |
-| `legs/<name>.sh` | One leg each: `kk` (K↔K and id305), `p1` (P1 and approvals), `testreq`, `agents`, `waiting`, `smoke-ios`, `smoke-android`, `devices` |
+| `legs/<name>.sh` | One leg each: `kk` (K↔K and id305), `p1` (P1 and approvals), `testreq`, `agents`, `waiting`, `lostreq` (a join ask that cannot reach the community shows an error and sends nothing; a request recorded as sent and then lost is bifold's `joinLostRequest.test.tsx`, since no network cut on the phone lands between the record and the send), `smoke-ios`, `smoke-android`, `devices` |
 | `lib.sh` | Shared shell: emulator and simulator slots, runner-key cleanup, the build cache, row parsing, `build_has` |
 | `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
 | `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
