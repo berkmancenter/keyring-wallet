@@ -16,13 +16,12 @@
   "AgentBackup": "older-build fallback: the setup's backup step, gone since keyring-bifold 113ade16 (2026-09-25); run-own-agent looks for it behind existsTestId",
   "AgentBackupPhone": "older-build fallback: gone since keyring-bifold 113ade16 (2026-09-25); run-own-agent looks for it behind existsTestId",
   "AgentCreate": "older-build fallback: the unlinked My Agent screen's Create button, gone since keyring-bifold ed9aabf8 (2026-10-06); run-own-agent looks for it behind existsTestId",
-  "AgentJoinCorner": "older-build fallback: the header's Join corner, gone since keyring-bifold 756abcd9 (2026-10-06); run-vta-link guards it, run-agent-home and run-agent-header still drive the 236 header",
+  "AgentJoinCorner": "older-build fallback: the header's Join corner, gone since keyring-bifold 756abcd9 (2026-10-06, in 240 and later); run-vta-link's journey guards it for the gate's dry --golden on 239, run-agent-home and run-agent-header still drive the 236 header",
   "AgentJoinMenu": "older-build fallback: the header's Join menu, gone since keyring-bifold 756abcd9 (2026-10-06); run-agent-header is a 236 header probe",
   "AgentJoinMenuClose": "older-build fallback: gone since keyring-bifold 756abcd9 (2026-10-06); run-agent-header guards it",
   "AgentJoinMenuJoin": "older-build fallback: gone since keyring-bifold 756abcd9 (2026-10-06); run-vta-link guards it",
   "AgentSegment_": "older-build fallback: the agent screen's segments, gone since keyring-bifold 520d2179 (2026-10-05); run-agent-segments is a segment probe for that build",
-  "AgentSegment_manage": "older-build fallback: gone since keyring-bifold 520d2179 (2026-10-05); every driver guards it with existsTestId or a catch",
-  "AgentSegment_communities": "older-build fallback: gone since keyring-bifold 520d2179 (2026-10-05); run-vta-link guards it",
+  "AgentSegment_manage": "older-build fallback: gone since keyring-bifold 520d2179 (2026-10-05); run-agent-segments, run-vta-approvals, run-several-agents and run-askme guard it with existsTestId or a catch (run-vta-link no longer does: 238 and later have no segments)",
   "AgentSwitcherOpen": "older-build fallback: the agent switcher's opener, gone since keyring-bifold 87baed13 (2026-10-06, agents are chips); run-several-agents guards it",
   "CommunityVerdict": "older-build fallback: the join verdict card, gone since keyring-bifold e410b0e3 (2026-10-06); run-my-agent races it against the current ids",
   "CommunityVerdictEffect": "older-build fallback: gone since keyring-bifold e410b0e3 (2026-10-06); run-my-agent reads it only after the verdict branch won",
@@ -30,7 +29,7 @@
   "JoinUseSuggestedAgent": "older-build fallback: gone since keyring-bifold f85bee46 (2026-10-06); run-several-agents guards it",
   "JoinAgentSuggested": "older-build fallback: gone since keyring-bifold f85bee46 (2026-10-06); run-several-agents guards it",
   "JoinWaysSeveral": "older-build fallback: the Join screen's several-ways view, gone since keyring-bifold 2e97fd1a (2026-10-07); run-vti-join03 records whether it shows",
-  "LinkWithoutQrButton": "older-build fallback: the unlinked My Agent screen's 'link without a QR' button, gone since keyring-bifold ed9aabf8 (2026-10-06); run-vta-link and run-several-agents guard it, run-own-agent still taps it",
-  "VtaLinkShowMyCode": "older-build fallback: the link screen's 'show my code', renamed in keyring-bifold 9b6cc085 (2026-10-06); the drivers try VtaLinkShowTheCode first",
-  "VtaLinkWithoutQr": "older-build fallback: the link screen's 'without a QR' step, gone since keyring-bifold 9b6cc085 (2026-10-06); every driver guards it"
+  "LinkWithoutQrButton": "older-build fallback: the unlinked My Agent screen's 'link without a QR' button, gone since keyring-bifold ed9aabf8 (2026-10-06, in 240 and later); run-vta-link guards it for the gate's dry --golden on 239 (it opens the link screen's own form, lib/pages/link.js typeAddressOnLink), run-several-agents guards it, run-own-agent still taps it",
+  "VtaLinkShowMyCode": "older-build fallback: the link screen's 'show my code', renamed in keyring-bifold 9b6cc085 (2026-10-06, in 241 and later); lib/pages/link.js showTheCode tries VtaLinkShowTheCode first, for the gate's dry --golden on 240 and before",
+  "VtaLinkWithoutQr": "older-build fallback: the link screen's 'without a QR' step, gone since keyring-bifold 9b6cc085 (2026-10-06, in 241 and later); lib/pages/link.js typeAddressOnLink and every driver guard it"
 }
