@@ -129,6 +129,38 @@ describe('when making the phone wakeable fails', () => {
     expect(enableWake).toHaveBeenCalledTimes(PUSH_AFTER_LINK_TRIES)
   })
 
+  // A tester on 242, 10-10: `noToken` once after a link, never tried again, so
+  // the phone was never woken. Apple's token can arrive after the first look.
+  it(`no platform token yet is tried again the same way, at most ${PUSH_AFTER_LINK_TRIES} times`, async () => {
+    const enableWake = jest.fn(async (): Promise<PushWakeOutcome> => ({ status: 'noToken' }))
+    const w = start({ link: { kind: 'unlinked' }, activity: [] }, { enableWake })
+    w.set({ link: { ...online, vtaDid: 'did:web:agent' }, activity: [{ at: T0 + 5, kind: 'linked' }] })
+    await flush()
+    expect(enableWake).toHaveBeenCalledTimes(1)
+    expect(w.log).toHaveBeenCalledWith('push wake: enable after link', {
+      status: 'noToken',
+      agent: 'did:web:agent',
+      try: 1,
+    })
+    for (const ms of PUSH_AFTER_LINK_RETRY_MS) await waitOut(ms)
+    expect(enableWake).toHaveBeenCalledTimes(PUSH_AFTER_LINK_TRIES)
+    await waitOut(10 * 60_000)
+    expect(enableWake).toHaveBeenCalledTimes(PUSH_AFTER_LINK_TRIES)
+  })
+
+  it('a token that arrives by a later try makes the phone wakeable and stops the retries', async () => {
+    const enableWake = jest.fn(async (): Promise<PushWakeOutcome> => ({ status: 'noToken' }))
+    const w = start({ link: { kind: 'unlinked' }, activity: [] }, { enableWake })
+    w.set({ link: online, activity: [{ at: T0 + 5, kind: 'linked' }] })
+    await flush()
+    enableWake.mockImplementation(async () => wakeable)
+    await waitOut(PUSH_AFTER_LINK_RETRY_MS[0])
+    expect(enableWake).toHaveBeenCalledTimes(2)
+    expect(w.log).toHaveBeenLastCalledWith('push wake: enable after link', { status: 'wakeable', agent: undefined })
+    await waitOut(10 * 60_000)
+    expect(enableWake).toHaveBeenCalledTimes(2)
+  })
+
   it('a try that then works stops the retries', async () => {
     const enableWake = refused()
     const w = start({ link: { kind: 'unlinked' }, activity: [] }, { enableWake })

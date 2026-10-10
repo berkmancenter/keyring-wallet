@@ -15,7 +15,10 @@
  * (Alberto's iPhone, 10-06: al-signer's `device list` said pushCapable false).
  * And a try that fails is tried again on a timer, not only when the link next
  * changes: right after a link the session is busy, and one refusal or timeout
- * left the agent with no wake channel for the rest of the session.
+ * left the agent with no wake channel for the rest of the session. A try that
+ * finds no platform token is tried again the same way: on an iPhone the token
+ * can arrive after the first look gives up (a tester on 242, 10-10: `noToken`
+ * after a link, never tried again, so the phone was never woken).
  *
  * A link restored at launch does not count: an already wakeable phone is not
  * registered again at every start.
@@ -69,6 +72,19 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
     retry = undefined
   }
 
+  // Again after a while, whether or not the link changes meanwhile, until the tries run out.
+  const retryLater = () => {
+    if (tries >= PUSH_AFTER_LINK_TRIES) {
+      pending = false
+      return
+    }
+    const wait = PUSH_AFTER_LINK_RETRY_MS[Math.min(tries - 1, PUSH_AFTER_LINK_RETRY_MS.length - 1)]
+    retry = setTimeout(() => {
+      retry = undefined
+      check()
+    }, wait)
+  }
+
   const check = () => {
     if (stopped) return
     const { link, activity } = deps.source.getState()
@@ -98,6 +114,11 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
     deps
       .enableWake()
       .then((outcome) => {
+        if (outcome.status === 'noToken') {
+          deps.log('push wake: enable after link', { status: outcome.status, agent: lastAgent, try: tries })
+          retryLater()
+          return
+        }
         deps.log('push wake: enable after link', { status: outcome.status, agent: lastAgent })
         // notLinked: the link went away under us; the next new link starts over.
         pending = false
@@ -113,16 +134,7 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
           pending = false
           return
         }
-        if (tries >= PUSH_AFTER_LINK_TRIES) {
-          pending = false
-          return
-        }
-        // Again after a while, whether or not the link changes meanwhile.
-        const wait = PUSH_AFTER_LINK_RETRY_MS[Math.min(tries - 1, PUSH_AFTER_LINK_RETRY_MS.length - 1)]
-        retry = setTimeout(() => {
-          retry = undefined
-          check()
-        }, wait)
+        retryLater()
       })
       .finally(() => {
         inFlight = false

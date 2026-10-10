@@ -40,18 +40,43 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
   const m = messaging()
   const status = await m.hasPermission()
   if (status !== messaging.AuthorizationStatus.AUTHORIZED && status !== messaging.AuthorizationStatus.PROVISIONAL) {
+    BCLogger.info('push token: none, notifications are not allowed', { os: Platform.OS, permission: status })
     return undefined
   }
-  await startPlatformPush(Platform.OS, m)
+  try {
+    await startPlatformPush(Platform.OS, m)
+  } catch (e) {
+    BCLogger.info('push token: none, registering for remote notifications failed', {
+      os: Platform.OS,
+      error: e instanceof Error ? e.message : String(e),
+    })
+    throw e
+  }
   if (Platform.OS === 'ios') {
     // The gateway sends to APNs directly with Keyring's own key, so it needs
     // the APNs device token, not Firebase's. On a first registration it can
     // arrive just after registering returns: wait for it.
+    const startedAt = Date.now()
     const token = await waitForApnsToken(() => m.getAPNSToken())
-    return token ? { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() } : undefined
+    if (!token) {
+      // Which step stopped (a tester on 242, 10-10, had only `noToken`): Apple
+      // never handed over a token while the app waited. Never log the token.
+      BCLogger.info("push token: none, Apple's token did not arrive", {
+        os: Platform.OS,
+        permission: status,
+        registeredForRemote: m.isDeviceRegisteredForRemoteMessages,
+        waitedMs: Date.now() - startedAt,
+      })
+      return undefined
+    }
+    return { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() }
   }
   const token = await m.getToken()
-  return token ? { platform: 'fcm', token } : undefined
+  if (!token) {
+    BCLogger.info('push token: none, Firebase returned no token', { os: Platform.OS, permission: status })
+    return undefined
+  }
+  return { platform: 'fcm', token }
 }
 
 const HANDLE_KEY_PREFIX = 'keyring.push.handle.'
