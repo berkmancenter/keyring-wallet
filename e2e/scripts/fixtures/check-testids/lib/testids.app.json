@@ -1,0 +1,10 @@
+{
+  "generatedFrom": "fixture",
+  "prefix": "com.ariesbifold:id/",
+  "keys": {
+    "ToggleDeveloper": ["src/screens/Developer.tsx:1"]
+  },
+  "stems": {},
+  "raw": {},
+  "derived": []
+}

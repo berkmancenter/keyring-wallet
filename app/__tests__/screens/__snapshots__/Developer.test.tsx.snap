@@ -249,7 +249,7 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
-            testID="com.ariesbifold:id/developer.environment"
+            testID="com.ariesbifold:id/environment"
           >
             <Text
               style={

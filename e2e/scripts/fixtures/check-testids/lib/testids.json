@@ -1,0 +1,16 @@
+{
+  "generatedFrom": "fixture",
+  "prefix": "com.ariesbifold:id/",
+  "keys": {
+    "Continue": ["src/screens/A.tsx:1"],
+    "MyAgent": ["src/screens/B.tsx:2"],
+    "Settings": ["src/screens/C.tsx:3"]
+  },
+  "stems": {
+    "AgentDevice_": ["src/screens/D.tsx:4"]
+  },
+  "raw": {
+    "WitnessedBadge": ["src/screens/E.tsx:5"]
+  },
+  "derived": [{ "src/screens/F.tsx:6": "t('X')" }]
+}

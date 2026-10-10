@@ -91,6 +91,9 @@ jobs:
             node --input-type=module --check < "$f" \
               || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
+          # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
+          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate.
+          node e2e/scripts/check-testids.mjs || fail=1
           exit $fail
 
   test:
