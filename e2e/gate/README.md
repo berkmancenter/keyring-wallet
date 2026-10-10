@@ -126,7 +126,7 @@ The rule, agreed 10-10:
   one guard, over `stable.mjs`: the watcher asks it before every cycle and skips the cycle otherwise, with the reason
   in its log; `run` and `rerun` (which does not go through `run`) ask it before a build is downloaded or the lock
   taken, and stop with the same reason. `GATE_ALLOW_UNSTABLE=1` starts anyway, with a warning in the log.
-- **When the Mac is not stable, the CI smoke workflow is the signal** (`gate-smoke.yml`, on its own branch): it
+- **When the Mac is not stable, the CI smoke workflow is the signal** (`gate-smoke.yml`, below): it
   runs on every main build, on GitHub's runners, with no Farm rows and no secrets. It is a smoke, not a gate.
 - **A full gate is not started on a laptop in a bag.** A closed lid with no display sleeps the Mac, every leg stalls,
   and the rows that time out say nothing about the build. The guard cannot stop a lid closing mid-run: a sleep inside
@@ -136,6 +136,34 @@ The rule, agreed 10-10:
   during a run, because the run is a child of the watcher. The same goes for `gate.sh` itself: the loop is a bash
   process that has already read it, so a change there (this guard included) is live only after that restart. The
   fast-forward before each run refreshes what a run spawns (the legs, `lib.sh`, the drivers), not the loop.
+
+## On a hosted runner: the smoke rows (stage A)
+
+`.github/workflows/gate-smoke.yml` runs the SMOKE rows on GitHub-hosted runners, with no Farm and no secrets, and
+times every step: a spike to see what a hosted runner can carry of the gate when the Mac is not available. The
+leg is `legs/smoke-ci.sh`; it takes the platform, the app or APK and the device, sources nothing private, and
+prints the same HEADS, ROW and LEG lines as `smoke-ios.sh` and `smoke-android.sh`. It does the plain-launch rows
+exactly as those legs do (install, launch with no Appium attached, screenshots at 20 s and 45 s, crash reports,
+the Firebase/FCM log rows; on Android the focus and permission-prompt checks and the token lines in logcat), then
+the welcome slides through Appium (`run-welcome.mjs`, which now runs on Android too). The rows that need a Farm
+runner (the link, the push probe, the agent header) print `SKIP — no Farm in CI (stage A)`.
+
+- iOS on `macos-26`: the newest iPhone of the newest runtime on the image (`ci/pick-sim.mjs`; the HEADS line
+  names it), WebDriverAgent cached at `~/Library/Developer/Xcode/keyring-wda-sim` by driver and Xcode version.
+- Android on `ubuntu-latest` with KVM: `reactivecircus/android-emulator-runner`, API 33 google_apis on x86_64
+  with the Pixel 6 profile and 2 GB, the gate's `Pixel_6_API_33` on the one arch the runners accelerate.
+- Timing: every workflow step marks the clock (`ci/mark.sh`), the leg writes its own steps to `steps.tsv`, and
+  `ci/summary.mjs` puts one table (and the rows) on the job summary. The leg dir is uploaded as an artifact.
+- The job fails only when a ROW says FAIL or the leg broke before its rows; SKIP rows and a driver's exit 3 do not.
+
+```sh
+gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref main -f run-id=<test-builds run id>
+gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref main -f wallet-sha=<sha> -f platform=ios
+```
+
+It also runs by itself after every green test build of main. What does not move to a hosted runner: the
+physical-phone legs, the terminal-app fixture, and anything that links a Farm runner (stage B would need the
+runner personas provisioned for CI).
 
 ## Continuous gating on main
 
