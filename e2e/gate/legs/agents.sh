@@ -18,7 +18,7 @@ fin() {
   keys_since "$RUNNER_MAIN_SLUG" "$T0"
   pnm "$RUNNER_MAIN_SLUG" approvals remove https://trusttasks.org/spec/acl/swap-key/0.1 >/dev/null 2>&1
   for s in "$RUNNER_A_SLUG" "$RUNNER_B_SLUG"; do
-    keys_since "$s" "$T0"; rules_clear "$s"
+    keys_since "$s" "$T0"; gate_sweep_runner "$s"   # the gate's own rules only: runner A is also used by hand
     for c in $(pnm "$s" contexts list | grep -oE 'agents-r3-[0-9]+' | sort -u); do echo "  $s context $c: $(pnm "$s" contexts delete -y "$c" | tail -1 | cut -c1-50)"; done
   done
   for m in $(grep -oE '^(R2_MEMBER|R6_MEMBER|R10_MEMBER) did:[^ ]+' "$LEG_DIR/agents.out" 2>/dev/null | awk '{print $2}' | sort -u); do

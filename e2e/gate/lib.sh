@@ -112,12 +112,21 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 # sweeps under a running gate. A runner named twice is swept once.
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
-  local slug seen=" " pol kind a b
+  local slug seen=" "
   for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
     [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
-    say "sweep $slug"
-    pnm "$slug" approvals list --json | GATE_RULE_TASKS="$GATE_RULE_TASKS" GATE_SETS_EXTRA="${APPROVER_SET:-}" python3 -c "
-import os,sys,json,re
+    gate_sweep_runner "$slug"
+  done
+}
+# gate_sweep_runner <slug>: the sweep for one runner (also a leg's end-of-leg cleanup, e.g. agents.sh). A runner whose
+# approvals cannot be read (network, keychain) is said so, never taken for a clean one.
+gate_sweep_runner() {
+  local slug=$1 json pol kind a b
+  say "sweep $slug"
+  json=$(pnm "$slug" approvals list --json 2>&1)
+  if [[ "$json" != *"{"* ]]; then say "  sweep $slug: could not read approvals ($(echo "$json" | tail -1 | cut -c1-100))"; return 0; fi
+  printf '%s' "$json" | GATE_RULE_TASKS="$GATE_RULE_TASKS" GATE_SETS_EXTRA="${APPROVER_SET:-}" python3 -c "
+import os,sys,json
 t=sys.stdin.read(); j=json.loads(t[t.index('{'):]) if '{' in t else {}
 tasks=set(os.environ['GATE_RULE_TASKS'].split())
 extra=os.environ.get('GATE_SETS_EXTRA') or ''
@@ -130,16 +139,15 @@ for n,ms in (j.get('approverSets') or {}).items():
         for m in ms: print('member', n, m)
     else: print('foreign-set', n, len(ms))
 " | while read -r kind a b; do
-      case $kind in
-        rule) pnm "$slug" approvals remove "$a" >/dev/null; say "  $slug rule removed: $a"; sleep 2 ;;
-        member) pnm "$slug" approvals approvers remove "$a" "$b" >/dev/null; say "  $slug approver removed from $a"; sleep 2 ;;
-        foreign-rule) say "  $slug foreign rule left in place: $a (set $b)" ;;
-        foreign-set) say "  $slug foreign approver set left in place: $a ($b members)" ;;
-      esac
-    done
-    for pol in $(pnm "$slug" policy list 2>/dev/null | grep -oE 'gate-[A-Za-z0-9_-]+' | sort -u); do
-      say "  $slug policy removed: $pol ($(pnm "$slug" policy delete "$pol" | tail -1 | cut -c1-60))"
-    done
+    case $kind in
+      rule) pnm "$slug" approvals remove "$a" >/dev/null; say "  $slug rule removed: $a"; sleep 2 ;;
+      member) pnm "$slug" approvals approvers remove "$a" "$b" >/dev/null; say "  $slug approver removed from $a"; sleep 2 ;;
+      foreign-rule) say "  $slug foreign rule left in place: $a (set $b)" ;;
+      foreign-set) say "  $slug foreign approver set left in place: $a ($b members)" ;;
+    esac
+  done
+  for pol in $(pnm "$slug" policy list 2>/dev/null | grep -oE 'gate-[A-Za-z0-9_-]+' | sort -u); do
+    say "  $slug policy removed: $pol ($(pnm "$slug" policy delete "$pol" | tail -1 | cut -c1-60))"
   done
 }
 

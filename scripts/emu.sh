@@ -95,7 +95,10 @@ cmd_start() {
 
   mkdir -p "$STATE_DIR"
   local serial=emulator-$port log=$STATE_DIR/emulator-$port.log
-  nohup "$EMULATOR" -avd "$avd" -port "$port" -no-snapshot -memory "$memory" ${extra[@]+"${extra[@]}"} > "$log" 2>&1 &
+  # In its own session, so a stop sent to the gate's process group (gate.sh's stop_forward) never reaches qemu
+  # directly: only "emu.sh stop" ends it, the path that avoids the 10-01 HV_NO_RESOURCES leak. The pid is the
+  # emulator's (perl execs into it).
+  nohup perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV' "$EMULATOR" -avd "$avd" -port "$port" -no-snapshot -memory "$memory" ${extra[@]+"${extra[@]}"} > "$log" 2>&1 &
   local pid=$!
   echo "$pid $serial $avd $(date -u +%FT%TZ)" > "$PID_FILE"
   echo "started $avd as $serial, pid $pid (log $log)"

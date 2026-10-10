@@ -7,6 +7,13 @@
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
 #   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
+# Lead our own process group, so a stop passed to "the group" (stop_forward's kill -TERM 0) reaches the gate and
+# nothing else: a gate started from a shell without job control (an agent's command, a script) would otherwise share
+# that shell's group with whatever else it started. A terminal already makes each job a group leader, so ctrl-C still
+# works there. setpgrp, not setsid: the terminal session is kept.
+if [ -z "${GATE_PGRP:-}" ] && [ "$(ps -o pgid= -p $$ | tr -d ' ')" != "$$" ]; then
+  GATE_PGRP=1 exec perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash "$0" "$@"
+fi
 . "$(dirname "$0")/lib.sh"
 
 # Legs in the order they run on one platform, and which device each needs.
