@@ -62,8 +62,13 @@ try {
   let opened = "";
   if (link) {
     await tapTestId(d, "LearnMoreAboutTheKeyringProject", 10000);
-    await sleep(4000);
-    opened = await frontApp(d);
+    // The browser takes a while to come forward on a slow host (run 38060729020: the app was still in front after a
+    // fixed 4 s): look for up to 20 s, once a second.
+    for (let i = 0; i < 20; i++) {
+      await sleep(1000);
+      opened = await frontApp(d);
+      if (opened !== "?" && opened !== BID) break;
+    }
     // The address Safari opened, as it shows it (its address field): kept as a screenshot.
     await screenshot(d, "welcome-learn-more-opened").catch(() => undefined);
     await d.activateApp(BID);
