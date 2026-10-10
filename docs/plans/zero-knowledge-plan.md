@@ -262,6 +262,43 @@ Measured and read on 2026-10-10, and these numbers are why the 10-11 decision wa
 
 **A community that required a relationship credential with its vetters could not run hidden vetting at all.** A VRC names both ends by construction, so requiring one would hand back precisely what the proof withholds. This matters to Keyring more than to any other client, because minting VRCs is what we do: the temptation to strengthen a vetting criterion with "and hold a VRC with your vetter" is real, and it is self-defeating in hidden mode. Membership does not require a VRC pair in any case ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.1), so nothing we ship today depends on it. Recorded here so the idea is refused with a reason rather than re-proposed.
 
+### 4.1.4 Against a hidden-mode community the app degrades; it does not refuse
+
+**Decided 2026-10-11 (Alberto): the downgrade stays, as a deliberate fallback.**
+*"lets still include the downgrade as a fallback."* The immediate reason is a demo
+in the days after 10-11, and the position outlives it: a wallet that refuses an
+unsupported vetting mode cannot be shown, cannot be tested against a community
+that has turned the mode on, and strands a user whose community moved ahead of
+their app build.
+
+**What the app does today, verified in code and not by reading a design.** Against
+a community advertising hidden mode, Keyring collects **named** vetting statements
+as though the mode were not there: `hidden-vetting`, `extCritical` and
+`unsupportedExtension` appear nowhere in `bifold`, `ext` exists in a schema and is
+read by nothing, and the requirements evaluator ignores it. The community then
+rejects what was collected.
+
+**So the fallback is kept, and the silence is not.** The two are separable, and
+only the second is a bug:
+
+| | Today | What the fallback should be |
+|---|---|---|
+| Proceeds on the named path | Yes | **Yes** — unchanged, this is the fallback |
+| Tells the user the community asked for something this build cannot do | No | **Yes**, once, in plain words |
+| Presents the outcome honestly if the community refuses | No — the refusal surfaces as a generic failure | **Yes**, naming the mode as the reason |
+
+That is the shape of the parked app-lane change: **keep the path, lose the
+silence.** It is not a fail-closed refusal, and §5's constraints are not read as
+requiring one. It needs no cryptography, no library and none of the rung ladder —
+it is a string, a condition and an error mapping in `bifold`, which is an app
+lane's work rather than this plan's.
+
+**The honest caveat for the demo.** The fallback makes the app *usable* against a
+hidden-mode community; it does not make the join *succeed*. If the demo community
+genuinely enforces hidden mode, the named statements are still refused — so a demo
+that must end in a successful join should run against a community in named mode,
+and the fallback is what stops a hidden-mode community from looking like a crash.
+
 ### 4.2 Z2 — Private presentation of Keyring's credentials
 
 This is the DTG pairwise construction ("disclose persona DIDs while hiding the R-DIDs"), the community-anchored construction, and `bbs-2023` selective disclosure, over VRCs, witness credentials (VSCs after [`vsc-migration-plan.md`](./vsc-migration-plan.md)) and memberships. Proving runs in the VTA (§3.1) from deposited copies (§3.4), presentation goes through `credential-exchange/present`, and consent works as in §3.2.
