@@ -27,7 +27,10 @@ Each part below removes one of those.
 | `stable.mjs` | Is the Mac stable enough to start a gate? Lid, external displays, battery, one verdict (`node --test e2e/gate/stable.test.mjs`, fixtures under `fixtures/stable/`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
-`buildHas.js`, `steady.js`, `pnm.js` and `runDir.js`.
+`buildHas.js`, `steady.js`, `pnm.js` and `runDir.js`, and the page objects in `e2e/lib/pages/`: `link.js` is the
+link's steps (the way in, the code, the key, Linked, the introduction), each asserting the screen it ends on and
+failing by name, on the model of `lib/keyringRoles.js`; `run-vta-link.js` runs on it, and a leg that links before its
+own rows can too.
 
 ## What stays out of the repo
 
