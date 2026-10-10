@@ -44,12 +44,15 @@
     "!**/__mocks__"
   ],
   "scripts": {
-    "build": "echo 'building core \ud83c\udfd7\ufe0f' && yarn clean && bob build && echo 'core built \u2705'",
+    "build": "echo 'building core 🏗️' && yarn clean && bob build && echo 'core built ✅'",
     "clean": "rimraf ./lib",
     "test": "TZ=GMT jest",
     "coverage": "TZ=GMT jest --coverage",
     "test:watch": "TZ=GMT jest --watch --notify --notifyMode=change --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "testids": "node scripts/gen-testids.mjs",
+    "testids:check": "node scripts/gen-testids.mjs --check",
+    "testids:test": "node --test scripts/gen-testids.test.mjs"
   },
   "devDependencies": {
     "@animo-id/expo-secure-environment": "0.1.5",

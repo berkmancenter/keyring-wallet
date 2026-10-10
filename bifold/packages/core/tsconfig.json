@@ -4,12 +4,8 @@
     "baseUrl": "src",
     "outDir": "./lib",
     "paths": {
-      "@openvtc/trust-tasks": [
-        "../node_modules/@openvtc/trust-tasks/dist/index.d.ts"
-      ],
-      "@openvtc/trust-tasks/*": [
-        "../node_modules/@openvtc/trust-tasks/dist/*"
-      ]
+      "@openvtc/trust-tasks": ["../node_modules/@openvtc/trust-tasks/dist/index.d.ts"],
+      "@openvtc/trust-tasks/*": ["../node_modules/@openvtc/trust-tasks/dist/*"]
     }
   },
   "exclude": [
@@ -20,6 +16,7 @@
     "lib",
     "build",
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.test.tsx",
+    "scripts"
   ]
 }
