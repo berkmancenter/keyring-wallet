@@ -158,6 +158,12 @@ runner (the link, the push probe, the agent header) print `SKIP — no Farm in C
   FirebaseInstanceId / BugleNetwork lines on run 38044225803, none from the wallet), so the token row counts only
   lines from the wallet's pid or naming its package. `smoke-android.sh` counts every line; that holds on the gate
   Mac's persistent AVD, which did that registration long ago, and would fail the same way on a re-created one.
+  "Boot complete" is not settled: on run 38045665103 System UI hung during a 195 s boot and its "isn't
+  responding" dialog covered the app from before the plain launch to the welcome driver (both welcome rows FAIL,
+  never seen locally). `ci/android-settle.sh` now waits after the boot (no ANR window, launcher focused, guest
+  load at or under its cores, 90 s at most; `ci/android-anr.sh` taps the dialog's Wait), a step of its own in the
+  table; the welcome driver waits 45 s for the first slide on Android and once taps Wait itself, and the leg runs
+  it a second time when System UI stopped responding during the first, saying so in the rows.
 - Timing: every workflow step marks the clock (`ci/mark.sh`), the leg writes its own steps to `steps.tsv`, and
   `ci/summary.mjs` puts one table (and the rows) on the job summary. The leg dir is uploaded as an artifact.
 - The job fails only when a ROW says FAIL or the leg broke before its rows; SKIP rows and a driver's exit 3 do not.

@@ -38,16 +38,42 @@ farm_rows() {
     skip "$r-$p" "run-agent-header.mjs needs the linked agent"
   done
 }
-# The welcome driver's own lines (ROW/LEG), folded in; the timing it prints becomes two steps.
-welcome() {
-  local t0; t0=$(date +%s)
-  (cd "$E2E" && perl -e 'alarm 1200; exec @ARGV' node run-welcome.mjs > "$LEG_DIR/$PLATFORM-welcome.out" 2>&1); local rc=$?
-  grep -E '^(ROW|LEG)' "$LEG_DIR/$PLATFORM-welcome.out"
-  local a s; a=$(grep -oE '^\[welcome\] appium ready [0-9]+' "$LEG_DIR/$PLATFORM-welcome.out" | grep -oE '[0-9]+$'); s=$(grep -oE '^\[welcome\] session ready [0-9]+' "$LEG_DIR/$PLATFORM-welcome.out" | grep -oE '[0-9]+$')
-  [ -z "$a" ] || step_at appium-start "$t0" "$a"
-  [ -z "$s" ] || step_at appium-session "$((t0 + ${a:-0}))" "$s"
-  step welcome-driver "$t0"
-  driver_rc "welcome-driver-$PLATFORM" "$rc" "$LEG_DIR/$PLATFORM-welcome.out"
+# The welcome driver, one try: its output in $WELCOME_OUT and exit code in $WELCOME_RC; the timing it prints
+# becomes two steps (named with the try's suffix, "" or "-retry"). welcome_rows then folds its ROW/LEG lines in,
+# with a note appended to each ROW's detail when given.
+welcome_try() {
+  local sfx=${1:-} t0; t0=$(date +%s); WELCOME_OUT=$LEG_DIR/$PLATFORM-welcome$sfx.out
+  (cd "$E2E" && perl -e 'alarm 1200; exec @ARGV' node run-welcome.mjs > "$WELCOME_OUT" 2>&1); WELCOME_RC=$?
+  local a s; a=$(grep -oE '^\[welcome\] appium ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$'); s=$(grep -oE '^\[welcome\] session ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$')
+  [ -z "$a" ] || step_at "appium-start$sfx" "$t0" "$a"
+  [ -z "$s" ] || step_at "appium-session$sfx" "$((t0 + ${a:-0}))" "$s"
+  step "welcome-driver$sfx" "$t0"
+}
+welcome_rows() {
+  local note; note=$(printf '%s' "${1:-}" | sed -e 's/[\/&\\]/\\&/g')
+  grep -E '^(ROW|LEG)' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
+  driver_rc "welcome-driver-$PLATFORM" "$WELCOME_RC" "$WELCOME_OUT"
+}
+# Android: a System UI ANR dialog (the emulator's own, on a loaded runner) covers the app and the driver finds no
+# slide. One up before the driver is dismissed first; one that appeared during the try (its window, or an "ANR in
+# com.android.systemui" line in logcat since the try began) is dismissed and the driver is run once more, and the
+# rows say so. The same lines otherwise as iOS.
+welcome_android() {
+  local note="" anr0 anr1 rc
+  "$CI" "$E" > "$LEG_DIR/android-anr-before-welcome.txt" 2>&1; rc=$?
+  case $rc in 2) note=" (a System UI ANR dialog was up before the driver: $(tr '\n' ';' < "$LEG_DIR/android-anr-before-welcome.txt"))";; 1) note=" (a System UI ANR dialog is up and would not go: $(tr '\n' ';' < "$LEG_DIR/android-anr-before-welcome.txt"))";; esac
+  anr0=$(grep -c 'ANR in com.android.systemui' "$LEG_DIR/android-logcat-all.txt")
+  welcome_try
+  anr1=$(grep -c 'ANR in com.android.systemui' "$LEG_DIR/android-logcat-all.txt")
+  "$CI" "$E" > "$LEG_DIR/android-anr-after-welcome.txt" 2>&1; rc=$?
+  if grep -qE '^(ROW .* FAIL|LEG .* BROKEN)' "$WELCOME_OUT" && { [ "$anr1" -gt "$anr0" ] || [ "$rc" != 0 ] || grep -q 'ANR dialog' "$WELCOME_OUT"; }; then
+    echo "welcome: System UI not responding during the first try (logcat ANR lines $anr0 -> $anr1; after it: $(tr '\n' ';' < "$LEG_DIR/android-anr-after-welcome.txt")); retrying once"
+    grep -E '^(ROW|LEG)' "$WELCOME_OUT" | sed 's/^/  first try: /'
+    adb -s "$E" shell am force-stop $BID; sleep 3
+    welcome_try -retry
+    note=" (second try: the first found no slide while System UI was not responding, logcat ANR lines $anr0 -> $anr1; dialog dismissed, driver run again)"
+  fi
+  welcome_rows "$note"
 }
 
 case $PLATFORM in
@@ -74,7 +100,7 @@ ios)
   xcrun simctl terminate "$SIM" $BID 2>/dev/null
   # The welcome slides (wallet #339) on the fresh install, before onboarding: link, agent words, icon size.
   export PLATFORM=ios IOS_APP=$APP UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=${DEVVER:-26.3} APPIUM_PORT=${APPIUM_PORT:-4723} WDA_LOCAL_PORT=${WDA_LOCAL_PORT:-8100} E2E_RELEASE=1
-  welcome
+  welcome_try; welcome_rows
   farm_rows ios
   echo "SMOKE iOS (CI) done $(date -u +%T)Z"
   ;;
@@ -103,7 +129,8 @@ android)
   adb -s "$E" shell am force-stop $BID
   # The welcome slides on the fresh install (the same driver as iOS; its icon row is iOS-only and says so).
   export PLATFORM=android APPIUM_PORT=${APPIUM_PORT:-4723} ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E UDID=$E E2E_RELEASE=1
-  welcome
+  CI=$(cd "$(dirname "$0")/../ci" && pwd)/android-anr.sh
+  welcome_android
   farm_rows android
   skip android-no-token-activity-through-onboarding "counted through onboarding and the probe"
   sleep 2; kill $LC 2>/dev/null

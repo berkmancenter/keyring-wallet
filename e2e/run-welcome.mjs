@@ -44,8 +44,21 @@ try {
   await d.activateApp(BID);
   await sleep(4000);
 
-  // The welcome slide's link, by its label-derived testID; tapping it should bring Safari forward.
-  const link = await existsTestId(d, "LearnMoreAboutTheKeyringProject", 15000);
+  // The welcome slide's link, by its label-derived testID; tapping it should bring Safari forward. An emulator
+  // on a loaded CI runner shows its first slide late, and can have System UI's own "isn't responding" dialog
+  // over it (run 38045665103): Android waits longer, and once dismisses that dialog (its Wait button) and looks again.
+  let link = await existsTestId(d, "LearnMoreAboutTheKeyringProject", PLATFORM === "android" ? 45000 : 15000);
+  let anr = "";
+  if (!link && PLATFORM === "android") {
+    const wait = await d.$("id=android:id/aerr_wait");
+    if (await wait.isExisting().catch(() => false)) {
+      await wait.click().catch(() => undefined);
+      console.log("[welcome] a System UI ANR dialog was over the app; tapped Wait");
+      await sleep(2000);
+      link = await existsTestId(d, "LearnMoreAboutTheKeyringProject", 20000);
+      anr = link ? "; found after dismissing a System UI ANR dialog" : " (a System UI ANR dialog was over the app; dismissed, still no link)";
+    }
+  }
   let opened = "";
   if (link) {
     await tapTestId(d, "LearnMoreAboutTheKeyringProject", 10000);
@@ -57,7 +70,7 @@ try {
     await sleep(2000);
   }
   const browserCame = PLATFORM === "android" ? opened !== "?" && opened !== BID : opened === "com.apple.mobilesafari";
-  row("welcome-learn-more", link && browserCame, link ? `the link is there; tapping it brought ${opened} forward` : "no LearnMoreAboutTheKeyringProject on the first slide");
+  row("welcome-learn-more", link && browserCame, link ? `the link is there; tapping it brought ${opened} forward${anr}` : `no LearnMoreAboutTheKeyringProject on the first slide${anr}`);
 
   // To the agent slide: Next until its words show (4th of 5).
   let src = await d.getPageSource();

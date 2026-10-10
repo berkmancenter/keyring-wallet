@@ -10,6 +10,9 @@ serial=$(adb devices | awk '$1 ~ /^emulator-/ {print $1; exit}')
 rel=$(adb -s "$serial" shell getprop ro.build.version.release | tr -d '\r'); sdk=$(adb -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')
 abi=$(adb -s "$serial" shell getprop ro.product.cpu.abi | tr -d '\r'); model=$(adb -s "$serial" shell getprop ro.product.model | tr -d '\r')
 echo "emulator $serial: $model, Android $rel (API $sdk), $abi; $(adb -s "$serial" shell cat /proc/meminfo | head -1 | tr -d '\r')"
+# Boot complete is not settled: System UI can be hung with its ANR dialog over everything (run 38045665103).
+"$HERE/mark.sh" settle-emulator
+"$HERE/android-settle.sh" "$serial" "${ANDROID_SETTLE_MAX:-90}"
 "$HERE/mark.sh" leg
 rc=0
 bash "$HERE/../legs/smoke-ci.sh" android "$RUNNER_TEMP/build/keyring-release-test.apk" "$serial" "$model $abi API $sdk" "$rel" > "$LEG_DIR/leg.log" 2>&1 || rc=$?
