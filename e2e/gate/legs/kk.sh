@@ -1,12 +1,13 @@
 #!/bin/bash
 # K↔K: an iOS applicant meets the seated iOS vetter (both Keyring) and joins C by vetting. The applicant links to
 # the main runner; the vetter simulator is seated once, by hand, and only gets the build installed over it.
-# Rows: kk-link, kk-vetting, a foot-<shot> row per persona line the vetting driver captures (#322), and id305:
-# the applicant's community card shows the DID the community lists as its newest member. id305 runs here,
-# before the cleanup removes the applicant's key (the 235 gate lost it to running it after).
+# Rows: kk-link, kk-vetting, and from the vetting driver's own ROW lines (run-vti-vetting.js, lib/rows.js): a
+# foot-<shot> row per persona line it captures (#322), desk-finished-identity (#326) and id305: the applicant's
+# community card shows the DID the community lists as its newest member. The driver reads the member list
+# while the applicant's key is still on the agent (the 235 gate lost id305 to running it after the cleanup).
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL C_DID C_REST C_ADMIN_CRED C_NAME VETTER_SIM_UDID VETTER_SIM_NAME VETTER_DID APPLICANT_SIM_UDID APPLICANT_SIM_NAME IOS_VERSION
-leg_begin kk "$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)"
+leg_begin kk "$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)" "$CAND_APP"
 T0=$(stamp)
 wda_stop() { local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$1" | grep -v grep | awk '{print $1}'); do kill "$p"; done; }
 fin() {
@@ -33,25 +34,8 @@ VETTER_DID=$VETTER_DID E2E_KEEP_STATE=1 E2E_KEEP_APP=1 APPLICANT_DOOR=link PLATF
   perl -e 'alarm 1800; exec @ARGV' node run-vti-vetting.js > "$LEG_DIR/vetting.out" 2>&1; rc=$?
 if [ $rc -eq 0 ]; then row kk-vetting PASS "$(( $(date +%s) - t ))s"
 else row kk-vetting FAIL "rc=$rc · $(grep -E '^\[step\].*FAILED' "$LEG_DIR/vetting.out" | tail -1 | cut -c1-160)"; fi
-grep -E '^(PERSONA-DID|\[step\])' "$LEG_DIR/vetting.out" | cut -c1-200
-while read -r _ shot st rest; do
-  case $st in clear) row "foot-$shot" PASS "$rest" ;; *) row "foot-$shot" FAIL "$st $rest" ;; esac
-done < <(grep -E '^FOOT ' "$LEG_DIR/vetting.out")
-# #326: the vetter's desk lists the finished vetting by the identity the applicant joined with.
-deskdid=$(grep -oE '^PERSONA-DID kk-vetter-desk-finished did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
-carddid=$(grep -oE '^PERSONA-DID kk-applicant-community-card did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
-deskline=$(grep -oE '^DESK-FINISHED "[^"]*"' "$LEG_DIR/vetting.out" | cut -d'"' -f2)
-if [ -n "$deskdid" ] && [ "$deskdid" = "$carddid" ] && [ -n "$deskline" ]; then row desk-finished-identity PASS "\"$deskline\" · $deskdid"
-else row desk-finished-identity FAIL "desk \"${deskline:-no line}\" ${deskdid:-no DID}; applicant's card ${carddid:-none}"; fi
-
-if selected id305; then
-  # The applicant's community card, as the vetting run captured it (its "Show the code they see" line): the
-  # identity C must list as its newest member. Read from that capture, not a second driver session (236 gate:
-  # a separate iOS session found the toggle but read an empty line).
-  shown=$(grep -oE '^PERSONA-DID kk-applicant-community-card did:[^ ]+' "$LEG_DIR/vetting.out" | awk '{print $3}')
-  newest=$(c_admin members | python3 -c "
-import sys,json; t=sys.stdin.read(); d=json.loads(t[t.index('{'):]) if '{' in t else {}
-m=sorted(d.get('items') or [], key=lambda x: x.get('joinedAt','')); print(m[-1]['did'] if m else '-')")
-  if [ -n "$shown" ] && [ "$shown" = "$newest" ]; then row id305 PASS "the card shows $shown, the community's newest member"
-  else row id305 FAIL "the card shows ${shown:-nothing}; newest member $newest"; fi
-fi
+grep -E '^(PERSONA-DID|DESK-FINISHED|\[step\])' "$LEG_DIR/vetting.out" | cut -c1-200
+# The driver's side rows: foot-<shot> (#322), desk-finished-identity (#326) and id305, read from its capture of
+# the applicant's community card, not a second driver session (236 gate: a separate iOS session found the
+# toggle but read an empty line).
+take_rows "$LEG_DIR/vetting.out"

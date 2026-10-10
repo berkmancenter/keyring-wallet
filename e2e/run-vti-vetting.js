@@ -29,11 +29,16 @@ import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
 import { capturePersonaDid } from "./lib/personaDid.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
+import { createRows } from "./lib/rows.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// The K↔K leg's side rows (lib/rows.js): foot-<shot> for each persona line captured (#322), desk-finished-identity
+// (#326) and id305. The exit code stays the ceremony's own (0 vetted and a member, 1 not): a side row that fails
+// is read from its ROW line, not from the exit code.
+const rows = createRows({ label: "vti-vetting" });
 const INVITE = path.resolve(here, "../scripts/openvtc/local-vti-stack/invite-persona.sh");
 const APPROVER = path.resolve(here, "../scripts/openvtc/local-vti-stack/approver-setup.sh");
 const platforms = (process.env.PLATFORMS || "android,ios").split(",");
@@ -390,10 +395,10 @@ try {
     await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
     await roles.applicant.awaitAccepted(applicant, {}, o);
     await screenshot(applicant, "vetting-02-accepted");
-    await capturePersonaDid(applicant, "VettingRequestMine", "kk-applicant-request-card");
+    await capturePersonaDid(applicant, "VettingRequestMine", "kk-applicant-request-card", { rows });
     await checkVettingStep(applicant, "applicant, request accepted");
     await roles.vetter.awaitRequest(vetter, {}, o);
-    await capturePersonaDid(vetter, "VettingDeskApplicant", "kk-vetter-desk");
+    await capturePersonaDid(vetter, "VettingDeskApplicant", "kk-vetter-desk", { rows });
     await checkVettingStep(vetter, "desk, a request waiting");
     const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
     const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
@@ -418,7 +423,7 @@ try {
     // The applicant waits for the statement; away and back, the step stays.
     if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
-    await capturePersonaDid(vetter, "VettingCheckApplicant", "kk-vetter-step4");
+    await capturePersonaDid(vetter, "VettingCheckApplicant", "kk-vetter-step4", { rows });
     // A gate leg that changes the world around the attest — the Farm 0.47
     // gate's (c) makes the community unreachable for it, so the desk must
     // choose the statement shape by the vetter's own grant — runs its own
@@ -475,10 +480,20 @@ try {
     }
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
+    let cardDid;
     if (process.env.KEYRING_COMMUNITY_DID) {
       await byTestId(applicant, "MyAgent").click().catch(() => undefined);
       await sleep(2000);
-      await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card");
+      cardDid = await capturePersonaDid(applicant, `AgentCommunityIdentity_${communityCardKey(process.env.KEYRING_COMMUNITY_DID)}`, "kk-applicant-community-card", { rows });
+      if (process.env.PERSONA_SHOTS) {
+        // id305: the card's "Show the code they see" is the identity the community lists as its newest member.
+        // The member list is read inside the row: a community that does not answer fails id305, not the ceremony.
+        await rows.row("id305", () => {
+          const newest = (admin("members").items ?? []).sort((a, b) => String(a.joinedAt ?? "").localeCompare(String(b.joinedAt ?? ""))).at(-1)?.did ?? "-";
+          const ok = Boolean(cardDid) && cardDid === newest;
+          return { ok, detail: ok ? `the card shows ${cardDid}, the community's newest member` : `the card shows ${cardDid ?? "nothing"}; newest member ${newest}` };
+        });
+      }
     }
     if (process.env.PERSONA_SHOTS) {
       // #326: the vetter's desk lists a finished vetting by the applicant's identity word and its DID.
@@ -494,8 +509,13 @@ try {
       }
       await scrollToTestId(vetter, "VettingDeskFinishedIdentity", 4).catch(() => undefined);
       const line = (await textOf(vetter, "VettingDeskFinishedIdentity").catch(() => "")).trim();
-      const did = await capturePersonaDid(vetter, "VettingDeskFinishedApplicant", "kk-vetter-desk-finished");
+      const did = await capturePersonaDid(vetter, "VettingDeskFinishedApplicant", "kk-vetter-desk-finished", { rows });
       console.log(`DESK-FINISHED "${line}" ${did ?? "(no DID)"}`);
+      // #326: the vetter's desk lists the finished vetting by the identity the applicant joined with.
+      await rows.row("desk-finished-identity", () => ({
+        ok: Boolean(did) && did === cardDid && Boolean(line),
+        detail: did && did === cardDid && line ? `"${line}" · ${did}` : `desk "${line || "no line"}" ${did ?? "no DID"}; applicant's card ${cardDid ?? "none"}`,
+      }));
     }
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
     if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
