@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 /**
- * Did the Mac sleep during a leg, and is it on battery? The one tested answer the gate uses for both.
+ * Did the Mac sleep during a leg? The one tested answer the gate uses.
  *
  * A gate leg that overlaps a sleep is not a verdict on the app: on 2026-10-09 (auto-run 1009-1608) a lid-closed sleep
- * on battery (682 s) ended both kk iOS sessions by Appium's 300 s newCommandTimeout, and the rows read as FAILs. caffeinate
- * does not hold off a clamshell sleep on battery, so the gate also refuses to start on battery.
+ * on battery (682 s) ended both kk iOS sessions by Appium's 300 s newCommandTimeout, and the rows read as FAILs; the
+ * gate marks such a leg ENV instead.
  *
  *   node sleeps.mjs --from <epoch s> --to <epoch s> [--log <file>]   sleeps overlapping the window: one line each, exit 0;
  *                                                                    none: no output, exit 1
- *   node sleeps.mjs --battery [--batt <file>]                         "battery" (exit 0) or "ac" (exit 1)
- * Without --log / --batt it reads `pmset -g log` / `pmset -g batt`.
+ * Without --log it reads `pmset -g log`.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -36,11 +35,6 @@ export function sleepsDuring(sleeps, from, to) {
   return sleeps.filter((s) => s.start < to && s.end > from);
 }
 
-/** `pmset -g batt`'s first line names the source: "Now drawing from 'Battery Power'" or "'AC Power'". */
-export function onBattery(battText) {
-  return /drawing from 'Battery Power'/.test(String(battText));
-}
-
 const hms = (t) => new Date(t * 1000).toISOString().slice(11, 19);
 export function describe(s) {
   return `Mac slept ${hms(s.start)}Z–${hms(s.end)}Z (${s.secs} s, ${s.cause})`;
@@ -50,19 +44,12 @@ function cli(argv) {
   const opt = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--battery') opt.battery = true;
-    else if (['--from', '--to', '--log', '--batt'].includes(a)) opt[a.slice(2)] = argv[++i];
-  }
-  if (opt.battery) {
-    const text = opt.batt ? readFileSync(opt.batt, 'utf8') : execFileSync('pmset', ['-g', 'batt'], { encoding: 'utf8' });
-    const b = onBattery(text);
-    process.stdout.write(b ? 'battery\n' : 'ac\n');
-    return b ? 0 : 1;
+    if (['--from', '--to', '--log'].includes(a)) opt[a.slice(2)] = argv[++i];
   }
   const from = Number(opt.from);
   const to = Number(opt.to);
   if (!Number.isFinite(from) || !Number.isFinite(to)) {
-    process.stderr.write('sleeps.mjs: --from <epoch> --to <epoch> [--log file], or --battery\n');
+    process.stderr.write('sleeps.mjs: --from <epoch> --to <epoch> [--log file]\n');
     return 3;
   }
   const text = opt.log ? readFileSync(opt.log, 'utf8') : execFileSync('pmset', ['-g', 'log'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });

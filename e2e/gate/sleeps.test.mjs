@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describe, onBattery, parseSleeps, sleepsDuring } from './sleeps.mjs';
+import { describe, parseSleeps, sleepsDuring } from './sleeps.mjs';
 
 // `pmset -g log` around auto-run 1009-1608's kk leg (lines as the Mac wrote them, local time +0200).
 const LOG = [
@@ -43,10 +43,4 @@ test('a leg that starts during a sleep overlaps it', () => {
 test('other timezones and no sleeps at all', () => {
   assert.equal(parseSleeps("2026-03-01 09:00:00 -0500 Sleep  \tEntering Sleep state due to 'Idle Sleep':TCPKeepAlive=active Using AC 10 secs")[0].start, Date.parse('2026-03-01T14:00:00Z') / 1000);
   assert.deepEqual(parseSleeps('nothing here\n'), []);
-});
-
-test('battery or AC from pmset -g batt', () => {
-  assert.equal(onBattery("Now drawing from 'Battery Power'\n -InternalBattery-0 (id=22937699)\t95%; discharging; 8:16 remaining present: true"), true);
-  assert.equal(onBattery("Now drawing from 'AC Power'\n -InternalBattery-0 (id=22937699)\t100%; charged; 0:00 remaining present: true"), false);
-  assert.equal(onBattery(''), false);
 });

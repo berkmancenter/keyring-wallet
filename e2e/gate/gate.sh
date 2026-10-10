@@ -102,7 +102,6 @@ cmd_run() {
     --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;; *) usage ;;
   esac; done
   [ -n "$pin" ] || usage
-  battery_refuse
   gate_env; use_build "$pin"
   run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
@@ -122,7 +121,6 @@ cmd_rerun() {
   [ "$only" = --only-failed ] || usage
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
-  battery_refuse
   gate_env; use_build "$pin"
   run_lock
   local rd; rd=$(new_run "$pin" "rerun")
@@ -156,15 +154,6 @@ lock_live() {
   if [ -n "$p" ]; then kill -0 "$p" 2>/dev/null; return; fi
   now=$(date +%s); m=$(stat -f %m "$d" 2>/dev/null || echo "$now"); [ $((now - m)) -lt 60 ]
 }
-# On battery a closed lid sleeps the Mac whatever caffeinate holds (1009-1608), so no gate starts on battery: the watcher
-# waits for the next cycle, a person's run stops here. GATE_ALLOW_BATTERY=1 starts anyway (the lid kept open, by hand).
-on_battery() { node "$GATE_SRC/sleeps.mjs" --battery >/dev/null 2>&1; }
-battery_refuse() {
-  on_battery || return 0
-  [ "${GATE_ALLOW_BATTERY:-}" = 1 ] && { say "on battery: starting anyway (GATE_ALLOW_BATTERY=1); keep the lid open"; return 0; }
-  die "the Mac is on battery: a closed lid would sleep it mid-leg (caffeinate does not stop that). Plug in, or GATE_ALLOW_BATTERY=1"
-}
-
 run_lock() {
   local d=$GATE_HOME/run.lock.d tag=$$.$RANDOM
   while ! mkdir "$d" 2>/dev/null; do
@@ -208,7 +197,6 @@ cmd_watch_main() {
       sha=${pair%% *}; run=${pair##* }
       if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
       elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
-      elif on_battery; then say "main build ${sha:0:8} is new, but the Mac is on battery (a closed lid sleeps it): next cycle"
       elif ! watch_checkout_ready; then :
       else
         say "new green main build ${sha:0:8} (run $run)"
