@@ -14,6 +14,39 @@ jobs:
     steps:
       - name: Checkout aries-mobile-agent-react-native
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # The changed-files step diffs the PR against its base with a three-dot range,
+          # which needs the merge base. The default shallow checkout (depth 1) has no
+          # parents for the merge commit, that diff failed, and the formatter and linter
+          # steps "skipped" on PRs that changed many files.
+          fetch-depth: 0
+
+      - name: Changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          # The formatter and linter steps check only the files this PR changes (the
+          # repo-wide runs carry pre-existing debt). The list is computed once, here, and
+          # any failure to compute it fails the job instead of leaving an empty list that
+          # the steps below would read as "nothing to check".
+          BASE="origin/${BASE_REF}"
+          if ! git merge-base "$BASE" HEAD >/dev/null; then
+            echo "::error::No merge base between $BASE and HEAD; the checkout is too shallow to diff the PR"
+            exit 1
+          fi
+          git diff --name-only "$BASE...HEAD" > "$RUNNER_TEMP/changed-files-all.txt"
+          if [ ! -s "$RUNNER_TEMP/changed-files-all.txt" ] && [ "${PR_CHANGED_FILES:-0}" -gt 0 ]; then
+            echo "::error::The diff against $BASE is empty, but GitHub lists $PR_CHANGED_FILES changed files in this PR; refusing to pass without checking anything"
+            git diff --stat "$BASE...HEAD" || true
+            exit 1
+          fi
+          # Deleted files cannot be formatted or linted; keep added, copied, modified, renamed, type-changed.
+          git diff --name-only --diff-filter=ACMRT "$BASE...HEAD" > "$RUNNER_TEMP/changed-files.txt"
+          echo "Files changed against $BASE ($(wc -l < "$RUNNER_TEMP/changed-files.txt" | tr -d ' ') to check):"
+          cat "$RUNNER_TEMP/changed-files.txt"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -36,8 +69,7 @@ jobs:
           # exits 0, so this step passed on every PR regardless of formatting. Check for real,
           # scoped to changed files on PRs (repo-wide has pre-existing debt, same as lint).
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}"
-            CHANGED="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.(js|jsx|json|ts|tsx|md|yml|yaml)$' | grep -vE '^(samples/app/(ios|android)/|.*/node_modules/)' || true)"
+            CHANGED="$(grep -E '\.(js|jsx|mjs|cjs|json|ts|tsx|md|yml|yaml)$' "$RUNNER_TEMP/changed-files.txt" | grep -vE '^(samples/app/(ios|android)/|.*/node_modules/)' || true)"
             if [ -z "$CHANGED" ]; then
               echo "No formattable files changed; skipping prettier"
               exit 0
@@ -51,8 +83,7 @@ jobs:
         run: |
           # Full-repo lint has pre-existing debt (~90+ errors on main). On PRs, lint changed JS/TS only.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}"
-            CHANGED="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.(js|jsx|ts|tsx)$' || true)"
+            CHANGED="$(grep -E '\.(js|jsx|mjs|cjs|ts|tsx)$' "$RUNNER_TEMP/changed-files.txt" || true)"
             if [ -z "$CHANGED" ]; then
               echo "No JS/TS files changed; skipping lint"
               exit 0
