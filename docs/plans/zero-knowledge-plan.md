@@ -1,6 +1,6 @@
 # Zero-knowledge in Keyring — where the proofs live, and what the wallet does about them
 
-**Status:** Proposed. No code written. **Held at ZK0 by decision, not by drift:** the client half of hidden vetting cannot be designed against guessed message shapes, so this plan waits for upstream's specifications and services rather than starting early and rewriting later. Until then it tracks upstream and keeps its dependencies current.
+**Status:** Proposed as a shipping design; **proven locally, not built into the app.** The hold is lifted for the applicant's side: **decided 2026-10-11 (Alberto) — the phone proves for the applicant** (§3.1, D4), without waiting on an agent-side prover that nobody upstream is building (§8 B3). Nothing is in `app/` or `bifold/`; the evidence is a ladder of local reference rungs, `tsp-reference/ref-24-pcs-host` through `ref-29-pcs-swift` on `feat/pcs-rungs`, summarised in §6.0. The **vetter's** side stays with the agent and is still held (§3.1, D3), as are Z2 and Z3.
 **Reasoning:** [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) — the research behind §2–§4: the positions it supersedes (on-device proving), the evidence for each, and what was not verifiable.
 **Siblings consulted:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 owns the credential-format decisions this plan inherits (VRC/VWC proof sets, evidence commitments, canonical transcript); [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture, consent card and approvals this plan's step-up rides on; [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the V0 vetting ceremony that hidden vetting keeps unchanged, and its §2.4 decision gates Track Z1; [`vsc-migration-plan.md`](./vsc-migration-plan.md) owns the witness-credential type Track Z2 would present; [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) owns the vetting screens Track Z1 changes.
 **Dependency direction:** nothing in the sibling plans waits on this one. This plan waits on upstream (§8) and on two sibling decisions (§3.3, §3.4).
@@ -113,7 +113,7 @@ Three facts specific to a phone bear on it. The first is general; the second and
 **So, split by role:**
 
 - **Vetter side — settled for us, the VTA proves.** Points 2 and 3 are decisive: an unattended collection schedule and a single source of truth for what has been spent are not things a phone can offer. A Keyring user who vouches does so through their agent.
-- **Applicant side — open (decision D4, §8), and on the ecosystem's own code the answer is the agent.** [[W39]]'s client-side placement is the reference implementation for this operation, and none of the vetter's constraints bind here — but three facts in the pinned clones point the other way, and they are about what a gate can do rather than about where a file sits (§3.1.1). The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. **The working assumption — the VTA proves both sides — is now the better-supported reading**, on the evidence in §3.1.1 rather than on convenience. What would overturn it is a concrete blocker rather than a preference: if upstream ships only a client-side prover and never a prove-as-persona task, we either wait or carry a divergent path, and D4 records that.
+- **Applicant side — decided 2026-10-11: the phone proves (D4), on the ecosystem's own precedent.** [[W39]]'s client-side placement is the reference implementation for this operation, and none of the vetter's constraints bind here — but three facts in the pinned clones point the other way, and they are about what a gate can do rather than about where a file sits (§3.1.1). The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. The evidence in §3.1.1 argued the other way, on what a step-up gate can enforce; it is answered not by rebuttal but by **the blocker that §3.1 anticipated having arrived**: a prove-as-persona task over non-exportable keys does not exist, no upstream branch, issue or changelog is building one (§8 B3, companion F21), and upstream's own client proves locally ([[W39]]). The choice was therefore between waiting indefinitely and carrying the path upstream's reference client already carries. **Keyring proves the applicant's side on the phone**, and §3.1.2 records what that costs us — chiefly the loss of the agent-side approval gate — as accepted rather than solved. If an agent-side prover appears, §3.6's method-neutral contract lets it become a second path without a redesign; we do not wait for it.
 
 **Rejected for the vetter's side: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. For a vetter it is still ruled out by points 2 and 3: it cannot keep an unattended schedule, and it creates a second source of truth for what has been spent. For an applicant those objections do not apply, which is exactly why D4 is open rather than closed — and `ref-03d` is the measurement that says the phone could carry it if we chose to.
 
@@ -142,16 +142,16 @@ Two further facts settle it for a *proving* key specifically:
 
 **Conclusion:** the proving key belongs in the VTA, non-exportable, with the agent proving on request — not because keys should live in agents as a matter of taste, but because the hardware-attested step-up we are building is unenforceable on an exported key, and because the two reasons the terminal client borrows (key agreement, signing as a persona) do not apply to a proof. That is the **default**, and §3.1.2 says why it cannot be the only path.
 
-### 3.1.2 Both paths ship: the agent by default, the phone by the holder's choice
+### 3.1.2 Both paths ship; as of 2026-10-11 the phone is the one we build
 
-**Decided 2026-09-28, and upstream's design says the same.** Keyring offers agent-side proving as the default and an on-phone path for a holder who chooses it. C7 keeps precisely that fallback, with precisely our cost line: *"The fallback, `usk` local to openvtc, remains possible for a member who runs no trusted VTA, at the cost of no step-up gate"* ([[PCS-DESIGN]] `:626-627`). So the dual path is not a divergence from upstream — it is upstream's design, and the §3.1.1 argument explains why the default falls the way it does. Two further reasons:
+**Decided 2026-09-28 that both paths ship; decided 2026-10-11 which one we build first.** Keyring builds the **on-phone** applicant path, and the agent path remains in the design for whenever an agent-side prover exists. The 09-28 ordering — agent by default, phone by the holder's choice — is superseded on this point and kept below because the cost table it produced is what now describes the path we chose. C7 keeps precisely that fallback, with precisely our cost line: *"The fallback, `usk` local to openvtc, remains possible for a member who runs no trusted VTA, at the cost of no step-up gate"* ([[PCS-DESIGN]] `:626-627`). So the dual path is not a divergence from upstream — it is upstream's design, and the §3.1.1 argument explains why the default falls the way it does. Two further reasons:
 
 - **The specification refuses a delegation-only client.** *"Mediated proving, where a holder delegates proving to an agent, … MUST NOT be the only path available to a holder"* ([[ZKP-SPEC]], Accessibility Considerations). The surrounding rationale is proving cost on constrained devices and not excluding holders; read with the sentence, the concern is that a holder is never *forced* to delegate. A client offering only the agent path would be the thing that sentence forbids.
 - **Delegation is a trust choice, and it is not ours to make for someone.** Agent-side proving means the agent can compute what the holder proves. Our own §3.5 accepts that trust for the vetter; a holder who does not accept it should still be able to participate.
 
 **What each path costs, stated so the UI can say it honestly:**
 
-| | Agent proves (default) | Phone proves (opt-in) |
+| | Agent proves (designed, unbuilt anywhere) | **Phone proves (what we build)** |
 |---|---|---|
 | Hardware-attested approval before a proof | **Yes** — the gate of §3.2 duty 1 | **No.** Nothing on the agent side can gate a proof made locally; the only gate is the app's own |
 | Unattended duties (a vetter's allowance schedule, one record of what was spent) | Kept | **Not possible on a phone** (§3.1), so this path is for the applicant's side only |
@@ -249,9 +249,9 @@ Distinctness is therefore enforced where it must be, at verification, and the cl
 
 This is the same asymmetry the *named* path already documents in `bifold/packages/trust-tasks/src/vetting/evaluate.ts`: the client counts vouchers by DID while a community counts by member record, so *"the client can be optimistic where the community is not. It can never be the other way round."* Hidden mode inherits it under a different mechanism.
 
-### 4.1.2 What the phone path would actually cost, if it is ever chosen
+### 4.1.2 What the phone path costs — measured, and accepted
 
-Measured and read on 2026-10-10, so the choice is not made on guesses:
+Measured and read on 2026-10-10, and these numbers are why the 10-11 decision was takeable rather than a leap. **The four costs in the last bullet are accepted, not solved** — an unaudited library in the shipped app, arkworks across three architectures, a prototype dependency, and no agent-side approval gate on this path. §6.0 records what the rungs then measured on top of this reading.
 
 - **It is not cryptography we would write.** `openvtc-vetting-pcs` is published on crates.io (0.5.0, Apache-2.0, 2026-10-03) and its `ApplicantEngine` already carries the whole state machine — `new`, `id`, `snapshot`, `restore`, `held`, `statement_meta`, `receive`, `replace`, `submit`. The work is a Rust→UniFFI native module plus key storage and screens, which is the shape of both our hardware-attestation module and upstream's own mobile agent.
 - **Speed is not a constraint.** The library's own bench at k = 5, run here: prove 11.7 ms, verify 10.4 ms, attest 2.5 ms (§2.2). Several times that on a phone is still imperceptible in this ceremony. This also reproduces upstream's "≈12 ms" claim independently, which until now this plan could only cite.
@@ -309,6 +309,42 @@ This covers Groth16 predicate proofs with scoped nullifiers (personhood, livenes
 ## 6. Phases
 
 Each phase starts only on instruction. Every phase that touches upstream behaviour starts by advancing the relevant pin at a boundary and re-running the reference ladder (the `openvtc-workspace` rule).
+
+### 6.0 What the rung ladder has already proven, and what it has not
+
+The 10-11 decision rests on six local rungs, built 2026-10-09 to 2026-10-11 on the
+branch `feat/pcs-rungs` (nothing pushed, nothing in `app/` or `bifold/`). Each has
+its own README stating the question it answers and what it does **not** prove; this
+is the index, not a substitute for them.
+
+| Rung | What it settled |
+|---|---|
+| `ref-24-pcs-host` | The published crate works from our own code against the real curve: threshold proof at k = 3, and a duplicate attester refused with `Error::DuplicateAttester` rather than silently counted |
+| `ref-25-pcs-bridge` | A **~180-line** UniFFI bridge is the whole surface — `Params`, `Applicant::{new,identifier,held,snapshot,restore,prove}` — with Swift and Kotlin generated, not written. `CommunityParams` is `Send` but not `Sync`, so the bridge owns a `Mutex` |
+| `ref-26-pcs-mobile` | Both phone platforms build. 0.7 MB for the crypto core, 2.4 MB for the bridge. It also found the **two non-cryptographic upstream asks** (§8) |
+| `ref-27-pcs-flow` | The whole protocol with upstream's own engines: the community's verifier accepts our submission, and the anonymity claim is `assert!`ed — no tag matches an enrolled identifier, no voucher DID appears on the wire |
+| `ref-28-pcs-conformance` | What a client sends validates against the **published** `vetting/attestation/0.1` schema at a pin — and it caught a real bug in ref-27 that every engine in the flow had accepted |
+| `ref-29-pcs-swift` | The generated Swift runs, on the host and inside an iOS runtime, with identical proof sizes. Saved state is **166 bytes**, which settles §3.4's custody shape practically |
+
+**Three findings from the ladder that constrain the app** rather than the crypto:
+a produced proof is not an accepted proof and counting held attestations overstates
+progress (§4.1.3); the engine's refusal reasons are developer-facing and the UI must
+translate them, never surface them; and the threshold comes from what the applicant
+holds, not from what the community requires, so sufficiency is the community's answer
+to render.
+
+**What the ladder has not proven, and what each gap needs:**
+
+- **No real device.** Every number is host or simulator, and a simulator is explicitly
+  not quotable as phone performance in either direction. A device run needs a slot from
+  the lane holding the phones.
+- **No Android runtime.** Kotlin bindings were generated and never executed. This is
+  local work needing no device, and is the next rung.
+- **No React Native.** No TurboModule, no JSI, no Keychain or Keystore wrapping. That is
+  app code and an app lane's territory, not this plan's to write.
+- **No transport, no ceremony.** Values pass in process: no TSP, no DIDComm, no manifest
+  fetch, no ticket, no session, no match code.
+- **Still an unaudited library**, behind all of it (C6a).
 
 ### ZK0 — Baseline and access
 
@@ -382,8 +418,8 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 **Not decided (ours):**
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
-- **D4 — decided 2026-09-28, and no longer open.** Agent-side proving is the default (non-exportable VTA-held key, agent proves on request); an on-phone path ships alongside it for holders who choose it (§3.1.1, §3.1.2). Revisit when [[ZKP-SPEC]] settles. What remains outstanding is upstream-side, not a decision of ours: whether a prove-as-persona task over non-exportable keys will exist (their built branch proves client-side), and: whether the published task family puts the applicant's engine behind the agent at all (note that the applicant is the party that *aggregates* the attestations into one proof at submission, so whoever holds that role holds the aggregation too); whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
-- **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
+- **D4 — decided 2026-10-11 (Alberto), superseding the 2026-09-28 default.** *"I want to do phone proves, upstream may do it on the agent, but lets not wait on it."* **For the applicant, the phone proves.** The 09-28 reading put the default in the agent on the strength of §3.1.1's step-up argument; what settled it instead is that the thing the agent path needs — a prove-as-persona task over non-exportable keys — does not exist and nobody upstream is building it (B3, companion F21), while upstream's own reference client proves locally ([[W39]]). Accepted with it: an unaudited library inside the shipped app, a store release to bump it, and **no agent-side approval gate on this path** (§3.1.2's table, §4.1.2). What is *not* decided by this: the **vetter's** side, which cannot move to a phone at all (§3.1 points 2 and 3 — an unattended token schedule and a single record of what was spent), so the honest shape is *applicant proves on the phone; vouching stays with the agent, or Keyring users do not vouch* — which is **D3**, still open. If an agent-side prover appears later it becomes a second path under §3.6 rather than a redesign.
+- **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope. **D4 sharpened this rather than answering it:** now that the applicant proves on the phone, the vetter is the *only* role left needing an agent-side prover, so D3 is in effect the question of whether Keyring needs one at all.
 
 **Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
 
@@ -405,6 +441,10 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
   - **The shipped client path is self-described as temporary.** `openvtc-vetting-pcs/src/lib.rs:1-18`: *"Throwaway prototype of hidden-vetter admission … The engines stand in for the VTA (`vetter`, `applicant`: the PCS engine of §13 C7) and the VTC (`vtc`). Nothing here is production code."* Copying it is copying a stand-in, which is a cost Path B must be chosen with rather than discovered after.
   - **The library blocker C7 named is cleared**, which removes the main obstacle to an agent-side build without constituting one: `predicate-credential-system` 0.1.0 is on crates.io and pinned in the Eucalyptus set, so openvtc's ban on git dependencies no longer bites.
 - **B3 (community half) — landed.** `vtc-service` carries the work behind a Cargo feature **`vetting-pcs`**, which its own manifest marks *"Off by default and never in `default`"* (`vtc-service/Cargo.toml:26-30` at VTI `main`; merged as `e907a34c`, #1838). There is no `vta-service` PCS engine and no `vta/pcs/*` task yet — C7 lists them as work to come (*"`vta-service` gains the PCS engine module and the key kind"*, [[PCS-DESIGN]] `:623-625`). ZK2 and ZK3 stay blocked on the **agent** half, and a lab wanting the community half must build with the feature enabled.
+- **B7 — two non-cryptographic asks, and the 10-11 decision turned them from tidiness into prerequisites.** Neither is cryptography; both are what stands between the published crate and a phone build, and `ref-26-pcs-mobile` measured each rather than assuming it.
+  - **`openvtc-vetting-pcs` cannot be built for a phone as published.** It pulls `vta-sdk` with a `keyring` feature, and removing only that feature leaves Android cross-compiling AWS's C crypto — so the ask is a **feature gate**, not the one-line edit this plan first called it (companion F22's correction). Worked around locally with a `[patch.crates-io]` onto a vendored copy, which every rung from ref-25 up depends on; that workaround cannot ship.
+  - **The attestation has no serialisable wire form in the published API**, so the bridge carries its own `HeldAttestation` and ref-28 owns the mapping to the published payload. Harmless locally, duplicated work if upstream later publishes one.
+  - A patch for the first is written and verified locally in `tsp-reference/ref-26-pcs-mobile/PR-CANDIDATE.md`. It is **DRAFT and unsent**, pending Alberto's approval and a check of `default-features = false`. Blocks a shippable build of the chosen path; blocks nothing in the ladder.
 - **B4** — Governance acceptance of the trade hidden mode makes. The accountability machinery [[VETTING-DESIGN]] §10.5 describes — lineage, and the cascade review that re-examines everyone a discredited vetter vouched for — cannot work against vetters nobody can name. A community must decide it accepts that, and that decision is not ours. Hidden mode may never be enabled anywhere Keyring runs.
 - **B5 — answered by the design, not yet by an implementation.** C7 says *"The manifest states it; the client warns when it can tell they coincide"* ([[PCS-DESIGN]] `:620-621`), so the signal is a manifest member rather than something we must invent. What remains is that no shipped manifest carries it; **VTI-Q16** (in `docs/VTI_UPSTREAM_FINDINGS.md`) becomes a question about availability rather than about design.
 - **B6** — DTG ZKP V1.0 and the BBS audit. Block ZK4.
