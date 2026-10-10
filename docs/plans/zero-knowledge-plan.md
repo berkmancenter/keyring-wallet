@@ -52,7 +52,7 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 |---|---|---|---|
 | **Proves** | "An issuer signed a credential containing these claims," revealing only the chosen claims; two shows are unlinkable | "k pairwise-distinct credentialed users attested to this identifier," and nobody learns which | Any statement expressible as a circuit: "signature valid ∧ predicate true ∧ nullifier = H(secret, context)" |
 | **Math** | Pairing-based signature over BLS12-381; the holder derives a proof of knowledge of the signature | Σ-protocols made non-interactive by Fiat–Shamir over a pairing-friendly curve; pseudorandom *tags* stand in for identities; blind issuance | R1CS circuit (circom), BN254 curve, Poseidon hashing; constant-size proof |
-| **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | Constant-size proof; proving and verifying are both cheap on server hardware. No public benchmark we can cite | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
+| **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | **Measured by us** on an Apple Silicon laptop, the library's own Criterion bench at k = 5 for the suite upstream fixes (`ps-ddh-bls12381`): prove **11.7 ms**, verify proof **10.4 ms**, attest **2.5 ms**, verify attestation **2.4 ms**, blind issue **10.4 ms**, unblind **2.3 ms**. Proof 1 392 B | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
 | **Setup** | None | None beyond the issuer's keys | A **per-circuit trusted-setup ceremony**; the lab's is lab-only |
 | **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | **Shipped and public.** Merged to openvtc `main` at `e49816c` (2026-09-29), and the library is published as `predicate-credential-system` 0.1.0 on crates.io under MIT (2026-09-28). Proof *"about 1.3 KB"* ([[W39]]). The library remains unaudited (C6a), and there is still no published *specification* — the readable contract is the code | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
 | **Our track** | Z2 | Z1 | Z3 |
@@ -156,7 +156,8 @@ Two further facts settle it for a *proving* key specifically:
 | Hardware-attested approval before a proof | **Yes** — the gate of §3.2 duty 1 | **No.** Nothing on the agent side can gate a proof made locally; the only gate is the app's own |
 | Unattended duties (a vetter's allowance schedule, one record of what was spent) | Kept | **Not possible on a phone** (§3.1), so this path is for the applicant's side only |
 | Who can compute the holder's proofs | The agent's operator, as well as the holder | The holder alone |
-| Cost to build | A `prove` task we do not yet have | A prover shipped in the app (`ref-03d` says the curve layer runs on Hermes) |
+| Cost to build | A `prove` task we do not yet have, and nobody upstream is building it (§8 B3) | A native module wrapping a **published** crate — see §4.1.2 — not cryptography we write |
+| Speed | Same proof, computed elsewhere | **Not a constraint.** 11.7 ms to prove natively on a laptop (§2.2); a phone being several times slower still disappears inside a ceremony with a human reading a code aloud |
 
 **Revisit when [[ZKP-SPEC]] settles**, and note its status: the sentence quoted above sits in a section the document itself marks *informative*, so its normative force is unclear as written (§8, an ask rather than a workaround). We implement both paths regardless, because the accessibility argument holds on its own.
 
@@ -231,6 +232,15 @@ The protocol, the services and the message definitions are upstream's to build; 
 | Submitting, and re-submitting | The freshness challenge is minted by the community and spent when the proof is counted. Answering a "needs more" outcome means asking for a **fresh** challenge and building a fresh proof; the app never re-sends a stored proof | A proof verifies as often as it is submitted, so a challenge that survives its first use is not a freshness anchor |
 
 Keyring as vetter is new scope. The vetting subtask makes Keyring the *applicant* (its P6) and tests against a headless openvtc vetter (its §2.5). Z1 needs both roles in Keyring, and both roles re-run against upstream's own clients.
+
+### 4.1.2 What the phone path would actually cost, if it is ever chosen
+
+Measured and read on 2026-10-10, so the choice is not made on guesses:
+
+- **It is not cryptography we would write.** `openvtc-vetting-pcs` is published on crates.io (0.5.0, Apache-2.0, 2026-10-03) and its `ApplicantEngine` already carries the whole state machine — `new`, `id`, `snapshot`, `restore`, `held`, `statement_meta`, `receive`, `replace`, `submit`. The work is a Rust→UniFFI native module plus key storage and screens, which is the shape of both our hardware-attestation module and upstream's own mobile agent.
+- **Speed is not a constraint.** The library's own bench at k = 5, run here: prove 11.7 ms, verify 10.4 ms, attest 2.5 ms (§2.2). Several times that on a phone is still imperceptible in this ceremony. This also reproduces upstream's "≈12 ms" claim independently, which until now this plan could only cite.
+- **The real costs are supply chain, not latency.** An unaudited proof library inside the shipped app — upstream keeps it off by default in their own service for that reason (C6a); arkworks across three architectures in the app's build; a dependency whose own header calls it a *"Throwaway prototype … Nothing here is production code"*; and the loss of the hardware-attested approval, which is what §3.2 duty 1 exists for.
+- **What a pure-JavaScript path would cost, and why it is not the plan.** No JS implementation of this construction exists, so it would mean writing the scheme ourselves on `@noble/curves`, and `ref-03d` measured Hermes at roughly 15× Node on the primitives — seconds, not milliseconds, for a proof of this shape. Ruled out on both counts.
 
 ### 4.1.1 What hidden vetting forbids a community to ask for, and why it touches us specifically
 
