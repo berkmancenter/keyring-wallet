@@ -627,7 +627,22 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
     console.log(`[e2e] ${deviceTag(driver)}: testID=${key} already satisfied, no tap needed`);
     return;
   }
-  await waitForTestId(driver, key, timeout);
+  // The same race can land while waiting for the button: in the dry run 1010-2222 one round trip took 11.7 s,
+  // the unlock went through after the check above, and a blind wait for Enter sat out its whole 90 s for a button
+  // that was gone for good. So wait for the key OR the goal. Cheap existence checks here; the last look is
+  // waitForTestId's own, so a real miss still clears a pre-flight sheet and fails with the same message.
+  for (const until = Date.now() + timeout; Date.now() < until; await sleep(500)) {
+    if (await byTestId(driver, key).isExisting().catch(() => false)) break;
+    if (await verify()) {
+      console.log(`[e2e] ${deviceTag(driver)}: testID=${key} satisfied while waiting for it, no tap needed`);
+      return;
+    }
+  }
+  try {
+    await waitForTestId(driver, key, 1000);
+  } catch {
+    throw new Error(`[${deviceTag(driver)}] element testID=${key} not found in ${timeout}ms`);
+  }
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
     if (await el.isExisting()) {
