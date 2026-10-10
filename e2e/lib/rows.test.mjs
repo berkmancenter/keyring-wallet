@@ -90,15 +90,15 @@ test("--only-failed names the dependent alone: its need runs first (it passed la
   assert.equal(rows.exitCode(), EXIT_PASS);
 });
 
-test("the needs run all the way up: the last of a chain selects the whole chain (lostreq)", async () => {
-  const needs = { "join-lost-request": ["lost-ask-offline"], "join-lost-send-again": ["join-lost-request"] };
-  const { rows } = leg({ only: selectedRows({ E2E_ONLY_ROWS: "join-lost-send-again" }), needs });
+test("the needs run all the way up: the last of a chain selects the whole chain", async () => {
+  const needs = { "chain-second": ["chain-first"], "chain-third": ["chain-second"] };
+  const { rows } = leg({ only: selectedRows({ E2E_ONLY_ROWS: "chain-third" }), needs });
   const ran = [];
-  await rows.row("lost-ask-offline", async () => ran.push("lost-ask-offline"));
-  await rows.row("join-lost-request", async () => ran.push("join-lost-request"));
-  await rows.row("join-lost-send-again", async () => ran.push("join-lost-send-again"));
-  assert.deepEqual(ran, ["lost-ask-offline", "join-lost-request", "join-lost-send-again"]);
-  assert.deepEqual([...withNeeds(new Set(["join-lost-send-again"]), needs)], ["join-lost-send-again", "join-lost-request", "lost-ask-offline"]);
+  await rows.row("chain-first", async () => ran.push("chain-first"));
+  await rows.row("chain-second", async () => ran.push("chain-second"));
+  await rows.row("chain-third", async () => ran.push("chain-third"));
+  assert.deepEqual(ran, ["chain-first", "chain-second", "chain-third"]);
+  assert.deepEqual([...withNeeds(new Set(["chain-third"]), needs)], ["chain-third", "chain-second", "chain-first"]);
 });
 
 test("withNeeds: a need that is not a row of its own, and a cycle, both end", () => {
