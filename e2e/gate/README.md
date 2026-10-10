@@ -20,14 +20,14 @@ Each part below removes one of those.
 |---|---|
 | `gate.sh` | The runner: `gate.sh <command> [options]` |
 | `legs/<name>.sh` | One leg each: `kk` (K↔K and id305), `p1` (P1 and approvals), `testreq`, `agents`, `waiting`, `smoke-ios`, `smoke-android`, `devices` |
-| `lib.sh` | Shared shell: emulator and simulator slots, runner-key cleanup, the build cache, row parsing |
+| `lib.sh` | Shared shell: emulator and simulator slots, runner-key cleanup, the build cache, row parsing, `build_has` |
 | `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
 | `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
 | `sleeps.mjs` | Did the Mac sleep during a leg? Read from `pmset -g log` (`node --test e2e/gate/sleeps.test.mjs`) |
 | `stable.mjs` | Is the Mac stable enough to start a gate? Lid, external displays, battery, one verdict (`node --test e2e/gate/stable.test.mjs`, fixtures under `fixtures/stable/`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
-`steady.js`, `pnm.js` and `runDir.js`.
+`buildHas.js`, `steady.js`, `pnm.js` and `runDir.js`.
 
 ## What stays out of the repo
 
@@ -67,11 +67,24 @@ e2e/gate/gate.sh report <run-id>                   # the run's rows, per leg, wi
 A leg prints the lines that `e2e/lib/rows.js` produces, and the runner reads only these:
 
 ```
-HEADS <leg> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8>
+HEADS <leg> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8> … caps=<n>
 ROW <name> PASS|FAIL|SKIP — <detail>
 LEG <leg> BROKEN — <first line>
 LEG <leg> DONE <exit> pass=<n> fail=<n> skip=<n> <seconds>s
 ```
+
+`caps=<n>` is how many of the manifests' testID keys (`e2e/lib/testids*.json`) the build's JS bundle holds, a
+short reading of how far the build is from the drivers' contract (`-` when the leg named no build file).
+
+A driver prints its rows through `rows.js` and a leg folds them in with `take_rows`; a leg that re-derives a
+row from a driver's other lines is the older form. Two things make a row independent:
+
+- **`needs`**: a row that depends on an earlier one is SKIPped as `needs "<row>", which was FAIL` instead of
+  failing twice. A need that was merely left out of `E2E_ONLY_ROWS` counts as met (it was left out for passing).
+- **`buildHas`** (`e2e/lib/buildHas.js`): a row written for a newer feature asks first whether the build's JS
+  bundle holds the feature's testID key, and SKIPs as `build lacks <id>` on a build before it (`dry --golden`),
+  instead of failing. From a leg, `build_has <key> <apk | .app>` exits 0 when the build holds the key, 1 when not,
+  2 when no build is known. The answer is cached per build under `$GATE_HOME/buildhas`.
 
 | Exit | Meaning | What the runner does |
 |---|---|---|
