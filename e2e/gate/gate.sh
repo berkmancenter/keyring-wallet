@@ -33,8 +33,10 @@ run_leg() {
   mem_ok || { say "$leg: not started (memory)"; printf '%s\t%s\t%s\t%s\n' "$leg" 1 "$(date +%s)" "$(date +%s)" >> "$rd/legs.tsv"; return; }
   say "$leg: start${only:+ (only: $only)}"
   s=$(date +%s)
-  E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1
-  rc=$?; e=$(date +%s)
+  # In the background with wait (not a foreground child), so a stop reaches this shell at once: stop_forward then
+  # passes it on and waits for the leg's cleanup.
+  E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
+  wait $!; rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
   # A sleep inside the leg (pmset's log) makes its rows no verdict on the app (1009-1608: a 682 s clamshell sleep
   # ended both kk iOS sessions by Appium's newCommandTimeout). Marked, not hidden: the rows stay as they ran.
@@ -106,6 +108,7 @@ cmd_run() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
+  gate_sweep
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
@@ -127,6 +130,7 @@ cmd_rerun() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
+  gate_sweep
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
   local leg rc s e names
@@ -169,6 +173,27 @@ run_lock() {
   # substitution forks first, so that pid is a shell that is already gone, and the lock would read as stale at once.
   sh -c 'echo $PPID' > "$d/pid"
   trap 'rm -rf "$GATE_HOME/run.lock.d"' EXIT
+  trap stop_forward TERM INT HUP
+}
+
+# A stop (launchctl bootout, a ctrl-C, a kill) reaches this shell: pass it to the whole process group (the legs, their
+# drivers, Appium), so each leg's trap runs its cleanup, then wait up to GATE_STOP_WAIT seconds (default 150) for the
+# group to empty before exiting. The run lock goes with the EXIT trap. The watcher's plist gives it ExitTimeOut 180.
+stop_forward() {
+  trap '' TERM INT HUP
+  say "stopping: passing the stop to the legs and waiting for their cleanup"
+  kill -TERM 0 2>/dev/null
+  local pg i left f="${TMPDIR:-/tmp}/gate-stop.$$"; pg=$(ps -o pgid= -p $$ | tr -d ' ')
+  for i in $(seq 1 "${GATE_STOP_WAIT:-150}"); do
+    # pgrep straight into a file, not inside $( ): a command substitution is itself a process in this group, and
+    # would keep the group looking busy for the whole wait.
+    pgrep -g "$pg" > "$f" 2>/dev/null; left=$(grep -cvx "$$" "$f")
+    [ "$left" = 0 ] && break
+    sleep 1
+  done
+  rm -f "$f"
+  say "stopped"
+  exit 143
 }
 
 # The Mac is shared: a build, a test run, an emulator or a booted simulator that belongs to someone else means
@@ -208,6 +233,8 @@ watch_checkout_ready() {
 
 cmd_watch_main() {
   gate_env
+  # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
+  trap stop_forward TERM INT HUP
   local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
   say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
   while :; do
@@ -225,11 +252,11 @@ cmd_watch_main() {
           if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
           else say "push-on build not requested: push legs will be skipped"; fi
         fi
-        for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60; done
-        ( cmd_run --pin "$sha" ) || say "gate for ${sha:0:8} ended with status $?"
+        for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60 & wait $!; done
+        ( cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
       fi
     fi
-    sleep "$interval"
+    sleep "$interval" & wait $!
   done
 }
 

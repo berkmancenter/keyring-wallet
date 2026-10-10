@@ -102,6 +102,24 @@ emu_stop() { "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
+# gate_sweep: before any leg, take off every runner what a gate leg may have left there: approval rules, approver
+# sets, and the gate's own policies (ids starting "gate-", e.g. linkfail's gate-deny-swap-key). A leg cleans up after
+# itself, and a stop runs that cleanup (leg_begin's trap), but a run killed outright cannot: 1009-1608 was killed in
+# linkfail and left an acl/swap-key consent rule on the main runner for a day, so the next run's links were held
+# with auth:consent_required. Called by run and rerun right after the run lock, so it never sweeps under a running
+# gate. Says what it removed, runner by runner.
+gate_sweep() {
+  local slug seen=" " pol
+  for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
+    [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
+    say "sweep $slug"
+    rules_clear "$slug" | sed 's/^/  /'
+    for pol in $(pnm "$slug" policy list 2>/dev/null | grep -oE 'gate-[A-Za-z0-9_-]+' | sort -u); do
+      say "  $slug policy removed: $pol ($(pnm "$slug" policy delete "$pol" | tail -1 | cut -c1-60))"
+    done
+  done
+}
+
 # ---- runner cleanup: what a leg made on a runner since it started ----
 
 # Delete the phone grants (label keyring-admin) made on $1 since $2, retrying a busy or rate-limited runner.
@@ -173,6 +191,9 @@ leg_begin() {
   local caps=-; [ -n "${3:-}" ] && caps=$(build_caps "$3" | cut -d/ -f1)
   echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -) caps=$caps${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
   trap leg_end EXIT
+  # A stop (the watcher booted out, a ctrl-C, gate.sh forwarding a TERM) becomes a normal exit, so leg_end and the
+  # leg's cleanup still run. Only SIGKILL or a power loss skip it; the start-of-gate sweep (gate_sweep) covers those.
+  trap 'exit 143' TERM INT HUP
 }
 # row <name> PASS|FAIL|SKIP <detail>; a name not in E2E_ONLY_ROWS (when set) is reported as not selected.
 row() {
@@ -192,6 +213,7 @@ take_rows() {
 }
 leg_end() {
   local rc=$?
+  trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
