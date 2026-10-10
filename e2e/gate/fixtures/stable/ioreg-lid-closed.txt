@@ -1,0 +1,33 @@
++-o IOPMrootDomain  <class IOPMrootDomain, id 0x100000305, registered, matched, active, busy 0 (551 ms), retain 210>
+  | {
+  |   "Wake Type" = "UserActivity Assertion"
+  |   "IOPMUserTriggeredFullWake" = Yes
+  |   "IOHibernateState" = <00000000>
+  |   "IOPowerManagement" = {"ChildrenPowerState"=0,"DevicePowerState"=4,"CurrentPowerState"=4,"CapabilityFlags"=2,"MaxPowerState"=4}
+  |   "Standby Enabled" = Yes
+  |   "IOPMSystemSleepType" = 7
+  |   "IOAppPowerStateInterest" = "IOCommand is not serializable"
+  |   "System Capabilities" = 15
+  |   "BootSessionUUID" = "00000000-0000-0000-0000-000000000000"
+  |   "IOUserClientClass" = "RootDomainUserClient"
+  |   "Hibernate Mode" = 3
+  |   "Hibernate File" = "/var/vm/sleepimage"
+  |   "AppleClamshellCausesSleep" = No
+  |   "AppleClamshellState" = Yes
+  |   "SleepDisabled" = No
+  |   "DestroyFVKeyOnStandby" = No
+  |   "Last Sleep Reason" = "Maintenance Sleep"
+  |   "SystemPowerProfileOverrideDict" = {}
+  |   "DriverPMAssertions" = 0
+  |   "Hibernate File Min" = 2147483648
+  |   "IOPMUserIsActive" = Yes
+  |   "IOPriorityPowerStateInterest" = "IOCommand is not serializable"
+  |   "IOGeneralInterest" = "IOCommand is not serializable"
+  |   "Wake Reason" = "smc.sysState.Wake(0x70070000) lid SMC.OutboxNotEmpty RTP.multi-touch"
+  |   "SleepWakeUUID" = "00000000-0000-0000-0000-000000000000"
+  |   "IOSleepSupported" = Yes
+  | }
+  | 
+  +-o IORootParent  <class IORootParent, id 0x100000306, !registered, !matched, active, busy 0, retain 7>
+  +-o RootDomainUserClient  <class RootDomainUserClient, id 0x100000ebd, !registered, !matched, active, busy 0, retain 5>
+  +-o RootDomainUserClient  <class RootDomainUserClient, id 0x100000ec0, !registered, !matched, active, busy 0, retain 5>

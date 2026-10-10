@@ -1,0 +1,50 @@
+{
+  "SPDisplaysDataType" : [
+    {
+      "_name" : "Apple M5",
+      "spdisplays_mtlgpufamilysupport" : "spdisplays_metal4",
+      "spdisplays_ndrvs" : [
+        {
+          "_name" : "Color LCD",
+          "_spdisplays_display-product-id" : "a061",
+          "_spdisplays_display-serial-number" : "00000000",
+          "_spdisplays_display-vendor-id" : "610",
+          "_spdisplays_display-week" : "0",
+          "_spdisplays_display-year" : "0",
+          "_spdisplays_displayID" : "1",
+          "_spdisplays_pixels" : "3024 x 1964",
+          "_spdisplays_resolution" : "1512 x 982 @ 120.00Hz",
+          "spdisplays_ambient_brightness" : "spdisplays_yes",
+          "spdisplays_connection_type" : "spdisplays_internal",
+          "spdisplays_display_type" : "spdisplays_built-in-liquid-retina-xdr",
+          "spdisplays_main" : "spdisplays_yes",
+          "spdisplays_mirror" : "spdisplays_off",
+          "spdisplays_online" : "spdisplays_yes",
+          "spdisplays_pixelresolution" : "spdisplays_3024x1964Retina"
+        },
+        {
+          "_name" : "External 4K",
+          "_spdisplays_display-product-id" : "0000",
+          "_spdisplays_display-serial-number" : "00000000",
+          "_spdisplays_display-vendor-id" : "0000",
+          "_spdisplays_display-week" : "0",
+          "_spdisplays_display-year" : "0",
+          "_spdisplays_displayID" : "2",
+          "_spdisplays_pixels" : "3840 x 2160",
+          "_spdisplays_resolution" : "1920 x 1080 @ 60.00Hz",
+          "spdisplays_connection_type" : "spdisplays_displayport_dongletype_dp",
+          "spdisplays_main" : "spdisplays_no",
+          "spdisplays_mirror" : "spdisplays_off",
+          "spdisplays_online" : "spdisplays_yes",
+          "spdisplays_pixelresolution" : "spdisplays_2160p",
+          "spdisplays_rotation" : "spdisplays_supported"
+        }
+      ],
+      "spdisplays_vendor" : "sppci_vendor_Apple",
+      "sppci_bus" : "spdisplays_builtin",
+      "sppci_cores" : "10",
+      "sppci_device_type" : "spdisplays_gpu",
+      "sppci_model" : "Apple M5"
+    }
+  ]
+}
