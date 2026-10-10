@@ -127,7 +127,9 @@ The rule, agreed 10-10:
   and the rows that time out say nothing about the build. A run that spans a sleep is reported as interrupted (below),
   not as red.
 - The watcher's plist is read once, at bootstrap: an edit needs `launchctl bootout` and then `bootstrap`, and never
-  during a run, because the run is a child of the watcher.
+  during a run, because the run is a child of the watcher. The same goes for `gate.sh` itself: the loop is a bash
+  process that has already read it, so a change there (this guard included) is live only after that restart. The
+  fast-forward before each run refreshes what a run spawns (the legs, `lib.sh`, the drivers), not the loop.
 
 ## Continuous gating on main
 
