@@ -155,9 +155,10 @@ leg_rows() { grep -E '^ROW ' "$1" | sed -E 's/^ROW (.*) (PASS|FAIL|SKIP) — (.*
 # ---- a leg's own lines (the same contract as e2e/lib/rows.js) ----
 
 LEG_NAME=""; LEG_T0=0; LEG_FAILS=0; LEG_PASS=0; LEG_SKIP=0; LEG_BROKEN=""
+# LEG_HEADS_EXTRA, when a leg sets it, is appended to the HEADS line (the CI leg names its device there).
 leg_begin() {
   LEG_NAME=$1; LEG_T0=$(date +%s); LEG_START=$(stamp)
-  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -)"
+  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -)${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
   trap leg_end EXIT
 }
 # row <name> PASS|FAIL|SKIP <detail>; a name not in E2E_ONLY_ROWS (when set) is reported as not selected.

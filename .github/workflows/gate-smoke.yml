@@ -1,0 +1,376 @@
+name: Gate smoke (CI runners)
+
+# The gate's SMOKE rows on GitHub-hosted runners, stage A: no Farm, no secrets, and every step timed. A spike
+# to find out what a hosted runner can carry of the release gate (e2e/gate/README.md, "On a hosted runner"):
+# the plain-launch rows of smoke-ios.sh and smoke-android.sh exactly as the legs do them, then the welcome
+# slides through Appium; the rows that need a Farm runner print SKIP. The leg is e2e/gate/legs/smoke-ci.sh;
+# the helpers under e2e/gate/ci/ pick the simulator, mark the clock and write the report.
+#
+#   gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref <branch> -f run-id=<test-builds run>
+#   gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref <branch> -f wallet-sha=<sha> -f platform=ios
+#
+# With no run id and no sha it takes the newest green push build of main. It also runs by itself after every
+# green push test build of main (not after a dispatched push-on build), and on a pull request that changes the smoke's own files (a workflow_dispatch of a
+# file that is not yet on main is refused, so a PR is how a change to this workflow is tried). The job fails
+# only when a ROW says FAIL (or the leg broke before its rows).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gate-smoke.yml
+      - e2e/gate/legs/smoke-ci.sh
+      - e2e/gate/ci/**
+      - e2e/run-welcome.mjs
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: "test-builds run id whose artifacts to smoke (default: the newest green push build of main, or of wallet-sha)"
+        type: string
+        default: ""
+      wallet-sha:
+        description: "wallet commit whose green push build to smoke (ignored when run-id is given)"
+        type: string
+        default: ""
+      platform:
+        description: Which platform to smoke
+        type: choice
+        options: [both, ios, android]
+        default: both
+  workflow_run:
+    workflows: ["Test builds (simulator app + APK)"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gate-smoke-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  APPIUM_VERSION: "3"
+  # The same driver versions as the gate Mac (appium driver list --installed, 10-10).
+  XCUITEST_VERSION: "11.10.0"
+  UIAUTOMATOR2_VERSION: "8.6.3"
+
+jobs:
+  builds:
+    name: Which build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 5
+    outputs:
+      run_id: ${{ steps.pick.outputs.run_id }}
+      platform: ${{ steps.pick.outputs.platform }}
+      ios_artifact: ${{ steps.pick.outputs.ios_artifact }}
+      android_artifact: ${{ steps.pick.outputs.android_artifact }}
+      wallet: ${{ steps.pick.outputs.wallet }}
+    steps:
+      - id: pick
+        name: Resolve the test-builds run and its push-off artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          IN_RUN_ID: ${{ inputs.run-id }}
+          IN_SHA: ${{ inputs.wallet-sha }}
+          IN_PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          R=$GITHUB_REPOSITORY
+          if [ "$EVENT" = workflow_run ]; then
+            run=$WORKFLOW_RUN_ID; platform=both
+          else
+            run=$IN_RUN_ID; platform=${IN_PLATFORM:-both}
+            if [ -z "$run" ] && [ -n "$IN_SHA" ]; then
+              full=$(gh api "repos/$R/commits/$IN_SHA" --jq .sha)
+              run=$(gh run list -R "$R" --workflow test-builds.yml --commit "$full" --event push --status success -L 1 --json databaseId --jq '.[0].databaseId // empty')
+              [ -n "$run" ] || { echo "::error::no green push test build of $IN_SHA"; exit 1; }
+            fi
+            if [ -z "$run" ]; then
+              run=$(gh run list -R "$R" --workflow test-builds.yml --branch main --event push --status success -L 1 --json databaseId --jq '.[0].databaseId // empty')
+              [ -n "$run" ] || { echo "::error::no green push test build of main"; exit 1; }
+            fi
+          fi
+          names=$(gh api "repos/$R/actions/runs/$run/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name')
+          echo "run $run artifacts:"; echo "$names" | sed 's/^/  /'
+          ios=$(echo "$names" | grep -E '^keyring-ios-sim-' | grep -v -- '-push-on$' | head -1 || true)
+          android=$(echo "$names" | grep -E '^keyring-android-' | grep -v -- '-push-on$' | head -1 || true)
+          wallet=$(echo "${ios:-$android}" | sed -E 's/^keyring-(ios-sim|android)-([0-9a-f]+)-bf.*/\2/')
+          [ "$platform" = android ] || [ -n "$ios" ] || { echo "::error::run $run has no push-off iOS simulator artifact"; exit 1; }
+          [ "$platform" = ios ] || [ -n "$android" ] || { echo "::error::run $run has no push-off Android artifact"; exit 1; }
+          {
+            echo "run_id=$run"; echo "platform=$platform"; echo "ios_artifact=$ios"; echo "android_artifact=$android"; echo "wallet=$wallet"
+          } >> "$GITHUB_OUTPUT"
+          echo "test-builds run $run (wallet $wallet): iOS ${ios:-none}, Android ${android:-none}; platform $platform" >> "$GITHUB_STEP_SUMMARY"
+
+  ios:
+    name: iOS smoke (macos-26)
+    needs: builds
+    if: needs.builds.outputs.platform != 'android'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Mark checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/leg"
+          printf 'checkout\t%s\n' "$(date +%s)" >> "$RUNNER_TEMP/marks.tsv"
+          { echo "CI_MARKS=$RUNNER_TEMP/marks.tsv"; echo "LEG_DIR=$RUNNER_TEMP/leg"; } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - name: The image
+        id: image
+        run: |
+          e2e/gate/ci/mark.sh xcode-select
+          ls /Applications | grep -i xcode || true
+          if [ -d /Applications/Xcode_26.3.app ]; then sudo xcode-select --switch /Applications/Xcode_26.3.app; fi
+          xcodebuild -version
+          ver=$(xcodebuild -version | head -1 | awk '{print $2}')
+          echo "xcode=$ver" >> "$GITHUB_OUTPUT"
+          echo "cpu $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, $(sysctl -n machdep.cpu.brand_string), macOS $(sw_vers -productVersion), Xcode $ver"
+          echo "runner: $(sysctl -n hw.ncpu) cores, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB, $(sysctl -n machdep.cpu.brand_string), macOS $(sw_vers -productVersion), Xcode $ver" >> "$GITHUB_STEP_SUMMARY"
+          df -h / | tail -1
+
+      - name: Pick the simulator
+        id: sim
+        run: |
+          e2e/gate/ci/mark.sh pick-sim
+          xcrun simctl list runtimes available | sed 's/^/  /'
+          IFS=$'\t' read -r udid name ver < <(node e2e/gate/ci/pick-sim.mjs)
+          echo "picked: $name (iOS $ver) $udid"
+          { echo "udid=$udid"; echo "name=$name"; echo "version=$ver"; } >> "$GITHUB_OUTPUT"
+          echo "simulator: $name, iOS $ver ($udid)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Boot the simulator
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          e2e/gate/ci/mark.sh boot-simulator
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices booted | sed 's/^/  /'
+
+      - name: Mark setup-node
+        run: e2e/gate/ci/mark.sh setup-node
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Harness packages
+        working-directory: e2e
+        run: |
+          ../e2e/gate/ci/mark.sh npm-ci-e2e
+          npm ci --no-audit --no-fund
+
+      - name: Appium and the XCUITest driver
+        run: |
+          e2e/gate/ci/mark.sh install-appium
+          npm install -g "appium@$APPIUM_VERSION" --no-audit --no-fund
+          appium driver install "xcuitest@$XCUITEST_VERSION"
+          appium --version
+          appium driver list --installed
+
+      - name: Mark the WDA cache
+        run: e2e/gate/ci/mark.sh restore-wda-cache
+
+      # WebDriverAgent, built once per driver and Xcode version and reused (config.js: usePrebuiltWDA when the
+      # product is there). A cold runner builds it inside the first Appium session, which the timing table shows.
+      - name: WebDriverAgent build cache
+        id: wda
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/keyring-wda-sim
+          key: wda-sim-${{ runner.os }}-${{ runner.arch }}-xcuitest-${{ env.XCUITEST_VERSION }}-xcode-${{ steps.image.outputs.xcode }}
+
+      - name: Mark the download
+        run: |
+          e2e/gate/ci/mark.sh download-build
+          echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}"
+          echo "WDA cache hit: ${{ steps.wda.outputs.cache-hit || 'no' }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.builds.outputs.ios_artifact }}
+          run-id: ${{ needs.builds.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/build
+
+      - name: Unzip the app
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          "$GITHUB_WORKSPACE/e2e/gate/ci/mark.sh" unzip-app
+          unzip -q keyring-sim.zip
+          ls -la
+          cat manifest.txt
+
+      - name: Smoke leg
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+          SIM_NAME: ${{ steps.sim.outputs.name }}
+          SIM_VERSION: ${{ steps.sim.outputs.version }}
+        run: |
+          e2e/gate/ci/mark.sh leg
+          export WDA_DERIVED_DATA="$HOME/Library/Developer/Xcode/keyring-wda"
+          rc=0
+          bash e2e/gate/legs/smoke-ci.sh ios "$RUNNER_TEMP/build/KeyRing.app" "$UDID" "$SIM_NAME" "$SIM_VERSION" > "$LEG_DIR/leg.log" 2>&1 || rc=$?
+          cat "$LEG_DIR/leg.log"
+          echo "leg rc=$rc"
+
+      - name: The machine after the leg
+        if: always()
+        run: |
+          e2e/gate/ci/mark.sh machine-snapshot
+          vm_stat | head -8
+          df -h / | tail -1
+          ls ~/Library/Developer/Xcode/keyring-wda-sim/Build/Products 2>/dev/null || echo "no WDA product"
+          xcrun simctl shutdown all || true
+
+      - name: Report
+        id: report
+        if: always()
+        run: |
+          e2e/gate/ci/mark.sh end
+          if node e2e/gate/ci/summary.mjs "$CI_MARKS" "$LEG_DIR" "iOS smoke, macos-26"; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+          cp "$CI_MARKS" "$LEG_DIR/marks.tsv"
+          printf 'upload\t%s\n' "$(date +%s)" > "$RUNNER_TEMP/upload-mark"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-smoke-ios-${{ needs.builds.outputs.wallet }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/leg
+          retention-days: 14
+
+      - name: Result
+        if: always()
+        env:
+          OK: ${{ steps.report.outputs.ok }}
+        run: |
+          t0=$(cut -f2 "$RUNNER_TEMP/upload-mark"); s=$(( $(date +%s) - t0 ))
+          echo "upload of the leg dir: ${s}s"
+          echo "Upload of the leg dir (after the table): ${s} s" >> "$GITHUB_STEP_SUMMARY"
+          [ "$OK" = true ] || { echo "::error::a ROW failed or the leg broke (see the summary)"; exit 1; }
+
+  android:
+    name: Android smoke (ubuntu-latest, KVM)
+    needs: builds
+    if: needs.builds.outputs.platform != 'ios'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Mark checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/leg"
+          printf 'checkout\t%s\n' "$(date +%s)" >> "$RUNNER_TEMP/marks.tsv"
+          { echo "CI_MARKS=$RUNNER_TEMP/marks.tsv"; echo "LEG_DIR=$RUNNER_TEMP/leg"; } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      # Hardware acceleration for the emulator on the hosted Linux runners (GitHub changelog, 2024-04).
+      - name: Enable KVM
+        run: |
+          e2e/gate/ci/mark.sh enable-kvm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+          echo "runner: $(nproc) cores, $(free -g | awk '/Mem:/ {print $2}') GB, $(lscpu | awk -F: '/Model name/ {gsub(/^ +/,"",$2); print $2}'), $(lsb_release -ds)"
+          echo "runner: $(nproc) cores, $(free -g | awk '/Mem:/ {print $2}') GB, $(lscpu | awk -F: '/Model name/ {gsub(/^ +/,"",$2); print $2}'), $(lsb_release -ds)" >> "$GITHUB_STEP_SUMMARY"
+          df -h / | tail -1
+
+      - name: Mark setup-java
+        run: e2e/gate/ci/mark.sh setup-java
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Mark setup-node
+        run: e2e/gate/ci/mark.sh setup-node
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Harness packages
+        working-directory: e2e
+        run: |
+          ../e2e/gate/ci/mark.sh npm-ci-e2e
+          npm ci --no-audit --no-fund
+
+      - name: Appium and the UiAutomator2 driver
+        run: |
+          e2e/gate/ci/mark.sh install-appium
+          npm install -g "appium@$APPIUM_VERSION" --no-audit --no-fund
+          appium driver install "uiautomator2@$UIAUTOMATOR2_VERSION"
+          appium --version
+          appium driver list --installed
+
+      - name: Mark the download
+        run: e2e/gate/ci/mark.sh download-build
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.builds.outputs.android_artifact }}
+          run-id: ${{ needs.builds.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/build
+
+      - name: The build
+        working-directory: ${{ runner.temp }}/build
+        run: |
+          "$GITHUB_WORKSPACE/e2e/gate/ci/mark.sh" emulator-boot
+          ls -la
+          cat manifest.txt
+
+      # The gate's Pixel_6_API_33 (google_apis, 2 GB): the same API level, profile and target on x86_64, the
+      # one arch the hosted runners accelerate. The action runs each line of `script` in its own shell, so the
+      # whole Android run is one script file.
+      - name: Emulator and the smoke leg
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          disable-animations: false
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash e2e/gate/ci/android-leg.sh
+
+      - name: Report
+        id: report
+        if: always()
+        run: |
+          e2e/gate/ci/mark.sh end
+          if node e2e/gate/ci/summary.mjs "$CI_MARKS" "$LEG_DIR" "Android smoke, ubuntu-latest + KVM"; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+          cp "$CI_MARKS" "$LEG_DIR/marks.tsv"
+          printf 'upload\t%s\n' "$(date +%s)" > "$RUNNER_TEMP/upload-mark"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-smoke-android-${{ needs.builds.outputs.wallet }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/leg
+          retention-days: 14
+
+      - name: Result
+        if: always()
+        env:
+          OK: ${{ steps.report.outputs.ok }}
+        run: |
+          t0=$(cut -f2 "$RUNNER_TEMP/upload-mark"); s=$(( $(date +%s) - t0 ))
+          echo "upload of the leg dir: ${s}s"
+          echo "Upload of the leg dir (after the table): ${s} s" >> "$GITHUB_STEP_SUMMARY"
+          [ "$OK" = true ] || { echo "::error::a ROW failed or the leg broke (see the summary)"; exit 1; }
