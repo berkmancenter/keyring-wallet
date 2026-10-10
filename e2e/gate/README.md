@@ -150,8 +150,14 @@ runner (the link, the push probe, the agent header) print `SKIP — no Farm in C
 
 - iOS on `macos-26`: the newest iPhone of the newest runtime on the image (`ci/pick-sim.mjs`; the HEADS line
   names it), WebDriverAgent cached at `~/Library/Developer/Xcode/keyring-wda-sim` by driver and Xcode version.
+  The iOS runtime is whatever the image carries, not the gate's `IOS_VERSION`: run 38044225803 ran on iPhone 17,
+  iOS 26.5 (the image had 26.2, 26.4 and 26.5; the gate pins 26.3), so a CI PASS is on a newer iOS than the gate's.
 - Android on `ubuntu-latest` with KVM: `reactivecircus/android-emulator-runner`, API 33 google_apis on x86_64
-  with the Pixel 6 profile and 2 GB, the gate's `Pixel_6_API_33` on the one arch the runners accelerate.
+  with the Pixel 6 profile and 2 GB, the gate's `Pixel_6_API_33` on the one arch the runners accelerate. The AVD
+  is new on every run, and Play Services registers itself with GCM during the plain launch (15 GCM-GMS /
+  FirebaseInstanceId / BugleNetwork lines on run 38044225803, none from the wallet), so the token row counts only
+  lines from the wallet's pid or naming its package. `smoke-android.sh` counts every line; that holds on the gate
+  Mac's persistent AVD, which did that registration long ago, and would fail the same way on a re-created one.
 - Timing: every workflow step marks the clock (`ci/mark.sh`), the leg writes its own steps to `steps.tsv`, and
   `ci/summary.mjs` puts one table (and the rows) on the job summary. The leg dir is uploaded as an artifact.
 - The job fails only when a ROW says FAIL or the leg broke before its rows; SKIP rows and a driver's exit 3 do not.
@@ -161,7 +167,8 @@ gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref main -f run
 gh workflow run gate-smoke.yml -R berkmancenter/keyring-wallet --ref main -f wallet-sha=<sha> -f platform=ios
 ```
 
-It also runs by itself after every green test build of main. What does not move to a hosted runner: the
+It also runs by itself after every green push test build of main (a push-on build the watcher dispatches carries
+only a `-push-on` artifact and does not start it). What does not move to a hosted runner: the
 physical-phone legs, the terminal-app fixture, and anything that links a Farm runner (stage B would need the
 runner personas provisioned for CI).
 

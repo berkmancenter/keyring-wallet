@@ -92,8 +92,13 @@ android)
   echo "ROW android-install-cold-launch $([ -n "$p1" ] && [ "$p1" = "$p2" ] && [ "$FC" = 0 ] && echo PASS || echo FAIL) — pid at 25 s ${p1:-none}, at 45 s ${p2:-none}, fatal lines $FC; focus at 25 s [$f1], at 45 s [$f2]; firebase log lines $(wc -l < "$LEG_DIR/android-firebase-log.txt" | tr -d ' ')"
   case "$f1$f2" in *GrantPermissions*|*permissioncontroller*) echo "ROW android-no-notification-prompt FAIL — a permission dialog had focus";; *) echo "ROW android-no-notification-prompt PASS — no permission dialog had focus at 25 s or 45 s (screenshots android-plain-25s.png, android-plain-45s.png)";; esac
   TOK='firebaseinstallations\.googleapis|fcmtoken\.googleapis|fcm\.googleapis|FirebaseMessaging|FirebaseInstallations|FirebaseInstanceId|FirebaseIid|Firebase-Installations|\bFCM\b|\bGCM\b|\bc2dm\b|registration token'
-  grep -E "$TOK" "$LEG_DIR/android-logcat-all.txt" | grep -v "GCM.*Unexpected forwarded intent.*PACKAGE_ADDED" | cut -c1-200 > "$LEG_DIR/android-token-lines-plain.txt"; P1=$(grep -c . "$LEG_DIR/android-token-lines-plain.txt")
-  echo "ROW android-no-token-activity-plain-launch $([ "$P1" = 0 ] && echo PASS || echo FAIL) — FirebaseMessaging / FirebaseInstallations / token lines in logcat during the plain launch (45 s): $P1 (android-token-lines-plain.txt)"; head -3 "$LEG_DIR/android-token-lines-plain.txt"
+  # Only the wallet's lines (its pid, or its package named by another process). A fresh AVD, which every CI run
+  # is, registers Play Services itself with GCM in these same seconds (GCM-GMS, FirebaseInstanceId, BugleNetwork
+  # under Play Services' own pids): 15 such lines on run 38044225803, none from the wallet. The gate's smoke-android.sh
+  # counts every line, which holds on its persistent AVD and would fail the same way on a re-created one.
+  WALLET='\( *'"${p1:-0}"'\)|'"$BID"
+  grep -E "$TOK" "$LEG_DIR/android-logcat-all.txt" | grep -E "$WALLET" | grep -v "GCM.*Unexpected forwarded intent.*PACKAGE_ADDED" | cut -c1-200 > "$LEG_DIR/android-token-lines-plain.txt"; P1=$(grep -c . "$LEG_DIR/android-token-lines-plain.txt")
+  echo "ROW android-no-token-activity-plain-launch $([ "$P1" = 0 ] && echo PASS || echo FAIL) — FirebaseMessaging / FirebaseInstallations / token lines from the wallet process (pid ${p1:-none} or $BID) in logcat during the plain launch (45 s): $P1 (android-token-lines-plain.txt; Play Services' own GMS registration on the fresh AVD is not counted)"; head -3 "$LEG_DIR/android-token-lines-plain.txt"
   step log-rows "$t"
   adb -s "$E" shell am force-stop $BID
   # The welcome slides on the fresh install (the same driver as iOS; its icon row is iOS-only and says so).
