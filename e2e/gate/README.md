@@ -24,6 +24,7 @@ Each part below removes one of those.
 | `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
 | `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
 | `sleeps.mjs` | Did the Mac sleep during a leg? Read from `pmset -g log` (`node --test e2e/gate/sleeps.test.mjs`) |
+| `stable.mjs` | Is the Mac stable enough to start a gate? Lid, external displays, battery, one verdict (`node --test e2e/gate/stable.test.mjs`, fixtures under `fixtures/stable/`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
 `steady.js`, `pnm.js` and `runDir.js`.
@@ -114,6 +115,28 @@ Every leg records when it started. On exit it removes the phone keys it made on 
 approval rules and approver sets it set, and its test members of the community. The report says what it
 removed and what it found left over.
 
+## Where a gate runs
+
+The rule, agreed 10-10:
+
+- **The full gate runs on the Mac, through the watcher, while the Mac is stable.** Stable means: the lid is open,
+  or an external display is online. A Mac with no lid at all and no battery is a desktop and is always stable (the log
+  says `desktop: no lid, no battery` once per start, so a headless mini still gates). No lid key but a battery is
+  unknown, and unknown does not start a gate. There is no power-adapter condition. `mac_stable` in `gate.sh` is the
+  one guard, over `stable.mjs`: the watcher asks it before every cycle and skips the cycle otherwise, with the reason
+  in its log; `run` and `rerun` (which does not go through `run`) ask it before a build is downloaded or the lock
+  taken, and stop with the same reason. `GATE_ALLOW_UNSTABLE=1` starts anyway, with a warning in the log.
+- **When the Mac is not stable, the CI smoke workflow is the signal** (`gate-smoke.yml`, on its own branch): it
+  runs on every main build, on GitHub's runners, with no Farm rows and no secrets. It is a smoke, not a gate.
+- **A full gate is not started on a laptop in a bag.** A closed lid with no display sleeps the Mac, every leg stalls,
+  and the rows that time out say nothing about the build. The guard cannot stop a lid closing mid-run: a sleep inside
+  a leg is marked on that leg (`ENV Mac slept …` in its `leg.log`, from `sleeps.mjs`, wallet #361), not judged, and
+  there is no run-level mark besides it.
+- The watcher's plist is read once, at bootstrap: an edit needs `launchctl bootout` and then `bootstrap`, and never
+  during a run, because the run is a child of the watcher. The same goes for `gate.sh` itself: the loop is a bash
+  process that has already read it, so a change there (this guard included) is live only after that restart. The
+  fast-forward before each run refreshes what a run spawns (the legs, `lib.sh`, the drivers), not the loop.
+
 ## Continuous gating on main
 
 `gate.sh watch --main` runs for ever: every five minutes (`GATE_WATCH_INTERVAL`) it asks `green.mjs` for the newest
@@ -125,6 +148,16 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   cargo, docker build or emulator process is running (executable names), while a Gradle build runs (its wrapper
   client; idle Gradle daemons, which stay up for hours, do not count),
   or while any simulator is booted (Simulator.app being open is not a signal).
+- **Not while the Mac is not stable.** The loop also skips a cycle while `mac_stable` says no (the rule is under
+  "Where a gate runs"). `stable.mjs` reads the lid from `ioreg -r -k AppleClamshellState -d 4`, the exact key
+  `"AppleClamshellState" = Yes|No` (`Yes` = closed; absent = no clamshell); the displays from
+  `system_profiler SPDisplaysDataType -json`, where an external display is an `spdisplays_ndrvs` entry whose
+  `spdisplays_connection_type` is not `spdisplays_internal` and whose `spdisplays_online` is `spdisplays_yes`
+  (a bare count of entries would count a panel that is listed but asleep); and the battery from an `InternalBattery`
+  line in `pmset -g batt`. About 0.2 s when the lid is closed (the displays are read only then; an open lid is the
+  answer by itself). `ioreg -l | grep -c IODisplayConnect` is not a count on Apple silicon: it matches a class table
+  and reads 1 with nothing attached. `node e2e/gate/stable.mjs --stable` prints the verdict and its reason
+  (`--lid`, `--displays`, `--battery` print one reading each).
 - **One push-on build per gated commit.** Each new green main commit gets one Android push-on dispatch (about 40
   minutes of a free public-repository runner), so the push legs have a build; `watch-requested-<sha8>` records it.
 - **Its own checkout.** The watcher runs from a checkout nobody edits (`~/.keyring-fleet/gate/wt-main`, on main),
@@ -147,8 +180,10 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
   and `launchctl bootstrap gui/$(id -u) <that file>`. The Mac's owner decides; it is a lasting change. Stop with
   `launchctl bootout gui/$(id -u)/org.keyring.gate-watch-main`. The log is `~/.keyring-fleet/gate/watch-main.log`.
 - **Keep the Mac awake.** A closed lid put the Mac to sleep for three hours in the middle of the 239 gate, and
-  `caffeinate` does not prevent lid-closed sleep. The owner runs once: `sudo pmset -a disablesleep 1` (and
-  `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.
+  `caffeinate` does not prevent lid-closed sleep. The stable-Mac check keeps a gate from starting in that state; it
+  cannot stop a lid closing mid-run, which the per-leg sleep mark (`sleeps.mjs`) below then reports. The owner can
+  also run once:
+  `sudo pmset -a disablesleep 1` (and `sudo pmset -a disablesleep 0` to undo). Check with `pmset -g | grep -i sleep`.
 - **A sleep is marked, not judged.** After each leg the gate reads `pmset -g log`. A sleep inside the leg adds an
   `ENV Mac slept …` line to its `leg.log`, shown in the report above the rows: those rows are no verdict on the app.
   (Auto-run 1009-1608: a 682 s clamshell sleep ended both kk iOS sessions by Appium's 300 s `newCommandTimeout`,

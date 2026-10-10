@@ -102,7 +102,9 @@ cmd_run() {
     --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;; *) usage ;;
   esac; done
   [ -n "$pin" ] || usage
-  gate_env; use_build "$pin"
+  gate_env
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
   run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
@@ -121,7 +123,9 @@ cmd_rerun() {
   [ "$only" = --only-failed ] || usage
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
-  gate_env; use_build "$pin"
+  gate_env
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
   run_lock
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
@@ -178,6 +182,21 @@ mac_busy() {
   xcrun simctl list devices booted 2>/dev/null | grep -q '(Booted)'
 }
 
+# A laptop in a bag is not a gate machine: a closed lid with no display behind it sleeps the Mac, and every leg
+# stalls with it (239 gate, 10-09: three hours). stable.mjs holds the rule and its two detectors, tested on captured
+# outputs: stable when the lid is open or an external display is online; a Mac with no lid and no battery is a
+# desktop and is stable (said once, so the log shows it); no lid key but a battery is unknown, and unknown does not
+# start a gate. There is no power-adapter condition: dropped, 10-10. GATE_ALLOW_UNSTABLE=1 starts anyway, with a
+# warning. A sleep inside a leg is a separate matter: sleeps.mjs marks that leg ENV (wallet #361).
+mac_stable() {
+  local out; out=$(node "$GATE_SRC/stable.mjs" --stable 2>&1)
+  case ${out%%:*} in
+    stable) case $out in *'desktop:'*) say "${out#*: }" ;; esac; return 0 ;;
+  esac
+  if [ "${GATE_ALLOW_UNSTABLE:-0}" = 1 ]; then say "WARNING: the Mac is not stable ($out), but GATE_ALLOW_UNSTABLE=1: running anyway"; return 0; fi
+  say "the Mac is not stable ($out): not running"; return 1
+}
+
 # The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a
 # run. Anything else and the cycle is skipped, so a report never reads as a main gate when the harness was not main's.
 watch_checkout_ready() {
@@ -197,6 +216,7 @@ cmd_watch_main() {
       sha=${pair%% *}; run=${pair##* }
       if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
       elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      elif ! mac_stable; then :
       elif ! watch_checkout_ready; then :
       else
         say "new green main build ${sha:0:8} (run $run)"
