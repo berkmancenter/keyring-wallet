@@ -43,10 +43,11 @@ try {
   await d.activateApp(BID);
   await sleep(4000);
 
-  // The welcome slide's link, by its label-derived testID; tapping it should bring Safari forward. An emulator
-  // on a loaded CI runner shows its first slide late, and can have System UI's own "isn't responding" dialog
-  // over it (run 38045665103): Android waits longer, and once dismisses that dialog (its Wait button) and looks again.
-  let link = await existsTestId(d, "LearnMoreAboutTheKeyringProject", PLATFORM === "android" ? 45000 : 15000);
+  // The welcome slide's link, by its label-derived testID; tapping it should bring Safari forward. A loaded CI
+  // runner shows the first slide late on both platforms: an iOS simulator on a slow host had the link in its tree
+  // 19 s after activation (run 38059701844; the failure capture showed it), and an emulator can have System UI's own
+  // "isn't responding" dialog over it (run 38045665103). Both wait 45 s; Android also dismisses that dialog once.
+  let link = await existsTestId(d, "LearnMoreAboutTheKeyringProject", 45000);
   let anr = "";
   if (!link && PLATFORM === "android") {
     const wait = await d.$("id=android:id/aerr_wait");
