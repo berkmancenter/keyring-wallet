@@ -18,7 +18,8 @@ deadlines without the time; `opts.log` is the shared step log; `opts.say` the dr
 
 The steps do what the drivers did before them, flow for flow and log line for log line (`run-several-agents.mjs`,
 `run-join-waiting.mjs`, `run-join-lost.mjs`, 239 gate). A driver's rows are `lib/rows.js` rows: a failing row
-never stops the rest, and a row that `needs` an earlier one skips instead of failing after it.
+never stops the rest, and a row that needs an earlier one (the `needs` map given to `createRows`) skips instead of
+failing after it; `gate.sh rerun --only-failed` on the dependent alone runs its needs first.
 
 ## Tests
 
