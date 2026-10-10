@@ -10,7 +10,8 @@
  *                            is unchanged, and Join never shows JoinRequestSent
  * A request recorded as sent whose delivery then fails (said lost, and sent again) cannot be forced from the phone:
  * no cut lands between the record and the send. bifold holds it in joinLostRequest.test.tsx (red before #347).
- * Prints `ARRIVED_REQ <id>` for any request that reached C anyway, so the caller declines it.
+ * Prints `ARRIVED_REQ <id>` for any request that reached C anyway, including one the app sent by itself in the ~30 s
+ * after the host came back (logged, not a row), so the caller declines it.
  *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME=… C_ADMIN="<rest> <did> <cred>" [BLOCK_HOST=…] node run-join-lost.mjs
  */
 import "./lib/cli-guard.js";
@@ -120,6 +121,12 @@ try {
       ? { ok: false, detail: wrong.join("; ") }
       : { ok: true, detail: `error "${seen.error}" after ${waited} s; C's pending list unchanged (${before.size}); no JoinRequestSent` };
   });
+  // Once more, ~30 s after the host is back: does the app send the failed ask by itself? It should not (nothing was
+  // recorded); logged, not a row, and anything new is declined by the caller like any arrival.
+  await sleep(30000);
+  const late = [...pendingIds()].filter((id) => !before.has(id) && !arrived.includes(id));
+  late.forEach((id) => console.log(`ARRIVED_REQ ${id}`));
+  log(late.length ? `after the host came back, C received ${late.length} request(s) by itself: ${late.join(", ")}` : "after the host came back, C received nothing more in 30 s");
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);
   if (d) await screenshot(d, "lost-ask-offline-failure").catch(() => undefined);
