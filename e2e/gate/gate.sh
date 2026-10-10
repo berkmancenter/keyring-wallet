@@ -36,6 +36,10 @@ run_leg() {
   E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1
   rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
+  # A sleep inside the leg (pmset's log) makes its rows no verdict on the app (1009-1608: a 682 s clamshell sleep
+  # ended both kk iOS sessions by Appium's newCommandTimeout). Marked, not hidden: the rows stay as they ran.
+  local slept; slept=$(node "$GATE_SRC/sleeps.mjs" --from "$s" --to "$e" 2>/dev/null)
+  if [ -n "$slept" ]; then echo "$slept" | sed 's/^/ENV /' >> "$dir/leg.log"; say "$leg: ENV — $(echo "$slept" | paste -sd';' -)"; fi
   say "$leg: exit $rc in $(( (e - s) / 60 )) min · $(leg_rows "$dir/leg.log" | cut -f1 | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
 }
 
@@ -98,6 +102,7 @@ cmd_run() {
     --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;; *) usage ;;
   esac; done
   [ -n "$pin" ] || usage
+  battery_refuse
   gate_env; use_build "$pin"
   run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
@@ -117,6 +122,7 @@ cmd_rerun() {
   [ "$only" = --only-failed ] || usage
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
+  battery_refuse
   gate_env; use_build "$pin"
   run_lock
   local rd; rd=$(new_run "$pin" "rerun")
@@ -150,6 +156,15 @@ lock_live() {
   if [ -n "$p" ]; then kill -0 "$p" 2>/dev/null; return; fi
   now=$(date +%s); m=$(stat -f %m "$d" 2>/dev/null || echo "$now"); [ $((now - m)) -lt 60 ]
 }
+# On battery a closed lid sleeps the Mac whatever caffeinate holds (1009-1608), so no gate starts on battery: the watcher
+# waits for the next cycle, a person's run stops here. GATE_ALLOW_BATTERY=1 starts anyway (the lid kept open, by hand).
+on_battery() { node "$GATE_SRC/sleeps.mjs" --battery >/dev/null 2>&1; }
+battery_refuse() {
+  on_battery || return 0
+  [ "${GATE_ALLOW_BATTERY:-}" = 1 ] && { say "on battery: starting anyway (GATE_ALLOW_BATTERY=1); keep the lid open"; return 0; }
+  die "the Mac is on battery: a closed lid would sleep it mid-leg (caffeinate does not stop that). Plug in, or GATE_ALLOW_BATTERY=1"
+}
+
 run_lock() {
   local d=$GATE_HOME/run.lock.d tag=$$.$RANDOM
   while ! mkdir "$d" 2>/dev/null; do
@@ -193,6 +208,7 @@ cmd_watch_main() {
       sha=${pair%% *}; run=${pair##* }
       if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
       elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      elif on_battery; then say "main build ${sha:0:8} is new, but the Mac is on battery (a closed lid sleeps it): next cycle"
       elif ! watch_checkout_ready; then :
       else
         say "new green main build ${sha:0:8} (run $run)"
@@ -241,6 +257,7 @@ cmd_report() {
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s
     [ "$e" -gt "$last" ] && last=$e
     printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
+    grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
     leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
   done < "$rd/legs.tsv"
   echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"
