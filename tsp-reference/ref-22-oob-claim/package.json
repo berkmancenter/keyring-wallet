@@ -1,0 +1,14 @@
+{
+  "name": "ref-22-oob-claim",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 22: claim a trigger-link sign-in request (auth/oob/claim/0.1) on a live community and verify the VTC's signed answer, as a wallet would. Plays the browser up to the request.",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node run.mjs" },
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "canonicalize": "^1.0.8",
+    "didwebvh-ts": "^2.8.0"
+  }
+}
