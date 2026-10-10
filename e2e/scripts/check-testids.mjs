@@ -6,13 +6,15 @@
  * The drivers' side: every literal handed to the testID helper family
  * (byTestId, waitForTestId, tapTestId, tapTestIdReliable, tapTestIdByCoordinates,
  * scrollToTestId, existsTestId, existsRawId, findScrolling, waitStable and its
- * `absent` list, tapLifted, textOf, and the build-capability pair buildHas and
- * buildLacks, whose key is their first argument) and every raw "com.ariesbifold:id/<key>"
- * string, across e2e/run-*.{js,mjs}, e2e/lib/*.{js,mjs}, the page objects
- * e2e/lib/pages/*.{js,mjs} (unit tests excluded: their fixture ids are not
- * selectors) and e2e/openvtc/*.{js,mjs}. A template
+ * `absent` list, tapLifted, textOf; the build-capability pair buildHas and
+ * buildLacks, whose key is their first argument; and a page object's own, key
+ * first: awaitStep, onScreen, textOfId, wordsOfId) and every raw
+ * "com.ariesbifold:id/<key>" string, across e2e/run-*.{js,mjs},
+ * e2e/lib/*.{js,mjs}, the page objects e2e/lib/pages/*.{js,mjs} (unit tests
+ * excluded: their fixture ids are not selectors) and e2e/openvtc/*.{js,mjs}. A template
  * literal with substitutions yields a stem: the text before its first `${`.
- * A key that is not a literal (a variable, a call) is dynamic and not checked.
+ * An array literal of strings (`awaitStep(["A", "B"])`) names each. A key
+ * that is not a literal (a variable, a call) is dynamic and not checked.
  *
  * The app's side: e2e/lib/testids.json (bifold's packages/core manifest, see
  * sync-testids.sh) and e2e/lib/testids.app.json (the same extraction over the
@@ -60,6 +62,11 @@ export const HELPERS = {
   textOf: 1,
   buildHas: 0,
   buildLacks: 0,
+  // A page object's own (e2e/lib/pages/*.js): the key comes first, there is no driver argument.
+  awaitStep: 0,
+  onScreen: 0,
+  textOfId: 0,
+  wordsOfId: 0,
 }
 
 const e2eDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -299,13 +306,18 @@ const stemOf = (template) => {
   return first.text.length > 0 ? { kind: 'stem', value: first.text } : { kind: 'dynamic', value: '`${…}`' }
 }
 
-/** What one argument names: a key, a stem, several (a conditional of literals) or something dynamic. */
+/** What one argument names: a key, a stem, several (a conditional of literals, an array of them) or something dynamic. */
 const classify = (arg) => {
   if (arg.length === 1) {
     const t = arg[0]
     if (t.type === 'string') return [{ kind: 'key', value: t.value }]
     if (t.type === 'template') return [stemOf(t)]
     return [{ kind: 'dynamic', value: t.value }]
+  }
+  // ["A", "B", `Stem_${x}`]: each element, when every element is a literal
+  if (arg[0].type === 'punct' && arg[0].value === '[' && arg[arg.length - 1].type === 'punct' && arg[arg.length - 1].value === ']') {
+    const inner = arg.slice(1, -1).filter((t) => !(t.type === 'punct' && t.value === ','))
+    if (inner.length > 0 && inner.every((t) => t.type === 'string' || t.type === 'template')) return inner.flatMap((t) => classify([t]))
   }
   // cond ? 'A' : 'B' with literal branches
   const q = arg.findIndex((t) => t.type === 'punct' && t.value === '?')

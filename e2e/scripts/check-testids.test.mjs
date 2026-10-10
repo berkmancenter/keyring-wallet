@@ -221,20 +221,49 @@ test('a key with whitespace is invalid unless allowlisted; unknown keys are list
   assert.deepEqual(r2.invalid, [])
 })
 
-test('fixture tree: lists run-*, lib and openvtc drivers (unit tests excluded) and reports per file:line', () => {
+test('a page object: the key comes first in its own helpers, and an array literal names each key', () => {
+  const refs = extractReferences(`
+    const textOfId = async (key) => io.byTestId(d, key).getAttribute("text");
+    await awaitStep(["VtaLinkDone", "VtaLinkError"], 240000, { each });
+    await awaitStep("VtaLinkConfirm", 30000);
+    await awaitStep([\`AgentDevice_\${key}\`, "AgentHome"], 5000);
+    if (await onScreen("VtaLinkResumed")) say(await wordsOfId("VtaLinkError"), await textOfId("VtaLinkCode"));
+    await awaitStep(wanted, 1000);
+    await awaitStep([first, "AgentIntro"], 1000);
+  `)
+  assert.deepEqual(
+    refs.map((r) => [r.kind, r.value, r.via]),
+    [
+      ['dynamic', 'key', 'byTestId'],
+      ['key', 'VtaLinkDone', 'awaitStep'],
+      ['key', 'VtaLinkError', 'awaitStep'],
+      ['key', 'VtaLinkConfirm', 'awaitStep'],
+      ['stem', 'AgentDevice_', 'awaitStep'],
+      ['key', 'AgentHome', 'awaitStep'],
+      ['key', 'VtaLinkResumed', 'onScreen'],
+      ['key', 'VtaLinkError', 'wordsOfId'],
+      ['key', 'VtaLinkCode', 'textOfId'],
+      ['dynamic', 'wanted', 'awaitStep'],
+      ['dynamic', '[ first , AgentIntro ]', 'awaitStep'],
+    ]
+  )
+})
+
+test('fixture tree: lists run-*, lib, lib/pages and openvtc drivers (unit tests excluded) and reports per file:line', () => {
   const files = listDriverFiles(fixtures).map((f) => path.relative(fixtures, f))
-  assert.deepEqual(files, ['run-sample.js', 'run-sample.mjs', 'lib/helpers.js', 'openvtc/walk.mjs'])
+  assert.deepEqual(files, ['run-sample.js', 'run-sample.mjs', 'lib/helpers.js', 'lib/pages/sample.js', 'openvtc/walk.mjs'])
   const result = runCheck({ root: fixtures })
   assert.equal(result.ok, false)
   assert.deepEqual(
     result.files.map((f) => [f.file, f.unknown.map((r) => `${r.line}:${r.value}`), f.invalid.map((r) => `${r.line}:${r.value}`)]),
     [
       ['run-sample.js', ['9:Renamed', '12:Gone_'], ['10:Not Here']],
+      ['lib/pages/sample.js', ['7:Lost'], []],
       ['openvtc/walk.mjs', ['2:TuiOnly'], []],
     ]
   )
   assert.deepEqual(result.stale, ['Unused'])
-  assert.equal(result.totals.allowed, 1)
+  assert.equal(result.totals.allowed, 2)
   assert.equal(result.known.keys, 5)
   assert.equal(result.known.stems, 1)
 })
@@ -242,7 +271,7 @@ test('fixture tree: lists run-*, lib and openvtc drivers (unit tests excluded) a
 test('fixture tree passes once the allowlist covers what is left (an explicit allowlist replaces the file)', () => {
   const result = runCheck({
     root: fixtures,
-    allow: { Old: 'x', Renamed: 'x', Gone_: 'x', 'Not Here': 'x', TuiOnly: 'x' },
+    allow: { Old: 'x', Renamed: 'x', Gone_: 'x', 'Not Here': 'x', TuiOnly: 'x', Lost: 'x' },
   })
   assert.equal(result.ok, true)
   assert.deepEqual(result.files, [])
