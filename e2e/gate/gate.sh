@@ -102,7 +102,9 @@ cmd_run() {
     --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;; *) usage ;;
   esac; done
   [ -n "$pin" ] || usage
-  gate_env; use_build "$pin"
+  gate_env
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
   run_lock
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
@@ -121,7 +123,9 @@ cmd_rerun() {
   [ "$only" = --only-failed ] || usage
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
-  gate_env; use_build "$pin"
+  gate_env
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
   run_lock
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
@@ -179,48 +183,18 @@ mac_busy() {
 }
 
 # A laptop in a bag is not a gate machine: a closed lid with no display behind it sleeps the Mac, and every leg
-# stalls with it (239 gate, 10-09: three hours). Stable means the lid is open, or an external display is attached (a
-# closed MacBook on a desk, driving a monitor, stays awake). There is no power-adapter condition: dropped, 10-10.
-lid_closed() { ioreg -r -k AppleClamshellState -d 4 2>/dev/null | grep -q '"AppleClamshellState" = Yes'; }
-# Displays other than the built-in panel, from system_profiler, which names each display's connection type
-# (Internal for the panel) in about 0.2 s. Not `ioreg -l | grep -c IODisplayConnect`: on Apple silicon that matches
-# a class table in IOKitDiagnostics and reads 1 with nothing attached, and AppleCLCD2 nodes read 0 here.
-external_displays() {
-  system_profiler SPDisplaysDataType 2>/dev/null | awk '/^ *Connection Type: / && !/Connection Type: Internal$/ {n++} END {print n + 0}'
-}
+# stalls with it (239 gate, 10-09: three hours). stable.mjs holds the rule and its two detectors, tested on captured
+# outputs: stable when the lid is open or an external display is online; a Mac with no lid and no battery is a
+# desktop and is stable (said once, so the log shows it); no lid key but a battery is unknown, and unknown does not
+# start a gate. There is no power-adapter condition: dropped, 10-10. GATE_ALLOW_UNSTABLE=1 starts anyway, with a
+# warning. A sleep inside a leg is a separate matter: sleeps.mjs marks that leg ENV (wallet #361).
 mac_stable() {
-  lid_closed || return 0
-  local n; n=$(external_displays)
-  [ "${n:-0}" -gt 0 ] && return 0
-  say "the Mac is not stable (lid closed, no external display): not running"; return 1
-}
-
-# The Mac's Sleep entries in pmset's log between two of the run's UTC stamps (started=, ended=), as the log prints
-# them (local time with its zone). Each candidate line is converted with its own zone, so a DST change between the
-# two stamps cannot move it; lines before the run's local date, less a day of slack, are not converted at all.
-sleep_during() {
-  local s e from line ts t
-  s=$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "${1%Z}" +%s 2>/dev/null) || return 1
-  e=$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "${2%Z}" +%s 2>/dev/null) || return 1
-  from=$(date -j -r $((s - 86400)) +%Y-%m-%d)
-  pmset -g log 2>/dev/null | awk -v f="$from" '/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} [-+][0-9]{4} Sleep  / && substr($0, 1, 10) >= f' | while IFS= read -r line; do
-    ts=${line:0:25}
-    t=$(date -j -f '%Y-%m-%d %H:%M:%S %z' "$ts" +%s 2>/dev/null) || continue
-    [ "$t" -ge "$s" ] && [ "$t" -le "$e" ] && echo "$ts"
-  done
-  return 0
-}
-# A run that spans a sleep has no verdict: its legs waited out the sleep and their timeouts fired on the wrong
-# clock. Record it in the run's meta; the report prints it first.
-mark_interrupted() {
-  local rd=$1 s e when n
-  s=$(grep '^started=' "$rd/meta" | cut -d= -f2); e=$(grep '^ended=' "$rd/meta" | cut -d= -f2)
-  [ -n "$s" ] && [ -n "$e" ] || return 0
-  when=$(sleep_during "$s" "$e") || return 0
-  [ -n "$when" ] || return 0
-  n=$(echo "$when" | wc -l | tr -d ' ')
-  echo "interrupted=sleep $(echo "$when" | head -1)$([ "$n" -gt 1 ] && echo " (and $((n - 1)) more)")" >> "$rd/meta"
-  say "run $(basename "$rd") INTERRUPTED: the Mac slept at $(echo "$when" | head -1) ($n sleep entries in its span); its verdict is not a verdict"
+  local out; out=$(node "$GATE_SRC/stable.mjs" --stable 2>&1)
+  case ${out%%:*} in
+    stable) case $out in *'desktop:'*) say "${out#*: }" ;; esac; return 0 ;;
+  esac
+  if [ "${GATE_ALLOW_UNSTABLE:-0}" = 1 ]; then say "WARNING: the Mac is not stable ($out), but GATE_ALLOW_UNSTABLE=1: running anyway"; return 0; fi
+  say "the Mac is not stable ($out): not running"; return 1
 }
 
 # The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a
@@ -234,7 +208,7 @@ watch_checkout_ready() {
 
 cmd_watch_main() {
   gate_env
-  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i rd
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
   say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
   while :; do
     pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
@@ -253,7 +227,6 @@ cmd_watch_main() {
         fi
         for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60; done
         ( cmd_run --pin "$sha" ) || say "gate for ${sha:0:8} ended with status $?"
-        rd=$(ls -d "$GATE_HOME"/runs/*-"${sha:0:8}"-gate 2>/dev/null | sort | tail -1); [ -z "$rd" ] || mark_interrupted "$rd"
       fi
     fi
     sleep "$interval"
@@ -286,8 +259,6 @@ cmd_watch() {
 # Rows per leg, and the wall-clock from the first leg's start to the last leg's end.
 cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
-  local intr; intr=$(grep '^interrupted=' "$rd/meta" | cut -d= -f2-)
-  [ -z "$intr" ] || echo "INTERRUPTED (${intr%% *}) ${intr#* }: the Mac slept during this run; its rows are not a verdict"
   echo "== $1 · $(grep -E '^(wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
   local leg rc s e first= last=0
   while IFS=$'\t' read -r leg rc s e; do
