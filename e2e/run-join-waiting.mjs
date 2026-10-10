@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 235 evidence (Alberto, 10-06): the community card's "Show the code they see" WHILE a join is still waiting.
+ * 235 evidence (10-06): the community card's "Show the code they see" WHILE a join is still waiting.
  * On a linked Android phone: open C by its link, Ask to join (the admin-review way), then My Agent → the card's
  * identity line → screenshot community-card-waiting.png into PERSONA_SHOTS. Prints `PERSONA-DID …` and
  * `WAITING-STATUS …`. The caller declines the request afterwards, unless JOIN_APPROVE=1.
@@ -13,17 +13,22 @@
  *   join-approved-wallet     (d) the Wallet shows C's membership card
  * Always, before approving: choose-how-to-join (#326): C's screen offers "Choose how to join" → Join.
  * Prints `JOIN_MEMBER <did>` so the caller removes the member afterwards.
+ * The rows are lib/rows.js rows (a failing row never stops the rest; (b)–(d) need (a)); the Join and
+ * community screens are driven through lib/pages/join.js and lib/pages/agents.js.
  *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME="Keyring Lab Community" PERSONA_SHOTS=<dir> node run-join-waiting.mjs
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsTestId, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId, ensureAppium, screenshot } from "./lib/driver.js";
+import { existsTestId, scrollToTestId, sleep, stopAppium, tapTestId, ensureAppium, screenshot } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
-import { handleBiometricConfirmIfPresent, pasteLinkFromHome } from "./lib/flows.js";
+import { pasteLinkFromHome } from "./lib/flows.js";
 import { capturePersonaDid, footClear } from "./lib/personaDid.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
+import { createRows } from "./lib/rows.js";
+import { agents } from "./lib/pages/agents.js";
+import { community, join, readMemberState, readStanding } from "./lib/pages/join.js";
 
 const C_DID = process.env.C_DID;
 const key = communityCardKey(C_DID || "");
@@ -32,7 +37,7 @@ const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp
 const admin = (...a) =>
   execFileSync("node", [ADMIN, ...(process.env.C_ADMIN || "").split(" ").filter(Boolean), ...a], { encoding: "utf8", timeout: 90000, stdio: ["ignore", "pipe", "pipe"] });
 const json = (t) => JSON.parse(t.slice(t.indexOf("{")));
-const row = (name, ok, detail) => console.log(`ROW ${name} ${ok ? "PASS" : "FAIL"} — ${detail}`);
+const rows = createRows({ label: "waiting" });
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 /** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
 async function statusOf(d, tries) {
@@ -60,21 +65,12 @@ const isMember = (status) => /you(?:'|’)?re a member/i.test(status);
  * ways in. Opened from Your agent's card for C while this phone's request waits. Row: choose-how-to-join.
  */
 async function chooseHowToJoin(d) {
-  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-  const open = (await existsTestId(d, `AgentCommunityOpen_${key}`, 5000)) ? `AgentCommunityOpen_${key}` : (await existsTestId(d, "AgentMembershipRow", 1500)) ? "AgentMembershipRow" : "";
-  if (!open) return row("choose-how-to-join", false, `no card for C on Your agent (AgentCommunityOpen_${key})`);
-  await tapTestId(d, open, 10000);
-  const btn = await scrollToTestId(d, "ApplyToCommunityButton", 6).catch(() => undefined);
-  const words = btn ? String((await btn.getAttribute("text").catch(() => "")) || (await textOf(d, "ApplyToCommunityButton").catch(() => ""))).trim() : "";
-  if (!btn) {
-    await screenshot(d, "choose-how-to-join-missing").catch(() => undefined);
-    return row("choose-how-to-join", false, "C's screen shows no ApplyToCommunityButton");
-  }
-  await btn.click();
-  let landed = "";
-  for (const id of ["JoinWays", "JoinAsks", "JoinStanding", "JoinAsk"]) if (!landed && (await existsTestId(d, id, id === "JoinWays" ? 15000 : 2000))) landed = id;
-  await screenshot(d, "choose-how-to-join").catch(() => undefined);
-  row("choose-how-to-join", Boolean(landed) && !/apply to join/i.test(words), `button "${words || "?"}" → ${landed || "no Join screen"}`);
+  await rows.row("choose-how-to-join", async () => {
+    await agents.openCommunityCard(d, { key });
+    const { words, landed } = (await community.chooseHowToJoin(d)).value;
+    await screenshot(d, "choose-how-to-join").catch(() => undefined);
+    return { ok: Boolean(landed) && !/apply to join/i.test(words), detail: `button "${words || "?"}" → ${landed}` };
+  });
   await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
 }
 
@@ -84,34 +80,23 @@ async function chooseHowToJoin(d) {
  */
 async function doneFlow(d) {
   await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-  await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(C_DID)}&n=${encodeURIComponent(C_NAME)}`);
-  const check = await existsTestId(d, "JoinMemberCheck", 30000);
-  const done = Boolean(await scrollToTestId(d, "JoinDone", 4, { from: 0.5 }).catch(() => undefined));
-  const open = await existsTestId(d, "JoinOpenCommunity", 1500);
-  await screenshot(d, "join-done-member").catch(() => undefined);
-  row("join-done-member", check && done, `JoinMemberCheck ${check} · JoinDone ${done} · JoinOpenCommunity ${open}`);
+  await join.openCommunity(d, { did: C_DID, name: C_NAME });
+  await rows.row("join-done-member", async () => {
+    const { check, done, open } = await readMemberState(d);
+    await screenshot(d, "join-done-member").catch(() => undefined);
+    return { ok: check && done, detail: `JoinMemberCheck ${check} · JoinDone ${done} · JoinOpenCommunity ${open}` };
+  });
   // IN-142 (239 re-pin): a member's Join still offers "A different community", and it opens the scanner (#344 hid
   // it, a dead end for joining a second community).
-  const other = await scrollToTestId(d, "JoinScanCommunity", 4, { from: 0.5 }).catch(() => undefined);
-  let scanner = false;
-  if (other) {
-    await other.click();
-    for (let i = 0; i < 3 && !scanner; i++) {
-      scanner = await existsTestId(d, "PasteUrlButton", 5000);
-      if (!scanner && (await existsTestId(d, "Continue", 1500))) await tapTestId(d, "Continue", 5000).catch(() => undefined);
-    }
-    await screenshot(d, "member-join-different-community").catch(() => undefined);
-    await d.back().catch(() => undefined);
-    await existsTestId(d, "JoinMemberCheck", 10000);
-  }
-  row("member-join-different-community", Boolean(other) && scanner, `JoinScanCommunity on a member's Join ${Boolean(other)} · the scanner opened ${scanner} (IN-142)`);
-  await scrollToTestId(d, "JoinDone", 4, { from: 0.5 }).catch(() => undefined);
-  if (!done) return row("join-done-highlight", false, "no JoinDone to tap");
-  await tapTestId(d, "JoinDone", 10000);
-  const home = await existsTestId(d, "AgentHome", 15000);
-  const lit = await existsTestId(d, "AgentCommunityHighlighted", 10000);
-  await screenshot(d, "join-done-highlight").catch(() => undefined);
-  row("join-done-highlight", home && lit, `Your agent ${home} · AgentCommunityHighlighted ${lit}`);
+  await rows.row("member-join-different-community", async () => {
+    const { offered, scanner } = (await join.scanOtherCommunity(d)).value;
+    return { ok: offered && scanner, detail: `JoinScanCommunity on a member's Join ${offered} · the scanner opened ${scanner} (IN-142)` };
+  });
+  await rows.row("join-done-highlight", async () => {
+    const { lit } = (await join.done(d)).value;
+    await screenshot(d, "join-done-highlight").catch(() => undefined);
+    return { ok: lit, detail: `Your agent true · AgentCommunityHighlighted ${lit}` };
+  });
 }
 
 /**
@@ -124,21 +109,22 @@ async function otherTicketFlow(d, me) {
   const B = process.env.COMMUNITY_B_DID;
   const cmd = process.env.COMMUNITY_B_TICKET_CMD;
   if (!B || !cmd) {
-    for (const n of ["member-scan-other-ticket", "left-scan-other-ticket"]) console.log(`ROW ${n} SKIP — SKIP: no community B (COMMUNITY_B_DID / COMMUNITY_B_TICKET_CMD unset)`);
+    for (const n of ["member-scan-other-ticket", "left-scan-other-ticket"]) rows.skip(n, "SKIP: no community B (COMMUNITY_B_DID / COMMUNITY_B_TICKET_CMD unset)");
     return;
   }
-  const scan = async (name, when) => {
-    const ticket = execFileSync("bash", ["-c", cmd], { encoding: "utf8", timeout: 120000 }).trim().split("\n").pop();
-    if (!/^vetting-ticket:/.test(ticket)) return row(name, false, `${when}: no vetting-ticket from COMMUNITY_B_TICKET_CMD ("${ticket.slice(0, 40)}")`);
-    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-    await pasteLinkFromHome(d, ticket).catch((e) => log(`${name}: ${String(e.message).split("\n")[0]}`));
-    const field = await scrollToTestId(d, "VettingTicketInput", 6).catch(() => undefined);
-    const held = field ? String((await field.getAttribute("text").catch(() => "")) || "").trim() : "";
-    const different = /different community/i.test(await d.getPageSource());
-    await screenshot(d, name).catch(() => undefined);
-    row(name, held === ticket && !different, `${when}: Get vetted holds B's ticket ${held === ticket} · "different community" shown ${different} (IN-144)`);
-    await d.back().catch(() => undefined);
-  };
+  const scan = (name, when) =>
+    rows.row(name, async () => {
+      const ticket = execFileSync("bash", ["-c", cmd], { encoding: "utf8", timeout: 120000 }).trim().split("\n").pop();
+      if (!/^vetting-ticket:/.test(ticket)) return { ok: false, detail: `${when}: no vetting-ticket from COMMUNITY_B_TICKET_CMD ("${ticket.slice(0, 40)}")` };
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      await pasteLinkFromHome(d, ticket).catch((e) => log(`${name}: ${String(e.message).split("\n")[0]}`));
+      const field = await scrollToTestId(d, "VettingTicketInput", 6).catch(() => undefined);
+      const held = field ? String((await field.getAttribute("text").catch(() => "")) || "").trim() : "";
+      const different = /different community/i.test(await d.getPageSource());
+      await screenshot(d, name).catch(() => undefined);
+      await d.back().catch(() => undefined);
+      return { ok: held === ticket && !different, detail: `${when}: Get vetted holds B's ticket ${held === ticket} · "different community" shown ${different} (IN-144)` };
+    });
   await scan("member-scan-other-ticket", "a member of C");
   // Leave C (the community removes the member, as the leg's cleanup would), then scan again.
   const said = admin("member-remove", me, "gate: IN-144, left before the second scan").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
@@ -151,41 +137,65 @@ async function otherTicketFlow(d, me) {
 async function approvedFlow(d, me) {
   const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
   const req = pending.filter((r) => r.applicantDid === me).pop();
-  row("join-request-is-mine", Boolean(me && req), req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`);
-  if (!req) return;
-  const said = admin("join-decide", req.id, "approved").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
-  log(`admin approves ${req.id}: ${said.trim()}`);
-  console.log(`JOIN_MEMBER ${me}`);
+  await rows.row("join-request-is-mine", () => ({
+    ok: Boolean(me && req),
+    detail: req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`,
+  }));
+  const mine = { needs: ["join-request-is-mine"] };
+  if (req) {
+    const said = admin("join-decide", req.id, "approved").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+    log(`admin approves ${req.id}: ${said.trim()}`);
+    console.log(`JOIN_MEMBER ${me}`);
+  }
   // (b) On its own first: Keyring is told, or finds out at its next read. Then once by Check now.
-  const t0 = Date.now();
-  let status = "";
-  let how = "";
-  for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
-    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-    status = await statusOf(d, 3);
-    if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
-  }
-  if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
-    await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
-    const t1 = Date.now();
-    for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
-    if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
-  }
-  await screenshot(d, "join-approved-card").catch(() => undefined);
-  row("join-approved-card", isMember(status), `${how || "not a member after 90 s and Check now"}; status "${status}"`);
+  await rows.row(
+    "join-approved-card",
+    async () => {
+      const t0 = Date.now();
+      let status = "";
+      let how = "";
+      for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
+        await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+        status = await statusOf(d, 3);
+        if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
+      }
+      if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
+        await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
+        const t1 = Date.now();
+        for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
+        if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
+      }
+      await screenshot(d, "join-approved-card").catch(() => undefined);
+      return { ok: isMember(status), detail: `${how || "not a member after 90 s and Check now"}; status "${status}"` };
+    },
+    mine
+  );
   // (c) The community's own list.
-  const members = (json(admin("members")).items ?? []).map((m) => m.did);
-  row("join-approved-listed", members.includes(me), members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members`);
+  await rows.row(
+    "join-approved-listed",
+    () => {
+      const members = (json(admin("members")).items ?? []).map((m) => m.did);
+      return { ok: members.includes(me), detail: members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members` };
+    },
+    mine
+  );
   // (d) The Wallet card. The Wallet's first-visit tour sits over the list: close it first.
-  await tapTestId(d, "Wallet", 10000).catch(() => undefined);
-  await sleep(2000);
-  for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-  const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
-  let shown = false;
-  for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
-  const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
-  await screenshot(d, "join-approved-wallet").catch(() => undefined);
-  row("join-approved-wallet", shown, shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s`);
+  await rows.row(
+    "join-approved-wallet",
+    async () => {
+      await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+      await sleep(2000);
+      for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+      let shown = false;
+      for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
+      const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
+      await screenshot(d, "join-approved-wallet").catch(() => undefined);
+      return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
+    },
+    mine
+  );
+  if (!req) return;
   if (is238) await doneFlow(d);
   await otherTicketFlow(d, me);
 }
@@ -195,33 +205,27 @@ let is238 = false;
 try {
   await ensureAppium();
   d = await makeDriver({ platform: "android", udid: process.env.UDID, keepState: true });
+  rows.setDriver(d);
   await d.activateApp(process.env.E2E_APP_ID);
   await unlockToHome(d).catch(async (e) => {
     if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
   });
-  await pasteLinkFromHome(d, `keyring://vti/community?d=${encodeURIComponent(C_DID)}&n=${encodeURIComponent(C_NAME)}`);
-  await scrollToTestId(d, "JoinAsk", 6, { from: 0.45 }).catch(() => undefined);
-  const ask = (await existsTestId(d, "JoinAsk", 5000)) ? "JoinAsk" : "JoinStart";
-  await tapTestId(d, ask, 15000);
-  await waitForTestId(d, "JoinMakeIdentity", 30000).catch(() => undefined);
-  if (await existsTestId(d, "JoinAsContinue", 3000)) await tapTestId(d, "JoinAsContinue", 10000);
-  await handleBiometricConfirmIfPresent(d).catch(() => undefined);
-  log(`asked to join by ${ask}`);
+  await join.openCommunity(d, { did: C_DID, name: C_NAME });
+  const { askId } = (await join.ask(d)).value;
+  log(`asked to join by ${askId}`);
   // Sent: the standing, or the "request was sent" line when the answer is late. Either way, it is waiting.
-  const shown = await waitForTestId(d, "JoinStanding", 120000).then(() => "standing", () => "no standing in 120 s");
+  const { shown } = (await join.awaitSent(d, { timeoutMs: 120000, required: false })).value;
   log(`Join after sending: ${shown}`);
   // 236: #319 the Join screen names the identity it asked with; #322 its actions end above the tab bar.
-  const nameLine = (await existsTestId(d, "JoinStandingIdentityName", 3000)) ? (await textOf(d, "JoinStandingIdentityName")).trim() : "";
+  const standing = await readStanding(d);
+  const nameLine = standing.identityName;
   console.log(`JOIN-IDENTITY-NAME ${nameLine || "(none)"}`);
   // #334: the line names the identity as a persona ID; 238 (#344): the bare word, under "You asked to join as".
   const bareWord = /^[a-z]+(?:-[a-z]+)+$/.test(nameLine);
-  row("join-persona-id", /^Your persona ID: \S/.test(nameLine) || bareWord, `"${nameLine}"${bareWord ? " (the bare word, #344)" : ""}`);
+  await rows.row("join-persona-id", () => ({ ok: /^Your persona ID: \S/.test(nameLine) || bareWord, detail: `"${nameLine}"${bareWord ? " (the bare word, #344)" : ""}` }));
   // 238 (#344): the waiting state says so in a title and what shows when accepted, and offers no ways in.
-  is238 = await existsTestId(d, "JoinRequestSent", 2000);
-  if (is238) {
-    const willShow = await existsTestId(d, "JoinWillShow", 2000);
-    row("join-request-sent", willShow, `JoinRequestSent "${(await textOf(d, "JoinRequestSent").catch(() => "")).trim()}" · JoinWillShow ${willShow}`);
-  }
+  is238 = standing.requestSent;
+  if (is238) await rows.row("join-request-sent", () => ({ ok: standing.willShow, detail: `JoinRequestSent "${standing.requestSentText}" · JoinWillShow ${standing.willShow}` }));
   const actionsY = async () => {
     const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/JoinActions")`);
     return (await el.isExisting().catch(() => false)) ? Math.round((await el.getLocation()).y) : undefined;
@@ -242,11 +246,16 @@ try {
   // in view, which is what the row is for. Otherwise the swipe must move them.
   const { height: wh } = await d.getWindowSize();
   const fits = yBefore !== undefined && yAfter === yBefore && yAfter < wh * 0.85;
-  row("join-actions-scroll", (yAfter !== undefined && yAfter !== yBefore) || fits, fits ? `the page fits: JoinActions stays at y ${yAfter} of ${wh}, in view (nothing to scroll)` : `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`);
+  await rows.row("join-actions-scroll", () => ({
+    ok: (yAfter !== undefined && yAfter !== yBefore) || fits,
+    detail: fits ? `the page fits: JoinActions stays at y ${yAfter} of ${wh}, in view (nothing to scroll)` : `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`,
+  }));
   if (is238) {
     // Swiped to the end of the page: no ways in anywhere on it while the request waits.
-    const ways = (await existsTestId(d, "JoinWays", 1500)) || (await existsTestId(d, "JoinWaysOthers", 500));
-    row("join-waiting-no-ways", !ways, ways ? "the waiting state still shows ways in" : "no JoinWays while waiting");
+    await rows.row("join-waiting-no-ways", async () => {
+      const ways = (await existsTestId(d, "JoinWays", 1500)) || (await existsTestId(d, "JoinWaysOthers", 500));
+      return { ok: !ways, detail: ways ? "the waiting state still shows ways in" : "no JoinWays while waiting" };
+    });
   }
   await tapTestId(d, "MyAgent", 15000);
   // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
@@ -260,8 +269,10 @@ try {
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);
   if (d) await screenshot(d, "community-card-waiting-failure").catch(() => undefined);
-  process.exitCode = 1;
+  rows.fatal(e);
 } finally {
+  rows.summary();
+  process.exitCode = rows.exitCode();
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();
 }
