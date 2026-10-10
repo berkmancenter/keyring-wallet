@@ -10,7 +10,7 @@ T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1
   adb -s $E uninstall $BID >/dev/null 2>&1; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; emu_stop
-  echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; rules_clear "$RUNNER_MAIN_SLUG"
+  echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
 }
 LEG_CLEANUP=fin
 emu_start 5572
