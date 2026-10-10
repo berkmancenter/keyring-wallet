@@ -19,7 +19,7 @@
 
 **Companions:**
 - [conformance vectors](./keyring-qr-and-links.vectors.json) (section 7);
-- [annex](./keyring-qr-and-links.annex.md) (non-normative: link hosting, device tests, rendering guidance, rationale, alternatives, one consumer's legacy format, and upstream fit);
+- [annex](./keyring-qr-and-links.annex.md) (non-normative: link hosting, device tests, rendering guidance, rationale, alternatives, and upstream fit);
 - [proposal to Trust Over IP](./keyring-qr-and-links.toip-proposal.md) (the shared link host).
 
 "Trigger link" is this document's term, and the VTI draft uses it too.
@@ -204,7 +204,6 @@ A consumer holds the list of flow URIs it implements, without their version segm
 - Each vector has `id`, `input`, `channel` and `expect`.
 - An accepted result has `outcome`, `via`, `from`, `id`, `exp`, `flow`, `task` and `ignored`.
 - A rejected result has `outcome`, `reason` and `ui`.
-- The file's `legacyVectors` belong to the annex, not to this section.
 
 **What no vector can test:**
 - section 5 rules 1 to 4 and 7 to 9;
@@ -256,4 +255,4 @@ The VTI specification governs flows under `https://link.trustoverip.org/vti/flow
 - **Trust Tasks.** Framework Working Draft 0.7.0 (Type URI; Compatibility Rules; Migrating Between Versions; Audience Binding; Consumer Requirements; `parentThreadId`); `bindings/didcomm/0.2`, `bindings/https/0.3`, `bindings/push/0.1` and `trust-task-discovery/0.3`, all draft.
 - **VTI.** The VTI specification draft, trigger-link chapter (`trustoverip/dtgwg-vti-spec` PR #58, branch `feat/trigger-links`, read 2026-10-10).
 
-Where each was read is in annex G.
+Where each was read is in annex F.
