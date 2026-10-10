@@ -66,7 +66,11 @@ const network = async (on) => {
   for (let i = 0; i < 20 && online() !== on; i++) await sleep(1000);
   log(`network ${on ? "on" : "off"}: online ${online()}`);
 };
-const rows = createRows({ label: "lostreq" });
+const rows = createRows({
+  label: "lostreq",
+  // Each needs the one before it; declared here so a rerun of one alone (gate.sh rerun --only-failed) runs its needs.
+  needs: { "join-lost-request": ["lost-ask-offline"], "join-lost-send-again": ["join-lost-request"] },
+});
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 
 let d;
@@ -114,36 +118,28 @@ try {
     rows.skip("join-lost-send-again", "the request was not lost");
   } else {
     await rows.row("lost-ask-offline", () => ({ ok: true, detail: `C has no new request; Join showed ${offline || "nothing"}` }));
-    await rows.row(
-      "join-lost-request",
-      async () => {
-        await tapTestId(d, "MyAgent", 15000).catch(() => undefined);
-        await join.openCommunity(d, { did: C_DID, name: C_NAME });
-        const { lost, words, checked, standingText } = (await join.awaitLost(d, { timeoutMs: 120000, checkAgainAfterMs: 30000 })).value;
-        await screenshot(d, "join-lost-request").catch(() => undefined);
-        return {
-          ok: lost && /didn.t reach/i.test(words),
-          detail: lost ? `"${words}"${checked ? " (after Check again)" : ""}` : `no JoinRequestLost in 120 s; Join shows "${standingText ?? ""}"`,
-        };
-      },
-      { needs: ["lost-ask-offline"] }
-    );
+    await rows.row("join-lost-request", async () => {
+      await tapTestId(d, "MyAgent", 15000).catch(() => undefined);
+      await join.openCommunity(d, { did: C_DID, name: C_NAME });
+      const { lost, words, checked, standingText } = (await join.awaitLost(d, { timeoutMs: 120000, checkAgainAfterMs: 30000 })).value;
+      await screenshot(d, "join-lost-request").catch(() => undefined);
+      return {
+        ok: lost && /didn.t reach/i.test(words),
+        detail: lost ? `"${words}"${checked ? " (after Check again)" : ""}` : `no JoinRequestLost in 120 s; Join shows "${standingText ?? ""}"`,
+      };
+    });
 
     // 3 — send it again.
-    await rows.row(
-      "join-lost-send-again",
-      async () => {
-        const before2 = pendingIds();
-        await join.sendAgain(d);
-        const waiting = (await join.awaitSent(d, { timeoutMs: 120000, required: false })).value.shown === "standing";
-        let fresh = [];
-        for (const until = Date.now() + 90000; Date.now() < until && !fresh.length; await sleep(3000)) fresh = [...pendingIds()].filter((id) => !before2.has(id));
-        fresh.forEach((id) => console.log(`LOST_REQ ${id}`));
-        await screenshot(d, "join-lost-send-again").catch(() => undefined);
-        return { ok: waiting && fresh.length === 1, detail: `Join waiting ${waiting} ("${(await readStanding(d)).standingText ?? ""}"); C lists ${fresh.length} new pending request(s)` };
-      },
-      { needs: ["join-lost-request"] }
-    );
+    await rows.row("join-lost-send-again", async () => {
+      const before2 = pendingIds();
+      await join.sendAgain(d);
+      const waiting = (await join.awaitSent(d, { timeoutMs: 120000, required: false })).value.shown === "standing";
+      let fresh = [];
+      for (const until = Date.now() + 90000; Date.now() < until && !fresh.length; await sleep(3000)) fresh = [...pendingIds()].filter((id) => !before2.has(id));
+      fresh.forEach((id) => console.log(`LOST_REQ ${id}`));
+      await screenshot(d, "join-lost-send-again").catch(() => undefined);
+      return { ok: waiting && fresh.length === 1, detail: `Join waiting ${waiting} ("${(await readStanding(d)).standingText ?? ""}"); C lists ${fresh.length} new pending request(s)` };
+    });
   }
 } catch (e) {
   log(`error: ${e.message.split("\n")[0]}`);

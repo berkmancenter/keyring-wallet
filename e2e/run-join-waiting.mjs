@@ -37,7 +37,11 @@ const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp
 const admin = (...a) =>
   execFileSync("node", [ADMIN, ...(process.env.C_ADMIN || "").split(" ").filter(Boolean), ...a], { encoding: "utf8", timeout: 90000, stdio: ["ignore", "pipe", "pipe"] });
 const json = (t) => JSON.parse(t.slice(t.indexOf("{")));
-const rows = createRows({ label: "waiting" });
+const rows = createRows({
+  label: "waiting",
+  // A rerun of one of the three alone (gate.sh rerun --only-failed) runs join-request-is-mine first: declared here.
+  needs: { "join-approved-card": ["join-request-is-mine"], "join-approved-listed": ["join-request-is-mine"], "join-approved-wallet": ["join-request-is-mine"] },
+});
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 /** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
 async function statusOf(d, tries) {
@@ -141,60 +145,47 @@ async function approvedFlow(d, me) {
     ok: Boolean(me && req),
     detail: req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`,
   }));
-  const mine = { needs: ["join-request-is-mine"] };
   if (req) {
     const said = admin("join-decide", req.id, "approved").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
     log(`admin approves ${req.id}: ${said.trim()}`);
     console.log(`JOIN_MEMBER ${me}`);
   }
   // (b) On its own first: Keyring is told, or finds out at its next read. Then once by Check now.
-  await rows.row(
-    "join-approved-card",
-    async () => {
-      const t0 = Date.now();
-      let status = "";
-      let how = "";
-      for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
-        await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-        status = await statusOf(d, 3);
-        if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
-      }
-      if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
-        await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
-        const t1 = Date.now();
-        for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
-        if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
-      }
-      await screenshot(d, "join-approved-card").catch(() => undefined);
-      return { ok: isMember(status), detail: `${how || "not a member after 90 s and Check now"}; status "${status}"` };
-    },
-    mine
-  );
+  await rows.row("join-approved-card", async () => {
+    const t0 = Date.now();
+    let status = "";
+    let how = "";
+    for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      status = await statusOf(d, 3);
+      if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
+    }
+    if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
+      await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
+      const t1 = Date.now();
+      for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
+      if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
+    }
+    await screenshot(d, "join-approved-card").catch(() => undefined);
+    return { ok: isMember(status), detail: `${how || "not a member after 90 s and Check now"}; status "${status}"` };
+  });
   // (c) The community's own list.
-  await rows.row(
-    "join-approved-listed",
-    () => {
-      const members = (json(admin("members")).items ?? []).map((m) => m.did);
-      return { ok: members.includes(me), detail: members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members` };
-    },
-    mine
-  );
+  await rows.row("join-approved-listed", () => {
+    const members = (json(admin("members")).items ?? []).map((m) => m.did);
+    return { ok: members.includes(me), detail: members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members` };
+  });
   // (d) The Wallet card. The Wallet's first-visit tour sits over the list: close it first.
-  await rows.row(
-    "join-approved-wallet",
-    async () => {
-      await tapTestId(d, "Wallet", 10000).catch(() => undefined);
-      await sleep(2000);
-      for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-      const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
-      let shown = false;
-      for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
-      const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
-      await screenshot(d, "join-approved-wallet").catch(() => undefined);
-      return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
-    },
-    mine
-  );
+  await rows.row("join-approved-wallet", async () => {
+    await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+    await sleep(2000);
+    for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+    const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+    let shown = false;
+    for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
+    const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
+    await screenshot(d, "join-approved-wallet").catch(() => undefined);
+    return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
+  });
   if (!req) return;
   if (is238) await doneFlow(d);
   await otherTicketFlow(d, me);

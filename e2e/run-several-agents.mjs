@@ -52,6 +52,8 @@ const firstLine = (err) => String(err?.message ?? err).split("\n")[0];
 const summary = [];
 const rows = createRows({
   label: "agents",
+  // A rerun of a dependent alone (gate.sh rerun --only-failed) runs its need first: declared here, not on the row.
+  needs: { "R1 switch to B": ["R1 add + keep"], "wallet-hidden-unlinked": ["wallet-both-cards"], "R4 unlink the last": ["R4 unlink B"] },
   log: (s) => {
     console.log(s);
     if (s.startsWith("ROW ")) summary.push(s.slice(4));
@@ -225,17 +227,13 @@ try {
       };
     });
     t0.R1b = Date.now();
-    await rows.row(
-      "R1 switch to B",
-      async () => {
-        await agents.switchTo(d, { name: E.B_NAME, owner });
-        const nameB = await myAgent();
-        const online = await txt(d, "AgentHomeStatus");
-        log(`R1: after switching, home "${nameB}" · status "${online}" (${since("R1b")})`);
-        return { ok: nameB.includes(E.B_NAME), detail: `home "${nameB}", status "${online}" in ${since("R1b")}` };
-      },
-      { needs: ["R1 add + keep"] }
-    );
+    await rows.row("R1 switch to B", async () => {
+      await agents.switchTo(d, { name: E.B_NAME, owner });
+      const nameB = await myAgent();
+      const online = await txt(d, "AgentHomeStatus");
+      log(`R1: after switching, home "${nameB}" · status "${online}" (${since("R1b")})`);
+      return { ok: nameB.includes(E.B_NAME), detail: `home "${nameB}", status "${online}" in ${since("R1b")}` };
+    });
     if (added.ok) console.log(`TEMP_B ${added.value.link.temp}`);
   }
 
@@ -507,15 +505,16 @@ try {
   // and B's card must leave the Wallet (wallet-hidden-unlinked in R4).
   if (ROWS.includes("R10")) {
     t0.R10 = Date.now();
-    await rows.row("wallet-both-cards", async () => {
+    // The join is the group's action, run whatever rows are selected (a rerun of wallet-hidden-unlinked needs it too).
+    const r10 = await attempt("R10", async () => {
       await agents.switchTo(d, { name: E.B_NAME, owner });
       const req = await askToJoinC(d, "R10 on B");
       log(`R10: admin approves: ${admin("join-decide", req.id, "approved").trim().split("\n").filter((l) => /->/.test(l)).pop()}`);
       console.log(`R10_MEMBER ${req.applicantDid}`);
       for (const until = Date.now() + 90000; Date.now() < until && walletBefore < 2; await sleep(5000)) walletBefore = await walletCardsForC(d);
       await shot(d, "agents-r10-wallet-two");
-      return { ok: walletBefore === 2, detail: `${walletBefore} Wallet card(s) name ${E.C_NAME} with A and B both members (want 2)` };
     });
+    await rows.row("wallet-both-cards", () => (r10.ok ? { ok: walletBefore === 2, detail: `${walletBefore} Wallet card(s) name ${E.C_NAME} with A and B both members (want 2)` } : threw(r10)));
     await resync(E.A_NAME);
   }
 
@@ -675,29 +674,22 @@ try {
       log(`R4: others left ${left} · home "${name}" · B's ACL still has the phone: ${phoneOnB}`);
       return { ok: left === 0 && name.includes(E.A_NAME) && !phoneOnB, detail: `others ${left}; home "${name}"; on B's ACL ${phoneOnB}` };
     });
-    // #348: B's card leaves the Wallet once B is unlinked; A's stays (the mirror re-runs on unlink: ~10 s).
-    if (walletBefore >= 0) {
-      await rows.row(
-        "wallet-hidden-unlinked",
-        async () => {
-          let now = walletBefore;
-          for (const until = Date.now() + 20000; Date.now() < until && now !== walletBefore - 1; await sleep(4000)) now = await walletCardsForC(d);
-          await shot(d, "agents-r4-wallet-after-unlink");
-          await myAgent().catch(() => "");
-          return { ok: walletBefore === 2 && now === 1, detail: `Wallet cards for ${E.C_NAME}: ${walletBefore} with B linked → ${now} after unlinking B (want 1: A's)` };
-        },
-        { needs: ["wallet-both-cards"] }
-      );
+    // #348: B's card leaves the Wallet once B is unlinked; A's stays (the mirror re-runs on unlink: ~10 s). The row
+    // is printed whenever R10 ran, so a rerun finds it: it SKIPs by itself when wallet-both-cards did not pass.
+    if (ROWS.includes("R10")) {
+      await rows.row("wallet-hidden-unlinked", async () => {
+        let now = walletBefore;
+        for (const until = Date.now() + 20000; Date.now() < until && now !== walletBefore - 1; await sleep(4000)) now = await walletCardsForC(d);
+        await shot(d, "agents-r4-wallet-after-unlink");
+        await myAgent().catch(() => "");
+        return { ok: walletBefore === 2 && now === 1, detail: `Wallet cards for ${E.C_NAME}: ${walletBefore} with B linked → ${now} after unlinking B (want 1: A's)` };
+      });
     }
-    await rows.row(
-      "R4 unlink the last",
-      async () => {
-        const { linkOffered } = (await agents.unlinkLast(d, { owner })).value;
-        await shot(d, "agents-r4-unlinked");
-        return { ok: linkOffered, detail: linkOffered ? "the phone offers to link an agent" : "no link offer" };
-      },
-      { needs: ["R4 unlink B"] }
-    );
+    await rows.row("R4 unlink the last", async () => {
+      const { linkOffered } = (await agents.unlinkLast(d, { owner })).value;
+      await shot(d, "agents-r4-unlinked");
+      return { ok: linkOffered, detail: linkOffered ? "the phone offers to link an agent" : "no link offer" };
+    });
   }
 } catch (err) {
   log(`error: ${err.message}`);
