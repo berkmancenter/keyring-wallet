@@ -92,8 +92,10 @@ row from a driver's other lines is the older form. Two things make a row indepen
 | 3 | A row failed; the leg carried on | Moves on, and records the row for `--only-failed` |
 | 1 | The leg itself broke (setup, link, crash) | Moves on, and reruns the whole leg in `--only-failed` |
 
-A failing row never stops its leg. A row that needs another (`{ needs: [...] }`) reports SKIP with the reason
-when that one failed. `--only-failed` passes the names through `E2E_ONLY_ROWS`.
+A failing row never stops its leg. A row that needs another (the `needs` map given to `createRows`) reports SKIP
+with the reason when that one failed. `--only-failed` passes the names through `E2E_ONLY_ROWS`, and a name selects
+the rows it needs as well, all the way up: a rerun of the dependent alone runs its needs first, even though they
+passed last time and are not on the list.
 
 ## Before a candidate: `dry --golden`
 

@@ -8,8 +8,9 @@
  * scrollToTestId, existsTestId, existsRawId, findScrolling, waitStable and its
  * `absent` list, tapLifted, textOf, and the build-capability pair buildHas and
  * buildLacks, whose key is their first argument) and every raw "com.ariesbifold:id/<key>"
- * string, across e2e/run-*.{js,mjs}, e2e/lib/*.{js,mjs} (unit tests excluded:
- * their fixture ids are not selectors) and e2e/openvtc/*.{js,mjs}. A template
+ * string, across e2e/run-*.{js,mjs}, e2e/lib/*.{js,mjs}, the page objects
+ * e2e/lib/pages/*.{js,mjs} (unit tests excluded: their fixture ids are not
+ * selectors) and e2e/openvtc/*.{js,mjs}. A template
  * literal with substitutions yields a stem: the text before its first `${`.
  * A key that is not a literal (a variable, a call) is dynamic and not checked.
  *
@@ -473,7 +474,7 @@ export const listDriverFiles = (root = e2eDir) => {
   for (const name of fs.readdirSync(root).sort()) {
     if (name.startsWith('run-') && DRIVER_FILE.test(name)) files.push(path.join(root, name))
   }
-  for (const dir of ['lib', 'openvtc']) {
+  for (const dir of ['lib', 'lib/pages', 'openvtc']) {
     const full = path.join(root, dir)
     if (!fs.existsSync(full)) continue
     for (const name of fs.readdirSync(full).sort()) {

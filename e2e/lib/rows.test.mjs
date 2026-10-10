@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { EXIT_BROKEN, EXIT_PASS, EXIT_ROW_FAILED, createRows, selectedRows } from "./rows.js";
+import { EXIT_BROKEN, EXIT_PASS, EXIT_ROW_FAILED, createRows, selectedRows, withNeeds } from "./rows.js";
 
 const leg = (opts = {}) => {
   const lines = [];
@@ -67,6 +67,43 @@ test("E2E_ONLY_ROWS: only the named rows run; the rest say not selected; a liste
   assert.deepEqual(ran, ["link", "approve"]);
   assert.equal(lines[1], "ROW rename SKIP — not selected");
   assert.equal(rows.exitCode(), EXIT_PASS);
+});
+
+test("the needs map: a dependent SKIPs when its need failed, with no needs option on the row", async () => {
+  const { rows, lines } = leg({ needs: { "R1 switch to B": ["R1 add + keep"] } });
+  await rows.row("R1 add + keep", async () => false);
+  let ran = false;
+  await rows.row("R1 switch to B", async () => (ran = true));
+  assert.equal(ran, false);
+  assert.equal(lines[1], 'ROW R1 switch to B SKIP — needs "R1 add + keep", which was FAIL');
+});
+
+test("--only-failed names the dependent alone: its need runs first (it passed last time, so it was not listed), then the dependent", async () => {
+  // The rerun's E2E_ONLY_ROWS holds the FAILed row only; the need it has PASSed and is not named.
+  const { rows, lines } = leg({ only: selectedRows({ E2E_ONLY_ROWS: "R1 switch to B" }), needs: { "R1 switch to B": ["R1 add + keep"] } });
+  const ran = [];
+  await rows.row("add-done-lands", async () => ran.push("add-done-lands"));
+  await rows.row("R1 add + keep", async () => ran.push("R1 add + keep"));
+  await rows.row("R1 switch to B", async () => ran.push("R1 switch to B"));
+  assert.deepEqual(ran, ["R1 add + keep", "R1 switch to B"]);
+  assert.deepEqual(lines, ["ROW add-done-lands SKIP — not selected", "ROW R1 add + keep PASS — ok", "ROW R1 switch to B PASS — ok"]);
+  assert.equal(rows.exitCode(), EXIT_PASS);
+});
+
+test("the needs run all the way up: the last of a chain selects the whole chain (lostreq)", async () => {
+  const needs = { "join-lost-request": ["lost-ask-offline"], "join-lost-send-again": ["join-lost-request"] };
+  const { rows } = leg({ only: selectedRows({ E2E_ONLY_ROWS: "join-lost-send-again" }), needs });
+  const ran = [];
+  await rows.row("lost-ask-offline", async () => ran.push("lost-ask-offline"));
+  await rows.row("join-lost-request", async () => ran.push("join-lost-request"));
+  await rows.row("join-lost-send-again", async () => ran.push("join-lost-send-again"));
+  assert.deepEqual(ran, ["lost-ask-offline", "join-lost-request", "join-lost-send-again"]);
+  assert.deepEqual([...withNeeds(new Set(["join-lost-send-again"]), needs)], ["join-lost-send-again", "join-lost-request", "lost-ask-offline"]);
+});
+
+test("withNeeds: a need that is not a row of its own, and a cycle, both end", () => {
+  assert.deepEqual([...withNeeds(new Set(["b"]), { b: ["a"], a: ["b"] })], ["b", "a"]);
+  assert.deepEqual([...withNeeds(new Set(["x"]), {})], ["x"]);
 });
 
 test("selectedRows: unset or blank selects everything", () => {

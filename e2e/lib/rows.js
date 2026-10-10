@@ -22,10 +22,17 @@
  * was left out for passing last time. `caps=<n>` on HEADS is how many of the
  * manifests' testID keys the build holds (lib/buildHas.js).
  *
- *   const rows = createRows({ label: "approvals", driver: d });
+ * A row that needs another is declared once, in the `needs` map given to
+ * createRows: the dependent SKIPs when the need did not pass, and selecting the
+ * dependent (E2E_ONLY_ROWS) selects its needs too, all the way up, so a rerun
+ * of the dependent alone still runs what it needs. A need that is still not
+ * selected (it is outside the rerun's whole chain) counts as met. A row for a
+ * feature a build may lack SKIPs with the reason `skip` gives.
+ *
+ *   const rows = createRows({ label: "approvals", driver: d, needs: { "test request held": ["rule shows as this phone's own"] } });
  *   rows.heads({ wallet, bifold, build, harness, caps });
  *   await rows.row("rule shows as this phone's own", async () => ({ ok: on, detail: `switch ${on}` }));
- *   await rows.row("test request held", check, { needs: ["rule shows as this phone's own"] });
+ *   await rows.row("test request held", check);
  *   await rows.row("sections ruled", check, { skip: buildLacks("AgentSectionRule", { platform }) });
  *   try { … } catch (err) { rows.fatal(err) } finally { rows.summary(); process.exitCode = rows.exitCode(); }
  *
@@ -61,6 +68,7 @@ export function selectedRows(env = process.env) {
 }
 
 /**
+ * `needs` maps a row's name to the names it needs (`{ dependent: [need, …] }`).
  * `driver`, when given (or set later with `setDriver`), is used for a failing
  * row's screenshot and page source, best effort. `log`, `now`, `only` and
  * `capture` are for tests.
@@ -68,6 +76,7 @@ export function selectedRows(env = process.env) {
 export function createRows({
   label,
   driver,
+  needs: needsOf = {},
   log = console.log,
   now = Date.now,
   only = selectedRows(),
@@ -77,6 +86,7 @@ export function createRows({
   const started = now();
   const results = new Map();
   const notSelected = new Set();
+  const selected = only && withNeeds(only, needsOf);
   let broken = false;
   let current = driver;
 
@@ -101,13 +111,15 @@ export function createRows({
     /**
      * Run one row. `fn` passes by returning true (or nothing), fails by
      * returning false or `{ ok: false }`, or by throwing; `{ ok, detail }` says
-     * what was seen. It is skipped, without running, when E2E_ONLY_ROWS does not
-     * name it, when `skip` gives a reason (a build that lacks the feature:
-     * `buildLacks(id)`), or when a row it `needs` did not pass — a need that
-     * was merely not selected counts as met. Never throws.
+     * what was seen. It is skipped, without running, when E2E_ONLY_ROWS names
+     * neither it nor a row that needs it, when `skip` gives a reason (a build
+     * that lacks the feature: `buildLacks(id)`), or when a row it needs did not
+     * pass; a need that was not selected counts as met. `needs` here, when
+     * given, replaces the map's entry for this row — for the SKIP only, not for
+     * the selection, so declare the needs in the map. Never throws.
      */
-    async row(name, fn, { needs = [], skip } = {}) {
-      if (only && !only.has(name)) return notSelected.add(name), record(name, "SKIP", "not selected"), "SKIP";
+    async row(name, fn, { needs = needsOf[name] ?? [], skip } = {}) {
+      if (selected && !selected.has(name)) return notSelected.add(name), record(name, "SKIP", "not selected"), "SKIP";
       if (skip) return record(name, "SKIP", String(skip)), "SKIP";
       const blocked = needs.find((need) => results.get(need) !== "PASS" && !notSelected.has(need));
       if (blocked !== undefined) {
@@ -163,6 +175,18 @@ export function createRows({
       return out;
     },
   };
+}
+
+/** The selected names and, through the `needs` map, every name they need: what a rerun must run. */
+export function withNeeds(only, needsOf) {
+  const out = new Set();
+  const walk = (name) => {
+    if (out.has(name)) return;
+    out.add(name);
+    for (const need of needsOf[name] ?? []) walk(need);
+  };
+  for (const name of only) walk(name);
+  return out;
 }
 
 /** A failing row's screenshot and page source, into the run's directory. */
