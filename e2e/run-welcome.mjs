@@ -5,6 +5,8 @@
  *                        opens https://www.appliedtechnologylab.org/projects#keyring (Safari comes to the front; on
  *                        Android, a browser package takes the foreground)
  *   agent-slide-words    the agent slide's paragraph begins "Not that kind of agent —"
+ *   layout-welcome       layout rules over each slide's hierarchy (lib/layoutRules.js): PASS with no findings; findings
+ *                        are a SKIP that lists them until the rules are calibrated (LAYOUT_STRICT=1: a FAIL)
  *   agent-icon-size      its shield icon (a glyph, no testID) is about 104 pt (was 88; within 6); needs
  *                        agent-slide-words. iOS only: the page source gives sizes in points there; on Android the
  *                        row is SKIP.
@@ -18,6 +20,9 @@ import "./lib/cli-guard.js";
 import { ensureAppium, existsTestId, screenshot, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { makeDriver } from "./lib/keyringRoles.js";
 import { createRows } from "./lib/rows.js";
+import { writeFileSync } from "node:fs";
+import { runPath } from "./lib/runDir.js";
+import { checkLayout, layoutLines, parsePageSource } from "./lib/layoutRules.js";
 
 const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const PLATFORM = process.env.PLATFORM === "android" ? "android" : "ios";
@@ -80,13 +85,16 @@ try {
     detail: link ? `the link is there; tapping it brought ${opened} forward${anr}` : `no LearnMoreAboutTheKeyringProject on the first slide${anr}`,
   }));
 
-  // To the agent slide: Next until its words show (4th of 5).
+  // To the agent slide: Next until its words show (4th of 5). Each slide's page source is kept for the layout rules.
+  const slides = [];
   let src = await d.getPageSource();
+  slides.push(src);
   for (let i = 0; i < 5 && !agentWords(src); i++) {
     if (!(await existsTestId(d, "Next", 3000))) break;
     await tapTestId(d, "Next", 5000);
     await sleep(1200);
     src = await d.getPageSource();
+    slides.push(src);
   }
   const words = agentWords(src);
   await screenshot(d, "welcome-agent-slide").catch(() => undefined);
@@ -116,6 +124,29 @@ try {
         skip: PLATFORM === "android" ? "measured in points from the iOS page source; Android's gives pixel bounds, not ported" : undefined,
       }
     );
+  }
+
+  // Layout rules over each slide's hierarchy (lib/layoutRules.js): tap size, clipping, overlaps, centred titles.
+  // Advisory until calibrated: findings make the row a SKIP that lists them; LAYOUT_STRICT=1 makes them a FAIL.
+  // The page sources are kept beside the screenshots, so the rules can be calibrated against real screens.
+  {
+    let scale = 1;
+    if (PLATFORM === "android") scale = ((await d.getDisplayDensity().catch(() => 0)) || 0) / 160 || 0;
+    const win = await d.getWindowSize().catch(() => null);
+    const window = win && scale ? { w: win.width / (PLATFORM === "android" ? scale : 1), h: win.height / (PLATFORM === "android" ? scale : 1) } : null;
+    const findings = [];
+    slides.forEach((xml, i) => {
+      try { writeFileSync(runPath(`layout-welcome-${i + 1}-${PLATFORM}.xml`), xml); } catch { /* artifacts are best effort */ }
+      if (!scale) return;
+      for (const line of layoutLines(`welcome-${i + 1}`, checkLayout(parsePageSource(xml, { platform: PLATFORM, scale }), { platform: PLATFORM, window }))) {
+        console.log(line);
+        findings.push(line);
+      }
+    });
+    const what = `${slides.length} slide(s), ${findings.length} finding(s)${findings.length ? `: ${findings.slice(0, 3).map((l) => l.replace(/^LAYOUT /, "")).join("; ")}${findings.length > 3 ? "; …" : ""}` : ""}`;
+    if (!scale) rows.skip("layout-welcome", "no display density from the emulator: the dp frames can't be measured");
+    else if (findings.length && process.env.LAYOUT_STRICT !== "1") rows.skip("layout-welcome", `advisory until calibrated (LAYOUT_STRICT=1 fails it): ${what}`);
+    else await rows.row("layout-welcome", () => ({ ok: findings.length === 0, detail: what }));
   }
 
   // Back to the first slide for the onboarding that follows.
