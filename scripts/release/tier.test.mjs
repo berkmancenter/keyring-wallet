@@ -55,33 +55,37 @@ test('the whole change takes its highest tier', () => {
   assert.equal(tierOf('docs/a.md', 'app/src/x.tsx', 'app/ios/Podfile'), 'store');
 });
 
-test('flags: all three held back from OTA for now; a held flag moves an ota change to store', () => {
-  const files = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts', 'bifold/packages/core/src/modules/trust-tasks/module/vtiJoin.ts', 'app/src/x.ts'];
-  const flags = flagsOf(files, { 'app/src/x.ts': ['  await store.deleteById(id)'] });
-  assert.deepEqual(flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
-  assert.ok(flags.every((f) => f.hold));
-  assert.equal(classify(files).tier, 'ota');
-  const r = applyHolds(classify(files), flags);
+test('flags: a storage delete forces store; sign-in and the VTI protocol line make an ota change ota-strict', () => {
+  const signIn = 'bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts';
+  const vti = 'bifold/packages/core/src/modules/trust-tasks/module/vtiJoin.ts';
+  const del = { 'app/src/x.ts': ['  await store.deleteById(id)'] };
+  const all = [signIn, vti, 'app/src/x.ts'];
+  const flags = flagsOf(all, del);
+  assert.deepEqual(flags.map((f) => [f.flag, f.policy]).sort(), [['VTI protocol line', 'strict'], ['deletes stored records', 'store'], ['sign-in / key handling', 'strict']]);
+  assert.ok(flags.every((f) => !('hold' in f)));
+  assert.equal(classify(all).tier, 'ota');
+  const r = applyHolds(classify(all), flags);
   assert.equal(r.tier, 'store');
-  assert.deepEqual(r.held.sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
-  for (const one of ['app/src/x.ts', 'bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts']) {
-    const only = [one];
-    assert.equal(applyHolds(classify(only), flagsOf(only, { 'app/src/x.ts': ['  await store.deleteById(id)'] })).tier, 'store', one);
+  assert.deepEqual(r.held, ['deletes stored records']);
+  assert.deepEqual(r.strict.sort(), ['VTI protocol line', 'sign-in / key handling']);
+  for (const one of [signIn, vti]) {
+    const v = applyHolds(classify([one]), flagsOf([one], {}));
+    assert.equal(v.tier, 'ota-strict', one);
+    assert.deepEqual(v.held, []);
   }
-  assert.deepEqual(applyHolds(classify(['app/src/y.tsx']), flagsOf(['app/src/y.tsx'])), { ...classify(['app/src/y.tsx']), held: [] });
+  assert.equal(applyHolds(classify(['app/src/x.ts']), flagsOf(['app/src/x.ts'], del)).tier, 'store');
+  assert.deepEqual(applyHolds(classify(['app/src/y.tsx']), flagsOf(['app/src/y.tsx'])), { ...classify(['app/src/y.tsx']), held: [], strict: [] });
   assert.deepEqual(flagsOf(['e2e/run-x.mjs', 'docs/a.md']), []);
 });
-
-test('flags: one set to hold false is shown only, and the change stays ota', () => {
-  const advisory = FLAGS.map((f) => ({ ...f, hold: false }));
+test('flags: an advisory flag is shown only, and the change stays ota', () => {
+  const advisory = FLAGS.map((f) => ({ ...f, policy: 'advisory' }));
   const files = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
   const flags = flagsOf(files, {}, advisory);
-  assert.deepEqual(flags.map((f) => [f.flag, f.hold]), [['sign-in / key handling', false]]);
+  assert.deepEqual(flags.map((f) => [f.flag, f.policy]), [['sign-in / key handling', 'advisory']]);
   const r = applyHolds(classify(files), flags);
   assert.equal(r.tier, 'ota');
-  assert.deepEqual(r.held, []);
+  assert.deepEqual([r.held, r.strict], [[], []]);
 });
-
 test('flags: a held flag never lowers a store change, and a none change stays none', () => {
   const store = ['app/ios/Podfile', 'bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
   assert.equal(applyHolds(classify(store), flagsOf(store)).tier, 'store');
@@ -162,10 +166,9 @@ test('range mode: an unreadable bifold range is store; only a..b is accepted', (
   }
 });
 
-test('flags: the three current flags are all held (flipping one off must change this test)', () => {
-  assert.deepEqual(FLAGS.map((f) => [f.flag, f.hold]), [['deletes stored records', true], ['sign-in / key handling', true], ['VTI protocol line', true]]);
+test('flags: the current policy (changing one must change this test)', () => {
+  assert.deepEqual(FLAGS.map((f) => [f.flag, f.policy]), [['deletes stored records', 'store'], ['sign-in / key handling', 'strict'], ['VTI protocol line', 'strict']]);
 });
-
 test('deletes stored records: storage deletes hold, a Map or Set delete does not', () => {
   const held = (line) => flagsOf(['app/src/screens/X.tsx'], { 'app/src/screens/X.tsx': [line] }).some((f) => f.flag === 'deletes stored records');
   for (const l of ['seen.delete(id)', 'new Map().delete(k)', 'this.pending.delete(key)', 'selected.remove(i)']) assert.equal(held(l), false, l);
@@ -173,7 +176,7 @@ test('deletes stored records: storage deletes hold, a Map or Set delete does not
     'await walletStorage.remove(key)', 'await store.delete(id)', 'await deleteRecord(r)', 'forgetConnection(id)', 'wipeWallet()']) assert.equal(held(l), true, l);
 });
 
-test('verdict: --files never says ota while a held flag reads added lines; --range (added lines) can', () => {
+test('verdict: --files never says ota (or ota-strict) while a store flag reads added lines; --range (added lines) can', () => {
   const f = ['app/src/screens/X.tsx'];
   const v = verdict(f);
   assert.equal(v.tier, 'unchecked');
@@ -182,11 +185,12 @@ test('verdict: --files never says ota while a held flag reads added lines; --ran
   assert.equal(verdict(f, { added: { [f[0]]: ['await store.delete(id)'] } }).tier, 'store');
   assert.equal(verdict(['app/ios/Podfile']).tier, 'store');
   assert.equal(verdict(['docs/a.md']).tier, 'none');
-  assert.equal(verdict(['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts']).tier, 'store');
-  assert.equal(verdict(f, { flags: FLAGS.map((x) => ({ ...x, hold: false })) }).tier, 'ota');
+  const signIn = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
+  assert.equal(verdict(signIn).tier, 'unchecked');
+  assert.equal(verdict(signIn, { added: {} }).tier, 'ota-strict');
+  assert.equal(verdict(f, { flags: FLAGS.map((x) => ({ ...x, policy: 'advisory' })) }).tier, 'ota');
 });
-
-test('the command line: only exit 0 is ota; --files on a JS change exits 4; an error carries every field', () => {
+test('the command line: exit 0 ota, 5 ota-strict, 4 unchecked; an error carries every field', () => {
   const run = (...a) => { try { return { out: execFileSync('node', [path.join(here, 'tier.mjs'), ...a], { encoding: 'utf8' }), code: 0 }; } catch (e) { return { out: e.stdout, code: e.status }; } };
   const js = run('--files', 'app/src/screens/X.tsx');
   assert.equal(js.code, 4);
@@ -195,5 +199,29 @@ test('the command line: only exit 0 is ota; --files on a JS change exits 4; an e
   assert.equal(run('--files', 'app/ios/Podfile').code, 2);
   const err = run('--range', 'not-a-range', '--json');
   assert.equal(err.code, 3);
-  assert.deepEqual(Object.keys(JSON.parse(err.out)).sort(), ['error', 'flags', 'held', 'reasons', 'tier', 'unchecked']);
+  assert.deepEqual(Object.keys(JSON.parse(err.out)).sort(), ['error', 'flags', 'held', 'reasons', 'strict', 'tier', 'unchecked']);
+});
+
+test('the command line: a sign-in change read from a range exits 5 and names the strict conditions', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tier-strict-'));
+  try {
+    const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+    git('init', '-q'); git('config', 'user.email', 't@example.invalid'); git('config', 'user.name', 'T'); git('config', 'commit.gpgsign', 'false');
+    mkdirSync(path.join(dir, 'app/src'), { recursive: true });
+    writeFileSync(path.join(dir, 'app/src/SignIn.tsx'), 'a\n'); git('add', '.'); git('commit', '-qm', 'a');
+    writeFileSync(path.join(dir, 'app/src/SignIn.tsx'), 'a\nb\n'); git('commit', '-qam', 'b');
+    const out = execFileSync('node', ['--input-type=module', '-e', `
+      import { changedFiles, addedLines, verdict } from ${JSON.stringify(path.join(here, 'tier.mjs'))};
+      const o = { repo: ${JSON.stringify(dir)} };
+      const v = verdict(changedFiles('HEAD~1..HEAD', o), { added: addedLines('HEAD~1..HEAD', o) });
+      console.log(v.tier, JSON.stringify(v.strict));`], { encoding: 'utf8' }).trim();
+    assert.equal(out, 'ota-strict ["sign-in / key handling"]');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('flags: an unknown or misspelt policy throws, never a plain ota', () => {
+  const signIn = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
+  const typo = FLAGS.map((f) => (f.policy === 'strict' ? { ...f, policy: 'Strict' } : f));
+  assert.throws(() => verdict(signIn, { added: {}, flags: typo }), /policy must be store, strict, advisory, not "Strict"/);
+  assert.throws(() => flagsOf(['docs/a.md'], {}, [{ flag: 'x', policy: 'later', path: /x/ }]), /policy must be/);
 });

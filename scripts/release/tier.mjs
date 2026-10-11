@@ -11,17 +11,24 @@
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
 //   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
-//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, hold, files}], held, unchecked}
+//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
+//                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
-// its paths, but --files cannot read the added lines a held flag looks at: run it with --range). ONLY 0 permits an OTA
-// publish; 1-4 all mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a file there can
-// say ota while the tier is store or unchecked), so never recompute the tier from reasons.
+// its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA
+// only under the strict conditions, listed under "strict": the full gate green on the bundle's commit, ring 0 soaked
+// 24 hours, both approvers). ONLY 0 permits an OTA publish as it stands; 5 permits one only when the publish step has
+// proof of those conditions; 1-4 mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
+// file there can say ota while the tier is store, unchecked or ota-strict), so never recompute the tier from reasons.
+// tier.mjs names the strict conditions; the publish step proves them, and must fail closed when it cannot.
+// "held" and "strict" name the flags that moved an ota change; when the tier is store for its own reasons (native files)
+// they are empty even if flags were raised: read "flags" for every flag a change raises.
 // While a held flag reads added lines (deletes stored records does), --files can never say ota: a change that is ota
 // by its paths always comes out unchecked there. A publish step must use --range.
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
 // here, and only a native fingerprint at publish time can catch it.
-// Flags (FLAGS) name classes of change the owner holds back from OTA even when they could travel (decided 10-11): a
-// flag with hold: true moves an "ota" change to "store" and lists itself under "held". A flag without it is shown only.
+// Flags (FLAGS) name classes of change that need more than a plain OTA publish (the owner's policy, revised 10-11):
+// policy "store" moves an "ota" change to "store" (listed under "held"); policy "strict" moves it to "ota-strict"
+// (listed under "strict"); policy "advisory" (or none) is shown only. Store wins over strict.
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,33 +78,44 @@ export const RULES = [
 ];
 
 /**
- * Flags: classes of change that could travel OTA (the OTA lane's question 1 on board #29). The owner holds all three
- * back for now (10-11): hold: true routes them to a store build. Setting hold to false makes a flag advisory again,
+ * Flags: classes of change that could travel OTA (the OTA lane's question 1 on board #29). The owner's policy (10-11,
+ * revised the same day to let features travel OTA): deleting stored records stays store only, since a rollback cannot
+ * undo data already changed; sign-in / key handling and the VTI protocol line travel OTA under the strict conditions.
  * shown to the approver beside an "ota" tier. A flag matches a path, or (with --range, which reads the diff) a line
  * the change adds.
  */
 export const FLAGS = [
   // Storage deletes only: a Map's or Set's .delete() is not one. deleteById on any receiver (Credo's APIs), .delete or
   // .remove on a receiver named for storage, and the record-removing helpers.
-  { flag: 'deletes stored records', hold: true, added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
-  { flag: 'sign-in / key handling', hold: true, path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
-  { flag: 'VTI protocol line', hold: true, path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
+  { flag: 'deletes stored records', policy: 'store', added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
+  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
 ];
 
-/** Which flags a change raises: [{ flag, hold, files }], from paths and, when given, each file's added lines. */
+const POLICIES = ['store', 'strict', 'advisory'];
+
+/** Which flags a change raises: [{ flag, policy, files }], from paths and, when given, each file's added lines. An
+ * unknown policy throws (the error path: store, exit 3), so a typo can never let a change through as plain ota. */
 export function flagsOf(files, added = {}, flags = FLAGS) {
   const out = [];
-  for (const { flag, hold = false, path: p, added: a } of flags) {
+  for (const { flag, policy = 'advisory', path: p, added: a } of flags) {
+    if (!POLICIES.includes(policy)) throw new Error(`flag "${flag}": policy must be ${POLICIES.join(', ')}, not "${policy}"`);
     const hit = files.filter((f) => !/^(e2e|docs)\/|__tests__|\.test\./.test(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
-    if (hit.length) out.push({ flag, hold, files: hit });
+    if (hit.length) out.push({ flag, policy, files: hit });
   }
   return out;
 }
 
-/** The tier after the held flags: an "ota" change that raises one becomes "store", naming the flags under "held". */
+/**
+ * The tier after the flags: an "ota" change that raises a store-policy flag becomes "store" (named under "held"); one
+ * that raises only strict-policy flags becomes "ota-strict" (named under "strict").
+ */
 export function applyHolds({ tier, ...rest }, flags) {
-  const held = flags.filter((f) => f.hold).map((f) => f.flag);
-  return tier === 'ota' && held.length ? { ...rest, tier: 'store', held } : { ...rest, tier, held: [] };
+  const held = flags.filter((f) => f.policy === 'store').map((f) => f.flag);
+  const strict = flags.filter((f) => f.policy === 'strict').map((f) => f.flag);
+  if (tier !== 'ota') return { ...rest, tier, held: [], strict: [] };
+  if (held.length) return { ...rest, tier: 'store', held, strict };
+  return { ...rest, tier: strict.length ? 'ota-strict' : 'ota', held: [], strict };
 }
 
 /**
@@ -107,8 +125,8 @@ export function applyHolds({ tier, ...rest }, flags) {
 export function verdict(files, { added, flags: set = FLAGS } = {}) {
   const flags = flagsOf(files, added || {}, set);
   const r = { ...applyHolds(classify(files), flags), flags, unchecked: [] };
-  if (!added && r.tier === 'ota') {
-    const unchecked = set.filter((f) => f.hold && f.added).map((f) => f.flag);
+  if (!added && (r.tier === 'ota' || r.tier === 'ota-strict')) {
+    const unchecked = set.filter((f) => f.policy === 'store' && f.added).map((f) => f.flag);
     if (unchecked.length) Object.assign(r, { tier: 'unchecked', unchecked });
   }
   return r;
@@ -185,15 +203,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
     else {
       for (const [f, why] of Object.entries(r.reasons)) if (!why.startsWith('none')) console.log(`${why.split(':')[0].padEnd(5)} ${f} (${why.split(': ')[1]})`);
-      for (const f of r.flags) console.log(`${f.hold ? 'hold ' : 'flag '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
-      const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})` : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})` : '';
+      for (const f of r.flags) console.log(`${{ store: 'hold  ', strict: 'strict' }[f.policy] || 'flag  '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
+      const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})`
+        : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})`
+        : r.strict.length ? ` (OTA only with the full gate green, 24 h on ring 0 and both approvers: ${r.strict.join('; ')})` : '';
       console.log(`tier=${r.tier}${why}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.
-    process.exitCode = { ota: 0, none: 1, store: 2, unchecked: 4 }[r.tier];
+    process.exitCode = { ota: 0, none: 1, store: 2, unchecked: 4, 'ota-strict': 5 }[r.tier];
   } catch (e) {
     // Never "none" by accident: an error routes the change to a store build, with its own exit code.
-    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message, reasons: {}, flags: [], held: [], unchecked: [] }));
+    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message, reasons: {}, flags: [], held: [], strict: [], unchecked: [] }));
     else console.log(`tier=store (error: ${e.message.split('\n')[0]})`);
     process.exitCode = 3;
   }
