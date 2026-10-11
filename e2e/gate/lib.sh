@@ -97,7 +97,19 @@ use_build() {
 
 # ---- devices ----
 
-emu_start() { local port=$1; "$EMU_SH" status >/dev/null || die "emu.sh status not ok"; "$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1 | tail -1; }
+# emu.sh refuses to start (memory short, swap too high, another emulator up) or gives up on a boot with a non-zero
+# exit. Piped through tail, that status was lost and the leg went on to wait for a device that never came
+# (1010-2354: smoke-android sat 17 min in adb wait-for-device after "swap used 9 GB > 8 GB"). Now the leg breaks at
+# once, with emu.sh's own reason: setup, not a verdict on the app, and --only-failed reruns the whole leg.
+emu_start() {
+  local port=$1 out rc why
+  "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
+  out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
+  echo "$out" | tail -1
+  [ "$rc" = 0 ] && return 0
+  why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
+  broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
+}
 emu_stop() { "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
