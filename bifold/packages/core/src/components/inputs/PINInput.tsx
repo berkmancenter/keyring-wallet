@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native'
 import {
@@ -31,6 +31,12 @@ interface PINInputProps {
   inlineMessage?: InlineMessageProps
   onSubmitEditing?: (...args: any[]) => void
   ref?: React.Ref<TextInput>
+  /**
+   * Change it to empty the field and focus it again, as after a wrong PIN: the
+   * digits are this field's own, so a screen cannot clear them otherwise and
+   * the person had to delete them one by one. `onPINChanged` is not called.
+   */
+  clearSignal?: number
 }
 
 const PINInput = ({
@@ -42,6 +48,7 @@ const PINInput = ({
   inlineMessage,
   onSubmitEditing = () => {},
   ref,
+  clearSignal,
 }: PINInputProps) => {
   const [{ PINScreensConfig }] = useServices([TOKENS.CONFIG])
 
@@ -51,6 +58,23 @@ const PINInput = ({
 
   const [PIN, setPIN] = useState('')
   const [showPIN, setShowPIN] = useState(false)
+  const field = useRef<TextInput | null>(null)
+  const setFieldRef = useCallback(
+    (node: TextInput | null) => {
+      field.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) (ref as React.MutableRefObject<TextInput | null>).current = node
+    },
+    [ref]
+  )
+  // Only a change clears: the value the field starts with does not.
+  const clearedFor = useRef(clearSignal)
+  useEffect(() => {
+    if (clearSignal === clearedFor.current) return
+    clearedFor.current = clearSignal
+    setPIN('')
+    field.current?.focus()
+  }, [clearSignal])
   const { t } = useTranslation()
   const cellHeight = 48
 
@@ -84,7 +108,7 @@ const PINInput = ({
         onPINChanged && onPINChanged(newPIN)
       }
     },
-    [PIN, displayValue, onPINChanged],
+    [PIN, displayValue, onPINChanged]
   )
 
   const [props, getCellOnLayoutHandler] = useClearByFocusCell({
@@ -142,7 +166,13 @@ const PINInput = ({
                 child = showPIN ? (
                   symbol
                 ) : (
-                  <MaskSymbol maskSymbol="●" isLastFilledCell={isLastFilledCell({ index, value: PINScreensConfig.useNewPINDesign ? PIN : displayValue })}>
+                  <MaskSymbol
+                    maskSymbol="●"
+                    isLastFilledCell={isLastFilledCell({
+                      index,
+                      value: PINScreensConfig.useNewPINDesign ? PIN : displayValue,
+                    })}
+                  >
                     {symbol}
                   </MaskSymbol>
                 )
@@ -161,7 +191,7 @@ const PINInput = ({
             )
           }}
           autoFocus={autoFocus}
-          ref={ref}
+          ref={setFieldRef}
           onSubmitEditing={(e) => {
             onSubmitEditing(e?.nativeEvent?.text ?? '')
           }}

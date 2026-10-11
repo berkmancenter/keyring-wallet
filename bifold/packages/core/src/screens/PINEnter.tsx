@@ -42,6 +42,8 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
   const { checkWalletPIN, getWalletSecret, isBiometricsActive, disableBiometrics } = useAuth()
   const [store, dispatch] = useStore()
   const [PIN, setPIN] = useState<string>('')
+  // Bumped after a wrong PIN: the field empties and takes focus again (IN-257).
+  const [clearSignal, setClearSignal] = useState(0)
   const [continueEnabled, setContinueEnabled] = useState(true)
   const [displayLockoutWarning, setDisplayLockoutWarning] = useState(false)
   const [biometricsErr, setBiometricsErr] = useState(false)
@@ -59,7 +61,7 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
       enableHiddenDevModeTrigger,
       attemptLockoutConfig: { thresholdRules } = attemptLockoutConfig,
       PINScreensConfig,
-      customAutoLockTimes
+      customAutoLockTimes,
     },
     inlineMessages,
   ] = useServices([TOKENS.UTIL_LOGGER, TOKENS.CONFIG, TOKENS.INLINE_ERRORS])
@@ -158,7 +160,9 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
   }, [store.loginAttempt.loginAttempts, getLockoutPenalty])
 
   useEffect(() => {
-    setInlineMessageField(undefined)
+    // Typing clears the last message; the field emptied after a wrong PIN does
+    // not, so "Incorrect PIN, N tries left" stays in view (IN-257).
+    if (PIN) setInlineMessageField(undefined)
   }, [PIN])
 
   const unlockWalletWithPIN = useCallback(
@@ -172,6 +176,9 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
           unMarkServedPenalty()
         }
         if (!result) {
+          // Six full dots after a wrong PIN had to be deleted one by one (IN-257).
+          setPIN('')
+          setClearSignal((n) => n + 1)
           const newAttempt = store.loginAttempt.loginAttempts + 1
           let message = ''
           const attemptsLeft =
@@ -358,7 +365,7 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
     store.preferences.autoLockTime,
     style.helpTextSubtitle,
     PINScreensConfig.useNewPINDesign,
-    defaultAutoLockoutTime
+    defaultAutoLockoutTime,
   ])
 
   const controls = (
@@ -430,6 +437,7 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
           accessibilityLabel={t('PINEnter.EnterPIN')}
           autoFocus={true}
           inlineMessage={inlineMessageField}
+          clearSignal={clearSignal}
           onSubmitEditing={(userPinInput: string) => {
             onPINInputCompleted(userPinInput)
           }}

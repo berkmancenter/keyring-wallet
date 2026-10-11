@@ -188,6 +188,29 @@ describe('PINEnter Screen', () => {
     expect(Keyboard.dismiss).toHaveBeenCalled()
   })
 
+  // IN-257: after a wrong PIN on the unlock screen the six dots stayed filled.
+  test('a wrong PIN empties the field so the person can start over', async () => {
+    const mockAuthContext = {
+      ...authContext,
+      checkWalletPIN: jest.fn().mockResolvedValue(false),
+    }
+    const main = new MainContainer(container.createChildContainer()).init()
+    const tree = render(
+      <ContainerProvider value={main}>
+        <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+          <AuthContext.Provider value={mockAuthContext}>
+            <PINEnter setAuthenticated={jest.fn()} />
+          </AuthContext.Provider>
+        </StoreProvider>
+      </ContainerProvider>
+    )
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('EnterPIN')), '123456')
+    })
+    await waitFor(() => expect(mockAuthContext.checkWalletPIN).toHaveBeenCalledWith('123456'))
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey('EnterPIN')).props.value).toBe(''))
+  })
+
   test('pin is submitted when pin input is filled', async () => {
     const setAuthenticatedMock = jest.fn()
     const mockAuthContext = {

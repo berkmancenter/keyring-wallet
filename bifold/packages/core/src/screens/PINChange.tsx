@@ -37,6 +37,8 @@ const PINChange: React.FC<StackScreenProps<SettingStackParams, Screens.ChangePIN
   const [PIN, setPIN] = useState('')
   const [PINTwo, setPINTwo] = useState('')
   const [PINOld, setPINOld] = useState('')
+  // Bumped when the old PIN is wrong: that field empties and takes focus again (IN-257).
+  const [oldClearSignal, setOldClearSignal] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const navigation = useNavigation<StackNavigationProp<OnboardingStackParams>>()
   const [store] = useStore()
@@ -95,6 +97,8 @@ const PINChange: React.FC<StackScreenProps<SettingStackParams, Screens.ChangePIN
     async (PIN: string): Promise<boolean> => {
       const valid = await checkWalletPIN(PIN)
       if (!valid) {
+        setPINOld('')
+        setOldClearSignal((n) => n + 1)
         setModalState({
           visible: true,
           title: t('PINCreate.InvalidPIN'),
@@ -178,6 +182,7 @@ const PINChange: React.FC<StackScreenProps<SettingStackParams, Screens.ChangePIN
           <PINHeader updatePin />
           <PINInput
             label={t('PINChange.EnterOldPINTitle')}
+            clearSignal={oldClearSignal}
             testID={testIdWithKey('EnterOldPIN')}
             accessibilityLabel={t('PINChange.EnterOldPIN')}
             onPINChanged={(p: string) => {

@@ -16,6 +16,32 @@ describe('PINInput Component', () => {
     jest.clearAllMocks()
   })
 
+  // IN-257: after a wrong PIN the six dots stayed filled; the screen bumps
+  // clearSignal and the field starts over, empty.
+  describe('clearSignal', () => {
+    it('empties the field when it changes, and not on first render', () => {
+      const onPINChanged = jest.fn()
+      const tree = render(
+        <BasicAppContext>
+          <PINInput {...defaultProps} onPINChanged={onPINChanged} clearSignal={0} />
+        </BasicAppContext>
+      )
+      const field = tree.getByTestId('code-field')
+      fireEvent.changeText(field, '123456')
+      expect(onPINChanged).toHaveBeenLastCalledWith('123456')
+      expect(String(tree.getByTestId('code-field').props.value).replace(/\s/g, '')).toHaveLength(6)
+      onPINChanged.mockClear()
+      tree.rerender(
+        <BasicAppContext>
+          <PINInput {...defaultProps} onPINChanged={onPINChanged} clearSignal={1} />
+        </BasicAppContext>
+      )
+      expect(tree.getByTestId('code-field').props.value).toBe('')
+      // The screen cleared it on purpose: nothing is reported back.
+      expect(onPINChanged).not.toHaveBeenCalled()
+    })
+  })
+
   describe('Basic Rendering', () => {
     it('renders correctly with label', () => {
       const tree = render(
