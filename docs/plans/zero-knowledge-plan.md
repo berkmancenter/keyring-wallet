@@ -255,7 +255,24 @@ This is the same asymmetry the *named* path already documents in `bifold/package
 Measured and read on 2026-10-10, and these numbers are why the 10-11 decision was takeable rather than a leap. **The four costs in the last bullet are accepted, not solved** — an unaudited library in the shipped app, arkworks across three architectures, a prototype dependency, and no agent-side approval gate on this path. §6.0 records what the rungs then measured on top of this reading.
 
 - **It is not cryptography we would write.** `openvtc-vetting-pcs` is published on crates.io (0.5.0, Apache-2.0, 2026-10-03) and its `ApplicantEngine` already carries the whole state machine — `new`, `id`, `snapshot`, `restore`, `held`, `statement_meta`, `receive`, `replace`, `submit`. The work is a Rust→UniFFI native module plus key storage and screens, which is the shape of both our hardware-attestation module and upstream's own mobile agent.
-- **Speed is not a constraint, and this no longer rests on an allowance.** Measured on an **iPhone 16**: prove **7.8 ms at k = 3**, **12.2 ms at k = 5**, five repetitions with a 7.8–8.1 ms spread (`ref-31`). That is within 15% of the laptop, so the earlier reasoning — a laptop bench plus "several times that is still imperceptible" — was conservative rather than necessary. It also reproduces upstream's "≈12 ms" claim independently on the hardware that matters. **A caution for anyone else measuring:** the iOS simulator is **2× slower than the phone it simulates** (16.1 ms at k = 3), so simulator numbers here are unrelated to device performance, not a safe upper bound.
+- **Speed is not a constraint, and the range is now measured on both ends.** Two real phones, five repetitions each:
+
+  | Device | prove, k = 3 | prove, k = 5 | start an application |
+  |---|---|---|---|
+  | iPhone 16, iOS 18.7.8 (`ref-31`) | **7.8 ms** | 12.2 ms | 1.2 ms |
+  | Samsung Galaxy A03s, Android 13 — budget, 2021 (`ref-32`) | **87.2 ms** | 130.0 ms | 29.4 ms |
+
+  So **"about 8 ms" must not be quoted as the cost of proving**: the honest range
+  is **8 ms on a current flagship to about 90 ms on a five-year-old budget
+  phone**, and 90 ms is still imperceptible inside a ceremony where a human reads
+  a code aloud. Neither device showed warm-up or thermal drift (spreads of
+  7.8–8.1 ms and 86.8–92.4 ms). Starting an application is the figure to watch on
+  a screen rather than proving: 29.4 ms on the low-end phone is worth a spinner.
+
+  **A caution for anyone else measuring: emulator numbers are unrelated to device
+  numbers in either direction.** The iOS simulator ran **2× slower** than the
+  iPhone (16.1 ms), while the Android emulator ran **8× faster** than the Android
+  phone it stands for (11.2 ms against 87.2 ms). Not a safe bound either way.
 - **The real costs are supply chain, not latency.** An unaudited proof library inside the shipped app — upstream keeps it off by default in their own service for that reason (C6a); arkworks across three architectures in the app's build; a dependency whose own header calls it a *"Throwaway prototype … Nothing here is production code"*; and the loss of the hardware-attested approval, which is what §3.2 duty 1 exists for.
 - **What a pure-JavaScript path would cost, and why it is not the plan.** No JS implementation of this construction exists, so it would mean writing the scheme ourselves on `@noble/curves`, and `ref-03d` measured Hermes at roughly 15× Node on the primitives — seconds, not milliseconds, for a proof of this shape. Ruled out on both counts.
 
@@ -390,10 +407,10 @@ to render.
 
 **What the ladder has not proven, and what each gap needs:**
 
-- ~~**No real device.**~~ **Closed 2026-10-11 for iOS** by `ref-31` on an iPhone 16.
-  `ref-32` then ran on **ART** (Android 16 emulator), so the runtime gap is closed on
-  both platforms; what is still unmeasured is **a physical Android device**, which is
-  now the only platform where the cost is not known on real hardware.
+- ~~**No real device.**~~ **Closed 2026-10-11 on both platforms** — `ref-31` on an
+  iPhone 16 and `ref-32` on a Samsung Galaxy A03s. The ladder's measurement gap is
+  shut: proving is known on current and on five-year-old budget hardware, and the
+  range is in §4.1.2.
 - ~~**No Android runtime.**~~ **Closed 2026-10-11** by `ref-32`, an APK on Android 16.
   Its timings are an emulator's and must not be read as device performance.
 - **No React Native.** No TurboModule, no JSI, no Keychain or Keystore wrapping. That is
