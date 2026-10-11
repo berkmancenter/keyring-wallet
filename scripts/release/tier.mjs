@@ -16,6 +16,8 @@
 // its paths, but --files cannot read the added lines a held flag looks at: run it with --range). ONLY 0 permits an OTA
 // publish; 1-4 all mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a file there can
 // say ota while the tier is store or unchecked), so never recompute the tier from reasons.
+// While a held flag reads added lines (deletes stored records does), --files can never say ota: a change that is ota
+// by its paths always comes out unchecked there. A publish step must use --range.
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
 // here, and only a native fingerprint at publish time can catch it.
 // Flags (FLAGS) name classes of change the owner holds back from OTA even when they could travel (decided 10-11): a
