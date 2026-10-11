@@ -362,6 +362,7 @@ is the index, not a substitute for them.
 | `ref-27-pcs-flow` | The whole protocol with upstream's own engines: the community's verifier accepts our submission, and the anonymity claim is `assert!`ed — no tag matches an enrolled identifier, no voucher DID appears on the wire |
 | `ref-28-pcs-conformance` | What a client sends validates against the **published** `vetting/attestation/0.1` schema at a pin — and it caught a real bug in ref-27 that every engine in the flow had accepted |
 | `ref-29-pcs-swift` | The generated Swift runs, on the host and inside an iOS runtime, with identical proof sizes. Saved state is **166 bytes**, which settles §3.4's custody shape practically |
+| `ref-32-pcs-android` | The bridge runs on **ART**, out of an APK: every check passes on Android 16, 166 B of state byte-identical to every other platform. The APK carries a 7.7 MB `.so`, **1.7 MB of it the AWS C cryptography the member side never calls** — the same supply-chain cost B7 is about, in megabytes this time. An emulator, so not Android device performance |
 | `ref-31-pcs-device` | **The real measurement: 7.8 ms to prove at k = 3 on an iPhone 16** (iOS 18.7.8), five repetitions, spread 7.8–8.1 ms — within 15% of the laptop, and **2× faster than the iOS simulator**, which was therefore the pessimistic measurement rather than the optimistic one |
 | `ref-30-pcs-kotlin` | The generated Kotlin runs on a JVM and **the three languages agree** — 166 B of state byte for byte, prove 7.5 ms at k = 3 against Swift's 7.4 ms and the library's own bench, so neither bridge costs anything measurable. The runtime dependency is JNA and nothing else |
 
@@ -374,11 +375,12 @@ to render.
 
 **What the ladder has not proven, and what each gap needs:**
 
-- ~~**No real device.**~~ **Closed 2026-10-11 for iOS** by `ref-31` on an iPhone 16. The
-  remaining device gap is Android: nothing has run on ART.
-- **No Android runtime.** `ref-30` runs the Kotlin on a JVM, and `ref-26` proved the
-  `.so` files build — but a JVM on a laptop is not ART on a phone, and nothing has yet
-  run one. That is an instrumentation test on an emulator or a device.
+- ~~**No real device.**~~ **Closed 2026-10-11 for iOS** by `ref-31` on an iPhone 16.
+  `ref-32` then ran on **ART** (Android 16 emulator), so the runtime gap is closed on
+  both platforms; what is still unmeasured is **a physical Android device**, which is
+  now the only platform where the cost is not known on real hardware.
+- ~~**No Android runtime.**~~ **Closed 2026-10-11** by `ref-32`, an APK on Android 16.
+  Its timings are an emulator's and must not be read as device performance.
 - **No React Native.** No TurboModule, no JSI, no Keychain or Keystore wrapping. That is
   app code and an app lane's territory, not this plan's to write.
 - **No transport, no ceremony.** Values pass in process: no TSP, no DIDComm, no manifest
