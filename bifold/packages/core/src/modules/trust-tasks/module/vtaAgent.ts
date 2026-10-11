@@ -297,8 +297,6 @@ export interface VtaAgentDeps {
    * {@link OwnerCheckNotConfigured}.
    */
   deviceCanOwn?: DeviceCanOwn
-  /** This phone's name, for the label of its own access entry ("Keyring — <name>"). */
-  deviceName?: () => Promise<string> | string
   /** An agent host's automatic connection: its waits, for tests (fetch is `fetch` above). */
   agentHost?: Pick<AgentHostDeps, 'sleep' | 'now'>
   /** How long to wait between sign-in tries once a host says the agent is ready; tests shorten it. */
@@ -624,11 +622,6 @@ export class VtaAgentController {
    * kept. Left unset, an owner act refuses with {@link OwnerCheckNotConfigured}
    * rather than skipping the check.
    */
-  /** How the app names this phone in its own access entry. Only this is set; the rest is kept. */
-  setDeviceName(deviceName: () => Promise<string> | string) {
-    this.deps = { ...this.deps, deviceName }
-  }
-
   setOwnerChecks(checks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn }) {
     this.deps = { ...this.deps, confirmOwner: checks.confirmOwner, deviceCanOwn: checks.deviceCanOwn }
   }
@@ -1700,8 +1693,13 @@ export class VtaAgentController {
       await client.whoAmI().catch(() => undefined)
       // Approval rules that name the swapped-out key follow this phone onto the new one.
       void this.carryApprovers(agent, vtaDid)
-      // In the background: a slow or silent answer must not hold the link up.
-      void this.labelOwnEntry(agent, client)
+      // This phone does not label its own access entry: an agent refuses any
+      // change to the caller's own entry (VTI-ACL-052), so the entry keeps the
+      // label it was granted with. The key screens suggest one for whoever
+      // grants it (IN-200).
+      agent.config?.logger?.debug?.(
+        "[TrustTasks:VtaAgent] not labelling this phone's own access entry: agents refuse a self-update (VTI-ACL-052)"
+      )
     }
     this.set({ introSeen: false })
     this.reconnectAttempt = 0
@@ -1714,28 +1712,6 @@ export class VtaAgentController {
   private async onTemporaryKey(agent: Agent, vtaDid: string): Promise<boolean> {
     const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
     return record?.stage === 'temporary'
-  }
-
-  /**
-   * Name this phone's own access entry after the swap, "Keyring — <device
-   * name>", so an agent's admin sees which entry is which (a host's own grant
-   * carries no label, and the swap keeps whatever label the entry had). Best
-   * effort: a refusal leaves the entry unnamed and the link as it is.
-   */
-  private async labelOwnEntry(agent: Agent, client: VtaClient): Promise<void> {
-    // Nothing here may fail the link: every step, the name included, is caught.
-    try {
-      const did = client.managerDid
-      if (!did) return
-      // Platforms answer "unknown" when they will not say (Android 12+ without
-      // BLUETOOTH_CONNECT; emulators): that is no name.
-      const raw = String((await this.deps.deviceName?.()) ?? '').trim()
-      const name = raw.toLowerCase() === 'unknown' ? '' : raw
-      await client.labelAclEntry(did, name ? `Keyring — ${name}` : 'Keyring')
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] could not label this phone's access entry: ${detail}`)
-    }
   }
 
   /**

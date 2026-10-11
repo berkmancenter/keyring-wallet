@@ -35,5 +35,6 @@ export const VtaLinkIds = {
   tryAgain: 'VtaLinkTryAgain',
   scanAgain: 'VtaLinkScanAgain',
   byAddress: 'VtaLinkByAddress',
+  suggestedLabel: 'VtaLinkSuggestedLabel',
 } as const
 export type VtaLinkId = (typeof VtaLinkIds)[keyof typeof VtaLinkIds]

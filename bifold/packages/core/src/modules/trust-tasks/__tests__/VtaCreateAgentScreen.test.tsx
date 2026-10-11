@@ -279,6 +279,22 @@ describe('the owner code is handed out only after Face ID', () => {
       link: { kind: 'showingKey', vtaDid: VTA, label: 'agents.example', did: 'did:key:z6MkOwner', checking: false },
     })
 
+  // IN-200: the phone cannot name its own access entry; the name for whoever
+  // grants the code is beside it. A name is not a secret: Copy needs no Face ID.
+  test('beside the code, the name the administrator will see, with Copy', async () => {
+    showingKey()
+    const copy = jest.spyOn(Clipboard, 'setString')
+    const tree = show()
+    expect(tree.getByTestId(id('AgentCreateSuggestedLabelValue'))).toHaveTextContent(/^Keyring — Devices\.DefaultName/)
+    expect(tree.getByTestId(id('AgentCreateSuggestedLabelHint'))).toHaveTextContent('VtaLink.SuggestedLabelHint')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateSuggestedLabelCopy')))
+    })
+    expect(copy).toHaveBeenLastCalledWith(expect.stringMatching(/^Keyring — Devices\.DefaultName/))
+    expect(confirmOwner).not.toHaveBeenCalled()
+    copy.mockRestore()
+  })
+
   test('cancelling Face ID says nothing and copies nothing', async () => {
     showingKey()
     ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: false, reason: 'cancelled' })
