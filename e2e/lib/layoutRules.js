@@ -11,6 +11,10 @@
  *              or elevation that reorders drawing is not visible in the page source.
  *   centred    a navigation bar's title more than 2 pt (or dp) off the window's centre line
  * Text truncation is not here: the hierarchy holds the full text, not what was drawn. That is the vision review.
+ * Known blind spots, so no overlap findings is never read as "no tap blockers": an earlier element raised by zIndex or
+ * elevation over a later button (React Native reorders drawing, the page source may keep the JS order); and a plain
+ * View that is neither pressable nor accessible but still takes touches (an absolute fill without pointerEvents="none"),
+ * which never counts as interactive here. Both are for the vision review and a driver's real tap.
  * Findings are data; a driver decides whether they fail a row (advisory until the rules are calibrated).
  * Calibration: the window is the root element's frame unless given; frames that share at most 1 pt/dp are not an
  * overlap (rounding); only the app's own window is judged, never the keyboard (on iOS the keys live in a later
