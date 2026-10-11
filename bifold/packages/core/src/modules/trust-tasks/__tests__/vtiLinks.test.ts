@@ -453,6 +453,43 @@ describe('a bare DID, scanned or pasted', () => {
     expect(keyringLinkErrorText(error as KeyringLinkError)).toMatch(/belongs to both an agent and a community/)
   })
 
+  // An agent that publishes no REST endpoint (no VTARest) was refused as "not
+  // an agent". Reached through a DIDComm mediator named by DID, as an agent
+  // linked by its address is, it is tried as an agent.
+  describe('an agent with no REST endpoint', () => {
+    const mediated = {
+      id: 'x',
+      service: [
+        { type: 'TSPTransport', serviceEndpoint: 'did:webvh:Qm:dids.example:mediator' },
+        { type: 'DIDCommMessaging', serviceEndpoint: [{ uri: 'did:webvh:Qm:dids.example:mediator' }] },
+      ],
+    }
+    afterEach(() => jest.restoreAllMocks())
+
+    it('is linked as an agent through its mediator', async () => {
+      const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(agentDid, withDoc(mediated), navigate)
+      expect(start).toHaveBeenCalledWith(expect.anything(), agentDid, expect.any(String), { via: 'scan' })
+      expect(navigate).toHaveBeenCalledWith('VtaLink')
+    })
+
+    it("a mediator's own code is still a mediator, never linked", async () => {
+      const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+      await expect(
+        routeKeyringAgentLink(agentDid, withDoc(doc(['DIDCommMessaging', 'Authentication'])), jest.fn())
+      ).rejects.toThrow(/mediator/)
+      expect(start).not.toHaveBeenCalled()
+    })
+
+    it('with no mediator either: points to linking by address', async () => {
+      const route = routeKeyringAgentLink(agentDid, withDoc(doc(['TSPTransport'])), jest.fn())
+      await expect(route).rejects.toMatchObject({ messageKey: 'Scan.UnknownCodeUseAddress' })
+      const error = await route.catch((e: unknown) => e as KeyringLinkError)
+      expect(keyringLinkErrorText(error as KeyringLinkError)).toMatch(/Use your agent's address/)
+    })
+  })
+
   it('anything else is explained in words, never routed', async () => {
     const navigate = jest.fn()
     await expect(routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest', 'VTCRest'])), navigate)).rejects.toThrow(
@@ -461,9 +498,9 @@ describe('a bare DID, scanned or pasted', () => {
     await expect(
       routeKeyringAgentLink(agentDid, withDoc(doc(['DIDCommMessaging', 'Authentication'])), navigate)
     ).rejects.toThrow(/mediator/)
-    await expect(routeKeyringAgentLink(agentDid, withDoc(doc([])), navigate)).rejects.toThrow(
-      /isn't an agent or a community/
-    )
+    await expect(routeKeyringAgentLink(agentDid, withDoc(doc([])), navigate)).rejects.toMatchObject({
+      messageKey: 'Scan.UnknownCodeUseAddress',
+    })
     const offline = {
       dids: { resolve: jest.fn(async () => Promise.reject(new Error('ENOTFOUND'))) },
     } as never

@@ -652,6 +652,7 @@
     "ReadingCode": "Reading this code…",
     "CodeNotUsable": "Keyring can't use this code",
     "BothAgentAndCommunity": "This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.",
+    "UnknownCodeUseAddress": "Keyring can't tell what this code is. If it's your agent, link it with “No code? Use your agent's address” on My Agent.",
     "TriggerLinkUpdate": "This code needs a newer version of the app.",
     "TriggerLinkExpired": "This code has expired. Get a new one.",
     "TriggerLinkUnreachable": "This service can't be reached from your wallet.",

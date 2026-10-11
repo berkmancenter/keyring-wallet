@@ -27,8 +27,12 @@ export type DidKind =
   | { kind: 'community'; did: string; name?: string }
   /** A mediator: it relays messages; there is nothing to link to or join. */
   | { kind: 'relay'; did: string }
-  /** Resolves, but is none of the above — a person, a key, a persona. */
-  | { kind: 'other'; did: string }
+  /**
+   * Resolves, but is none of the above — a person, a key, a persona, or an
+   * agent that publishes no REST endpoint. `reachable`: it names a DIDComm
+   * mediator by DID, the way an agent is reached when linked by its address.
+   */
+  | { kind: 'other'; did: string; reachable?: boolean }
   /** Advertises both an agent and a community: the person says which they mean. Never guessed. */
   | { kind: 'ambiguous'; did: string }
   /**
@@ -64,7 +68,20 @@ export function classifyDidDocument(doc: ClassifiableDidDocument, did?: string):
   if (agent) return { kind: 'agent', did: id }
   if (community) return { kind: 'community', did: id }
   if (types.has('DIDCommMessaging') && types.has('Authentication')) return { kind: 'relay', did: id }
-  return { kind: 'other', did: id }
+  return mediatedByDid(doc) ? { kind: 'other', did: id, reachable: true } : { kind: 'other', did: id }
+}
+
+/** Whether a DIDCommMessaging service names its mediator by DID (VtaClient `resolveVtaMediator`). */
+function mediatedByDid(doc: ClassifiableDidDocument): boolean {
+  return (doc.service ?? []).some((service) => {
+    if (!typesOf(service).includes('DIDCommMessaging')) return false
+    const endpoint = (service as { serviceEndpoint?: unknown }).serviceEndpoint
+    const endpoints = Array.isArray(endpoint) ? endpoint : [endpoint]
+    return endpoints.some((e) => {
+      const uri = typeof e === 'string' ? e : (e as { uri?: unknown } | undefined)?.uri
+      return typeof uri === 'string' && uri.startsWith('did:')
+    })
+  })
 }
 
 /**
@@ -135,5 +152,7 @@ export async function classifyDid(
     }),
   ])
   if (timer) clearTimeout(timer)
-  return 'doc' in outcome ? classifyDidDocument(outcome.doc, did) : { kind: 'unresolvable', did, reason: outcome.reason }
+  return 'doc' in outcome
+    ? classifyDidDocument(outcome.doc, did)
+    : { kind: 'unresolvable', did, reason: outcome.reason }
 }

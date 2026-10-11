@@ -19,6 +19,21 @@ const PERSONA = {
 }
 
 describe('classifyDidDocument', () => {
+  it('marks as reachable a DID with no REST endpoint that names a DIDComm mediator by DID', () => {
+    const doc = {
+      id: 'did:webvh:Qm:dids.example:agent',
+      service: [{ type: 'DIDCommMessaging', serviceEndpoint: [{ uri: 'did:webvh:Qm:dids.example:mediator' }] }],
+    }
+    expect(classifyDidDocument(doc)).toEqual({ kind: 'other', did: doc.id, reachable: true })
+    // A plain URL endpoint is not a mediator to look up.
+    expect(
+      classifyDidDocument({
+        id: 'did:x:y',
+        service: [{ type: 'DIDCommMessaging', serviceEndpoint: 'https://m.example' }],
+      } as never)
+    ).toEqual({ kind: 'other', did: 'did:x:y' })
+  })
+
   it('reads a VTA as an agent to link', () => {
     expect(classifyDidDocument(RUNNER_VTA)).toEqual({ kind: 'agent', did: RUNNER_VTA.id })
   })
@@ -65,7 +80,9 @@ describe('classifyDidDocument', () => {
 
 describe('bareDid', () => {
   it('takes a DID as scanned, trimmed', () => {
-    expect(bareDid('  did:webvh:QmS4:dids.ic3.dev:keyring-runner-vta\n')).toBe('did:webvh:QmS4:dids.ic3.dev:keyring-runner-vta')
+    expect(bareDid('  did:webvh:QmS4:dids.ic3.dev:keyring-runner-vta\n')).toBe(
+      'did:webvh:QmS4:dids.ic3.dev:keyring-runner-vta'
+    )
   })
 
   it('drops a fragment, query or path', () => {
@@ -103,7 +120,10 @@ describe('classifyDid', () => {
   })
 
   it('calls a method this wallet cannot resolve invalid, and does not retry it', async () => {
-    const resolve = jest.fn(async () => ({ didDocument: null, didResolutionMetadata: { error: 'unsupportedDidMethod' } }))
+    const resolve = jest.fn(async () => ({
+      didDocument: null,
+      didResolutionMetadata: { error: 'unsupportedDidMethod' },
+    }))
     expect(await classifyDid(agentWith(resolve), 'did:nope:x', quick)).toMatchObject({ reason: 'invalid' })
     expect(resolve).toHaveBeenCalledTimes(1)
   })

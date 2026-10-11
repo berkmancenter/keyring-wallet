@@ -618,6 +618,7 @@
     "ReadingCode": "Lecture de ce code…",
     "CodeNotUsable": "Keyring ne peut pas utiliser ce code",
     "BothAgentAndCommunity": "Ce code appartient à la fois à un agent et à une communauté. Demandez à la personne qui vous l’a donné de quoi il s’agit.",
+    "UnknownCodeUseAddress": "Keyring ne sait pas ce qu’est ce code. Si c’est votre agent, liez-le avec « Pas de code ? Utilisez l'adresse de votre agent » dans Mon agent.",
     "TriggerLinkUpdate": "Ce code nécessite une version plus récente de l'application.",
     "TriggerLinkExpired": "Ce code a expiré. Obtenez-en un nouveau.",
     "TriggerLinkUnreachable": "Ce service n'est pas joignable depuis votre portefeuille.",
