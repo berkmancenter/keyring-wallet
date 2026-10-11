@@ -119,9 +119,21 @@ describe('1. confirm, before anything is sent', () => {
     expect(tree.getByTestId(id(SignInIds.number))).toBeTruthy()
   })
 
-  test('a community with no recorded name is shown by its DID', async () => {
+  // IN-249: a community with no name was shown as its raw did:webvh. It is
+  // its handle, said as having no name yet; the DID is behind Details.
+  test('a community with no name is shown by its handle, never its raw DID', async () => {
     const tree = await show(fakeSteps({ community: jest.fn(async () => ({ member: true })) }))
-    expect(tree.getByTestId(id(SignInIds.community))).toHaveTextContent(VTC)
+    expect(tree.getByTestId(id(SignInIds.community))).toHaveTextContent('Community.UnnamedRef')
+    expect(tree.getByTestId(id(SignInIds.community))).not.toHaveTextContent(VTC)
+  })
+
+  test('a community this phone has not joined, with no name: its handle, the DID behind Details', async () => {
+    const tree = await show(fakeSteps({ community: jest.fn(async () => ({ member: false })) }))
+    expect(tree.getByTestId(id(SignInIds.notMember))).toBeTruthy()
+    expect(tree.getByTestId(id(SignInIds.community))).not.toHaveTextContent(VTC)
+    expect(tree.queryByTestId(id(`${SignInIds.communityDid}Did`))).toBeNull()
+    await press(tree, `${SignInIds.communityDid}Toggle`)
+    expect(tree.getByTestId(id(`${SignInIds.communityDid}Did`))).toHaveTextContent(VTC)
   })
 
   test('Cancel leaves without sending anything', async () => {

@@ -37,7 +37,6 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { ClaimedSignIn } from '../module/oobSignIn'
-import { signInCommunityLabel } from '../module/oobSignIn'
 import {
   agentSignInSteps,
   pendingSignInLink,
@@ -48,7 +47,8 @@ import {
   type SignInSteps,
 } from '../module/signInSteps'
 
-import { didHost } from './communityName'
+import { didHost, unnamedCommunityLabel } from './communityName'
+import { DidDetails } from './DidDetails'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { SignInIds } from './SignIn.ids'
 import { useSafeHeaderHeight } from './VtaLink'
@@ -66,7 +66,7 @@ export type SignInEnd =
 type Step =
   | { kind: 'reading' }
   | { kind: 'confirm'; vtcDid: string; name: string; host?: string }
-  | { kind: 'notMember'; name: string }
+  | { kind: 'notMember'; name: string; vtcDid: string }
   | { kind: 'claiming' }
   | { kind: 'number'; claimed: ClaimedSignIn }
   | { kind: 'checking'; claimed: ClaimedSignIn }
@@ -159,12 +159,14 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
       .community(read.vtcDid)
       .then(({ member, name }) => {
         if (!live) return
-        const label = signInCommunityLabel(name, read.vtcDid)
+        // Never the raw DID as its name: what the community calls itself,
+        // else its handle, with the DID behind Details (IN-249).
+        const label = name?.trim() || unnamedCommunityLabel(read.vtcDid, t)
         setCommunityName(label)
         setStep(
           member
             ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didHost(read.vtcDid) }
-            : { kind: 'notMember', name: label }
+            : { kind: 'notMember', name: label, vtcDid: read.vtcDid }
         )
       })
       .catch((e) => {
@@ -340,6 +342,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             </ThemedText>
             <ThemedText testID={id(SignInIds.resultMessage)}>{t('SignIn.Failure.notAMember')}</ThemedText>
             {row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)}
+            <DidDetails did={step.vtcDid} testIdStem={SignInIds.communityDid} />
             <Button
               title={t('SignIn.Done')}
               buttonType={ButtonType.Primary}
