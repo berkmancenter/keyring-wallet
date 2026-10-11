@@ -50,6 +50,24 @@ c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" 
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
+# dispatch_build <sha> on|off: the newest green dispatched test build of <sha> with that push setting, told apart by
+# its artifacts' names (a push-on build's end in -push-on; a push-off build has the iOS simulator app and the APK, so
+# dispatch it with platform=both: an Android-only push-off build is never picked, a full gate needs both).
+# Taking "the newest green dispatch" as push-on picked a push-off build whenever a commit had both (release/240).
+dispatch_build() {
+  local sha=$1 want=$2 id names
+  for id in $(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event workflow_dispatch --json databaseId,conclusion \
+      --jq '.[]|select(.conclusion=="success")|.databaseId'); do
+    # Expired artifacts are still listed: a newer build whose download would fail must not hide an older good one.
+    names=$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts" --jq '.artifacts[]|select(.expired|not)|.name' 2>/dev/null)
+    case $want in
+      on) grep -q -- '-push-on$' <<<"$names" && { echo "$id"; return; } ;;
+      off) grep -q -- '-push-on$' <<<"$names" && continue
+           grep -q '^keyring-ios-sim-' <<<"$names" && grep -q '^keyring-android-' <<<"$names" && { echo "$id"; return; } ;;
+    esac
+  done
+}
+
 # The CI test builds of one wallet commit: the push build (push off, both platforms) and a push-on Android
 # build. Prints "<push-off run id> <push-on run id or ->".
 build_runs() {
@@ -59,10 +77,11 @@ build_runs() {
   if [ -f "$GATE_HOME/build-override-${sha:0:8}" ]; then cat "$GATE_HOME/build-override-${sha:0:8}"; return; fi
   off=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event push --json databaseId,conclusion \
     --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')
+  # A release branch gets no push build: its push-off build is dispatched (push=off), so take that one.
+  [ -n "$off" ] || off=$(dispatch_build "$sha" off)
   # GATE_PUSH_ON_SHA: the commit whose push-on build stands for this one (main's HEAD, when nothing between them
   # changes the app: samebuild.mjs). Set by the watcher; unset, it is this commit's own.
-  on=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "${GATE_PUSH_ON_SHA:-$sha}" --event workflow_dispatch --json databaseId,conclusion \
-    --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')
+  on=$(dispatch_build "${GATE_PUSH_ON_SHA:-$sha}" on)
   echo "${off:--} ${on:--}"
 }
 
@@ -88,6 +107,11 @@ use_build() {
   dir=$GATE_HOME/builds/${sha:0:8}
   fetch_run "$off" "$dir/off" || die "push-off build $off did not download"
   [ "$on" = - ] || fetch_run "$on" "$dir/on" || say "push-on build $on did not download: push legs will be skipped"
+  BUILDS_NOTE="$off $on"
+  if [ -f "$GATE_HOME/build-override-${sha:0:8}" ]; then BUILDS_NOTE="$BUILDS_NOTE (build-override-${sha:0:8})"
+  elif [ -z "$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event push --json databaseId,conclusion --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')" ]; then
+    BUILDS_NOTE="$BUILDS_NOTE (push-off build dispatched: no push build of ${sha:0:8})"
+  fi
   PUSH_ON_NOTE=
   if [ "$on" != - ] && [ -n "${GATE_PUSH_ON_SHA:-}" ] && [ "$GATE_PUSH_ON_SHA" != "$sha" ]; then
     PUSH_ON_NOTE="$on of ${GATE_PUSH_ON_SHA:0:8} (no app change since ${sha:0:8})"
@@ -100,7 +124,7 @@ use_build() {
   CAND_WALLET=$(grep '^wallet=' "$m" | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" | cut -d= -f2)
   local want got; want=$(grep '^main.jsbundle.sha256=' "$m" | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
   [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
-  export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON PUSH_ON_NOTE
+  export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON PUSH_ON_NOTE BUILDS_NOTE
   say "build ${CAND_WALLET:0:8} / bifold ${CAND_BIFOLD:0:8}: app $got · APK off $(shasum -a 256 "$APK_OFF" | cut -c1-12) · APK on $([ -f "$APK_ON" ] && shasum -a 256 "$APK_ON" | cut -c1-12 || echo none)"
 }
 
