@@ -29,6 +29,26 @@ describe('PINVerify Screen', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  // IN-257: a wrong PIN left the six dots filled.
+  test('a wrong PIN empties the field so the person can start over', async () => {
+    const mockAuthContext = { ...authContext, verifyPIN: jest.fn().mockResolvedValue(false) }
+    const main = new MainContainer(container.createChildContainer()).init()
+    const tree = render(
+      <ContainerProvider value={main}>
+        <StoreProvider initialState={{ ...defaultState }}>
+          <AuthContext.Provider value={mockAuthContext}>
+            <PINVerify setAuthenticated={jest.fn()} usage={PINEntryUsage.ChangePIN} />
+          </AuthContext.Provider>
+        </StoreProvider>
+      </ContainerProvider>
+    )
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('EnterOldPIN')), '123456')
+    })
+    await waitFor(() => expect(mockAuthContext.verifyPIN).toHaveBeenCalledWith('123456'))
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey('EnterOldPIN')).props.value).toBe(''))
+  })
+
   test('PIN Verify renders correctly for biometrics change', () => {
     const main = new MainContainer(container.createChildContainer()).init()
     const tree = render(

@@ -35,6 +35,8 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
   const { t } = useTranslation()
   const { verifyPIN } = useAuth()
   const [PIN, setPIN] = useState<string>('')
+  // Bumped after a wrong PIN: the field empties and takes focus again (IN-257).
+  const [clearSignal, setClearSignal] = useState(0)
   const [continueDisabled, setContinueDisabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [alertModalVisible, setAlertModalVisible] = useState<boolean>(false)
@@ -57,6 +59,8 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
       if (isPINVerified) {
         setAuthenticated(usage === PINEntryUsage.ChangePIN ? userPinInput : true)
       } else {
+        setPIN('')
+        setClearSignal((n) => n + 1)
         if (inlineMessages.enabled) {
           setInlineMessageField({
             message: t('PINEnter.IncorrectPIN'),
@@ -167,6 +171,7 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
             )}
           </ThemedText>
           <PINInput
+            clearSignal={clearSignal}
             onPINChanged={async (userPinInput: string) => {
               setInlineMessageField(undefined)
               setPIN(userPinInput)
