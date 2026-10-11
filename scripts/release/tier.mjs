@@ -11,7 +11,8 @@
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
 //   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
-//   [--json]                         prints {tier, reasons: {file: rule}}; exit 0 ota, 1 none, 2 store
+//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, files}]}; exit 0 ota, 1 none, 2 store
+// Flags (FLAGS) are for the approver: classes he may hold back even when they could travel OTA; they never set the tier.
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +54,27 @@ export const RULES = [
   ['ota', 'app JavaScript bundle (screens, flows, copy, theme, localisation)', /^(app\/src|bifold\/packages\/[^/]+\/src)\/|^app\/[^/]+\.[jt]sx?$/],
 ];
 
+/**
+ * Flags the approver sees: classes of change that may travel OTA but that the person approving may want to hold
+ * (the OTA lane's question 1 on board #29). Data, not verdicts: they never change the tier. A flag matches a path,
+ * or (with --range, which reads the diff) a line the change adds.
+ */
+export const FLAGS = [
+  { flag: 'deletes stored records', added: /\b(delete|deleteById|deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  { flag: 'sign-in / key handling', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
+  { flag: 'VTI protocol line', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
+];
+
+/** Which flags a change raises: [{ flag, files }], from paths and, when given, each file's added lines. */
+export function flagsOf(files, added = {}) {
+  const out = [];
+  for (const { flag, path: p, added: a } of FLAGS) {
+    const hit = files.filter((f) => !/^(e2e|docs)\/|__tests__|\.test\./.test(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
+    if (hit.length) out.push({ flag, files: hit });
+  }
+  return out;
+}
+
 const RANK = { none: 0, ota: 1, store: 2 };
 
 /** The tier of each file, and of the whole change. An unknown path counts as store: never OTA by default. */
@@ -66,6 +88,26 @@ export function classify(files) {
     if (RANK[t] > RANK[tier]) tier = t;
   }
   return { tier, reasons };
+}
+
+/** The lines a range adds, per file (wallet and, when the pin moved, bifold), for the content flags. */
+function addedLines(range) {
+  const out = {};
+  const read = (dir, r, prefix) => {
+    let diff = '';
+    try { diff = execFileSync('git', ['-C', dir, 'diff', '-U0', r], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return; }
+    let file = null;
+    for (const l of diff.split('\n')) {
+      if (l.startsWith('+++ b/')) file = prefix + l.slice(6);
+      else if (file && l.startsWith('+') && !l.startsWith('+++')) (out[file] ||= []).push(l.slice(1));
+    }
+  };
+  read(repo, range, '');
+  const [a, b] = range.split('..');
+  const pin = (rev) => { try { return execFileSync('git', ['-C', repo, 'rev-parse', `${rev}:bifold`], { encoding: 'utf8' }).trim(); } catch { return ''; } };
+  const pa = pin(a), pb = pin(b);
+  if (pa && pb && pa !== pb) read(process.env.BIFOLD_GIT || path.join(repo, 'bifold'), `${pa}..${pb}`, 'bifold/');
+  return out;
 }
 
 function changedFiles(range) {
@@ -91,10 +133,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
   const files = arg('--files') ? arg('--files').split(',').map((s) => s.trim()).filter(Boolean) : arg('--range') ? changedFiles(arg('--range')) : null;
   if (!files) { console.error('usage: tier.mjs --files a,b,… | --range <a>..<b> [--json]'); process.exit(64); }
-  const r = classify(files);
+  const r = { ...classify(files), flags: flagsOf(files, arg('--range') ? addedLines(arg('--range')) : {}) };
   if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
   else {
     for (const [f, why] of Object.entries(r.reasons)) if (!why.startsWith('none')) console.log(`${why.split(':')[0].padEnd(5)} ${f} (${why.split(': ')[1]})`);
+    for (const f of r.flags) console.log(`flag  ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
     console.log(`tier=${r.tier}`);
   }
   // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.

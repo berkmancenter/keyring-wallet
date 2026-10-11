@@ -1,7 +1,7 @@
 // node --test scripts/release/tier.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classify, MIGRATION_PATHS } from './tier.mjs';
+import { classify, flagsOf, MIGRATION_PATHS } from './tier.mjs';
 
 const tierOf = (...files) => classify(files).tier;
 
@@ -47,4 +47,12 @@ test('an unknown path is store, never OTA by default; an unread bifold range too
 test('the whole change takes its highest tier', () => {
   assert.equal(tierOf('docs/a.md', 'app/src/x.tsx'), 'ota');
   assert.equal(tierOf('docs/a.md', 'app/src/x.tsx', 'app/ios/Podfile'), 'store');
+});
+
+test('flags for the approver: data beside the tier, never the tier itself', () => {
+  const files = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts', 'bifold/packages/core/src/modules/trust-tasks/module/vtiJoin.ts', 'app/src/x.ts'];
+  const flags = flagsOf(files, { 'app/src/x.ts': ['  await store.deleteById(id)'] });
+  assert.deepEqual(flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
+  assert.equal(classify(files).tier, 'ota');
+  assert.deepEqual(flagsOf(['e2e/run-x.mjs', 'docs/a.md']), []);
 });
