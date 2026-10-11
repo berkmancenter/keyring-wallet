@@ -26,6 +26,11 @@ gate_env() {
   [ -f "$GATE_ENV" ] || die "no $GATE_ENV (copy e2e/gate/env.example there and fill it in)"
   set -a; . "$GATE_ENV"; set +a
   : "${GATE_PARALLEL_MIN_GB:=15}" "${GATE_MEM_MIN_GB:=3}" "${AVD:=Pixel_6_API_33}"
+  # Which infrastructure the run tests against: the Farm, or the local fallback stack (decided 10-11). From the env
+  # file itself, else its name (farm.env -> farm, local.env -> local). Written to meta, the report and every HEADS
+  # line, so a local pass is never read as a Farm pass.
+  : "${GATE_TARGET:=$(basename "$GATE_ENV" .env)}"
+  export GATE_TARGET
 }
 need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "$GATE_ENV: $v is empty"; done; }
 
@@ -265,7 +270,7 @@ LEG_NAME=""; LEG_T0=0; LEG_FAILS=0; LEG_PASS=0; LEG_SKIP=0; LEG_BROKEN=""
 leg_begin() {
   LEG_NAME=$1; LEG_T0=$(date +%s); LEG_START=$(stamp)
   local caps=-; [ -n "${3:-}" ] && caps=$(build_caps "$3" | cut -d/ -f1)
-  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -) caps=$caps${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
+  echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) target=${GATE_TARGET:-?} farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -) caps=$caps${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
   trap leg_end EXIT
   # A stop (the watcher booted out, a ctrl-C, gate.sh forwarding a TERM) becomes a normal exit, so leg_end and the
   # leg's cleanup still run. Only SIGKILL or a power loss skip it; the start-of-gate sweep (gate_sweep) covers those.
