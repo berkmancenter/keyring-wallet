@@ -1,0 +1,2 @@
+{ "name": "ref-24-oob-grant", "private": true, "type": "module", "scripts": { "start": "node run.mjs" },
+  "description": "TSP reference rung 24: the member's VTA signs auth/oob/grant on the device's UV decision, the VTC records it (respond) and the browser redeems a session." }
