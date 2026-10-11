@@ -24,6 +24,7 @@ Each part below removes one of those.
 | `watch.sh` | The auto-start poller: one pin PR (`gate.plist.example`) or main for ever (`gate-main.plist.example`) |
 | `green.mjs` | Is a commit's test build green? The one tested answer every watcher uses (`node --test e2e/gate/green.test.mjs`) |
 | `sleeps.mjs` | Did the Mac sleep during a leg? Read from `pmset -g log` (`node --test e2e/gate/sleeps.test.mjs`) |
+| `tokenlines.mjs` | Keyring's own Firebase / FCM token lines in an Android logcat, by its pids (`node --test e2e/gate/tokenlines.test.mjs`) |
 | `stable.mjs` | Is the Mac stable enough to start a gate? Lid, external displays, battery, one verdict (`node --test e2e/gate/stable.test.mjs`, fixtures under `fixtures/stable/`) |
 
 The drivers stay where they are (`e2e/run-*.js|mjs`) and use the shared helpers in `e2e/lib/`: `rows.js`,
