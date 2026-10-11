@@ -37,6 +37,12 @@ import { readTrigger, serviceEndpointOfType, triggerAction, type TriggerAccept }
 export const OOB_TASKS = {
   claim: 'https://trusttasks.org/spec/auth/oob/claim/0.1',
   cancel: 'https://trusttasks.org/spec/auth/oob/cancel/0.1',
+  /** Signed by the member's VTA as the persona (oobSignInAgent). */
+  identify: 'https://trusttasks.org/spec/auth/oob/identify/0.1',
+  prove: 'https://trusttasks.org/spec/auth/oob/prove/0.1',
+  /** Signed by the member's VTA as the persona, on the phone's user verification (oobSignInAgent). */
+  grant: 'https://trusttasks.org/spec/auth/oob/grant/0.1',
+  respond: 'https://trusttasks.org/spec/auth/oob/respond/0.1',
 } as const
 
 /** The service types a sign-in community's DID document publishes. */
@@ -55,6 +61,19 @@ const LOGIN = 'login'
  *  - `notFound`: the community no longer knows the request (the page was refreshed);
  *  - `refused`: the community said no for another reason;
  *  - `badAnswer`: the answer failed a check, so it was not believed.
+ *
+ * The later steps (oobSignInAgent):
+ *  - `badNumber`: what was typed is not two digits; nothing was sent, type it again;
+ *  - `wrongNumber`: the community says it is not the number on the page; the request is over;
+ *  - `noVaultEntry`: the member's agent has no sign-in entry for this persona and community;
+ *  - `notEnrolledDevice`: the agent does not know this phone as a registered device;
+ *  - `noUvKey` / `uvRequired`: the agent has no Face ID approval key for this phone, or got no approval;
+ *  - `uvCancelled`: the person cancelled the Face ID prompt; nothing was sent;
+ *  - `uvKeyLost`: the approval key is gone (Face ID or fingerprints changed): set it up again;
+ *  - `uvUnavailable`: the phone could not use its approval key;
+ *  - `grantReplayed`: the agent already signed this approval;
+ *  - `assertionMethodMissing`: the persona's DID document cannot approve sign-ins;
+ *  - `agentRefused` / `agentUnreachable`: the member's own agent said no, or did not answer.
  */
 export type SignInFailure =
   | 'expired'
@@ -67,6 +86,20 @@ export type SignInFailure =
   | 'notFound'
   | 'refused'
   | 'badAnswer'
+  | 'badNumber'
+  | 'wrongNumber'
+  | 'noVaultEntry'
+  | 'notEnrolledDevice'
+  | 'noUvKey'
+  | 'uvRequired'
+  | 'uvCancelled'
+  | 'uvKeyLost'
+  | 'uvUnavailable'
+  | 'grantReplayed'
+  | 'assertionMethodMissing'
+  | 'agentRefused'
+  | 'agentNeedsUpdate'
+  | 'agentUnreachable'
 
 /** The words for each, in the person's terms. */
 export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
@@ -80,17 +113,40 @@ export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
   notFound: 'This sign-in has ended. Refresh the sign-in page and scan the new code.',
   refused: "The community didn't accept this sign-in. Refresh the sign-in page and try again.",
   badAnswer: "The community's answer couldn't be checked, so nothing was signed in.",
+  badNumber: 'Enter the two digits shown on the sign-in page.',
+  wrongNumber: "That isn't the number on the sign-in page. Refresh the page and scan the new code.",
+  noVaultEntry: "Your agent isn't set up to sign in to this community yet.",
+  notEnrolledDevice: "This phone isn't registered with your agent, so it can't sign in.",
+  noUvKey: "This phone isn't set up to approve sign-ins with your agent yet.",
+  uvRequired: 'Your agent needs your approval on this phone to sign in.',
+  uvCancelled: "The sign-in wasn't approved.",
+  uvKeyLost: 'Your Face ID or fingerprints changed, so approving sign-ins must be set up again.',
+  uvUnavailable: "This phone couldn't approve the sign-in.",
+  grantReplayed: 'This approval was already used. Refresh the sign-in page and scan the new code.',
+  assertionMethodMissing: "Your identity in this community can't approve sign-ins yet.",
+  agentRefused: 'Your agent refused this sign-in.',
+  agentNeedsUpdate: 'Your agent needs an update before it can sign you in to websites.',
+  agentUnreachable: "Your agent couldn't be reached.",
 }
 
 export class SignInError extends Error {
   constructor(
     readonly reason: SignInFailure,
     /** Which check failed, for the Release log and tests. Never the link, never a key. */
-    readonly detail?: string
+    readonly detail?: string,
+    options: { responded?: boolean } = {}
   ) {
     super(SIGN_IN_FAILURE_MESSAGES[reason])
     this.name = 'SignInError'
+    this.responded = options.responded ?? false
   }
+
+  /**
+   * Whether the grant may already have reached the community (`respond` was
+   * sent, answered or not). Then the sign-in must NOT be cancelled: the VTC
+   * cancels a request it already approved (findings G2).
+   */
+  readonly responded: boolean
 }
 
 /**
@@ -100,6 +156,8 @@ export class SignInError extends Error {
  */
 const REFUSALS: Record<string, SignInFailure> = {
   'auth/oob/claim:alreadyClaimed': 'alreadyClaimed',
+  // One try: a wrong number declines the request (vtc-service oob_tasks.rs:689-695).
+  'auth/oob/prove:numberMismatch': 'wrongNumber',
   'auth/oob:requestExpired': 'expired',
   'auth/oob:requestNotFound': 'notFound',
 }
@@ -131,13 +189,12 @@ function ed25519Multikey(publicKey: Uint8Array): string {
   return `z${TypedArrayEncoder.toBase58(prefixed)}`
 }
 
-/** An eddsa-jcs-2022 proof over `document` by `secretKey`, named as `verificationMethod`. */
-export function signWithKey(
+/** An eddsa-jcs-2022 proof's configuration and the 64 bytes its signature covers. */
+function eddsaJcsProofInput(
   document: Record<string, unknown>,
-  secretKey: Uint8Array,
   verificationMethod: string,
   proofPurpose: ProofPurpose
-): Record<string, unknown> {
+): { proofConfig: Record<string, unknown>; signedInput: Uint8Array } {
   const proofConfig = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
@@ -150,7 +207,35 @@ export function signWithKey(
   const signedInput = new Uint8Array(64)
   signedInput.set(configHash, 0)
   signedInput.set(documentHash, 32)
+  return { proofConfig, signedInput }
+}
+
+/** An eddsa-jcs-2022 proof over `document` by `secretKey`, named as `verificationMethod`. */
+export function signWithKey(
+  document: Record<string, unknown>,
+  secretKey: Uint8Array,
+  verificationMethod: string,
+  proofPurpose: ProofPurpose
+): Record<string, unknown> {
+  const { proofConfig, signedInput } = eddsaJcsProofInput(document, verificationMethod, proofPurpose)
   const signature = ed25519.sign(signedInput, secretKey)
+  return { ...document, proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` } }
+}
+
+/**
+ * The same proof, made by a signer that holds its key elsewhere — the phone's
+ * biometric-gated UV key, whose signature is made only after Face ID
+ * (`uvKey.uvSign`). `sign` gets the 64-byte signing input and returns the raw
+ * 64-byte Ed25519 signature.
+ */
+export async function signWithSigner(
+  document: Record<string, unknown>,
+  sign: (signedInput: Uint8Array) => Promise<Uint8Array>,
+  verificationMethod: string,
+  proofPurpose: ProofPurpose
+): Promise<Record<string, unknown>> {
+  const { proofConfig, signedInput } = eddsaJcsProofInput(document, verificationMethod, proofPurpose)
+  const signature = await sign(signedInput)
   return { ...document, proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` } }
 }
 
@@ -170,7 +255,7 @@ export function newThrowawayKey(secretKey: Uint8Array = ed25519.utils.randomSecr
 const wholeSecond = () => new Date(Math.floor(Date.now() / 1000) * 1000)
 
 /** A Trust Task envelope, as the member portal and the browser plugin build one. */
-function envelope(
+export function oobEnvelope(
   type: string,
   payload: Record<string, unknown>,
   issuer: string,
@@ -240,16 +325,26 @@ function errorCode(answer: Record<string, unknown>): string | undefined {
   return typeof payload.code === 'string' ? payload.code : ''
 }
 
-async function send(deps: SignInDeps, base: string, document: Record<string, unknown>) {
+/**
+ * POST a document to the community's Trust Task endpoint and return its
+ * answer; a refusal or a failure to reach it is a {@link SignInError}.
+ * `responded` marks the errors of a `respond` send (see {@link SignInError.responded}).
+ */
+export async function sendToCommunity(
+  deps: Pick<SignInDeps, 'post'>,
+  base: string,
+  document: Record<string, unknown>,
+  options: { responded?: boolean } = {}
+): Promise<Record<string, unknown>> {
   let answer: unknown
   try {
     answer = await deps.post(tasksUrl(base), document)
   } catch (e) {
-    throw new SignInError('unreachable', e instanceof Error ? e.message : String(e))
+    throw new SignInError('unreachable', e instanceof Error ? e.message : String(e), options)
   }
-  if (!isObject(answer)) throw new SignInError('badAnswer', 'the answer is not a JSON object')
+  if (!isObject(answer)) throw new SignInError('badAnswer', 'the answer is not a JSON object', options)
   const code = errorCode(answer)
-  if (code !== undefined) throw new SignInError(REFUSALS[code] ?? 'refused', code || 'an error with no code')
+  if (code !== undefined) throw new SignInError(REFUSALS[code] ?? 'refused', code || 'an error with no code', options)
   return answer
 }
 
@@ -344,11 +439,11 @@ export async function claimSignIn(link: string | TriggerAccept, deps: SignInDeps
 
   const keyA = (deps.newKey ?? newThrowawayKey)()
   const claim = keyA.sign(
-    envelope(OOB_TASKS.claim, { requestId }, keyA.did, vtcDid, requestId),
+    oobEnvelope(OOB_TASKS.claim, { requestId }, keyA.did, vtcDid, requestId),
     // K_a proves control of itself to the community: `authentication`.
     'authentication'
   )
-  const answer = await send(deps, base, claim)
+  const answer = await sendToCommunity(deps, base, claim)
   const problem = await answerProblem(answer, {
     vtcDid,
     vtcDocument,
@@ -383,8 +478,8 @@ export async function cancelSignIn(
   deps: Pick<SignInDeps, 'post'>
 ): Promise<{ cancelled: boolean }> {
   const { requestId, vtcDid, base, keyA } = session
-  const cancel = keyA.sign(envelope(OOB_TASKS.cancel, { requestId }, keyA.did, vtcDid, requestId), 'authentication')
-  const answer = await send(deps as SignInDeps, base, cancel)
+  const cancel = keyA.sign(oobEnvelope(OOB_TASKS.cancel, { requestId }, keyA.did, vtcDid, requestId), 'authentication')
+  const answer = await sendToCommunity(deps, base, cancel)
   const payload = isObject(answer.payload) ? answer.payload : {}
   return { cancelled: payload.status === 'cancelled' }
 }
