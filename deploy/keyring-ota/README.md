@@ -50,7 +50,9 @@ TestFlight app or the production key.
    ring 0 there.
 5. **Publish.** Make a visible JS-only change, commit it, then
    `OTA_SERVER_URL=http://localhost:3080 OTA_SIGNING_KEY=keys/ota-private-key.pem yarn ota:deploy --base <commit the build came from> --channel spike`.
-   Add `--skip-tier` only while `scripts/release/tier.mjs` is not on the branch.
+   A store build is named by number instead (`--build 245`, its `staging-v*-245`
+   tag); `--base` exists for the spike's untagged build. Either way the base must
+   be an ancestor of HEAD, and `scripts/release/tier.mjs` must say `ota`.
 6. **Apply.** Cold-start the app twice: the first start downloads and stages the
    bundle, the second runs it. The Developer screen's `Running` line (testID
    `OtaBundleId`) shows the bundle id.

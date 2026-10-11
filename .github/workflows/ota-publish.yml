@@ -14,8 +14,8 @@ name: OTA publish (ring 0)
 on:
   workflow_dispatch:
     inputs:
-      base:
-        description: 'The commit or staging tag the store build was cut from (staging-v0.2.0-NNN)'
+      build:
+        description: 'The store build the bundle targets, by number (its staging-v*-NNN tag)'
         type: string
         required: true
       platform:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - publish ${{ github.sha }} (base ${{ inputs.base }}, ${{ inputs.platform }}, scope ${{ inputs.scope }}) to ring 0."
+      - run: echo "Approved - publish ${{ github.sha }} (for build ${{ inputs.build }}, ${{ inputs.platform }}, scope ${{ inputs.scope }}) to ring 0."
 
   publish:
     needs: [approve]
@@ -99,21 +99,22 @@ jobs:
           OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
           OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
-          BASE: ${{ inputs.base }}
+          BUILD: ${{ inputs.build }}
           PLATFORM: ${{ inputs.platform }}
           SCOPE: ${{ inputs.scope }}
-        run: node scripts/ota-deploy.mjs --base "$BASE" --platform "$PLATFORM" --scope "$SCOPE"
+        run: node scripts/ota-deploy.mjs --build "$BUILD" --platform "$PLATFORM" --scope "$SCOPE"
 
       - name: Dry run
         if: ${{ inputs.dry_run }}
         env:
-          BASE: ${{ inputs.base }}
+          BUILD: ${{ inputs.build }}
         run: |
-          if [ -f scripts/release/tier.mjs ]; then
-            node scripts/release/tier.mjs --range "$BASE..$GITHUB_SHA" --json
-          else
-            echo "scripts/release/tier.mjs is not on this commit yet"
+          tag=$(git tag --list "staging-v*-$BUILD")
+          if [ "$(printf '%s\n' "$tag" | grep -c .)" != 1 ]; then
+            echo "::error::expected one staging-v*-$BUILD tag, found: ${tag:-none}"
+            exit 1
           fi
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json
 
       - name: Remove the signing key
         if: ${{ always() }}

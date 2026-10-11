@@ -3,13 +3,19 @@
  * Publish an over-the-air bundle to ring 0, with the checks the OTA plan
  * requires (docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md).
  *
- *   node scripts/ota-deploy.mjs --base <ref> [--platform ios|android|both]
+ *   node scripts/ota-deploy.mjs --build <N> [--platform ios|android|both]
  *        [--channel <name>] [--scope fix|within-purpose] [--message <text>]
  *
- * --base is the commit the store build was cut from (for example its
- * staging-v* tag). The change since then must be JavaScript-only by
- * scripts/release/tier.mjs, with no held class (stored-record deletion, sign-in
- * or key handling, VTI protocol line): those always ship as store builds.
+ * --build is the store build the bundle targets: its staging-v*-<N> tag names
+ * the commit that build was cut from, the same build whose native fingerprint
+ * the bundle must match. The change from that commit to HEAD must be
+ * JavaScript-only by scripts/release/tier.mjs (exit 0, tier "ota"), with no
+ * held class (stored-record deletion, sign-in or key handling, VTI protocol
+ * line): those always ship as store builds. Measuring from any other commit
+ * could read "ota" for JS that calls a native method the build lacks.
+ *
+ * --base <commit> replaces --build only for a build that has no staging tag
+ * (the spike's quick-install build); it must still be an ancestor of HEAD.
  *
  * A bundle is deployed at 0% rollout, so it reaches nobody, then targeted at
  * ring 0 only. Widening is a separate, deliberate step:
@@ -30,12 +36,12 @@ const RING0 = 'ring0'
 
 const { values: args } = parseArgs({
   options: {
+    build: { type: 'string' },
     base: { type: 'string' },
     platform: { type: 'string', default: 'both' },
     channel: { type: 'string', default: process.env.OTA_CHANNEL ?? 'production' },
     scope: { type: 'string', default: 'fix' },
     message: { type: 'string' },
-    'skip-tier': { type: 'boolean', default: false },
   },
 })
 
@@ -48,7 +54,7 @@ const appDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..
 const repoDir = path.resolve(appDir, '..')
 const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8' }).trim()
 
-if (!args.base) fail('--base <ref> is required: the commit the store build was cut from')
+if (!args.build === !args.base) fail('give exactly one of --build <N> (the store build) or --base <commit>')
 if (!SCOPES.includes(args.scope)) fail(`--scope must be one of ${SCOPES.join(', ')}`)
 const platforms = args.platform === 'both' ? ['ios', 'android'] : [args.platform]
 if (!platforms.every((p) => p === 'ios' || p === 'android')) fail('--platform must be ios, android or both')
@@ -58,26 +64,40 @@ if (git('status', '--porcelain')) fail('the working tree has changes; publish fr
 const walletHead = git('rev-parse', 'HEAD')
 const bifoldHead = git('rev-parse', 'HEAD:bifold')
 
+// The store build's own commit.
+let baseRef = args.base
+if (args.build) {
+  const tags = git('tag', '--list', `staging-v*-${args.build}`).split('\n').filter(Boolean)
+  if (tags.length !== 1) fail(`build ${args.build}: expected one staging-v*-${args.build} tag, found ${tags.length}`)
+  baseRef = tags[0]
+}
+let base
+try {
+  base = git('rev-parse', `${baseRef}^{commit}`)
+} catch {
+  fail(`cannot resolve ${baseRef}`)
+}
+const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', base, walletHead], { cwd: repoDir })
+if (ancestor.status !== 0)
+  fail(`${baseRef} (${base.slice(0, 8)}) is not an ancestor of HEAD; a bundle builds on its store build`)
+
 // 2. JavaScript-only, and no held class.
+// Only exit 0 with tier "ota" permits a publish (tier.mjs's header).
 const tierScript = path.join(repoDir, 'scripts', 'release', 'tier.mjs')
-if (!existsSync(tierScript)) {
-  if (!args['skip-tier']) fail('scripts/release/tier.mjs is missing; refusing to publish without the tier check')
-  console.warn('ota-deploy: --skip-tier: no tier check (spike only)')
-} else {
-  const run = spawnSync('node', [tierScript, '--range', `${args.base}..${walletHead}`, '--json'], {
-    cwd: repoDir,
-    encoding: 'utf8',
-  })
-  let verdict
-  try {
-    verdict = JSON.parse(run.stdout)
-  } catch {
-    fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
-  }
-  if (verdict.tier !== 'ota') {
-    const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
-    fail(`tier is "${verdict.tier}"${held}: this change ships as a store build`)
-  }
+if (!existsSync(tierScript)) fail('scripts/release/tier.mjs is missing; refusing to publish without the tier check')
+const run = spawnSync('node', [tierScript, '--range', `${base}..${walletHead}`, '--json'], {
+  cwd: repoDir,
+  encoding: 'utf8',
+})
+let verdict
+try {
+  verdict = JSON.parse(run.stdout)
+} catch {
+  fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
+}
+if (run.status !== 0 || verdict.tier !== 'ota') {
+  const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
+  fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
 }
 
 // 3. The signing key must be there: with the public key in the binary, an
@@ -87,7 +107,7 @@ if (!existsSync(keyPath)) fail(`no signing key at ${keyPath} (OTA_SIGNING_KEY)`)
 
 const message =
   args.message ??
-  `[scope: ${args.scope}] wallet ${walletHead.slice(0, 8)} bifold ${bifoldHead.slice(0, 8)} base ${args.base}`
+  `[scope: ${args.scope}] wallet ${walletHead.slice(0, 8)} bifold ${bifoldHead.slice(0, 8)} base ${baseRef}`
 
 const hotUpdater = (...a) => {
   const result = spawnSync('npx', ['hot-updater', ...a], {
