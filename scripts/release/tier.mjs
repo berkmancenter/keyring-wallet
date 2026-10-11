@@ -11,8 +11,11 @@
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
 //   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
-//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, hold, files}], held}; exit 0 ota, 1 none, 2 store,
-//                                    3 an error (reported as store, never none)
+//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, hold, files}], held, unchecked}
+// Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
+// its paths, but --files cannot read the added lines a held flag looks at: run it with --range). ONLY 0 permits an OTA
+// publish; 1-4 all mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a file there can
+// say ota while the tier is store or unchecked), so never recompute the tier from reasons.
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
 // here, and only a native fingerprint at publish time can catch it.
 // Flags (FLAGS) name classes of change the owner holds back from OTA even when they could travel (decided 10-11): a
@@ -72,7 +75,9 @@ export const RULES = [
  * the change adds.
  */
 export const FLAGS = [
-  { flag: 'deletes stored records', hold: true, added: /\b(delete|deleteById|deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  // Storage deletes only: a Map's or Set's .delete() is not one. deleteById on any receiver (Credo's APIs), .delete or
+  // .remove on a receiver named for storage, and the record-removing helpers.
+  { flag: 'deletes stored records', hold: true, added: /\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
   { flag: 'sign-in / key handling', hold: true, path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
   { flag: 'VTI protocol line', hold: true, path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
 ];
@@ -91,6 +96,20 @@ export function flagsOf(files, added = {}, flags = FLAGS) {
 export function applyHolds({ tier, ...rest }, flags) {
   const held = flags.filter((f) => f.hold).map((f) => f.flag);
   return tier === 'ota' && held.length ? { ...rest, tier: 'store', held } : { ...rest, tier, held: [] };
+}
+
+/**
+ * The whole verdict. Without the added lines (--files), a held flag that reads them was never checked, so an "ota"
+ * change is "unchecked" instead, listing those flags: the tool never says OTA without having looked.
+ */
+export function verdict(files, { added, flags: set = FLAGS } = {}) {
+  const flags = flagsOf(files, added || {}, set);
+  const r = { ...applyHolds(classify(files), flags), flags, unchecked: [] };
+  if (!added && r.tier === 'ota') {
+    const unchecked = set.filter((f) => f.hold && f.added).map((f) => f.flag);
+    if (unchecked.length) Object.assign(r, { tier: 'unchecked', unchecked });
+  }
+  return r;
 }
 
 const RANK = { none: 0, ota: 1, store: 2 };
@@ -160,19 +179,19 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (!arg('--files') && !arg('--range')) { console.error('usage: tier.mjs --files a,b,… | --range <last store build>..<tip> [--json]'); process.exit(64); }
   try {
     const files = arg('--files') ? arg('--files').split(',').map((s) => s.trim()).filter(Boolean) : changedFiles(arg('--range'));
-    const flags = flagsOf(files, arg('--range') ? addedLines(arg('--range')) : {});
-    const r = { ...applyHolds(classify(files), flags), flags };
+    const r = verdict(files, { added: arg('--range') ? addedLines(arg('--range')) : undefined });
     if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
     else {
       for (const [f, why] of Object.entries(r.reasons)) if (!why.startsWith('none')) console.log(`${why.split(':')[0].padEnd(5)} ${f} (${why.split(': ')[1]})`);
       for (const f of r.flags) console.log(`${f.hold ? 'hold ' : 'flag '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
-      console.log(`tier=${r.tier}${r.held.length ? ` (held back from OTA: ${r.held.join('; ')})` : ''}`);
+      const why = r.held.length ? ` (held back from OTA: ${r.held.join('; ')})` : r.unchecked.length ? ` (ota by its paths; not checked without --range: ${r.unchecked.join('; ')})` : '';
+      console.log(`tier=${r.tier}${why}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.
-    process.exitCode = { ota: 0, none: 1, store: 2 }[r.tier];
+    process.exitCode = { ota: 0, none: 1, store: 2, unchecked: 4 }[r.tier];
   } catch (e) {
     // Never "none" by accident: an error routes the change to a store build, with its own exit code.
-    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message }));
+    if (process.argv.includes('--json')) console.log(JSON.stringify({ tier: 'store', error: e.message, reasons: {}, flags: [], held: [], unchecked: [] }));
     else console.log(`tier=store (error: ${e.message.split('\n')[0]})`);
     process.exitCode = 3;
   }
