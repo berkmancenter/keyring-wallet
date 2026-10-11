@@ -88,7 +88,7 @@ test('calibration: the keyboard is never judged (iOS keys, an Android input meth
 
 test('calibration: an allowlisted finding is printed with its reason, never counted; entries need a reason', () => {
   const els = parsePageSource(IOS, { platform: 'ios' });
-  const allow = readAllow({ allow: [{ rule: 'tap-size', label: 'Back', reason: 'hitSlop 12 makes it 54 pt' }, { rule: 'overlap', label: 'B', reason: 'B sits on A by design' }] });
+  const allow = readAllow({ allow: [{ rule: 'tap-size', label: 'Back', reason: 'hitSlop 12 makes it 54 pt' }, { rule: 'overlap', label: 'B', with: 'A', reason: 'B sits on A by design' }] });
   const found = checkLayout(els, { platform: 'ios', allow });
   assert.deepEqual(rules(counted(found)), ['centred StaticText "Your agent"', 'clipped Button "Edge"']);
   const lines = layoutLines('welcome-1', found);
@@ -96,4 +96,33 @@ test('calibration: an allowlisted finding is printed with its reason, never coun
   assert.equal(lines.filter((l) => l.startsWith('LAYOUT ')).length, 2);
   assert.throws(() => readAllow({ allow: [{ rule: 'tap-size', label: 'Back' }] }), /needs rule, label and reason/);
   assert.deepEqual(readAllow({ allow: [] }), []);
+});
+
+test('calibration: only the app window is judged; iOS keyboard keys live in a later window with KeyboardKey traits', () => {
+  // The shape of a real smoke dump (link-failure, 10-11): window 0 the app, window 1 hidden, window 2 the keyboard host
+  // whose Emoji and dictation keys are plain Buttons, not under a Keyboard element.
+  const key = (n, x) => `<XCUIElementTypeButton type="XCUIElementTypeButton" name="${n}" x="${x}" y="805" width="69" height="70" visible="true" enabled="true" traits="KeyboardKey, Button"/>`;
+  const xml = `<?xml version="1.0"?><AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="402" height="874" visible="true" enabled="true">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="true" enabled="true">${btn('Continue', 20, 700, 362, 48)}${btn('Edge', 370, 400, 60)}</XCUIElementTypeWindow>
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="false" enabled="true"/>
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="true" enabled="true"><XCUIElementTypeOther type="XCUIElementTypeOther" x="0" y="560" width="402" height="314" visible="true">${key('Emoji', 8)}${key('dictation', 325)}${key('dictation', 325)}${btn('Stray', 380, 300, 60)}</XCUIElementTypeOther></XCUIElementTypeWindow>
+  </XCUIElementTypeApplication></AppiumAUT>`;
+  const els = parsePageSource(xml, { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })), ['clipped Button "Edge"']);
+  // A key trait alone is enough, even in the app's own window.
+  const inApp = parsePageSource(ios(key('Emoji', 360)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(inApp, { platform: 'ios' })), []);
+});
+
+test('calibration: allowlist entries narrow by screen and platform, and an overlap needs its exact pair', () => {
+  const els = parsePageSource(IOS, { platform: 'ios' });
+  const allowed = (entries, opts = {}) => rules(checkLayout(els, { platform: 'ios', allow: readAllow({ allow: entries }), ...opts }).filter((f) => f.allowed));
+  const back = { rule: 'tap-size', label: 'Back', reason: 'hitSlop' };
+  assert.deepEqual(allowed([{ ...back, screen: 'welcome-2' }], { screen: 'welcome-1' }), []);
+  assert.deepEqual(allowed([{ ...back, screen: 'welcome-1' }], { screen: 'welcome-1' }), ['tap-size Button "Back"']);
+  assert.deepEqual(allowed([{ ...back, platform: 'android' }]), []);
+  assert.deepEqual(allowed([{ ...back, platform: 'ios' }]), ['tap-size Button "Back"']);
+  assert.deepEqual(allowed([{ rule: 'overlap', label: 'A', with: 'Next', reason: 'r' }]), []);
+  assert.deepEqual(allowed([{ rule: 'overlap', label: 'B', with: 'A', reason: 'r' }]), ['overlap Button "A" / Button "B"']);
+  assert.throws(() => readAllow({ allow: [{ rule: 'overlap', label: 'B', reason: 'r' }] }), /needs "with"/);
 });

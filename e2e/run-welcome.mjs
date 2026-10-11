@@ -145,7 +145,7 @@ try {
         writeFileSync(runPath(`layout-welcome-${i + 1}-${PLATFORM}.json`), JSON.stringify({ platform: PLATFORM, scale, densityDpi: PLATFORM === "android" ? scale * 160 : undefined, driverWindow: win, rootWindow: scale ? rootWindow(els) : null }, null, 2));
       } catch { /* artifacts are best effort */ }
       if (!scale) return;
-      const found = checkLayout(els, { platform: PLATFORM, allow });
+      const found = checkLayout(els, { platform: PLATFORM, allow, screen: `welcome-${i + 1}` });
       for (const line of layoutLines(`welcome-${i + 1}`, found)) console.log(line);
       findings.push(...layoutLines(`welcome-${i + 1}`, counted(found)));
     });

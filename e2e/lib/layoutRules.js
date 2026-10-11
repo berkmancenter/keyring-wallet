@@ -8,13 +8,17 @@
  * Text truncation is not here: the hierarchy holds the full text, not what was drawn. That is the vision review.
  * Findings are data; a driver decides whether they fail a row (advisory until the rules are calibrated).
  * Calibration: the window is the root element's frame unless given; frames that share at most 1 pt/dp are not an
- * overlap (rounding); the keyboard is never judged; and an allowlist (layout.allow.json) marks findings the hierarchy
- * cannot see past, each with its reason (e.g. a hitSlop that makes a small frame a full-size target).
+ * overlap (rounding); only the app's own window is judged, never the keyboard (on iOS the keys live in a later
+ * XCUIElementTypeWindow, with traits "KeyboardKey", not always under XCUIElementTypeKeyboard); and an allowlist
+ * (layout.allow.json) marks findings the hierarchy cannot see past, each with its reason (e.g. a hitSlop that makes a
+ * small frame a full-size target). Allowlist labels should be testIDs, not visible text, which repeats across screens.
  */
 
 const IOS_INTERACTIVE = /^XCUIElementType(Button|Link|Switch|Slider|TextField|SecureTextField|TextView|SegmentedControl|Cell|Tab|PickerWheel|Stepper)$/;
 const IOS_SCROLL = /^XCUIElementType(ScrollView|Table|CollectionView|WebView)$/;
 const IOS_KEYBOARD = /^XCUIElementType(Keyboard|Key)$/;
+// uiautomator2 dumps only the active app window unless multi-window dumps are on, so this matters only then (Gboard's
+// nodes carry package="com.google.android.inputmethod.latin").
 const ANDROID_KEYBOARD = /inputmethod|keyboard/i;
 const OVERLAP_TOLERANCE = 1;
 const ANDROID_SCROLL = /(ScrollView|RecyclerView|ListView|ViewPager|HorizontalScrollView|ReactScrollView)$/;
@@ -28,6 +32,7 @@ const attr = (tag, name) => {
 export function parsePageSource(xml, { platform = 'ios', scale = 1 } = {}) {
   const elements = [];
   const stack = [];
+  let windows = 0;
   for (const m of String(xml).matchAll(/<(\/?)([A-Za-z0-9_.$]+)([^>]*?)(\/?)>/g)) {
     const [, closing, type, rest, selfClosing] = m;
     if (closing) { stack.pop(); continue; }
@@ -40,7 +45,7 @@ export function parsePageSource(xml, { platform = 'ios', scale = 1 } = {}) {
       interactive = IOS_INTERACTIVE.test(type) && attr(tag, 'enabled') !== 'false';
       label = attr(tag, 'name') || attr(tag, 'label') || '';
       scroll = IOS_SCROLL.test(type);
-      keyboard = IOS_KEYBOARD.test(type);
+      keyboard = IOS_KEYBOARD.test(type) || /\bKeyboardKey\b/.test(attr(tag, 'traits') || '');
     } else {
       const b = (attr(tag, 'bounds') || '').match(/\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/);
       const [x1, y1, x2, y2] = b ? b.slice(1).map(Number) : [NaN, NaN, NaN, NaN];
@@ -52,7 +57,10 @@ export function parsePageSource(xml, { platform = 'ios', scale = 1 } = {}) {
       keyboard = ANDROID_KEYBOARD.test(attr(tag, 'package') || '');
     }
     const parent = stack.length ? stack[stack.length - 1] : null;
-    const el = { type, frame, visible, interactive, label: label.replace(/^.*:id\//, ''), scroll, inScroll: Boolean(parent && (parent.scroll || parent.inScroll)), keyboard: Boolean(keyboard || (parent && parent.keyboard)), root: !parent, navTitle: false };
+    // iOS: a window after the application's first (the keyboard host, a system alert) is not the app's screen.
+    if (platform === 'ios' && type === 'XCUIElementTypeWindow' && parent && parent.root) windows++;
+    const laterWindow = platform === 'ios' && type === 'XCUIElementTypeWindow' && parent && parent.root && windows > 1;
+    const el = { type, frame, visible, interactive, label: label.replace(/^.*:id\//, ''), scroll, inScroll: Boolean(parent && (parent.scroll || parent.inScroll)), keyboard: Boolean(keyboard || (parent && parent.keyboard)), outside: Boolean(laterWindow || (parent && parent.outside)), root: !parent, navTitle: false };
     if (platform === 'ios' && type === 'XCUIElementTypeStaticText' && parent && parent.type === 'XCUIElementTypeNavigationBar') el.navTitle = true;
     elements.push(el);
     if (!selfClosing) stack.push(el);
@@ -74,21 +82,31 @@ export function rootWindow(elements) {
 }
 
 /**
- * The allowlist: [{ rule, label, reason }], a reason required. A finding whose rule matches and whose element (or
- * either element of an overlap) has that label is kept but marked { allowed: reason }, never counted.
+ * The allowlist: [{ rule, label, reason, with?, screen?, platform? }]. A finding is kept but marked { allowed: reason },
+ * never counted, when its rule matches, its element has that label (an overlap: the pair is exactly label + with, in
+ * either order), and screen and platform match where the entry names them. Labels should be testIDs.
  */
 export function readAllow(json) {
   const list = (json && json.allow) || [];
-  for (const a of list) if (!a || !a.rule || !a.label || !a.reason) throw new Error(`layout allowlist: every entry needs rule, label and reason (${JSON.stringify(a)})`);
+  for (const a of list) {
+    if (!a || !a.rule || !a.label || !a.reason) throw new Error(`layout allowlist: every entry needs rule, label and reason (${JSON.stringify(a)})`);
+    if (a.rule === 'overlap' && !a.with) throw new Error(`layout allowlist: an overlap entry needs "with", the other element's label (${JSON.stringify(a)})`);
+  }
   return list;
 }
 
+const allowMatch = (a, f, { screen, platform }) =>
+  a.rule === f.rule &&
+  (!a.screen || a.screen === screen) &&
+  (!a.platform || a.platform === platform) &&
+  (f.rule === 'overlap' ? [a.label, a.with].sort().join('\n') === [...f.labels].sort().join('\n') : f.labels.includes(a.label));
+
 /** Findings: [{ rule, element, labels, detail, allowed? }]. `window` is { w, h } in the frames' units (default: the root's). */
-export function checkLayout(elements, { platform = 'ios', window = rootWindow(elements), allow = [] } = {}) {
+export function checkLayout(elements, { platform = 'ios', window = rootWindow(elements), allow = [], screen } = {}) {
   const out = [];
   const min = platform === 'ios' ? 44 : 48;
   const unit = platform === 'ios' ? 'pt' : 'dp';
-  const live = elements.filter((e) => e.visible && !e.keyboard && valid(e.frame));
+  const live = elements.filter((e) => e.visible && !e.keyboard && !e.outside && valid(e.frame));
   const taps = live.filter((e) => e.interactive);
   for (const e of taps) {
     if (e.frame.w < min || e.frame.h < min) out.push({ rule: 'tap-size', element: name(e), labels: [e.label], detail: `${r1(e.frame.w)}×${r1(e.frame.h)} ${unit}, under ${min}×${min}` });
@@ -108,7 +126,7 @@ export function checkLayout(elements, { platform = 'ios', window = rootWindow(el
     if (Math.abs(off) > 2) out.push({ rule: 'centred', element: name(e), labels: [e.label], detail: `title centre ${off > 0 ? '+' : ''}${r1(off)} ${unit} off the window's centre line` });
   }
   for (const f of out) {
-    const a = allow.find((x) => x.rule === f.rule && f.labels.includes(x.label));
+    const a = allow.find((x) => allowMatch(x, f, { screen, platform }));
     if (a) f.allowed = a.reason;
   }
   return out;

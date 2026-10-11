@@ -1,4 +1,4 @@
 {
-  "about": "Layout findings the view hierarchy cannot see past (lib/layoutRules.js). Each entry: rule (tap-size, clipped, overlap, centred), label (the element's testID, or iOS name), reason (why the screen is right, e.g. a hitSlop that makes a small frame a full-size target). An allowed finding is still printed (LAYOUT-ALLOWED), never counted.",
+  "about": "Layout findings the view hierarchy cannot see past (lib/layoutRules.js). Each entry: rule (tap-size, clipped, overlap, centred), label (the element's testID, not visible text), with (overlap only: the other element's testID; the pair must match), optional screen (e.g. welcome-1) and platform (ios or android) to narrow it, reason (why the screen is right, e.g. a hitSlop that makes a small frame a full-size target). An allowed finding is still printed (LAYOUT-ALLOWED), never counted.",
   "allow": []
 }
