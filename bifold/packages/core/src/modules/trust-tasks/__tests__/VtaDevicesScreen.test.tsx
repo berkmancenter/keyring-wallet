@@ -69,6 +69,20 @@ beforeEach(() => {
 })
 
 describe('your devices', () => {
+  // IN-200b: a key with a narrower role than admin is listed too, and says so.
+  test('a key with limited access is listed, marked as such, and can still be renamed and removed', async () => {
+    const limited = device('did:key:z6MkLimitedKey', { source: 'aclOnly', label: 'om4', limitedAccess: true })
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, limited])
+    const tree = await show()
+    const key = deviceKey('did:key:z6MkLimitedKey')
+    expect(tree.getByTestId(id(`AgentDevice_${key}`))).toHaveTextContent(/om4/)
+    expect(tree.getByTestId(id(`AgentDeviceAccess_${key}`))).toHaveTextContent('Devices.LimitedAccess')
+    expect(tree.getByTestId(id(`AgentDeviceRename_${key}`))).toBeTruthy()
+    expect(tree.getByTestId(id(`AgentDeviceRemove_${key}`))).toBeTruthy()
+    // An admin key says nothing about access.
+    expect(tree.queryByTestId(id(`AgentDeviceAccess_${deviceKey(THIS)}`))).toBeNull()
+  })
+
   test('each device by name, what it is and when it was seen; this phone first, with Rename and no Remove', async () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([oldPhone, plugin, thisPhone])
     const tree = await show()

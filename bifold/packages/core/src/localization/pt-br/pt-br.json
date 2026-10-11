@@ -2016,6 +2016,7 @@
     "Title": "Meus dispositivos",
     "Intro": "Tudo o que pode agir como proprietário do seu agente: este telefone, outros telefones, um computador, uma extensão de navegador. Se perder um, remova-o aqui a partir de outro.",
     "ThisPhone": "Este telefone",
+    "LimitedAccess": "Acesso limitado: pode usar seu agente para algumas tarefas, mas não gerenciá-lo",
     "Unnamed": "Outro dispositivo",
     "Remove": "Remover",
     "Removed": "Removido: {{device}}. Ele não pode mais usar seu agente.",

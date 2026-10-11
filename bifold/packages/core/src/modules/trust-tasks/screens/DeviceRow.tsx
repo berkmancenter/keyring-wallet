@@ -31,6 +31,8 @@ export interface DeviceView {
   thisPhone: boolean
   /** A Keyring phone, so "Remove this phone" rather than a plain Remove. */
   phone: boolean
+  /** It can use the agent for some tasks but not manage it: not an admin (IN-200b). */
+  limited?: boolean
 }
 
 export const DeviceRow: React.FC<{
@@ -75,6 +77,11 @@ export const DeviceRow: React.FC<{
       <View style={{ gap: 2 }}>
         <ThemedText variant="bold">{device.name}</ThemedText>
         {about ? <ThemedText style={styles.muted}>{about}</ThemedText> : null}
+        {device.limited ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(`AgentDeviceAccess_${key}`)}>
+            {t('Devices.LimitedAccess')}
+          </ThemedText>
+        ) : null}
         {removed ? (
           <ThemedText testID={testIdWithKey(`AgentDeviceState_${key}`)}>{t('Devices.RemovedErasePending')}</ThemedText>
         ) : null}
