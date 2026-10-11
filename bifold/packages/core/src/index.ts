@@ -92,7 +92,7 @@ export { DispatchAction, reducer, default as Store } from './contexts/reducers/s
 export { defaultState, mergeReducers, StoreContext, StoreProvider, useStore } from './contexts/store'
 export { ThemeProvider, useTheme } from './contexts/theme'
 export { openAppLink, useDeepLinks } from './hooks/deep-links'
-export { APPROVALS_LINK } from './modules/trust-tasks/module/vtiLinks'
+export { APPROVALS_LINK, MESSAGES_LINK } from './modules/trust-tasks/module/vtiLinks'
 export { useConnectionDisplayName } from './hooks/connections'
 export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
 export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'

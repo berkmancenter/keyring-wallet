@@ -75,6 +75,17 @@ export const keyringLinkErrorText = (e: KeyringLinkError, t?: (key: string) => s
  */
 export const APPROVALS_LINK = 'keyring://vta/approvals'
 
+/**
+ * The app's own link to the Messages tab. A push notification for a message
+ * waiting at the mediator opens it: like an approval's, the notification
+ * carries no content, so a tap can only say "go to where messages are". Not
+ * one of the agent links below: it leads to a tab, not to My Agent.
+ */
+export const MESSAGES_LINK = 'keyring://messages'
+
+/** Whether `text` is {@link MESSAGES_LINK}, exactly. */
+export const isMessagesLink = (text: string): boolean => text.trim() === MESSAGES_LINK
+
 export type KeyringAgentLinkKind =
   | 'agentHost'
   | 'triggerLink'
