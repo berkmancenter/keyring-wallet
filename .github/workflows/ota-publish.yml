@@ -63,10 +63,10 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      # Branch rules on this repository block only deletion and force-pushes on
-      # main, so the branch name alone vouches for nothing: the commit must also
-      # be signed and verified by GitHub, and the approver sees which commit it
-      # is. The script then checks that it descends from the build's own tag.
+      # main's ruleset requires signed commits and green checks; release/* and
+      # hotfix/* have no rule, so the commit must be signed and verified by
+      # GitHub whatever the branch, and the approver sees which commit it is.
+      # The script then checks that it descends from the build's own tag.
       - name: Publish only a verified commit of main, release/* or hotfix/*
         env:
           REF: ${{ github.ref_name }}
