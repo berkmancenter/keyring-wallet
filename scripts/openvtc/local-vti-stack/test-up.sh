@@ -79,7 +79,9 @@ chmod 644 "$T/stack/ngrok.yml"
 run_pf REDIS_DB=5
 [ "$rc" = 1 ] && case "$out" in *"mode is 644"*) true ;; *) false ;; esac && ok "ngrok.yml mode 644 refused" || bad "perms not refused (rc=$rc)"
 chmod 600 "$T/stack/ngrok.yml"
-sed -i '/^  vtc:/,+3d' "$T/stack/ngrok.yml"
+# Drop the vtc tunnel (its line and the 3 under it). Portable: BSD sed has no `,+3` address and needs a suffix after
+# -i; the file is rewritten in place (cat >) so it keeps mode 600 for the check that follows.
+awk 'skip > 0 { skip--; next } /^  vtc:/ { skip = 3; next } { print }' "$T/stack/ngrok.yml" > "$T/ngrok.yml.cut" && cat "$T/ngrok.yml.cut" > "$T/stack/ngrok.yml"
 run_pf REDIS_DB=5
 [ "$rc" = 1 ] && case "$out" in *vtc*) true ;; *) false ;; esac && ok "missing vtc endpoint refused" || bad "missing endpoint rc=$rc"
 
