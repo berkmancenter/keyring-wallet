@@ -1160,9 +1160,28 @@ export class VtaAgentController {
     if (this.addingFrom && this.agent) void this.stopAddingAgent(this.agent)
   }
 
-  /** After a failure or a revocation, back to a phone with no agent. */
+  /**
+   * After a failure or a revocation, back to a phone with no agent. After a
+   * revocation ("Link again"), the removed agent is also forgotten as a link:
+   * its key is no longer on the agent's list, so the stored link is of no use,
+   * and left on the list of agents it made a scan of that agent say "This
+   * phone already has that agent" with nothing to switch to (IN-251). The
+   * identities made for its communities are kept, as an unlink keeps them.
+   */
   relink() {
+    const was = this.state.link
     this.dispatch({ type: 'relink' })
+    if (was.kind !== 'revoked') return
+    // At once, so a scan straight after is not refused; the store follows.
+    this.set({ agents: (this.state.agents ?? []).filter((a) => a.vtaDid !== was.vtaDid) })
+    if (this.agent) void this.forgetRemovedAgent(this.agent, was.vtaDid)
+  }
+
+  /** A removed agent's link and this phone's key for it, gone; the list of agents read again. */
+  private async forgetRemovedAgent(agent: Agent, vtaDid: string): Promise<void> {
+    await Promise.resolve(this.linkStore(agent).remove?.(vtaDid)).catch(() => undefined)
+    await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+    await this.refreshAgents(agent).catch(() => undefined)
   }
 
   /**
