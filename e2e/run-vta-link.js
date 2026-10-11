@@ -59,7 +59,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -697,7 +697,7 @@ async function linkCase(driver, which) {
     const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !aclBefore.has(e.subject)), first.key, runHeirs);
     if (!mine.length) return row(false, "found no key of this phone's on the agent to remove");
     for (const e of mine) {
-      const out = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "delete", e.subject], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+      const out = deleteAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME, subject: e.subject });
       console.log(`[e2e] removed this phone's key …${e.subject.slice(-12)}: ${out.trim().split("\n").pop()?.slice(0, 60)}`);
     }
     // The phone hears of it on its next call: the app to the background and back, My Agent, past an introduction.
@@ -706,7 +706,7 @@ async function linkCase(driver, which) {
       await sleep(1500);
       await unlockIfLocked(driver).catch(() => undefined);
       if (await existsTestId(driver, "AgentIntroSkip", 1000)) await tapTestId(driver, "AgentIntroSkip", 5000).catch(() => undefined);
-      await (await waitForTestId(driver, "MyAgent", 15000)).click().catch(() => undefined);
+      await waitForTestId(driver, "MyAgent", 15000).then((el) => el.click(), () => undefined).catch(() => undefined);
     };
     await nudge();
     const removed = (await link.awaitRemoved({ nudge })).value;

@@ -12,6 +12,10 @@
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN
 APK=$APK_OFF
 leg_begin pnmlink "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
+# Runners only: never a person's own agent (alice, alberto3, alberto-push-vta-2), on either slug this leg may change.
+for s in "$RUNNER_MAIN_SLUG" "${NO_REST_AGENT_SLUG:-}"; do
+  case $s in alice|alberto3|alberto-push-vta-2) die "refusing $s: a person's own agent, not a runner" ;; esac
+done
 T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"
