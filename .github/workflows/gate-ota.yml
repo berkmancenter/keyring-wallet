@@ -112,7 +112,9 @@ jobs:
           npx hot-updater fingerprint create
           cd ..
           git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false
-          git commit -qam "ci: the store build's OTA settings (never pushed)"
+          # HUSKY=0: the repo's hooks require signed commits, which protects what is pushed. These commits live only in
+          # this throwaway checkout (never pushed; persist-credentials is off), as the base ota-deploy measures from.
+          HUSKY=0 git commit -qam "ci: the store build's OTA settings (never pushed)"
           echo "OTA_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "OTA_SIGNING_KEY=$RUNNER_TEMP/keys/private-key.pem" >> "$GITHUB_ENV"
 
