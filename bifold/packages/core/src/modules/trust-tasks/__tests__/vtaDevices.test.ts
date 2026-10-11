@@ -81,13 +81,16 @@ function fakeAgent(overrides: Partial<Record<string, (payload: Record<string, un
 }
 
 describe('the devices that run your agent', () => {
-  it('lists every admin: registered devices with their binding, the rest from the access list', async () => {
+  // IN-200b: My devices lists every key on the access list, not only admins;
+  // a narrower role is marked limited.
+  it('lists every access entry: registered devices with their binding, the rest from the list', async () => {
     const { port } = fakeAgent()
     const devices = await listAgentDevices(port)
-    expect(devices.map((d) => [d.did, d.source])).toEqual([
-      [ME, 'registered'],
-      [OLD_PHONE, 'registered'],
-      [PLUGIN, 'aclOnly'],
+    expect(devices.map((d) => [d.did, d.source, d.limitedAccess])).toEqual([
+      [ME, 'registered', false],
+      [OLD_PHONE, 'registered', false],
+      [PLUGIN, 'aclOnly', false],
+      ['did:key:z6MkCommunityApp', 'aclOnly', true],
     ])
     const me = devices[0]
     expect(me).toMatchObject({
@@ -265,6 +268,19 @@ describe('another phone acting as the same agent', () => {
     })
     const live = liveSiblings(await listAgentDevices(port), NOW)
     expect(live.map((d) => d.did)).toEqual([OLD_PHONE])
+  })
+
+  it('a key with limited access, seen just now, is not another device acting as this agent', async () => {
+    const recent = new Date(NOW.getTime() - 60_000).toISOString()
+    const rows = [{ deviceId: 'dev-x', consumerDid: 'did:key:z6MkLimited', displayName: 'x', lastSeenAt: recent }]
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.list]: () => ({ devices: rows }),
+      [AGENT_DEVICE_TASK.aclList]: () => ({
+        entries: [{ subject: 'did:key:z6MkLimited', role: 'application' }],
+        truncated: false,
+      }),
+    })
+    expect(liveSiblings(await listAgentDevices(port), NOW)).toEqual([])
   })
 })
 

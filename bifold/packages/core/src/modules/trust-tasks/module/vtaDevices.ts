@@ -88,12 +88,19 @@ export interface AgentDevice {
   wipePending: boolean
   /** A Keyring phone: registered from iOS or Android. Undefined when unknown. */
   kind?: 'keyring'
+  /** Its access-list role is not `admin`: it can use the agent for some tasks but not manage it (IN-200b). */
+  limitedAccess?: boolean
 }
 
 type Json = Record<string, unknown>
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
 
-/** Every admin of the agent, each with its device binding when it has one. */
+/**
+ * Every key the agent's access list holds, each with its device binding when it
+ * has one. Not only admins (IN-200b): a computer or a browser plugin often
+ * holds a narrower role, and My devices said it lists them; those are marked
+ * `limitedAccess`.
+ */
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, listAnswer] = await Promise.all([
     versionsFor(port.managerDid ?? port)
@@ -115,7 +122,7 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
   const devices: AgentDevice[] = []
   for (const entry of entries) {
     const did = str(entry.subject)
-    if (!did || entry.role !== 'admin') continue
+    if (!did) continue
     const b = bindingOf.get(did)
     const platform = str(b?.platform)
     const disabledAt = str(b?.disabledAt)
@@ -140,6 +147,7 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
       accessRevoked: Boolean(disabledAt || wipedAt),
       wipePending: Boolean(wipedAt),
       ...(platform === 'ios' || platform === 'android' ? { kind: 'keyring' as const } : {}),
+      limitedAccess: entry.role !== 'admin',
     })
   }
   return devices
@@ -295,7 +303,8 @@ export function liveSiblings(
   windowMs = LIVENESS_WINDOW_MS
 ): AgentDevice[] {
   return devices.filter((d) => {
-    if (d.isThisPhone || d.accessRevoked || !d.lastSeenAt) return false
+    // A key with limited access does not act as this agent.
+    if (d.isThisPhone || d.accessRevoked || d.limitedAccess || !d.lastSeenAt) return false
     const seen = Date.parse(d.lastSeenAt)
     return Number.isFinite(seen) && now.getTime() - seen <= windowMs
   })
