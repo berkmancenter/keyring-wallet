@@ -31,5 +31,8 @@
   "JoinWaysSeveral": "older-build fallback: the Join screen's several-ways view, gone since keyring-bifold 2e97fd1a (2026-10-07); run-vti-join03 records whether it shows",
   "LinkWithoutQrButton": "older-build fallback: the unlinked My Agent screen's 'link without a QR' button, gone since keyring-bifold ed9aabf8 (2026-10-06, in 240 and later); run-vta-link guards it for the gate's dry --golden on 239 (it opens the link screen's own form, lib/pages/link.js typeAddressOnLink), run-several-agents guards it, run-own-agent still taps it",
   "VtaLinkShowMyCode": "older-build fallback: the link screen's 'show my code', renamed in keyring-bifold 9b6cc085 (2026-10-06, in 241 and later); lib/pages/link.js showTheCode tries VtaLinkShowTheCode first, for the gate's dry --golden on 240 and before",
-  "VtaLinkWithoutQr": "older-build fallback: the link screen's 'without a QR' step, gone since keyring-bifold 9b6cc085 (2026-10-06, in 241 and later); lib/pages/link.js typeAddressOnLink and every driver guard it"
+  "VtaLinkWithoutQr": "older-build fallback: the link screen's 'without a QR' step, gone since keyring-bifold 9b6cc085 (2026-10-06, in 241 and later); lib/pages/link.js typeAddressOnLink and every driver guard it",
+  "clearSignal": "not a testID: the PINInput prop bifold #384 adds (IN-257, a wrong PIN empties the field). run-wrong-pin asks buildLacks for it as that fix's marker in the bundle, since the fix adds no testID or string; a prop name is a literal in the Hermes string table like a key",
+  "SignInCommunityDidToggle": "derived, bifold #385 (IN-249): SignIn.tsx <DidDetails testIdStem={SignInIds.communityDid}> builds `${testIdStem}Toggle`",
+  "SignInCommunityDidDid": "derived, bifold #385 (IN-249): SignIn.tsx <DidDetails testIdStem={SignInIds.communityDid}> builds `${testIdStem}Did`"
 }
