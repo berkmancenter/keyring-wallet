@@ -41,6 +41,16 @@ usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 # for another lane's device build, instead of cutting the legs mid-way (10-11).
 PAUSE_FILE_NAME=stop-after-leg
 paused() { [ -f "$GATE_HOME/$PAUSE_FILE_NAME" ]; }
+# The watcher never gates a commit again once it has a run, so a paused run's legs wait for a person: say which.
+paused_runs() {
+  local rd id n
+  for rd in "$GATE_HOME"/runs/*/; do
+    [ -f "$rd/legs.tsv" ] || continue; id=$(basename "$rd")
+    n=$(awk -F'\t' '$2==4' "$rd/legs.tsv" | wc -l | tr -d ' '); [ "$n" -gt 0 ] || continue
+    grep -qx "rerun-of=$id" "$GATE_HOME"/runs/*/meta 2>/dev/null && continue
+    say "legs not run (paused): $n in $id; finish it with: gate.sh rerun $id --only-failed"
+  done
+}
 run_leg() {
   local rd=$1 leg=$2 only=${3:-} dir=$1/$2 s e rc
   if paused; then
@@ -344,6 +354,6 @@ case ${1:-} in
   watch) shift; cmd_watch "$@" ;;
   report) shift; cmd_report "$@" ;;
   pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
-  resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed" ;;
+  resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
   *) usage ;;
 esac
