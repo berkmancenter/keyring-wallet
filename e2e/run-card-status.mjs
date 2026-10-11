@@ -45,7 +45,7 @@ import { communityCardKey } from "./lib/testIdKeys.js";
 import { join } from "./lib/pages/join.js";
 
 export const ROW = "card-status-unreachable-notice";
-export const TRACKED = "tracked: IN-258 fix pending";
+export const TRACKED = "tracked (IN-258 fix pending)";
 
 /** The host the status lists are served from: the override, else the community's REST host. */
 export function statusHostOf(cRest, override) {
@@ -82,9 +82,9 @@ export function noticeIn(source) {
 
 /** How the row ends: PASS on the notice, else SKIP as tracked (FAIL when strict). */
 export function cardStatusOutcome({ notice, observed, setup, strict = false }) {
-  if (setup) return { status: "SKIP", detail: `${TRACKED}; setup did not reach the check: ${setup}` };
+  if (setup) return { status: "SKIP", detail: `${TRACKED}: setup did not reach the check: ${setup}` };
   if (notice) return { status: "PASS", detail: `notice "${notice}"; ${observed}` };
-  return strict ? { status: "FAIL", detail: `no status notice; ${observed}` } : { status: "SKIP", detail: `${TRACKED}; observed: ${observed}` };
+  return strict ? { status: "FAIL", detail: `no status notice; ${observed}` } : { status: "SKIP", detail: `${TRACKED}: observed: ${observed}` };
 }
 
 const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
@@ -134,7 +134,17 @@ async function main() {
   const sniRule = ["OUTPUT", "-p", "tcp", "-m", "string", "--string", host, "--algo", "bm", "-j", "REJECT", "--reject-with", "tcp-reset"];
   const ipRule = ["OUTPUT", "-d", host, "-j", "REJECT"];
   let cut = "";
+  let tried = false;
+  // The server-name rule matches the host as a substring of any server name: refuse when C's messaging host or the
+  // host in C's own DID would match too, or the cut would also cut the answer (or C's DID resolution).
+  const overlaps = () => {
+    const didHost = decodeURIComponent(String(C_DID || "").split(":")[3] ?? "");
+    return [process.env.C_MEDIATOR_HOST, didHost].filter((h) => h && h.includes(host));
+  };
   const block = () => {
+    const shared = overlaps();
+    if (shared.length) throw new Error(`${host} is part of ${shared.join(" and ")}: cutting it would cut C's messaging or DID too`);
+    tried = true;
     console.log(`STATUS_BLOCK_HOST ${host}`);
     try {
       adb("iptables", "-I", ...sniRule);
@@ -150,7 +160,12 @@ async function main() {
     const ip = ipOf(host);
     const mediator = process.env.C_MEDIATOR_HOST;
     if (mediator && ip && ip === ipOf(mediator)) throw new Error(`${host} and C's messaging host ${mediator} share ${ip}: cutting the address would cut the answer too`);
-    for (const t of ["iptables", "ip6tables"]) adb(t, "-I", ...ipRule);
+    adb("iptables", "-I", ...ipRule);
+    try {
+      adb("ip6tables", "-I", ...ipRule);
+    } catch {
+      // No IPv6 rule: the IPv4 one is the one the emulator's network uses; finally removes it either way.
+    }
     return `by address (${ip || "?"})`;
   };
   const unblock = () => {
@@ -205,9 +220,10 @@ async function main() {
       return rows.exitCode();
     }
     log(`${host} cut ${cut}`);
+    // Named before the approval, so a timeout after it is still cleaned up (lostreq's fin removes the member).
+    console.log(`JOIN_MEMBER ${req.applicantDid}`);
     const said = admin("join-decide", req.id, "approved");
     approved = true;
-    console.log(`JOIN_MEMBER ${req.applicantDid}`);
     log(`admin approves ${req.id}: ${(said.split("\n").filter((l) => /->/.test(l)).pop() ?? "").trim()}`);
     const listed = statusListHostIn(said);
     const mismatch = listed && listed !== host ? ` (the card names its status list at ${listed}, not ${host}: the wrong host was cut)` : "";
@@ -249,7 +265,7 @@ async function main() {
     // A row that is still tracked is not a broken leg: it says what stopped it.
     if (rows.outcome(ROW) === undefined) await end(cardStatusOutcome({ setup: `the driver stopped: ${String(e.message).split("\n")[0].slice(0, 160)}` }));
   } finally {
-    if (cut) unblock();
+    if (cut || tried) unblock();
     if (reqId && !approved) console.log(`ARRIVED_REQ ${reqId}`);
     // After the host is back: does the held card arrive? Logged, not a row.
     if (cut && d) {

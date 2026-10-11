@@ -30,6 +30,13 @@ test("pinCount counts masked bullets and digits, never the spaces between them",
   assert.equal(pinCount("Masked"), 0);
 });
 
+test("readPinField: a read that fails is not an empty field", async () => {
+  const broken = { e2ePlatform: "android", $: () => ({ getAttribute: async () => { throw new Error("stale element"); } }) };
+  const got = await readPinField(broken);
+  assert.equal(got.count, null);
+  assert.match(got.error, /stale element/);
+});
+
 test("readPinField reads Android's text and iOS's value", async () => {
   const android = fakeDriver({ platform: "android", screen: { EnterPIN: { text: "● ● ● ● ● ●" } } });
   assert.deepEqual(await readPinField(android), { raw: "● ● ● ● ● ●", count: 6 });
@@ -43,9 +50,9 @@ test("readPinField reads Android's text and iOS's value", async () => {
   assert.equal((await readPinField(ios)).count, 0);
 });
 
-test("readPinField on a screen without the field reads nothing rather than throwing", async () => {
+test("readPinField on a screen without the field cannot read it, so it never passes as cleared", async () => {
   const d = fakeDriver({ platform: "android", screen: {} });
-  assert.equal((await readPinField(d)).count, 0);
+  assert.equal((await readPinField(d)).count, null);
 });
 
 // ------------------------------------------------------------------ IN-249
@@ -136,8 +143,8 @@ test("the row is tracked: SKIP without the notice, PASS with it, FAIL only when 
   });
   const tracked = cardStatusOutcome({ notice: "", observed: 'card status "Approved"' });
   assert.equal(tracked.status, "SKIP");
-  assert.equal(tracked.detail, `${TRACKED}; observed: card status "Approved"`);
-  assert.match(tracked.detail, /^tracked: IN-258 fix pending; observed: /);
+  assert.equal(tracked.detail, `${TRACKED}: observed: card status "Approved"`);
+  assert.match(tracked.detail, /^tracked \(IN-258 fix pending\): observed: /);
   assert.equal(cardStatusOutcome({ notice: "", observed: "o", strict: true }).status, "FAIL");
   // bifold #386's notice: its testID and its words.
   assert.equal(noticeIn('<android.view.View resource-id="com.ariesbifold:id/CardStatusNotice" />'), 'testID CardStatusNotice');
@@ -145,5 +152,5 @@ test("the row is tracked: SKIP without the notice, PASS with it, FAIL only when 
   // A setup that never reached the check is SKIP whatever `strict` says.
   const setup = cardStatusOutcome({ setup: "no new pending request", strict: true });
   assert.equal(setup.status, "SKIP");
-  assert.match(setup.detail, /^tracked: IN-258 fix pending; setup did not reach the check: no new pending request$/);
+  assert.match(setup.detail, /^tracked \(IN-258 fix pending\): setup did not reach the check: no new pending request$/);
 });

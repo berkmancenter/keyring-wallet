@@ -40,6 +40,11 @@ driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
 # IN-258, tracked (no fix yet): the same phone, not a member and with no open request, asks to join C and is approved
 # while only the status-list host is cut; the card must say its status could not be checked (run-card-status.mjs, row
 # card-status-unreachable-notice: SKIP "tracked: …" until the fix lands). iptables needs root, as above.
+# Anything run-join-lost's ask left at C is declined now, before the card-status run asks again: that run tells its
+# own request by what is new, and a leftover one would make the phone "already asked".
+for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '{print $2}' | sort -u); do
+  echo "  decline $r (before card-status): $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined before the next ask' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
+done
 adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
 # A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
 CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
@@ -48,4 +53,4 @@ E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_R
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
 take_rows "$LEG_DIR/card.out"
 # Tracked to the end: a driver that never printed its row (killed by its alarm, a crash) is the tracked row's detail.
-grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out" || row card-status-unreachable-notice SKIP "tracked: IN-258 fix pending; the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"
+grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out" || row card-status-unreachable-notice SKIP "tracked (IN-258 fix pending): the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"

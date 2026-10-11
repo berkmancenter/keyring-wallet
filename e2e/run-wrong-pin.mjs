@@ -48,7 +48,13 @@ export const pinCount = (raw) => (String(raw ?? "").match(/[0-9●•]/g) ?? [])
 /** The PIN field's contents as the platform reads them: Android's text, iOS's value. Returns { raw, count }. */
 export async function readPinField(d, key = "EnterPIN") {
   const el = byTestId(d, key);
-  const raw = d.e2ePlatform === "ios" ? await el.getAttribute("value").catch(() => "") : await el.getAttribute("text").catch(() => "");
+  // A read that fails is not an empty field: count stays null, so a regressed build cannot pass as cleared.
+  let raw;
+  try {
+    raw = d.e2ePlatform === "ios" ? await el.getAttribute("value") : await el.getAttribute("text");
+  } catch (err) {
+    return { raw: "", count: null, error: String(err?.message ?? err).split("\n")[0].slice(0, 120) };
+  }
   return { raw: raw ?? "", count: pinCount(raw) };
 }
 
@@ -150,7 +156,7 @@ async function main() {
     }
     await rows.row(ROW, () => {
       if (!locked) return { ok: false, detail: "the app started again without the unlock screen (EnterPIN) in 120 s" };
-      const wrongs = [!error && "no error line after the wrong PIN", after.count !== 0 && `the field still holds ${after.count} character(s) (${JSON.stringify(after.raw)})`, !unlocked && how].filter(Boolean);
+      const wrongs = [!error && "no error line after the wrong PIN", after.count === null && `could not read the field (${after.error})`, after.count !== null && after.count !== 0 && `the field still holds ${after.count} character(s) (${JSON.stringify(after.raw)})`, !unlocked && how].filter(Boolean);
       return wrongs.length
         ? { ok: false, detail: `${wrongs.join("; ")}${error ? `; error "${error}"` : ""}` }
         : { ok: true, detail: `error "${error}"; the field then empty (${JSON.stringify(after.raw)}); the right PIN ${how}` };
