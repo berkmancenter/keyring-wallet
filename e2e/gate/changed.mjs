@@ -256,16 +256,50 @@ function changedFiles(range) {
   return files.filter((f) => f !== 'bifold');
 }
 
+/** Does the path exist in the wallet tree, or in the bifold clone (BIFOLD_GIT, else ./bifold)? null when unknowable. */
+export function pathExists(f, top = repo) {
+  if (fs.existsSync(path.join(top, f))) return true;
+  const git = (dir, ...a) => { try { execFileSync('git', ['-C', dir, ...a], { stdio: 'ignore' }); return true; } catch { return false; } };
+  if (git(top, 'cat-file', '-e', `HEAD:${f}`)) return true;
+  if (f.startsWith('bifold/')) {
+    const dir = process.env.BIFOLD_GIT || path.join(top, 'bifold');
+    let pin = '';
+    try { pin = execFileSync('git', ['-C', top, 'rev-parse', 'HEAD:bifold'], { encoding: 'utf8' }).trim(); } catch { /* no pin */ }
+    const inner = f.slice('bifold/'.length);
+    if (pin && git(dir, 'cat-file', '-e', `${pin}:${inner}`)) return true;
+    if (git(dir, 'cat-file', '-e', `origin/main:${inner}`)) return true;
+    if (!git(dir, 'rev-parse', '--git-dir') || !fs.existsSync(path.join(dir, '.git'))) return null;
+  }
+  return false;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
   const changed = arg('--files') ? arg('--files').split(',').map((s) => s.trim()).filter(Boolean) : arg('--range') ? changedFiles(arg('--range')) : null;
   if (!changed) { console.error('usage: changed.mjs --files a,b,… | --range <a>..<b> [--json]'); process.exit(64); }
   const manifests = MANIFESTS.filter((m) => fs.existsSync(path.join(e2eDir, m.file))).map((m) => ({ root: m.root, json: JSON.parse(fs.readFileSync(path.join(e2eDir, m.file), 'utf8')) }));
+  // A path that is in neither tree is a typo, not a logic file: say so instead of "use the full gate".
+  const missing = changed.filter((f) => /^(bifold|app)\//.test(f) && pathExists(f) === false);
+  if (missing.length) {
+    if (process.argv.includes('--json')) console.log(JSON.stringify({ legs: [], reasons: {}, mapped: [], unmapped: [], missing, verdict: 'no-such-file' }, null, 2));
+    else console.log(`no such file in the wallet or bifold tree: ${missing.join(', ')}`);
+    process.exitCode = 2;
+  }
+  // The manifest is generated from one bifold commit; a file that gained testIDs since reads as unmapped.
+  let warning = '';
+  try {
+    const gen = manifests[0]?.json.generatedFrom || '';
+    const ref = arg('--range') ? arg('--range').split('..')[1] : 'HEAD';
+    const pin = execFileSync('git', ['-C', repo, 'rev-parse', `${ref}:bifold`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (gen && pin && !pin.startsWith(gen) && !gen.startsWith(pin)) warning = `testids manifest from bifold ${gen.slice(0, 8)}, change judged at bifold ${pin.slice(0, 8)}: IDs added since read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
+  } catch { /* no pin to compare */ }
+  if (warning) console.error(`warning: ${warning}`);
+  if (missing.length) process.exit();
   const r = select(changed, { manifests, legsDir: path.join(here, 'legs') });
   const legs = [...r.legs.keys()].sort();
   const code = r.unmapped.length ? 2 : legs.length ? 0 : 1;
   if (process.argv.includes('--json')) {
-    console.log(JSON.stringify({ legs, reasons: Object.fromEntries(r.legs), mapped: r.mapped, unmapped: r.unmapped, verdict: ['select', 'none', 'full-gate'][code] }, null, 2));
+    console.log(JSON.stringify({ legs, reasons: Object.fromEntries(r.legs), mapped: r.mapped, unmapped: r.unmapped, verdict: ['select', 'none', 'full-gate'][code], ...(warning ? { warning } : {}) }, null, 2));
   } else {
     for (const leg of legs) {
       const why = r.legs.get(leg);

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { idsOwnedBy, ownersFrom, select, unitsOf } from './changed.mjs';
+import { idsOwnedBy, ownersFrom, pathExists, select, unitsOf } from './changed.mjs';
 
 /** A small repo: two screens, a page object, three drivers, four legs. */
 function fixture() {
@@ -109,5 +109,17 @@ test('gate.sh changed refuses what it cannot narrow, and while paused', async ()
     assert.match(run('--pin', 'abc', '--files', 'bifold/packages/core/src/screens/PINEnter.tsx'), /paused \(test pause/);
   } finally {
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a path in neither tree is reported as missing, not taken for a logic file', () => {
+  const f = fixture();
+  try {
+    mkdirSync(path.join(f.top, 'app/src'), { recursive: true });
+    writeFileSync(path.join(f.top, 'app/src/Real.tsx'), 'export {}\n');
+    assert.equal(pathExists('app/src/Real.tsx', f.top), true);
+    assert.equal(pathExists('app/src/Typo.tsx', f.top), false);
+  } finally {
+    f.done();
   }
 });
