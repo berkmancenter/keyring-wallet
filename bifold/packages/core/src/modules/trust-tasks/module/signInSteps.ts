@@ -35,6 +35,7 @@ import {
 import { readTrigger, triggerAction } from './triggerLink'
 import { vtaAgent } from './vtaAgent'
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
+import { readPublicProfileName } from './vtiAgent'
 import { communityTarget } from './vtiCommunityLink'
 
 export type { ProvedSignIn, SignInRequester } from './oobSignInAgent'
@@ -58,8 +59,23 @@ async function recordedCommunity(agent: Agent, vtcDid: string): Promise<{ member
   const member = memberships.some((m) => m.communityDid === vtcDid && isCurrentMembership(m))
   const name =
     communityTarget.publishedNameOf(vtcDid) ??
-    (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)?.name
+    (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)?.name ??
+    // A community this phone never joined has no name on record: the one it
+    // publishes, read once, so a sign-in from it is not shown as a raw DID (IN-249).
+    (await publishedName(agent, vtcDid))
   return { member, name }
+}
+
+/** The name a community's public profile gives it, or undefined (unreachable, unnamed, not answered in 3 s). */
+async function publishedName(agent: Agent, vtcDid: string): Promise<string | undefined> {
+  try {
+    const doc = await agent.dids.resolveDidDocument(vtcDid)
+    const service = doc.service?.find((s) => s.type === 'VTCRest')
+    const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+    return base ? await readPublicProfileName(base, vtcDid) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

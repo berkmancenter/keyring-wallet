@@ -4,6 +4,7 @@ export const SignInIds = {
   // 1. Confirm, before anything is sent.
   confirm: 'SignInConfirm',
   community: 'SignInCommunity',
+  communityDid: 'SignInCommunityDid',
   host: 'SignInHost',
   continue: 'SignInContinue',
   cancel: 'SignInCancel',
