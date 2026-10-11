@@ -165,8 +165,17 @@ cmd_rerun() {
   gate_sweep
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
-  local leg rc s e names
-  while IFS=$'\t' read -r leg rc s e; do
+  rerun_legs "$old" "$rd"
+  echo "ended=$(stamp)Z" >> "$rd/meta"
+  cmd_report "$(basename "$rd")"
+}
+
+# rerun_legs <old-run-dir> <new-run-dir>: every leg of the old run that did not pass, again. legs.tsv is read on fd 3,
+# not stdin: a leg's programs (adb, node, pnm) read stdin, and a loop fed on it lost every line after the first leg
+# it ran (1011-0902: the rerun ran linkwait and never update-ios, p1 or testreq). e2e/gate/rerun.test.mjs.
+rerun_legs() {
+  local old=$1 rd=$2 leg rc s e names
+  while IFS=$'\t' read -r leg rc s e <&3; do
     case $rc in
       0) ;;
       # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
@@ -174,9 +183,7 @@ cmd_rerun() {
       *) names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
          run_leg "$rd" "$leg" "$names" ;;
     esac
-  done < "$old/legs.tsv"
-  echo "ended=$(stamp)Z" >> "$rd/meta"
-  cmd_report "$(basename "$rd")"
+  done 3< "$old/legs.tsv"
 }
 
 # The drivers against the build testers already have: a FAIL here is the driver's, found before a candidate.
