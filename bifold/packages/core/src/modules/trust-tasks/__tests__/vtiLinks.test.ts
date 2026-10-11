@@ -1,6 +1,7 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
+import { pendingSignInLink } from '../module/signInSteps'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
@@ -532,8 +533,6 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
         /can't be used/,
       ],
       ['an agent claim', live.replace('sign-in/0.1', 'vta-claim/0.1'), 'Scan.TriggerLinkUpdate', /newer version/],
-      // Read and accepted, but there is no sign-in screen yet.
-      ['a sign-in', live, 'Scan.TriggerLinkUpdate', /newer version/],
     ])('says why for %s, and sends nothing', async (_, link, messageKey, message) => {
       const navigate = jest.fn()
       const resolve = jest.fn()
@@ -542,6 +541,30 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
       expect(resolve).not.toHaveBeenCalled()
       expect(navigate).not.toHaveBeenCalled()
     })
+
+    it('opens the sign-in screen for a sign-in it accepts, holding the code, and sends nothing', async () => {
+      pendingSignInLink.clear()
+      const navigate = jest.fn()
+      const resolve = jest.fn()
+      await routeKeyringAgentLink(`  ${live}\n`, { dids: { resolve } } as never, navigate)
+      expect(navigate).toHaveBeenCalledWith('SignIn')
+      expect(MY_AGENT_SCREEN.SignIn).toBe(Screens.SignIn)
+      expect(myAgentLinkParams('SignIn')).toEqual({ screen: Screens.SignIn, initial: false })
+      expect(pendingSignInLink.peek()).toBe(live)
+      expect(resolve).not.toHaveBeenCalled()
+      pendingSignInLink.clear()
+    })
+  })
+
+  it('never opens the sign-in screen while sign-in is off, even for a live sign-in code', async () => {
+    pendingSignInLink.clear()
+    const live = signIn.replace('_exp=1791675395', `_exp=${Math.floor(Date.now() / 1000) + 300}`)
+    const navigate = jest.fn()
+    await expect(routeKeyringAgentLink(live, {} as never, navigate)).rejects.toMatchObject({
+      messageKey: 'Scan.TriggerLinkUpdate',
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(pendingSignInLink.peek()).toBeUndefined()
   })
 })
 

@@ -26,6 +26,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
+import { pendingSignInLink } from './signInSteps'
 import {
   readTrigger,
   TRIGGER_UI_MESSAGE_KEYS,
@@ -142,8 +143,8 @@ export function isTriggerLink(text: string): boolean {
  * is the words the trigger-link spec gives a reader for a flow it does not
  * implement (outcome `update`), whatever the link. With it on, the link is
  * read, and a code that cannot be used says why (expired, can't be used, …).
- * Either way nothing is sent and nothing is logged; a sign-in the reader
- * accepts has no screen yet, so it too is `update`.
+ * Either way nothing is sent and nothing is logged. A sign-in the reader
+ * accepts goes to the sign-in screen instead (`signInToOpen`).
  */
 function triggerLinkError(text: string): KeyringLinkError {
   let ui: Exclude<TriggerUi, 'pass-on'> = 'update'
@@ -152,6 +153,17 @@ function triggerLinkError(text: string): KeyringLinkError {
     if (action.kind === 'say' && action.ui !== 'pass-on') ui = action.ui
   }
   return new KeyringLinkError(TRIGGER_UI_MESSAGES[ui], undefined, TRIGGER_UI_MESSAGE_KEYS[ui])
+}
+
+/**
+ * Whether a trigger link opens the sign-in screen: only with sign-in switched
+ * on, and only for a code the reader accepts as a sign-in. Read offline;
+ * nothing is sent until the person continues on that screen.
+ */
+function signInToOpen(text: string): boolean {
+  if (!triggerLinkSignInEnabled()) return false
+  const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+  return action.kind === 'proceed' && action.flow === 'sign-in'
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -296,6 +308,7 @@ export type MyAgentDestination =
   | 'VtiVetting'
   | 'VtiJoin'
   | 'VtiInvited'
+  | 'SignIn'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
@@ -306,6 +319,8 @@ export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtiVetting: Screens.VtiVetting,
   VtiJoin: Screens.VtiJoin,
   VtiInvited: Screens.VtiInvited,
+  // A community sign-in code, read and accepted (trigger-link sign-in on).
+  SignIn: Screens.SignIn,
 }
 
 /**
@@ -482,6 +497,11 @@ export async function routeKeyringAgentLink(
     case 'otherDid':
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
     case 'triggerLink':
+      if (signInToOpen(trimmed)) {
+        pendingSignInLink.set(trimmed)
+        navigate('SignIn')
+        return
+      }
       throw triggerLinkError(trimmed)
     default:
       throw new Error('not a Keyring agent link')
