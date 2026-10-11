@@ -652,6 +652,7 @@
     "ReadingCode": "Reading this code…",
     "CodeNotUsable": "Keyring can't use this code",
     "BothAgentAndCommunity": "This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.",
+    "TriggerLinkUpdate": "This code needs a newer version of the app.",
     "NotADeviceCode": "That isn't a phone's code. Scan the code your other phone shows.",
     "HostNotAllowed": "This code is from a site Keyring doesn't connect to, so nothing was sent.",
     "NotAnAgentAddress": "This isn't an agent's code. Scan the code your agent host shows for your agent.",

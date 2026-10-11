@@ -560,6 +560,7 @@
     "ReadingCode": "Lendo este código…",
     "CodeNotUsable": "O Keyring não pode usar este código",
     "BothAgentAndCommunity": "Este código pertence ao mesmo tempo a um agente e a uma comunidade. Pergunte a quem o deu qual dos dois ele é.",
+    "TriggerLinkUpdate": "Este código precisa de uma versão mais recente do app.",
     "NotADeviceCode": "Isso não é o código de um telefone. Escaneie o código que o seu outro telefone mostra.",
     "HostNotAllowed": "Este código é de um site ao qual o Keyring não se conecta, então nada foi enviado.",
     "NotAnAgentAddress": "Isto não é o código de um agente. Escaneie o código que o provedor do seu agente mostra para o seu agente.",
