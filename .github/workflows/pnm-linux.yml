@@ -90,7 +90,7 @@ jobs:
       - name: The binary runs and keeps sessions under PNM_HOME
         run: |
           home=$(mktemp -d)
-          PNM_HOME="$home" ./out/pnm --version
+          # pnm has no --version flag: the commit and sha below identify the build.
           PNM_HOME="$home" ./out/pnm --help | head -20
           echo "sha256 $(sha256sum out/pnm | cut -c1-64)  ref ${{ steps.name.outputs.ref }}  features $FEATURES" | tee -a "$GITHUB_STEP_SUMMARY"
 
