@@ -68,6 +68,7 @@ export const APPROVALS_LINK = 'keyring://vta/approvals'
 
 export type KeyringAgentLinkKind =
   | 'agentHost'
+  | 'triggerLink'
   | 'approvals'
   | 'enrolment'
   | 'invitation'
@@ -83,6 +84,11 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // An agent host's automatic connection: JSON with a callback. Claimed even
   // when it fails its checks, so the scanner says why rather than "invalid".
   if (looksLikeAgentHostQr(trimmed)) return 'agentHost'
+  // A one-scan trigger link (a community sign-in, an agent claim). Keyring
+  // reads none of its flows yet, so it is claimed here to be answered in
+  // words instead of reaching the connection handler, which reported it as
+  // an invalid DIDComm invitation (`_oob`, `oob`, `c_i` or `d_m`).
+  if (isTriggerLink(trimmed)) return 'triggerLink'
   if (trimmed === APPROVALS_LINK) return 'approvals'
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
@@ -104,6 +110,23 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // fails to fetch. So it is answered here, in words.
   if (did) return 'otherDid'
   return undefined
+}
+
+/** The names a trigger link reserves in its fragment (dtgwg-vti-spec trigger links). */
+const TRIGGER_NAMES = ['_from', '_id', '_exp', '_type']
+
+/**
+ * Whether `text` is a trigger link: an `https` (or `http`, or Keyring's own
+ * `keyring:`) URL whose fragment carries one of the reserved names. Only the
+ * fragment is read, as a trigger is never in the query. Nothing is checked
+ * beyond that: it is enough to know the code is one Keyring can't use yet.
+ */
+export function isTriggerLink(text: string): boolean {
+  if (!/^(https?|keyring):\/\//i.test(text)) return false
+  const hash = text.indexOf('#')
+  if (hash < 0) return false
+  const names = new URLSearchParams(text.slice(hash + 1))
+  return TRIGGER_NAMES.some((name) => names.has(name))
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -433,6 +456,10 @@ export async function routeKeyringAgentLink(
       return routeBareDid(bareDid(trimmed) as string, agent, navigate)
     case 'otherDid':
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
+    case 'triggerLink':
+      // The words the trigger-link spec gives a reader for a flow it does not
+      // implement (outcome `update`). Nothing is sent and nothing is logged.
+      throw new KeyringLinkError('This code needs a newer version of the app.', undefined, 'Scan.TriggerLinkUpdate')
     default:
       throw new Error('not a Keyring agent link')
   }
