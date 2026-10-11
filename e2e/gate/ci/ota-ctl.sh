@@ -7,6 +7,9 @@
 # Needs OTA_BASE (the store build's commit), OTA_SERVER_URL, OTA_SIGNING_KEY, HOT_UPDATER_AUTH_TOKEN, OTA_CHANNEL.
 set -euo pipefail
 cmd=${1:?publish, crash or disable}
+# The wallet root, wherever it is called from (run-ota.mjs runs in e2e/).
+cd "$(dirname "$0")/../../.."
+[ -d app/src/ota ] || { echo "not a wallet checkout with the OTA module: $PWD"; exit 1; }
 : "${OTA_BASE:?}" "${OTA_SERVER_URL:?}" "${OTA_SIGNING_KEY:?}" "${OTA_CHANNEL:?}"
 git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false
 # The repo's hooks require signed commits (for what is pushed); these commits stay in a throwaway checkout.
