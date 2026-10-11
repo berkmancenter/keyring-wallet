@@ -20,8 +20,9 @@ sleep 20; adb -s $E exec-out screencap -p > $LEG_DIR/android-plain-45s.png; p2=$
 FC=$(adb -s $E logcat -d | grep -cE "FATAL EXCEPTION|Process: $BID"); adb -s $E logcat -d | grep -iE "FirebaseApp|FirebaseInitProvider" | cut -c1-200 | tail -5 > $LEG_DIR/android-firebase-log.txt
 echo "ROW android-install-cold-launch $([ -n "$p1" ] && [ "$p1" = "$p2" ] && [ $FC = 0 ] && echo PASS || echo FAIL) — pid at 25 s ${p1:-none}, at 45 s ${p2:-none}, fatal lines $FC; focus at 25 s [$f1], at 45 s [$f2]; firebase log lines $(wc -l < $LEG_DIR/android-firebase-log.txt | tr -d ' ')"
 case "$f1$f2" in *GrantPermissions*|*permissioncontroller*) echo "ROW android-no-notification-prompt FAIL — a permission dialog had focus";; *) echo "ROW android-no-notification-prompt PASS — no permission dialog had focus at 25 s or 45 s (screenshots android-plain-25s.png, android-plain-45s.png)";; esac
-TOK='firebaseinstallations\.googleapis|fcmtoken\.googleapis|fcm\.googleapis|FirebaseMessaging|FirebaseInstallations|FirebaseInstanceId|FirebaseIid|Firebase-Installations|\bFCM\b|\bGCM\b|\bc2dm\b|registration token'
-grep -E "$TOK" $LEG_DIR/android-logcat-all.txt | grep -v "GCM.*Unexpected forwarded intent.*PACKAGE_ADDED" | cut -c1-200 > $LEG_DIR/android-token-lines-plain.txt; P1=$(grep -c . $LEG_DIR/android-token-lines-plain.txt)
+# The no-token rows count Keyring's own Firebase / FCM / token lines only (tokenlines.mjs holds the words and the
+# pids: every Start proc of the bundle id, plus p1/p2): in 1011-0020 the emulator's Google Messages logged Firebase frames.
+node "$GATE_SRC/tokenlines.mjs" --log $LEG_DIR/android-logcat-all.txt --bid $BID --pid "$p1 $p2" > $LEG_DIR/android-token-lines-plain.txt; P1=$(grep -c . $LEG_DIR/android-token-lines-plain.txt)
 echo "ROW android-no-token-activity-plain-launch $([ $P1 = 0 ] && echo PASS || echo FAIL) — FirebaseMessaging / FirebaseInstallations / token lines in logcat during the plain launch (45 s): $P1 (android-token-lines-plain.txt)"; head -3 $LEG_DIR/android-token-lines-plain.txt
 adb -s $E shell am force-stop $BID
 ( export PLATFORM=android APPIUM_PORT=4760 ENROL_PORT=8196 ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E
@@ -31,6 +32,6 @@ ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/android-link.out); if [ -n "$ic" ]; then 
 # The probe's own row, android-push-<expect> (run-push-off-probe.mjs); a probe that stopped early is a FAIL row of its own.
 [ $rc -eq 0 ] && { cd $E2E; EXPECT=${PROBE_EXPECT:-off} perl -e 'alarm 600; exec @ARGV' node run-push-off-probe.mjs > $LEG_DIR/android-push-off.out 2>&1; prc=$?; take_rows $LEG_DIR/android-push-off.out; driver_rc android-push-driver "$prc" $LEG_DIR/android-push-off.out; } )
 (cd $E2E && PLATFORM=android UDID=$E APPIUM_PORT=4760 perl -e 'alarm 600; exec @ARGV' node run-agent-header.mjs > $LEG_DIR/android-header.out 2>&1; hrc=$?; take_rows $LEG_DIR/android-header.out; driver_rc android-header-driver "$hrc" $LEG_DIR/android-header.out)
-sleep 2; kill $LC 2>/dev/null; grep -E "$TOK" $LEG_DIR/android-logcat-all.txt | grep -v "GCM.*Unexpected forwarded intent.*PACKAGE_ADDED" | cut -c1-200 > $LEG_DIR/android-token-lines-all.txt; P2=$(grep -c . $LEG_DIR/android-token-lines-all.txt)
+sleep 2; kill $LC 2>/dev/null; node "$GATE_SRC/tokenlines.mjs" --log $LEG_DIR/android-logcat-all.txt --bid $BID --pid "$p1 $p2" > $LEG_DIR/android-token-lines-all.txt; P2=$(grep -c . $LEG_DIR/android-token-lines-all.txt)
 echo "ROW android-no-token-activity-through-onboarding $([ $P2 = 0 ] && echo PASS || echo FAIL) — the same lines through the plain launch, onboarding and the probe: $P2 of $(wc -l < $LEG_DIR/android-logcat-all.txt | tr -d ' ') logcat lines (android-token-lines-all.txt)"; grep -vE "$BID|^$" $LEG_DIR/android-token-lines-all.txt | head -0; sed -n '1,4p' $LEG_DIR/android-token-lines-all.txt
 emu_stop; echo "SMOKE Android done $(date -u +%T)Z";

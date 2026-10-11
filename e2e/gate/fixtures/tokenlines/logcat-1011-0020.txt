@@ -1,0 +1,12 @@
+--------- beginning of main
+10-11 02:21:17.966 I/resolv  (  293): res_nsend: used send_dg 178 terrno: 0
+10-11 02:21:17.966 I/resolv  (  293): doQuery: rcode=0, ancount=8, return value=178
+10-11 02:21:18.570 I/ActivityManager(  499): Start proc 3480:asml.bkc.harvard.wallet/u0a176 for next-top-activity {asml.bkc.harvard.wallet/asml.bkc.harvard.wallet.MainActivity}
+10-11 02:22:11.855 I/ActivityManager(  499): Start proc 4685:asml.bkc.harvard.wallet/u0a176 for next-top-activity {asml.bkc.harvard.wallet/asml.bkc.harvard.wallet.MainActivity}
+10-11 02:31:36.499 I/ActivityManager(  499): Start proc 5704:asml.bkc.harvard.wallet/u0a176 for next-top-activity {asml.bkc.harvard.wallet/asml.bkc.harvard.wallet.MainActivity}
+10-11 02:21:19.008 D/StrictMode( 2272): 	at com.google.firebase.installations.FirebaseInstallationsRegistrar.lambda$getComponents$0(PG:2)
+10-11 02:21:19.008 D/StrictMode( 2272): 	at com.google.firebase.iid.FirebaseInstanceId.<init>(PG:4)
+10-11 02:21:19.008 D/StrictMode( 2272): 	at com.google.firebase.iid.FirebaseInstanceId.<init>(PG:4)
+10-11 02:21:18.552 W/ActivityThread( 2272): getPackageInfo() called with an older ApplicationInfo than the cached version for package com.google.android.apps.messaging
+10-11 02:21:18.575 I/.harvard.wallet( 3480): Using CollectorTypeCC GC.
+10-11 02:21:18.589 D/CompatibilityChangeReporter( 3480): Compat change id reported: 171979766; UID 10176; state: ENABLED
