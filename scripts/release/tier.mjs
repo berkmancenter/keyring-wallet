@@ -11,7 +11,7 @@
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
 //   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
-//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, hold, files}], held,
+//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
 // its paths, but --files cannot read the added lines a held flag looks at: run it with --range), 5 ota-strict (OTA
@@ -19,6 +19,9 @@
 // 24 hours, both approvers). ONLY 0 permits an OTA publish as it stands; 5 permits one only when the publish step has
 // proof of those conditions; 1-4 mean do not publish OTA. "tier" is the verdict; "reasons" is the per-file input (a
 // file there can say ota while the tier is store, unchecked or ota-strict), so never recompute the tier from reasons.
+// tier.mjs names the strict conditions; the publish step proves them, and must fail closed when it cannot.
+// "held" and "strict" name the flags that moved an ota change; when the tier is store for its own reasons (native files)
+// they are empty even if flags were raised: read "flags" for every flag a change raises.
 // While a held flag reads added lines (deletes stored records does), --files can never say ota: a change that is ota
 // by its paths always comes out unchecked there. A publish step must use --range.
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
@@ -89,12 +92,16 @@ export const FLAGS = [
   { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
 ];
 
-/** Which flags a change raises: [{ flag, policy, hold, files }], from paths and, when given, each file's added lines. */
+const POLICIES = ['store', 'strict', 'advisory'];
+
+/** Which flags a change raises: [{ flag, policy, files }], from paths and, when given, each file's added lines. An
+ * unknown policy throws (the error path: store, exit 3), so a typo can never let a change through as plain ota. */
 export function flagsOf(files, added = {}, flags = FLAGS) {
   const out = [];
   for (const { flag, policy = 'advisory', path: p, added: a } of flags) {
+    if (!POLICIES.includes(policy)) throw new Error(`flag "${flag}": policy must be ${POLICIES.join(', ')}, not "${policy}"`);
     const hit = files.filter((f) => !/^(e2e|docs)\/|__tests__|\.test\./.test(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
-    if (hit.length) out.push({ flag, policy, hold: policy === 'store', files: hit });
+    if (hit.length) out.push({ flag, policy, files: hit });
   }
   return out;
 }

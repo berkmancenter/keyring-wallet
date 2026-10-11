@@ -61,7 +61,8 @@ test('flags: a storage delete forces store; sign-in and the VTI protocol line ma
   const del = { 'app/src/x.ts': ['  await store.deleteById(id)'] };
   const all = [signIn, vti, 'app/src/x.ts'];
   const flags = flagsOf(all, del);
-  assert.deepEqual(flags.map((f) => [f.flag, f.policy, f.hold]).sort(), [['VTI protocol line', 'strict', false], ['deletes stored records', 'store', true], ['sign-in / key handling', 'strict', false]]);
+  assert.deepEqual(flags.map((f) => [f.flag, f.policy]).sort(), [['VTI protocol line', 'strict'], ['deletes stored records', 'store'], ['sign-in / key handling', 'strict']]);
+  assert.ok(flags.every((f) => !('hold' in f)));
   assert.equal(classify(all).tier, 'ota');
   const r = applyHolds(classify(all), flags);
   assert.equal(r.tier, 'store');
@@ -216,4 +217,11 @@ test('the command line: a sign-in change read from a range exits 5 and names the
       console.log(v.tier, JSON.stringify(v.strict));`], { encoding: 'utf8' }).trim();
     assert.equal(out, 'ota-strict ["sign-in / key handling"]');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('flags: an unknown or misspelt policy throws, never a plain ota', () => {
+  const signIn = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
+  const typo = FLAGS.map((f) => (f.policy === 'strict' ? { ...f, policy: 'Strict' } : f));
+  assert.throws(() => verdict(signIn, { added: {}, flags: typo }), /policy must be store, strict, advisory, not "Strict"/);
+  assert.throws(() => flagsOf(['docs/a.md'], {}, [{ flag: 'x', policy: 'later', path: /x/ }]), /policy must be/);
 });
