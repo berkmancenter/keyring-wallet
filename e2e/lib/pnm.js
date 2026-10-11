@@ -12,6 +12,7 @@
  *   const list = pnmCall(["approvals", "list", "--json"], { slug, json: true });
  */
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,4 +92,43 @@ export function parsePnmJson(out) {
   const start = out.indexOf("{");
   if (start < 0) throw new Error(`pnm printed no JSON: ${out.trim().split("\n").pop()?.slice(0, 160) ?? ""}`);
   return JSON.parse(out.slice(start));
+}
+
+/**
+ * `pnm --vta <slug> cred-vault query --filter-file <f> --json`: what the
+ * runner agent's credential vault holds that matches `filter` (any of `type`,
+ * `communityDid`, `issuerDid`, `purpose`, `status`; at least one — VTI
+ * pnm-cli/src/cli.rs CredVaultCommands::Query, vta-vault query.rs
+ * CredentialQuery). The filter goes through a file of its own, never stdin
+ * (`-`): the gate's pnm calls must not read stdin. The vault files a card by
+ * the purpose it infers from the card's type, and a DTG role card
+ * (AuthorityCredential) matches none (vta-vault receive.rs infer_purpose), so
+ * ask for that one by `{ type: "AuthorityCredential" }`.
+ *
+ * Returns `{ ids, credentials }`: the descriptors' ids, and the descriptors
+ * (body-free). A refusal, or output with no JSON, throws with pnm's last line.
+ * `pnmCall`'s options (exec, sleep, log, …) pass through, for tests.
+ */
+export function credVaultQuery(filter, { slug, ...opts } = {}) {
+  if (!filter || typeof filter !== "object" || !Object.keys(filter).length) throw new Error("credVaultQuery: an empty filter (the vault refuses an enumeration)");
+  const dir = mkdtempSync(path.join(os.tmpdir(), "cred-vault-query-"));
+  const file = path.join(dir, "filter.json");
+  try {
+    writeFileSync(file, JSON.stringify(filter));
+    const out = pnmCall(["cred-vault", "query", "--filter-file", file, "--json"], { slug, ...opts });
+    const credentials = vaultDescriptors(out);
+    return { ids: credentials.map((c) => c?.id).filter((id) => typeof id === "string" && id), credentials };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The descriptors in a cred-vault query's output: `{ credentials: [...] }`, or a bare array. */
+export function vaultDescriptors(out) {
+  const at = [out.indexOf("{"), out.indexOf("[")].filter((i) => i >= 0);
+  if (!at.length) throw new Error(`pnm printed no JSON: ${out.trim().split("\n").pop()?.slice(0, 160) ?? ""}`);
+  const parsed = JSON.parse(out.slice(Math.min(...at)));
+  const list = Array.isArray(parsed) ? parsed : parsed.credentials;
+  if (!Array.isArray(list)) throw new Error(`cred-vault query: no credentials list in ${JSON.stringify(parsed).slice(0, 160)}`);
+  return list;
 }

@@ -201,3 +201,35 @@ test("HEADS carries caps when given: a count, or buildCaps()'s object", () => {
   assert.equal(lines[0], "HEADS approvals wallet=18ced16f bifold=5fb10bc2 build=d2a08f28669a harness=abcdef01 caps=814");
   assert.equal(lines[1], "HEADS approvals wallet=18ced16f bifold=5fb10bc2 build=d2a08f28669a harness=abcdef01 caps=805");
 });
+
+test("tracked: a failing row is a SKIP saying what it waits on, and does not fail the leg; a passing one is a plain PASS", async () => {
+  const { rows, lines, captured } = leg({ driver: {} });
+  const why = "role card recovery: vtiCardVault recovers by purpose only; UI/UX fix pending";
+  await rows.row("cards-back-new-install", async () => ({ ok: false, detail: "membership back true · role card back false" }), { tracked: why });
+  await rows.row("member-vmc-sent", async () => {
+    throw new Error("members list refused\n  at …");
+  }, { tracked: "Keyring does not send the reciprocal member VMC yet" });
+  await rows.row("tracked but passing", async () => ({ ok: true, detail: "both back" }), { tracked: why });
+  await rows.row("tracked, bare false", async () => false, { tracked: "x" });
+  assert.deepEqual(lines, [
+    `ROW cards-back-new-install SKIP — tracked (${why}): membership back true · role card back false`,
+    "ROW member-vmc-sent SKIP — tracked (Keyring does not send the reciprocal member VMC yet): threw: members list refused",
+    "ROW tracked but passing PASS — both back",
+    "ROW tracked, bare false SKIP — tracked (x): failed",
+  ]);
+  assert.equal(rows.exitCode(), EXIT_PASS);
+  assert.deepEqual(rows.summary(), { pass: 1, fail: 0, skip: 3, exit: 0 });
+  // Still evidence: a tracked failure takes its screenshot like any failing row.
+  assert.equal(captured.length, 3);
+  assert.equal(rows.outcome("cards-back-new-install"), "SKIP");
+});
+
+test("tracked: a dependent of a tracked row that failed SKIPs on its need; a needs-skip or a build-skip stays as before", async () => {
+  const { rows, lines } = leg();
+  await rows.row("member-vmc-sent", async () => false, { tracked: "lane ac" });
+  await rows.row("after it", async () => true, { needs: ["member-vmc-sent"] });
+  await rows.row("built later", async () => false, { tracked: "lane ac", skip: "build lacks X" });
+  assert.equal(lines[1], 'ROW after it SKIP — needs "member-vmc-sent", which was SKIP');
+  assert.equal(lines[2], "ROW built later SKIP — build lacks X");
+  assert.equal(rows.exitCode(), EXIT_PASS);
+});

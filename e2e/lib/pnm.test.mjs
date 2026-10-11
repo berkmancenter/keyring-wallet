@@ -78,3 +78,49 @@ test("E2E_PNM_TIMING: one PNM line per attempt with its wall-clock time, off by 
   pnmCall(["approvals", "list"], { slug: "s", timing: false, ...quiet.opts });
   assert.deepEqual(quiet.logs, []);
 });
+
+test("credVaultQuery: the filter goes through a file (never stdin), --json, and the descriptors' ids come back", async () => {
+  const { credVaultQuery } = await import("./pnm.js");
+  const { readFileSync, existsSync } = await import("node:fs");
+  const seen = [];
+  let file;
+  const exec = (cmd, args, opts) => {
+    seen.push({ cmd, args, stdio: opts.stdio });
+    file = args[args.indexOf("--filter-file") + 1];
+    seen.push(JSON.parse(readFileSync(file, "utf8")));
+    return '  VTA: farm3-runner-prague\n{\n  "credentials": [ { "id": "urn:uuid:vmc-1", "types": ["VerifiableCredential"], "purpose": "membership" }, { "types": [] } ]\n}\n';
+  };
+  const got = credVaultQuery({ purpose: "membership" }, { slug: "farm3-runner-prague", locked: "/x/pnm-locked", exec, sleep: () => {}, log: () => {} });
+  assert.deepEqual(got.ids, ["urn:uuid:vmc-1"]);
+  assert.equal(got.credentials.length, 2);
+  assert.equal(seen[0].cmd, "/x/pnm-locked");
+  assert.deepEqual(seen[0].args.slice(0, 5), ["--vta", "farm3-runner-prague", "cred-vault", "query", "--filter-file"]);
+  assert.equal(seen[0].args.at(-1), "--json");
+  assert.notEqual(file, "-");
+  assert.equal(seen[0].stdio[0], "ignore");
+  assert.deepEqual(seen[1], { purpose: "membership" });
+  // The filter file is gone afterwards.
+  assert.equal(existsSync(file), false);
+});
+
+test("credVaultQuery: by type, a bare array answer, and an empty one", async () => {
+  const { credVaultQuery } = await import("./pnm.js");
+  const answers = ['[ { "id": "urn:uuid:role-1" } ]\n', '{ "credentials": [] }'];
+  let i = 0;
+  const opts = { slug: "s", exec: () => answers[i++], sleep: () => {}, log: () => {} };
+  assert.deepEqual(credVaultQuery({ type: "AuthorityCredential" }, opts).ids, ["urn:uuid:role-1"]);
+  assert.deepEqual(credVaultQuery({ type: "AuthorityCredential" }, opts).ids, []);
+});
+
+test("credVaultQuery: a refusal throws with pnm's last line; an empty filter is refused before any call", async () => {
+  const { credVaultQuery } = await import("./pnm.js");
+  let calls = 0;
+  const refused = () => {
+    calls++;
+    throw Object.assign(new Error("exit 1"), { stdout: "  VTA: s\n", stderr: "✗ Forbidden: VaultRead required\n" });
+  };
+  assert.throws(() => credVaultQuery({ purpose: "membership" }, { slug: "s", exec: refused, sleep: () => {}, log: () => {} }), /no JSON: ✗ Forbidden: VaultRead required/);
+  assert.equal(calls, 1);
+  assert.throws(() => credVaultQuery({}, { slug: "s", exec: refused }), /empty filter/);
+  assert.equal(calls, 1);
+});
