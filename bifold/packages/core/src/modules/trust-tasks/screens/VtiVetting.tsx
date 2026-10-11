@@ -524,7 +524,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         setProfileName((v) => v || p?.displayName || '')
         const ts = await stores.vetting.listTickets(persona.communityDid)
         setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
-        setDesk(await stores.vetting.listDesk())
+        // This community's requests only: the store keeps every desk's (240).
+        setDesk((await stores.vetting.listDesk()).filter((r) => r.communityDid === persona.communityDid))
         setHeldRead(true)
       } else {
         if (!applicantRef.current)
@@ -1038,7 +1039,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                             livenessConfirmed: true,
                           })
                           // Straight to "Statement issued", not on the next read.
-                          setDesk(await stores!.vetting.listDesk())
+                          setDesk(
+                            (await stores!.vetting.listDesk()).filter((r) => r.communityDid === request.communityDid)
+                          )
                           setJustAttested(request.requestId)
                         })
                       }

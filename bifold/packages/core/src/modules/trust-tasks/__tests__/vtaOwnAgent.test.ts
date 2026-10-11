@@ -415,13 +415,6 @@ async function linkedPhone(owner: Owner = { confirmOwner: confirmed() }) {
 }
 
 const sentOf = (type: string) => mockVta.asked.filter((a) => a.type === type)
-/** Wait (in 10 ms steps, up to 2 s) until the phone has sent its background acl/update. */
-async function labelSent() {
-  for (let waited = 0; sentOf(ACL_UPDATE).length === 0 && waited < 2000; waited += 10) {
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-}
-
 beforeEach(() => {
   mockVta.refuseUpdate = false
   mockVta.acl = new Map([
@@ -881,40 +874,16 @@ describe('creating an agent', () => {
     expect(mockVta.acl.has(TEMPORARY)).toBe(false)
   })
 
-  it('names its own access entry after the swap: "Keyring — <device name>"', async () => {
+  // IN-200: an agent refuses any change to the caller's own entry
+  // (VTI-ACL-052). The phone no longer tries; the entry keeps its grant's label.
+  it('does not try to label its own access entry after the swap', async () => {
     const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
-    vta.setDeviceName(() => 'Test phone')
     await vta.startCreateAgent(agent, VTA, 'farm.example')
-    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    mockVta.acl.set(TEMPORARY, { role: 'admin', label: 'mobile integration' })
     await vta.checkManualGrant(agent)
-
     expect(vta.getState().link).toMatchObject({ kind: 'linked' })
-    // The label goes out in the background, after the link is done.
-    await labelSent()
-    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring — Test phone' }])
-    expect(mockVta.acl.get(PERMANENT)).toMatchObject({ label: 'Keyring — Test phone' })
-  })
-
-  it('a platform that answers "unknown" gives the plain "Keyring" label', async () => {
-    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
-    vta.setDeviceName(() => 'unknown')
-    await vta.startCreateAgent(agent, VTA, 'farm.example')
-    mockVta.acl.set(TEMPORARY, { role: 'admin' })
-    await vta.checkManualGrant(agent)
-    await labelSent()
-    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring' }])
-  })
-
-  it('without a device name the label is just "Keyring"; a refused relabel does not fail the link', async () => {
-    mockVta.refuseUpdate = true
-    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
-    await vta.startCreateAgent(agent, VTA, 'farm.example')
-    mockVta.acl.set(TEMPORARY, { role: 'admin' })
-    await vta.checkManualGrant(agent)
-
-    await labelSent()
-    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring' }])
-    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(sentOf(ACL_UPDATE)).toEqual([])
   })
 
   it('a plain manual link is not marked as owned', async () => {

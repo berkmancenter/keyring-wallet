@@ -26,6 +26,14 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
+import {
+  readTrigger,
+  TRIGGER_UI_MESSAGE_KEYS,
+  TRIGGER_UI_MESSAGES,
+  triggerAction,
+  triggerLinkSignInEnabled,
+  type TriggerUi,
+} from './triggerLink'
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { vtaAgent } from './vtaAgent'
@@ -68,6 +76,7 @@ export const APPROVALS_LINK = 'keyring://vta/approvals'
 
 export type KeyringAgentLinkKind =
   | 'agentHost'
+  | 'triggerLink'
   | 'approvals'
   | 'enrolment'
   | 'invitation'
@@ -83,6 +92,11 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // An agent host's automatic connection: JSON with a callback. Claimed even
   // when it fails its checks, so the scanner says why rather than "invalid".
   if (looksLikeAgentHostQr(trimmed)) return 'agentHost'
+  // A one-scan trigger link (a community sign-in, an agent claim). Keyring
+  // reads none of its flows yet, so it is claimed here to be answered in
+  // words instead of reaching the connection handler, which reported it as
+  // an invalid DIDComm invitation (`_oob`, `oob`, `c_i` or `d_m`).
+  if (isTriggerLink(trimmed)) return 'triggerLink'
   if (trimmed === APPROVALS_LINK) return 'approvals'
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
@@ -104,6 +118,40 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // fails to fetch. So it is answered here, in words.
   if (did) return 'otherDid'
   return undefined
+}
+
+/** The names a trigger link reserves in its fragment (dtgwg-vti-spec trigger links). */
+const TRIGGER_NAMES = ['_from', '_id', '_exp', '_type']
+
+/**
+ * Whether `text` is a trigger link: an `https` (or `http`, or Keyring's own
+ * `keyring:`) URL whose fragment carries one of the reserved names. Only the
+ * fragment is read, as a trigger is never in the query. Nothing is checked
+ * beyond that: it is enough to know the code is one Keyring can't use yet.
+ */
+export function isTriggerLink(text: string): boolean {
+  if (!/^(https?|keyring):\/\//i.test(text)) return false
+  const hash = text.indexOf('#')
+  if (hash < 0) return false
+  const names = new URLSearchParams(text.slice(hash + 1))
+  return TRIGGER_NAMES.some((name) => names.has(name))
+}
+
+/**
+ * What the scanner says of a trigger link. With sign-in off (the default) it
+ * is the words the trigger-link spec gives a reader for a flow it does not
+ * implement (outcome `update`), whatever the link. With it on, the link is
+ * read, and a code that cannot be used says why (expired, can't be used, …).
+ * Either way nothing is sent and nothing is logged; a sign-in the reader
+ * accepts has no screen yet, so it too is `update`.
+ */
+function triggerLinkError(text: string): KeyringLinkError {
+  let ui: Exclude<TriggerUi, 'pass-on'> = 'update'
+  if (triggerLinkSignInEnabled()) {
+    const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+    if (action.kind === 'say' && action.ui !== 'pass-on') ui = action.ui
+  }
+  return new KeyringLinkError(TRIGGER_UI_MESSAGES[ui], undefined, TRIGGER_UI_MESSAGE_KEYS[ui])
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -433,6 +481,8 @@ export async function routeKeyringAgentLink(
       return routeBareDid(bareDid(trimmed) as string, agent, navigate)
     case 'otherDid':
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
+    case 'triggerLink':
+      throw triggerLinkError(trimmed)
     default:
       throw new Error('not a Keyring agent link')
   }

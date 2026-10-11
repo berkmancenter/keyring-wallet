@@ -9,6 +9,7 @@ import {
   myAgentLinkParams,
   KeyringLinkError,
   communityLinkReturn,
+  isTriggerLink,
   keyringAgentLinkKind,
   keyringLinkErrorText,
   otherDidMessage,
@@ -42,6 +43,12 @@ jest.mock('../module/VtiIdentityStore', () => ({
   GenericRecordsIdentityStore: jest.fn(() => ({
     getPersona: async (communityDid: string) => (communityDid === mockPersona.communityDid ? mockPersona : undefined),
   })),
+}))
+// Trigger-link sign-in is off in the app; a test turns it on to see the reader's words.
+let mockSignInOn = false
+jest.mock('../module/triggerLink', () => ({
+  ...jest.requireActual('../module/triggerLink'),
+  triggerLinkSignInEnabled: () => mockSignInOn,
 }))
 const mockRedeem = jest.fn()
 jest.mock('../module/vtiInvitationOffer', () => ({
@@ -465,6 +472,76 @@ describe('a bare DID, scanned or pasted', () => {
     }
     expect(caught).toBeInstanceOf(KeyringLinkError)
     expect(caught).toBeInstanceOf(Error)
+  })
+})
+
+// Alberto's iPhone on 242, 10-11: a community portal's sign-in code ended on
+// "InvitationUrl is invalid … `_oob`, `oob`, `c_i` or `d_m`". Keyring reads no
+// trigger-link flow yet, so it says so in the spec's words and sends nothing.
+describe('a one-scan trigger link (sign-in, agent claim)', () => {
+  // The code the test community's member portal showed (request id made up).
+  const signIn =
+    'https://link.trustoverip.org/t#_from=did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.storm.ws:test-vtc&_id=XOcGXOQTCHb5iz4T2JD2RQ&_exp=1791675395&_type=/vti/flow/sign-in/0.1'
+
+  it('is recognised on any host, encoded or not, and under our own scheme', () => {
+    expect(keyringAgentLinkKind(signIn)).toBe('triggerLink')
+    expect(isTriggerLink(signIn.replace('link.trustoverip.org', 'claims.example.com'))).toBe(true)
+    expect(isTriggerLink(signIn.replace('_from=did:webvh:', '_from=did%3Awebvh%3A'))).toBe(true)
+    expect(isTriggerLink(signIn.replace('https://link.trustoverip.org', 'keyring://link.trustoverip.org'))).toBe(true)
+    expect(isTriggerLink(`  ${signIn}\n`.trim())).toBe(true)
+  })
+
+  it('is not taken for a link whose fragment has none of its names, nor for one in the query', () => {
+    expect(isTriggerLink('https://example.com/page#section')).toBe(false)
+    expect(isTriggerLink('https://example.com/page?_from=did:web:example.com&_id=abc')).toBe(false)
+    expect(isTriggerLink('https://mediator.example.com/?oob=eyJ0eXAiOiJKV00vMS4wIn0')).toBe(false)
+    expect(isTriggerLink('did:webvh:QmAgent:dids.example:alice')).toBe(false)
+  })
+
+  it('is answered in words, translatable, and nothing is sent', async () => {
+    const navigate = jest.fn()
+    const resolve = jest.fn()
+    const route = routeKeyringAgentLink(signIn, { dids: { resolve } } as never, navigate)
+    await expect(route).rejects.toBeInstanceOf(KeyringLinkError)
+    await expect(route).rejects.toMatchObject({ messageKey: 'Scan.TriggerLinkUpdate' })
+    const error = await route.catch((e: unknown) => e as KeyringLinkError)
+    expect(keyringLinkErrorText(error as KeyringLinkError)).toBe('This code needs a newer version of the app.')
+    expect(resolve).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('says only "needs a newer version" while sign-in is off, even for a code that has expired', async () => {
+    const expired = signIn.replace('_exp=1791675395', '_exp=1000')
+    await expect(routeKeyringAgentLink(expired, {} as never, jest.fn())).rejects.toMatchObject({
+      messageKey: 'Scan.TriggerLinkUpdate',
+    })
+  })
+
+  describe('with sign-in switched on', () => {
+    beforeEach(() => (mockSignInOn = true))
+    afterEach(() => (mockSignInOn = false))
+    // The portal's code above has long expired; these read against the clock.
+    const live = signIn.replace('_exp=1791675395', `_exp=${Math.floor(Date.now() / 1000) + 300}`)
+
+    it.each([
+      ['an expired code', signIn.replace('_exp=1791675395', '_exp=1000'), 'Scan.TriggerLinkExpired', /expired/],
+      [
+        'a malformed handle',
+        live.replace('_id=XOcGXOQTCHb5iz4T2JD2RQ', '_id=short'),
+        'Scan.TriggerLinkInvalid',
+        /can't be used/,
+      ],
+      ['an agent claim', live.replace('sign-in/0.1', 'vta-claim/0.1'), 'Scan.TriggerLinkUpdate', /newer version/],
+      // Read and accepted, but there is no sign-in screen yet.
+      ['a sign-in', live, 'Scan.TriggerLinkUpdate', /newer version/],
+    ])('says why for %s, and sends nothing', async (_, link, messageKey, message) => {
+      const navigate = jest.fn()
+      const resolve = jest.fn()
+      const route = routeKeyringAgentLink(link, { dids: { resolve } } as never, navigate)
+      await expect(route).rejects.toMatchObject({ messageKey, message: expect.stringMatching(message) })
+      expect(resolve).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+    })
   })
 })
 

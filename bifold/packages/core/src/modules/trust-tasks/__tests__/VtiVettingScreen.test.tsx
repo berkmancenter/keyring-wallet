@@ -535,6 +535,24 @@ describe('Vetting — the desk', () => {
     expect(confirmedNameOf({})).toBeUndefined()
   })
 
+  // 240: a vetter for two communities saw one desk's requests on the other.
+  test("a desk lists its own community's requests, not another desk's", async () => {
+    const elsewhere: Rec = {
+      tags: { recordType: 'keyring/vti-vetting', kind: 'desk', key: 'r2' },
+      content: {
+        requestId: 'r2',
+        applicantDid: 'did:key:z6MkElsewhere',
+        communityDid: 'did:webvh:QmOther:vtc.other.example',
+        status: 'attested',
+        receivedAt: '2026-09-26T09:00:00Z',
+      },
+    }
+    const tree = await renderDesk([persona, grant, deskRequest('attested'), elsewhere])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getAllByTestId(testIdWithKey('VettingDeskFinishedRequest'))).toHaveLength(1)
+  })
+
   test('only a finished request on the desk: it opens on a new ticket, the finished one folded away', async () => {
     const tree = await renderDesk([persona, grant, deskRequest('attested')])
     expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()

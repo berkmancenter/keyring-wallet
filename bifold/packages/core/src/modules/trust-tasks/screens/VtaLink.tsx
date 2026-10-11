@@ -44,6 +44,7 @@ import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentN
 import { DeviceNameField } from './DeviceNamePrompt'
 import { HostSetupSteps } from './HostSetupSteps'
 import { defaultNameOf } from './deviceWords'
+import { SuggestedAccessLabel } from './SuggestedAccessLabel'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { linkFailureText } from './linkFailureWords'
@@ -516,6 +517,9 @@ const VtaLink: React.FC = () => {
             <ThemedText>{t('VtaLink.GiveKeyHow')}</ThemedText>
             <ThemedText style={styles.muted}>{t('VtaLink.GiveKeyHowTerminal')}</ThemedText>
           </View>
+          {/* The name for the agent's list: the phone cannot set it itself
+              (IN-200). The same name the device-name field starts with. */}
+          <SuggestedAccessLabel deviceName={defaultName} testIdStem={VtaLinkIds.suggestedLabel} />
           <Pressable
             onPress={() => setKeyShown(!keyShown)}
             accessibilityRole="button"

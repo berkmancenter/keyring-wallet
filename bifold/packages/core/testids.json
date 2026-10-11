@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "35fbd059fa41fd27b2b641c47c304bec486b7599",
+  "generatedFrom": "b999742556fdef02af84a5480ba00c90af158ef1",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -68,6 +68,7 @@
     "AgentCreateScroll": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateShareCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateShowCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateSuggestedLabel": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateSwitchToExisting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateWaiting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentDetails": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
@@ -920,6 +921,7 @@
       "src/modules/trust-tasks/screens/HostSetupSteps.tsx",
       "src/modules/trust-tasks/screens/VtaLink.ids.ts"
     ],
+    "VtaLinkSuggestedLabel": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkTryAgain": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkWaitingForPhone": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaOfflineBanner": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
@@ -1190,6 +1192,18 @@
     },
     {
       "src/modules/trust-tasks/screens/SaidFailure.tsx": "testID"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Copy`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Hint`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Value`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "testIdStem"
     },
     {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.addedCard"
