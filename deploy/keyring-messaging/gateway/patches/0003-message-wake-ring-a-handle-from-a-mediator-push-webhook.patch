@@ -1,4 +1,4 @@
-From 6111f3f75a7dca3be58abe0128b6f9222d0c577f Mon Sep 17 00:00:00 2001
+From 587bb6a4ccfd8d3ead73557b76a5940aad61fc01 Mon Sep 17 00:00:00 2001
 From: Alberto L <alberto_leon@seas.harvard.edu>
 Date: Sun, 11 Oct 2026 11:33:21 +0100
 Subject: [PATCH] feat(message-wake): ring a handle from a mediator's push
@@ -447,20 +447,18 @@ index c8bf9dd..b33db69 100644
      fn fcm_background_wake_stays_data_only_even_with_the_mode() {
          let mut p = interactive();
 diff --git a/src/types.rs b/src/types.rs
-index bef4c29..4c8532d 100644
+index bef4c29..af8dfd2 100644
 --- a/src/types.rs
 +++ b/src/types.rs
-@@ -219,6 +219,10 @@ pub struct WakeRequest {
+@@ -253,4 +253,8 @@ pub struct WakePayload {
      pub count: Option<u32>,
-     #[serde(default, skip_serializing_if = "Option::is_none")]
+     #[serde(skip_serializing_if = "Option::is_none")]
      pub urgency: Option<Urgency>,
 +    /// Gateway-side only, never sent: a collapse id for this wake's visible
 +    /// alert in place of the configured one (message wakes).
 +    #[serde(skip)]
 +    pub collapse_id: Option<String>,
  }
- 
- impl WakeRequest {
 diff --git a/tests/message_wake.rs b/tests/message_wake.rs
 new file mode 100644
 index 0000000..afe0de4
