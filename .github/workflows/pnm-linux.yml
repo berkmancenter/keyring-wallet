@@ -1,0 +1,94 @@
+name: pnm for CI runners
+
+# Builds the pnm CLI for Linux runners at the exact VTI commit the Farm runs, so the gate's legs can run on
+# GitHub-hosted runners (moving the gate off the Mac). On a runner pnm cannot use a Keychain: it is built with
+# upstream's file session store (config-session, sessions under PNM_HOME) instead of the OS keyring. Upstream
+# marks that store dev / non-sensitive only, so the only identities it may ever hold are CI-only ones with the
+# narrowest rights (granting and deleting test-phone keys on the Farm runner VTAs), never a person's.
+# The binary is cached by commit and features, so a build happens once per pin.
+#
+#   gh workflow run pnm-linux.yml -R berkmancenter/keyring-wallet -f vti-ref=<commit>
+#   jobs: uses: ./.github/workflows/pnm-linux.yml   (then download the artifact named in outputs.artifact)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/pnm-linux.yml
+  workflow_dispatch:
+    inputs:
+      vti-ref:
+        description: "verifiable-trust-infrastructure commit (default: the Farm's vta-service v0.56.0)"
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      vti-ref:
+        type: string
+        default: ""
+    outputs:
+      artifact:
+        description: The artifact holding the pnm binary
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+env:
+  # The Farm's VTA: vta-service v0.56.0 (FARM_VERSIONS in the gate's farm.env, checked 2026-10-11). Move this with
+  # the Farm, never ahead of it.
+  FARM_VTI_REF: 39c801ed091cdd0aaa8247b8c7aa8e564903d4d6
+  RUST_VERSION: "1.95.0"
+  FEATURES: config-session,tsp
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      - name: Which commit
+        id: name
+        run: |
+          ref="${{ inputs.vti-ref }}"
+          [ -n "$ref" ] || ref="$FARM_VTI_REF"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "artifact=pnm-linux-x86_64-${ref:0:12}" >> "$GITHUB_OUTPUT"
+
+      - name: Cached binary
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: out/pnm
+          key: pnm-linux-x86_64-${{ steps.name.outputs.ref }}-${{ env.FEATURES }}-rust${{ env.RUST_VERSION }}
+
+      - name: Check out VTI at that commit
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: OpenVTC/verifiable-trust-infrastructure
+          ref: ${{ steps.name.outputs.ref }}
+          path: vti
+          persist-credentials: false
+
+      - name: Build pnm (file session store, no keyring)
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: vti
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          cargo +"$RUST_VERSION" build --locked --release -p pnm-cli --no-default-features --features "$FEATURES"
+          mkdir -p ../out && cp target/release/pnm ../out/pnm
+
+      - name: The binary runs and keeps sessions under PNM_HOME
+        run: |
+          home=$(mktemp -d)
+          PNM_HOME="$home" ./out/pnm --version
+          PNM_HOME="$home" ./out/pnm --help | head -20
+          echo "sha256 $(sha256sum out/pnm | cut -c1-64)  ref ${{ steps.name.outputs.ref }}  features $FEATURES" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.artifact }}
+          path: out/pnm
+          retention-days: 30
