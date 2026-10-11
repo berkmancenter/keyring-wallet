@@ -33,7 +33,7 @@ test('answered: only by the lane that heard it; choice an option index; a summar
   } finally { t.done(); }
 });
 
-test('words only on answered; a relay is reported, never his words', () => {
+test('words only on answered; a relay is reported, never the owner's words', () => {
   const t = tmp();
   try {
     ask(t.file);
