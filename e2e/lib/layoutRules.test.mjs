@@ -144,3 +144,18 @@ test('overlap: frames are clipped to their scroll viewport (the R-Card form scro
   const both = parsePageSource(ios(`<XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="0" y="100" width="390" height="600" visible="true">${btn('A', 100, 300)}${btn('B', 150, 320)}</XCUIElementTypeScrollView>`), { platform: 'ios' });
   assert.deepEqual(rules(checkLayout(both, { platform: 'ios' })), ['overlap Button "A" / Button "B"']);
 });
+
+test('overlap: only hierarchy nesting makes one control; a sibling drawn over a button and covering it is an overlap', () => {
+  const cell = (inner) => `<XCUIElementTypeCell type="XCUIElementTypeCell" name="Row" x="0" y="200" width="390" height="80" visible="true" enabled="true">${inner}</XCUIElementTypeCell>`;
+  const nested = parsePageSource(ios(cell(btn('Info', 300, 210, 60, 60))), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(nested, { platform: 'ios' })), []);
+  assert.deepEqual(nested.map((e) => e.parentIndex), [-1, 0, 1]);
+  // A backdrop drawn after the button covers it: the button's taps are swallowed.
+  const over = checkLayout(parsePageSource(ios(btn('Close', 300, 60, 60, 48) + btn('Backdrop', 0, 0, 390, 844)), { platform: 'ios' }), { platform: 'ios' });
+  assert.deepEqual(rules(over), ['overlap Button "Close" / Button "Backdrop"']);
+  assert.match(over[0].detail, /Button "Backdrop" is drawn over Button "Close" and covers it/);
+  // A button drawn after a large tap area sits on top and gets its taps (the scan screen's camera area): no finding.
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(btn('CameraTapArea', 0, 0, 390, 844) + btn('ScanTorch', 300, 700, 60, 60)), { platform: 'ios' }), { platform: 'ios' })), []);
+  // A partial overlap of siblings is a finding whatever the order.
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(btn('B', 150, 620) + btn('A', 100, 600)), { platform: 'ios' }), { platform: 'ios' })), ['overlap Button "B" / Button "A"']);
+});
