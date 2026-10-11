@@ -7,6 +7,8 @@
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
 #   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
+#   gate.sh pause [reason]                                    legs running finish; no further leg or gate starts
+#   gate.sh resume                                            lift a pause (then: rerun <run> --only-failed)
 # Lead our own process group, so a stop passed to "the group" (stop_forward's kill -TERM 0) reaches the gate and
 # nothing else: a gate started from a shell without job control (an agent's command, a script) would otherwise share
 # that shell's group with whatever else it started. A terminal already makes each job a group leader, so ctrl-C still
@@ -29,13 +31,33 @@ LEGS_IOS_ALONE="kk smoke-ios"
 # emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
 LEGS_BESIDE_IOS_ALONE="linkwait"
 
-usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- one leg ----
 
 # run_leg <run-dir> <leg> [only-rows]: the leg's own folder holds its log and every screenshot and page dump.
+# A pause (gate.sh pause: $GATE_HOME/stop-after-leg) lets the legs already running finish and starts no other: each
+# leg not started is recorded with exit 4, "not run (paused)", which rerun --only-failed runs in full. A clean stop
+# for another lane's device build, instead of cutting the legs mid-way (10-11).
+PAUSE_FILE_NAME=stop-after-leg
+paused() { [ -f "$GATE_HOME/$PAUSE_FILE_NAME" ]; }
+# The watcher never gates a commit again once it has a run, so a paused run's legs wait for a person: say which.
+paused_runs() {
+  local rd id n
+  for rd in "$GATE_HOME"/runs/*/; do
+    [ -f "$rd/legs.tsv" ] || continue; id=$(basename "$rd")
+    n=$(awk -F'\t' '$2==4' "$rd/legs.tsv" | wc -l | tr -d ' '); [ "$n" -gt 0 ] || continue
+    grep -qx "rerun-of=$id" "$GATE_HOME"/runs/*/meta 2>/dev/null && continue
+    say "legs not run (paused): $n in $id; finish it with: gate.sh rerun $id --only-failed"
+  done
+}
 run_leg() {
   local rd=$1 leg=$2 only=${3:-} dir=$1/$2 s e rc
+  if paused; then
+    say "$leg: not started (paused: $(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME"))"
+    printf '%s\t%s\t%s\t%s\n' "$leg" 4 "$(date +%s)" "$(date +%s)" >> "$rd/legs.tsv"
+    return
+  fi
   mkdir -p "$dir"
   mem_ok || { say "$leg: not started (memory)"; printf '%s\t%s\t%s\t%s\n' "$leg" 1 "$(date +%s)" "$(date +%s)" >> "$rd/legs.tsv"; return; }
   say "$leg: start${only:+ (only: $only)}"
@@ -112,6 +134,7 @@ cmd_run() {
   esac; done
   [ -n "$pin" ] || usage
   gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
@@ -135,6 +158,7 @@ cmd_rerun() {
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
   gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
@@ -145,7 +169,8 @@ cmd_rerun() {
   while IFS=$'\t' read -r leg rc s e; do
     case $rc in
       0) ;;
-      1) run_leg "$rd" "$leg" ;;
+      # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
+      1|4|143) run_leg "$rd" "$leg" ;;
       *) names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
          run_leg "$rd" "$leg" "$names" ;;
     esac
@@ -250,6 +275,7 @@ cmd_watch_main() {
     if [ -n "$pair" ] && [ "$pair" != none ]; then
       sha=${pair%% *}; run=${pair##* }
       if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
+      elif paused; then say "main build ${sha:0:8} is new, but the gate is paused: next cycle"
       elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
       elif ! mac_stable; then :
       elif ! watch_checkout_ready; then :
@@ -313,6 +339,7 @@ cmd_report() {
   while IFS=$'\t' read -r leg rc s e; do
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s
     [ "$e" -gt "$last" ] && last=$e
+    [ "$rc" = 4 ] && { printf '%-14s not run (paused)\n' "$leg"; continue; }
     printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
     grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
     leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
@@ -326,5 +353,7 @@ case ${1:-} in
   dry) shift; cmd_dry "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   report) shift; cmd_report "$@" ;;
+  pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
+  resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
   *) usage ;;
 esac
