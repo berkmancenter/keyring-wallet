@@ -169,6 +169,17 @@
       "watch": [
         "specs/auth/oob/"
       ]
+    },
+    "affinidi-tdk-rs-signin": {
+      "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
+      "sha": "7d28c4bf",
+      "commitDate": "2026-10-10",
+      "pinnedOn": "2026-10-11",
+      "why": "A separate clone of tdk main for the sign-in test bed's own TSP mediator (port 7057, Redis db 3): the lab mediator is a did:peer with no TSPTransport, so a VTA on it may not advertise #tsp, and Keyring talks TSP to its agents. Main is 5 commits past VTI-Eucalyptus, including #928 (mediator secrets in one backend secret, breaking) and #930; nothing in them changes TSP. VTI main 03a3562f builds with messaging-sdk 0.33.2, the same as the release pin. The release pin above, the lab mediator and the gate do not move.",
+      "watch": [
+        "crates/messaging/affinidi-messaging-mediator/",
+        "crates/messaging/affinidi-tsp/"
+      ]
     }
   },
   "npm": {
