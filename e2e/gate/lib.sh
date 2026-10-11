@@ -41,7 +41,9 @@ mem_ok() {
 disk_free_gb() { df -g / | awk 'NR==2 {print $4}'; }
 
 # pnm on a runner, through the repo's per-slug lock. Prints what it said whatever its exit status.
-pnm() { local slug=$1; shift; PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" 2>&1; }
+# Never on the caller's stdin: the sweep and rules_clear call pnm inside a `| while read` loop over a list, and a pnm
+# that read stdin (a prompt, a TTY check) would swallow the rest of that list, one removal per sweep. sweep.test.mjs.
+pnm() { local slug=$1; shift; PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" </dev/null 2>&1; }
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
