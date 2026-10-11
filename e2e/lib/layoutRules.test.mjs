@@ -1,7 +1,7 @@
 // node --test e2e/lib/layoutRules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkLayout, layoutLines, parsePageSource } from './layoutRules.js';
+import { checkLayout, counted, layoutLines, parsePageSource, readAllow, rootWindow } from './layoutRules.js';
 
 const IOS = `<?xml version="1.0" encoding="UTF-8"?><AppiumAUT>
 <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="390" height="844" visible="true" enabled="true">
@@ -59,4 +59,41 @@ test('a centred title and a clean screen give no findings; lines name the screen
   const els = parsePageSource(ok.replace(/<XCUIElementTypeButton[^>]*name="(Back|Edge|A|B)"[^>]*\/>/g, ''), { platform: 'ios' });
   assert.deepEqual(rules(checkLayout(els, { platform: 'ios', window: { w: 390, h: 844 } })), []);
   assert.deepEqual(layoutLines('welcome-1', [{ rule: 'tap-size', element: 'Button "Back"', detail: '30×30 pt' }]), ['LAYOUT welcome-1 tap-size Button "Back" — 30×30 pt']);
+});
+
+const ios = (inner) => `<?xml version="1.0"?><AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="390" height="844" visible="true" enabled="true">${inner}</XCUIElementTypeApplication></AppiumAUT>`;
+const btn = (n, x, y, w = 80, h = 48) => `<XCUIElementTypeButton type="XCUIElementTypeButton" name="${n}" x="${x}" y="${y}" width="${w}" height="${h}" visible="true" enabled="true"/>`;
+
+test('calibration: the window defaults to the root element frame', () => {
+  const els = parsePageSource(ios(btn('Edge', 360, 400, 60)), { platform: 'ios' });
+  assert.deepEqual(rootWindow(els), { w: 390, h: 844 });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })), ['clipped Button "Edge"']);
+  const and = parsePageSource(ANDROID, { platform: 'android', scale: 2.625 });
+  assert.ok(Math.abs(rootWindow(and).w - 1080 / 2.625) < 0.01);
+});
+
+test('calibration: frames sharing at most 1 pt are neighbours, not an overlap', () => {
+  const touch = parsePageSource(ios(btn('A', 100, 600) + btn('B', 179, 600)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(touch, { platform: 'ios' })), []);
+  const real = parsePageSource(ios(btn('A', 100, 600) + btn('B', 170, 600)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(real, { platform: 'ios' })), ['overlap Button "A" / Button "B"']);
+});
+
+test('calibration: the keyboard is never judged (iOS keys, an Android input method)', () => {
+  const kb = `<XCUIElementTypeKeyboard type="XCUIElementTypeKeyboard" x="0" y="560" width="390" height="284" visible="true"><XCUIElementTypeKey type="XCUIElementTypeKey" name="q" x="3" y="570" width="33" height="42" visible="true" enabled="true"/>${btn('shift', 3, 680, 42, 42)}</XCUIElementTypeKeyboard>`;
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(kb), { platform: 'ios' }), { platform: 'ios' })), []);
+  const and = ANDROID.replace('</hierarchy>', '<android.widget.FrameLayout class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[0,1500][1080,2400]" displayed="true"><android.widget.Button class="android.widget.Button" package="com.google.android.inputmethod.latin" bounds="[0,1500][60,1560]" displayed="true" clickable="true" enabled="true"/></android.widget.FrameLayout></hierarchy>');
+  assert.deepEqual(rules(checkLayout(parsePageSource(and, { platform: 'android', scale: 2.625 }), { platform: 'android' })), ['tap-size ViewGroup "Back"']);
+});
+
+test('calibration: an allowlisted finding is printed with its reason, never counted; entries need a reason', () => {
+  const els = parsePageSource(IOS, { platform: 'ios' });
+  const allow = readAllow({ allow: [{ rule: 'tap-size', label: 'Back', reason: 'hitSlop 12 makes it 54 pt' }, { rule: 'overlap', label: 'B', reason: 'B sits on A by design' }] });
+  const found = checkLayout(els, { platform: 'ios', allow });
+  assert.deepEqual(rules(counted(found)), ['centred StaticText "Your agent"', 'clipped Button "Edge"']);
+  const lines = layoutLines('welcome-1', found);
+  assert.ok(lines.includes('LAYOUT-ALLOWED welcome-1 tap-size Button "Back" — 30×30 pt, under 44×44 (allowed: hitSlop 12 makes it 54 pt)'));
+  assert.equal(lines.filter((l) => l.startsWith('LAYOUT ')).length, 2);
+  assert.throws(() => readAllow({ allow: [{ rule: 'tap-size', label: 'Back' }] }), /needs rule, label and reason/);
+  assert.deepEqual(readAllow({ allow: [] }), []);
 });

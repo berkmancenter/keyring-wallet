@@ -20,9 +20,9 @@ import "./lib/cli-guard.js";
 import { ensureAppium, existsTestId, screenshot, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { makeDriver } from "./lib/keyringRoles.js";
 import { createRows } from "./lib/rows.js";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { runPath } from "./lib/runDir.js";
-import { checkLayout, layoutLines, parsePageSource } from "./lib/layoutRules.js";
+import { checkLayout, counted, layoutLines, parsePageSource, readAllow, rootWindow } from "./lib/layoutRules.js";
 
 const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const PLATFORM = process.env.PLATFORM === "android" ? "android" : "ios";
@@ -132,16 +132,22 @@ try {
   {
     let scale = 1;
     if (PLATFORM === "android") scale = ((await d.getDisplayDensity().catch(() => 0)) || 0) / 160 || 0;
+    // The window is each hierarchy's root frame (getWindowSize can leave out the system bars); the driver's size and
+    // the density are kept beside the page sources, so a finding can be re-measured from the artifacts alone.
     const win = await d.getWindowSize().catch(() => null);
-    const window = win && scale ? { w: win.width / (PLATFORM === "android" ? scale : 1), h: win.height / (PLATFORM === "android" ? scale : 1) } : null;
+    let allow = [];
+    try { allow = readAllow(JSON.parse(readFileSync(new URL("./lib/layout.allow.json", import.meta.url), "utf8"))); } catch (e) { console.log(`layout allowlist not read: ${e.message}`); }
     const findings = [];
     slides.forEach((xml, i) => {
-      try { writeFileSync(runPath(`layout-welcome-${i + 1}-${PLATFORM}.xml`), xml); } catch { /* artifacts are best effort */ }
+      const els = scale ? parsePageSource(xml, { platform: PLATFORM, scale }) : [];
+      try {
+        writeFileSync(runPath(`layout-welcome-${i + 1}-${PLATFORM}.xml`), xml);
+        writeFileSync(runPath(`layout-welcome-${i + 1}-${PLATFORM}.json`), JSON.stringify({ platform: PLATFORM, scale, densityDpi: PLATFORM === "android" ? scale * 160 : undefined, driverWindow: win, rootWindow: scale ? rootWindow(els) : null }, null, 2));
+      } catch { /* artifacts are best effort */ }
       if (!scale) return;
-      for (const line of layoutLines(`welcome-${i + 1}`, checkLayout(parsePageSource(xml, { platform: PLATFORM, scale }), { platform: PLATFORM, window }))) {
-        console.log(line);
-        findings.push(line);
-      }
+      const found = checkLayout(els, { platform: PLATFORM, allow });
+      for (const line of layoutLines(`welcome-${i + 1}`, found)) console.log(line);
+      findings.push(...layoutLines(`welcome-${i + 1}`, counted(found)));
     });
     const what = `${slides.length} slide(s), ${findings.length} finding(s)${findings.length ? `: ${findings.slice(0, 3).map((l) => l.replace(/^LAYOUT /, "")).join("; ")}${findings.length > 3 ? "; …" : ""}` : ""}`;
     if (!scale) rows.skip("layout-welcome", "no display density from the emulator: the dp frames can't be measured");
