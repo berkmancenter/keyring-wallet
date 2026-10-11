@@ -2,7 +2,9 @@ name: OTA publish (ring 0)
 
 # Publishes an over-the-air JS bundle to ring 0 (the maintainers' own devices),
 # phase 1 of docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md.
-# Run by hand from the Actions tab, on main. A real publish first waits for a
+# Run by hand from the Actions tab, on main, or on the release/* or hotfix/*
+# branch of the store build it targets (a hot fix for build N descends from
+# that build's own commit, not from main). A real publish first waits for a
 # required reviewer on the "ota-approval" environment, which holds no secrets;
 # only then does the "ota" environment hand over the signing key.
 #
@@ -61,13 +63,25 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Publish only a commit of main
+      # Branch rules on this repository block only deletion and force-pushes on
+      # main, so the branch name alone vouches for nothing: the commit must also
+      # be signed and verified by GitHub, and the approver sees which commit it
+      # is. The script then checks that it descends from the build's own tag.
+      - name: Publish only a verified commit of main, release/* or hotfix/*
+        env:
+          REF: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch -q origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_SHA is not on main; an OTA bundle is published only from main"
+          case "$REF" in
+            main|release/*|hotfix/*) ;;
+            *) echo "::error::$REF: an OTA bundle is published only from main, release/* or hotfix/*"; exit 1 ;;
+          esac
+          verified=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.verification.verified)
+          if [ "$verified" != "true" ]; then
+            echo "::error::$GITHUB_SHA is not a signed commit that GitHub verified"
             exit 1
           fi
+          echo "publishing $GITHUB_SHA from $REF (signature verified)"
 
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
