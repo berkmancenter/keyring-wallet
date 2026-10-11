@@ -19,6 +19,10 @@ fin() {
   local m; for m in $(grep -oE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR/waiting.out" 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: flow B member, removed after the leg" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
+  # The cards the phone kept in the runner's vault (CARD_IDS): archived, as pnm has no delete, so they leave every query.
+  local id; for id in $(grep -hE '^CARD_IDS ' "$LEG_DIR/waiting.out" 2>/dev/null | awk '{print $2, $3}' | tr ' ' '\n' | grep -v '^$' | sort -u); do
+    echo "  vault card …${id: -12}: $(pnm "$RUNNER_MAIN_SLUG" cred-vault archive "$id" --reason "gate: waiting leg card, archived after the leg" | tail -1 | cut -c1-60)"
+  done
 }
 LEG_CLEANUP=fin
 emu_start 5572
@@ -65,7 +69,7 @@ fi
 # Cards back on a new install, last (it wipes the app): the same agent linked again, "Get your cards", both cards back.
 # Tracked (lib/rows.js `tracked`): Keyring recovers by purpose only and the vault files the role card with none.
 CB_ROW=cards-back-new-install
-CB_TRACKED="role card recovery: vtiCardVault recovers by purpose only; UI/UX fix pending"
+CB_TRACKED="cards back on a new install: a fresh install takes over no identities yet, and recovery asks by purpose only (role); UI/UX fix pending"
 if ! selected "$CB_ROW"; then row "$CB_ROW" SKIP "not selected"
 elif [ "$APPROVE" != 1 ]; then row "$CB_ROW" SKIP "flow B did not run (WAITING_DECLINE=1): no member to take cards back for"
 elif ! grep -qE '^JOIN_MEMBER did:' "$LEG_DIR/waiting.out"; then row "$CB_ROW" SKIP "tracked ($CB_TRACKED): not run, flow B approved no request"
@@ -74,6 +78,7 @@ else
   echo "  wipe and link again $(utc): $(grep -E '^CARD_IDS ' "$LEG_DIR/waiting.out" | tail -1)"
   adb -s $E uninstall $BID >/dev/null 2>&1
   if link_phone "$LEG_DIR/link-again.out"; then
+    row relink-wiped-app PASS "the wiped app linked to the same agent again"
     E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME \
       perl -e 'alarm 600; exec @ARGV' node run-cards-back.mjs > "$LEG_DIR/cards-back.out" 2>&1; cbrc=$?
     grep -E '^\[e2e\] [0-9]' "$LEG_DIR/cards-back.out" | cut -c1-220
@@ -82,6 +87,8 @@ else
     # tracked row's detail too, not an untracked driver FAIL.
     grep -qE "^ROW $CB_ROW " "$LEG_DIR/cards-back.out" || row "$CB_ROW" SKIP "tracked ($CB_TRACKED): the driver stopped (rc=$cbrc): $(grep -aE 'error: |Error:' "$LEG_DIR/cards-back.out" | grep -v webdriver | tail -1 | cut -c1-140)"
   else
-    row "$CB_ROW" SKIP "tracked ($CB_TRACKED): not run, linking the wiped app again failed: $(grep -E '✅|❌' "$LEG_DIR/link-again.out" | tail -1 | cut -c1-120)"
+    # Linking the wiped app to the same agent is core linking, not the tracked gap: its own row, and a real FAIL.
+    row relink-wiped-app FAIL "$(grep -E '✅|❌' "$LEG_DIR/link-again.out" | tail -1 | cut -c1-140)"
+    row "$CB_ROW" SKIP "tracked ($CB_TRACKED): not run, relink-wiped-app failed"
   fi
 fi

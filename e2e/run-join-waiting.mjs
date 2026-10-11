@@ -171,7 +171,7 @@ function issuedCards(did, decided) {
   }
   return {
     membership: row?.currentVmcId || decided?.vmc?.id || "",
-    role: row?.currentRoleVacId || decided?.roleVac?.id || decided?.roleVec?.id || "",
+    role: row?.currentRoleVacId || decided?.roleVac?.id || "",
   };
 }
 
@@ -188,9 +188,10 @@ async function cardsKeptOnAgent(want) {
     try {
       // A card the vault filed with no purpose (a role: vta-vault receive.rs infer_purpose) is found by type only.
       const byPurpose = credVaultQuery({ purpose: "membership" }, { slug }).ids;
-      const byType = credVaultQuery({ type: "AuthorityCredential" }, { slug }).ids;
+      // By type, and by purpose "role" too: a vault that learns to file roles (infer_purpose) is still read right.
+      const byType = [...new Set([...credVaultQuery({ type: "AuthorityCredential" }, { slug }).ids, ...credVaultQuery({ purpose: "role" }, { slug }).ids])];
       have = { membership: byPurpose.includes(want.membership), role: byType.includes(want.role) || byPurpose.includes(want.role) };
-      said = `${byPurpose.length} by purpose membership, ${byType.length} by type AuthorityCredential`;
+      said = `${byPurpose.length} by purpose membership, ${byType.length} by type AuthorityCredential or purpose role`;
     } catch (e) {
       said = `query: ${String(e.message).split("\n")[0].slice(0, 160)}`;
     }
