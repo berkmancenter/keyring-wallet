@@ -1341,6 +1341,8 @@
     "CheckAgain": "Vérifier à nouveau",
     "StepConnecting": "Connexion à votre agent…",
     "StepRotating": "Sécurisation de la clé de ce téléphone…",
+    "StepAwaitingApproval": "En attente d'une approbation sur votre agent…",
+    "StepAwaitingApprovalHint": "Votre agent demande que quelqu'un approuve ce téléphone avant de terminer la liaison. Approuvez-le là où votre agent demande les approbations, ou demandez à l'administrateur de votre agent. Cela peut prendre quelques minutes.",
     "Linked": "Relié",
     "LinkedBody": "Ce téléphone est maintenant relié à {{label}}.",
     "Continue": "Continuer",
