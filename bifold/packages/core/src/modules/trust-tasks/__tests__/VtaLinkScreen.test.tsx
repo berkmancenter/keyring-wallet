@@ -367,6 +367,28 @@ describe('giving the code to an admin', () => {
     expect(typeOf('VtaLinkCheckGrant')).toBe(ButtonType.Primary)
   })
 
+  // UX-240-a: "Securing this phone's key…" spun for minutes with no reason
+  // while an approval rule held the swap.
+  test('a key swap held for an approval says it waits for one, and why', () => {
+    const controller = vtaAgent as unknown as Setter
+    controller.set({
+      link: { kind: 'linking', vtaDid: 'did:webvh:example:vta', label: 'alice', step: 'rotating' },
+      awaitingConsentFor: 'https://trusttasks.org/spec/acl/swap-key/0.1',
+    })
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkState'))).toHaveTextContent('VtaLink.StepAwaitingApproval')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkAwaitingApproval'))).toHaveTextContent(
+      'VtaLink.StepAwaitingApprovalHint'
+    )
+    act(() => controller.set({ awaitingConsentFor: undefined }))
+    expect(tree.getByTestId(testIdWithKey('VtaLinkState'))).toHaveTextContent('VtaLink.StepRotating')
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkAwaitingApproval'))).toBeNull()
+  })
+
   test('the two things to do come before the code, which starts hidden', () => {
     const mockUseAgent = useAgent as jest.Mock
     mockUseAgent.mockReturnValue({ agent: {} })

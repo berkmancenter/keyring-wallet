@@ -76,6 +76,31 @@ describe("create my agent: a community's own agent", () => {
   })
 })
 
+// UX-240-a: an approval rule on the agent holds the key swap for a few minutes.
+describe('create my agent: a key swap held for an approval is said', () => {
+  afterEach(() => controller.set({ awaitingConsentFor: undefined }))
+
+  test('while the agent waits for an approval, the step says so and why', () => {
+    controller.set({
+      link: { kind: 'linking', vtaDid: VTA, label: VTA, step: 'rotating' },
+      awaitingConsentFor: 'https://trusttasks.org/spec/acl/swap-key/0.1',
+    })
+    const tree = show()
+    expect(tree.getByTestId(id('AgentCreateStep_rotating'))).toHaveTextContent('VtaLink.StepAwaitingApproval')
+    expect(tree.getByTestId(id('AgentCreateAwaitingApproval'))).toHaveTextContent('VtaLink.StepAwaitingApprovalHint')
+  })
+
+  test('with no approval pending, the plain step and no hint', () => {
+    controller.set({
+      link: { kind: 'linking', vtaDid: VTA, label: VTA, step: 'rotating' },
+      awaitingConsentFor: undefined,
+    })
+    const tree = show()
+    expect(tree.getByTestId(id('AgentCreateStep_rotating'))).toHaveTextContent('CreateAgent.GettingReady')
+    expect(tree.queryByTestId(id('AgentCreateAwaitingApproval'))).toBeNull()
+  })
+})
+
 // The one way to link by address (Alberto, 239): every failure of its own
 // attempt is said, in the link screen's words, the original under Details.
 describe('create my agent: a link that fails is said', () => {

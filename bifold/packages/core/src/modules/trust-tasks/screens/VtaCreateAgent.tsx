@@ -121,7 +121,7 @@ const VtaCreateAgent: React.FC = () => {
     if (addDevice) navigation.setOptions({ title: t('Screens.AddDevice') })
   }, [addDevice, navigation, t])
   const { ColorPalette, TextTheme } = useTheme()
-  const { link, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const { link, agentNames, awaitingConsentFor } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const headerHeight = useSafeHeaderHeight()
   const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const readyName = readyNameOf(link.kind === 'linked' ? link.vtaDid : undefined, agentNames, t)
@@ -671,9 +671,19 @@ const VtaCreateAgent: React.FC = () => {
         <View style={styles.row}>
           <ActivityIndicator color={ColorPalette.brand.primary} />
           <ThemedText testID={testIdWithKey(`AgentCreateStep_${link.step}`)}>
-            {link.step === 'connecting' ? t('CreateAgent.SigningIn') : t('CreateAgent.GettingReady')}
+            {link.step === 'connecting'
+              ? t('CreateAgent.SigningIn')
+              : awaitingConsentFor
+                ? t('VtaLink.StepAwaitingApproval')
+                : t('CreateAgent.GettingReady')}
           </ThemedText>
         </View>
+        {/* The key swap held for an approval (UX-240-a). */}
+        {link.step === 'rotating' && awaitingConsentFor ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtaCreateAgentIds.createAwaitingApproval)}>
+            {t('VtaLink.StepAwaitingApprovalHint')}
+          </ThemedText>
+        ) : null}
       </View>
     )
   } else if (screen === 'backupAddress') {

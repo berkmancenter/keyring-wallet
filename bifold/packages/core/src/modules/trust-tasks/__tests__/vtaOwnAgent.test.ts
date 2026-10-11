@@ -946,6 +946,8 @@ describe('a link whose swap onto the long-term key does not happen says why', ()
     }
     const { vta, disk } = linked
     expect(failure(vta)).toMatchObject({ reason: 'failed', swap: 'held' })
+    // UX-240-a: the wait for an approval is over, held or not.
+    expect(vta.getState().awaitingConsentFor).toBeUndefined()
     expect(mockVta.acl.has(TEMPORARY)).toBe(true)
     expect(disk.link).toBeUndefined()
     // 239 gate (linkfail, swap held): the agent stayed on the phone's list

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "9701a985f920d08827c1995981d08289c75da830",
+  "generatedFrom": "6efedfc02356eff19b477910b3afc908320737d9",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -46,6 +46,7 @@
     "AgentCreateAddressContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateAddressInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateAsDevice": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateAwaitingApproval": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateCheckAgain": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateConnect": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
@@ -870,6 +871,7 @@
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkAwaitingApproval": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkByAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkCancel": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
@@ -1442,6 +1444,9 @@
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAsDevice"
     },
     {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAwaitingApproval"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createCheckAgain"
     },
     {
@@ -1521,6 +1526,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.agentAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.awaitingApproval"
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.button"
