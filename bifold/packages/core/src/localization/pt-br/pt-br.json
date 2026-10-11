@@ -1246,6 +1246,8 @@
     "CheckAgain": "Verificar de novo",
     "StepConnecting": "Entrando no seu agente…",
     "StepRotating": "Protegendo a chave deste telefone…",
+    "StepAwaitingApproval": "Aguardando uma aprovação no seu agente…",
+    "StepAwaitingApprovalHint": "Seu agente pede que alguém aprove este telefone antes de terminar a vinculação. Aprove onde seu agente pede aprovações, ou peça ao administrador do seu agente. Isso pode levar alguns minutos.",
     "Linked": "Vinculado",
     "LinkedBody": "Este telefone agora está vinculado a {{label}}.",
     "Continue": "Continuar",

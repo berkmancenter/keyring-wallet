@@ -1401,6 +1401,8 @@
     "CheckAgain": "Check again",
     "StepConnecting": "Signing in to your agent…",
     "StepRotating": "Securing this phone's key…",
+    "StepAwaitingApproval": "Waiting for an approval on your agent…",
+    "StepAwaitingApprovalHint": "Your agent asks someone to approve this phone before it finishes linking. Approve it where your agent asks for approvals, or ask your agent's administrator. This can take a few minutes.",
     "Linked": "Linked",
     "LinkedBody": "This phone is now linked to {{label}}.",
     "Continue": "Continue",
