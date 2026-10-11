@@ -11,6 +11,7 @@ import Database from 'better-sqlite3'
 import { Kysely, SqliteDialect } from 'kysely'
 
 import { createDiskStore, diskStoragePlugin } from './diskStorage.mjs'
+import { withBooleanBinding } from './sqliteBooleans.mjs'
 
 const dataDir = path.resolve(process.env.OTA_DATA_DIR ?? 'data')
 mkdirSync(path.join(dataDir, 'files'), { recursive: true })
@@ -19,7 +20,7 @@ export const publicUrl = () => (process.env.OTA_PUBLIC_URL ?? 'http://localhost:
 
 export const store = createDiskStore({ filesDir: path.join(dataDir, 'files'), publicUrl })
 
-const db = new Kysely({ dialect: new SqliteDialect({ database: new Database(path.join(dataDir, 'ota.db')) }) })
+const db = new Kysely({ dialect: new SqliteDialect({ database: withBooleanBinding(new Database(path.join(dataDir, 'ota.db'))) }) })
 
 export const hotUpdater = createHotUpdater({
   database: kyselyAdapter({ db, provider: 'sqlite' }),
