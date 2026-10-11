@@ -52,6 +52,8 @@ import { deviceCodeScan } from '../module/deviceCodeScan'
 import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
 import { DeviceNameField } from './DeviceNamePrompt'
+import { defaultNameOf } from './deviceWords'
+import { SuggestedAccessLabel } from './SuggestedAccessLabel'
 import { openScanner } from './openScanner'
 import { VtaCreateAgentIds, type VtaCreateAgentId } from './VtaCreateAgent.ids'
 import { useSafeHeaderHeight } from './VtaLink'
@@ -603,6 +605,11 @@ const VtaCreateAgent: React.FC = () => {
             testID={testIdWithKey(VtaCreateAgentIds.createShareCode)}
           />
         </View>
+        {/* The name for the agent's list: the phone cannot set it itself (IN-200). */}
+        <SuggestedAccessLabel
+          deviceName={defaultNameOf(Platform.OS, new Date(), t)}
+          testIdStem={VtaCreateAgentIds.createSuggestedLabel}
+        />
         <Pressable
           onPress={() => setCodeShown(!codeShown)}
           accessibilityRole="button"

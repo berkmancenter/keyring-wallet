@@ -44,5 +44,6 @@ export const VtaCreateAgentIds = {
   createJoin: 'AgentCreateJoin',
   createDone: 'AgentCreateDone',
   createScroll: 'AgentCreateScroll',
+  createSuggestedLabel: 'AgentCreateSuggestedLabel',
 } as const
 export type VtaCreateAgentId = (typeof VtaCreateAgentIds)[keyof typeof VtaCreateAgentIds]

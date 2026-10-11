@@ -380,6 +380,11 @@ describe('giving the code to an admin', () => {
     expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
     // Where the admin adds it is in view — behind a quiet link nobody found it (219)…
     expect(tree.getByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toHaveTextContent(/VtaLink\.GiveKeyHow/)
+    // IN-200: the name for whoever adds the code, the one the name field later starts with.
+    expect(tree.getByTestId(testIdWithKey('VtaLinkSuggestedLabelValue'))).toHaveTextContent(
+      /^Keyring — Devices\.DefaultName/
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkSuggestedLabelCopy'))).toBeTruthy()
     // …while the code itself stays out of sight until asked for.
     expect(tree.queryByTestId(testIdWithKey('VtaLinkManualDid'))).toBeNull()
     fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowTheCode')))
