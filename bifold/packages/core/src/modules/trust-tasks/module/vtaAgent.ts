@@ -1667,7 +1667,11 @@ export class VtaAgentController {
       this.dispatch({ type: 'rotating' })
       try {
         await client.rotateManagerKey()
+        // An approval rule held the swap and then let it through: no longer waiting (UX-240-a).
+        this.set({ awaitingConsentFor: undefined })
       } catch (error) {
+        // Held, refused or lost: the screen stops saying it waits for an approval.
+        this.set({ awaitingConsentFor: undefined })
         // Swapped, but the new key's sign-in failed: linked, and it reconnects (below).
         const swapDone = error instanceof SwapDoneSignInFailed
         if (!swapDone && !(await this.swapStillOpen(error, identities, vtaDid))) {

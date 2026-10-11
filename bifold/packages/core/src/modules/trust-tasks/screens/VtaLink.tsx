@@ -79,7 +79,7 @@ const VtaLink: React.FC = () => {
   const { agent } = useAgent()
   const navigation = useNavigation()
   const { ColorPalette, TextTheme } = useTheme()
-  const { link: current, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const { link: current, agentNames, awaitingConsentFor } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const link = withAgentName(current, agentNames)
   const [copied, setCopied] = useState(false)
   // The code was handed out (Copy or Share): "I've been added" becomes the
@@ -579,9 +579,21 @@ const VtaLink: React.FC = () => {
           <View style={styles.row}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
             <ThemedText testID={testIdWithKey(VtaLinkIds.state)}>
-              {link.step === 'rotating' ? t('VtaLink.StepRotating') : t('VtaLink.StepConnecting')}
+              {link.step === 'rotating'
+                ? awaitingConsentFor
+                  ? t('VtaLink.StepAwaitingApproval')
+                  : t('VtaLink.StepRotating')
+                : t('VtaLink.StepConnecting')}
             </ThemedText>
           </View>
+          {/* An approval rule on the agent holds the key swap until someone
+              approves it, for up to a few minutes: said, rather than a
+              spinner with no reason (UX-240-a). */}
+          {link.step === 'rotating' && awaitingConsentFor ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey(VtaLinkIds.awaitingApproval)}>
+              {t('VtaLink.StepAwaitingApprovalHint')}
+            </ThemedText>
+          ) : null}
         </View>
       )
       break
