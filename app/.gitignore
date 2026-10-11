@@ -1,3 +1,5 @@
-# hot-updater: the CLI recreates this file when it is missing
+# hot-updater
+.hot-updater/output
+# The rest of the CLI's output and the signing keys
 .hot-updater/
 keys/
