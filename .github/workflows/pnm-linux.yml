@@ -40,6 +40,9 @@ env:
   FARM_VTI_REF: 39c801ed091cdd0aaa8247b8c7aa8e564903d4d6
   RUST_VERSION: "1.95.0"
   FEATURES: config-session,tsp
+  # Upstream's explicit switch to the file session store, first in its priority order: a job that runs pnm sets it
+  # too, so no keyring backend is ever tried on a runner.
+  VTI_SECURE_STORE: file
 
 jobs:
   build:
@@ -78,6 +81,8 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         working-directory: vti
         run: |
+          # A dependency links libdbus even without the keyring feature (libdbus-sys's build script needs it).
+          sudo apt-get update -qq && sudo apt-get install -y -qq libdbus-1-dev pkg-config
           rustup toolchain install "$RUST_VERSION" --profile minimal
           cargo +"$RUST_VERSION" build --locked --release -p pnm-cli --no-default-features --features "$FEATURES"
           mkdir -p ../out && cp target/release/pnm ../out/pnm
