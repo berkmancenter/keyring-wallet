@@ -20,13 +20,11 @@ function client(contexts: { id: string }[]) {
   jest.spyOn(vta, 'listContexts').mockResolvedValue(contexts as never)
   jest.spyOn(vta, 'listServers').mockResolvedValue([{ id: 'dids.ic3.dev' }])
   const task = jest.spyOn(vta, 'task')
-  const mint = jest
-    .spyOn(vta, 'mintPersona')
-    .mockResolvedValue({
-      did: 'did:webvh:minted',
-      signingKeyId: 'did:webvh:minted#key-0',
-      kaKeyId: 'did:webvh:minted#key-1',
-    } as never)
+  const mint = jest.spyOn(vta, 'mintPersona').mockResolvedValue({
+    did: 'did:webvh:minted',
+    signingKeyId: 'did:webvh:minted#key-0',
+    kaKeyId: 'did:webvh:minted#key-1',
+  } as never)
   jest.spyOn(vta, 'borrowKey').mockResolvedValue({ keyId: 'kms-1', curve: 'Ed25519' })
   return { vta, mint, task, store }
 }
