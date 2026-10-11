@@ -470,7 +470,11 @@ describe('a bare DID, scanned or pasted', () => {
       const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
       const navigate = jest.fn()
       await routeKeyringAgentLink(agentDid, withDoc(mediated), navigate)
-      expect(start).toHaveBeenCalledWith(expect.anything(), agentDid, expect.any(String), { via: 'scan' })
+      // Not declared an agent: checked at once (probe), and said if it is not one.
+      expect(start).toHaveBeenCalledWith(expect.anything(), agentDid, expect.any(String), {
+        via: 'scan',
+        probe: true,
+      })
       expect(navigate).toHaveBeenCalledWith('VtaLink')
     })
 

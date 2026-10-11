@@ -1278,6 +1278,7 @@
     "AlreadyOnPhone": "Este telefone já tem esse agente.",
     "SwitchToIt": "Mudar para ele",
     "FailedAlreadyLinked": "Este telefone já tem esse agente. Mude para ele em Seu agente.",
+    "FailedNotAnAgent": "Este código não é um agente que este telefone possa vincular: ele não respondeu como um. Se for o seu agente, use “Sem código? Use o endereço do seu agente” em Meu agente.",
     "FailedCommunityAgentCleanup": "Se você adicionou este telefone nas configurações desse agente, remova-o lá.",
     "FailedOther": "Algo deu errado ao vincular. Escaneie o código novamente.",
     "SwapFailed": {

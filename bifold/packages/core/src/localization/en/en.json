@@ -1433,6 +1433,7 @@
     "AlreadyOnPhone": "This phone already has that agent.",
     "SwitchToIt": "Switch to it",
     "FailedAlreadyLinked": "This phone already has that agent. Switch to it on Your agent.",
+    "FailedNotAnAgent": "This code isn't an agent this phone can link: it didn't answer as one. If it's your agent, use “No code? Use your agent's address” on My Agent.",
     "FailedCommunityAgentCleanup": "If you added this phone in that agent's settings, remove it there.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
     "SwapFailed": {

@@ -288,7 +288,11 @@ async function routeBareDid(
       // Scanned or pasted: usually another phone's "Add another phone" code, so
       // this phone shows its own code for that phone to scan (#30).
       try {
-        await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
+        await vtaAgent.startManualLink(agent, did, didHost(did), {
+          via: 'scan',
+          // Not declared an agent: checked at once, and said if it is not one.
+          ...(kind.kind === 'other' ? { probe: true } : {}),
+        })
       } catch (error) {
         // The link screen never opened: the add it started is given up, and
         // the agent before comes back (IN-138).

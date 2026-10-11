@@ -128,8 +128,17 @@ export interface VtaLinkFailure {
   /**
    * `communityAgent`: the agent serves a community; Keyring links only to a person's own agent.
    * `alreadyLinked`: this phone already has that agent (IN-132); switch to it instead.
+   * `notAnAgent`: a scanned DID tried as an agent did not answer as one.
    */
-  reason: 'expired' | 'refused' | 'unreachable' | 'rejected' | 'failed' | 'communityAgent' | 'alreadyLinked'
+  reason:
+    | 'expired'
+    | 'refused'
+    | 'unreachable'
+    | 'rejected'
+    | 'failed'
+    | 'communityAgent'
+    | 'alreadyLinked'
+    | 'notAnAgent'
   detail?: string
   /** An agent host's automatic connection stopped: why, in its own words for a screen (agentHostConnection.ts). */
   hostReason?: HostLinkFailure
