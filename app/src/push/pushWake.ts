@@ -6,7 +6,10 @@
  * 2. register it with the push gateway (`push/register`), which returns an
  *    opaque handle;
  * 3. give the handle to the agent (`device/set-wake`), which provisions the
- *    gateway itself.
+ *    gateway itself, asking it to allow the gateway too as a trigger;
+ * 4. give the same handle to the mediator (RFC 0734 `set-device-info`), whose
+ *    push webhook is the gateway: a message queued for this phone rings it
+ *    (docs/plans/peer-message-notifications-plan.md §3).
  *
  * Off unless a build names a gateway (`PUSH_GATEWAY_URL`): nothing about push is
  * baked into a shipped build. The agent never sees the token, and a locked or
@@ -25,8 +28,13 @@ export interface PushWakeDeps {
   /** `device/set-wake` on the linked agent. */
   setWake(
     wake: GatewayWakeHandle,
-    opts: { pushPlatform: PushRegistration['platform'] }
+    opts: { pushPlatform: PushRegistration['platform']; suggestedTriggers?: string[] }
   ): Promise<{ pushCapable: boolean; allowedTriggers?: string[] }>
+  /**
+   * RFC 0734 `set-device-info` to this phone's mediator, with the handle. Its
+   * failure is reported in the outcome, never thrown: approvals still ring.
+   */
+  setMediatorDeviceInfo?(info: { handle: string; platform: PushRegistration['platform'] }): Promise<void>
   register?: typeof registerWithGateway
   /**
    * The handle each agent was given, and for which token. The gateway mints a
@@ -96,7 +104,13 @@ export type PushWakeOutcome =
   | { status: 'off' }
   | { status: 'notLinked' }
   | { status: 'noToken' }
-  | { status: 'wakeable'; handle: GatewayWakeHandle; allowedTriggers?: string[] }
+  | {
+      status: 'wakeable'
+      handle: GatewayWakeHandle
+      allowedTriggers?: string[]
+      /** Whether the mediator was given the handle, so a waiting message rings this phone. */
+      messages?: 'set' | 'failed'
+    }
   | { status: 'notWakeable'; handle: GatewayWakeHandle }
 
 /**
@@ -128,11 +142,20 @@ export async function enablePushWake(deps: PushWakeDeps): Promise<PushWakeOutcom
   // Kept before set-wake, so a retry after a failed one gives the same handle
   // (within UNCONFIRMED_HANDLE_REUSE_MS) instead of spending another.
   if (!reuse) await deps.handles?.set(agentDid, record).catch(() => undefined)
-  const channel = await deps.setWake(handle, { pushPlatform: registration.platform })
-  if (channel.pushCapable && record.provisionedAt === undefined) {
+  // The gateway as a trigger too: it rings this handle for the mediator's
+  // waiting messages, and only if the agent allows it here.
+  const channel = await deps.setWake(handle, {
+    pushPlatform: registration.platform,
+    suggestedTriggers: [handle.gateway],
+  })
+  if (!channel.pushCapable) return { status: 'notWakeable', handle }
+  if (record.provisionedAt === undefined) {
     await deps.handles?.set(agentDid, { ...record, provisionedAt: now }).catch(() => undefined)
   }
-  return channel.pushCapable
-    ? { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }
-    : { status: 'notWakeable', handle }
+  if (!deps.setMediatorDeviceInfo) return { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }
+  const messages = await deps.setMediatorDeviceInfo({ handle: handle.handle, platform: registration.platform }).then(
+    () => 'set' as const,
+    () => 'failed' as const
+  )
+  return { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers, messages }
 }

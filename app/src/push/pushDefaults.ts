@@ -21,6 +21,7 @@ import { checkNotifications, requestNotifications, RESULTS, type PermissionStatu
 
 import BCLogger from '@/utils/logger'
 
+import { setMediatorDeviceInfo } from './mediatorDeviceInfo'
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
 import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
@@ -119,8 +120,35 @@ export function appPushWakeDeps(agent: Agent): PushWakeDeps {
     agentDid: () => vtaAgent.agentAddress(),
     pushRegistration: platformPushRegistration,
     setWake: (wake, opts) => vtaAgent.setThisDeviceWake(agent, wake, opts),
+    // Logged here, on every path that enables the wake; the outcome only says it failed.
+    setMediatorDeviceInfo: (info) =>
+      setMediatorDeviceInfo(agent, info).then(
+        () => BCLogger.info('push wake: mediator given the handle for message wakes'),
+        (e) => {
+          BCLogger.info('push wake: mediator device info not set', {
+            error: e instanceof Error ? e.message : String(e),
+          })
+          throw e
+        }
+      ),
     handles: appWakeHandles,
   }
+}
+
+/**
+ * Stop this phone being woken: the agent drops the wake channel, then the
+ * mediator forgets the handle, so a waiting message no longer rings it either.
+ * The mediator step is best effort and logged: the agent's answer is what the
+ * caller acts on.
+ */
+export async function clearPushWake(agent: Agent): Promise<unknown> {
+  const channel = await vtaAgent.clearThisDeviceWake(agent)
+  await setMediatorDeviceInfo(agent, null).catch((e) =>
+    BCLogger.info('push wake: mediator device info not cleared', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+  )
+  return channel
 }
 
 function fromIos(status: number): PermissionState {
@@ -176,7 +204,7 @@ export function appPushNotificationsConfig(): PushNotificationsConfig | undefine
     permissionStatus: notificationPermissionStatus,
     requestPermission: requestNotificationPermission,
     enableWake: (agent) => enablePushWake(appPushWakeDeps(agent)),
-    clearWake: (agent) => vtaAgent.clearThisDeviceWake(agent),
+    clearWake: clearPushWake,
     stopPlatformPush: () => stopPlatformPush(Platform.OS, messaging()),
     log: (message, data) => BCLogger.info(message, data),
     onHandleLimit: showHandleLimit,
