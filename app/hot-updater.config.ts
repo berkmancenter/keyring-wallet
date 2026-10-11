@@ -29,12 +29,37 @@ export default defineConfig({
   fingerprint: {
     // The bifold submodule's own native modules are linked from source through
     // portals; hash them explicitly rather than trusting autolinking to see them.
-    extraSources: [
-      '../bifold/packages/react-native-attestation/ios',
-      '../bifold/packages/react-native-attestation/android',
-      '../bifold/packages/react-native-locality-peripheral/ios',
-      '../bifold/packages/react-native-locality-peripheral/android',
-    ],
+    // hot-updater 0.36.18 ignores the app's own android/ and ios/ folders
+    // entirely (measured: edits to MainApplication.kt, app/build.gradle and
+    // the Podfile left the hash unchanged), so the app's native code and build
+    // files are listed here. AndroidManifest.xml and Info.plist cannot be: the
+    // CLI writes the fingerprint and key into them. A change to those two, or
+    // to anything else native, is caught by scripts/release/tier.mjs instead.
+    extraSources: {
+      android: [
+        '../bifold/packages/react-native-attestation/android',
+        '../bifold/packages/react-native-locality-peripheral/android',
+        // Files, not folders: inside android/ and ios/ the loader's ignore
+        // rules filter a listed folder's contents away, so each file is named.
+        'android/app/src/main/java/ca/bc/gov/BCWallet/MainApplication.kt',
+        'android/app/src/main/java/ca/bc/gov/BCWallet/MainActivity.kt',
+        'android/app/build.gradle',
+        'android/build.gradle',
+        'android/settings.gradle',
+        'android/gradle.properties',
+      ],
+      ios: [
+        '../bifold/packages/react-native-attestation/ios',
+        '../bifold/packages/react-native-locality-peripheral/ios',
+        'ios/AriesBifold/AppDelegate.mm',
+        'ios/AriesBifold/AppDelegate.h',
+        'ios/AriesBifold/main.m',
+        'ios/AriesBifold/AriesBifold.entitlements',
+        // Not project.pbxproj: the store build bumps its build number in place.
+        'ios/Podfile',
+        'ios/Podfile.lock',
+      ],
+    },
   },
   signing: {
     enabled: true,
