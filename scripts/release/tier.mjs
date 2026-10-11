@@ -11,11 +11,12 @@
 //
 //   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
 //   tier.mjs --range <a>..<b>        the wallet range, plus the bifold submodule's range when its pin moved
-//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, files}]}; exit 0 ota, 1 none, 2 store,
+//   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, hold, files}], held}; exit 0 ota, 1 none, 2 store,
 //                                    3 an error (reported as store, never none)
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
 // here, and only a native fingerprint at publish time can catch it.
-// Flags (FLAGS) are for the approver: classes he may hold back even when they could travel OTA; they never set the tier.
+// Flags (FLAGS) name classes of change the owner holds back from OTA even when they could travel (decided 10-11): a
+// flag with hold: true moves an "ota" change to "store" and lists itself under "held". A flag without it is shown only.
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,24 +66,31 @@ export const RULES = [
 ];
 
 /**
- * Flags the approver sees: classes of change that may travel OTA but that the person approving may want to hold
- * (the OTA lane's question 1 on board #29). Data, not verdicts: they never change the tier. A flag matches a path,
- * or (with --range, which reads the diff) a line the change adds.
+ * Flags: classes of change that could travel OTA (the OTA lane's question 1 on board #29). The owner holds all three
+ * back for now (10-11): hold: true routes them to a store build. Setting hold to false makes a flag advisory again,
+ * shown to the approver beside an "ota" tier. A flag matches a path, or (with --range, which reads the diff) a line
+ * the change adds.
  */
 export const FLAGS = [
-  { flag: 'deletes stored records', added: /\b(delete|deleteById|deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
-  { flag: 'sign-in / key handling', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
-  { flag: 'VTI protocol line', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
+  { flag: 'deletes stored records', hold: true, added: /\b(delete|deleteById|deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  { flag: 'sign-in / key handling', hold: true, path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
+  { flag: 'VTI protocol line', hold: true, path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/ },
 ];
 
-/** Which flags a change raises: [{ flag, files }], from paths and, when given, each file's added lines. */
-export function flagsOf(files, added = {}) {
+/** Which flags a change raises: [{ flag, hold, files }], from paths and, when given, each file's added lines. */
+export function flagsOf(files, added = {}, flags = FLAGS) {
   const out = [];
-  for (const { flag, path: p, added: a } of FLAGS) {
+  for (const { flag, hold = false, path: p, added: a } of flags) {
     const hit = files.filter((f) => !/^(e2e|docs)\/|__tests__|\.test\./.test(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
-    if (hit.length) out.push({ flag, files: hit });
+    if (hit.length) out.push({ flag, hold, files: hit });
   }
   return out;
+}
+
+/** The tier after the held flags: an "ota" change that raises one becomes "store", naming the flags under "held". */
+export function applyHolds({ tier, ...rest }, flags) {
+  const held = flags.filter((f) => f.hold).map((f) => f.flag);
+  return tier === 'ota' && held.length ? { ...rest, tier: 'store', held } : { ...rest, tier, held: [] };
 }
 
 const RANK = { none: 0, ota: 1, store: 2 };
@@ -152,12 +160,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (!arg('--files') && !arg('--range')) { console.error('usage: tier.mjs --files a,b,… | --range <last store build>..<tip> [--json]'); process.exit(64); }
   try {
     const files = arg('--files') ? arg('--files').split(',').map((s) => s.trim()).filter(Boolean) : changedFiles(arg('--range'));
-    const r = { ...classify(files), flags: flagsOf(files, arg('--range') ? addedLines(arg('--range')) : {}) };
+    const flags = flagsOf(files, arg('--range') ? addedLines(arg('--range')) : {});
+    const r = { ...applyHolds(classify(files), flags), flags };
     if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
     else {
       for (const [f, why] of Object.entries(r.reasons)) if (!why.startsWith('none')) console.log(`${why.split(':')[0].padEnd(5)} ${f} (${why.split(': ')[1]})`);
-      for (const f of r.flags) console.log(`flag  ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
-      console.log(`tier=${r.tier}`);
+      for (const f of r.flags) console.log(`${f.hold ? 'hold ' : 'flag '} ${f.flag}: ${f.files.slice(0, 4).join(', ')}${f.files.length > 4 ? ', …' : ''}`);
+      console.log(`tier=${r.tier}${r.held.length ? ` (held back from OTA: ${r.held.join('; ')})` : ''}`);
     }
     // exitCode, not exit(): a large --json written to a pipe must finish before the process ends.
     process.exitCode = { ota: 0, none: 1, store: 2 }[r.tier];

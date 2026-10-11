@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { addedLines, changedFiles, classify, flagsOf, MIGRATION_PATHS, parseRange } from './tier.mjs';
+import { addedLines, applyHolds, changedFiles, classify, FLAGS, flagsOf, MIGRATION_PATHS, parseRange } from './tier.mjs';
 
 const tierOf = (...files) => classify(files).tier;
 
@@ -53,12 +53,37 @@ test('the whole change takes its highest tier', () => {
   assert.equal(tierOf('docs/a.md', 'app/src/x.tsx', 'app/ios/Podfile'), 'store');
 });
 
-test('flags for the approver: data beside the tier, never the tier itself', () => {
+test('flags: all three held back from OTA for now; a held flag moves an ota change to store', () => {
   const files = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts', 'bifold/packages/core/src/modules/trust-tasks/module/vtiJoin.ts', 'app/src/x.ts'];
   const flags = flagsOf(files, { 'app/src/x.ts': ['  await store.deleteById(id)'] });
   assert.deepEqual(flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
+  assert.ok(flags.every((f) => f.hold));
   assert.equal(classify(files).tier, 'ota');
+  const r = applyHolds(classify(files), flags);
+  assert.equal(r.tier, 'store');
+  assert.deepEqual(r.held.sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
+  for (const one of ['app/src/x.ts', 'bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts']) {
+    const only = [one];
+    assert.equal(applyHolds(classify(only), flagsOf(only, { 'app/src/x.ts': ['  await store.deleteById(id)'] })).tier, 'store', one);
+  }
+  assert.deepEqual(applyHolds(classify(['app/src/y.tsx']), flagsOf(['app/src/y.tsx'])), { ...classify(['app/src/y.tsx']), held: [] });
   assert.deepEqual(flagsOf(['e2e/run-x.mjs', 'docs/a.md']), []);
+});
+
+test('flags: one set to hold false is shown only, and the change stays ota', () => {
+  const advisory = FLAGS.map((f) => ({ ...f, hold: false }));
+  const files = ['bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
+  const flags = flagsOf(files, {}, advisory);
+  assert.deepEqual(flags.map((f) => [f.flag, f.hold]), [['sign-in / key handling', false]]);
+  const r = applyHolds(classify(files), flags);
+  assert.equal(r.tier, 'ota');
+  assert.deepEqual(r.held, []);
+});
+
+test('flags: a held flag never lowers a store change, and a none change stays none', () => {
+  const store = ['app/ios/Podfile', 'bifold/packages/core/src/modules/trust-tasks/module/oobSignIn.ts'];
+  assert.equal(applyHolds(classify(store), flagsOf(store)).tier, 'store');
+  assert.equal(applyHolds(classify(['docs/a.md']), flagsOf(['docs/a.md'])).tier, 'none');
 });
 
 test('review cases that need a store build (codegen specs, fonts, CMake, app-root config, install files)', () => {
