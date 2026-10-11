@@ -73,9 +73,14 @@ A leg prints the lines that `e2e/lib/rows.js` produces, and the runner reads onl
 ```
 HEADS <leg> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8> … caps=<n>
 ROW <name> PASS|FAIL|SKIP — <detail>
+ROW <name> SKIP — tracked (<why>): <detail>
 LEG <leg> BROKEN — <first line>
 LEG <leg> DONE <exit> pass=<n> fail=<n> skip=<n> <seconds>s
 ```
+
+A **tracked** row (`rows.row(name, fn, { tracked: "why" })`) checks a known gap whose fix is pending: while it fails it
+prints `SKIP — tracked (<why>): <detail>` and does not fail the leg; the day the fix lands it prints PASS. 241's tracked
+rows: `cards-back-new-install` (role card recovery) and `member-vmc-sent` (the reciprocal membership credential).
 
 `caps=<n>` is how many of the manifests' testID keys (`e2e/lib/testids*.json`) the build's JS bundle holds, a
 short reading of how far the build is from the drivers' contract (`-` when the leg named no build file).

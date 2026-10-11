@@ -11,6 +11,15 @@
  *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
  *   join-approved-listed     (c) the community lists that identity as a member
  *   join-approved-wallet     (d) the Wallet shows C's membership card
+ *   join-approved-role-card  (e) Your agent's card for C shows the role card beside the membership card (VTI issues
+ *                                both on admission; decide/0.1 names no role, so it is the default "member", which the
+ *                                Wallet leaves out beside its membership card by design, IN-109)
+ *   cards-kept-on-agent      (f) the runner agent's vault holds both cards C issued this identity, within 90 s
+ *                                (pnm cred-vault query: purpose membership; type AuthorityCredential for the role)
+ *   member-vmc-sent          (g) TRACKED: C's member row records the identity's reciprocal membership credential
+ *                                (members/vmc/1.0); Keyring does not send it yet (lane ac)
+ * (f) needs RUNNER_VTA (the runner's pnm slug) and PNM_BIN. Prints `CARD_IDS <membership id> <role id>` for the leg.
+ * The new-install recovery of both cards is run-cards-back.mjs (row cards-back-new-install), after this driver.
  * Always, before approving: choose-how-to-join (#326): C's screen offers "Choose how to join" → Join.
  * Prints `JOIN_MEMBER <did>` so the caller removes the member afterwards.
  * The rows are lib/rows.js rows (a failing row never stops the rest; (b)–(d) need (a)); the Join and
@@ -27,6 +36,7 @@ import { pasteLinkFromHome } from "./lib/flows.js";
 import { capturePersonaDid, footClear } from "./lib/personaDid.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows } from "./lib/rows.js";
+import { credVaultQuery } from "./lib/pnm.js";
 import { agents } from "./lib/pages/agents.js";
 import { community, join, readMemberState, readStanding } from "./lib/pages/join.js";
 
@@ -40,7 +50,14 @@ const json = (t) => JSON.parse(t.slice(t.indexOf("{")));
 const rows = createRows({
   label: "waiting",
   // A rerun of one of the three alone (gate.sh rerun --only-failed) runs join-request-is-mine first: declared here.
-  needs: { "join-approved-card": ["join-request-is-mine"], "join-approved-listed": ["join-request-is-mine"], "join-approved-wallet": ["join-request-is-mine"] },
+  needs: {
+    "join-approved-card": ["join-request-is-mine"],
+    "join-approved-listed": ["join-request-is-mine"],
+    "join-approved-wallet": ["join-request-is-mine"],
+    "join-approved-role-card": ["join-request-is-mine"],
+    "cards-kept-on-agent": ["join-request-is-mine"],
+    "member-vmc-sent": ["join-request-is-mine"],
+  },
 });
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 /** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
@@ -137,6 +154,55 @@ async function otherTicketFlow(d, me) {
   await scan("left-scan-other-ticket", "after leaving C");
 }
 
+/** C's member row for `did` (vtc/members/list/0.1: currentVmcId, currentRoleVacId, memberVmcId, memberVmcReceivedAt). */
+const memberRow = (did) => (json(admin("members")).items ?? []).find((m) => m.did === did);
+
+/**
+ * The two cards C issued this identity, by id: from C's member row, else from the decide answer (`vmc`, `roleVac`:
+ * spec vtc/join-requests/decide/0.1). These are the very cards the phone was delivered (bifold vtiJoin.ts takes the
+ * membership and `roleVac` from the same answer).
+ */
+function issuedCards(did, decided) {
+  let row;
+  try {
+    row = memberRow(did);
+  } catch (e) {
+    log(`members list: ${String(e.message).split("\n")[0]}`);
+  }
+  return {
+    membership: row?.currentVmcId || decided?.vmc?.id || "",
+    role: row?.currentRoleVacId || decided?.roleVac?.id || "",
+  };
+}
+
+/** (f) The runner agent's vault, asked the two ways it files C's cards: by purpose, and the role card by its type. */
+async function cardsKeptOnAgent(want) {
+  const slug = process.env.RUNNER_VTA;
+  if (!slug) return { ok: false, detail: "no RUNNER_VTA (the runner agent's pnm slug)" };
+  if (!want.membership || !want.role) return { ok: false, detail: `C issued no ${want.membership ? "role" : "membership"} card id to look for (members list, decide answer)` };
+  const t0 = Date.now();
+  let have = { membership: false, role: false };
+  let said = "";
+  for (let first = true; first || (Date.now() - t0 < 90000 && !(have.membership && have.role)); first = false) {
+    if (!first) await sleep(15000);
+    try {
+      // A card the vault filed with no purpose (a role: vta-vault receive.rs infer_purpose) is found by type only.
+      const byPurpose = credVaultQuery({ purpose: "membership" }, { slug }).ids;
+      // By type, and by purpose "role" too: a vault that learns to file roles (infer_purpose) is still read right.
+      const byType = [...new Set([...credVaultQuery({ type: "AuthorityCredential" }, { slug }).ids, ...credVaultQuery({ purpose: "role" }, { slug }).ids])];
+      have = { membership: byPurpose.includes(want.membership), role: byType.includes(want.role) || byPurpose.includes(want.role) };
+      said = `${byPurpose.length} by purpose membership, ${byType.length} by type AuthorityCredential or purpose role`;
+    } catch (e) {
+      said = `query: ${String(e.message).split("\n")[0].slice(0, 160)}`;
+    }
+  }
+  const s = Math.round((Date.now() - t0) / 1000);
+  return {
+    ok: have.membership && have.role,
+    detail: `after ${s} s: membership ${want.membership} kept ${have.membership} · role ${want.role} kept ${have.role} (${said})`,
+  };
+}
+
 /** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
 async function approvedFlow(d, me) {
   const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
@@ -145,10 +211,17 @@ async function approvedFlow(d, me) {
     ok: Boolean(me && req),
     detail: req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`,
   }));
+  let decided;
   if (req) {
-    const said = admin("join-decide", req.id, "approved").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+    const out = admin("join-decide", req.id, "approved");
+    const said = out.split("\n").filter((l) => /->/.test(l)).pop() ?? "";
     log(`admin approves ${req.id}: ${said.trim()}`);
     console.log(`JOIN_MEMBER ${me}`);
+    try {
+      decided = json(out);
+    } catch {
+      decided = undefined;
+    }
   }
   // (b) On its own first: Keyring is told, or finds out at its next read. Then once by Check now.
   await rows.row("join-approved-card", async () => {
@@ -186,6 +259,52 @@ async function approvedFlow(d, me) {
     await screenshot(d, "join-approved-wallet").catch(() => undefined);
     return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
   });
+  // (e) The role card beside the membership on Your agent's card for C (CardKeptRow: AgentCard_<kind>_<key>, and its
+  // "kept by your agent" line AgentCardKept_<kind>_<key>). The Wallet lists the membership alone when the role is the
+  // plain "member" (vtiWalletCards isPlainMemberRole, IN-109), so Your agent is where the role card shows.
+  await rows.row("join-approved-role-card", async () => {
+    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+    let role = false;
+    let membership = false;
+    for (const until = Date.now() + 60000; Date.now() < until && !(role && membership); await sleep(2000)) {
+      await scrollToTestId(d, `AgentCard_role_${key}`, 6).catch(() => undefined);
+      role = await existsTestId(d, `AgentCard_role_${key}`, 1500);
+      membership = await existsTestId(d, `AgentCard_membership_${key}`, 1000);
+    }
+    const kept = role ? (await textOf(d, `AgentCardKept_role_${key}`).catch(() => "")).replace(/\s+/g, " ").trim() : "";
+    const label = role ? String((await (await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentCard_role_${key}")`)).getAttribute("content-desc").catch(() => "")) || "") : "";
+    await screenshot(d, "join-approved-role-card").catch(() => undefined);
+    return {
+      ok: role && membership,
+      detail: `AgentCard_role ${role}${kept ? ` ("${kept}")` : ""}${label ? ` [${label.slice(0, 80)}]` : ""} · AgentCard_membership ${membership} · decide/0.1 names no role: the default "member"`,
+    };
+  });
+  // (f) Both cards kept by the runner agent, as the phone pushed them (vault/credentials/receive/0.1).
+  const want = me ? issuedCards(me, decided) : { membership: "", role: "" };
+  console.log(`CARD_IDS ${want.membership || "-"} ${want.role || "-"}`);
+  await rows.row("cards-kept-on-agent", () => cardsKeptOnAgent(want));
+  // (g) TRACKED: the identity's reciprocal membership credential, recorded on C's member row (vtc-service
+  // members/inbound_vmc.rs record_reciprocation → memberVmcId, memberVmcReceivedAt on members/list/0.1).
+  await rows.row(
+    "member-vmc-sent",
+    async () => {
+      let row;
+      for (const until = Date.now() + 60000; ; await sleep(10000)) {
+        row = memberRow(me);
+        if ((row?.memberVmcId && row?.memberVmcReceivedAt) || Date.now() >= until) break;
+      }
+      const sent = Boolean(row?.memberVmcId && row?.memberVmcReceivedAt);
+      return {
+        ok: sent,
+        detail: row
+          ? sent
+            ? `C recorded ${row.memberVmcId} at ${row.memberVmcReceivedAt}`
+            : `C's member row for ${me} has no reciprocal membership credential after 60 s (memberVmcId ${row.memberVmcId ?? "none"})`
+          : `${me} is not on C's members list`,
+      };
+    },
+    { tracked: "Keyring does not send the reciprocal member VMC yet; lane ac's work pending" }
+  );
   if (!req) return;
   if (is238) await doneFlow(d);
   await otherTicketFlow(d, me);
