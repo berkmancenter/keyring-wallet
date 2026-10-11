@@ -227,6 +227,7 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
                     "opacity": 1,
                   }
                 }
+                testID="com.ariesbifold:id/RCardPhotoAction"
               >
                 <Text
                   maxFontSizeMultiplier={2}

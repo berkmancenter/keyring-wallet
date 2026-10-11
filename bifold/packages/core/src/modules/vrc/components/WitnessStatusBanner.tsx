@@ -11,6 +11,7 @@ import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
+import { testIdWithKey } from '../../../utils/testable'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 
 export interface WitnessStatusBannerProps {
@@ -58,7 +59,12 @@ const WitnessStatusBanner: React.FC<WitnessStatusBannerProps> = ({ onDetailsPres
 
   return (
     <>
-      <TouchableOpacity style={styles.banner} onPress={handleBannerPress} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={styles.banner}
+        onPress={handleBannerPress}
+        activeOpacity={0.7}
+        testID={testIdWithKey('WitnessStatusBanner')}
+      >
         <View style={styles.bannerContent}>
           <Icon name="shield-check" size={20} color="#fff" style={styles.bannerIcon} />
           <View style={styles.bannerTextContainer}>
@@ -75,12 +81,12 @@ const WitnessStatusBanner: React.FC<WitnessStatusBannerProps> = ({ onDetailsPres
 
       {/* Details Menu Modal */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={handleMenuClose}>
-        <Pressable style={styles.modalOverlay} onPress={handleMenuClose}>
+        <Pressable style={styles.modalOverlay} onPress={handleMenuClose} testID={testIdWithKey('WitnessStatusOverlay')}>
           <View style={styles.modalContent}>
             {/* Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Active Witness</Text>
-              <TouchableOpacity onPress={handleMenuClose}>
+              <TouchableOpacity onPress={handleMenuClose} testID={testIdWithKey('WitnessStatusClose')}>
                 <Icon name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
@@ -119,13 +125,21 @@ const WitnessStatusBanner: React.FC<WitnessStatusBannerProps> = ({ onDetailsPres
             {/* Actions */}
             <View style={styles.actionsContainer}>
               {onDetailsPress && (
-                <TouchableOpacity style={styles.actionButton} onPress={handleViewDetails}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={handleViewDetails}
+                  testID={testIdWithKey('WitnessViewDetails')}
+                >
                   <Icon name="information-outline" size={20} color="#667eea" />
                   <Text style={styles.actionButtonText}>View Details</Text>
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity style={[styles.actionButton, styles.deactivateButton]} onPress={handleDeactivate}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deactivateButton]}
+                onPress={handleDeactivate}
+                testID={testIdWithKey('WitnessDeactivate')}
+              >
                 <Icon name="shield-off-outline" size={20} color="#dc3545" />
                 <Text style={[styles.actionButtonText, styles.deactivateButtonText]}>Deactivate Witness</Text>
               </TouchableOpacity>

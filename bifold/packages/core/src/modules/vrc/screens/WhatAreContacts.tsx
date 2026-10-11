@@ -8,6 +8,7 @@ import Link from '../../../components/texts/Link'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, Stacks } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
 
 const CARD_MARGIN = 20
 const CIRCLE_SIZE = 120
@@ -109,7 +110,11 @@ const WhatAreContacts: React.FC<WhatAreContactsProps> = ({ navigation }) => {
             </View>
             <ThemedText style={{ marginTop: 16 }}>
               {`${t('WhatAreContacts.RemoveContacts')} `}
-              <Link linkText={t('WhatAreContacts.ContactsLink')} onPress={goToContactList} />
+              <Link
+                linkText={t('WhatAreContacts.ContactsLink')}
+                onPress={goToContactList}
+                testID={testIdWithKey('ContactsList')}
+              />
             </ThemedText>
           </ScrollView>
         </View>

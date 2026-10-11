@@ -53,6 +53,7 @@ import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReaso
 
 import { DeviceNameField } from './DeviceNamePrompt'
 import { openScanner } from './openScanner'
+import { VtaCreateAgentIds, type VtaCreateAgentId } from './VtaCreateAgent.ids'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { linkFailureText } from './linkFailureWords'
@@ -425,7 +426,7 @@ const VtaCreateAgent: React.FC = () => {
             ? 'address'
             : step
 
-  const errorLine = (key: string) =>
+  const errorLine = (key: VtaCreateAgentId) =>
     error ? (
       <>
         <ThemedText style={styles.error} testID={testIdWithKey(key)}>
@@ -457,7 +458,7 @@ const VtaCreateAgent: React.FC = () => {
 
   if (screen === 'intro') {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentCreateIntro')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.createIntro)}>
         <ThemedText variant="headingThree">{t('CreateAgent.IntroTitle')}</ThemedText>
         <ThemedText>{t('CreateAgent.IntroBody')}</ThemedText>
         <ThemedText>{t('CreateAgent.IntroStep1')}</ThemedText>
@@ -472,20 +473,20 @@ const VtaCreateAgent: React.FC = () => {
             title={t('CreateAgent.OpenHost')}
             buttonType={ButtonType.Secondary}
             onPress={() => Linking.openURL(AGENT_HOST_WEBSITE as string)}
-            testID={testIdWithKey('AgentCreateOpenHost')}
+            testID={testIdWithKey(VtaCreateAgentIds.createOpenHost)}
           />
         ) : null}
         <Button
           title={t('Global.Continue')}
           buttonType={ButtonType.Primary}
           onPress={() => setStep('address')}
-          testID={testIdWithKey('AgentCreateContinue')}
+          testID={testIdWithKey(VtaCreateAgentIds.createContinue)}
         />
       </>
     )
   } else if (screen === 'address') {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentCreateAddress')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.createAddress)}>
         <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 1, of: 2 })}</ThemedText>
         <ThemedText variant="headingThree">{t('CreateAgent.AddressTitle')}</ThemedText>
         <ThemedText>{t('CreateAgent.AddressBody')}</ThemedText>
@@ -501,13 +502,13 @@ const VtaCreateAgent: React.FC = () => {
           onSubmitEditing={() => {
             if (!busy && address.trim()) void onAddressContinue()
           }}
-          testID={testIdWithKey('AgentCreateAddressInput')}
+          testID={testIdWithKey(VtaCreateAgentIds.createAddressInput)}
         />
       </View>
     )
     actions = (
       <>
-        {errorLine('AgentCreateError')}
+        {errorLine(VtaCreateAgentIds.createError)}
         {existingAgent && agent ? (
           <Button
             title={t('VtaLink.SwitchToIt')}
@@ -523,7 +524,7 @@ const VtaCreateAgent: React.FC = () => {
                 routes: [{ name: Screens.VtaAgent }],
               })
             }}
-            testID={testIdWithKey('AgentCreateSwitchToExisting')}
+            testID={testIdWithKey(VtaCreateAgentIds.createSwitchToExisting)}
           />
         ) : null}
         {/* The host's page shows the agent's address as a QR, or its
@@ -536,20 +537,20 @@ const VtaCreateAgent: React.FC = () => {
             agentAddressScan.request(onAddressScanned)
             openScanner(navigation)
           }}
-          testID={testIdWithKey('AgentCreateScanAddress')}
+          testID={testIdWithKey(VtaCreateAgentIds.createScanAddress)}
         />
         <Button
           title={t('CreateAgent.Paste')}
           buttonType={ButtonType.Secondary}
           onPress={async () => setAddress((await Clipboard.getString()).trim())}
-          testID={testIdWithKey('AgentCreatePasteAddress')}
+          testID={testIdWithKey(VtaCreateAgentIds.createPasteAddress)}
         />
         <Button
           title={t('Global.Continue')}
           buttonType={ButtonType.Primary}
           onPress={() => void onAddressContinue()}
           disabled={busy || !address.trim()}
-          testID={testIdWithKey('AgentCreateAddressContinue')}
+          testID={testIdWithKey(VtaCreateAgentIds.createAddressContinue)}
         >
           {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
         </Button>
@@ -557,15 +558,17 @@ const VtaCreateAgent: React.FC = () => {
     )
   } else if (screen === 'ownerCode' && link.kind === 'showingKey') {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentCreateOwnerCode')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.createOwnerCode)}>
         <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 2, of: 2 })}</ThemedText>
         <ThemedText variant="headingThree">
           {asDevice ? t('CreateAgent.AsDeviceTitle') : t('CreateAgent.OwnerTitle')}
         </ThemedText>
         {asDevice ? (
-          <ThemedText testID={testIdWithKey('AgentCreateAsDevice')}>{t('CreateAgent.AsDeviceBody')}</ThemedText>
+          <ThemedText testID={testIdWithKey(VtaCreateAgentIds.createAsDevice)}>
+            {t('CreateAgent.AsDeviceBody')}
+          </ThemedText>
         ) : (
-          <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
+          <ThemedText testID={testIdWithKey(VtaCreateAgentIds.createOwnerBody)}>
             {t('CreateAgent.OwnerBody', {
               method: t(`CreateAgent.Lock.${lockKind}`),
               interpolation: { escapeValue: false },
@@ -577,12 +580,12 @@ const VtaCreateAgent: React.FC = () => {
           onPress={() => setHowShown(!howShown)}
           accessibilityRole="button"
           accessibilityState={{ expanded: howShown }}
-          testID={testIdWithKey('AgentCreateOwnerHowToggle')}
+          testID={testIdWithKey(VtaCreateAgentIds.createOwnerHowToggle)}
         >
           <ThemedText style={styles.muted}>{t('CreateAgent.OwnerHowToggle')}</ThemedText>
         </Pressable>
         {howShown ? (
-          <ThemedText style={styles.muted} testID={testIdWithKey('AgentCreateOwnerHow')}>
+          <ThemedText style={styles.muted} testID={testIdWithKey(VtaCreateAgentIds.createOwnerHow)}>
             {t('CreateAgent.OwnerHow')}
           </ThemedText>
         ) : null}
@@ -591,27 +594,27 @@ const VtaCreateAgent: React.FC = () => {
             title={t('VtaLink.CopyKey')}
             buttonType={ButtonType.Secondary}
             onPress={() => handOut('copy')}
-            testID={testIdWithKey('AgentCreateCopyCode')}
+            testID={testIdWithKey(VtaCreateAgentIds.createCopyCode)}
           />
           <Button
             title={t('VtaLink.ShareKey')}
             buttonType={ButtonType.Secondary}
             onPress={() => handOut('share')}
-            testID={testIdWithKey('AgentCreateShareCode')}
+            testID={testIdWithKey(VtaCreateAgentIds.createShareCode)}
           />
         </View>
         <Pressable
           onPress={() => setCodeShown(!codeShown)}
           accessibilityRole="button"
           accessibilityState={{ expanded: codeShown }}
-          testID={testIdWithKey('AgentCreateShowCode')}
+          testID={testIdWithKey(VtaCreateAgentIds.createShowCode)}
         >
           <ThemedText style={styles.muted}>
             {codeShown ? t('VtaLink.HideTheCode') : t('VtaLink.ShowTheCode')}
           </ThemedText>
         </Pressable>
         {codeShown ? (
-          <ThemedText style={styles.key} testID={testIdWithKey('AgentCreateOwnerDid')} selectable>
+          <ThemedText style={styles.key} testID={testIdWithKey(VtaCreateAgentIds.createOwnerDid)} selectable>
             {link.did}
           </ThemedText>
         ) : null}
@@ -620,20 +623,20 @@ const VtaCreateAgent: React.FC = () => {
     actions = (
       <>
         {waiting ? (
-          <View style={styles.row} testID={testIdWithKey('AgentCreateWaiting')}>
+          <View style={styles.row} testID={testIdWithKey(VtaCreateAgentIds.createWaiting)}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
             <ThemedText style={{ flex: 1 }}>{t('CreateAgent.Waiting')}</ThemedText>
           </View>
         ) : link.notYet ? (
-          <ThemedText style={styles.error} testID={testIdWithKey('AgentCreateError')}>
+          <ThemedText style={styles.error} testID={testIdWithKey(VtaCreateAgentIds.createError)}>
             {t('CreateAgent.NotAcceptedYet')}
           </ThemedText>
         ) : link.noAnswer ? (
-          <ThemedText style={styles.error} testID={testIdWithKey('AgentCreateError')}>
+          <ThemedText style={styles.error} testID={testIdWithKey(VtaCreateAgentIds.createError)}>
             {t('CreateAgent.Unreachable')}
           </ThemedText>
         ) : (
-          errorLine('AgentCreateError')
+          errorLine(VtaCreateAgentIds.createError)
         )}
         {pollExpired ? (
           <Button
@@ -641,7 +644,7 @@ const VtaCreateAgent: React.FC = () => {
             buttonType={ButtonType.Primary}
             onPress={onConnect}
             disabled={link.checking}
-            testID={testIdWithKey('AgentCreateCheckAgain')}
+            testID={testIdWithKey(VtaCreateAgentIds.createCheckAgain)}
           />
         ) : null}
         <Button
@@ -649,7 +652,7 @@ const VtaCreateAgent: React.FC = () => {
           buttonType={pollExpired ? ButtonType.Secondary : ButtonType.Primary}
           onPress={onConnect}
           disabled={link.checking}
-          testID={testIdWithKey('AgentCreateConnect')}
+          testID={testIdWithKey(VtaCreateAgentIds.createConnect)}
         >
           {link.checking && !waiting ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
         </Button>
@@ -657,7 +660,7 @@ const VtaCreateAgent: React.FC = () => {
     )
   } else if (screen === 'connecting' && link.kind === 'linking') {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentCreateProgress')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.createProgress)}>
         <View style={styles.row}>
           <ActivityIndicator color={ColorPalette.brand.primary} />
           <ThemedText testID={testIdWithKey(`AgentCreateStep_${link.step}`)}>
@@ -669,11 +672,11 @@ const VtaCreateAgent: React.FC = () => {
   } else if (screen === 'backupAddress') {
     const agentDid = vtaAgent.agentAddress()
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentBackupAddressQr')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.backupAddressQr)}>
         <ThemedText
           variant="headingThree"
           onLayout={(e) => setHeadingHeight(e.nativeEvent.layout.height)}
-          testID={testIdWithKey('AgentBackupScanThisHeading')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupScanThisHeading)}
         >
           {t('CreateAgent.BackupScanThis')}
         </ThemedText>
@@ -682,7 +685,7 @@ const VtaCreateAgent: React.FC = () => {
             value={agentDid}
             size={backupQrSize}
             quietZone={QR_QUIET_ZONE}
-            testID={testIdWithKey('AgentBackupAddressQrCode')}
+            testID={testIdWithKey(VtaCreateAgentIds.backupAddressQrCode)}
           />
         ) : null}
         <ThemedText>{t('CreateAgent.BackupScanThisBody')}</ThemedText>
@@ -691,7 +694,7 @@ const VtaCreateAgent: React.FC = () => {
             onPress={() => setAddressShown(!addressShown)}
             accessibilityRole="button"
             accessibilityState={{ expanded: addressShown }}
-            testID={testIdWithKey('AgentBackupShowAsText')}
+            testID={testIdWithKey(VtaCreateAgentIds.backupShowAsText)}
           >
             <ThemedText style={styles.muted}>
               {addressShown ? t('VtaLink.HideText') : t('VtaLink.ShowAsText')}
@@ -699,7 +702,7 @@ const VtaCreateAgent: React.FC = () => {
           </Pressable>
         ) : null}
         {agentDid && addressShown ? (
-          <ThemedText selectable testID={testIdWithKey('AgentBackupAddressText')}>
+          <ThemedText selectable testID={testIdWithKey(VtaCreateAgentIds.backupAddressText)}>
             {agentDid}
           </ThemedText>
         ) : null}
@@ -714,13 +717,13 @@ const VtaCreateAgent: React.FC = () => {
                 Clipboard.setString(agentDid)
                 setAddressCopied(true)
               }}
-              testID={testIdWithKey('AgentBackupCopyAddress')}
+              testID={testIdWithKey(VtaCreateAgentIds.backupCopyAddress)}
             />
             <Button
               title={t('VtaLink.ShareKey')}
               buttonType={ButtonType.Secondary}
               onPress={() => void Share.share({ message: agentDid }).catch(() => undefined)}
-              testID={testIdWithKey('AgentBackupShareAddress')}
+              testID={testIdWithKey(VtaCreateAgentIds.backupShareAddress)}
             />
           </View>
         ) : null}
@@ -731,26 +734,26 @@ const VtaCreateAgent: React.FC = () => {
         {/* A computer or another app (pnm, the browser plugin) does not scan
             this: it shows its own code to enter, so that way is said here
             rather than found only after Next (IN-123). */}
-        <ThemedText style={styles.muted} testID={testIdWithKey('AgentBackupOtherKinds')}>
+        <ThemedText style={styles.muted} testID={testIdWithKey(VtaCreateAgentIds.backupOtherKinds)}>
           {t('CreateAgent.BackupOtherKinds')}
         </ThemedText>
         <Button
           title={t('Global.Next')}
           buttonType={ButtonType.Primary}
           onPress={() => setStep('backupCode')}
-          testID={testIdWithKey('AgentBackupNext')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupNext)}
         />
         <Button
           title={t('CreateAgent.BackupEnterCode')}
           buttonType={ButtonType.Secondary}
           onPress={() => setStep('backupCode')}
-          testID={testIdWithKey('AgentBackupEnterCode')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupEnterCode)}
         />
       </>
     )
   } else if (screen === 'backupCode') {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentBackupScanCode')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.backupScanCode)}>
         <ThemedText variant="headingThree">{t('CreateAgent.BackupNowScan')}</ThemedText>
         <ThemedText>{t('CreateAgent.BackupNowScanBody')}</ThemedText>
         <TextInput
@@ -764,7 +767,7 @@ const VtaCreateAgent: React.FC = () => {
           onSubmitEditing={() => {
             if (!busy && backupCode.trim()) void onAddBackup()
           }}
-          testID={testIdWithKey('AgentBackupCodeInput')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupCodeInput)}
         />
         {/* Its name, as My devices will show it; renamed later beside Remove. */}
         {backupCode.trim() ? <DeviceNameField value={nameForCode} onChange={setDeviceName} other /> : null}
@@ -772,7 +775,7 @@ const VtaCreateAgent: React.FC = () => {
     )
     actions = (
       <>
-        {errorLine('AgentCreateError')}
+        {errorLine(VtaCreateAgentIds.createError)}
         {/* One filled button: Scan until there is a code, then adding it (#30). */}
         <Button
           title={t('CreateAgent.ScanItsCode')}
@@ -787,7 +790,7 @@ const VtaCreateAgent: React.FC = () => {
             openScanner(navigation)
           }}
           disabled={busy}
-          testID={testIdWithKey('AgentBackupScanButton')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupScanButton)}
         />
         <Button
           title={t('CreateAgent.Paste')}
@@ -796,7 +799,7 @@ const VtaCreateAgent: React.FC = () => {
             const pasted = await Clipboard.getString()
             setBackupCode(deviceCodeIn(pasted) ?? pasted.trim())
           }}
-          testID={testIdWithKey('AgentBackupPasteCode')}
+          testID={testIdWithKey(VtaCreateAgentIds.backupPasteCode)}
         />
         {backupCode.trim() ? (
           <Button
@@ -804,7 +807,7 @@ const VtaCreateAgent: React.FC = () => {
             buttonType={ButtonType.Primary}
             onPress={() => void onAddBackup()}
             disabled={busy}
-            testID={testIdWithKey('AgentBackupAdd')}
+            testID={testIdWithKey(VtaCreateAgentIds.backupAdd)}
           >
             {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
           </Button>
@@ -813,12 +816,15 @@ const VtaCreateAgent: React.FC = () => {
     )
   } else {
     body = (
-      <View style={styles.card} testID={testIdWithKey('AgentCreateReady')}>
+      <View style={styles.card} testID={testIdWithKey(VtaCreateAgentIds.createReady)}>
         <ThemedText variant="headingThree">{t('CreateAgent.ReadyTitle')}</ThemedText>
         <ThemedText>
           {t('CreateAgent.ReadyBody', { label: readyName, interpolation: { escapeValue: false } })}
         </ThemedText>
-        <ThemedText style={styles.muted} testID={testIdWithKey(backupAdded ? 'AgentBackupAdded' : 'AgentBackupNone')}>
+        <ThemedText
+          style={styles.muted}
+          testID={testIdWithKey(backupAdded ? VtaCreateAgentIds.backupAdded : VtaCreateAgentIds.backupNone)}
+        >
           {backupAdded
             ? t('CreateAgent.YourBackup', { device: backupAdded, interpolation: { escapeValue: false } })
             : t('CreateAgent.BackupLater')}
@@ -831,7 +837,7 @@ const VtaCreateAgent: React.FC = () => {
           title={t('CreateAgent.JoinCommunity')}
           buttonType={ButtonType.Primary}
           onPress={() => navigation.navigate(Screens.VtiJoin as never)}
-          testID={testIdWithKey('AgentCreateJoin')}
+          testID={testIdWithKey(VtaCreateAgentIds.createJoin)}
         />
         <Button
           title={t('Global.Done')}
@@ -847,7 +853,7 @@ const VtaCreateAgent: React.FC = () => {
               routes: [{ name: Screens.VtaAgent }],
             })
           }
-          testID={testIdWithKey('AgentCreateDone')}
+          testID={testIdWithKey(VtaCreateAgentIds.createDone)}
         />
       </>
     )
@@ -869,7 +875,7 @@ const VtaCreateAgent: React.FC = () => {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           onLayout={(e) => setViewportHeight(e.nativeEvent.layout.height)}
-          testID={testIdWithKey('AgentCreateScroll')}
+          testID={testIdWithKey(VtaCreateAgentIds.createScroll)}
         >
           {body}
         </ScrollView>

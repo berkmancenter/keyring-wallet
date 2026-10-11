@@ -74,7 +74,12 @@ const EmptyContactsList: React.FC = () => {
         <ThemedText style={[styles.text, { color: ColorPalette.grayscale.mediumGrey, fontSize: 16, lineHeight: 22 }]} testID={testIdWithKey('NoContacts')}>
           {t('Contacts.PeopleAndOrganizations' as any)}
         </ThemedText>
-        <Link style={styles.link} linkText={t('Contacts.WhatAreContacts' as any)} onPress={navigateToWhatAreContacts} />
+        <Link
+          style={styles.link}
+          linkText={t('Contacts.WhatAreContacts' as any)}
+          onPress={navigateToWhatAreContacts}
+          testID={testIdWithKey('WhatAreContacts?')}
+        />
         <View style={styles.buttonContainer}>
           <Button
             title={t('Contacts.InviteContact')}

@@ -1308,13 +1308,38 @@ describe('several agents', () => {
     expect(vta.getState()).toMatchObject({ addingAgent: false, link: { kind: 'linked', vtaDid: HOME.vtaDid } })
   })
 
+  // 239 gate: an "Add" whose key swap the agent held. The link is undone, and
+  // back is still back to the agent before, which stays the only one listed.
+  it('an add whose key swap did not happen goes back to the agent before', async () => {
+    const { vta } = twoAgents()
+    await vta.restore({} as never)
+    await vta.startAddingAgent()
+    await vta.startManualLink({} as never, 'did:webvh:Qm:dids.example:club', 'club')
+    mockClient.rotateManagerKey.mockImplementationOnce(async () => {
+      throw new Error('task failed: auth:consent_required')
+    })
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState()).toMatchObject({ addingAgent: true, link: { kind: 'notLinked' } })
+    expect(vta.getState().addedAgent).toBeUndefined()
+    expect((vta.getState().agents ?? []).map((a) => a.vtaDid)).not.toContain('did:webvh:Qm:dids.example:club')
+    vta.cancelLink()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState()).toMatchObject({ addingAgent: false, link: { kind: 'linked', vtaDid: HOME.vtaDid } })
+  })
+
   // IN-138: the add failed (a community's agent, refused) and the person went back.
   it('an add that failed, then given up, goes back to the agent before', async () => {
     const { vta } = twoAgents()
     await vta.restore({} as never)
     await vta.startAddingAgent()
     ;(vta as unknown as { set(next: object): void }).set({
-      link: { kind: 'showingKey', vtaDid: 'did:webvh:Qm:dids.example:club', label: 'club', did: 'did:key:z6MkT', checking: true },
+      link: {
+        kind: 'showingKey',
+        vtaDid: 'did:webvh:Qm:dids.example:club',
+        label: 'club',
+        did: 'did:key:z6MkT',
+        checking: true,
+      },
     })
     ;(vta as unknown as { dispatch(event: object): void }).dispatch({
       type: 'failed',

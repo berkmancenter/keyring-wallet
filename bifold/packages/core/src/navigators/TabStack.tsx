@@ -336,7 +336,7 @@ const TabStack: React.FC = () => {
             tabBarShowLabel: false,
             tabBarAccessibilityLabel:
               totalUnread > 0 ? `${t('TabStack.Messages')}, ${totalUnread} unread` : t('TabStack.Messages'),
-            tabBarTestID: testIdWithKey(t('TabStack.Messages')),
+            tabBarTestID: testIdWithKey('Message'),
           }}
         />
         <Tab.Screen
@@ -363,7 +363,7 @@ const TabStack: React.FC = () => {
             ),
             tabBarShowLabel: false,
             tabBarAccessibilityLabel: t('TabStack.QRCode'),
-            tabBarTestID: testIdWithKey(t('TabStack.QRCode')),
+            tabBarTestID: testIdWithKey('QR Code'),
           }}
           listeners={() => ({
             tabPress: (e) => {
@@ -406,7 +406,7 @@ const TabStack: React.FC = () => {
             ),
             tabBarShowLabel: false,
             tabBarAccessibilityLabel: t('TabStack.Wallet'),
-            tabBarTestID: testIdWithKey(t('TabStack.Wallet')),
+            tabBarTestID: testIdWithKey('Wallet'),
           }}
         />
         <Tab.Screen

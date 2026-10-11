@@ -73,7 +73,12 @@ const QRCodeExchangeSlider: React.FC<QRCodeExchangeSliderProps> = ({ visible, on
       onRequestClose={onDismiss}
       onDismiss={handleModalDismissed}
     >
-      <TouchableOpacity style={styles.outsideListener} onPress={onDismiss} activeOpacity={1} />
+      <TouchableOpacity
+        style={styles.outsideListener}
+        onPress={onDismiss}
+        activeOpacity={1}
+        testID={testIdWithKey('QRCodeExchangeDismiss')}
+      />
       <View style={styles.centeredView}>
         <View style={styles.modalView}>
           <View style={styles.handleBar} />

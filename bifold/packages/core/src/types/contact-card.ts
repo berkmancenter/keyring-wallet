@@ -17,4 +17,6 @@ export interface ContactCardProps {
   /** The contact's hardware attestation was checked and verified cryptographically. */
   hardwareVerified: boolean
   onPress: () => void
+  /** Test id for the pressable card; the default renderer falls back to `ContactCard`. */
+  testID?: string
 }

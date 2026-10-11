@@ -24,6 +24,7 @@ import {
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
+import { testIdWithKey } from '../../../utils/testable'
 
 const ListContacts: React.FC = () => {
   const { t } = useTranslation()
@@ -305,6 +306,7 @@ const ListContacts: React.FC = () => {
         onPress={() => {
           navigation.navigate(Screens.ContactDetails, { contact: item })
         }}
+        testID={testIdWithKey('ContactCard')}
       />
     )
   }
