@@ -57,7 +57,9 @@ build_runs() {
   if [ -f "$GATE_HOME/build-override-${sha:0:8}" ]; then cat "$GATE_HOME/build-override-${sha:0:8}"; return; fi
   off=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event push --json databaseId,conclusion \
     --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')
-  on=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event workflow_dispatch --json databaseId,conclusion \
+  # GATE_PUSH_ON_SHA: the commit whose push-on build stands for this one (main's HEAD, when nothing between them
+  # changes the app: samebuild.mjs). Set by the watcher; unset, it is this commit's own.
+  on=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "${GATE_PUSH_ON_SHA:-$sha}" --event workflow_dispatch --json databaseId,conclusion \
     --jq '[.[]|select(.conclusion=="success")][0].databaseId // empty')
   echo "${off:--} ${on:--}"
 }
@@ -84,6 +86,11 @@ use_build() {
   dir=$GATE_HOME/builds/${sha:0:8}
   fetch_run "$off" "$dir/off" || die "push-off build $off did not download"
   [ "$on" = - ] || fetch_run "$on" "$dir/on" || say "push-on build $on did not download: push legs will be skipped"
+  PUSH_ON_NOTE=
+  if [ "$on" != - ] && [ -n "${GATE_PUSH_ON_SHA:-}" ] && [ "$GATE_PUSH_ON_SHA" != "$sha" ]; then
+    PUSH_ON_NOTE="$on of ${GATE_PUSH_ON_SHA:0:8} (no app change since ${sha:0:8})"
+    say "push-on build $PUSH_ON_NOTE"
+  fi
   CAND_APP=$(ls -d "$dir"/off/keyring-ios-sim-*/KeyRing.app 2>/dev/null | head -1)
   APK_OFF=$(ls "$dir"/off/keyring-android-*/*.apk 2>/dev/null | head -1)
   APK_ON=$(ls "$dir"/on/keyring-android-*/*.apk 2>/dev/null | head -1)
@@ -91,7 +98,7 @@ use_build() {
   CAND_WALLET=$(grep '^wallet=' "$m" | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" | cut -d= -f2)
   local want got; want=$(grep '^main.jsbundle.sha256=' "$m" | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
   [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
-  export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON
+  export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON PUSH_ON_NOTE
   say "build ${CAND_WALLET:0:8} / bifold ${CAND_BIFOLD:0:8}: app $got · APK off $(shasum -a 256 "$APK_OFF" | cut -c1-12) · APK on $([ -f "$APK_ON" ] && shasum -a 256 "$APK_ON" | cut -c1-12 || echo none)"
 }
 

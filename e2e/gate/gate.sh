@@ -121,6 +121,7 @@ cmd_run() {
   [ $held = 1 ] && say "hold released"
   local rd; rd=$(new_run "$pin" "$kind")
   { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; } >> "$rd/meta"
+  [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
   say "run $(basename "$rd"): wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"
@@ -242,7 +243,7 @@ cmd_watch_main() {
   gate_env
   # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
   trap stop_forward TERM INT HUP
-  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same
   say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
   while :; do
     pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
@@ -254,13 +255,27 @@ cmd_watch_main() {
       elif ! watch_checkout_ready; then :
       else
         say "new green main build ${sha:0:8} (run $run)"
-        req=$GATE_HOME/watch-requested-${sha:0:8}
-        if [ ! -f "$req" ]; then
-          if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
-          else say "push-on build not requested: push legs will be skipped"; fi
+        # The push-on build is dispatched on main, so it is of main's HEAD. When main has moved past this commit with
+        # changes the CI build ignores (e2e, docs: test-builds.yml's paths-ignore, read by samebuild.mjs), HEAD's
+        # push-on build is the same app and stands for this one. When the app changed, no push-on build of this
+        # commit can be made: say so and go on without waiting (1011's first auto-run waited 60 min for one).
+        head=$(git -C "$REPO" rev-parse origin/main); on_sha=$sha
+        if [ "$head" != "$sha" ]; then
+          same=$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)
+          case $same in
+            same) on_sha=$head; say "main is at ${head:0:8}, past ${sha:0:8} with no app change: its push-on build stands for this one" ;;
+            *) on_sha=; say "main is at ${head:0:8}, past ${sha:0:8} ($same): no push-on build of this commit can be made; push legs will be skipped" ;;
+          esac
         fi
-        for i in $(seq 1 60); do [ "$(build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60 & wait $!; done
-        ( cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
+        if [ -n "$on_sha" ]; then
+          req=$GATE_HOME/watch-requested-${on_sha:0:8}
+          if [ ! -f "$req" ]; then
+            if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
+            else say "push-on build not requested: push legs will be skipped"; fi
+          fi
+          for i in $(seq 1 60); do [ "$(GATE_PUSH_ON_SHA=$on_sha build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60 & wait $!; done
+        fi
+        ( GATE_PUSH_ON_SHA=$on_sha cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
       fi
     fi
     sleep "$interval" & wait $!
