@@ -1,0 +1,191 @@
+name: Gate OTA (CI runners)
+
+# The OTA leg (e2e/run-ota.mjs) on a GitHub-hosted runner, everything throwaway inside one job: the update server
+# (deploy/keyring-ota) behind a Cloudflare quick tunnel (a Release build refuses cleartext and trusts only system
+# CAs, so the phone needs HTTPS), a throwaway signing key and channel, an OTA-enabled Release APK built against that
+# tunnel, then an emulator: embedded bundle, join ring 0, a published bundle applies, a crash-at-load bundle rolls
+# back, a withdrawn bundle returns the app to its embedded bundle. No Farm and no store key. Android first.
+#
+#   gh workflow run gate-ota.yml -R berkmancenter/keyring-wallet --ref <branch>
+
+on:
+  pull_request:
+    branches: [main, spike/ota-hot-updater]
+    paths:
+      - .github/workflows/gate-ota.yml
+      - e2e/run-ota.mjs
+      - e2e/gate/ci/ota-*.sh
+      - app/src/ota/**
+      - deploy/keyring-ota/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-ota-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APPIUM_VERSION: "3"
+  UIAUTOMATOR2_VERSION: "8.6.3"
+  CLOUDFLARED_VERSION: "2026.9.1"
+  OTA_CHANNEL: ci
+  OTA_SERVER_URL: http://localhost:3080
+
+jobs:
+  ota-android:
+    runs-on: ubuntu-22.04
+    # MEDIATOR_URL for the store configuration, as the test builds use it.
+    environment: test-builds
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift \
+            /usr/local/share/chromium /opt/microsoft /usr/share/vcpkg /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: 17
+
+      # One full install for the build and every publish: the fingerprint covers node_modules, and a skip-build
+      # install (no crypto native libraries) hashes differently.
+      - name: Install (full) and build bifold
+        shell: bash
+        run: |
+          (cd bifold && yarn install --immutable && yarn build)
+          yarn install --immutable
+          node scripts/verify-bifold-linking.js
+
+      - name: Update server behind a quick tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(openssl rand -hex 32); echo "::add-mask::$token"; echo "HOT_UPDATER_AUTH_TOKEN=$token" >> "$GITHUB_ENV"
+          curl -sSfL -o "$RUNNER_TEMP/cloudflared" "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION/cloudflared-linux-amd64"
+          chmod +x "$RUNNER_TEMP/cloudflared"
+          nohup "$RUNNER_TEMP/cloudflared" tunnel --no-autoupdate --url http://localhost:3080 > "$RUNNER_TEMP/tunnel.log" 2>&1 &
+          url=""
+          for i in $(seq 1 60); do url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$RUNNER_TEMP/tunnel.log" | head -1 || true); [ -n "$url" ] && break; sleep 2; done
+          [ -n "$url" ] || { echo "::error::no tunnel URL"; tail -30 "$RUNNER_TEMP/tunnel.log"; exit 1; }
+          echo "OTA_PUBLIC_URL=$url" >> "$GITHUB_ENV"
+          cd deploy/keyring-ota
+          npm ci --no-audit --no-fund
+          HOT_UPDATER_AUTH_TOKEN=$token npm run db:migrate
+          HOT_UPDATER_AUTH_TOKEN=$token OTA_PUBLIC_URL=$url OTA_LOG_CHECKS=1 nohup npm start > "$RUNNER_TEMP/ota-server.log" 2>&1 &
+          # The URL is baked into the APK: wait until the tunnel really answers (a new quick tunnel gives Cloudflare
+          # error 1033 for a few seconds), up to about two minutes.
+          for i in $(seq 1 40); do
+            if curl -sf "$url/hot-updater/version" | grep -q '{'; then echo "server answers through $url"; exit 0; fi
+            sleep 3
+          done
+          echo "::error::the update server does not answer through the tunnel"; tail -20 "$RUNNER_TEMP/ota-server.log"; tail -20 "$RUNNER_TEMP/tunnel.log"; exit 1
+
+      # The OTA lane's sequence (keys, export-public, channel, then the fingerprint LAST, since it writes into the same
+      # files), committed locally as the store build's base. The key lives under RUNNER_TEMP and is never uploaded.
+      - name: OTA settings for the store build
+        shell: bash
+        env:
+          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+        run: |
+          set -euo pipefail
+          cd app
+          npx hot-updater keys generate -o "$RUNNER_TEMP/keys"
+          npx hot-updater keys export-public -i "$RUNNER_TEMP/keys/private-key.pem" -y
+          npx hot-updater channel set "$OTA_CHANNEL"
+          { echo "MEDIATOR_URL=${MEDIATOR_URL}"; echo "MEDIATOR_V2_URL="; echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}"; echo "OTA_UPDATE_URL=${OTA_PUBLIC_URL}/hot-updater"; } > .env
+          npx hot-updater fingerprint create
+          cd ..
+          git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false
+          git commit -qam "ci: the store build's OTA settings (never pushed)"
+          echo "OTA_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "OTA_SIGNING_KEY=$RUNNER_TEMP/keys/private-key.pem" >> "$GITHUB_ENV"
+
+      - name: Setup Android SDK
+        working-directory: app/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget --quiet -O /tmp/clt.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q /tmp/clt.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdk.log 2>&1 || { tail -30 /tmp/sdk.log; exit 1; }
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/$BT" >> $GITHUB_ENV
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      # Codegen first: without it CMake configured before most libraries' codegen had run (the OTA lane's run).
+      - name: Build the OTA-enabled Release APK (x86_64, test-signed)
+        working-directory: app/android
+        shell: bash
+        env:
+          GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
+        run: |
+          set -euo pipefail
+          ./gradlew generateCodegenArtifactsFromSchema -PreactNativeArchitectures=x86_64
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --stacktrace
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          mkdir -p "$RUNNER_TEMP/build" && cp "$apk" "$RUNNER_TEMP/build/keyring-ota.apk"
+          git -C ../.. status --porcelain | head -5
+
+      - name: Appium
+        shell: bash
+        run: |
+          npm install -g "appium@$APPIUM_VERSION" > /dev/null
+          appium driver install "uiautomator2@$UIAUTOMATOR2_VERSION"
+          (cd e2e && npm ci --no-audit --no-fund)
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: OTA leg on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          LEG_DIR: ${{ runner.temp }}/leg
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          disable-animations: false
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          pre-emulator-launch-script: mkdir -p "$RUNNER_TEMP/leg"
+          script: bash e2e/gate/ci/ota-android.sh
+
+      # The leg's log and the server's check log. Never the keys (RUNNER_TEMP/keys) or the env.
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-ota-android-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/leg
+            ${{ runner.temp }}/ota-server.log
+          retention-days: 14
