@@ -76,7 +76,7 @@ export function noticeIn(source) {
   const s = String(source ?? "");
   const words = s.match(/[^"<>]{0,40}could(?:n['’]t| not) (?:check|verify|read)[^"<>]{0,80}status[^"<>]{0,40}/i) ?? s.match(/[^"<>]{0,40}status[^"<>]{0,60}could(?:n['’]t| not) be (?:checked|read|verified)[^"<>]{0,40}/i);
   if (words) return words[0].trim();
-  const id = s.match(/(?:resource-id|name)="[^"]*?((?:Card)?Status(?:Unreadable|Unknown|Unchecked)[A-Za-z_]*)"/);
+  const id = s.match(/(?:resource-id|name)="[^"]*?((?:Card)?Status(?:Unreadable|Unknown|Unchecked|Notice)[A-Za-z_]*)"/);
   return id ? `testID ${id[1]}` : "";
 }
 

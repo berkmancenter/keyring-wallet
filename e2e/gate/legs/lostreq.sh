@@ -41,8 +41,10 @@ driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
 # while only the status-list host is cut; the card must say its status could not be checked (run-card-status.mjs, row
 # card-status-unreachable-notice: SKIP "tracked: …" until the fix lands). iptables needs root, as above.
 adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
+# A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
+CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
-  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-} perl -e 'alarm 1200; exec @ARGV' node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
+  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} perl -e 'alarm 1200; exec @ARGV' node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
 take_rows "$LEG_DIR/card.out"
 # Tracked to the end: a driver that never printed its row (killed by its alarm, a crash) is the tracked row's detail.
