@@ -37,4 +37,9 @@ ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/ios-link.out); if [ -n "$ic" ]; then st=F
 # Your agent's header, Join menu and chips (#329/#330/#331), measured on the linked phone.
 (cd $E2E && PLATFORM=ios UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 \
   perl -e 'alarm 600; exec @ARGV' node run-agent-header.mjs > $LEG_DIR/ios-header.out 2>&1; hrc=$?; take_rows $LEG_DIR/ios-header.out; driver_rc ios-header-driver "$hrc" $LEG_DIR/ios-header.out)
+# IN-249 (bifold #385): a sign-in code from C, which this linked phone never joined, names C and not its DID. Then IN-257
+# (#384): a wrong PIN on the unlock screen empties the field and the right one unlocks. Each SKIPs on a build without its fix.
+(cd $E2E && export PLATFORM=ios IOS_APP=$APP UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 C_DID=${C_DID:-} C_NAME="${C_NAME:-}"
+  perl -e 'alarm 420; exec @ARGV' node run-signin-unjoined.mjs > $LEG_DIR/ios-signin.out 2>&1; grc=$?; take_rows $LEG_DIR/ios-signin.out; driver_rc ios-signin-driver "$grc" $LEG_DIR/ios-signin.out
+  perl -e 'alarm 420; exec @ARGV' node run-wrong-pin.mjs > $LEG_DIR/ios-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-wrong-pin.out; driver_rc ios-wrong-pin-driver "$wrc" $LEG_DIR/ios-wrong-pin.out)
 wda_stop; xcrun simctl shutdown $SIM 2>/dev/null; echo "SMOKE iOS done $(date -u +%T)Z";

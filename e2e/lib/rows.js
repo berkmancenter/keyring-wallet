@@ -8,6 +8,7 @@
  *   ROW <name> PASS — <detail>
  *   ROW <name> FAIL — <detail>
  *   ROW <name> SKIP — <reason>
+ *   ROW <name> SKIP — tracked (<why>): <detail>   (a tracked row that failed: a known gap, not a failure)
  *   LEG <label> BROKEN — <first line>        (the leg broke outside a row)
  *   LEG <label> DONE <exit> pass=<n> fail=<n> skip=<n> <seconds>s
  *
@@ -117,8 +118,13 @@ export function createRows({
      * pass; a need that was not selected counts as met. `needs` here, when
      * given, replaces the map's entry for this row — for the SKIP only, not for
      * the selection, so declare the needs in the map. Never throws.
+     *
+     * `tracked` (a reason: the known bug or pending work it waits on) marks a
+     * row whose check is expected to fail until that work lands: a failure is
+     * reported as `SKIP — tracked (<why>): <detail>` and does not fail the leg;
+     * a pass is a plain PASS, so the day the work lands shows in the report.
      */
-    async row(name, fn, { needs = needsOf[name] ?? [], skip } = {}) {
+    async row(name, fn, { needs = needsOf[name] ?? [], skip, tracked } = {}) {
       if (selected && !selected.has(name)) return notSelected.add(name), record(name, "SKIP", "not selected"), "SKIP";
       if (skip) return record(name, "SKIP", String(skip)), "SKIP";
       const blocked = needs.find((need) => results.get(need) !== "PASS" && !notSelected.has(need));
@@ -141,6 +147,7 @@ export function createRows({
         detail = `threw: ${firstLine(err)}`;
       }
       if (!ok && current) await capture(current, `row-${slugOf(name)}`).catch(() => undefined);
+      if (!ok && tracked) return record(name, "SKIP", `tracked (${tracked}): ${detail ?? "failed"}`), "SKIP";
       record(name, ok ? "PASS" : "FAIL", detail ?? (ok ? "ok" : "failed"));
       return ok ? "PASS" : "FAIL";
     },

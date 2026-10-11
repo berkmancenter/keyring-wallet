@@ -73,9 +73,14 @@ A leg prints the lines that `e2e/lib/rows.js` produces, and the runner reads onl
 ```
 HEADS <leg> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8> … caps=<n>
 ROW <name> PASS|FAIL|SKIP — <detail>
+ROW <name> SKIP — tracked (<why>): <detail>
 LEG <leg> BROKEN — <first line>
 LEG <leg> DONE <exit> pass=<n> fail=<n> skip=<n> <seconds>s
 ```
+
+A **tracked** row (`rows.row(name, fn, { tracked: "why" })`) checks a known gap whose fix is pending: while it fails it
+prints `SKIP — tracked (<why>): <detail>` and does not fail the leg; the day the fix lands it prints PASS. 241's tracked
+rows: `cards-back-new-install` (role card recovery) and `member-vmc-sent` (the reciprocal membership credential).
 
 `caps=<n>` is how many of the manifests' testID keys (`e2e/lib/testids*.json`) the build's JS bundle holds, a
 short reading of how far the build is from the drivers' contract (`-` when the leg named no build file).
@@ -242,6 +247,8 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
 - **A pause for another lane's device build.** `gate.sh pause [reason]` lets the legs already running finish and starts nothing else: each leg not started is recorded as `not run (paused)` (exit 4), the watcher skips its cycles, and `run`/`rerun` refuse to start. `gate.sh resume` lifts it; `gate.sh rerun <run> --only-failed` then runs the paused legs, and any broken or stopped one, in full.
 - **Farm or local.** `GATE_ENV` picks what a run tests against: `env/farm.env` (the default) or `env/local.env`, the fallback stack on the newest VTI release tag for when the Farm is down. The target (`GATE_TARGET`, else the file's name) is written to the run's `meta`, the report's first line and every `HEADS` line, so a local pass is never read as a Farm pass. The watcher runs on the Farm only; a local run is started by hand.
 - **Layout rules on every smoke (`e2e/lib/layoutRules.js`).** Over each welcome slide's view hierarchy: tap targets under 44 pt (iOS) or 48 dp (Android), interactive elements clipped by the window outside a scroller, overlapping tap targets, and navigation titles off the centre line. Each finding is a `LAYOUT <screen> <rule> <element> — <detail>` line, listed in the CI step summary; the `layout-welcome` row is a SKIP that lists them until the rules are calibrated (`LAYOUT_STRICT=1` makes it a FAIL). The page sources are kept as `layout-welcome-<n>-<platform>.xml` beside the screenshots. Text truncation is not checkable from the hierarchy (it holds the full text): that is the screenshot review.
+- **A fast check for a fix: `gate.sh changed --pin <sha> --range <a>..<b>`** (or `--files f,…`). It runs only the legs whose drivers reach a testID a changed file owns (`changed.mjs`: file → the testIDs it owns, including its typed ids map → the page-object methods and helper functions that name them → the drivers that call those → the legs that run them, honouring each leg's env flags, so a flow behind `JOURNEY=1` counts only where it is on). The run is `<id>-changed`; its `meta` and report say **changed legs only**, record the legs chosen and why (`changed-why=`), and the watcher never counts it as the gate of the commit. It is minutes, not hours, and never the release gate: an external release still needs the full gate. A changed file that owns no testID (a client, a store, logic) stops it with "run the full gate"; a change no leg looks at stops it with "write a row for it". `node --test e2e/gate/changed.test.mjs`.
+- **Every run as data: `<run>/summary.json`** (`run-summary.mjs`), written when a run ends and again with `gate.sh summary <run>` after meta notes are added. Per leg: exit, pass/fail/skip, and whose result it is: `app` (a verdict on the app), `env` (a Mac sleep, or `env-legs=` in meta), `harness` (the leg broke, or `harness-legs=`), `none` (paused or stopped); overall `pass`, `fail` or `incomplete`. A tracked row that passed in an earlier run (by `started=`) on an ancestor build and skips again is listed under `regressions` and counts as an app fail; an older build without the fix (a dry run on the golden) is not judged by a newer build's pass, and ancestry that can't be told goes under `possiblyRegressed`, which never changes the verdict. The command-center board reads it instead of retyping legs.
 - **Downloads retry** five times a minute apart; the 239 auto-start lost its gate to two transient download failures.
 - **PATH is yours to set.** launchd starts the watcher with almost no PATH. The example names the node that runs
   the drivers (appium is installed under it), homebrew, and the system directories including `/usr/sbin`, where

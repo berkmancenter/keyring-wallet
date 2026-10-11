@@ -44,7 +44,7 @@ const PNM = process.env.PNM_BIN || path.join(os.homedir(), "vti-stack/bin/pnm");
 // admin DID, and the mediator keeps one live socket per DID. See the script.
 const PNM_LOCKED = fileURLToPath(new URL("../../scripts/openvtc/pnm-locked", import.meta.url));
 /** A person's own agents: never touched by a runner. */
-const REFUSED = new Set(["alice", "farm"]);
+const REFUSED = new Set(["alice", "alberto3", "alberto-push-vta-2", "farm"]);
 
 // A dropped transport, not an answer: the mediator keeps one socket per DID, so
 // a pnm call on this slug from outside the lock (another machine, a bare pnm)
@@ -75,6 +75,12 @@ function pnm(slug, pnmHome, args) {
 }
 
 /** The ACL as full entries: subject, createdBy, createdAt, label. */
+/** Delete one ACL entry on a runner, through pnm-locked (the lock, the retries, no stdin). Never a person's agent. */
+export function deleteAcl({ slug, pnmHome, subject }) {
+  if (REFUSED.has(slug)) throw new Error(`[acl] refusing to change "${slug}": a person's own agent, not a runner's`);
+  return pnm(slug, pnmHome, ["acl", "delete", subject]);
+}
+
 export function listAcl({ slug, pnmHome }) {
   if (REFUSED.has(slug)) throw new Error(`[acl] refusing to read "${slug}": a person's own agent, not a runner's`);
   const out = pnm(slug, pnmHome, ["acl", "list", "--json"]);
