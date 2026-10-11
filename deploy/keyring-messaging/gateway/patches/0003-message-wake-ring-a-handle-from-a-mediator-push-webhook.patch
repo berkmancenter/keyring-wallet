@@ -1,0 +1,732 @@
+From 6111f3f75a7dca3be58abe0128b6f9222d0c577f Mon Sep 17 00:00:00 2001
+From: Alberto L <alberto_leon@seas.harvard.edu>
+Date: Sun, 11 Oct 2026 11:33:21 +0100
+Subject: [PATCH] feat(message-wake): ring a handle from a mediator's push
+ webhook
+
+A mediator built on didcomm-mediator-credo posts {connectionId, fcmToken}
+to one URL for every message it queues for an absent recipient. With
+GATEWAY_MEDIATOR_WEBHOOK_SECRET set, POST /mediator-webhook/{secret}
+treats that token as a wake handle and wakes it as the gateway's own
+trigger DID, so only a handle whose controller allowlisted the gateway
+is rung. One wake per handle per GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS
+(default 30). Each message wake is interactive and carries its own
+collapse id (keyring-msg-<random>), so it does not replace an earlier
+notification; approval wakes keep the configured one.
+
+Signed-off-by: Alberto L <alberto_leon@seas.harvard.edu>
+---
+ README.md             |  31 +++++
+ src/api.rs            |   1 +
+ src/lib.rs            |   1 +
+ src/main.rs           |  27 ++++-
+ src/message_wake.rs   | 213 ++++++++++++++++++++++++++++++++++
+ src/sender.rs         |  35 +++++-
+ src/types.rs          |   4 +
+ tests/message_wake.rs | 260 ++++++++++++++++++++++++++++++++++++++++++
+ 8 files changed, 567 insertions(+), 5 deletions(-)
+ create mode 100644 src/message_wake.rs
+ create mode 100644 tests/message_wake.rs
+
+diff --git a/README.md b/README.md
+index ff5c046..5aeca1f 100644
+--- a/README.md
++++ b/README.md
+@@ -381,6 +381,37 @@ every wake means the push services see a wake, not what kind it was.
+ Keys, the collapse id and the channel id must be `[A-Za-z0-9._-]`; an invalid
+ value stops startup.
+ 
++## Message wakes from a mediator (optional)
++
++A DIDComm mediator built on
++[didcomm-mediator-credo](https://github.com/openwallet-foundation/didcomm-mediator-credo)
++can POST `{"connectionId": …, "fcmToken": …}` to one URL
++(`PUSH_NOTIFICATIONS__WEBHOOK_URL`) for every message it queues for a
++recipient that is not connected. A device that wants those messages to ring it
++hands the mediator its **handle** as the RFC 0734 `set-device-info` token (never
++a push-service token), and asks its VTA to add the gateway's own DID to the
++handle's allowlist (`suggestedTriggers`).
++
++| Env | Meaning |
++| --- | --- |
++| `GATEWAY_MEDIATOR_WEBHOOK_SECRET` | Turns the route on. At least 32 characters of `[A-Za-z0-9_-]`; the mediator's URL is `https://<gateway>/mediator-webhook/<secret>` |
++| `GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS` | At most one message wake per handle per this many seconds (default 30) |
++
++The gateway then wakes the handle as **its own** trigger: a handle whose
++controller did not allowlist the gateway's DID is never rung this way, and a
++wrong secret answers `404`. Each message wake is interactive (shown, under the
++visible alert mode) and carries its own collapse id, `keyring-msg-<random>`,
++so a later message does not replace an earlier notification. That prefix tells
++the app, on a tap, that the wake was for a message; it also tells the push
++service that this wake was for a message rather than an approval.
++
++The answer is always `200` with a `status` (`delivered`, `ignored` for a
++missing token, `unknownHandle`, `notAllowed`, `rateLimited`,
++`transientFailure`, `tokenUnregistered`), except `404` for a wrong secret,
++`400` for a body that is not JSON, and `503` when the gateway has no DID. The
++secret is in the request path, so keep HTTP request logging at a level that
++does not print paths in production.
++
+ ## Testing Web Push end-to-end
+ 
+ The wake loop spans the gateway, a VTA + mediator, and the browser plugin. A
+diff --git a/src/api.rs b/src/api.rs
+index ec82708..f920c93 100644
+--- a/src/api.rs
++++ b/src/api.rs
+@@ -562,6 +562,7 @@ async fn handle_wake(
+         mediator: req.mediator,
+         count: req.count,
+         urgency: req.urgency,
++        collapse_id: None,
+     };
+     // Bound the send even if a sender's own client has no timeout.
+     let outcome =
+diff --git a/src/lib.rs b/src/lib.rs
+index bcaa3cc..44bd980 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -9,6 +9,7 @@ pub mod egress;
+ pub mod identity;
+ pub mod intake;
+ pub mod limits;
++pub mod message_wake;
+ pub mod metrics;
+ pub mod proof;
+ pub mod replay;
+diff --git a/src/main.rs b/src/main.rs
+index a9eb4f2..7f77289 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -32,6 +32,7 @@ use vti_push_gateway::didcomm;
+ use vti_push_gateway::egress::{EgressPolicy, ENV_APNS_TOPICS};
+ use vti_push_gateway::identity::GatewayIdentity;
+ use vti_push_gateway::limits::Limits;
++use vti_push_gateway::message_wake;
+ use vti_push_gateway::secretfile;
+ use vti_push_gateway::sender::{
+     generate_vapid_keypair, ApnsSender, EchoSender, FcmSender, PushSender, VisibleAlert,
+@@ -459,7 +460,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+         .finish()
+         .ok_or("invalid per-IP HTTP rate-limit configuration")?;
+ 
+-    let app = api::router(state)
++    // Message wakes from a mediator's push webhook: off unless a secret is set.
++    let mut app = api::router(state.clone());
++    if let Some(secret) = std::env::var(message_wake::ENV_WEBHOOK_SECRET)
++        .ok()
++        .map(|s| s.trim().to_string())
++        .filter(|s| !s.is_empty())
++    {
++        let interval = Duration::from_secs(env_num(
++            message_wake::ENV_MIN_INTERVAL_SECS,
++            message_wake::DEFAULT_MIN_INTERVAL.as_secs(),
++        ));
++        let wake = message_wake::MessageWake::new(secret, interval)?;
++        if state.gateway_did.is_none() {
++            tracing::warn!(
++                "mediator webhook enabled but the gateway has no DID: every message wake \
++                 is refused"
++            );
++        }
++        tracing::warn!(
++            min_interval_secs = interval.as_secs(),
++            "mediator webhook up (POST /mediator-webhook/<secret>)"
++        );
++        app = app.merge(message_wake::router(state, Arc::new(wake)));
++    }
++    let app = app
+         .layer(GovernorLayer::new(Arc::new(governor)))
+         .layer(tower_http::trace::TraceLayer::new_for_http());
+     let listener = tokio::net::TcpListener::bind(&bind).await?;
+diff --git a/src/message_wake.rs b/src/message_wake.rs
+new file mode 100644
+index 0000000..472ecca
+--- /dev/null
++++ b/src/message_wake.rs
+@@ -0,0 +1,213 @@
++//! Message wakes: a DIDComm mediator's push webhook rings a handle's device.
++//!
++//! A mediator built on `didcomm-mediator-credo` can POST
++//! `{"connectionId": …, "fcmToken": …}` to one configured URL for every message
++//! it queues for a recipient it could not deliver to directly. The "token" is
++//! whatever the recipient handed the mediator in RFC 0734 `set-device-info`;
++//! a recipient using this gateway hands it its opaque wake **handle**, never a
++//! push-service token.
++//!
++//! The webhook is not a Trust Task and carries no proof, so it is gated three
++//! ways:
++//! - the URL holds a shared secret (`GATEWAY_MEDIATOR_WEBHOOK_SECRET`); a wrong
++//!   secret answers `404` as if the route did not exist;
++//! - the gateway wakes the handle as **its own** trigger DID: the handle's
++//!   controller must have put the gateway's DID on the allowlist (the device
++//!   asks for it in `suggestedTriggers`), so a handle whose controller did not
++//!   opt in is never rung this way;
++//! - at most one wake per handle per interval
++//!   (`GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS`, default 30), so a burst of
++//!   messages rings once.
++//!
++//! Each message wake is interactive (shown) and carries its own collapse id
++//! (`keyring-msg-…`), so it does not replace an earlier notification, and the
++//! app can tell a message wake from an approval wake when it is tapped.
++
++use std::collections::HashMap;
++use std::sync::{Arc, Mutex};
++use std::time::{Duration, Instant};
++
++use axum::{
++    body::Bytes,
++    extract::{DefaultBodyLimit, Path, State},
++    http::StatusCode,
++    response::{IntoResponse, Response},
++    routing::post,
++    Json, Router,
++};
++use serde::Deserialize;
++use serde_json::json;
++use uuid::Uuid;
++
++use crate::api::{AppState, WAKE_SEND_TIMEOUT};
++use crate::sender::{self, SendOutcome};
++use crate::store::WakeAuthz;
++use crate::types::{Urgency, WakePayload};
++
++/// Env var holding the webhook path secret; the route is off when unset.
++pub const ENV_WEBHOOK_SECRET: &str = "GATEWAY_MEDIATOR_WEBHOOK_SECRET";
++/// Env var setting the minimum seconds between two message wakes of one handle.
++pub const ENV_MIN_INTERVAL_SECS: &str = "GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS";
++/// Default minimum interval between two message wakes of one handle.
++pub const DEFAULT_MIN_INTERVAL: Duration = Duration::from_secs(30);
++/// Prefix of every message wake's collapse id.
++pub const COLLAPSE_PREFIX: &str = "keyring-msg-";
++
++/// The mediator's body is two short strings; refuse anything larger.
++const MAX_BODY_BYTES: usize = 2 * 1024;
++/// Shortest accepted secret.
++const MIN_SECRET_LEN: usize = 32;
++/// Above this many remembered handles, forget the ones outside the interval.
++const PRUNE_ABOVE: usize = 10_000;
++
++/// Message-wake configuration plus the per-handle rate-limit memory.
++pub struct MessageWake {
++    secret: String,
++    min_interval: Duration,
++    last_wake: Mutex<HashMap<String, Instant>>,
++}
++
++impl MessageWake {
++    /// Validate the operator's configuration: the secret is at least 32
++    /// characters of `[A-Za-z0-9_-]` (it sits in a URL path).
++    pub fn new(secret: String, min_interval: Duration) -> Result<Self, String> {
++        if secret.len() < MIN_SECRET_LEN
++            || !secret
++                .bytes()
++                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
++        {
++            return Err(format!(
++                "{ENV_WEBHOOK_SECRET} must be at least {MIN_SECRET_LEN} characters of [A-Za-z0-9_-]"
++            ));
++        }
++        Ok(Self {
++            secret,
++            min_interval,
++            last_wake: Mutex::new(HashMap::new()),
++        })
++    }
++
++    /// Claim this handle's next wake slot: `false` if it was woken within the
++    /// interval. Recorded before the send, so concurrent posts ring once.
++    fn claim(&self, handle: &str, now: Instant) -> bool {
++        let mut last = self.last_wake.lock().unwrap();
++        if last
++            .get(handle)
++            .is_some_and(|t| now.duration_since(*t) < self.min_interval)
++        {
++            return false;
++        }
++        if last.len() >= PRUNE_ABOVE {
++            let interval = self.min_interval;
++            last.retain(|_, t| now.duration_since(*t) < interval);
++        }
++        last.insert(handle.to_string(), now);
++        true
++    }
++}
++
++#[derive(Clone)]
++struct Ctx {
++    state: AppState,
++    wake: Arc<MessageWake>,
++}
++
++/// The mediator webhook body (`didcomm-mediator-credo` `sendWebhookNotification`).
++#[derive(Deserialize)]
++#[serde(rename_all = "camelCase")]
++struct WebhookBody {
++    #[serde(default)]
++    fcm_token: Option<String>,
++}
++
++/// `POST /mediator-webhook/{secret}`.
++pub fn router(state: AppState, wake: Arc<MessageWake>) -> Router {
++    Router::new()
++        .route("/mediator-webhook/{secret}", post(webhook))
++        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
++        .with_state(Ctx { state, wake })
++}
++
++fn status(s: &str) -> Response {
++    (StatusCode::OK, Json(json!({ "status": s }))).into_response()
++}
++
++/// Compare without an early exit, so the response time does not reveal a
++/// correct prefix of the secret.
++fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
++    if a.len() != b.len() {
++        return false;
++    }
++    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
++}
++
++async fn webhook(State(ctx): State<Ctx>, Path(secret): Path<String>, body: Bytes) -> Response {
++    if !constant_time_eq(secret.as_bytes(), ctx.wake.secret.as_bytes()) {
++        return StatusCode::NOT_FOUND.into_response();
++    }
++    // The mediator posts for every queued message, with a null token when the
++    // recipient never sent set-device-info: nothing to ring.
++    let Ok(body) = serde_json::from_slice::<WebhookBody>(&body) else {
++        return StatusCode::BAD_REQUEST.into_response();
++    };
++    let Some(handle) = body.fcm_token.filter(|h| !h.is_empty()) else {
++        return status("ignored");
++    };
++    let Some(gateway_did) = ctx.state.gateway_did.as_deref() else {
++        return (
++            StatusCode::SERVICE_UNAVAILABLE,
++            Json(json!({ "status": "noGatewayIdentity" })),
++        )
++            .into_response();
++    };
++    let registration = match ctx.state.store.authorize_wake(&handle, gateway_did) {
++        WakeAuthz::Allowed(reg) => reg,
++        WakeAuthz::UnknownHandle => {
++            ctx.state.metrics.inc_wake_unknown_handle();
++            return status("unknownHandle");
++        }
++        WakeAuthz::NotAllowed => {
++            ctx.state.metrics.inc_wake_not_allowed();
++            return status("notAllowed");
++        }
++    };
++    if !ctx.wake.claim(&handle, Instant::now()) {
++        return status("rateLimited");
++    }
++    let Some(s) = sender::select(&ctx.state.senders, &registration) else {
++        return status("noSender");
++    };
++    let payload = WakePayload {
++        v: 1,
++        mediator: None,
++        count: None,
++        urgency: Some(Urgency::Interactive),
++        collapse_id: Some(format!("{COLLAPSE_PREFIX}{}", Uuid::new_v4().simple())),
++    };
++    let outcome =
++        match tokio::time::timeout(WAKE_SEND_TIMEOUT, s.send(&registration, &payload)).await {
++            Ok(outcome) => outcome,
++            Err(_) => {
++                tracing::warn!(
++                    platform = registration.platform(),
++                    "message wake exceeded the wake timeout"
++                );
++                SendOutcome::TransientFailure
++            }
++        };
++    match outcome {
++        SendOutcome::Delivered => {
++            ctx.state.metrics.inc_wake_delivered();
++            status("delivered")
++        }
++        SendOutcome::TransientFailure => {
++            ctx.state.metrics.inc_wake_transient_failure();
++            status("transientFailure")
++        }
++        SendOutcome::PermanentlyUnregistered => {
++            ctx.state.store.remove(&handle);
++            ctx.state.metrics.inc_wake_token_unregistered();
++            status("tokenUnregistered")
++        }
++    }
++}
+diff --git a/src/sender.rs b/src/sender.rs
+index c8bf9dd..b33db69 100644
+--- a/src/sender.rs
++++ b/src/sender.rs
+@@ -147,6 +147,13 @@ fn visible_for<'a>(
+     alert.filter(|_| matches!(payload.urgency, Some(Urgency::Interactive)))
+ }
+ 
++/// The collapse id for a shown wake: the wake's own when it carries one (a
++/// message wake, so it does not replace an earlier notification), else the
++/// configured one.
++fn collapse_for<'a>(alert: &'a VisibleAlert, payload: &'a WakePayload) -> &'a str {
++    payload.collapse_id.as_deref().unwrap_or(&alert.collapse_id)
++}
++
+ /// The APNs request for a wake: its push-type / priority / collapse headers and
+ /// its JSON body. The wake's hint fields ride as custom keys (binding §2).
+ fn apns_request(
+@@ -186,7 +193,7 @@ fn apns_request(
+                 serde_json::json!({
+                     "alert": serde_json::Value::Object(shown),
+                     "sound": "default",
+-                    "thread-id": a.collapse_id,
++                    "thread-id": collapse_for(a, payload),
+                     "content-available": 1,
+                 }),
+             );
+@@ -194,7 +201,7 @@ fn apns_request(
+                 vec![
+                     ("apns-push-type", "alert".to_string()),
+                     ("apns-priority", "10".to_string()),
+-                    ("apns-collapse-id", a.collapse_id.clone()),
++                    ("apns-collapse-id", collapse_for(a, payload).to_string()),
+                 ],
+                 serde_json::Value::Object(body),
+             )
+@@ -239,8 +246,8 @@ fn fcm_message(
+         if let Some(c) = &a.android_channel_id {
+             notification.insert("channel_id".to_string(), c.clone().into());
+         }
+-        notification.insert("tag".to_string(), a.collapse_id.clone().into());
+-        android.insert("collapse_key".to_string(), a.collapse_id.clone().into());
++        notification.insert("tag".to_string(), collapse_for(a, payload).into());
++        android.insert("collapse_key".to_string(), collapse_for(a, payload).into());
+         android.insert(
+             "notification".to_string(),
+             serde_json::Value::Object(notification),
+@@ -1246,6 +1253,7 @@ JIdgVjmcJ6J16mUbDYosCYI=
+             mediator: None,
+             count: None,
+             urgency: None,
++            collapse_id: None,
+         }
+     }
+ 
+@@ -1413,6 +1421,7 @@ JIdgVjmcJ6J16mUbDYosCYI=
+             mediator: Some("did:web:mediator.example".into()),
+             count: None,
+             urgency: Some(Urgency::Interactive),
++            collapse_id: None,
+         }
+     }
+ 
+@@ -1523,6 +1532,24 @@ JIdgVjmcJ6J16mUbDYosCYI=
+         assert!(m["message"].get("notification").is_none());
+     }
+ 
++    #[test]
++    fn a_wake_with_its_own_collapse_id_uses_it_on_both_platforms() {
++        let mut p = interactive();
++        p.collapse_id = Some("keyring-msg-1".into());
++        let (headers, body) = apns_request(&p, Some(&alert()));
++        assert_eq!(header(&headers, "apns-collapse-id"), Some("keyring-msg-1"));
++        assert_eq!(body["aps"]["thread-id"], "keyring-msg-1");
++        let m = fcm_message("tok", &p, Some(&alert()));
++        assert_eq!(m["message"]["android"]["collapse_key"], "keyring-msg-1");
++        assert_eq!(
++            m["message"]["android"]["notification"]["tag"],
++            "keyring-msg-1"
++        );
++        // Gateway-side only: never in the payload the device receives.
++        assert!(body.get("collapse_id").is_none());
++        assert!(m["message"]["data"].get("collapse_id").is_none());
++    }
++
+     #[test]
+     fn fcm_background_wake_stays_data_only_even_with_the_mode() {
+         let mut p = interactive();
+diff --git a/src/types.rs b/src/types.rs
+index bef4c29..4c8532d 100644
+--- a/src/types.rs
++++ b/src/types.rs
+@@ -219,6 +219,10 @@ pub struct WakeRequest {
+     pub count: Option<u32>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub urgency: Option<Urgency>,
++    /// Gateway-side only, never sent: a collapse id for this wake's visible
++    /// alert in place of the configured one (message wakes).
++    #[serde(skip)]
++    pub collapse_id: Option<String>,
+ }
+ 
+ impl WakeRequest {
+diff --git a/tests/message_wake.rs b/tests/message_wake.rs
+new file mode 100644
+index 0000000..afe0de4
+--- /dev/null
++++ b/tests/message_wake.rs
+@@ -0,0 +1,260 @@
++//! The mediator webhook: a message queued at a mediator rings the handle's
++//! device, as the gateway's own trigger, once per interval, each with its own
++//! collapse id.
++
++use std::sync::{Arc, Mutex};
++use std::time::Duration;
++
++use affinidi_did_resolver_cache_sdk::{config::DIDCacheConfigBuilder, DIDCacheClient};
++use axum::body::Body;
++use axum::http::{Request, StatusCode};
++use axum::Router;
++use http_body_util::BodyExt;
++use serde_json::{json, Value};
++use tower::ServiceExt;
++
++use vti_push_gateway::api::AppState;
++use vti_push_gateway::egress::EgressPolicy;
++use vti_push_gateway::limits::Limits;
++use vti_push_gateway::message_wake::{self, MessageWake};
++use vti_push_gateway::proof::ProofVerifier;
++use vti_push_gateway::sender::{PushSender, SendOutcome};
++use vti_push_gateway::store::{Store, WakeAuthz};
++use vti_push_gateway::types::{PushRegistration, Urgency, WakePayload, WakeTriggerPolicy};
++
++const GATEWAY_DID: &str = "did:webvh:scid:gateway.example";
++const VTA_DID: &str = "did:webvh:scid:vta.example";
++const SECRET: &str = "s3cret-s3cret-s3cret-s3cret-s3cret-0123";
++const HANDLE: &str = "handle-1";
++
++/// Records every wake it is asked to send; delivers, or reports a dead token.
++struct Recording {
++    sent: Arc<Mutex<Vec<WakePayload>>>,
++    dead: bool,
++}
++
++#[async_trait::async_trait]
++impl PushSender for Recording {
++    fn handles(&self, _registration: &PushRegistration) -> bool {
++        true
++    }
++    async fn send(&self, _registration: &PushRegistration, payload: &WakePayload) -> SendOutcome {
++        self.sent.lock().unwrap().push(payload.clone());
++        if self.dead {
++            SendOutcome::PermanentlyUnregistered
++        } else {
++            SendOutcome::Delivered
++        }
++    }
++}
++
++struct Setup {
++    app: Router,
++    store: Arc<Store>,
++    sent: Arc<Mutex<Vec<WakePayload>>>,
++}
++
++/// A gateway with one handle whose controller allowlisted `triggers`.
++async fn setup(
++    triggers: &[&str],
++    gateway_did: Option<&str>,
++    interval: Duration,
++    dead: bool,
++) -> Setup {
++    let store = Arc::new(Store::new());
++    store
++        .insert(
++            HANDLE.into(),
++            PushRegistration::Fcm {
++                token: "fcm-token".into(),
++            },
++            VTA_DID.into(),
++        )
++        .unwrap();
++    store.provision(
++        HANDLE,
++        VTA_DID,
++        WakeTriggerPolicy {
++            allowed_triggers: triggers.iter().map(|d| d.to_string()).collect(),
++        },
++    );
++    let sent = Arc::new(Mutex::new(Vec::new()));
++    let senders: Vec<Box<dyn PushSender>> = vec![Box::new(Recording {
++        sent: sent.clone(),
++        dead,
++    })];
++    let state = AppState {
++        store: store.clone(),
++        senders: Arc::new(senders),
++        gateway_addr: "https://gw.test".into(),
++        metrics: Arc::new(vti_push_gateway::metrics::Metrics::default()),
++        egress: Arc::new(EgressPolicy::default()),
++        limits: Arc::new(Limits::permissive()),
++        replay: Arc::new(vti_push_gateway::replay::ReplayRecord::default()),
++        controllers: Arc::new(vti_push_gateway::controllers::ControllerPolicy::Open),
++        proofs: ProofVerifier::new(Arc::new(
++            DIDCacheClient::new(DIDCacheConfigBuilder::default().build())
++                .await
++                .expect("resolver"),
++        )),
++        gateway_did: gateway_did.map(String::from),
++    };
++    let wake = MessageWake::new(SECRET.into(), interval).unwrap();
++    Setup {
++        app: message_wake::router(state, Arc::new(wake)),
++        store,
++        sent,
++    }
++}
++
++async fn allowed() -> Setup {
++    setup(
++        &[VTA_DID, GATEWAY_DID],
++        Some(GATEWAY_DID),
++        Duration::from_secs(30),
++        false,
++    )
++    .await
++}
++
++async fn post(app: &Router, secret: &str, body: Value) -> (StatusCode, Value) {
++    let req = Request::post(format!("/mediator-webhook/{secret}"))
++        .header("content-type", "application/json")
++        .body(Body::from(body.to_string()))
++        .unwrap();
++    let resp = app.clone().oneshot(req).await.unwrap();
++    let status = resp.status();
++    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
++    (
++        status,
++        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
++    )
++}
++
++fn webhook(token: Option<&str>) -> Value {
++    json!({ "connectionId": "conn-1", "fcmToken": token })
++}
++
++#[tokio::test]
++async fn a_wrong_secret_is_not_found_and_sends_nothing() {
++    let s = allowed().await;
++    let (status, _) = post(&s.app, "wrong", webhook(Some(HANDLE))).await;
++    assert_eq!(status, StatusCode::NOT_FOUND);
++    assert!(s.sent.lock().unwrap().is_empty());
++}
++
++#[tokio::test]
++async fn no_device_token_is_ignored() {
++    let s = allowed().await;
++    for body in [
++        webhook(None),
++        webhook(Some("")),
++        json!({ "connectionId": "c" }),
++    ] {
++        let (status, v) = post(&s.app, SECRET, body).await;
++        assert_eq!(status, StatusCode::OK);
++        assert_eq!(v["status"], "ignored");
++    }
++    assert!(s.sent.lock().unwrap().is_empty());
++}
++
++#[tokio::test]
++async fn an_unknown_handle_is_not_rung() {
++    let s = allowed().await;
++    let (_, v) = post(&s.app, SECRET, webhook(Some("no-such-handle"))).await;
++    assert_eq!(v["status"], "unknownHandle");
++    assert!(s.sent.lock().unwrap().is_empty());
++}
++
++#[tokio::test]
++async fn a_handle_whose_controller_did_not_allow_the_gateway_is_not_rung() {
++    let s = setup(
++        &[VTA_DID],
++        Some(GATEWAY_DID),
++        Duration::from_secs(30),
++        false,
++    )
++    .await;
++    let (_, v) = post(&s.app, SECRET, webhook(Some(HANDLE))).await;
++    assert_eq!(v["status"], "notAllowed");
++    assert!(s.sent.lock().unwrap().is_empty());
++}
++
++#[tokio::test]
++async fn a_gateway_without_a_did_refuses() {
++    let s = setup(&[GATEWAY_DID], None, Duration::from_secs(30), false).await;
++    let (status, _) = post(&s.app, SECRET, webhook(Some(HANDLE))).await;
++    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
++    assert!(s.sent.lock().unwrap().is_empty());
++}
++
++#[tokio::test]
++async fn an_allowed_handle_gets_a_shown_wake_with_its_own_collapse_id() {
++    let s = allowed().await;
++    let (status, v) = post(&s.app, SECRET, webhook(Some(HANDLE))).await;
++    assert_eq!(status, StatusCode::OK);
++    assert_eq!(v["status"], "delivered");
++    let sent = s.sent.lock().unwrap();
++    assert_eq!(sent.len(), 1);
++    assert!(matches!(sent[0].urgency, Some(Urgency::Interactive)));
++    assert!(sent[0].mediator.is_none() && sent[0].count.is_none());
++    let collapse = sent[0].collapse_id.as_deref().unwrap();
++    assert!(collapse.starts_with(message_wake::COLLAPSE_PREFIX));
++    assert!(
++        collapse.len() <= 64,
++        "APNs caps the collapse id at 64 bytes"
++    );
++}
++
++#[tokio::test]
++async fn a_burst_rings_once_per_interval() {
++    let s = allowed().await;
++    assert_eq!(
++        post(&s.app, SECRET, webhook(Some(HANDLE))).await.1["status"],
++        "delivered"
++    );
++    assert_eq!(
++        post(&s.app, SECRET, webhook(Some(HANDLE))).await.1["status"],
++        "rateLimited"
++    );
++    assert_eq!(s.sent.lock().unwrap().len(), 1);
++}
++
++#[tokio::test]
++async fn wakes_outside_the_interval_each_get_a_distinct_collapse_id() {
++    let s = setup(&[GATEWAY_DID], Some(GATEWAY_DID), Duration::ZERO, false).await;
++    for _ in 0..2 {
++        assert_eq!(
++            post(&s.app, SECRET, webhook(Some(HANDLE))).await.1["status"],
++            "delivered"
++        );
++    }
++    let sent = s.sent.lock().unwrap();
++    assert_eq!(sent.len(), 2);
++    assert_ne!(sent[0].collapse_id, sent[1].collapse_id);
++}
++
++#[tokio::test]
++async fn a_dead_token_drops_the_handle() {
++    let s = setup(
++        &[GATEWAY_DID],
++        Some(GATEWAY_DID),
++        Duration::from_secs(30),
++        true,
++    )
++    .await;
++    let (_, v) = post(&s.app, SECRET, webhook(Some(HANDLE))).await;
++    assert_eq!(v["status"], "tokenUnregistered");
++    assert!(matches!(
++        s.store.authorize_wake(HANDLE, GATEWAY_DID),
++        WakeAuthz::UnknownHandle
++    ));
++}
++
++#[test]
++fn a_short_or_unsafe_secret_is_refused() {
++    let t = Duration::from_secs(30);
++    assert!(MessageWake::new("short".into(), t).is_err());
++    assert!(MessageWake::new(format!("{}/x", "a".repeat(40)), t).is_err());
++    assert!(MessageWake::new("a".repeat(32), t).is_ok());
++}
+-- 
+2.50.1 (Apple Git-155)
+

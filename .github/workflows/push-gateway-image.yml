@@ -207,6 +207,40 @@ jobs:
           docker logs gwh 2>&1 | grep 'controller allowlist'
           docker rm -f gwh
 
+      - name: The image carries the patches (mediator webhook, patch 0003)
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+        run: |
+          # With a webhook secret set, the route answers a post with no device
+          # token as ignored, and a wrong secret as not found. An image without
+          # patch 0003 has no such route and answers 404 to both.
+          secret=ci-check-0123456789abcdefghijklmnopqrstuv
+          docker run -d --name gwm -p 8300:8300 \
+            -e GATEWAY_DEV_ECHO_SENDER=1 \
+            -e GATEWAY_MEDIATOR_WEBHOOK_SECRET="$secret" \
+            -e GATEWAY_ADDR=http://localhost:8300 \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8300/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8300/healthz
+
+          ok=$(curl -sS "http://localhost:8300/mediator-webhook/$secret" \
+            -H 'content-type: application/json' -d '{"connectionId":"c","fcmToken":null}')
+          echo "right secret, no token: $ok"
+          if [ "$(printf '%s' "$ok" | jq -r '.status // empty')" != ignored ]; then
+            echo "::error::the mediator webhook did not answer: the image lacks patch 0003"; docker logs gwm; exit 1
+          fi
+          wrong=$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:8300/mediator-webhook/wrong-secret" \
+            -H 'content-type: application/json' -d '{"connectionId":"c","fcmToken":"h"}')
+          echo "wrong secret: HTTP $wrong"
+          if [ "$wrong" != 404 ]; then
+            echo "::error::a wrong webhook secret was not answered 404"; docker logs gwm; exit 1
+          fi
+          docker logs gwm 2>&1 | grep 'mediator webhook up'
+          docker rm -f gwm
+
       - name: Save the image
         run: docker save -o vti-push-gateway.tar "${{ steps.pin.outputs.image }}"
 
