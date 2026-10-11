@@ -23,6 +23,9 @@ const LimitedTextInput = forwardRef<TextInput, LimitedTextInputProps>(
       },
       textInput: {
         ...Inputs.textInput,
+        // The touch target's minimum: the theme's padding left the R-Card
+        // fields at 42-43 pt (iOS layout check, 241).
+        minHeight: 44,
       },
       limitCounter: {
         color: TextTheme.normal.color,

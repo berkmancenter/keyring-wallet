@@ -180,6 +180,7 @@ exports[`NameWallet Screen LimitedInput and continue button are present 1`] = `
                       "borderWidth": 2,
                       "color": "#FFFFFF",
                       "fontSize": 16,
+                      "minHeight": 44,
                       "padding": 10,
                     },
                     false,

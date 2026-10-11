@@ -180,6 +180,7 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
                       "borderWidth": 2,
                       "color": "#FFFFFF",
                       "fontSize": 16,
+                      "minHeight": 44,
                       "padding": 10,
                     },
                     false,
