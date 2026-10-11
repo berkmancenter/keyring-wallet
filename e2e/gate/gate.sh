@@ -19,14 +19,14 @@ fi
 . "$(dirname "$0")/lib.sh"
 
 # Legs in the order they run on one platform, and which device each needs.
-LEGS_IOS="kk smoke-ios update-ios"
+LEGS_IOS="kk p2 smoke-ios update-ios"
 LEGS_ANDROID="p1 testreq agents waiting lostreq linkresume smoke-android devices update-android relaunch-android linkwait"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail"
 # iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
 # so they run first, with nothing beside them; the rest of iOS then runs beside Android.
-LEGS_IOS_ALONE="kk smoke-ios"
+LEGS_IOS_ALONE="kk p2 smoke-ios"
 # Mostly waiting (IN-135's slow cases, about 35 min) on the emulator, so it runs beside the iOS-alone legs, where the
 # emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
 LEGS_BESIDE_IOS_ALONE="linkwait"
