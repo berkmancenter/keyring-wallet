@@ -55,13 +55,15 @@ jobs:
           [ -n "$ref" ] || ref="$FARM_VTI_REF"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "artifact=pnm-linux-x86_64-${ref:0:12}" >> "$GITHUB_OUTPUT"
+          echo "features=${FEATURES//,/+}" >> "$GITHUB_OUTPUT"
 
       - name: Cached binary
         id: cache
         uses: actions/cache@v4
         with:
           path: out/pnm
-          key: pnm-linux-x86_64-${{ steps.name.outputs.ref }}-${{ env.FEATURES }}-rust${{ env.RUST_VERSION }}
+          # A cache key may not contain commas: the features list is joined with "+".
+          key: pnm-linux-x86_64-${{ steps.name.outputs.ref }}-${{ steps.name.outputs.features }}-rust${{ env.RUST_VERSION }}
 
       - name: Check out VTI at that commit
         if: steps.cache.outputs.cache-hit != 'true'
