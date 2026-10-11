@@ -29,6 +29,8 @@ import { holdForStatusCheck } from './vtiCardStatusRetry'
 import { deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCommunityNotices'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
+import { REQUEST_VMC } from './vtiMemberVmc'
+import { receiveRequestVmc, reciprocateIfOwed } from './vtiReciprocate'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
@@ -67,6 +69,7 @@ function ownedByInbox(message: { type?: unknown; body?: unknown }): boolean {
   return (
     type === REMOVAL_NOTICE ||
     type === SUBMIT_RECEIPT ||
+    type === REQUEST_VMC ||
     type.startsWith('https://trusttasks.org/spec/credential-exchange/issue/') ||
     Boolean(invitationOfferOfMessage(message as never))
   )
@@ -101,6 +104,11 @@ export async function keepForPersona(
         })
     })
   }
+  // The community asking for this member's acknowledgement again (vtc/members/request-vmc/0.1).
+  if (message.type === REQUEST_VMC) {
+    await receiveRequestVmc(agent, community, target, message)
+    return
+  }
   // A community admin console's Send: an offer of the invitation, redeemed
   // here for the invitation itself, which "I was invited" then joins with.
   const offer = invitationOfferOfMessage(message)
@@ -118,6 +126,9 @@ export async function keepForPersona(
     checkCard: deliveredCardCheck(agent),
   }).then(
     (got: VtiReceivedCredential[]) => {
+      // A membership card kept: the member's half of the pair goes back (vtc/members/vmc/0.1).
+      if (got.some((c) => c.kind === 'membership'))
+        void reciprocateIfOwed(agent, community, target, target.communityDid)
       if (got.length) {
         DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
           communityDid: target.communityDid,

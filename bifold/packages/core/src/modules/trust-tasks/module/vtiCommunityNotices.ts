@@ -29,6 +29,7 @@ import { verifyDocumentProof } from '@bifold/trust-tasks'
 import { DeviceEventEmitter } from 'react-native'
 
 import { didPrefix } from './didPrefix'
+import { REQUEST_VMC } from './vtiMemberVmc'
 import { recordStatus } from './joinSubmission'
 import type { VtiCommunityStore, VtiRemoval } from './VtiCommunityStore'
 
@@ -39,7 +40,12 @@ export const SUBMIT_RECEIPT = 'https://trusttasks.org/spec/vtc/join-requests/sub
 export const VTI_REMOVED_EVENT = 'vti:removed'
 
 /** How old a notice may be (openvtc operational.rs:51-52, 87-94): a removal notice travels up to 30 days. */
-const MAX_AGE_MS = { [REMOVAL_NOTICE]: 31 * 24 * 3600 * 1000, [SUBMIT_RECEIPT]: 24 * 3600 * 1000 }
+const MAX_AGE_MS = {
+  [REMOVAL_NOTICE]: 31 * 24 * 3600 * 1000,
+  [SUBMIT_RECEIPT]: 24 * 3600 * 1000,
+  // A community asking for the member's acknowledgement: a community answer (openvtc operational.rs:87-94).
+  [REQUEST_VMC]: 24 * 3600 * 1000,
+}
 /** How far ahead of this phone's clock an `issuedAt` may be. */
 const FUTURE_SKEW_MS = 5 * 60 * 1000
 
@@ -54,7 +60,7 @@ type Document = Record<string, unknown> & { payload?: Record<string, unknown> }
  */
 export function operationalDocument(
   message: { type?: unknown; from?: unknown; body?: unknown },
-  type: typeof REMOVAL_NOTICE | typeof SUBMIT_RECEIPT,
+  type: typeof REMOVAL_NOTICE | typeof SUBMIT_RECEIPT | typeof REQUEST_VMC,
   personaDid: string,
   now = Date.now()
 ): { doc: Document } | { reason: string } {

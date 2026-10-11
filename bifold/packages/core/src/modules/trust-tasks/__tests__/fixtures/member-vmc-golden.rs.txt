@@ -1,0 +1,46 @@
+// Prints a community grant and the member acknowledgement dtg-credentials 0.13
+// mints for it (the library VTI 49f5f1be verifies with), for Keyring's golden test.
+use chrono::TimeZone;
+use dtg_credentials::{DTGCredential, IssuerScope};
+use serde_json::{json, Value};
+
+fn main() {
+    let valid_from = chrono::Utc.with_ymd_and_hms(2026, 10, 11, 17, 0, 0).unwrap();
+    let valid_until = chrono::Utc.with_ymd_and_hms(2027, 10, 11, 17, 0, 0).unwrap();
+    let grant = DTGCredential::new_vmc(
+        "did:webvh:QmCommunity:vtc.example:test-vtc".to_string(),
+        "did:webvh:QmPersona:dids.example:column-hobby".to_string(),
+        valid_from,
+        Some(valid_until),
+        false,
+    )
+    .with_id("urn:uuid:grant-1");
+    let mut grant_wire: Value = serde_json::to_value(&grant).unwrap();
+    // The wire form a community actually sends: a status entry and a proof
+    // (the digest excludes the proof, keeps the status).
+    let o = grant_wire.as_object_mut().unwrap();
+    o.insert("credentialStatus".into(), json!({
+        "type": "BitstringStatusListEntry", "statusPurpose": "revocation",
+        "statusListIndex": "9", "statusListCredential": "https://vtc.example/v1/status-lists/revocation"
+    }));
+    o.insert("proof".into(), json!({"type": "DataIntegrityProof", "cryptosuite": "eddsa-jcs-2022",
+        "proofPurpose": "assertionMethod", "verificationMethod": "did:webvh:QmCommunity:vtc.example:test-vtc#key-0",
+        "created": "2026-10-11T17:00:00Z", "proofValue": "zFixture"}));
+    let ack_from = chrono::Utc.with_ymd_and_hms(2026, 10, 11, 18, 0, 0).unwrap();
+    let ack = DTGCredential::new_member_vmc_for(
+        &grant_wire,
+        "did:webvh:QmPersona:dids.example:column-hobby",
+        IssuerScope::Directed,
+        ack_from,
+        Some(valid_until),
+    )
+    .unwrap()
+    .with_id("urn:uuid:ack-1");
+    let digest = dtg_credentials::digest_multibase_json(&grant_wire).unwrap();
+    println!("{}", serde_json::to_string_pretty(&json!({
+        "library": "dtg-credentials 0.13.0",
+        "grant": grant_wire,
+        "digestMultibase": digest,
+        "acknowledgement": serde_json::to_value(&ack).unwrap(),
+    })).unwrap());
+}

@@ -28,6 +28,7 @@ import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } f
 import { selfRemoveRefusal, vtiAgent, VtiSentNoAnswer, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 import { recordCardRevocation } from './vtiCardStanding'
 import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
+import { reciprocateIfOwed } from './vtiReciprocate'
 import { receiveIssue, roleNameOf, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
 import { checkCredentialStatus } from './vtiStatusList'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
@@ -187,6 +188,9 @@ export async function joinCommunity(
       if (membership) {
         if (invitation) await deps.communityStore.saveInvitation({ ...invitation, status: 'used' })
         step('stored', membership.role)
+        // The member's half of the pair, closing the request (vtc/members/vmc/0.1).
+        // Best effort: never in the way of the membership itself.
+        void reciprocateIfOwed(deps.agent, deps.communityStore, persona, deps.communityDid)
       }
     }
   } finally {
