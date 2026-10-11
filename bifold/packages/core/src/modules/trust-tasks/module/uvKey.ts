@@ -56,7 +56,12 @@ export class UvKeyError extends Error {
 /** Cancelling is said in words, not a shared code (as ownerConfirm.ts reads it). */
 const CANCELLED = /cancel|negative button/i
 
-const ACCESS_CONTROL = Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET
+/**
+ * Read when a key is made or used, never at import: importing @bifold/core
+ * must not touch a native module (a test's keychain mock, or a build without
+ * the native side, has no constants to read).
+ */
+const accessControl = () => Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET
 
 const toHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 const fromHex = (hex: string) => new Uint8Array((hex.match(/../g) ?? []).map((pair) => parseInt(pair, 16)))
@@ -84,7 +89,7 @@ async function createUvKey(prompt: string): Promise<string> {
     const did = ed25519DidKey(ed25519.getPublicKey(secret))
     const stored = await Keychain.setGenericPassword(did, toHex(secret), {
       service: SECRET_SERVICE,
-      accessControl: ACCESS_CONTROL,
+      accessControl: accessControl(),
       // Never in a backup, never on another phone, gone with the passcode.
       accessible: Keychain.ACCESSIBLE.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
       // Android: the Keystore key that encrypts it needs the biometric.
@@ -130,7 +135,7 @@ export async function uvSign(bytes: Uint8Array, prompt: string): Promise<Uint8Ar
   try {
     item = await Keychain.getGenericPassword({
       service: SECRET_SERVICE,
-      accessControl: ACCESS_CONTROL,
+      accessControl: accessControl(),
       authenticationPrompt: { title: prompt },
     })
   } catch (error) {
