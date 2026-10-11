@@ -2,6 +2,7 @@ import {
   animatedComponents,
   AnimatedComponentsProvider,
   APPROVALS_LINK,
+  MESSAGES_LINK,
   AuthProvider,
   ContainerProvider,
   ErrorModal,
@@ -90,7 +91,13 @@ const App = () => {
   // module load there is no activity yet, so that tap was dropped and a cold
   // start landed on My Agent instead of Requests (232, Android). iOS reports its
   // taps through the app delegate and is unaffected.
-  useEffect(() => openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), () => openAppLink(APPROVALS_LINK)), [])
+  useEffect(
+    () =>
+      openApprovalsOnTap(Config.PUSH_GATEWAY_URL, messaging(), (kind) =>
+        openAppLink(kind === 'messages' ? MESSAGES_LINK : APPROVALS_LINK)
+      ),
+    []
+  )
 
   /**
    * Leaving a screen that failed. The boundary calls this before it renders

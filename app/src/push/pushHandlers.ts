@@ -37,20 +37,42 @@ export interface NotificationOpenSource {
 }
 
 /**
- * A tapped wake notification opens the waiting approvals, and only that: the
- * notification carries no content, so the approval is fetched after the wallet
- * is unlocked. Handles a tap on a running app and one that launched it (a cold
- * start). Registered only in a build that names a push gateway.
+ * The prefix of a message wake's collapse id. The gateway gives every wake for
+ * a message waiting at the mediator its own (`keyring-msg-<random>`, gateway
+ * patch 0003); approval wakes share the configured `keyring-wake`.
+ */
+export const MESSAGE_WAKE_PREFIX = 'keyring-msg-'
+
+export type TapKind = 'approvals' | 'messages'
+
+/**
+ * What a tapped wake was for, read from its collapse id as Firebase hands the
+ * tap over: `threadId` (the APNs `thread-id`) on iOS, `collapseKey` on
+ * Android. Anything else, including a wake from before message wakes, opens
+ * the approvals, as every wake did before.
+ */
+export function tapKind(message: unknown): TapKind {
+  const m = message as { threadId?: unknown; collapseKey?: unknown } | null
+  const id = typeof m?.threadId === 'string' ? m.threadId : m?.collapseKey
+  return typeof id === 'string' && id.startsWith(MESSAGE_WAKE_PREFIX) ? 'messages' : 'approvals'
+}
+
+/**
+ * A tapped wake notification opens the waiting approvals, or the Messages tab
+ * for a message wake ({@link tapKind}), and only that: the notification carries
+ * no content, so what waits is fetched after the wallet is unlocked. Handles a
+ * tap on a running app and one that launched it (a cold start). Registered
+ * only in a build that names a push gateway.
  */
 export function openApprovalsOnTap(
   gatewayUrl: string | undefined,
   source: NotificationOpenSource,
-  openLink: () => void
+  openLink: (kind: TapKind) => void
 ): (() => void) | undefined {
   if (!gatewayUrl?.trim()) return undefined
-  const unsubscribe = source.onNotificationOpenedApp(() => openLink())
+  const unsubscribe = source.onNotificationOpenedApp((message) => openLink(tapKind(message)))
   void source.getInitialNotification().then((message) => {
-    if (message) openLink()
+    if (message) openLink(tapKind(message))
   })
   return unsubscribe
 }

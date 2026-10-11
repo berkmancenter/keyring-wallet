@@ -12,6 +12,8 @@
 
 // The app's own link to the waiting approvals (bifold's APPROVALS_LINK).
 static NSString *const KeyringApprovalsLink = @"keyring://vta/approvals";
+// The app's own link to the Messages tab (bifold's MESSAGES_LINK).
+static NSString *const KeyringMessagesLink = @"keyring://messages";
 
 // Whether a notification is the push gateway's wake: an alert whose text is the
 // app's own KEYRING_WAKE string (Localizable.strings). It carries no content.
@@ -22,12 +24,23 @@ static BOOL KeyringIsWakeNotification(NSDictionary *userInfo)
   return [alert isKindOfClass:[NSDictionary class]] && [alert[@"loc-key"] isEqual:@"KEYRING_WAKE"];
 }
 
+// Where a tapped wake leads: the Messages tab for a message wake, whose thread
+// id is its own collapse id, starting keyring-msg- (gateway patch 0003); the
+// approvals for every other wake (pushHandlers.ts tapKind does the same on Android).
+static NSString *KeyringWakeLink(NSDictionary *userInfo)
+{
+  id aps = userInfo[@"aps"];
+  id thread = [aps isKindOfClass:[NSDictionary class]] ? aps[@"thread-id"] : nil;
+  BOOL message = [thread isKindOfClass:[NSString class]] && [thread hasPrefix:@"keyring-msg-"];
+  return message ? KeyringMessagesLink : KeyringApprovalsLink;
+}
+
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
 @end
 
 @implementation AppDelegate {
   // The tap that launched the app is delivered twice: in the launch options and
-  // as a notification response. The launch options open the approvals link, so
+  // as a notification response. The launch options open the wake's link, so
   // that one response is skipped.
   BOOL _launchedFromWakeTap;
 }
@@ -49,21 +62,22 @@ static BOOL KeyringIsWakeNotification(NSDictionary *userInfo)
   // excluded file’s resource values each time the application starts.
   [self excludeDotAFJFolderFromBackup];
 
-  // A tapped wake opens the waiting approvals. The gateway sends the wake
+  // A tapped wake opens the waiting approvals, or the Messages tab for a
+  // message wake (KeyringWakeLink). The gateway sends the wake
   // straight to APNs, not through Firebase, so Firebase messaging's tap
   // callbacks never fire for it (it only reports notifications that carry its
   // own message id). Set before Firebase messaging takes the delegate over at
   // the end of launch: it keeps this one and forwards to it.
   [UNUserNotificationCenter currentNotificationCenter].delegate = self;
 
-  // A tap that launched the app: hand React Native the approvals link as the
+  // A tap that launched the app: hand React Native the wake's link as the
   // launch URL, which the app's deep-link handling keeps until the wallet is
   // unlocked.
   NSDictionary *launchNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
   if ([launchNotification isKindOfClass:[NSDictionary class]] && KeyringIsWakeNotification(launchNotification) &&
       launchOptions[UIApplicationLaunchOptionsURLKey] == nil) {
     NSMutableDictionary *options = [launchOptions mutableCopy];
-    options[UIApplicationLaunchOptionsURLKey] = [NSURL URLWithString:KeyringApprovalsLink];
+    options[UIApplicationLaunchOptionsURLKey] = [NSURL URLWithString:KeyringWakeLink(launchNotification)];
     launchOptions = options;
     _launchedFromWakeTap = YES;
   }
@@ -83,7 +97,7 @@ static BOOL KeyringIsWakeNotification(NSDictionary *userInfo)
       _launchedFromWakeTap = NO;
     } else {
       [RCTLinkingManager application:[UIApplication sharedApplication]
-                             openURL:[NSURL URLWithString:KeyringApprovalsLink]
+                             openURL:[NSURL URLWithString:KeyringWakeLink(userInfo)]
                              options:@{}];
     }
   }
