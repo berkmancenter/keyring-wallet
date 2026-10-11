@@ -1,9 +1,13 @@
 /**
  * Bundles on this server's own disk, under data/files/.
  *
- * A stored bundle is named `ota-disk://<key>`. The update check turns that into
- * `<OTA_PUBLIC_URL>/files/<key>` when it answers a phone, so the public address
- * (a tunnel in the spike) can change without touching stored rows.
+ * A stored object is named `ota-disk://files/<key>`. The update check turns that
+ * into `<OTA_PUBLIC_URL>/files/<key>` when it answers a phone, so the public
+ * address (a tunnel in the spike) can change without touching stored rows.
+ *
+ * The host part is fixed: hot-updater treats a storage URI like s3://bucket/key
+ * and derives related objects (a bundle's content-addressed assets) by path
+ * arithmetic on the pathname only, so the key must live entirely in the path.
  */
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -20,10 +24,12 @@ export const fileForKey = (filesDir, key) => {
   return file
 }
 
+export const HOST = 'files'
+
 export const keyFromUri = (storageUri) => {
   const url = new URL(storageUri)
-  if (url.protocol !== `${PROTOCOL}:`) throw new Error(`not an ${PROTOCOL} URI: ${storageUri}`)
-  return decodeURIComponent(`${url.host}${url.pathname}`)
+  if (url.protocol !== `${PROTOCOL}:` || url.host !== HOST) throw new Error(`not an ${PROTOCOL} URI: ${storageUri}`)
+  return url.pathname.replace(/^\/+/, '').split('/').map(decodeURIComponent).join('/')
 }
 
 /**
@@ -37,7 +43,7 @@ export const objectKey = (key, filename) => {
   return `${String(key).replace(/^\/+|\/+$/g, '')}/${name}`
 }
 
-export const uriForKey = (key) => `${PROTOCOL}://${key.split('/').map(encodeURIComponent).join('/')}`
+export const uriForKey = (key) => `${PROTOCOL}://${HOST}/${key.split('/').map(encodeURIComponent).join('/')}`
 
 export const createDiskStore = ({ filesDir, publicUrl }) => ({
   async put(key, bytes) {

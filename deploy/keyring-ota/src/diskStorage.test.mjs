@@ -63,3 +63,11 @@ test('files uploaded under one key are stored side by side, not over each other'
   assert.notEqual(zip, manifest)
   assert.equal(await store.readText(zip), 'zip')
 })
+
+test('a URI derived by path arithmetic, as hot-updater derives asset URIs, maps back to its key', () => {
+  const bundle = new URL(uriForKey('bundles/b5/bundle.zip'))
+  assert.equal(bundle.host, 'files')
+  bundle.pathname = '/assets/sha256/58/585e.br'
+  assert.equal(keyFromUri(bundle.toString()), 'assets/sha256/58/585e.br')
+  assert.throws(() => keyFromUri('ota-disk://bundles/b5/bundle.zip'), /not an ota-disk URI/)
+})
