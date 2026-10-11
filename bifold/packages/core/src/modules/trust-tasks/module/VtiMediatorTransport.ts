@@ -438,6 +438,36 @@ export async function vtiClientIdentityFromPersona(
 }
 
 /**
+ * Authcrypt a v2 plaintext from `sender` to a peer's keyAgreement key (resolved
+ * through Credo), with Credo's own envelope service: the key never leaves the
+ * KMS. What {@link VtiMediatorSession.sendTo} forwards, and — on its own — the
+ * `didcomm-authcrypt` JWE a VTA's `vault/upsert` takes as a sealed secret
+ * (vta-service operations/vault/upsert.rs `unseal_secret`: the authenticated
+ * sender must be the caller).
+ */
+export async function authcryptTo(
+  agent: Agent,
+  sender: VtiClientIdentity,
+  peerDid: string,
+  plaintext: DidCommV2PlaintextMessage
+): Promise<unknown> {
+  const doc = await agent.dids.resolveDidDocument(peerDid)
+  const keyAgreementRef = doc.keyAgreement?.[0]
+  const vm =
+    typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+  if (!vm) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no keyAgreement verification method`)
+  const recipientKey = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
+  recipientKey.keyId = vm.id
+
+  const envelopeService = agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+  return envelopeService.pack(agent.context, plaintext, {
+    recipientKey,
+    senderKey: sender.senderKey,
+    senderKeySkid: sender.kid,
+  })
+}
+
+/**
  * One authenticated socket to one mediator, for one DID.
  *
  * `start()` performs the login and opens the socket; inbound frames are handed
@@ -1111,20 +1141,7 @@ export class VtiMediatorSession {
    * path for a VTA or a VTC: they are reached by DID, never dialled directly.
    */
   async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
-    const doc = await this.agent.dids.resolveDidDocument(peerDid)
-    const keyAgreementRef = doc.keyAgreement?.[0]
-    const vm =
-      typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
-    if (!vm) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no keyAgreement verification method`)
-    const recipientKey = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
-    recipientKey.keyId = vm.id
-
-    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
-    const inner = await envelopeService.pack(this.agent.context, plaintext, {
-      recipientKey,
-      senderKey: this.identity.senderKey,
-      senderKeySkid: this.identity.kid,
-    })
+    const inner = await authcryptTo(this.agent, this.identity, peerDid, plaintext)
     await this.forward(peerDid, inner)
   }
 

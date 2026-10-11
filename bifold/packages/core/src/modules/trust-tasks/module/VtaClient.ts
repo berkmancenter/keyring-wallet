@@ -40,6 +40,7 @@ import {
   type VtaExportedKey,
 } from './vtaKeys'
 import {
+  authcryptTo,
   createVtiClientDid,
   resolveVtiMediator,
   resolveDidDocumentRetrying,
@@ -120,6 +121,16 @@ export const VTA_TASK = {
   // The approval rules' row (vta-sdk trust_tasks.rs:2048-2060). Writing is super-admin.
   policyGet: 'https://trusttasks.org/spec/policy/get/0.1',
   policyUpsert: 'https://trusttasks.org/spec/policy/upsert/0.2',
+  // The vault, for trigger-link sign-in (oobSignInAgent). vta-sdk's own client
+  // sends every vault task at 0.1 (client/vault.rs:35-279, VTI 03a3562f);
+  // 0.1 is deprecated in favour of 0.2 (trust_tasks.rs:701-846), which the VTA
+  // also serves.
+  vaultList: 'https://trusttasks.org/spec/vault/list/0.1',
+  vaultList02: 'https://trusttasks.org/spec/vault/list/0.2',
+  vaultUpsert: 'https://trusttasks.org/spec/vault/upsert/0.1',
+  vaultUpsert02: 'https://trusttasks.org/spec/vault/upsert/0.2',
+  vaultSignTrustTask: 'https://trusttasks.org/spec/vault/sign-trust-task/0.1',
+  vaultSignTrustTask02: 'https://trusttasks.org/spec/vault/sign-trust-task/0.2',
 } as const
 
 /**
@@ -141,7 +152,37 @@ export const VTA_TASK_VERSIONS = {
   // ran and an Approve hung (al-phone, 10-05). This client sends only 0.1's
   // members; 0.2 is asked if an agent ever refuses 0.1.
   consentDecision: [VTA_TASK.consentDecision, VTA_TASK.consentDecision02],
+  // 0.2 first: the reference rungs signed identify and grant with 0.2 against
+  // VTI main 03a3562f (ref-23, ref-24). The payload is the same in both.
+  vaultSignTrustTask: [VTA_TASK.vaultSignTrustTask02, VTA_TASK.vaultSignTrustTask],
+  // 0.1 first, as vta-sdk's own client and pnm send them (ref-23 created the
+  // sign-in entry with pnm's 0.1). Both casings of `secretKind` are read and
+  // accepted (vti-common vault/mod.rs:300-322).
+  vaultList: [VTA_TASK.vaultList, VTA_TASK.vaultList02],
+  vaultUpsert: [VTA_TASK.vaultUpsert, VTA_TASK.vaultUpsert02],
 } as const
+
+/** The `type` of the DIDComm message a sealed vault secret travels in (vta-sdk didcomm_session.rs:567-570; informational). */
+export const VAULT_SECRET_MESSAGE_TYPE = 'https://trusttasks.org/spec/vault/_shared/0.1/vault-secret'
+
+/** A vault entry's metadata as `vault/list` and `vault/upsert` answer it — never the secret. */
+export interface VtaVaultEntry {
+  id: string
+  contextId?: string
+  targets?: { kind?: string; did?: string; [key: string]: unknown }[]
+  label?: string
+  /** `did-self-issued` at 0.1, `didSelfIssued` at 0.2. */
+  secretKind?: string
+  /** The DID the entry signs as, derived by the VTA from the secret (vti-common vault/mod.rs:118-127). */
+  principalDid?: string
+  /** Absent when active (vti-common vault/mod.rs:128-135). */
+  status?: string
+  version?: number
+  [key: string]: unknown
+}
+
+/** `vault/_shared` SealedEnvelope, the one variant Keyring makes (vta-service trust_tasks/vault.rs:168-188). */
+export type VtaSealedSecret = { envelope: 'didcomm-authcrypt'; jwe: string }
 
 /** Is this one of the 0.2 access-list URIs (where a revoke may answer `entry: null`)? */
 const isAcl02 = (uri: string) => /\/acl\/[a-z-]+\/0\.2$/.test(uri)
@@ -1107,6 +1148,74 @@ export class VtaClient {
         this.task<{ status?: string }>(type, payload)
       )
       .then(({ answer }) => answer)
+  }
+
+  /**
+   * `vault/sign-trust-task`: the VTA signs `unsignedEnvelope` as the entry's
+   * principal and answers it with a `proof`. `ext` carries the UV approval of
+   * a sign-in grant (`org.openvtc.uv-consent`). Not held for consent: a
+   * sign-in has 120 s to finish, so a held signature is refused at once.
+   */
+  async signTrustTask(request: {
+    entryId: string
+    unsignedEnvelope: Record<string, unknown>
+    ext?: Record<string, unknown>
+  }): Promise<Record<string, unknown>> {
+    const payload = {
+      entryId: request.entryId,
+      unsignedEnvelope: request.unsignedEnvelope,
+      ...(request.ext ? { ext: request.ext } : {}),
+    }
+    const { answer } = await this.versions.ask('vaultSignTrustTask', VTA_TASK_VERSIONS.vaultSignTrustTask, (type) =>
+      this.task<{ signedEnvelope?: Record<string, unknown> }>(type, payload, 30000, {}, undefined, {
+        waitForConsent: false,
+      })
+    )
+    if (!answer?.signedEnvelope || typeof answer.signedEnvelope !== 'object') {
+      throw new Error(`${LOG_PREFIX} vault/sign-trust-task answered without a signedEnvelope`)
+    }
+    return answer.signedEnvelope
+  }
+
+  /** `vault/list`: the entries' metadata, filtered as the VTA filters (`contextId`, `targetDid`, …). */
+  async vaultList(filters: Record<string, unknown> = {}): Promise<VtaVaultEntry[]> {
+    const { answer } = await this.versions.ask('vaultList', VTA_TASK_VERSIONS.vaultList, (type) =>
+      this.task<{ entries?: VtaVaultEntry[] } | VtaVaultEntry[]>(type, filters)
+    )
+    return Array.isArray(answer) ? answer : (answer?.entries ?? [])
+  }
+
+  /** `vault/upsert`: create (no `id`) or update an entry. A create needs `sealedSecret` (vault.rs:826-870). */
+  async vaultUpsert(payload: Record<string, unknown>): Promise<{ entry?: VtaVaultEntry; created?: boolean }> {
+    const { answer } = await this.versions.ask('vaultUpsert', VTA_TASK_VERSIONS.vaultUpsert, (type) =>
+      this.task<{ entry?: VtaVaultEntry; created?: boolean }>(type, payload)
+    )
+    return answer ?? {}
+  }
+
+  /**
+   * Seal a cleartext vault secret to this VTA as a `didcomm-authcrypt` JWE,
+   * from the manager identity this session signs in as — the
+   * `sealedSecret` `vault/upsert` takes. The VTA unpacks it and refuses it
+   * unless the authenticated sender is the caller (vta-service
+   * operations/vault/upsert.rs:34-63), so it is packed by the same identity
+   * and the same Credo envelope service as every message this client sends
+   * (vta-sdk does the same, didcomm_session.rs:557-586). The cleartext never
+   * leaves this call except inside the JWE, and is never logged.
+   */
+  async sealVaultSecret(secret: Record<string, unknown>): Promise<VtaSealedSecret> {
+    const identity = this.identity
+    if (!identity || !this.session) throw new Error(`${LOG_PREFIX} not connected`)
+    const packed = await authcryptTo(this.agent, identity, this.vtaDid, {
+      id: `urn:uuid:${utils.uuid()}`,
+      typ: 'application/didcomm-plain+json',
+      type: VAULT_SECRET_MESSAGE_TYPE,
+      from: identity.did,
+      to: [this.vtaDid],
+      created_time: nowSec(),
+      body: secret,
+    })
+    return { envelope: 'didcomm-authcrypt', jwe: typeof packed === 'string' ? packed : JSON.stringify(packed) }
   }
 
   /** `timeoutMs` bounds the wait for the VTA's answer, counted from the send (`onSent`). */
