@@ -53,9 +53,14 @@ jobs:
     steps:
       - name: Which commit
         id: name
+        shell: bash
+        # The input travels as an env value, never interpolated into the script; only a full commit sha is accepted,
+        # so a mutable branch name can never be built and cached as if it were fixed.
+        env:
+          REF: ${{ inputs.vti-ref }}
         run: |
-          ref="${{ inputs.vti-ref }}"
-          [ -n "$ref" ] || ref="$FARM_VTI_REF"
+          ref="${REF:-$FARM_VTI_REF}"
+          [[ $ref =~ ^[0-9a-f]{40}$ ]] || { echo "::error::vti-ref must be a full 40-character commit sha, not \"$ref\""; exit 1; }
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "artifact=pnm-linux-x86_64-${ref:0:12}" >> "$GITHUB_OUTPUT"
           echo "features=${FEATURES//,/+}" >> "$GITHUB_OUTPUT"
@@ -87,11 +92,16 @@ jobs:
           cargo +"$RUST_VERSION" build --locked --release -p pnm-cli --no-default-features --features "$FEATURES"
           mkdir -p ../out && cp target/release/pnm ../out/pnm
 
-      - name: The binary runs and keeps sessions under PNM_HOME
+      # Session handling is tested where an identity exists (the gate's CI jobs); this only proves the binary runs.
+      - name: The binary runs
+        shell: bash
         run: |
           home=$(mktemp -d)
           # pnm has no --version flag: the commit and sha below identify the build.
-          PNM_HOME="$home" ./out/pnm --help | head -20
+          # To a file, not a pipe: with pipefail, head closing early would fail pnm on SIGPIPE.
+          PNM_HOME="$home" ./out/pnm --help > "$home/help.txt"
+          head -20 "$home/help.txt"
+          grep -q '^Usage: pnm' "$home/help.txt"
           echo "sha256 $(sha256sum out/pnm | cut -c1-64)  ref ${{ steps.name.outputs.ref }}  features $FEATURES" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
