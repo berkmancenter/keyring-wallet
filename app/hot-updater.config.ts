@@ -20,7 +20,7 @@ const authHeaders = { Authorization: `Bearer ${process.env.HOT_UPDATER_AUTH_TOKE
 export default defineConfig({
   // The bundle is built the way the store build bundles it: the React Native
   // CLI with this app's own metro.config.js, then Hermes bytecode.
-  build: bare({ enableHermes: true, entryFile: 'index.js' }),
+  build: bare({ enableHermes: true, entryFile: 'index.js', outDir: '.hot-updater/dist' }),
   storage: standaloneStorage({ baseUrl: `${serverUrl}/storage`, commonHeaders: authHeaders }),
   database: standaloneRepository({ baseUrl: `${serverUrl}/hot-updater`, commonHeaders: authHeaders }),
   // A bundle is offered only to binaries whose native fingerprint matches the one

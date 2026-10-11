@@ -1,0 +1,3 @@
+# hot-updater: the CLI recreates this file when it is missing
+.hot-updater/
+keys/
