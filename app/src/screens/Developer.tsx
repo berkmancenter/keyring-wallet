@@ -46,6 +46,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
+import OtaDeveloperSection from '@/ota/OtaDeveloperSection'
 import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
@@ -1105,6 +1106,8 @@ const Developer: React.FC = () => {
             )}
           </Pressable>
         </View>
+        <SectionHeader icon={'system-update'} title={'Over-the-air updates'} />
+        <OtaDeveloperSection />
       </ScrollView>
     </SafeAreaView>
   )

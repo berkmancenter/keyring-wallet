@@ -1,0 +1,120 @@
+name: OTA publish (ring 0)
+
+# Publishes an over-the-air JS bundle to ring 0 (the maintainers' own devices),
+# phase 1 of docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md.
+# Run by hand from the Actions tab, on main. A real publish first waits for a
+# required reviewer on the "ota-approval" environment, which holds no secrets;
+# only then does the "ota" environment hand over the signing key.
+#
+# Not usable until both of these exist: the hosted update server (OTA_SERVER_URL)
+# and store builds that carry the public key, the channel and the native
+# fingerprint (a change to staging.yaml, in its own PR). Until then the spike
+# publishes from a laptop with a throwaway key (deploy/keyring-ota/README.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'The commit or staging tag the store build was cut from (staging-v0.2.0-NNN)'
+        type: string
+        required: true
+      platform:
+        description: Which platform's bundle to publish
+        type: choice
+        options: [both, ios, android]
+        default: both
+      scope:
+        description: 'fix, or within-purpose (a small addition inside an existing flow)'
+        type: choice
+        options: [fix, within-purpose]
+        default: fix
+      dry_run:
+        description: 'Only run the checks and build the bundle; publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-publish
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-22.04
+    environment: ota-approval
+    steps:
+      - run: echo "Approved - publish ${{ github.sha }} (base ${{ inputs.base }}, ${{ inputs.platform }}, scope ${{ inputs.scope }}) to ring 0."
+
+  publish:
+    needs: [approve]
+    # Runs after an approval, or straight away for a dry run (approve is skipped).
+    if: ${{ !cancelled() && (needs.approve.result == 'success' || inputs.dry_run) }}
+    runs-on: ubuntu-22.04
+    environment: ota
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Publish only a commit of main
+        run: |
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main; an OTA bundle is published only from main"
+            exit 1
+          fi
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify bifold linking
+        run: node scripts/verify-bifold-linking.js
+
+      - name: Signing key
+        if: ${{ !inputs.dry_run }}
+        env:
+          OTA_SIGNING_KEY_PEM: ${{ secrets.OTA_SIGNING_KEY_PEM }}
+        run: |
+          umask 077
+          printf '%s\n' "$OTA_SIGNING_KEY_PEM" > "$RUNNER_TEMP/ota-private-key.pem"
+
+      - name: Publish to ring 0
+        if: ${{ !inputs.dry_run }}
+        working-directory: app
+        env:
+          OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          BASE: ${{ inputs.base }}
+          PLATFORM: ${{ inputs.platform }}
+          SCOPE: ${{ inputs.scope }}
+        run: node scripts/ota-deploy.mjs --base "$BASE" --platform "$PLATFORM" --scope "$SCOPE"
+
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          BASE: ${{ inputs.base }}
+        run: |
+          if [ -f scripts/release/tier.mjs ]; then
+            node scripts/release/tier.mjs --range "$BASE..$GITHUB_SHA" --json
+          else
+            echo "scripts/release/tier.mjs is not on this commit yet"
+          fi
+
+      - name: Remove the signing key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/ota-private-key.pem"

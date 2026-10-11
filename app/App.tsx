@@ -36,6 +36,7 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
+import { withOta } from '@/ota/withOta'
 import { onPushWake, openApprovalsOnTap } from '@/push/pushHandlers'
 import PushStartup from '@/push/PushStartup'
 import { initialState, reducer } from '@/store'
@@ -159,4 +160,6 @@ const App = () => {
   )
 }
 
-export default App
+// Over-the-air JS updates: a no-op unless the build names an update server
+// (OTA_UPDATE_URL); see src/ota/withOta.tsx.
+export default withOta(App)

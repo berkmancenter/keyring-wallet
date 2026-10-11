@@ -1,0 +1,5 @@
+# The server's SQLite database and stored bundles.
+data/
+# Filled-in configuration (management token, public URL).
+.env
+node_modules/

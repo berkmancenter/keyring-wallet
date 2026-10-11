@@ -87,6 +87,11 @@ describe('problem report', () => {
     expect(report).toContain('Recent log (3 of 3 lines, oldest first):\nl1\nl2\nl3')
   })
 
+  it('names the over-the-air bundle the phone runs, when the build has OTA', () => {
+    const report = buildProblemReport({ referenceCode: 'X' }, { ...env, update: '0192f3a4' }, [])
+    expect(report).toContain('KeyRing 0.2.0 (205) · update 0192f3a4 · iOS 26.3 · iPhone 16')
+  })
+
   it('trims the log to the newest lines when asked (email body)', () => {
     const report = buildProblemReport({ referenceCode: 'X' }, env, ['a', 'b', 'c', 'd'], 2)
     expect(report).toContain('Recent log (2 of 4 lines, oldest first):\nc\nd')

@@ -11,6 +11,7 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 
+import com.hotupdater.HotUpdater
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import org.wonday.orientation.OrientationActivityLifecycle
@@ -29,6 +30,13 @@ class MainApplication : Application(), ReactApplication {
             override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
             override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
             override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+
+            // The over-the-air update loader: an installed update when there is
+            // one, otherwise this build's own bundle (src/ota/withOta.tsx). Debug
+            // builds keep loading from Metro. Expo's ReactNativeHostWrapper reads
+            // this through to the New Architecture ReactHost (toReactHost).
+            override fun getJSBundleFile(): String? =
+                if (BuildConfig.DEBUG) null else HotUpdater.getJSBundleFile(this@MainApplication.applicationContext)
     })
 
     override val reactHost: ReactHost
