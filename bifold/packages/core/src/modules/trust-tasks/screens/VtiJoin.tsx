@@ -844,6 +844,20 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   if (standingShown && communityDid && standing) {
     const waiting = standing.kind === 'sent' || standing.kind === 'pending'
     const withInvitation = waiting && standing.submission.withInvitation
+    // Turned down, withdrawn, left or removed: "Join again" sits in the card
+    // that says so, above the ways in, which are shown for reading only. Below
+    // them it was off the screen (240, Android).
+    const joinAgain = mayJoinAgain ? (
+      <Button
+        title={t('Join.JoinAgain')}
+        buttonType={ButtonType.Primary}
+        onPress={() => {
+          setAgain(true)
+          setStep('asks')
+        }}
+        testID={testIdWithKey(VtiJoinIds.again)}
+      />
+    ) : null
     const standingCard = (
       <View style={styles.card} testID={testIdWithKey(VtiJoinIds.standing)}>
         {waiting ? (
@@ -933,6 +947,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {t('Join.StandingAgain')}
           </ThemedText>
         ) : null}
+        {joinAgain}
       </View>
     )
     // Waiting, or a member: what the community asks is behind them, and
@@ -1003,17 +1018,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             onPress={() => go(Screens.VtiVetting)}
             testID={testIdWithKey(VtiJoinIds.continueVetting)}
           />
-        ) : (
-          <Button
-            title={t('Join.JoinAgain')}
-            buttonType={ButtonType.Primary}
-            onPress={() => {
-              setAgain(true)
-              setStep('asks')
-            }}
-            testID={testIdWithKey(VtiJoinIds.again)}
-          />
-        )}
+        ) : null}
         {different}
       </>
     )
