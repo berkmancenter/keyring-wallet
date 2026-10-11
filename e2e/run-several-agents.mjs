@@ -32,7 +32,7 @@ import { pasteLinkOnScanScreen } from "./lib/flows.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows } from "./lib/rows.js";
-import { agents, answerOwnerCheck, readCommunityCard, readHomeName, readScanKey, readSwitcherRows, splitRows } from "./lib/pages/agents.js";
+import { agents, answerOwnerCheck, readCommunityCard, readHomeName, readOwnerCode, readScanKey, readSwitcherRows, splitRows } from "./lib/pages/agents.js";
 import { community, join, readEntry } from "./lib/pages/join.js";
 import { idsWithPrefix, rowText, said, shot } from "./lib/pages/step.js";
 
@@ -164,7 +164,7 @@ try {
         const before = await myAgent();
         await agents.add(d, { owner, tag: "add agent (held)" });
         await agents.enterAddress(d, { did: H.did, timeoutMs: 60000 });
-        await grant(await agents.readOwnerCode(d), H.slug);
+        await grant(await readOwnerCode(d), H.slug);
         const { said: held } = (await agents.connect(d, { owner: (tag) => owner(`${tag} (held)`) })).value;
         await shot(d, "agents-r11-held");
         for (let i = 0; i < 4 && !(await existsTestId(d, "MyAgent", 2000)); i++) await d.back().catch(() => undefined);
