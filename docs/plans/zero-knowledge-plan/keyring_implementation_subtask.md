@@ -250,6 +250,207 @@ And both platforms carry a **300-second auth-reuse window**
 inside five minutes may not prompt at all. A screen must not promise "you will be
 asked each time".
 
-## 4. The client contract, the screens, and the phases
+## 4. The client: where the named path branches, and what must change
 
-*Pending the survey in flight.*
+### 4.0 Read this before touching any file: the working tree is 980 commits stale
+
+Verified 2026-10-11 in the main checkout: the outer repository is **1127 commits
+behind** `origin/main`, the `bifold` submodule is checked out at `7dc1de2a` and is
+**980 behind** its own `origin/main`, and the submodule SHA the outer `origin/main`
+pins is **`95371d9f`**. The vetting implementation is not on disk at all —
+`grep -ri vett` over `bifold/` and `app/` in the checkout returns nothing.
+
+**Every file and line number below was read from git objects at `95371d9f`** and
+must be re-verified after the submodule is updated. Updating it is step K0.
+
+### 4.1 Correction: the client is no longer ignorant of hidden vetting
+
+The parent plan, and a statement I made on 2026-10-10, say there are **zero**
+occurrences of `hidden-vetting` in bifold and that `ext` *"exists only in a schema
+and is never read"*. That was measured on this stale tree and **is now wrong**. At
+`95371d9f`, `packages/core/src/modules/trust-tasks/module/joinManifest.ts`
+carries:
+
+- `:156` `export const HIDDEN_VETTING_EXT = 'org.openvtc.hidden-vetting'`
+- `:164-170` `HIDDEN_VETTING_OPERATIONAL = ['vetterLabels','tokenLabels','dripPerTick','tickLength','events']`,
+  citing **VTI #1977, 2026-10-06**
+- `:186-197` `criterionDigest()`, which **does read** `vetting.ext[HIDDEN_VETTING_EXT]`
+  and strips the operational members before digesting, with `digestMatches()`
+  (`:204-206`) accepting either that rule or the whole-criterion rule a community
+  on an older VTI still uses
+
+So the client already knows the namespace, already knows which parameters are
+operational, and already computes the digest the way a hidden-vetting community
+does. **That is the anchor the rest hangs off, and it did not exist when this plan
+was written.**
+
+### 4.2 What is still missing is exactly one thing: the mode is never read
+
+Verified at `95371d9f` across `packages/`:
+
+- **`extCritical` — one hit, and it is a test fixture**
+  (`__tests__/fixtures/join-0.3/manifest-response-examples.json:198`). No code
+  reads it.
+- **`unsupportedExtension` — zero hits.** No such fault, state or string.
+- `faultOf()` (`joinManifest.ts:219-244`) judges a criterion usable and its
+  `JoinWayFault` union (`:94-102`) has no member for an extension it cannot
+  honour.
+- `wayOf()` (`:264-298`) flattens `vetting` to `{statements, claims, methods}`
+  and **drops `ext`**.
+- `VtiApplicant.start()` (`module/vtiVetting.ts:1547-1612`) takes the **first**
+  criterion carrying a `vetting` member (`:1557`) and copies seven named fields
+  (`:1594-1606`). It never looks at `ext` or `extCritical`.
+- `VettingRequirements` (`packages/trust-tasks/src/vetting/evaluate.ts:32-44`)
+  has **no `ext` and no index signature**, so hidden parameters cannot reach the
+  evaluator without a type change.
+- `vettingRequirements` schema (`module/vettingSchemas.ts:242-245`) is
+  `additionalProperties: true`, so `ext` and `extCritical` pass validation
+  silently. The shared `Ext` definition already exists at `:85-92`.
+
+**So the silent downgrade is real and precisely located**, and it is one decision
+(`read_mode`) rather than a diffuse gap. A criterion marked
+`extCritical: ['org.openvtc.hidden-vetting']` is read today as ordinary named
+vetting with a `minStatements` count, and the person is sent to the ticket flow.
+
+### 4.3 Two API corrections for the evaluator
+
+The parent plan and my earlier notes get this wrong in a way that would have
+produced code that does not compile:
+
+- **There is no `satisfied()` method.** `evaluateStatements(statements,
+  requirements, joinDid, at?)` is a **pure function** returning
+  `VettingEvaluation`, and the boolean is a **field named `meets`**, computed as
+  `needs.length === 0` (`evaluate.ts:121-126`, `:196`).
+- **`needs` is `{ kind: 'statements' | 'method'; method?: string; n: number }[]`**
+  (`:74`), built at `:175-181`. `independenceOk` is deliberately **not** folded
+  into `meets` (`:76-81`): a blown relationship cap is a referral, not a refusal.
+
+### 4.4 The ten seams, in the order to touch them
+
+| # | Seam | Change |
+|---|---|---|
+| 1 | `joinManifest.ts:219-244` `faultOf()` | scan `extCritical`; add `unsupportedExtension` to `JoinWayFault` (`:94-102`) |
+| 2 | `joinManifest.ts` (new) `readMode()` | port upstream's `read_mode` three-outcome semantics (§1.3) |
+| 3 | `joinManifest.ts:264-298` `wayOf()` | carry a hidden-mode discriminator instead of dropping `ext` |
+| 4 | `screens/joinWays.ts:31-77` | `JoinCannotUse` gains the "this build cannot do hidden vetting" word; `canStartVetting` (`:63`) accounts for the mode |
+| 5 | `module/vtiVetting.ts:1547-1612` `VtiApplicant.start` | **do not branch here** — see 4.5 |
+| 6 | `screens/VtiVetting.tsx:273-285` | where `applicantRef` is constructed: select named or hidden |
+| 7 | `screens/vettingPrimary.ts:20` `ApplicantStep` + `VtiVetting.tsx:1179-1196` | the member step machine; hidden mode has no per-voucher ticket/match/card sequence |
+| 8 | `module/vtiVetting.ts:2322-2404` `checklist()` | widen its contract (§4.6) |
+| 9 | `packages/trust-tasks/src/vetting/evaluate.ts:32-44` | `VettingRequirements` needs the hidden parameters to be reachable |
+| 10 | `module/vettingSchemas.ts:242-245` | declare `ext`/`extCritical` against the existing `Ext` def for shape enforcement |
+
+### 4.5 A sibling class, not a branch — and the first DI seam in this module
+
+`VtiApplicant` is `module/vtiVetting.ts:1524-2405` — ~880 lines whose every step
+(`requestVetter`, `confirmMatch`, `sendCard`, `receiveStatement` with its
+fourteen-gate acceptance path) is about a **named** voucher. Hidden mode keeps the
+ceremony and replaces only what the voucher returns and how progress is counted,
+so branching inside those methods would thread a mode flag through all of them.
+
+**Build `HiddenApplicant` as a sibling** implementing the subset of the interface
+`VtiVetting.tsx` actually uses, and select it where the screen constructs
+`applicantRef` (`:273-285`).
+
+**Note what that costs, because it is not free.** The trust-tasks module is **not
+DI-wired today**: `VtiApplicant`, `VtiVetterDesk` and all three stores are `new`'d
+directly in the screen (`:273-285`), and the screen is imported statically by
+`navigators/MyAgentStack.tsx:23` rather than resolved from a `SCREEN_*` token. So
+registering the selection behind a token would be **the first DI seam in
+`modules/trust-tasks`** — a new pattern for this module, not an extension of one.
+The container mechanics are ready for it (`container-api.ts:186-205` `TOKENS`,
+`:216-285` `TokenMapping`, `container-impl.ts:131-292` `init`, child-container
+override as in `app/src/demo-profiles/starter/StarterContainer.ts:49-54`), and
+**D6 below records the choice** rather than taking it silently.
+
+### 4.6 The progress surface is the hard part, and §4.1.3 is why
+
+`checklist()` (`:2322-2404`) counts held `'vetting-statement'` credentials whose
+subject is `joinDid` and whose `id` a request names (`:2355-2359`), runs
+`evaluateStatements` (`:2363-2373`), folds in grant faults (`:2380-2387`) and
+returns `{ held, needed, counted, meets, statements, discounted, needs,
+independenceOk, exceededCaps, unreadableMaxAge, unchecked }`. The UI contract is
+83 testIDs (`VtiVetting.ids.ts`), with `checklist` `:69`, `discounted` `:70`,
+`needs` `:73`, `independence` `:74`.
+
+In hidden mode there is **no per-statement fact to count** — that is the point of
+the construction — and the parent's §4.1.3 is the governing constraint:
+`ref-27` proved the engine accepts a duplicate attestation, builds a proof from
+it, and the community counts it once. So:
+
+- `held` = the engine's `held()` count. Honest, and **not** the same as what will
+  be counted.
+- `counted`, `discounted`, `independenceOk`, `exceededCaps` have **no hidden-mode
+  meaning before submission**. They must be absent, not zero: a zero renders as
+  "none counted", which is a claim we cannot make.
+- `needs` is authoritative **only** from the community's answer. Before submitting
+  there is `minStatements` and a holding count, and the screen must word the
+  difference — "you hold 3; the community will count distinct vouchers" — rather
+  than show a tick.
+- `meets` must be **optimistic-only**, matching the existing rule the named path
+  already documents: the client may be optimistic where the community is not,
+  never the reverse.
+
+### 4.7 One more thing the screen must carry: the challenge's lifetime
+
+From §1.2: one open challenge per applicant, replaced on re-ask, expiring in
+minutes. The step machine (`:1179-1196`) currently has no notion of a step that
+can go stale while the person looks at it. Hidden mode's `apply` step must be able
+to **rebuild** the proof, not merely retry the send, and asking for a second
+challenge must be understood as invalidating the first.
+
+## 5. Decisions this work needs
+
+- **D5 — where the native binaries come from.** Askar downloads them at install
+  from a GitHub release and ships none in the package (§2.2). We have no release
+  to download from. The options are: commit the xcframework plus four `.so` files
+  (~8 MB a bump, in a submodule, every bump a binary diff); publish them to a
+  release of our own and copy Askar's `install` script; or build from source at
+  install time, which puts the Rust toolchain and the NDK on every developer's
+  machine and in CI. **Recommendation: a release of our own**, because it is the
+  pattern the repository already consumes four times over. Needs Alberto.
+- **D6 — the DI seam.** §4.5: introduce `TOKENS` registration for applicant
+  selection (first in this module, consistent with the rest of core), or select on
+  a plain conditional in the screen. **Recommendation: a plain conditional first**,
+  and a token only when a second consumer exists — the module has lived without DI
+  and a seam with one caller is speculative.
+- **D7 — the demo flag.** §1.3: "proceed even when the namespace is marked
+  critical" defaults off (conformant stop) and is flippable for a demo. Needs a
+  name and a home — a dev-menu toggle beside the existing ones in
+  `app/src/screens/Developer.tsx` is the obvious place.
+- **D8 — the four-ABI question.** §2.4: `ref-26` measured one Android ABI; the app
+  builds four. Either cross-build all four or restrict the module's ABI set and
+  accept that hidden vetting is unavailable on x86 emulators — which would make
+  `ref-32`'s own test path unavailable.
+
+## 6. Phases
+
+**K0 — make the tree buildable and current.** Update the outer repository and the
+`bifold` submodule to the pinned `95371d9f`, re-verify every line number in §3 and
+§4, and re-run the parent's §6.0 ladder against whatever moved. **Nothing else
+starts before this.**
+
+**K1 — mode selection, no native code.** `readMode()`, the `extCritical` scan,
+`unsupportedExtension` as a fault, the schema declaration, and the Join screen
+wording. **This phase alone closes the silent downgrade** and ships without a
+single byte of Rust, a binary, or a new package. It is also exactly the parked
+app-lane fix from 2026-10-10, now with upstream's semantics to copy rather than
+invented ones.
+
+**K2 — the native module, unwired.** `bifold/packages/react-native-pcs` per §2,
+built for both platforms, with the bridge's own tests. Not yet a dependency of
+`app/`, so it cannot affect a build.
+
+**K3 — the client.** `HiddenApplicant`, the keychain storage of §3, the challenge
+exchange, the submission with the proof in `ext`. Tested against the reference
+vectors from `zkp_reference_flow.rs` (§1.4).
+
+**K4 — the screens.** The step machine, the honest progress surface of §4.6, the
+refusal and at-capacity wording.
+
+**K5 — the gate.** The e2e path, and the one measurement still missing from the
+parent's §6.0: a physical Android device.
+
+**Shipping is blocked on B7 regardless of K-phase progress** — the vendored
+`[patch.crates-io]` cannot ship, so K2 onwards is *prepared and proven*, not
+releasable, until the upstream feature gate lands.

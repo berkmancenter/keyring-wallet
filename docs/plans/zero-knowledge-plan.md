@@ -2,6 +2,7 @@
 
 **Status:** Proposed as a shipping design; **proven locally, not built into the app.** The hold is lifted for the applicant's side: **decided 2026-10-11 (Alberto) — the phone proves for the applicant** (§3.1, D4), without waiting on an agent-side prover that nobody upstream is building (§8 B3). Nothing is in `app/` or `bifold/`; the evidence is a ladder of local reference rungs, `tsp-reference/ref-24-pcs-host` through `ref-29-pcs-swift` on `feat/pcs-rungs`, summarised in §6.0. The **vetter's** side stays with the agent and is still held (§3.1, D3), as are Z2 and Z3.
 **Reasoning:** [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) — the research behind §2–§4: the positions it supersedes (on-device proving), the evidence for each, and what was not verifiable.
+**Implementation:** [`keyring_implementation_subtask.md`](./zero-knowledge-plan/keyring_implementation_subtask.md) — how the phone path is built in this repository: the published applicant protocol, the native-module shape, storage, the ten seams in the client, and phases K0–K5. Read it before touching `app/` or `bifold/`.
 **Siblings consulted:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 owns the credential-format decisions this plan inherits (VRC/VWC proof sets, evidence commitments, canonical transcript); [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture, consent card and approvals this plan's step-up rides on; [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the V0 vetting ceremony that hidden vetting keeps unchanged, and its §2.4 decision gates Track Z1; [`vsc-migration-plan.md`](./vsc-migration-plan.md) owns the witness-credential type Track Z2 would present; [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) owns the vetting screens Track Z1 changes.
 **Dependency direction:** nothing in the sibling plans waits on this one. This plan waits on upstream (§8) and on two sibling decisions (§3.3, §3.4).
 **Sources:** this plan cites **only publicly available artifacts**. Where it states a design position with no citation, the position is **ours**, reasoned from those artifacts. Much of what was ours by necessity is now citable: upstream's hidden-vetting design is public and in our pinned clone (see [[PCS-DESIGN]]), and the sections below name it where they previously carried our reasoning alone.
@@ -271,12 +272,26 @@ unsupported vetting mode cannot be shown, cannot be tested against a community
 that has turned the mode on, and strands a user whose community moved ahead of
 their app build.
 
-**What the app does today, verified in code and not by reading a design.** Against
-a community advertising hidden mode, Keyring collects **named** vetting statements
-as though the mode were not there: `hidden-vetting`, `extCritical` and
-`unsupportedExtension` appear nowhere in `bifold`, `ext` exists in a schema and is
-read by nothing, and the requirements evaluator ignores it. The community then
-rejects what was collected.
+**What the app does today — corrected 2026-10-11.** The sweep behind this section
+was run on a checkout **980 commits behind** the `bifold` submodule's `origin/main`,
+and two of its findings do not survive on the pinned commit (`95371d9f`). What is
+true there:
+
+- **The client already knows the namespace.** `joinManifest.ts:156` defines
+  `HIDDEN_VETTING_EXT = 'org.openvtc.hidden-vetting'`, `:164-170` lists the
+  operational parameters per VTI #1977, and `criterionDigest()` (`:186-197`)
+  **does read** `vetting.ext[HIDDEN_VETTING_EXT]`, stripping those members before
+  digesting — so "`ext` is read by nothing" was wrong.
+- **What is missing is the mode decision, and only that.** `extCritical` appears
+  once in all of `packages/`, in a test fixture
+  (`__tests__/fixtures/join-0.3/manifest-response-examples.json:198`);
+  `unsupportedExtension` appears zero times; `faultOf()` judges such a criterion
+  usable; `wayOf()` drops `ext`; and `VtiApplicant.start()` copies seven named
+  fields and never looks at either member.
+
+So the downgrade is real and more precisely located than this section first said:
+a criterion marked critical is read as ordinary named vetting, the person is sent
+to the ticket flow, and the community rejects what they gather.
 
 **So the fallback is kept, and the silence is not.** The two are separable, and
 only the second is a bug:
@@ -476,7 +491,7 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 **Decided upstream, waiting on someone else:**
 
 - ~~**B1**~~ — **Closed 2026-09-29.** `predicate-credential-system` 0.1.0 is on crates.io under MIT, and openvtc `main` depends on the published crate rather than a git reference (`e49816c`). The audit gate of C6a is unaffected and still open.
-- **B2 — closed for ZK1's purposes (2026-10-08).** The specifications exist and are published in `dtgwg-trust-tasks-tf`, with versioned payload schemas, invalid-example fixtures and generated bindings. On that repository's `main` (`7b6bb488`): `specs/vtc/vetting/hidden/{publish,show,withdraw}/0.1/`, `specs/vtc/vetting/pcs-challenge/0.1/`, `specs/vtc/vetting/vetters/pcs-root/0.1/`, `specs/vtc/vetting/vetters/pcs-tokens/0.1/` and `specs/vtc/vetting/vetters/event-mode/0.1/`, plus `specs/vetting/attestation/0.1/spec.md`, which covers the hidden path. **Every one is community-side (`vtc/`) or member-to-member** — `vetting/attestation/0.1` is vetter→applicant, its front matter naming the vetter as issuer and the applicant as recipient — so none of them is an agent task, which is consistent with B3. So **ZK1's fixtures come from published schemas and their invalid examples**, not from guesses and not only from reading someone's client. **Our pin is 179 commits behind** (`bdae1cf9`), so ZK0 now needs one more pin advance before these can be cited at a pin. What remains unpublished: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
+- **B2 — closed, and its reasoning corrected 2026-10-11.** Its claim that every published task is community-side or member-to-member, so *"none of them is an agent task"*, **misread the slugs: the `vtc/` prefix names the responder, not the caller.** `vtc/vetting/pcs-challenge/0.1`'s front matter is `role: applicant, member: issuer` — the applicant's own task — and `vetters/pcs-root`, `vetters/pcs-tokens` are the vetter's. The applicant's whole message set is therefore published and ZK1 needs no guessed fixtures; see [`keyring_implementation_subtask.md`](./zero-knowledge-plan/keyring_implementation_subtask.md) §1. The original text follows, since its inventory is still accurate. **B2 — closed for ZK1's purposes (2026-10-08).** The specifications exist and are published in `dtgwg-trust-tasks-tf`, with versioned payload schemas, invalid-example fixtures and generated bindings. On that repository's `main` (`7b6bb488`): `specs/vtc/vetting/hidden/{publish,show,withdraw}/0.1/`, `specs/vtc/vetting/pcs-challenge/0.1/`, `specs/vtc/vetting/vetters/pcs-root/0.1/`, `specs/vtc/vetting/vetters/pcs-tokens/0.1/` and `specs/vtc/vetting/vetters/event-mode/0.1/`, plus `specs/vetting/attestation/0.1/spec.md`, which covers the hidden path. **Every one is community-side (`vtc/`) or member-to-member** — `vetting/attestation/0.1` is vetter→applicant, its front matter naming the vetter as issuer and the applicant as recipient — so none of them is an agent task, which is consistent with B3. So **ZK1's fixtures come from published schemas and their invalid examples**, not from guesses and not only from reading someone's client. **Our pin is 179 commits behind** (`bdae1cf9`), so ZK0 now needs one more pin advance before these can be cited at a pin. What remains unpublished: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
 - **B3 — the agent half does not exist, and nothing upstream is building it (swept 2026-10-10).** A full sweep of ten pinned clones plus GitHub found the six `vta/pcs/*` task URIs **only in design prose** — two openvtc documents, zero code, zero schema, zero spec. `vta-service/src` contains no occurrence of `pcs`; the VTA's key-type enum is `Ed25519, X25519, P256, MlDsa44, MlDsa65` with no BLS scalar; `specs/vta/**` has no pcs/zkp/prove path; the `vetting-pcs` feature C7 proposes for `vta-sdk` does not exist. No open PR in either repository would add it (all seven open PRs are CI, release, TEE or performance), no branch is scoped for it (`zkp-pcs` merged and was deleted in both repos, carrying the **community** half and the **client** prototype), no changelog line promises it, and **there is no upstream tracking issue for C7**. Three further facts bear on §3.1 and D4:
   - **C7 carries no status, owner, timeline or milestone**, and the document's own §11 *"Order of work"* — six numbered items, from the library to `vtc-service` to openvtc — **has no `vta-service` item at all**. Its item 6 reads *"openvtc: the applicant and vetter paths"*. So the plan of record still assigns the member side to the client, and C7's placement is an un-scheduled intention rather than queued work.
   - **The shipped client path is self-described as temporary.** `openvtc-vetting-pcs/src/lib.rs:1-18`: *"Throwaway prototype of hidden-vetter admission … The engines stand in for the VTA (`vetter`, `applicant`: the PCS engine of §13 C7) and the VTC (`vtc`). Nothing here is production code."* Copying it is copying a stand-in, which is a cost Path B must be chosen with rather than discovered after.
