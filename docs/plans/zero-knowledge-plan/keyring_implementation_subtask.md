@@ -1,7 +1,11 @@
 # Hidden-vetting on the phone — the Keyring implementation
 
-**Owner:** this plan's §4.1 (Track Z1). **Status:** analysis complete for the
-protocol and the native-module shape; **no app code written yet.**
+**Owner:** this plan's §4.1 (Track Z1). **Status:** **K0–K3 built, K4 part
+built**, on `feat/hidden-vetting-mode` in the `bifold` submodule (worktree
+`~/Documents/keyring-hidden-vetting`, six signed commits, **unpushed**, and
+nothing in `app/` calls any of it). §7 records what each commit did and what is
+left. **Not releasable:** the vendored `[patch.crates-io]` in the native package
+cannot ship (§5 B7).
 **Parent:** [`../zero-knowledge-plan.md`](../zero-knowledge-plan.md) — §3.1 and D4
 decided on 2026-10-11 that the applicant proves on the phone; this document is
 how that is built in this repository.
@@ -454,3 +458,123 @@ parent's §6.0: a physical Android device.
 **Shipping is blocked on B7 regardless of K-phase progress** — the vendored
 `[patch.crates-io]` cannot ship, so K2 onwards is *prepared and proven*, not
 releasable, until the upstream feature gate lands.
+
+## 7. What is built, and what is left (2026-10-11)
+
+Six commits on `feat/hidden-vetting-mode`. Every regression claim below is
+"identical before and after", **not** green: the worktree borrows `node_modules`
+from a checkout 980 commits behind the submodule, so 15 suites in
+`packages/core` fail for linker reasons unrelated to these changes (a 4-argument
+`signDocumentProof` against a 3-argument build, missing `@bifold/trust-tasks`
+exports). Each change was measured against that same baseline.
+
+### K1 — mode selection (`63d96b69`)
+
+`readVettingAsk(criterion)` reads what the community published; `vettingModeFor(ask, capabilities)`
+applies what this build can do. Two functions deliberately, because the
+community's ask does not depend on our binary. The rules are openvtc's own
+`read_mode`, so an applicant here and the reference client agree about what was
+asked. A refusal surfaces as a new `unsupportedExtension` fault and a Join row
+saying this version cannot vouch the way the community does, in all three
+locales. `allowUnsupportedCritical` is off by default and off in a shipped build.
+
+**One existing test asserted the bug**: `joinManifest.test.ts` expected
+`usable: true` for the specification's own hidden-vetting criterion, which marks
+its namespace critical — the silent downgrade, encoded as desired behaviour. It
+now asserts the refusal, with a comment recording the change; the advisory case
+keeps the old answer, which is where the fallback lives.
+
+### K2 — the native package (`5ee3ee22`)
+
+`bifold/packages/react-native-pcs`, per §2. **The surface is flat**: every
+function takes the application's saved state and returns the new saved state.
+An object with methods is the obvious shape and the wrong one — a native object
+outlives the JavaScript that made it, so the handle must be tracked,
+invalidated on a reload and freed on unmount, the state lives in two places, and
+the OS may kill the app between any two calls. Flat, there are no handles,
+nothing to leak, and a relaunch is indistinguishable from a continuation. The
+cost is re-reading the published parameters per call, against an 8 ms proof.
+
+`rust/tests/flat_surface.rs` drives the whole protocol through that surface — a
+real community and three real vouchers from the published engine, three
+attestations taken through `receive_attestation`, a proof, and **the community's
+own verifier** deciding — passing only `saved` between steps. Plus the two
+refusals that matter: another suite declined before an application starts, and
+an attestation meant for someone else refused.
+
+**All four Android ABIs build**, including 32-bit ARM, so **D8 needs no
+compromise** and `ref-32`'s own emulator path stays available: 2.5 MB
+(arm64-v8a), 1.6 MB (armeabi-v7a), 3.4 MB (x86), 2.9 MB (x86_64), linked and
+stripped. The iOS xcframework is 285 MB **on disk and that is not an app-size
+figure** — a static archive holds every object file before the linker discards
+what is unreached, which `ref-26` measured at roughly thirty times. Those sizes
+are also from the **unoptimised** profile: the shipping profile (`lto`, `strip`,
+`panic = "abort"`) that `ref-26` used was missing from this crate and is now
+added, but the rebuild to measure it was killed for disk (§7.1).
+
+### K3 — storage, the client, and the challenge (`c7c2c407`, `35010322`, `c8847fce`)
+
+- **Storage.** One Keychain item of its own, keyed by community, holding the
+  engine's ~166-byte state. Deliberately **not** `optionsForKeychainAccess`: its
+  non-biometric branch is `ACCESSIBLE.ALWAYS`, readable while the device is
+  locked *and* restorable onto another device from a backup, where this is
+  `WHEN_UNLOCKED_THIS_DEVICE_ONLY` either way; and with biometrics on its
+  Android branch picks `STORAGE_TYPE.RSA` where an opaque blob wants the
+  auth-required `AES_GCM`.
+- **The client.** `HiddenProgress` carries `held` and the published `minimum`,
+  and `counted`/`stillNeeds` **only once the community has answered** — absent
+  rather than zero, because a zero renders as "none counted". The state is
+  written back after every step, so a kill between two vouchers loses nothing.
+- **The challenge** (`vtc/vetting/pcs-challenge/0.1`). A **write**, never
+  retried, never in `VTI_READ_TASKS` — that list's comment now names this task
+  as the clearest case for why "anything unlisted is a write" is the right
+  default. The reading is a module apart from the transport so it can be tested
+  without a connected agent, and it is strict: uppercase, whitespace and a wrong
+  length are each refused, because a community compares the challenge byte for
+  byte and a value this client "repaired" would bind a proof to something never
+  issued. `notHiddenVetting` returns `undefined` rather than throwing — a
+  community may have turned the mode off since its manifest was read.
+- **The submission.** `submitPayload` carries the `extensions` bag and `apply()`
+  threads it; the member name is the engine's, so the bag is passed in rather
+  than assembled. An empty bag is not sent.
+
+### K4 — the screen's decisions (`c811c598`), but not its rendering
+
+`hiddenApply.ts` holds the decisions as pure functions, for the same reason
+`applicantPrimary` is one: the apply action, the challenge's staleness (a
+challenge with seconds left counts as expired — the round trip costs more than
+that, and telling someone to hurry against a clock they cannot see is useless),
+one button either way, and `hiddenProgressLines`, which never claims a count of
+its own.
+
+Copy in all three locales, as i18next plurals: **this package forbids "(s)" in
+the vetting copy** and a test enforces it, which caught the first draft.
+
+**Not done: the JSX.** `VtiVetting.tsx` (1796 lines) is untouched, and its screen
+test is one of the 15 failing for borrowed-dependency reasons — so wiring it
+would mean editing the module's largest file with no feedback loop. **A real
+`yarn install` in the worktree comes first**, which is a shared-machine ask
+rather than a code task.
+
+### 7.1 One more thing this work cost
+
+The full native matrix left a **~16 GB** cargo target and the rung crates another
+9.6 GB, which took the Mac to 6.3 GB free with the gate lane queued behind it.
+The cause is `aws-lc-sys` compiling C per target — the same 1.7 MB of AWS crypto
+B7 is about. Everything was deleted (38 GB free afterwards) and the standing rule
+is now: delete the target as the last step of any build, jest `--runInBand`, and
+clear the matrix with the coordinator first.
+
+### 7.2 Two corrections to this document's own earlier claims
+
+- **§5 B7's second ask is withdrawn.** It asked upstream for a wire form for a
+  received attestation. `snapshot::HeldAttestation` is public, derives
+  `Serialize`/`Deserialize` as camelCase with `deny_unknown_fields`, and carries
+  `of()` and `restore()` — and `restore()` yields the `HiddenAttestation` that
+  `receive` takes. The path was always complete. What remains is a client's own
+  mapping, which `heldAttestationFromPayload` owns.
+- **§1.1 had the proof's carrier wrong.** It said `ext['org.openvtc.hidden-vetting']`,
+  from upstream's `raw["ext"][HIDDEN_VETTING_NS]["id"]` assertion. That
+  assertion is on the **vetting request to a voucher**, carrying the applicant's
+  identifier. The submission's carrier is **`extensions.hiddenVetting`**, built
+  by the engine's own `to_extensions`.
