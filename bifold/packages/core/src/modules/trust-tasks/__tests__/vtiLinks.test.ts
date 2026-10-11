@@ -6,7 +6,9 @@ import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
   APPROVALS_LINK,
+  MESSAGES_LINK,
   MY_AGENT_SCREEN,
+  isMessagesLink,
   myAgentLinkParams,
   KeyringLinkError,
   communityLinkReturn,
@@ -91,6 +93,20 @@ describe('the approvals link a push notification opens', () => {
     expect(navigate).toHaveBeenCalledTimes(1)
     expect(navigate).toHaveBeenCalledWith('VtaRequests')
     expect(MY_AGENT_SCREEN.VtaRequests).toBe(Screens.VtaRequests)
+  })
+})
+
+describe('the messages link a push notification opens', () => {
+  it('is recognised exactly, and nothing near it', () => {
+    expect(MESSAGES_LINK).toBe('keyring://messages')
+    expect(isMessagesLink(MESSAGES_LINK)).toBe(true)
+    expect(isMessagesLink(` ${MESSAGES_LINK}\n`)).toBe(true)
+    expect(isMessagesLink('keyring://messages?x=1')).toBe(false)
+    expect(isMessagesLink(APPROVALS_LINK)).toBe(false)
+  })
+
+  it('is not an agent link, so it never reaches the My Agent routing', () => {
+    expect(keyringAgentLinkKind(MESSAGES_LINK)).toBeUndefined()
   })
 })
 
