@@ -537,7 +537,7 @@ GATEWAY_COMMIT=e542a9d77a7369f4f3da01d573107ea155c80691
 # The image's tag: the commit plus the patch set (-pN). Our patches change the
 # image without changing the commit, so the tag has to tell the images apart.
 # Change it only as part of an update the project gives you (§12).
-GATEWAY_IMAGE_TAG=e542a9d77a7369f4f3da01d573107ea155c80691-p3
+GATEWAY_IMAGE_TAG=e542a9d77a7369f4f3da01d573107ea155c80691-p4
 
 # Which agents the gateway serves: exact DIDs separated by commas or spaces,
 # or * for any agent (§3). Unset or empty (and no hosts below) = every phone
