@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 /**
  * Publish an over-the-air bundle to ring 0, with the checks the OTA plan
  * requires (docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md).
