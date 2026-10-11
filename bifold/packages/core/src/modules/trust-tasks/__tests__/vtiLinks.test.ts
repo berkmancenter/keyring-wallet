@@ -44,6 +44,12 @@ jest.mock('../module/VtiIdentityStore', () => ({
     getPersona: async (communityDid: string) => (communityDid === mockPersona.communityDid ? mockPersona : undefined),
   })),
 }))
+// Trigger-link sign-in is off in the app; a test turns it on to see the reader's words.
+let mockSignInOn = false
+jest.mock('../module/triggerLink', () => ({
+  ...jest.requireActual('../module/triggerLink'),
+  triggerLinkSignInEnabled: () => mockSignInOn,
+}))
 const mockRedeem = jest.fn()
 jest.mock('../module/vtiInvitationOffer', () => ({
   ...jest.requireActual('../module/vtiInvitationOffer'),
@@ -502,6 +508,40 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
     expect(keyringLinkErrorText(error as KeyringLinkError)).toBe('This code needs a newer version of the app.')
     expect(resolve).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('says only "needs a newer version" while sign-in is off, even for a code that has expired', async () => {
+    const expired = signIn.replace('_exp=1791675395', '_exp=1000')
+    await expect(routeKeyringAgentLink(expired, {} as never, jest.fn())).rejects.toMatchObject({
+      messageKey: 'Scan.TriggerLinkUpdate',
+    })
+  })
+
+  describe('with sign-in switched on', () => {
+    beforeEach(() => (mockSignInOn = true))
+    afterEach(() => (mockSignInOn = false))
+    // The portal's code above has long expired; these read against the clock.
+    const live = signIn.replace('_exp=1791675395', `_exp=${Math.floor(Date.now() / 1000) + 300}`)
+
+    it.each([
+      ['an expired code', signIn.replace('_exp=1791675395', '_exp=1000'), 'Scan.TriggerLinkExpired', /expired/],
+      [
+        'a malformed handle',
+        live.replace('_id=XOcGXOQTCHb5iz4T2JD2RQ', '_id=short'),
+        'Scan.TriggerLinkInvalid',
+        /can't be used/,
+      ],
+      ['an agent claim', live.replace('sign-in/0.1', 'vta-claim/0.1'), 'Scan.TriggerLinkUpdate', /newer version/],
+      // Read and accepted, but there is no sign-in screen yet.
+      ['a sign-in', live, 'Scan.TriggerLinkUpdate', /newer version/],
+    ])('says why for %s, and sends nothing', async (_, link, messageKey, message) => {
+      const navigate = jest.fn()
+      const resolve = jest.fn()
+      const route = routeKeyringAgentLink(link, { dids: { resolve } } as never, navigate)
+      await expect(route).rejects.toMatchObject({ messageKey, message: expect.stringMatching(message) })
+      expect(resolve).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+    })
   })
 })
 

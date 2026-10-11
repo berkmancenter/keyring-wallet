@@ -26,6 +26,14 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
+import {
+  readTrigger,
+  TRIGGER_UI_MESSAGE_KEYS,
+  TRIGGER_UI_MESSAGES,
+  triggerAction,
+  triggerLinkSignInEnabled,
+  type TriggerUi,
+} from './triggerLink'
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { vtaAgent } from './vtaAgent'
@@ -127,6 +135,23 @@ export function isTriggerLink(text: string): boolean {
   if (hash < 0) return false
   const names = new URLSearchParams(text.slice(hash + 1))
   return TRIGGER_NAMES.some((name) => names.has(name))
+}
+
+/**
+ * What the scanner says of a trigger link. With sign-in off (the default) it
+ * is the words the trigger-link spec gives a reader for a flow it does not
+ * implement (outcome `update`), whatever the link. With it on, the link is
+ * read, and a code that cannot be used says why (expired, can't be used, …).
+ * Either way nothing is sent and nothing is logged; a sign-in the reader
+ * accepts has no screen yet, so it too is `update`.
+ */
+function triggerLinkError(text: string): KeyringLinkError {
+  let ui: Exclude<TriggerUi, 'pass-on'> = 'update'
+  if (triggerLinkSignInEnabled()) {
+    const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+    if (action.kind === 'say' && action.ui !== 'pass-on') ui = action.ui
+  }
+  return new KeyringLinkError(TRIGGER_UI_MESSAGES[ui], undefined, TRIGGER_UI_MESSAGE_KEYS[ui])
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -457,9 +482,7 @@ export async function routeKeyringAgentLink(
     case 'otherDid':
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
     case 'triggerLink':
-      // The words the trigger-link spec gives a reader for a flow it does not
-      // implement (outcome `update`). Nothing is sent and nothing is logged.
-      throw new KeyringLinkError('This code needs a newer version of the app.', undefined, 'Scan.TriggerLinkUpdate')
+      throw triggerLinkError(trimmed)
     default:
       throw new Error('not a Keyring agent link')
   }
