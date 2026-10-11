@@ -129,6 +129,9 @@ export const LINK_SCREENS = [
   "EnterPIN",
 ];
 
+/** A link begun by a scanned agent: VtaLink's "add this phone" card, or the key it shows (bifold #338). */
+export const LINK_STARTED = ["VtaLinkForOtherPhone", "VtaLinkShowingKey", "VtaLinkWaitingForPhone"];
+
 /** What the address path says when a phone has no screen lock (237, before bifold #339). */
 export const NEEDS_LOCK = /To protect your agent, turn on .*(passcode|screen lock)/i;
 
@@ -375,6 +378,54 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
       step("pasteAddress", async () => {
         await io.pasteLinkOnScanScreen(d, did);
         await awaitStep("VtaLinkForOtherPhone", 45000);
+      }),
+
+    /**
+     * A code given to the scanner (a bare DID, as `pnm vta qr` draws one), and
+     * what the scanner made of it, returned rather than thrown so the row can
+     * say it: `started` (VtaLink's "add this phone" card), `refused` (the paste
+     * screen's ErrorModal, with its title and words: "nothing to do with it
+     * here", "This phone already has that agent"), or `none` on the deadline,
+     * with the screen it sat on. The paste helper throws on that modal ("the
+     * app refused the pasted link"); here the modal is the answer.
+     */
+    pasteScanned: (text, { timeoutMs = 45000 } = {}) =>
+      step("pasteScanned", async () => {
+        try {
+          await io.pasteLinkOnScanScreen(d, text);
+        } catch (e) {
+          if (!(await onScreen("ErrorModal")) && !(await onScreen("Try Again"))) throw e;
+        }
+        let on = null;
+        try {
+          on = await awaitStep([...LINK_STARTED, "ErrorModal", "Try Again"], timeoutMs);
+        } catch (e) {
+          return { value: { state: "none", on: e.observed?.stepId ?? null, said: "" }, observed: e.observed };
+        }
+        if (LINK_STARTED.includes(on)) return { value: { state: "started", on, said: "" } };
+        const said = [await wordsOfId("HeaderText"), await wordsOfId("BodyText")].filter(Boolean).join(": ");
+        return { value: { state: "refused", on, said } };
+      }),
+
+    /**
+     * After the agent took this phone off its list: the removed-phone card
+     * (RemovedPhone) on My Agent or the link screen, and its words. The phone
+     * learns of it on its next call to the agent, so `nudge` (the caller's:
+     * background and foreground, My Agent again) runs every `everyMs` until the
+     * card shows or `timeoutMs` passes.
+     */
+    awaitRemoved: ({ timeoutMs = 180000, everyMs = 30000, nudge } = {}) =>
+      step("awaitRemoved", async () => {
+        let last = io.now();
+        let nudges = 0;
+        const each = async () => {
+          if (!nudge || io.now() - last < everyMs) return;
+          last = io.now();
+          nudges++;
+          await nudge();
+        };
+        await awaitStep("RemovedPhone", timeoutMs, { each, extra: async () => ({ nudges }) });
+        return { value: { said: await wordsOfId("VtaLinkError"), nudges } };
       }),
 
     /**
