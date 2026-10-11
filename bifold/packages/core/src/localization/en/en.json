@@ -1341,6 +1341,9 @@
     "CardNotKeptExpired": "A card from {{community}} had already expired, so Keyring didn't keep it.",
     "CardNotKeptNotYetValid": "A card from {{community}} isn't valid yet, so Keyring didn't keep it. Check that this phone's date and time are right.",
     "CardNotKeptRevoked": "A card from {{community}} was withdrawn, so Keyring didn't keep it.",
+    "CardStatusUnchecked": "Keyring couldn't check this card's status, so it isn't kept yet. Keyring keeps trying.",
+    "CardStatusTryAgain": "Try again",
+    "CardStatusStillUnchecked": "Still couldn't check it. Keyring will try again soon.",
     "RemovedReason": "The reason given: {{reason}}"
   },
   "VtaLink": {

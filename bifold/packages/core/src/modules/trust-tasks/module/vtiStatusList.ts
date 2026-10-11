@@ -62,7 +62,13 @@ export type CredentialStatusResult =
   | { state: 'ok'; checkedAt: string; index: number; purpose: string }
   | { state: 'revoked'; checkedAt: string; index: number; purpose: string }
   | { state: 'none'; checkedAt: string }
-  | { state: 'unknown'; checkedAt: string; reason: string }
+  /**
+   * `host` is the status list's host when the entry named a URL with one: said
+   * in the log so a report shows where the list was sought, without the path
+   * (which can carry a list's ids). IN-258: a card held for a list the phone
+   * could not reach, with nothing in the report to say which.
+   */
+  | { state: 'unknown'; checkedAt: string; reason: string; host?: string }
 
 /** A parsed `credentialStatus` entry. */
 export interface StatusEntry {
@@ -235,6 +241,27 @@ export async function checkStatusEntry(
   entry: StatusEntry,
   expectedIssuer: string,
   options: { allowInsecureLocal?: boolean; fetchImpl?: typeof fetch } = {}
+): Promise<CredentialStatusResult> {
+  const result = await readStatusEntry(agent, entry, expectedIssuer, options)
+  if (result.state !== 'unknown') return result
+  const host = statusListHost(entry.url)
+  return host ? { ...result, host } : result
+}
+
+/** The host a status list URL names, or undefined when it names none (never the path or query). */
+export function statusListHost(raw: string): string | undefined {
+  try {
+    return new URL(raw).host || undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readStatusEntry(
+  agent: Agent,
+  entry: StatusEntry,
+  expectedIssuer: string,
+  options: { allowInsecureLocal?: boolean; fetchImpl?: typeof fetch }
 ): Promise<CredentialStatusResult> {
   const rejection = guardStatusListUrl(entry.url, options.allowInsecureLocal)
   if (rejection) return unknown(`status list URL rejected: ${rejection}`)

@@ -37,6 +37,7 @@ import { useCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/commu
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
+import { CardStatusNotice } from './cardStatusNotice'
 import { communityName, identityWord, unnamedCommunityLabel } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
@@ -900,6 +901,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         {waiting ? (
           <ThemedText testID={testIdWithKey(VtiJoinIds.willShow)}>{t('Join.WillShowWhenAccepted')}</ThemedText>
         ) : null}
+        {/* The community sent a card whose status list could not be read: it is
+            not kept, and is tried again; said here rather than left silent
+            behind "not accepted" (IN-258). */}
+        {standing.kind !== 'member' ? <CardStatusNotice communityDid={communityDid} onKept={onCheckAgain} /> : null}
         {withInvitation ? (
           <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.standingInvitation)}>
             {t('Join.StandingWithInvitation')}

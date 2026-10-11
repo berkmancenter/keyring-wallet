@@ -25,7 +25,8 @@ import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './com
 import { currentAgentDid } from './currentAgent'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
-import { deliveredCardCheck } from './vtiDeliveredCheck'
+import { holdForStatusCheck } from './vtiCardStatusRetry'
+import { deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCommunityNotices'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
@@ -125,6 +126,16 @@ export async function keepForPersona(
       }
     },
     (e) => {
+      // A card whose status list could not be read stays off the mediator for
+      // redelivery as before, and is now also tried again here and said on the
+      // community's card (IN-258). The check is the same either way.
+      if (e instanceof VtiCardStatusUnreadable) {
+        holdForStatusCheck(`${target.communityDid}|${String(message.id ?? '')}`, {
+          communityDid: target.communityDid,
+          host: e.host,
+          retry: () => keepForPersona(agent, target, message, options),
+        })
+      }
       options.onError?.(e)
       throw e
     }

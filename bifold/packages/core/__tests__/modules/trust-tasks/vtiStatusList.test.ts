@@ -102,7 +102,7 @@ describe('decodeEncodedList', () => {
   it('round-trips a multibase-prefixed GZIP bitstring', () => {
     const bits = decodeEncodedList(encodeList(1024))
     expect(bits).toBeInstanceOf(Uint8Array)
-    expect((bits as Uint8Array)).toHaveLength(128)
+    expect(bits as Uint8Array).toHaveLength(128)
   })
 
   it('accepts a bare base64url string without the multibase prefix', () => {
@@ -208,9 +208,28 @@ describe('checkStatusEntry', () => {
 
   it('reports an index past the end of the list', async () => {
     const fetchImpl = serving(listCredential(encodeList(64)))
-    await expect(
-      checkStatusEntry(agent, { ...entry, index: 1_000 }, ISSUER, { fetchImpl })
-    ).resolves.toMatchObject({ state: 'unknown', reason: expect.stringContaining('exceeds') })
+    await expect(checkStatusEntry(agent, { ...entry, index: 1_000 }, ISSUER, { fetchImpl })).resolves.toMatchObject({
+      state: 'unknown',
+      reason: expect.stringContaining('exceeds'),
+    })
+  })
+
+  it('names the host it could not reach, never the path (IN-258: a host that does not resolve, failing at once)', async () => {
+    // The tester's card named test-vtc.storm.ws, which has no DNS record; iOS
+    // fetch fails 11 ms later with this exact error (report X8YZ-X2FP).
+    const fetchImpl = jest.fn(() => Promise.reject(new TypeError('Network request failed'))) as unknown as typeof fetch
+    const result = await checkStatusEntry(
+      agent,
+      { url: 'https://test-vtc.storm.ws/v1/status-lists/revocation', index: 9, purpose: 'revocation' },
+      ISSUER,
+      { fetchImpl }
+    )
+    expect(result).toMatchObject({
+      state: 'unknown',
+      host: 'test-vtc.storm.ws',
+      reason: expect.stringContaining('TypeError: Network request failed'),
+    })
+    expect(JSON.stringify(result)).not.toContain('/v1/status-lists')
   })
 
   it('calls an unreachable list unknown, never revoked', async () => {
@@ -229,7 +248,11 @@ describe('checkStatusEntry', () => {
   })
 
   it('never follows a redirect off the guarded host', async () => {
-    const fetchImpl = jest.fn(async () => ({ ok: true, status: 200, text: async () => '{}' })) as unknown as typeof fetch
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '{}',
+    })) as unknown as typeof fetch
     await checkStatusEntry(agent, entry, ISSUER, { fetchImpl })
     expect((fetchImpl as jest.Mock).mock.calls[0][1]).toMatchObject({ redirect: 'error' })
   })

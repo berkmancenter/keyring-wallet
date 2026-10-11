@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "6f6f9aba936ecdbe2049d2c401bfebd919919f1e",
+  "generatedFrom": "d86785b447cac839013878f60981dc0058a8aad8",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -232,6 +232,10 @@
     "CancelDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "CancelDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "CancelRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
+    "CardStatusNotice": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeStill": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeText": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeTryAgain": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
     "Change Pin": ["src/screens/Settings.tsx"],
     "ChangePIN": ["src/screens/PINChange.tsx"],
     "ClearPastedUrl": ["src/screens/PasteUrl.tsx"],
@@ -2109,6 +2113,18 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "requestTestKey(r.requestDocumentId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.notice"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.still"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.text"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.tryAgain"
     },
     {
       "src/screens/AutoLock.tsx": "testID"

@@ -1280,6 +1280,9 @@
     "CardNotKeptExpired": "Une carte de {{community}} avait déjà expiré, Keyring ne l'a donc pas gardée.",
     "CardNotKeptNotYetValid": "Une carte de {{community}} n'est pas encore valable, Keyring ne l'a donc pas gardée. Vérifiez la date et l'heure de ce téléphone.",
     "CardNotKeptRevoked": "Une carte de {{community}} a été retirée, Keyring ne l'a donc pas gardée.",
+    "CardStatusUnchecked": "Keyring n'a pas pu vérifier le statut de cette carte, elle n'est donc pas encore gardée. Keyring continue d'essayer.",
+    "CardStatusTryAgain": "Réessayer",
+    "CardStatusStillUnchecked": "Toujours impossible de la vérifier. Keyring réessaiera bientôt.",
     "RemovedReason": "Motif indiqué : {{reason}}"
   },
   "VtaLink": {
