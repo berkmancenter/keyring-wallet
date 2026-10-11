@@ -47,7 +47,12 @@ import {
   type VtaContext,
 } from './VtaClient'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
-import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiManagerIdentity } from './VtiIdentityStore'
+import {
+  GenericRecordsIdentityStore,
+  type VtiIdentityStore,
+  type VtiManagerIdentity,
+  type VtiPersona,
+} from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import {
@@ -2149,6 +2154,19 @@ export class VtaAgentController {
     return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
       throw this.refused(error)
     })
+  }
+
+  /**
+   * What trigger-link sign-in needs from the linked agent: a signed-in client,
+   * and the persona this phone holds there for `communityDid` (none when it
+   * joined through another agent). Signs in if it must. Refuses with
+   * {@link DeviceActionRefused}.
+   */
+  async signInSession(agent: Agent, communityDid: string): Promise<{ client: VtaClient; persona?: VtiPersona }> {
+    const vtaDid = this.linkedAgent()
+    const client = await this.signedIn(agent, vtaDid)
+    const persona = await this.identityStore(agent).getPersona(communityDid, vtaDid)
+    return { client, persona }
   }
 
   /**

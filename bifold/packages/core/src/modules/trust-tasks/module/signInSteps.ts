@@ -10,16 +10,8 @@
  * @module trust-tasks/module/signInSteps
  */
 import type { Agent } from '@credo-ts/core'
+import { Platform } from 'react-native'
 
-// TEMPORARY: the later steps come from a stub until oobSignInAgent.ts lands.
-// Swap this import for the real module; nothing else names the stub.
-import {
-  approveSignIn,
-  identifyAndProve,
-  type ProvedSignIn,
-  type SignInAgentDeps,
-  type SignInLaterFailure,
-} from './oobSignInAgentStub'
 import {
   agentDidResolver,
   cancelSignIn,
@@ -27,16 +19,28 @@ import {
   httpsPost,
   SignInError,
   type ClaimedSignIn,
+  type SignInDeps,
   type SignInFailure,
 } from './oobSignIn'
+import {
+  approveSignIn,
+  enrolUvKey,
+  ensureSignInVaultEntry,
+  identifyAndProve,
+  signInAgentDeps,
+  signInFailureFromAgent,
+  type ProvedSignIn,
+  type SignInAgentDeps,
+} from './oobSignInAgent'
 import { readTrigger, triggerAction } from './triggerLink'
+import { vtaAgent } from './vtaAgent'
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { communityTarget } from './vtiCommunityLink'
 
-export type { ProvedSignIn, SignInRequester } from './oobSignInAgentStub'
+export type { ProvedSignIn, SignInRequester } from './oobSignInAgent'
 
 /** Every reason a sign-in can end without being approved, as the screen words them. */
-export type SignInEndReason = SignInFailure | SignInLaterFailure
+export type SignInEndReason = SignInFailure
 
 export type SignInSteps = {
   /** Local only: membership and the recorded name. Never reaches the network. */
@@ -58,20 +62,52 @@ async function recordedCommunity(agent: Agent, vtcDid: string): Promise<{ member
   return { member, name }
 }
 
-/** The production steps, over the Credo agent. */
+/**
+ * The member's agent for one community: the sign-in dependencies over a
+ * signed-in client, and the persona with its vault entry (made if missing).
+ * A phone not linked, or holding no persona there, is not a member to sign in.
+ */
+async function memberAgent(
+  agent: Agent,
+  vtcDid: string
+): Promise<{ deps: SignInAgentDeps; persona: { did: string; entryId: string } }> {
+  const session = await vtaAgent.signInSession(agent, vtcDid).catch((error: unknown) => {
+    const reason = (error as { reason?: unknown } | null)?.reason
+    if (reason === 'notLinked') throw new SignInError('notAMember', 'this phone is linked to no agent')
+    throw signInFailureFromAgent(error)
+  })
+  if (!session.persona)
+    throw new SignInError('notAMember', 'this phone holds no persona for the community on its agent')
+  const deps = signInAgentDeps(agent, session.client, { platform: Platform.OS })
+  const { did, contextId } = session.persona
+  // The key as the persona's DID document names it: the form the live entry was proven with (findings G-section).
+  const entryId = await ensureSignInVaultEntry(vtcDid, { did, contextId, signingKeyId: `${did}#key-0` }, deps)
+  return { deps, persona: { did, entryId } }
+}
+
+/** The production steps, over the Credo agent and the phone's linked agent. */
 export function agentSignInSteps(agent: Agent): SignInSteps {
-  const deps: SignInAgentDeps = {
-    agent,
+  const claimDeps: SignInDeps = {
     resolveDid: agentDidResolver(agent),
     post: httpsPost,
     isKnownCommunity: async (vtcDid) => (await recordedCommunity(agent, vtcDid)).member,
   }
+  let member: { vtcDid: string; deps: SignInAgentDeps } | undefined
   return {
     community: (vtcDid) => recordedCommunity(agent, vtcDid),
-    claim: (link) => claimSignIn(link, deps),
-    identifyAndProve: (claimed, enteredNumber) => identifyAndProve(claimed, enteredNumber, deps),
-    approve: (proved) => approveSignIn(proved, deps),
-    cancel: (claimed) => cancelSignIn(claimed, deps),
+    claim: (link) => claimSignIn(link, claimDeps),
+    identifyAndProve: async (claimed, enteredNumber) => {
+      const { deps, persona } = await memberAgent(agent, claimed.vtcDid)
+      member = { vtcDid: claimed.vtcDid, deps }
+      return identifyAndProve(claimed, enteredNumber, { ...deps, persona })
+    },
+    approve: async (proved) => {
+      const deps =
+        member?.vtcDid === proved.claimed.vtcDid ? member.deps : (await memberAgent(agent, proved.claimed.vtcDid)).deps
+      await enrolUvKey(deps)
+      return approveSignIn(proved, deps)
+    },
+    cancel: (claimed) => cancelSignIn(claimed, claimDeps),
   }
 }
 

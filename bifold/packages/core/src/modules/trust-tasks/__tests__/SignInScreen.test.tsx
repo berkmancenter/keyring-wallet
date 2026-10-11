@@ -186,13 +186,13 @@ describe('3. the number the website shows', () => {
   test('a wrong number ends the request and says to scan again', async () => {
     const steps = fakeSteps({
       identifyAndProve: jest.fn(async () => {
-        throw new SignInError('wrongNumber' as never)
+        throw new SignInError('wrongNumber')
       }),
     })
     const tree = await toReview(steps)
     expect(message(tree)).toHaveTextContent('SignIn.Failure.wrongNumber')
     expect(en.SignIn.Failure.wrongNumber).toBe(
-      "That number didn't match. Refresh the code on the website and scan again."
+      "That isn't the number on the sign-in page. Refresh the page and scan the new code."
     )
     expect(tree.queryByTestId(id(SignInIds.numberInput))).toBeNull()
     expect(steps.approve).not.toHaveBeenCalled()
@@ -274,7 +274,7 @@ describe('6. how it ended: every reason has its words', () => {
     }
   )
 
-  test.each(['noVaultEntry', 'replayed', 'notEnrolled', 'refused'])(
+  test.each(['noVaultEntry', 'grantReplayed', 'notEnrolledDevice', 'refused'])(
     'identify and prove refused for %s',
     async (reason) => {
       const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(fails(reason)) }))
@@ -282,7 +282,7 @@ describe('6. how it ended: every reason has its words', () => {
     }
   )
 
-  test.each(['uvRequired', 'notEnrolled', 'unreachable'])('an approval that fails for %s', async (reason) => {
+  test.each(['uvRequired', 'notEnrolledDevice', 'unreachable'])('an approval that fails for %s', async (reason) => {
     const steps = fakeSteps({ approve: jest.fn(fails(reason)) })
     const tree = await toReview(steps)
     await press(tree, SignInIds.approve)
@@ -303,8 +303,8 @@ describe('6. how it ended: every reason has its words', () => {
     'wrongNumber',
     'noVaultEntry',
     'uvRequired',
-    'notEnrolled',
-    'replayed',
+    'notEnrolledDevice',
+    'grantReplayed',
     'unknown',
   ]
   test.each([
