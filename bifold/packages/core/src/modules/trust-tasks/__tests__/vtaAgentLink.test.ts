@@ -1327,6 +1327,49 @@ describe('several agents', () => {
     expect(vta.getState()).toMatchObject({ addingAgent: false, link: { kind: 'linked', vtaDid: HOME.vtaDid } })
   })
 
+  // IN-251: the agent removed this phone; "Link again" left it on the list of
+  // agents, so a scan of it said "This phone already has that agent" with
+  // nothing to switch to. It is forgotten as a link; its identities stay.
+  it('"Link again" after a removal forgets that agent, so scanning it again goes ahead', async () => {
+    const forgetManager = jest.fn(async () => undefined)
+    const forgetPersona = jest.fn(async () => undefined)
+    const { vta, links } = twoAgents({
+      identityStore: () => ({ setManager: async () => undefined, forgetManager, forgetPersona }),
+    })
+    await vta.restore({} as never)
+    ;(vta as unknown as { agent: unknown }).agent = {}
+    ;(vta as unknown as { set(next: object): void }).set({
+      link: { kind: 'revoked', vtaDid: HOME.vtaDid, label: 'Home', reason: 'DID not in ACL', cause: 'removed' },
+    })
+    expect(vta.hasAgent(HOME.vtaDid)).toBe(false)
+    vta.relink()
+    // At once: a scan straight after is not refused.
+    expect(vta.getState().link.kind).toBe('notLinked')
+    expect(vta.hasAgent(HOME.vtaDid)).toBe(false)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(links()).toEqual([WORK.vtaDid])
+    expect(vta.hasAgent(HOME.vtaDid)).toBe(false)
+    expect(vta.hasAgent(WORK.vtaDid)).toBe(true)
+    expect(forgetManager).toHaveBeenCalledWith(HOME.vtaDid)
+    expect(forgetPersona).not.toHaveBeenCalled()
+  })
+
+  it('"Scan again" after a plain failure forgets nothing', async () => {
+    const forgetManager = jest.fn(async () => undefined)
+    const { vta, links } = twoAgents({
+      identityStore: () => ({ setManager: async () => undefined, forgetManager }),
+    })
+    await vta.restore({} as never)
+    ;(vta as unknown as { agent: unknown }).agent = {}
+    ;(vta as unknown as { set(next: object): void }).set({
+      link: { kind: 'notLinked', lastError: { reason: 'failed' } },
+    })
+    vta.relink()
+    await new Promise((resolve) => setImmediate(resolve))
+    expect([...links()].sort()).toEqual([HOME.vtaDid, WORK.vtaDid].sort())
+    expect(forgetManager).not.toHaveBeenCalled()
+  })
+
   // IN-138: the add failed (a community's agent, refused) and the person went back.
   it('an add that failed, then given up, goes back to the agent before', async () => {
     const { vta } = twoAgents()
