@@ -207,17 +207,23 @@ jobs:
           docker logs gwh 2>&1 | grep 'controller allowlist'
           docker rm -f gwh
 
-      - name: The image carries the patches (mediator webhook, patch 0003)
+      - name: The image carries the patches (mediator webhook, patches 0003 and 0004)
         env:
           IMAGE: ${{ steps.pin.outputs.image }}
         run: |
           # With a webhook secret set, the route answers a post with no device
           # token as ignored, and a wrong secret as not found. An image without
-          # patch 0003 has no such route and answers 404 to both.
+          # patch 0003 has no such route and answers 404 to both. The secret is
+          # given as a file, as production does: an image without patch 0004
+          # ignores the file and has no route either.
           secret=ci-check-0123456789abcdefghijklmnopqrstuv
+          mkdir -p "$RUNNER_TEMP/gwm"
+          printf '%s\n' "$secret" > "$RUNNER_TEMP/gwm/webhook"
+          chmod 644 "$RUNNER_TEMP/gwm/webhook"
           docker run -d --name gwm -p 8300:8300 \
             -e GATEWAY_DEV_ECHO_SENDER=1 \
-            -e GATEWAY_MEDIATOR_WEBHOOK_SECRET="$secret" \
+            -v "$RUNNER_TEMP/gwm:/run/secrets/gateway:ro" \
+            -e GATEWAY_MEDIATOR_WEBHOOK_SECRET_FILE=/run/secrets/gateway/webhook \
             -e GATEWAY_ADDR=http://localhost:8300 \
             "$IMAGE"
           for _ in $(seq 1 30); do
@@ -230,7 +236,7 @@ jobs:
             -H 'content-type: application/json' -d '{"connectionId":"c","fcmToken":null}')
           echo "right secret, no token: $ok"
           if [ "$(printf '%s' "$ok" | jq -r '.status // empty')" != ignored ]; then
-            echo "::error::the mediator webhook did not answer: the image lacks patch 0003"; docker logs gwm; exit 1
+            echo "::error::the mediator webhook did not answer: the image lacks patch 0003 or 0004"; docker logs gwm; exit 1
           fi
           wrong=$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:8300/mediator-webhook/wrong-secret" \
             -H 'content-type: application/json' -d '{"connectionId":"c","fcmToken":"h"}')
