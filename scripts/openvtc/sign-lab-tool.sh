@@ -70,6 +70,25 @@ BUILT="$TARGET_DIR/debug/$TOOL"
 [ -x "$BUILT" ] || { echo "no build at $BUILT (run with --build)" >&2; exit 1; }
 REV=$(git -C "$SRC" rev-parse --short=7 HEAD)
 
+# Linux has no Keychain and no per-binary ACL prompt, so there is nothing to
+# sign: skip codesign, keep the stable-path job (a revisioned copy plus a link).
+# pnm/openvtc secrets on Linux: set VTI_SECURE_STORE=file for an unattended lab
+# (plaintext 0600 under pnm's config dir) or leave it unset for the Secret
+# Service (needs an unlocked keyring in the session).
+if [ "$(uname)" = "Linux" ]; then
+  echo "$TOOL: Linux — Keychain code signing skipped (not needed); VTI_SECURE_STORE=file is the unattended-lab option"
+  case "$TOOL" in
+    pnm|cnm|openvtc)
+      mkdir -p "$BIN_DIR"
+      DEST="$BIN_DIR/$TOOL-$REV"
+      cp -p "$BUILT" "$DEST.new" && mv -f "$DEST.new" "$DEST"
+      ln -sfn "$DEST" "$BIN_DIR/$TOOL"
+      echo "  $TOOL → $(readlink "$BIN_DIR/$TOOL")"
+      ;;
+  esac
+  exit 0
+fi
+
 # The identity by SHA-1: an untrusted self-signed identity signs fine by hash.
 if [[ "$IDENTITY_NAME" =~ ^[0-9A-Fa-f]{40}$ ]]; then
   IDENTITY="$IDENTITY_NAME"
@@ -96,13 +115,13 @@ echo "$TOOL: $BUILT signed in place"
 echo "  $REQ"
 
 # CLIs also get a revisioned copy and a stable ~/vti-stack/bin link, which the
-# harness defaults to (-h on ln: replace the link itself).
+# harness defaults to (-n on ln: replace the link itself; BSD and GNU both take it).
 case "$TOOL" in
   pnm|cnm|openvtc)
     mkdir -p "$BIN_DIR"
     DEST="$BIN_DIR/$TOOL-$REV"
     sign_copy "$BUILT" "$DEST"
-    ln -sfh "$DEST" "$BIN_DIR/$TOOL"
+    ln -sfn "$DEST" "$BIN_DIR/$TOOL"
     echo "  $TOOL → $(readlink "$BIN_DIR/$TOOL")"
     ;;
 esac
