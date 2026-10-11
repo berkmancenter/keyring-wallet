@@ -23,6 +23,7 @@ import { createServer } from 'node:http'
 import { Readable } from 'node:stream'
 import { timingSafeEqual } from 'node:crypto'
 
+import { objectKey } from './diskStorage.mjs'
 import { hotUpdater, store } from './hotUpdater.mjs'
 
 const token = process.env.HOT_UPDATER_AUTH_TOKEN
@@ -67,7 +68,7 @@ const handleStorage = async (req, res, route) => {
     const file = form.get('file')
     const key = form.get('key')
     if (!file || typeof key !== 'string') return json(res, 400, { error: 'file and key are required' })
-    const storageUri = await store.put(key, Buffer.from(await file.arrayBuffer()))
+    const storageUri = await store.put(objectKey(key, file.name), Buffer.from(await file.arrayBuffer()))
     return json(res, 200, { storageUri })
   }
   const { storageUri } = await request.json()

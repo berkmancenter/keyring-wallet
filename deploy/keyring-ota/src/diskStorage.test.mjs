@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-import { createDiskStore, diskStoragePlugin, fileForKey, keyFromUri, uriForKey } from './diskStorage.mjs'
+import { createDiskStore, diskStoragePlugin, fileForKey, keyFromUri, objectKey, uriForKey } from './diskStorage.mjs'
 
 const tempStore = async (publicUrl = 'https://ota.example.org') => {
   const dir = await mkdtemp(path.join(tmpdir(), 'keyring-ota-'))
@@ -50,4 +50,16 @@ test('the runtime plugin resolves only its own protocol', async () => {
     fileUrl: 'https://ota.example.org/files/b3/bundle.zip',
   })
   await assert.rejects(plugin.profiles.runtime.getDownloadUrl('s3://bucket/key'), /not an ota-disk URI/)
+})
+
+test('files uploaded under one key are stored side by side, not over each other', async () => {
+  assert.equal(objectKey('bundles/b4', 'bundle.zip'), 'bundles/b4/bundle.zip')
+  assert.equal(objectKey('bundles/b4/', 'manifest.json'), 'bundles/b4/manifest.json')
+  assert.equal(objectKey('bundles/b4', '../../escape'), 'bundles/b4/escape')
+  assert.throws(() => objectKey('', 'bundle.zip'), /invalid upload/)
+  const { store } = await tempStore()
+  const zip = await store.put(objectKey('bundles/b4', 'bundle.zip'), Buffer.from('zip'))
+  const manifest = await store.put(objectKey('bundles/b4', 'manifest.json'), Buffer.from('{}'))
+  assert.notEqual(zip, manifest)
+  assert.equal(await store.readText(zip), 'zip')
 })

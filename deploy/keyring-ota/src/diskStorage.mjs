@@ -26,6 +26,17 @@ export const keyFromUri = (storageUri) => {
   return decodeURIComponent(`${url.host}${url.pathname}`)
 }
 
+/**
+ * The object key for an upload, as hot-updater's own storage plugins form it
+ * (`createStorageKeyBuilder`): the CLI uploads several files under one key
+ * (the bundle archive, its manifest), and each is stored at `<key>/<file name>`.
+ */
+export const objectKey = (key, filename) => {
+  const name = path.basename(String(filename ?? ''))
+  if (!key || !name || name === '.' || name === '..') throw new Error(`invalid upload: key ${key}, file ${filename}`)
+  return `${String(key).replace(/^\/+|\/+$/g, '')}/${name}`
+}
+
 export const uriForKey = (key) => `${PROTOCOL}://${key.split('/').map(encodeURIComponent).join('/')}`
 
 export const createDiskStore = ({ filesDir, publicUrl }) => ({
