@@ -5,6 +5,10 @@
  *   R1 add a second agent and keep the first; switch to it
  *   R2 an identity belongs to its agent: A joins C; on B, Join offers no chooser and goes ahead with B (#334)
  *   R5 a refusal reaches Your agent: the card's own status, and "Check now" if the session holds another identity
+ *   persona-in-own-context  TRACKED (IN-259): the persona Keyring made on B for C (R5's ask on B, else R10's) is in
+ *      vta, a Keyring context, or one made during this run — not another app's (B's first contexts are the openvtc
+ *      TUI fixtures' openvtc-*, and bifold VtaClient.ensurePersonaOnce mints in contexts[0]). Read-only pnm on B_SLUG
+ *      (lib/pnm.js personaContextCheck), against B's context ids read at the start; one context on B is a SKIP.
  *   R3 requests from the other agent ("Ask me before…" on A, a held task, Requests on B)
  *   R6 both agents join one community; both memberships survive a relaunch; the Wallet names each card's agent
  *   R7 a membership of another agent (#320): A a member of C (R2), on B open C from its Wallet card → "on A"
@@ -31,7 +35,8 @@ import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { pasteLinkOnScanScreen } from "./lib/flows.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
-import { createRows } from "./lib/rows.js";
+import { createRows, selectedRows } from "./lib/rows.js";
+import { contextSnapshot, personaContextCheck } from "./lib/pnm.js";
 import { agents, answerOwnerCheck, readCommunityCard, readHomeName, readOwnerCode, readScanKey, readSwitcherRows, splitRows } from "./lib/pages/agents.js";
 import { community, join, readEntry } from "./lib/pages/join.js";
 import { idsWithPrefix, rowText, said, shot } from "./lib/pages/step.js";
@@ -120,6 +125,32 @@ async function walletCardsForC(d) {
 }
 let walletBefore = -1;
 
+const OWN_CONTEXT_ROW = "persona-in-own-context";
+const OWN_CONTEXT_TRACKED = "IN-259: new persona made in the agent's first context; UI/UX fix pending";
+const ownContextWanted = () => Boolean(E.B_SLUG) && (ROWS.includes("R5") || ROWS.includes("R10")) && (!selectedRows() || selectedRows().has(OWN_CONTEXT_ROW));
+/** B's context ids before the run makes anything there (read at the start); undefined when not read. */
+let bContextsBefore;
+/** The persona DID Keyring made on B for C: the applicant of the first request asked on B (R5, else R10). */
+let bPersona;
+let ownContextDone = false;
+
+/**
+ * IN-259 on B, read-only: where the persona Keyring made on B for C sits (lib/pnm.js personaContextCheck). Read before
+ * the row so that a single context, or a pnm without the commands, is a plain SKIP and not the tracked row's failure.
+ */
+async function personaInOwnContext(from) {
+  ownContextDone = true;
+  if (!ownContextWanted()) return rows.row(OWN_CONTEXT_ROW, () => true, { skip: E.B_SLUG ? "not selected" : "no B_SLUG (agent B's pnm slug)" });
+  let got;
+  try {
+    got = personaContextCheck(bPersona, { slug: E.B_SLUG, before: bContextsBefore });
+  } catch (e) {
+    got = { ok: false, detail: `pnm: ${firstLine(e).slice(0, 200)}` };
+  }
+  if (got.skip) return rows.row(OWN_CONTEXT_ROW, () => true, { skip: `${got.skip} (the persona from ${from})` });
+  return rows.row(OWN_CONTEXT_ROW, () => ({ ok: got.ok, detail: `${got.detail} (the persona from ${from})` }), { tracked: OWN_CONTEXT_TRACKED });
+}
+
 /** Ask to join C on the current agent (the review way); answers the owner check; returns the request id. */
 async function askToJoinC(d, tag) {
   const before = new Set((json(admin("join-list")).items ?? []).map((r) => r.id));
@@ -144,6 +175,11 @@ try {
     adb("shell", "locksettings", "set-pin", PIN);
     log("device PIN set (after the first link); waiting past the 5 s key window");
     await sleep(8000);
+  }
+  // IN-259: B's contexts before anything here can make one (read-only), so a context made during the run is known.
+  if (ownContextWanted()) {
+    bContextsBefore = contextSnapshot({ slug: E.B_SLUG, log });
+    if (bContextsBefore) log(`B's contexts before the run: ${bContextsBefore.size} (${[...bContextsBefore].slice(0, 8).join(", ")})`);
   }
 
   // R11 (239 finding, UI/UX 10-08): an Add whose key swap is held by an approval rule on B's agent, then Back: the
@@ -452,6 +488,7 @@ try {
     const r5 = await attempt("R5", async () => {
       await agents.switchTo(d, { name: E.B_NAME, owner });
       const req = await askToJoinC(d, "R5 on B");
+      bPersona = bPersona || req.applicantDid;
       await agents.switchTo(d, { name: E.A_NAME, owner });
       await myAgent();
       log(`R5: admin declines: ${admin("join-decide", req.id, "rejected").trim().split("\n").filter((l) => /->/.test(l)).pop()}`);
@@ -499,6 +536,8 @@ try {
       await rows.row("R5 refusal on the card by itself", () => ({ ok: Boolean(r5.value.refused), detail: `no Check now needed; "${r5.value.refused}"` }));
       console.log('NOT-REACHED R5 "Check now": the session held this identity, so the card learned the refusal by itself');
     }
+    // IN-259: the persona R5's ask made on B.
+    if (bPersona) await personaInOwnContext("R5's ask on B");
   }
 
   // R10 (#348): B joins C too (approved), so the Wallet holds two cards for C: A's (R2) and B's. R4 then unlinks B,
@@ -509,13 +548,20 @@ try {
     const r10 = await attempt("R10", async () => {
       await agents.switchTo(d, { name: E.B_NAME, owner });
       const req = await askToJoinC(d, "R10 on B");
+      bPersona = bPersona || req.applicantDid;
       log(`R10: admin approves: ${admin("join-decide", req.id, "approved").trim().split("\n").filter((l) => /->/.test(l)).pop()}`);
       console.log(`R10_MEMBER ${req.applicantDid}`);
       for (const until = Date.now() + 90000; Date.now() < until && walletBefore < 2; await sleep(5000)) walletBefore = await walletCardsForC(d);
       await shot(d, "agents-r10-wallet-two");
     });
     await rows.row("wallet-both-cards", () => (r10.ok ? { ok: walletBefore === 2, detail: `${walletBefore} Wallet card(s) name ${E.C_NAME} with A and B both members (want 2)` } : threw(r10)));
+    // IN-259: the persona R10's ask made on B, when R5 made none.
+    if (!ownContextDone && bPersona) await personaInOwnContext("R10's ask on B");
     await resync(E.A_NAME);
+  }
+  if (!ownContextDone) {
+    const why = ROWS.includes("R5") || ROWS.includes("R10") ? "no join request asked on B (R5 / R10 stopped first): no persona on B to read" : "ROWS has neither R5 nor R10: nothing joins on B";
+    await rows.row(OWN_CONTEXT_ROW, () => true, { skip: why });
   }
 
   if (ROWS.includes("R3")) {
