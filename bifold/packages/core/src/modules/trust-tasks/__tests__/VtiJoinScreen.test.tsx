@@ -4,7 +4,7 @@
  * then vetting at the ticket.
  */
 import { useNavigation } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter, StyleSheet } from 'react-native'
 
@@ -434,6 +434,13 @@ describe('I want to join a community', () => {
       })
       expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingRejected')
       expect(tree.getByTestId(testIdWithKey('JoinStandingReason'))).toHaveTextContent('Join.StandingReason')
+      // 240, Android: "Join again" sat below the read-only ways, off the
+      // screen. It is in the card that says the request was turned down.
+      expect(
+        within(tree.getByTestId(testIdWithKey('JoinStanding'))).getByTestId(testIdWithKey('JoinAgain'))
+      ).toBeTruthy()
+      const actions = tree.queryByTestId(testIdWithKey('JoinActions'))
+      if (actions) expect(within(actions).queryByTestId(testIdWithKey('JoinAgain'))).toBeNull()
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAgain'))))
       expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
