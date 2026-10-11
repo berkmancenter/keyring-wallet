@@ -373,6 +373,23 @@ describe('identify and prove', () => {
     expect(error.detail).toBe('auth/oob/prove:numberMismatch')
   })
 
+  it.each(['unsupportedVersion', 'unsupportedType'])(
+    'says the agent needs an update when it answers %s (an agent from before sign-in)',
+    async (code) => {
+      const community = fakeCommunity()
+      const vtaFake = fakeVta()
+      vtaFake.signTrustTask.mockRejectedValueOnce(
+        new VtiRefusal(
+          code,
+          'unsupported version: https://trusttasks.org/spec/vault/sign-trust-task/0.2 — this VTA serves https://trusttasks.org/spec/vault/sign-trust-task/0.1'
+        )
+      )
+      const error = await failureOf(identifyAndProve(claimedSignIn(), MATCH, depsWith(community, vtaFake)))
+      expect(error.reason).toBe('agentNeedsUpdate')
+      expect(community.post).not.toHaveBeenCalled()
+    }
+  )
+
   it('does not start after the decision deadline', async () => {
     const vtaFake = fakeVta()
     const deps = depsWith(undefined, vtaFake, { now: () => NOW + 121 })

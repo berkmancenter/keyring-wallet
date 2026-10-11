@@ -2238,6 +2238,7 @@
       "assertionMethodMissing": "Votre identité pour cette communauté ne peut pas encore approuver de connexions, aucune connexion n'a eu lieu.",
       "agentRefused": "Votre agent a refusé de vous connecter, aucune connexion n'a eu lieu.",
       "agentUnreachable": "Votre agent est injoignable, aucune connexion n'a eu lieu. Réessayez plus tard.",
+      "agentNeedsUpdate": "Votre agent doit être mis à jour avant de pouvoir vous connecter à des sites web.",
       "unknown": "Un problème est survenu, rien n'a été connecté. Actualisez la page de connexion et réessayez."
     }
   }

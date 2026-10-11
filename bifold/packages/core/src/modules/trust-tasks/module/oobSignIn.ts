@@ -98,6 +98,7 @@ export type SignInFailure =
   | 'grantReplayed'
   | 'assertionMethodMissing'
   | 'agentRefused'
+  | 'agentNeedsUpdate'
   | 'agentUnreachable'
 
 /** The words for each, in the person's terms. */
@@ -124,6 +125,7 @@ export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
   grantReplayed: 'This approval was already used. Refresh the sign-in page and scan the new code.',
   assertionMethodMissing: "Your identity in this community can't approve sign-ins yet.",
   agentRefused: 'Your agent refused this sign-in.',
+  agentNeedsUpdate: 'Your agent needs an update before it can sign you in to websites.',
   agentUnreachable: "Your agent couldn't be reached.",
 }
 

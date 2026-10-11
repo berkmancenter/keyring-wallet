@@ -2307,6 +2307,7 @@
       "assertionMethodMissing": "Your identity in this community can't approve sign-ins yet.",
       "agentRefused": "Your agent refused this sign-in.",
       "agentUnreachable": "Your agent couldn't be reached.",
+      "agentNeedsUpdate": "Your agent needs an update before it can sign you in to websites.",
       "unknown": "Something went wrong, so nothing was signed in. Refresh the sign-in page and try again."
     }
   }

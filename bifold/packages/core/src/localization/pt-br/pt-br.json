@@ -2147,6 +2147,7 @@
       "assertionMethodMissing": "Sua identidade nesta comunidade ainda não pode aprovar logins, então nada foi conectado.",
       "agentRefused": "Seu agente recusou entrar por você, então nada foi conectado.",
       "agentUnreachable": "Não foi possível contatar seu agente, então nada foi conectado. Tente mais tarde.",
+      "agentNeedsUpdate": "Seu agente precisa ser atualizado antes de poder conectar você a sites.",
       "unknown": "Algo deu errado, então nada foi conectado. Atualize a página de login e tente novamente."
     }
   }

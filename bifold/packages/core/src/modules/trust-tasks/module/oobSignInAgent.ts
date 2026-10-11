@@ -171,6 +171,11 @@ const AGENT_REFUSALS: Record<string, SignInFailure> = {
   oobAssertionMethodMissing: 'assertionMethodMissing',
   // The entry is gone (vault.rs:1794).
   notFound: 'noVaultEntry',
+  // An agent from before sign-in signing (VTI #1997): it serves only
+  // vault/sign-trust-task/0.1, so 0.2 is a known family at an unknown
+  // version (vta-service trust_tasks/helpers.rs method_not_found).
+  unsupportedVersion: 'agentNeedsUpdate',
+  unsupportedType: 'agentNeedsUpdate',
 }
 
 /** The local code inside a VTA's refusal: `details.code`, else the `<task>:<code>` in its message. */
