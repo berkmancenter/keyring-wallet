@@ -13,6 +13,9 @@
  *
  * Environment: HOT_UPDATER_AUTH_TOKEN (required), OTA_PUBLIC_URL (the https
  * address phones use), PORT (default 3080), OTA_DATA_DIR (default ./data).
+ * OTA_LOG_CHECKS=1 prints each update check's path and each download, for a
+ * spike or a gate run that must see which bundle a phone reports; never set it
+ * on the hosted server, which keeps no access log.
  */
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -28,6 +31,7 @@ if (!token || token.length < 32) {
   process.exit(1)
 }
 const port = Number(process.env.PORT ?? 3080)
+const logChecks = process.env.OTA_LOG_CHECKS === '1'
 
 export const authorized = (header, expected = token) => {
   const given = Buffer.from(String(header ?? ''))
@@ -98,6 +102,9 @@ const handleFile = async (req, res, key) => {
 export const server = createServer(async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://localhost')
+    if (logChecks && (pathname.startsWith('/hot-updater/fingerprint/') || pathname.startsWith('/files/'))) {
+      console.log(`${new Date().toISOString()} ${req.method} ${pathname}`)
+    }
     if (pathname.startsWith('/files/')) return await handleFile(req, res, pathname.slice('/files/'.length))
     if (pathname.startsWith('/storage/')) {
       if (!authorized(req.headers.authorization)) return json(res, 401, { error: 'unauthorized' })
