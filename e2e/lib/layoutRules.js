@@ -3,7 +3,8 @@
  * about its layout, before any screenshot review (the testing report's Proposal C, part 1).
  *   tap-size   an interactive element smaller than 44 x 44 pt (iOS) or 48 x 48 dp (Android)
  *   clipped    an interactive element partly outside the window, and not inside a scrolling container
- *   overlap    two interactive elements whose frames overlap (a tap could land on either)
+ *   overlap    two interactive elements whose frames overlap (a tap could land on either), each frame clipped first to
+ *              its scrolling container's viewport: content scrolled under a header is not on screen to tap
  *   centred    a navigation bar's title more than 2 pt (or dp) off the window's centre line
  * Text truncation is not here: the hierarchy holds the full text, not what was drawn. That is the vision review.
  * Findings are data; a driver decides whether they fail a row (advisory until the rules are calibrated).
@@ -60,7 +61,8 @@ export function parsePageSource(xml, { platform = 'ios', scale = 1 } = {}) {
     // iOS: a window after the application's first (the keyboard host, a system alert) is not the app's screen.
     if (platform === 'ios' && type === 'XCUIElementTypeWindow' && parent && parent.root) windows++;
     const laterWindow = platform === 'ios' && type === 'XCUIElementTypeWindow' && parent && parent.root && windows > 1;
-    const el = { type, frame, visible, interactive, label: label.replace(/^.*:id\//, ''), scroll, inScroll: Boolean(parent && (parent.scroll || parent.inScroll)), keyboard: Boolean(keyboard || (parent && parent.keyboard)), outside: Boolean(laterWindow || (parent && parent.outside)), root: !parent, navTitle: false };
+    const el = { type, frame, visible, interactive, label: label.replace(/^.*:id\//, ''), scroll, inScroll: Boolean(parent && (parent.scroll || parent.inScroll)), keyboard: Boolean(keyboard || (parent && parent.keyboard)), outside: Boolean(laterWindow || (parent && parent.outside)), root: !parent,
+      viewport: parent ? (parent.scroll ? clip(parent.frame, parent.viewport) : parent.viewport) : null, navTitle: false };
     if (platform === 'ios' && type === 'XCUIElementTypeStaticText' && parent && parent.type === 'XCUIElementTypeNavigationBar') el.navTitle = true;
     elements.push(el);
     if (!selfClosing) stack.push(el);
@@ -68,6 +70,12 @@ export function parsePageSource(xml, { platform = 'ios', scale = 1 } = {}) {
   return elements;
 }
 
+/** The part of frame a inside viewport v (null: no viewport, a whole); an empty part has w or h of 0. */
+function clip(a, v) {
+  if (!v) return a;
+  const x = Math.max(a.x, v.x), y = Math.max(a.y, v.y);
+  return { x, y, w: Math.max(0, Math.min(a.x + a.w, v.x + v.w) - x), h: Math.max(0, Math.min(a.y + a.h, v.y + v.h) - y) };
+}
 const valid = (f) => [f.x, f.y, f.w, f.h].every(Number.isFinite) && f.w > 0 && f.h > 0;
 // Overlap beyond the tolerance on both axes: neighbours whose frames share a rounding edge are not an overlap.
 const overlaps = (a, b) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > OVERLAP_TOLERANCE && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > OVERLAP_TOLERANCE;
@@ -118,8 +126,10 @@ export function checkLayout(elements, { platform = 'ios', window = rootWindow(el
   }
   for (let i = 0; i < taps.length; i++) for (let j = i + 1; j < taps.length; j++) {
     const a = taps[i], b = taps[j];
+    const fa = clip(a.frame, a.viewport), fb = clip(b.frame, b.viewport);
+    if (!valid(fa) || !valid(fb)) continue;
     // Nested interactive elements (a cell and its button) are one control, not an overlap.
-    if (overlaps(a.frame, b.frame) && !contains(a.frame, b.frame) && !contains(b.frame, a.frame)) out.push({ rule: 'overlap', element: `${name(a)} / ${name(b)}`, labels: [a.label, b.label], detail: 'their frames overlap; a tap could land on either' });
+    if (overlaps(fa, fb) && !contains(a.frame, b.frame) && !contains(b.frame, a.frame)) out.push({ rule: 'overlap', element: `${name(a)} / ${name(b)}`, labels: [a.label, b.label], detail: 'their frames overlap; a tap could land on either' });
   }
   if (window) for (const e of live.filter((x) => x.navTitle)) {
     const off = e.frame.x + e.frame.w / 2 - window.w / 2;

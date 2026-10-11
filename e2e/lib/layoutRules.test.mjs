@@ -126,3 +126,21 @@ test('calibration: allowlist entries narrow by screen and platform, and an overl
   assert.deepEqual(allowed([{ rule: 'overlap', label: 'B', with: 'A', reason: 'r' }]), ['overlap Button "A" / Button "B"']);
   assert.throws(() => readAllow({ allow: [{ rule: 'overlap', label: 'B', reason: 'r' }] }), /needs "with"/);
 });
+
+test('overlap: frames are clipped to their scroll viewport (the R-Card form scrolled under the No-internet banner)', () => {
+  // The shape of the real smoke dump (link-failure, 10-11, iPhone 402x874): the form scrolled up 216 pt, so the label
+  // field's frame starts at y=147 while its scroll view's viewport starts at 179; the banner ends at 162.
+  const xml = ios(`<XCUIElementTypeButton type="XCUIElementTypeButton" name="com.ariesbifold:id/button-error" x="0" y="106" width="402" height="56" visible="true" enabled="true"/>
+    <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="21" y="179" width="360" height="374" visible="true"><XCUIElementTypeOther type="XCUIElementTypeOther" x="21" y="-37" width="360" height="700" visible="true">
+      <XCUIElementTypeTextField type="XCUIElementTypeTextField" name="com.ariesbifold:id/RCardLabelInput" x="42" y="147" width="318" height="44" visible="true" enabled="true"/>
+      ${btn('Hidden', 42, 100, 318, 48)}
+    </XCUIElementTypeOther></XCUIElementTypeScrollView>`);
+  const els = parsePageSource(xml, { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })).filter((r) => r.startsWith('overlap')), []);
+  // The same field not inside a scroller does overlap the banner: the clip is what clears it.
+  const flat = parsePageSource(ios(`<XCUIElementTypeButton type="XCUIElementTypeButton" name="button-error" x="0" y="106" width="402" height="56" visible="true" enabled="true"/>${'<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="RCardLabelInput" x="42" y="147" width="318" height="44" visible="true" enabled="true"/>'}`), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(flat, { platform: 'ios' })).filter((r) => r.startsWith('overlap')), ['overlap Button "button-error" / TextField "RCardLabelInput"']);
+  // Two buttons both on screen inside the scroller still overlap.
+  const both = parsePageSource(ios(`<XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="0" y="100" width="390" height="600" visible="true">${btn('A', 100, 300)}${btn('B', 150, 320)}</XCUIElementTypeScrollView>`), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(both, { platform: 'ios' })), ['overlap Button "A" / Button "B"']);
+});
