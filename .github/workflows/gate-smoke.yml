@@ -38,7 +38,8 @@ on:
         options: [both, ios, android]
         default: both
   workflow_run:
-    workflows: ["Test builds (simulator app + APK)"]
+    # The build workflow's name: field. It carries no special characters: the old one, with "+", never matched.
+    workflows: ["Test builds"]
     types: [completed]
     branches: [main]
 
@@ -60,7 +61,9 @@ jobs:
   builds:
     name: Which build
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Automatically: a green push build of main only. The watcher's push-on builds also run on main (dispatched), and
+    # carry no push-off artifacts to smoke.
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     timeout-minutes: 5
     outputs:
       run_id: ${{ steps.pick.outputs.run_id }}
