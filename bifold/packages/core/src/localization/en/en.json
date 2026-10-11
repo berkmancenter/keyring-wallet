@@ -2176,6 +2176,7 @@
     "Title": "My devices",
     "Intro": "Everything that can act as your agent's owner: this phone, other phones, a computer, a browser plugin. If you lose one, remove it here from another.",
     "ThisPhone": "This phone",
+    "LimitedAccess": "Limited access: it can use your agent for some tasks, but not manage it",
     "Unnamed": "Another device",
     "Remove": "Remove",
     "Removed": "Removed: {{device}}. It can't use your agent any more.",

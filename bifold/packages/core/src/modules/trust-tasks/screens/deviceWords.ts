@@ -99,6 +99,7 @@ export interface AgentDeviceLike {
   accessRevoked: boolean
   wipePending: boolean
   kind?: 'keyring'
+  limitedAccess?: boolean
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
@@ -126,6 +127,7 @@ export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView 
     // A device that registered a name shows it whatever its label says, so
     // only one that does not is renamed from here (IN-123).
     namesItself: Boolean(readable(device.displayName)),
+    ...(device.limitedAccess ? { limited: true } : {}),
   }
 }
 

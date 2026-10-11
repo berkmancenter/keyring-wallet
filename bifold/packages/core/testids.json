@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "b999742556fdef02af84a5480ba00c90af158ef1",
+  "generatedFrom": "6efedfc02356eff19b477910b3afc908320737d9",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -971,6 +971,7 @@
     "AgentCommunityPrimary_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityStatus_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCreateStep_": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
+    "AgentDeviceAccess_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceDetails_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceDid_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceRemove_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],

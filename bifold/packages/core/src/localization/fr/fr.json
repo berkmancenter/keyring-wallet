@@ -2112,6 +2112,7 @@
     "Title": "Mes appareils",
     "Intro": "Tout ce qui peut agir comme propriétaire de votre agent : ce téléphone, d'autres téléphones, un ordinateur, une extension de navigateur. Si vous en perdez un, retirez-le ici depuis un autre.",
     "ThisPhone": "Ce téléphone",
+    "LimitedAccess": "Accès limité : il peut utiliser votre agent pour certaines tâches, mais pas le gérer",
     "Unnamed": "Un autre appareil",
     "Remove": "Retirer",
     "Removed": "Retiré : {{device}}. Il ne peut plus utiliser votre agent.",
