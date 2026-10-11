@@ -18,13 +18,13 @@
  */
 
 /**
- * Trigger-link sign-in is not switched on. Off, the scanner answers every
- * trigger link with "This code needs a newer version of the app." exactly as
- * before (vtiLinks), and nothing reaches the claim step. A constant, as
- * `USE_CREDO_OPENID_REFRESH_FLOW` is: there is no screen behind it yet, so a
- * developer setting would only offer a dead end.
+ * Trigger-link sign-in is switched on: the scanner sends a sign-in code to the
+ * sign-in screen. Off, the scanner answers every trigger link with "This code
+ * needs a newer version of the app." as it did before (vtiLinks), and nothing
+ * reaches the claim step. An agent without sign-in signing (VTI #1997) is
+ * told apart on screen: "Your agent needs an update" (agentNeedsUpdate).
  */
-export const TRIGGER_LINK_SIGN_IN = false
+export const TRIGGER_LINK_SIGN_IN = true
 
 /** Whether trigger-link sign-in is on. A function, so a test can turn it on. */
 export const triggerLinkSignInEnabled = (): boolean => TRIGGER_LINK_SIGN_IN

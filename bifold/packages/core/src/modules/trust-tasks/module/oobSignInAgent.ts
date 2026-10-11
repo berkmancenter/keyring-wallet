@@ -22,7 +22,7 @@
  *    {@link SignInError.responded}).
  *
  * Network, resolver, agent and UV key are passed in, so this is tested without
- * any; nothing here is reachable from a screen yet (TRIGGER_LINK_SIGN_IN).
+ * any. The sign-in screen reaches it through signInSteps.
  *
  * @module trust-tasks/module/oobSignInAgent
  */

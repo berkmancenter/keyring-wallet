@@ -97,9 +97,9 @@ describe("Keyring's own reading", () => {
     expect(KEYRING_TRIGGER_CONFIG.flows?.filter((f) => f.implemented).map((f) => f.flow)).toEqual(['sign-in'])
   })
 
-  it('is switched off', () => {
-    expect(TRIGGER_LINK_SIGN_IN).toBe(false)
-    expect(triggerLinkSignInEnabled()).toBe(false)
+  it('is switched on', () => {
+    expect(TRIGGER_LINK_SIGN_IN).toBe(true)
+    expect(triggerLinkSignInEnabled()).toBe(true)
   })
 })
 

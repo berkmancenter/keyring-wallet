@@ -28,7 +28,7 @@
  * biometric storage (`AES_GCM`) needs the biometric to encrypt as well, so
  * creating the key prompts once there.
  *
- * Behind TRIGGER_LINK_SIGN_IN: nothing calls this yet.
+ * Used by the sign-in screen's Approve (oobSignInAgent.approveSignIn).
  *
  * @module trust-tasks/module/uvKey
  */
