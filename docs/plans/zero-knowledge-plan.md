@@ -106,14 +106,37 @@ Two public anchors say the ecosystem proves server-side for the credential layer
 Three facts specific to a phone bear on it. The first is general; the second and third are about the **vetter**:
 
 1. **There is no hardware-custody gain to lose.** Every ZK secret in play (a predicate-credential secret, a BBS link secret, a Groth16 witness) is a scalar on a pairing-friendly curve, and neither phone secure element supports those curves (§2.3). A device-held ZK secret would be a software key either way. Keyring's hardware story continues where it actually applies: the Secure Enclave or StrongBox signature on the *approval* (§3.2).
-2. **Hidden vetting needs an always-on agent.** Capping how often an anonymous vetter may vouch means handing each of them rate-limiting tokens, and the collection of those tokens must not track their activity — otherwise the collection pattern is itself the signal the design exists to hide. That implies a component awake on a schedule of its own. A mobile OS suspends and kills apps as routine, so the phone cannot be that component.
+2. ~~**Hidden vetting needs an always-on agent.**~~ **Withdrawn 2026-10-11 — this was
+   wrong, and [[PCS-DESIGN]] says so in the section it was reasoned from.** The argument
+   was that an anonymous vetter's rate-limiting tokens must be drawn on a schedule that
+   does not track their activity, and that a mobile OS cannot keep such a schedule. The
+   design anticipates exactly that: *"**Missed ticks** (the device was off) are caught up
+   on the next fetch, capped at `r × W`. This reveals when the vetter was offline, not
+   when they vetted. A community that minds can have the vetter's always-on agent do the
+   fetching"* (§5.1 step 1). So **catch-up fetching is the designed answer for a device
+   that sleeps**, the residual leak is offline-ness rather than vouching, and an always-on
+   agent is an option a community may require, not a precondition. `openvtc` itself has no
+   daemon — the drip appears only in its TUI, so the reference client draws when its
+   operator has it open, exactly as a phone would.
 3. **Anonymity does not survive two copies.** A vetter's attestations held on the phone *and* in the VTA are two places to leak identifying tags from, and two sources of truth for what has already been spent.
 
 **Upstream's own implementation proves on the client, for both roles.** [[W39]] states it plainly: *"proving runs on the client side (via the community app), while verification occurs server-side"*. That is a coherent choice for a desktop client which is running whenever its operator is, and it does not change our answer, because the reason the vetter's side needs an agent is not custody but **duties that continue while the client is closed**. It does mean our placement is a deliberate divergence from the reference client, made for a phone, and should be described that way rather than as the ecosystem's rule.
 
 **So, split by role:**
 
-- **Vetter side — settled for us, the VTA proves.** Points 2 and 3 are decisive: an unattended collection schedule and a single source of truth for what has been spent are not things a phone can offer. A Keyring user who vouches does so through their agent.
+- **Vetter side — reopened 2026-10-11, and no longer settled against the phone.** This
+  said the VTA proves, on points 2 and 3. Point 2 is withdrawn above. Point 3 — anonymity
+  does not survive two copies — survives but argues the *opposite* of what it was used
+  for: `VetterSnapshot`'s own source calls `usk` *"the most sensitive value here: every tag
+  this vetter has ever produced is derived from it, so a copy links their attestations to
+  each other"*, so what matters is that **one** holder keeps it, and a phone holding the
+  only copy satisfies that better than a phone and an agent both holding one. Storage is
+  not an obstacle either: `VetterSnapshot` derives `Serialize`/`Deserialize` exactly as the
+  applicant's state does, so it goes in the Keychain by the same route (§3.4). **So the
+  vetter role is feasible on the phone**, and what it actually costs is bridging
+  `VetterEngine` — which is in the same published crate as the applicant engine — plus the
+  catch-up discipline of §5.1. That is work, not an impossibility, and D3 now asks whether
+  we do it rather than whether we can.
 - **Applicant side — decided 2026-10-11: the phone proves (D4), on the ecosystem's own precedent.** [[W39]]'s client-side placement is the reference implementation for this operation, and none of the vetter's constraints bind here — but three facts in the pinned clones point the other way, and they are about what a gate can do rather than about where a file sits (§3.1.1). The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. The evidence in §3.1.1 argued the other way, on what a step-up gate can enforce; it is answered not by rebuttal but by **the blocker that §3.1 anticipated having arrived**: a prove-as-persona task over non-exportable keys does not exist, no upstream branch, issue or changelog is building one (§8 B3, companion F21), and upstream's own client proves locally ([[W39]]). The choice was therefore between waiting indefinitely and carrying the path upstream's reference client already carries. **Keyring proves the applicant's side on the phone**, and §3.1.2 records what that costs us — chiefly the loss of the agent-side approval gate — as accepted rather than solved. If an agent-side prover appears, §3.6's method-neutral contract lets it become a second path without a redesign; we do not wait for it.
 
 **Rejected for the vetter's side: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. For a vetter it is still ruled out by points 2 and 3: it cannot keep an unattended schedule, and it creates a second source of truth for what has been spent. For an applicant those objections do not apply, which is exactly why D4 is open rather than closed — and `ref-03d` is the measurement that says the phone could carry it if we chose to.
@@ -492,7 +515,17 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
 - **D4 — decided 2026-10-11 (Alberto), superseding the 2026-09-28 default.** *"I want to do phone proves, upstream may do it on the agent, but lets not wait on it."* **For the applicant, the phone proves.** The 09-28 reading put the default in the agent on the strength of §3.1.1's step-up argument; what settled it instead is that the thing the agent path needs — a prove-as-persona task over non-exportable keys — does not exist and nobody upstream is building it (B3, companion F21), while upstream's own reference client proves locally ([[W39]]). Accepted with it: an unaudited library inside the shipped app, a store release to bump it, and **no agent-side approval gate on this path** (§3.1.2's table, §4.1.2). What is *not* decided by this: the **vetter's** side, which cannot move to a phone at all (§3.1 points 2 and 3 — an unattended token schedule and a single record of what was spent), so the honest shape is *applicant proves on the phone; vouching stays with the agent, or Keyring users do not vouch* — which is **D3**, still open. If an agent-side prover appears later it becomes a second path under §3.6 rather than a redesign.
-- **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope. **D4 sharpened this rather than answering it:** now that the applicant proves on the phone, the vetter is the *only* role left needing an agent-side prover, so D3 is in effect the question of whether Keyring needs one at all.
+- **D3 — whether Keyring builds the vetter role, reopened and reframed 2026-10-11.** This
+  read as "whether Keyring pursues the vetter role at all, or stays applicant-only", with
+  the implication that a phone could not hold it. **That implication was wrong** (§3.1
+  point 2, withdrawn): catch-up fetching is the design's own answer for a device that
+  sleeps, `VetterSnapshot` serialises like the applicant's state, and one holder is what
+  the construction wants anyway. So the question is a scoping one, and Alberto put it
+  plainly: *"we should be able to do the equivalent on keyring"*, and *"seems we are only
+  working half way, the applicant side"*. He is right that the work so far is half the
+  feature. What it needs is recorded in
+  [`vetter_role_subtask.md`](./zero-knowledge-plan/vetter_role_subtask.md). Blocks ZK3's
+  scope, and nothing already built.
 
 **Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
 
