@@ -1,4 +1,8 @@
-name: Test builds (simulator app + APK)
+# A plain name, no "+", "(" or ")": gate-smoke.yml's workflow_run trigger names this workflow. With the old name,
+# "Test builds (simulator app + APK)", that trigger never fired once (no workflow_run run in the repo, 10-10 to
+# 10-11), though branch, event, actor and name all matched. The likely cause: the name is matched as a filter
+# pattern, where "+" means "one or more of the character before".
+name: Test builds
 
 # Store-configuration builds for the release checks, so a Mac running the checks
 # downloads and installs instead of compiling. Nothing here signs for a store or
