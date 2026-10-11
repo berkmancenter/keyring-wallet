@@ -7,6 +7,7 @@
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
 #   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
+#   gate.sh summary <run-id>                                  write the run's summary.json (the board's feed) again
 #   gate.sh changed --pin <sha> (--range a..b | --files f,…)  only the legs a fix touches: a fast check, not the gate
 #   gate.sh pause [reason]                                    legs running finish; no further leg or gate starts
 #   gate.sh resume                                            lift a pause (then: rerun <run> --only-failed)
@@ -24,7 +25,7 @@ LEGS_IOS="kk p2 smoke-ios update-ios"
 LEGS_ANDROID="p1 testreq agents waiting lostreq linkresume smoke-android devices update-android relaunch-android linkwait"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
-LEGS_SOLO="linkfail"
+LEGS_SOLO="linkfail pnmlink"
 # iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
 # so they run first, with nothing beside them; the rest of iOS then runs beside Android.
 LEGS_IOS_ALONE="kk p2 smoke-ios"
@@ -32,7 +33,7 @@ LEGS_IOS_ALONE="kk p2 smoke-ios"
 # emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
 LEGS_BESIDE_IOS_ALONE="linkwait"
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- one leg ----
 
@@ -150,6 +151,7 @@ cmd_run() {
   say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
 
@@ -170,6 +172,7 @@ cmd_rerun() {
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   rerun_legs "$old" "$rd"
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
 
@@ -229,6 +232,7 @@ cmd_changed() {
   say "run $(basename "$rd"): CHANGED LEGS ONLY (not the release gate) · target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} · legs $legs"
   run_legs "$rd" "$legs" 0
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
 
@@ -385,6 +389,11 @@ cmd_watch() {
 }
 
 # Rows per leg, and the wall-clock from the first leg's start to the last leg's end.
+# summary.json in the run dir (run-summary.mjs): the feed the board reads. Written at every run's end; `gate.sh
+# summary <run>` writes it again after meta notes are added (env=, env-legs=, harness-legs=).
+write_summary() { node "$GATE_SRC/run-summary.mjs" "$1" >/dev/null 2>&1 || say "summary.json not written for $(basename "$1")"; }
+cmd_summary() { local rd=$GATE_HOME/runs/${1:?usage: gate.sh summary <run-id>}; [ -f "$rd/meta" ] || die "no run $1"; node "$GATE_SRC/run-summary.mjs" "$rd"; }
+
 cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
   echo "== $1 · $(grep -E '^(target|wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
@@ -407,6 +416,7 @@ case ${1:-} in
   dry) shift; cmd_dry "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   report) shift; cmd_report "$@" ;;
+  summary) shift; gate_env; cmd_summary "$@" ;;
   changed) shift; cmd_changed "$@" ;;
   pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
   resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
