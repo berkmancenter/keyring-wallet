@@ -12,7 +12,7 @@
 # (VETTER_SIM_UDID): then p2 runs in the iOS group after kk, never beside it. android: a dedicated AVD,
 # P2_VETTER_AVD, booted cold (emu.sh: -no-snapshot) so the seat survives; never the shared $AVD, which legs wipe.
 . "$(dirname "$0")/../lib.sh"; gate_env
-need PNM_BIN C_DID C_NAME C_REST C_ADMIN_CRED OPENVTC_BIN OPENVTC_VERSION
+need PNM_BIN C_DID C_NAME C_REST C_ADMIN_CRED
 PLAT=${P2_VETTER_PLATFORM:-ios}
 case $PLAT in
   ios) BUILD=${CAND_APP:-}; BSHA=$( [ -f "$BUILD/main.jsbundle" ] && shasum -a 256 "$BUILD/main.jsbundle" | cut -c1-12) ;;
@@ -25,6 +25,13 @@ P2_ROWS="p2-tui-applicant-ready p2-vetter-seated p2-ticket-issued p2-request-rec
 # What p2 needs that no other leg provides. Missing anything: every row SKIPs with the reason, nothing boots.
 why=; miss=
 if [ -n "${P2_BLOCKED:-}" ]; then why="blocked: $P2_BLOCKED"
+elif [ "$PLAT" = android ]; then
+  # On Android p2 would boot a second emulator while linkwait runs beside the iOS-alone legs: emu.sh refuses, and a
+  # broken p2 must not stop linkwait's. Not supported until p2 gets a slot of its own.
+  why="P2_VETTER_PLATFORM=android is not supported yet: it would need a second emulator beside linkwait's"
+elif [ -z "${OPENVTC_BIN:-}" ] || [ -z "${OPENVTC_VERSION:-}" ]; then why="no openvtc TUI configured (OPENVTC_BIN / OPENVTC_VERSION)"
+elif [ -n "${TUI_APPLICANT_PERSONA_DID:-}" ] && [ -z "${TUI_APPLICANT_PERSONA_LABEL:-}" ]; then
+  why="TUI_APPLICANT_PERSONA_DID is set without TUI_APPLICANT_PERSONA_LABEL: a reused persona needs both"
 else
   case $PLAT in
     ios) vars="P2_VETTER_SIM_UDID P2_VETTER_SIM_NAME" ;;
