@@ -111,6 +111,7 @@ describe('withOta', () => {
         baseURL: 'https://ota.example.org/hot-updater',
         updateStrategy: 'fingerprint',
         reloadOnForceUpdate: false,
+        requestTimeout: 15000,
       })
     )
     expect(log).toHaveBeenCalledWith('enabled', expect.objectContaining({ ring: DEFAULT_RING }))

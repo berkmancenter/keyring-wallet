@@ -47,6 +47,10 @@ export const withOta = <P extends object>(
     baseURL: url,
     updateStrategy: 'fingerprint',
     reloadOnForceUpdate: false,
+    // The loader's default is 5 s; on a slow network (2 s a request on a plane,
+    // seen in the spike) checks timed out. A timeout is safe (the app runs what
+    // it has) but should not be the norm.
+    requestTimeout: 15000,
     onUpdateProcessCompleted: ({ status, id, shouldForceUpdate }) =>
       log('check finished', { status, id, shouldForceUpdate }),
     onError: (error) => log('update failed', { error: String(error) }),
