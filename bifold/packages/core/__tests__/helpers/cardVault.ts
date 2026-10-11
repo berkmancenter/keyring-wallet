@@ -80,6 +80,17 @@ export const roleCard = base(
   { endorsement: { type: 'CommunityRole', role: 'member', communityDid: COMMUNITY } },
   oneProof
 )
+/**
+ * A role grant in DTG Credentials v1's shape, an `AuthorityCredential` (VTI
+ * #1859 on). Its type names none of the vault's purposes, so the vault files
+ * it with no purpose (vta-vault receive.rs `infer_purpose`).
+ */
+export const roleVac = base(
+  'urn:uuid:44444444-4444-4444-8444-444444444444',
+  'AuthorityCredential',
+  { authority: { scope: COMMUNITY, actions: ['role:vetter'], maxAttenuation: 0 } },
+  oneProof
+)
 /** A vetter grant from a community that signs with two keys: the vault refuses its proof set (VTI-44 (e)). */
 export const vetterGrantProofSet = base(
   'urn:uuid:33333333-3333-4333-8333-333333333333',
@@ -151,10 +162,16 @@ export function fakeVault(
     refuses?: string[]
   } = {}
 ) {
-  const kept = new Map<string, { credential: Record<string, unknown>; contextId?: string; purpose: string }>()
+  const kept = new Map<string, { credential: Record<string, unknown>; contextId?: string; purpose?: string }>()
   const calls: { type: string; payload: Record<string, unknown> }[] = []
-  const purposeOf = (c: Record<string, unknown>) =>
-    (c.type as string[]).includes('MembershipCredential') ? 'membership' : 'endorsement'
+  // As vta-vault receive.rs `infer_purpose` reads the type names.
+  const purposeOf = (c: Record<string, unknown>): string | undefined => {
+    const types = (c.type as string[]).map((t) => t.toLowerCase())
+    if (types.some((t) => t.includes('membership'))) return 'membership'
+    if (types.some((t) => t.includes('role'))) return 'role'
+    if (types.some((t) => t.includes('endorsement'))) return 'endorsement'
+    return undefined
+  }
   const task = async <T>(type: string, payload: Record<string, unknown>): Promise<T> => {
     calls.push({ type, payload })
     if (options.offline) throw new Error('the VTA did not answer')
@@ -174,7 +191,11 @@ export function fakeVault(
     if (type.endsWith('/query/0.1')) {
       return {
         credentials: [...kept.entries()]
-          .filter(([, v]) => v.purpose === payload.purpose)
+          .filter(([, v]) =>
+            payload.type !== undefined
+              ? (v.credential.type as string[]).includes(String(payload.type))
+              : v.purpose === payload.purpose
+          )
           .map(([id, v]) => ({ id, purpose: v.purpose })),
       } as T
     }

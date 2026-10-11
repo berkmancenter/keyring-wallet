@@ -26,6 +26,7 @@ import {
   persona,
   PERSONA_DID,
   roleCard,
+  roleVac,
   seedCardVaultState,
   vetterGrantProofSet,
 } from '../../../../__tests__/helpers/cardVault'
@@ -219,6 +220,7 @@ describe('getting the cards back on a new phone', () => {
       { purpose: 'membership' },
       { purpose: 'role' },
       { purpose: 'endorsement' },
+      { type: 'AuthorityCredential' },
     ])
     expect(result.found).toBe(2)
     expect(result.restored.sort()).toEqual([membershipCard.id, roleCard.id].sort())
@@ -231,6 +233,22 @@ describe('getting the cards back on a new phone', () => {
     expect(progress[0]).toEqual({ found: 2, restored: 0 })
     expect(progress.at(-1)).toEqual({ found: 2, restored: 2 })
     expect(cardVaultStateOf(membershipCard.id)).toMatchObject({ state: 'kept' })
+  })
+
+  // A DTG Credentials v1 role card is an AuthorityCredential: the vault files
+  // it with no purpose, so asking by purpose alone never brought it back to a
+  // new phone. It is asked for by type too.
+  it('brings back a DTG v1 role card (AuthorityCredential), which no purpose finds', async () => {
+    const vault = fakeVault()
+    await vault.task('vault/credentials/receive/0.1', { credential: roleVac })
+    expect(vault.kept.get(roleVac.id)?.purpose).toBeUndefined()
+    resetCardVaultCache()
+    const { store } = fakeCommunityStore()
+    const result = await recoverCardsFromAgent(fakeAgent().agent, store, persona, vault.task, {
+      check: async () => undefined,
+    })
+    expect(result.found).toBe(1)
+    expect(result.restored).toEqual([roleVac.id])
   })
 
   it('does not keep a card that fails its check, or one about someone else', async () => {

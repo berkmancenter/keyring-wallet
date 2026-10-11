@@ -206,10 +206,13 @@ export type RecoveredRefusal = {
 /**
  * Fetch what the agent keeps for this persona and keep, on this phone, each
  * card that is about the persona and still holds up (vtiDeliveredCheck). The
- * vault answers only a filtered query, so it is asked by purpose: the receive
- * derives the purpose from the card's type, and a role or a vetter grant, typed
- * `EndorsementCredential`, is filed as an endorsement (vta-vault receive.rs
- * `purpose_of`).
+ * vault answers only a filtered query, never a list of everything. It is asked
+ * by purpose, which the vault's receive infers from the card's type names
+ * (vta-vault receive.rs `infer_purpose`: invitation, membership, role,
+ * endorsement, personhood), and by type for what that leaves out: a DTG
+ * Credentials v1 role card is an `AuthorityCredential`, which no purpose
+ * matches, so it was never asked for and never came back on a new phone.
+ * Every card is fetched once, whichever query found it.
  */
 export async function recoverCardsFromAgent(
   agent: Agent,
@@ -223,8 +226,14 @@ export async function recoverCardsFromAgent(
 ): Promise<{ found: number; restored: string[]; refused: RecoveredRefusal[] }> {
   const check = options.check ?? ((c, issuer) => checkDeliveredCard(agent, c, issuer))
   const ids = new Set<string>()
-  for (const purpose of ['membership', 'role', 'endorsement']) {
-    const answer = await task<{ credentials?: { id?: string }[] }>(VAULT_QUERY, { purpose })
+  const queries: Record<string, string>[] = [
+    { purpose: 'membership' },
+    { purpose: 'role' },
+    { purpose: 'endorsement' },
+    { type: 'AuthorityCredential' },
+  ]
+  for (const query of queries) {
+    const answer = await task<{ credentials?: { id?: string }[] }>(VAULT_QUERY, query)
     for (const d of answer?.credentials ?? []) if (typeof d.id === 'string' && d.id) ids.add(d.id)
   }
   const restored: string[] = []
