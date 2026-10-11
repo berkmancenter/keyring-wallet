@@ -51,13 +51,15 @@ c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
 # dispatch_build <sha> on|off: the newest green dispatched test build of <sha> with that push setting, told apart by
-# its artifacts' names (a push-on build's end in -push-on; a push-off build has the iOS simulator app and the APK).
+# its artifacts' names (a push-on build's end in -push-on; a push-off build has the iOS simulator app and the APK, so
+# dispatch it with platform=both: an Android-only push-off build is never picked, a full gate needs both).
 # Taking "the newest green dispatch" as push-on picked a push-off build whenever a commit had both (release/240).
 dispatch_build() {
   local sha=$1 want=$2 id names
   for id in $(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event workflow_dispatch --json databaseId,conclusion \
       --jq '.[]|select(.conclusion=="success")|.databaseId'); do
-    names=$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts" --jq '.artifacts[].name' 2>/dev/null)
+    # Expired artifacts are still listed: a newer build whose download would fail must not hide an older good one.
+    names=$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts" --jq '.artifacts[]|select(.expired|not)|.name' 2>/dev/null)
     case $want in
       on) grep -q -- '-push-on$' <<<"$names" && { echo "$id"; return; } ;;
       off) grep -q -- '-push-on$' <<<"$names" && continue
