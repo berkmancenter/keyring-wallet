@@ -1,0 +1,2 @@
+{ "name": "ref-23-oob-identify", "private": true, "type": "module", "scripts": { "start": "node run.mjs" },
+  "description": "TSP reference rung 23: the member's VTA signs auth/oob/identify (vault/sign-trust-task) and the VTC accepts auth/oob/prove." }
