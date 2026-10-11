@@ -238,6 +238,7 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
 - **Green means green.** `green.mjs` accepts a run only when its head commit is the one asked about, its status is
   `completed` and its conclusion is exactly `success`. An empty conclusion is pending. Two hand-written watchers
   read these wrong in one week (an empty check taken as done; a job name split on a space).
+- **The push-on build of main's HEAD** stands for an older green commit when nothing between them changes the app (the CI build's own `paths-ignore` list, read by `samebuild.mjs`; `node --test e2e/gate/samebuild.test.mjs`). The run's `meta` records it as `push-on=<run> of <head> (no app change since <commit>)`. When the app did change, the watcher says so and runs without the push legs instead of waiting an hour for a build that cannot come.
 - **Downloads retry** five times a minute apart; the 239 auto-start lost its gate to two transient download failures.
 - **PATH is yours to set.** launchd starts the watcher with almost no PATH. The example names the node that runs
   the drivers (appium is installed under it), homebrew, and the system directories including `/usr/sbin`, where
