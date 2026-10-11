@@ -1,7 +1,11 @@
 // node --test scripts/release/tier.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classify, flagsOf, MIGRATION_PATHS } from './tier.mjs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { addedLines, changedFiles, classify, flagsOf, MIGRATION_PATHS, parseRange } from './tier.mjs';
 
 const tierOf = (...files) => classify(files).tier;
 
@@ -55,4 +59,78 @@ test('flags for the approver: data beside the tier, never the tier itself', () =
   assert.deepEqual(flags.map((f) => f.flag).sort(), ['VTI protocol line', 'deletes stored records', 'sign-in / key handling']);
   assert.equal(classify(files).tier, 'ota');
   assert.deepEqual(flagsOf(['e2e/run-x.mjs', 'docs/a.md']), []);
+});
+
+test('review cases that need a store build (codegen specs, fonts, CMake, app-root config, install files)', () => {
+  for (const f of [
+    'bifold/packages/react-native-attestation/src/NativeAttestation.ts',
+    'bifold/packages/react-native-locality-peripheral/src/NativeLocalityPeripheral.ts',
+    'app/src/assets/fonts/Keyring.ttf',
+    'bifold/packages/core/src/assets/fonts/MaterialIcons.ttf',
+    'bifold/packages/react-native-attestation/android/CMakeLists.txt',
+    'app/android/app/src/main/assets/licenses.txt',
+    'app/react-native.config.ts',
+    'app/metro.config.ts',
+    'app/babel.config.ts',
+    'app/app.config.mjs',
+    '.yarnrc.yml',
+    '.env',
+    'scripts/ensure-bifold-ready.js',
+    'scripts/fix-portal-symlinks.js',
+    'app/some-new-root-file.ts',
+  ]) assert.equal(tierOf(f), 'store', f);
+  assert.equal(tierOf('bifold/packages/core/tsconfig.build.json'), 'none');
+  assert.equal(tierOf('app/index.js', 'app/App.tsx', 'app/container-imp.ts'), 'ota');
+});
+
+/** A wallet repo whose bifold is a gitlink into a second repo, two commits each. */
+function repos() {
+  const top = mkdtempSync(path.join(tmpdir(), 'tier-'));
+  const wallet = path.join(top, 'wallet'), bifold = path.join(top, 'bifold');
+  const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
+  const commit = (dir, m) => { if (dir !== wallet) git(dir, 'add', '-A'); git(dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', m); return git(dir, 'rev-parse', 'HEAD'); };
+  const put = (dir, f, body) => { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), body); };
+  for (const d of [wallet, bifold]) { mkdirSync(d); git(d, 'init', '-q'); }
+  put(bifold, 'packages/core/src/x.ts', 'a\n');
+  const b1 = commit(bifold, 'b1');
+  put(bifold, 'packages/react-native-attestation/ios/A.swift', 'native\n');
+  put(bifold, 'packages/core/src/x.ts', 'a\nawait store.deleteById(id)\n');
+  const b2 = commit(bifold, 'b2');
+  put(wallet, 'app/src/hooks/useBCAgentSetup.ts', 'migration\n');
+  git(wallet, 'add', 'app/src/hooks/useBCAgentSetup.ts');
+  git(wallet, 'update-index', '--add', '--cacheinfo', `160000,${b1},bifold`);
+  const w1 = commit(wallet, 'w1');
+  git(wallet, 'mv', 'app/src/hooks/useBCAgentSetup.ts', 'app/src/hooks/useAgentSetup.ts');
+  git(wallet, 'update-index', '--cacheinfo', `160000,${b2},bifold`);
+  const w2 = commit(wallet, 'w2');
+  return { wallet, bifold, w1, w2, done: () => rmSync(top, { recursive: true, force: true }) };
+}
+
+test('range mode: renames as delete + add, the bifold pin bump read through, added lines for the flags', () => {
+  const r = repos();
+  try {
+    const files = changedFiles(`${r.w1}..${r.w2}`, { repo: r.wallet, bifold: r.bifold }).sort();
+    assert.deepEqual(files, ['app/src/hooks/useAgentSetup.ts', 'app/src/hooks/useBCAgentSetup.ts', 'bifold/packages/core/src/x.ts', 'bifold/packages/react-native-attestation/ios/A.swift']);
+    assert.equal(classify(files).tier, 'store');
+    assert.match(classify(files).reasons['app/src/hooks/useBCAgentSetup.ts'], /migration/);
+    const added = addedLines(`${r.w1}..${r.w2}`, { repo: r.wallet, bifold: r.bifold });
+    assert.ok(added['bifold/packages/core/src/x.ts'].some((l) => /deleteById/.test(l)));
+    assert.deepEqual(flagsOf(files, added).map((f) => f.flag), ['deletes stored records']);
+  } finally {
+    r.done();
+  }
+});
+
+test('range mode: an unreadable bifold range is store; only a..b is accepted', () => {
+  const r = repos();
+  try {
+    const files = changedFiles(`${r.w1}..${r.w2}`, { repo: r.wallet, bifold: path.join(r.wallet, 'no-such-clone') });
+    assert.ok(files.some((f) => f.startsWith('bifold@')));
+    assert.equal(classify(files).tier, 'store');
+    assert.throws(() => parseRange(`${r.w1}...${r.w2}`), /base>\.\.<tip/);
+    assert.throws(() => parseRange('HEAD'), /base>\.\.<tip/);
+    assert.deepEqual(parseRange('staging-v0.2.0-237..staging-v0.2.0-238'), ['staging-v0.2.0-237', 'staging-v0.2.0-238']);
+  } finally {
+    r.done();
+  }
 });
