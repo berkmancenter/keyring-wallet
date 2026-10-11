@@ -98,7 +98,13 @@ export function passedBeforeIn(runDir, repos = defaultRepos()) {
     const wallet = isAncestor(repos.wallet, first(meta.pin), first(me.pin));
     const bifold = repos.bifold && first(meta.bifold) && first(me.bifold) ? isAncestor(repos.bifold, first(meta.bifold), first(me.bifold)) : undefined;
     const ancestor = wallet === false || bifold === false ? false : wallet === true && bifold !== null ? true : null;
-    for (const leg of legs) for (const m of read(path.join(runs, id, leg, 'leg.log')).matchAll(/^ROW (.*?) PASS — /gm)) out.set(m[1], { run: id, ancestor });
+    // The strongest earlier pass per row wins: an ancestor (true) over unknown (null) over a side build (false), so a
+    // later pass on a side branch or an older pin cannot hide a regression an ancestor's pass shows.
+    const rank = (x) => (x === true ? 2 : x === null ? 1 : 0);
+    for (const leg of legs) for (const m of read(path.join(runs, id, leg, 'leg.log')).matchAll(/^ROW (.*?) PASS — /gm)) {
+      const prev = out.get(m[1]);
+      if (!prev || rank(ancestor) >= rank(prev.ancestor)) out.set(m[1], { run: id, ancestor });
+    }
   }
   return out;
 }

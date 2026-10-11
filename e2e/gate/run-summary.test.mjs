@@ -125,6 +125,22 @@ test('earlier means earlier by started=, not by the folder name (MMDD has no yea
   }
 });
 
+test('a later pass on a side build does not hide an ancestor\u2019s pass', () => {
+  const g = gitRepo();
+  const r = runs({
+    '1010-0900-aaaa-gate': { meta: `kind=gate\npin=${g.older}\nstarted=2026-10-10T09:00:00Z\n`, legs: [['waiting', 0, passed]] },
+    // a pass on a build that is not an ancestor of the newest (here an unknown side commit), started later
+    '1010-1200-side-gate': { meta: 'kind=gate\npin=fedcba9876543210fedcba9876543210fedcba98\nstarted=2026-10-10T12:00:00Z\n', legs: [['waiting', 0, passed]] },
+    '1011-0900-bbbb-gate': { meta: `kind=gate\npin=${g.newer}\nstarted=2026-10-11T09:00:00Z\n`, legs: [['waiting', 0, tracked]] },
+  });
+  try {
+    const s = summarize(path.join(r.root, '1011-0900-bbbb-gate'), { wallet: g.dir });
+    assert.deepEqual(s.legs[0].regressions, [{ row: 'in-257-dots', passedIn: '1010-0900-aaaa-gate' }]);
+  } finally {
+    r.done(); g.done();
+  }
+});
+
 test('all app passes is pass; any leg with no verdict on the app is incomplete', () => {
   const r = runs({
     '1011-1000-cccc-gate': { meta: 'kind=gate\n', legs: [['kk', 0, 'ROW a PASS — ok\n']] },
