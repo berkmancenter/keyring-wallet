@@ -50,7 +50,7 @@
  */
 import "./lib/cli-guard.js";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
@@ -63,6 +63,8 @@ import { heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } fr
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
+import { buildHas } from "./lib/buildHas.js";
+import { decodeQrSvg } from "./lib/qrSvg.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -413,6 +415,13 @@ async function afterRefusal(driver, said, temporaryDid) {
  *                              (AgentCreateWaiting), not Check again
  *   link-try-again             host code: the mediator blocked once granted, until "This phone was not linked" with
  *                              VtaLinkTryAgain (about 14 min); unblocked, Try again links with the same key, no ACL growth
+ * 241 (pnmlink.sh), each by the scanner:
+ *   pnmqr-scan                 the SVG `pnm vta qr` wrote (PNM_QR_SVG) decodes to the runner's DID, which the scanner
+ *                              then takes to Linked (pasted: no helper feeds an image to the emulator's camera)
+ *   scan-agent-no-rest         NO_REST_AGENT_DID (an agent whose DID document has no VTARest) on the scanner: a link
+ *                              must start. TRACKED until the scanner fix: a failure is reported as a SKIP
+ *   link-again-rescan          IN-251 (bifold #383): linked, the agent removes this phone, RemovedPhone shows; Link
+ *                              again, the same agent scanned: a link starts (not "already has that agent") and links
  */
 async function linkCase(driver, which) {
   const udid = driver.e2eUdid;
@@ -624,7 +633,138 @@ async function linkCase(driver, which) {
     const after = aclSize();
     return row(tryAgain && done && after <= mid, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses): "not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
   }
+  // 241: the scanner given `did`; when a link starts, the host grants the key it shows (enrol-manager, as every
+  // manual link) and the end is awaited. `went` is what the scanner made of it (link.pasteScanned).
+  const scanAndLink = async (did) => {
+    const { entry } = (await link.open()).value;
+    const went = (await link.pasteScanned(did)).value;
+    if (went.state !== "started") return { went, entry };
+    const { did: key } = (await link.readKey()).value;
+    runTempDids.push(key);
+    const since = new Date(Date.now() - 2000).toISOString();
+    grant(key);
+    const end = (await link.awaitLinked({ timeoutMs: 240000 })).value;
+    if (end.state === "done") recordHeir(since);
+    return { went, entry, key, end };
+  };
+  const scanSaid = (went) => (went.state === "refused" ? `the scanner said "${went.said.slice(0, 160)}"` : `no link within 45 s (on ${went.on ?? "none of the link's screens"})`);
+  const endSaid = (end) => (end.state === "done" ? "Linked" : `not linked: "${end.said.slice(0, 120)}"`);
+  if (which === "pnmqr-scan") {
+    // `pnm vta qr` draws the agent's bare DID and nothing else (VTI-Eucalyptus pnm-cli vta.rs show_qr,
+    // vta-cli-common qr.rs) and prints it on a "DID  <did>" line. The SVG is read back here; no helper feeds an image
+    // to the emulator's camera, so what it holds reaches the scanner by the scanner's own paste.
+    const svg = process.env.PNM_QR_SVG || "";
+    const pnmSaid = (() => { try { return readFileSync(process.env.PNM_QR_OUT || "", "utf8").replace(/\x1b\[[0-9;]*m/g, ""); } catch { return ""; } })();
+    if (!existsSync(svg)) return row(false, `pnm wrote no SVG (${svg || "PNM_QR_SVG unset"}): ${pnmSaid.trim().split("\n").pop()?.slice(0, 120) || "no output"}`);
+    const qr = decodeQrSvg(readFileSync(svg, "utf8"));
+    const want = runnerVtaDid();
+    const printed = (pnmSaid.match(/^DID\s+(did:\S+)/m) || [])[1] || "";
+    const drew = `pnm drew a version-${qr.version} level-${qr.ecLevel} code`;
+    if (qr.text !== want) return row(false, `${drew} holding "…${qr.text.slice(-24)}", not the runner's DID (…${want.slice(-24)})`);
+    if (printed !== want) return row(false, `${drew} of the runner's DID, but printed "DID  …${printed.slice(-24) || "(no DID line)"}"`);
+    const { went, end } = await scanAndLink(qr.text);
+    await screenshot(driver, which);
+    const how = `${drew} holding exactly the runner's DID (…${want.slice(-12)}), the same it printed; it reached the scanner decoded+pasted (no camera feed)`;
+    if (!end) return row(false, `${how}; ${scanSaid(went)}`);
+    return row(end.state === "done", `${how}; a link started; ${endSaid(end)}`);
+  }
+  if (which === "scan-agent-no-rest") {
+    // An agent whose DID document has no VTARest service: classifyDid.ts calls it "other" today ("nothing to do with
+    // it here"), though "Use your agent's address" links it. The row passes when the scanner starts the link. With
+    // the agent's own slug (the leg makes it RUNNER_VTA) the link is also finished and said so; a start passes alone.
+    const did = process.env.NO_REST_AGENT_DID;
+    if (process.env.NO_REST_AGENT_SLUG && process.env.NO_REST_AGENT_SLUG === VTA_SLUG) {
+      const { went, end } = await scanAndLink(did);
+      await screenshot(driver, which);
+      if (!end) return row(false, scanSaid(went));
+      return row(true, `the scanner started the link (${went.on}); granted on the agent: ${endSaid(end)}`);
+    }
+    await link.open();
+    const went = (await link.pasteScanned(did)).value;
+    await screenshot(driver, which);
+    if (went.state !== "started") return row(false, scanSaid(went));
+    return row(true, `the scanner started the link (${went.on}); not finished: no NO_REST_AGENT_SLUG to grant it on`);
+  }
+  if (which === "link-again-rescan") {
+    // IN-251 (bifold #383): Link again after a removal moved the link to "not linked" but left the agent on the
+    // phone's list, so scanning it again said "This phone already has that agent" with nothing to switch to.
+    const did = runnerVtaDid();
+    const first = await scanAndLink(did);
+    if (first.end?.state !== "done") return row(false, `the first link: ${first.end ? endSaid(first.end) : scanSaid(first.went)}`);
+    await link.continueToAgent();
+    // The host removes this phone: this run's entries on the agent (the swap left its long-term key there).
+    if (!aclBefore) return row(false, "no ACL snapshot at the start, so this phone's keys cannot be told from others'");
+    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !aclBefore.has(e.subject)), first.key, runHeirs);
+    if (!mine.length) return row(false, "found no key of this phone's on the agent to remove");
+    for (const e of mine) {
+      const out = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "delete", e.subject], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+      console.log(`[e2e] removed this phone's key …${e.subject.slice(-12)}: ${out.trim().split("\n").pop()?.slice(0, 60)}`);
+    }
+    // The phone hears of it on its next call: the app to the background and back, My Agent, past an introduction.
+    const nudge = async () => {
+      await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
+      await sleep(1500);
+      await unlockIfLocked(driver).catch(() => undefined);
+      if (await existsTestId(driver, "AgentIntroSkip", 1000)) await tapTestId(driver, "AgentIntroSkip", 5000).catch(() => undefined);
+      await (await waitForTestId(driver, "MyAgent", 15000)).click().catch(() => undefined);
+    };
+    await nudge();
+    const removed = (await link.awaitRemoved({ nudge })).value;
+    await screenshot(driver, `${which}-removed`);
+    const again = await scanAndLink(did);
+    await screenshot(driver, which);
+    // link.open takes the card's "Link again" (VtaLinkScanAgain) when it shows; anything else is not the path asked for.
+    if (again.entry !== "VtaLinkScanAgain") return row(false, `removed: "${removed.said.slice(0, 80)}", but My Agent offered no Link again (opened by ${again.entry})`);
+    const head = `removed (${mine.length} key${mine.length === 1 ? "" : "s"}): "${removed.said.slice(0, 80)}"; Link again, the same agent scanned:`;
+    if (!again.end) return row(false, `${head} ${scanSaid(again.went)}`);
+    return row(again.end.state === "done", `${head} a link started; ${endSaid(again.end)}`);
+  }
   return row(false, `no such LINK_CASE ${which}`);
+}
+
+/**
+ * A LINK_CASE that cannot run here, and why, decided before any device or agent is touched; undefined when it runs.
+ * A row that runs and fails says its own why.
+ */
+function linkCaseSkip(which) {
+  if (which === "pnmqr-scan") {
+    if (existsSync(process.env.PNM_QR_SVG || "")) return undefined;
+    let said = "";
+    try { said = readFileSync(process.env.PNM_QR_OUT || "", "utf8"); } catch { /* none */ }
+    if (/unrecognized subcommand|unexpected argument|invalid subcommand/i.test(said)) return "this pnm has no `vta qr` (VTI-Eucalyptus and later draw the agent's QR)";
+  }
+  if (which === "scan-agent-no-rest" && !process.env.NO_REST_AGENT_DID) {
+    return "needs an agent without VTARest (NO_REST_AGENT_DID, and NO_REST_AGENT_SLUG for the grant); none on the Farm";
+  }
+  if (which === "link-again-rescan" && process.env.EXPECT_IN251 !== "1") {
+    // #383 adds no testID or words; its new method's name is in the bundle's string table (Hermes keeps property names).
+    const has = buildHas("forgetRemovedAgent", { platform });
+    if (has === false) return "this build lacks forgetRemovedAgent (bifold #383, IN-251): Link again still keeps the removed agent";
+    if (has === undefined) return "no build file to check for bifold #383 (IN-251); EXPECT_IN251=1 runs it anyway";
+  }
+  return undefined;
+}
+
+/** A case decided before the run: reported as its SKIP row, with nothing started. */
+class CaseSkipped extends Error {}
+
+/**
+ * Cases expected to fail until a Keyring fix lands: a failure is a SKIP that says what was seen, a pass is a PASS.
+ * Kept here: rows.js has no tracked option (another branch may add one; move this onto it then).
+ */
+const TRACKED = { "scan-agent-no-rest": "tracked: expected until the scanner fix" };
+async function trackedRow(name, fn) {
+  let got;
+  try {
+    got = await fn();
+  } catch (e) {
+    got = { ok: false, detail: `threw: ${String(e?.message ?? e).split("\n")[0].slice(0, 300)}` };
+  }
+  if (got?.ok === false) {
+    await screenshot(driver, `row-${name}`).catch(() => undefined);
+    return rows.skip(name, `${TRACKED[name]}; observed: ${got.detail ?? "failed"}`);
+  }
+  return rows.row(name, async () => got);
 }
 
 /**
@@ -1331,6 +1471,10 @@ const runTempDids = [];
 const runHeirs = [];
 let runFailed = false;
 try {
+  // A case that cannot run here (241's: no SVG from pnm, no agent without VTARest, a build without #383) stops
+  // before the ACL, the page or a session: its SKIP row is printed below.
+  const skipWhy = process.env.LINK_CASE ? linkCaseSkip(process.env.LINK_CASE) : undefined;
+  if (skipWhy) throw new CaseSkipped(skipWhy);
   // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
   try {
     aclBefore = snapshotAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME });
@@ -1371,7 +1515,9 @@ try {
 
   if (process.env.LINK_CASE) {
     // IN-135 (239): one link case, its row through rows.js (a throw is that row's FAIL); 3 when a row failed.
-    await rows.row(process.env.LINK_CASE, () => linkCase(driver, process.env.LINK_CASE));
+    const run = () => linkCase(driver, process.env.LINK_CASE);
+    if (TRACKED[process.env.LINK_CASE]) await trackedRow(process.env.LINK_CASE, run);
+    else await rows.row(process.env.LINK_CASE, run);
     rows.summary();
     process.exitCode = rows.exitCode();
   } else if (LINK_MODE === "manual") {
@@ -1439,14 +1585,21 @@ try {
   process.exitCode = 0;
   }
 } catch (err) {
-  runFailed = true;
-  console.error(err);
-  if (driver) {
-    await screenshot(driver, "link-failure").catch(() => undefined);
-    await dumpSource(driver, "link-failure").catch(() => undefined);
+  if (err instanceof CaseSkipped) {
+    rows = createRows({ label: "vta-link", only: null });
+    await rows.row(process.env.LINK_CASE, async () => true, { skip: err.message });
+    rows.summary();
+    process.exitCode = rows.exitCode();
+  } else {
+    runFailed = true;
+    console.error(err);
+    if (driver) {
+      await screenshot(driver, "link-failure").catch(() => undefined);
+      await dumpSource(driver, "link-failure").catch(() => undefined);
+    }
+    printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
+    process.exitCode = 1;
   }
-  printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
-  process.exitCode = 1;
 } finally {
   // Only this run's keys. A link is usually the FIRST step of a chain (link →
   // invite → vetting), and removing its keys after a success unlinks the phone
