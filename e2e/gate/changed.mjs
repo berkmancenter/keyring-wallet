@@ -275,5 +275,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!legs.length && !r.unmapped.length) console.log('no leg names a testID these files own');
     console.log(`legs=${legs.join(',')}`);
   }
-  process.exit(code);
+  // exitCode, not exit(): the --json gate.sh reads through a pipe must be written in full first.
+  process.exitCode = code;
 }
