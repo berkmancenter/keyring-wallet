@@ -102,6 +102,55 @@ emu_stop() { "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
+# gate_sweep: before any leg, take off every runner what a gate leg creates and may have left there, and nothing
+# else. A leg cleans up after itself, and a stop runs that cleanup (leg_begin's trap), but a run killed outright
+# cannot: 1009-1608 was killed in linkfail and left an acl/swap-key consent rule on the main runner for a day, so the
+# next run's links were held with auth:consent_required. Runner A is also used by hand (the UI/UX lane's approvals
+# screens), so the sweep is limited to the gate's own: the task types in GATE_RULE_TASKS, the members of approver sets
+# named gate-* or e2e-approvals (or $APPROVER_SET), and policies whose id starts "gate-". Anything else is logged as
+# "foreign … left in place", visible but not destroyed. Called by run and rerun right after the run lock, so it never
+# sweeps under a running gate. A runner named twice is swept once.
+GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
+gate_sweep() {
+  local slug seen=" "
+  for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
+    [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
+    gate_sweep_runner "$slug"
+  done
+}
+# gate_sweep_runner <slug>: the sweep for one runner (also a leg's end-of-leg cleanup, e.g. agents.sh). A runner whose
+# approvals cannot be read (network, keychain) is said so, never taken for a clean one.
+gate_sweep_runner() {
+  local slug=$1 json pol kind a b
+  say "sweep $slug"
+  json=$(pnm "$slug" approvals list --json 2>&1)
+  if [[ "$json" != *"{"* ]]; then say "  sweep $slug: could not read approvals ($(echo "$json" | tail -1 | cut -c1-100))"; return 0; fi
+  printf '%s' "$json" | GATE_RULE_TASKS="$GATE_RULE_TASKS" GATE_SETS_EXTRA="${APPROVER_SET:-}" python3 -c "
+import os,sys,json
+t=sys.stdin.read(); j=json.loads(t[t.index('{'):]) if '{' in t else {}
+tasks=set(os.environ['GATE_RULE_TASKS'].split())
+extra=os.environ.get('GATE_SETS_EXTRA') or ''
+ours=lambda n: n.startswith('gate-') or n=='e2e-approvals' or (extra and n==extra)
+for r in j.get('rules',[]):
+    tt=r.get('taskType','')
+    print(('rule' if tt in tasks else 'foreign-rule'), tt, r.get('approverSet') or r.get('set') or '-')
+for n,ms in (j.get('approverSets') or {}).items():
+    if ours(n):
+        for m in ms: print('member', n, m)
+    else: print('foreign-set', n, len(ms))
+" | while read -r kind a b; do
+    case $kind in
+      rule) pnm "$slug" approvals remove "$a" >/dev/null; say "  $slug rule removed: $a"; sleep 2 ;;
+      member) pnm "$slug" approvals approvers remove "$a" "$b" >/dev/null; say "  $slug approver removed from $a"; sleep 2 ;;
+      foreign-rule) say "  $slug foreign rule left in place: $a (set $b)" ;;
+      foreign-set) say "  $slug foreign approver set left in place: $a ($b members)" ;;
+    esac
+  done
+  for pol in $(pnm "$slug" policy list 2>/dev/null | grep -oE 'gate-[A-Za-z0-9_-]+' | sort -u); do
+    say "  $slug policy removed: $pol ($(pnm "$slug" policy delete "$pol" | tail -1 | cut -c1-60))"
+  done
+}
+
 # ---- runner cleanup: what a leg made on a runner since it started ----
 
 # Delete the phone grants (label keyring-admin) made on $1 since $2, retrying a busy or rate-limited runner.
@@ -173,6 +222,9 @@ leg_begin() {
   local caps=-; [ -n "${3:-}" ] && caps=$(build_caps "$3" | cut -d/ -f1)
   echo "HEADS $LEG_NAME wallet=${CAND_WALLET:0:8} bifold=${CAND_BIFOLD:0:8} build=${2:-} harness=$(git -C "$REPO" rev-parse --short=8 HEAD) farm=\"${FARM_VERSIONS:-unrecorded}\" openvtc=${OPENVTC_VERSION:-?}@$( [ -f "${OPENVTC_BIN:-}" ] && shasum -a 256 "$OPENVTC_BIN" | cut -c1-8 || echo -) caps=$caps${LEG_HEADS_EXTRA:+ $LEG_HEADS_EXTRA}"
   trap leg_end EXIT
+  # A stop (the watcher booted out, a ctrl-C, gate.sh forwarding a TERM) becomes a normal exit, so leg_end and the
+  # leg's cleanup still run. Only SIGKILL or a power loss skip it; the start-of-gate sweep (gate_sweep) covers those.
+  trap 'exit 143' TERM INT HUP
 }
 # row <name> PASS|FAIL|SKIP <detail>; a name not in E2E_ONLY_ROWS (when set) is reported as not selected.
 row() {
@@ -192,6 +244,7 @@ take_rows() {
 }
 leg_end() {
   local rc=$?
+  trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
