@@ -35,9 +35,14 @@ export type VtiDeliveredCardCheck = (
 
 /** Its status list could not be read now; the delivery should come again. */
 export class VtiCardStatusUnreadable extends Error {
-  constructor(reason: string) {
-    super(`vtiDeliveredCheck: the card's status list could not be read (${reason}); left for redelivery`)
+  /** The status list's host, when its URL named one (never the path, which can carry ids). */
+  readonly host?: string
+  constructor(reason: string, host?: string) {
+    super(
+      `vtiDeliveredCheck: the card's status list could not be read${host ? ` at ${host}` : ''} (${reason}); left for redelivery`
+    )
     this.name = 'VtiCardStatusUnreadable'
+    this.host = host
   }
 }
 
@@ -61,7 +66,7 @@ export async function checkDeliveredCard(
     allowInsecureLocal: options.allowInsecureLocal,
   })
   if (status.state === 'revoked') return 'revoked'
-  if (status.state === 'unknown') throw new VtiCardStatusUnreadable(status.reason)
+  if (status.state === 'unknown') throw new VtiCardStatusUnreadable(status.reason, status.host)
   return undefined
 }
 
