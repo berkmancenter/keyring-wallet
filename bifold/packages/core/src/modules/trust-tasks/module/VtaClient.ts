@@ -227,6 +227,11 @@ export interface VtaWhoAmI {
   [key: string]: unknown
 }
 
+/** An agent context for Keyring's personas, used when the agent has one (IN-259). */
+export const PERSONA_CONTEXT_ID = 'keyring'
+/** The context every agent starts with. */
+const DEFAULT_CONTEXT_ID = 'vta'
+
 export interface VtaContext {
   id: string
   name?: string
@@ -1674,6 +1679,22 @@ export class VtaClient {
   }
 
   /**
+   * The agent context new personas are minted in (IN-259): one named for
+   * Keyring if the agent has it, else the agent's default context ("vta"),
+   * and only then the first it lists. The first was used before, which put a
+   * persona beside whatever came first — a tester's was "did-git-sign". The
+   * phone does not make a context itself: `vta/contexts/create` is a task the
+   * "Ask me before…" screen offers rules on, and the phone never sends one
+   * (approvalRules.ts OFFERED_TASKS), so a rule there could only ever hold it.
+   */
+  private personaContextId(contexts: VtaContext[]): string {
+    const has = (id: string) => contexts.some((c) => c.id === id)
+    if (has(PERSONA_CONTEXT_ID)) return PERSONA_CONTEXT_ID
+    if (has(DEFAULT_CONTEXT_ID)) return DEFAULT_CONTEXT_ID
+    return contexts[0]?.id ?? DEFAULT_CONTEXT_ID
+  }
+
+  /**
    * The persona for a community, kept in the identity store: reused when the
    * phone already holds one with its key-agreement key borrowed, otherwise
    * minted on the first registered DID-hosting server (or serverlessly at
@@ -1706,8 +1727,8 @@ export class VtaClient {
     }
 
     await this.connect()
-    const contexts = await this.listContexts()
-    const contextId = contexts[0]?.id ?? 'vta'
+    // Only a new persona needs a context: one already recorded stays where it is.
+    const contextId = existing ? existing.contextId : this.personaContextId(await this.listContexts())
     const servers = await this.listServers()
     const label = options.label ?? `keyring-${Date.now().toString(36)}`
     // A persona is a did:webvh, and one has to be served from somewhere: a
