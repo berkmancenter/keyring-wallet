@@ -26,6 +26,7 @@ import { DeviceEventEmitter } from 'react-native'
 
 import { signDocumentProof } from '../documentProof'
 import { purposeForDocumentType } from './proofPurpose'
+import { MEMBER_VMC, type MemberVmcReceipt } from './vtiMemberVmc'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import {
@@ -1580,6 +1581,25 @@ class VtiAgentController {
       disposition: payload?.disposition ?? options.disposition ?? 'policydefault',
       removed: payload?.removed !== false,
     }
+  }
+
+  /**
+   * Deliver the member's acknowledgement of its membership
+   * (`vtc/members/vmc/0.1`, `vtiMemberVmc`), closing the approved join request
+   * `requestId` when there is one, and return the community's receipt. Throws
+   * the community's refusal (subjectMismatch, notAMember, invalidCredential,
+   * requestNotFound/NotApproved/ApplicantMismatch), or that nothing answered.
+   */
+  async sendMemberVmc(
+    communityDid: string,
+    vc: Record<string, unknown>,
+    requestId?: string
+  ): Promise<MemberVmcReceipt> {
+    const answer = await this.ask(communityDid, MEMBER_VMC, requestId ? { vc, requestId } : { vc })
+    if (!answer) throw this.sentNoAnswer(communityDid, MEMBER_VMC)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    return ((answer.body as { payload?: MemberVmcReceipt } | undefined)?.payload ?? {}) as MemberVmcReceipt
   }
 
   /**

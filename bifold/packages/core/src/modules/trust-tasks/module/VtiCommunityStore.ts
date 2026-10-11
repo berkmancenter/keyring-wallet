@@ -59,6 +59,14 @@ export interface VtiMembership {
    * and why.
    */
   removal?: VtiRemoval
+  /**
+   * The member's own half of the pair: the acknowledgement this persona issued
+   * back for `vmc` (vtc/members/vmc/0.1, `vtiMemberVmc`), verbatim and signed.
+   * Kept before it is sent, so a re-send carries the same credential.
+   */
+  memberVmc?: Record<string, unknown>
+  /** When the community answered that it stored `memberVmc`. Absent: not yet acknowledged. */
+  memberVmcAckedAt?: string
 }
 
 /** What a community's removal notice said (vtc/members/removal-notice/0.1 payload). */
