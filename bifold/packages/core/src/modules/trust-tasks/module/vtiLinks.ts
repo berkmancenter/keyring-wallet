@@ -271,12 +271,28 @@ async function routeBareDid(
       communityTarget.set({ communityDid: did })
       navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
+    case 'other':
+      // No REST endpoint, so it does not say it is an agent, but it is reached
+      // through a mediator the way an agent linked by its address is: tried as
+      // one. A mediator's own code is classified as a relay, never this.
+      if (!kind.reachable) {
+        throw new KeyringLinkError(
+          "Keyring can't tell what this code is. If it's your agent, link it with “No code? Use your agent's address” on My Agent.",
+          undefined,
+          'Scan.UnknownCodeUseAddress'
+        )
+      }
+    // falls through
     case 'agent': {
       const adding = await makeRoomForAgent(did)
       // Scanned or pasted: usually another phone's "Add another phone" code, so
       // this phone shows its own code for that phone to scan (#30).
       try {
-        await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
+        await vtaAgent.startManualLink(agent, did, didHost(did), {
+          via: 'scan',
+          // Not declared an agent: checked at once, and said if it is not one.
+          ...(kind.kind === 'other' ? { probe: true } : {}),
+        })
       } catch (error) {
         // The link screen never opened: the add it started is given up, and
         // the agent before comes back (IN-138).
@@ -305,8 +321,6 @@ async function routeBareDid(
             ? "This isn't a code Keyring can read."
             : "This code couldn't be read. Check your connection and try again."
       )
-    default:
-      throw new KeyringLinkError("This code isn't an agent or a community, so there's nothing to do with it here.")
   }
 }
 

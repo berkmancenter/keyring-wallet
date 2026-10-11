@@ -618,6 +618,7 @@
     "ReadingCode": "Lecture de ce code…",
     "CodeNotUsable": "Keyring ne peut pas utiliser ce code",
     "BothAgentAndCommunity": "Ce code appartient à la fois à un agent et à une communauté. Demandez à la personne qui vous l’a donné de quoi il s’agit.",
+    "UnknownCodeUseAddress": "Keyring ne sait pas ce qu’est ce code. Si c’est votre agent, liez-le avec « Pas de code ? Utilisez l'adresse de votre agent » dans Mon agent.",
     "TriggerLinkUpdate": "Ce code nécessite une version plus récente de l'application.",
     "TriggerLinkExpired": "Ce code a expiré. Obtenez-en un nouveau.",
     "TriggerLinkUnreachable": "Ce service n'est pas joignable depuis votre portefeuille.",
@@ -1371,6 +1372,7 @@
     "AlreadyOnPhone": "Ce téléphone a déjà cet agent.",
     "SwitchToIt": "Y passer",
     "FailedAlreadyLinked": "Ce téléphone a déjà cet agent. Passez-y depuis Votre agent.",
+    "FailedNotAnAgent": "Ce code n’est pas un agent que ce téléphone peut lier : il n’a pas répondu comme tel. Si c’est votre agent, utilisez « Pas de code ? Utilisez l'adresse de votre agent » dans Mon agent.",
     "FailedCommunityAgentCleanup": "Si vous avez ajouté ce téléphone dans les réglages de cet agent, retirez-le là-bas.",
     "FailedOther": "Un problème est survenu pendant la liaison. Scannez le code à nouveau.",
     "SwapFailed": {

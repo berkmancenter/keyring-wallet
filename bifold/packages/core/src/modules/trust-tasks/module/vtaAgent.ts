@@ -1856,8 +1856,33 @@ export class VtaAgentController {
     await Promise.resolve(identities.forgetManager?.(vtaDid)).catch(() => undefined)
   }
 
-  async startManualLink(agent: Agent, vtaDid: string, label: string, opts: { via?: 'scan' } = {}): Promise<void> {
-    return this.beginManualLink(agent, vtaDid, label, false, opts.via)
+  /**
+   * `probe`: the DID did not say it is an agent (no REST endpoint) and is
+   * reached through a mediator as one is. Its key is shown and checked at once,
+   * within the usual deadlines: an agent answers, granted or not yet; anything
+   * that does not answer is said not to be an agent this phone can link, with
+   * a way back, rather than leaving the person on a key nobody will grant.
+   */
+  async startManualLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    opts: { via?: 'scan'; probe?: boolean } = {}
+  ): Promise<void> {
+    await this.beginManualLink(agent, vtaDid, label, false, opts.via)
+    if (opts.probe) void this.probeAsAgent(agent, vtaDid).catch(() => undefined)
+  }
+
+  /** One check of a key shown for a DID tried as an agent; no answer ends the attempt (`notAnAgent`). */
+  private async probeAsAgent(agent: Agent, vtaDid: string): Promise<void> {
+    const shown = this.state.link
+    if (shown.kind !== 'showingKey' || shown.vtaDid !== vtaDid) return
+    await this.checkManualGrant(agent)
+    const after = this.state.link
+    if (after.kind !== 'showingKey' || after.vtaDid !== vtaDid || !after.noAnswer) return
+    this.attemptToken++
+    this.dispatch({ type: 'failed', failure: { reason: 'notAnAgent' } })
+    await this.forgetTemporaryKey(agent, vtaDid)
   }
 
   /**

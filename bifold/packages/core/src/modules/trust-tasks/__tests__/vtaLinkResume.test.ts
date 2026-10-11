@@ -206,4 +206,35 @@ describe('a link left part-way picks back up with the same key', () => {
     await new Promise((resolve) => setImmediate(resolve))
     expect(forgetManager).not.toHaveBeenCalled()
   })
+
+  // #390: a scanned DID with no REST endpoint is tried as an agent. One that
+  // never answers (a persona's) must not leave the person on a key nobody
+  // will grant.
+  describe('a DID tried as an agent (probe)', () => {
+    it('that does not answer: not an agent this phone can link, and the key is dropped', async () => {
+      const { vta, forgetManager } = controller()
+      ;(vta as unknown as Setter).set({ link: { kind: 'notLinked' } })
+      ;(vta as unknown as { agent: unknown }).agent = {}
+      mockClient.whoAmI.mockImplementationOnce(async () => {
+        throw new Error('the VTA did not answer')
+      })
+      await vta.startManualLink({} as never, VTA, 'home', { via: 'scan', probe: true })
+      for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
+      expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'notAnAgent' } })
+      expect(forgetManager).toHaveBeenCalledWith(VTA)
+    })
+
+    it('an agent that answers "not yet": the key stays for its admin to add', async () => {
+      const { vta, forgetManager } = controller()
+      ;(vta as unknown as Setter).set({ link: { kind: 'notLinked' } })
+      ;(vta as unknown as { agent: unknown }).agent = {}
+      mockClient.whoAmI.mockImplementationOnce(async () => {
+        throw new Error('permission denied: forbidden: DID not in ACL')
+      })
+      await vta.startManualLink({} as never, VTA, 'home', { via: 'scan', probe: true })
+      for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
+      expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA })
+      expect(forgetManager).not.toHaveBeenCalled()
+    })
+  })
 })
