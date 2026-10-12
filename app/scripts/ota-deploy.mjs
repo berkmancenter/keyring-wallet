@@ -24,6 +24,10 @@
  *   npx hot-updater bundle update <id> --target-cohorts ring0,ring1,ring2 -y
  * Withdrawing: npx hot-updater bundle disable <id> -y (phones on it roll back).
  *
+ * --after-native-config: the job has just run scripts/ota/native-config.mjs on a
+ * checkout it verified clean, so exactly the files that script writes may differ
+ * (both Info.plists, the Android manifest, app/fingerprint.json) and nothing else.
+ *
  * Runs in CI behind the GitHub environment that holds the signing key and
  * requires an approver. Run locally only for the spike, with a throwaway key.
  */
@@ -43,6 +47,7 @@ const { values: args } = parseArgs({
     channel: { type: 'string', default: process.env.OTA_CHANNEL ?? 'production' },
     scope: { type: 'string', default: 'fix' },
     message: { type: 'string' },
+    'after-native-config': { type: 'boolean', default: false },
   },
 })
 
@@ -61,7 +66,24 @@ const platforms = args.platform === 'both' ? ['ios', 'android'] : [args.platform
 if (!platforms.every((p) => p === 'ios' || p === 'android')) fail('--platform must be ios, android or both')
 
 // 1. What is published is a commit, not a working tree.
-if (git('status', '--porcelain')) fail('the working tree has changes; publish from a clean checkout of a signed commit')
+const NATIVE_CONFIG_PATHS = new Set([
+  'app/ios/AriesBifold/Info.plist',
+  'app/ios/AriesBifoldTests/Info.plist',
+  'app/android/app/src/main/AndroidManifest.xml',
+  'app/fingerprint.json',
+])
+// Not git(): its trim() would eat the leading space of the first ' M path' line.
+const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+  cwd: repoDir,
+  encoding: 'utf8',
+})
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => line.slice(3))
+const unexpected = args['after-native-config'] ? dirty.filter((p) => !NATIVE_CONFIG_PATHS.has(p)) : dirty
+if (unexpected.length) {
+  fail(`the working tree has changes (${unexpected.join(', ')}); publish from a clean checkout of a signed commit`)
+}
 const walletHead = git('rev-parse', 'HEAD')
 const bifoldHead = git('rev-parse', 'HEAD:bifold')
 

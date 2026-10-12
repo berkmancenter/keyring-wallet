@@ -106,6 +106,26 @@ jobs:
           umask 077
           printf '%s\n' "$OTA_SIGNING_KEY_PEM" > "$RUNNER_TEMP/ota-private-key.pem"
 
+      # The same native settings the store build wrote (staging.yaml), from the
+      # same repository variables: the CLI refuses to publish a signed bundle
+      # unless the checkout carries the public key and a fingerprint.json, and
+      # the fingerprint must come out as the build's did.
+      - name: The checkout is clean before the native settings are written
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+            git status --porcelain --untracked-files=all
+            echo "::error::the checkout is not clean before the native OTA settings"
+            exit 1
+          fi
+
+      - name: Native OTA settings
+        if: ${{ !inputs.dry_run }}
+        env:
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: node scripts/ota/native-config.mjs
+
       - name: Publish to ring 0
         if: ${{ !inputs.dry_run }}
         working-directory: app
@@ -116,7 +136,7 @@ jobs:
           BUILD: ${{ inputs.build }}
           PLATFORM: ${{ inputs.platform }}
           SCOPE: ${{ inputs.scope }}
-        run: node scripts/ota-deploy.mjs --build "$BUILD" --platform "$PLATFORM" --scope "$SCOPE"
+        run: node scripts/ota-deploy.mjs --build "$BUILD" --platform "$PLATFORM" --scope "$SCOPE" --after-native-config
 
       - name: Dry run
         if: ${{ inputs.dry_run }}

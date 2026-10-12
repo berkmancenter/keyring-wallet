@@ -396,6 +396,32 @@ jobs:
           echo "Push notifications (Android): ${push}"
           echo "- Push notifications (Android): **${push}**" >>"$GITHUB_STEP_SUMMARY"
 
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server. Unset is what testers get today:
+      # the app never contacts an update server. When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (Android): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
       - name: Create release keystore
         working-directory: app/android/app
         env:
@@ -898,6 +924,32 @@ jobs:
           fi
           echo "Push notifications (iOS): ${push}"
           echo "- Push notifications (iOS): **${push}**" >>"$GITHUB_STEP_SUMMARY"
+
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server. Unset is what testers get today:
+      # the app never contacts an update server. When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (iOS): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
 
       # The store target carries no push entitlement, so a tester's build asks
       # Apple for nothing. A build that names a push gateway adds it here. The
