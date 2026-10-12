@@ -27,16 +27,20 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  APPIUM_VERSION: "3"
+  # The gate Mac's version (appium --version, 10-12).
+  APPIUM_VERSION: "3.5.0"
   UIAUTOMATOR2_VERSION: "8.6.3"
   CLOUDFLARED_VERSION: "2026.9.1"
+  # From the release's notes (cloudflared-linux-amd64), checked before the binary is run.
+  CLOUDFLARED_SHA256: 03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc
   OTA_CHANNEL: ci
   OTA_SERVER_URL: http://localhost:3080
 
 jobs:
   ota-android:
     runs-on: ubuntu-22.04
-    # MEDIATOR_URL for the store configuration, as the test builds use it.
+    # MEDIATOR_URL for the store configuration, as the test builds use it. test-builds holds no other secret; if it
+    # ever gains a store or signing key, this pull_request job must stop using it first.
     environment: test-builds
     timeout-minutes: 120
     steps:
@@ -77,6 +81,7 @@ jobs:
           set -euo pipefail
           token=$(openssl rand -hex 32); echo "::add-mask::$token"; echo "HOT_UPDATER_AUTH_TOKEN=$token" >> "$GITHUB_ENV"
           curl -sSfL -o "$RUNNER_TEMP/cloudflared" "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION/cloudflared-linux-amd64"
+          echo "$CLOUDFLARED_SHA256  $RUNNER_TEMP/cloudflared" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/cloudflared"
           nohup "$RUNNER_TEMP/cloudflared" tunnel --no-autoupdate --url http://localhost:3080 > "$RUNNER_TEMP/tunnel.log" 2>&1 &
           url=""
@@ -172,6 +177,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           LEG_DIR: ${{ runner.temp }}/leg
+          OTA_SERVER_LOG: ${{ runner.temp }}/ota-server.log
         with:
           api-level: 33
           target: google_apis

@@ -5,25 +5,56 @@
  *   ota-embedded        a fresh install runs its embedded bundle: Developer → OtaBundleId reads "embedded (…)"
  *   ota-join-ring0      "Join ring 0" moves the install to ring0 (OtaRing)
  *   ota-applies         a published JS-only bundle runs after two cold starts (the first downloads and stages it)
- *   ota-crash-rollback  a bundle that throws while its JS loads is caught and the app comes back on the previous one
+ *   ota-crash-rollback  a bundle that throws while its JS loads is caught and the app comes back on the previous one:
+ *                       only with evidence the path ran (the server served that bundle, and the app lists it under
+ *                       OtaRolledBack), never just because the app is still on the previous bundle
  *   ota-withdraw        withdrawing the bundle (bundle disable) returns the app to its embedded bundle after two cold
  *                       starts, and the app still reaches Home
- * The server-side moves are e2e/gate/ci/ota-ctl.sh (OTA_CTL). Rows through lib/rows.js: exit 0 all pass or skipped,
- * 3 any fail, 1 the run broke.
+ * The server-side moves are e2e/gate/ci/ota-ctl.sh (OTA_CTL). Between cold starts the leg waits on the server's check
+ * log (OTA_SERVER_LOG, OTA_LOG_CHECKS=1) for the download or check it expects, not on a fixed sleep. Before each move
+ * it checks the update server answers through the tunnel (OTA_PUBLIC_URL): when it does not, it prints
+ * "ENV update server unreachable through the tunnel" and exits 2, a verdict on the environment, not the app.
+ * Rows through lib/rows.js: exit 0 all pass or skipped, 3 any fail, 1 the run broke, 2 the environment.
  *   PLATFORM=android UDID=<emulator serial> E2E_RELEASE=1 OTA_CTL=e2e/gate/ci/ota-ctl.sh node run-ota.mjs
  */
 import "./lib/cli-guard.js";
 import { execFile } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 import { promisify } from "node:util";
 import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { completeOnboarding, openDeveloperScreen, restartApp } from "./lib/flows.js";
 import { makeDriver } from "./lib/keyringRoles.js";
 import { createRows } from "./lib/rows.js";
+import { crashRolledBack, servedPattern } from "./lib/otaEvidence.js";
 
 const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const PLATFORM = process.env.PLATFORM === "android" ? "android" : "ios";
 const CTL = process.env.OTA_CTL || "e2e/gate/ci/ota-ctl.sh";
 const run = promisify(execFile);
+const SERVER_LOG = process.env.OTA_SERVER_LOG;
+const PUBLIC_URL = process.env.OTA_PUBLIC_URL;
+
+/** The server's log so far, and its lines since a byte offset (where a wait began). */
+const logSize = () => { try { return statSync(SERVER_LOG).size; } catch { return 0; } };
+const logSince = (from) => { try { return readFileSync(SERVER_LOG).subarray(from).toString("utf8"); } catch { return ""; } };
+
+/** Waits up to `ms` for a server-log line matching `re` after byte `from`; true when it came. */
+async function waitForServer(re, from, ms) {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(2000)) if (re.test(logSince(from))) return true;
+  return re.test(logSince(from));
+}
+
+/** The update server through the tunnel the APK was built against; a dead tunnel is the environment's, not the app's. */
+async function serverUp() {
+  for (let i = 0; i < 3; i++) {
+    const ok = await fetch(`${PUBLIC_URL}/hot-updater/version`, { signal: AbortSignal.timeout(15000) }).then((r) => r.ok, () => false);
+    if (ok) return;
+    await sleep(5000);
+  }
+  console.log("ENV update server unreachable through the tunnel");
+  rows.summary();
+  process.exit(2);
+}
 const rows = createRows({
   label: "ota",
   needs: { "ota-join-ring0": ["ota-embedded"], "ota-applies": ["ota-join-ring0"], "ota-crash-rollback": ["ota-applies"], "ota-withdraw": ["ota-applies"] },
@@ -34,6 +65,7 @@ const rows = createRows({
  * than Appium's idle timeout (300 s on Android), so the session is kept alive with a light command every minute.
  */
 async function ctl(d, ...args) {
+  await serverUp();
   const keepAlive = setInterval(() => d.getWindowSize().catch(() => undefined), 60000);
   try {
     const { stdout } = await run("bash", [CTL, ...args], { encoding: "utf8", timeout: 20 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }).catch((e) => {
@@ -56,20 +88,28 @@ async function otaState(d) {
     const el = await scrollToTestId(d, key).catch(() => byTestId(d, key));
     return (await el.getAttribute(PLATFORM === "android" ? "content-desc" : "label").catch(() => "")) || "";
   };
-  return { bundle: await label("OtaBundleId"), ring: await label("OtaRing") };
+  return { bundle: await label("OtaBundleId"), ring: await label("OtaRing"), rolledBack: await label("OtaRolledBack") };
 }
 
-/** Two cold starts: the first checks and stages, the second runs what was staged. Returns the state after. */
-async function twoColdStarts(d) {
+/**
+ * Two cold starts: the first checks and downloads, the second runs what was staged. Between them it waits for the
+ * server to see what the first start should do: the download of bundle `id` (its manifest or archive), or, with no id
+ * (a withdrawal), the first start's update check. Returns what the waits saw and the state after.
+ */
+async function twoColdStarts(d, id) {
+  await serverUp();
+  const from = logSize();
   await restartApp(d);
-  await sleep(8000); // the update check arrives about 2 s after launch, the download a few seconds after that
+  const served = await waitForServer(servedPattern(id), from, 120000);
+  await sleep(id ? 15000 : 3000); // the download finishes and is staged after its first request
   await restartApp(d);
-  return otaState(d);
+  return { served, ...(await otaState(d)) };
 }
 
 let d;
 let good;
 try {
+  await serverUp();
   await ensureAppium();
   d = await makeDriver({ platform: PLATFORM, udid: process.env.UDID, keepState: true });
   rows.setDriver(d);
@@ -91,21 +131,27 @@ try {
 
   await rows.row("ota-applies", async () => {
     good = await ctl(d, "publish");
-    const s = await twoColdStarts(d);
-    return { ok: Boolean(good) && s.bundle.includes(good), detail: `published ${good}; running "${s.bundle}"` };
+    const s = await twoColdStarts(d, good);
+    return { ok: Boolean(good) && s.bundle.includes(good), detail: `published ${good}; served ${s.served ? "yes" : "NO"}; running "${s.bundle}"` };
   });
 
   await rows.row("ota-crash-rollback", async () => {
     const bad = await ctl(d, "crash");
-    const s = await twoColdStarts(d);
+    const s = await twoColdStarts(d, bad);
     const home = await existsTestId(d, "Settings", 5000);
     await ctl(d, "disable", bad); // never left enabled behind the next row
-    return { ok: s.bundle.includes(good) && !s.bundle.includes(bad) && home, detail: `crash bundle ${bad}; running "${s.bundle}" (want ${good}); Home ${home ? "reached" : "NOT reached"}` };
+    // The path must have run: served, tried and rolled back. Still being on `good` alone proves nothing.
+    const v = crashRolledBack({ served: s.served, rolledBackLabel: s.rolledBack, running: s.bundle, good, bad, home });
+    const rolledBack = v.rolledBack;
+    return {
+      ok: v.ok,
+      detail: `crash bundle ${bad}: served ${s.served ? "yes" : "NO"}, rolled back ${rolledBack ? "yes" : `NO ("${s.rolledBack}")`}; running "${s.bundle}" (want ${good}); Home ${home ? "reached" : "NOT reached"}`,
+    };
   });
 
   await rows.row("ota-withdraw", async () => {
     await ctl(d, "disable", good);
-    const s = await twoColdStarts(d);
+    const s = await twoColdStarts(d, null);
     const home = await existsTestId(d, "Settings", 5000);
     return { ok: s.bundle.startsWith("embedded") && home, detail: `withdrew ${good}; running "${s.bundle}"; Home ${home ? "reached" : "NOT reached"}` };
   });
