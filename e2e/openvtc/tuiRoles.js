@@ -156,7 +156,9 @@ export async function issueTicket(tui) {
   // then the only sign it is selected.
   const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen()) || rowSelected(tui.screen(), code);
   // The tickets view grows by one every run; its position is the ticket read aloud.
-  await walkTo(tui, selected, { pace: 600, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
+  // The pane does not follow the ▸ (main/mod.rs:562-577 scroll it on PageUp/PageDown/Home/End only): page after
+  // it, or a ticket below the fold is never reached (1012-2223 rerun: 28 tickets out, the new one last).
+  await walkTo(tui, selected, { pace: 600, reveal: { Down: 'PageDown', Up: 'PageUp' }, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
   if (!selected()) throw tui.failure('vetter.ticketSelect', new Date(), `could not select ticket ${code} on the Tickets view`);
   await tui.pressEach(['End'], 800);
   const uri = scrapeTicketUri(tui.screen());
