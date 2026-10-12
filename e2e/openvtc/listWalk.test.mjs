@@ -70,3 +70,52 @@ test('rowSelected: the row carrying the cursor names the ticket', () => {
   // The Activity Log names the new ticket too; that is not a selection.
   assert.equal(rowSelected('│[10:57:22] Ticket 4CPB-TAXR for did:webvh:… — press ⏎', '4CPB-TAXR'), false);
 });
+
+/**
+ * A list in a pane `height` rows tall that scrolls apart from its cursor, as
+ * openvtc's content panel does: Down/Up move the ▸, PageDown/PageUp move the view.
+ */
+function fakePane(rows, { at = 0, height = 27 } = {}) {
+  return {
+    at,
+    top: 0,
+    presses: [],
+    screen() {
+      return rows.slice(this.top, this.top + height).map((r, i) => `${this.top + i === this.at ? '▸ ' : '  '}${r}`).join('\n');
+    },
+    async pressEach([key]) {
+      this.presses.push(key);
+      if (key === 'Down') this.at = Math.min(this.at + 1, rows.length - 1);
+      if (key === 'Up') this.at = Math.max(this.at - 1, 0);
+      if (key === 'PageDown') this.top = Math.min(this.top + height, Math.max(rows.length - height, 0));
+      if (key === 'PageUp') this.top = Math.max(this.top - height, 0);
+    },
+  };
+}
+const tickets = (n) => Array.from({ length: n }, (_, i) => `T${String(i).padStart(3, '0')}-ABCD  Keyring Lab Community  spent or expired`);
+const ticketWanted = (code) => (screen) => rowSelected(screen, code);
+
+test('1012-2223: without reveal, a ticket below the fold of a pane that does not follow is never reached', async () => {
+  const tui = fakePane(tickets(28));
+  assert.equal(await walkTo(tui, ticketWanted('T027-ABCD'), { pace: 0 }), false);
+});
+
+test('with reveal, the walk pages after the cursor and reaches the last of 28 tickets', async () => {
+  const tui = fakePane(tickets(28));
+  assert.equal(await walkTo(tui, ticketWanted('T027-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 27);
+  assert.ok(tui.presses.includes('PageDown'));
+});
+
+test('with reveal, a long list several pages deep, then back up to a row above the start', async () => {
+  const tui = fakePane(tickets(200), { at: 150, height: 20 });
+  tui.top = 140;
+  assert.equal(await walkTo(tui, ticketWanted('T005-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 5);
+});
+
+test('with reveal, a code that is not there still ends the walk: false', async () => {
+  const tui = fakePane(tickets(60), { height: 25 });
+  assert.equal(await walkTo(tui, ticketWanted('ZZZZ-ZZZZ'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), false);
+  assert.ok(tui.presses.length < 400);
+});
