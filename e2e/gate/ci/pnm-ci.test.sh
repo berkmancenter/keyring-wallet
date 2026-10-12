@@ -23,6 +23,8 @@ check refuse --vta runner-main keys rotate
 check ok --vta runner-main approvals approvers remove gate-set did:key:x
 check ok --vta runner-main policy upsert --file p.json
 check ok --vta runner-main health
+check refuse --vta runner-main -V acl list
+check refuse --vta runner-main acl list -v alice
 check refuse --vta runner-main acl list --vta alice
 check refuse --vta runner-main --vta=alice acl list
 chmod 755 "$T/home"; check refuse --vta runner-main acl list

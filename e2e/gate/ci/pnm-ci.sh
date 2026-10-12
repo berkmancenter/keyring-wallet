@@ -21,7 +21,8 @@ for a in "$@"; do
 done
 case " alice alberto3 alberto-push-vta-2 farm " in *" $slug "*) echo "pnm-ci: refused: $slug is a person's agent" >&2; exit 2 ;; esac
 case " ${CI_ALLOWED_SLUGS:-} " in *" $slug "*) ;; *) echo "pnm-ci: refused: $slug is not one of the CI configuration's agents" >&2; exit 2 ;; esac
-for a in "$@"; do case "$a" in -v|-vv|-vvv|--verbose|--debug|--trace) echo "pnm-ci: refused: $a (pnm's verbose output is not masked)" >&2; exit 2 ;; esac; done
+# -V/--verbose is pnm's verbose flag; -v is its short --vta (a second agent through the back door): both refused.
+for a in "$@"; do case "$a" in -V|-VV|-v|-vv|--verbose|--debug|--trace) echo "pnm-ci: refused: $a (verbose output, or a second agent)" >&2; exit 2 ;; esac; done
 : "${PNM_REAL:?the CI pnm binary}" "${CI_PNM_HOME:?the session directory of the CI identity}"
 [ "$(stat -c %a "$CI_PNM_HOME" 2>/dev/null || stat -f %Lp "$CI_PNM_HOME")" = 700 ] || { echo "pnm-ci: $CI_PNM_HOME must be mode 700" >&2; exit 2; }
 # The command, as "<command> <subcommand>": the two words after --vta <slug>.
@@ -32,5 +33,5 @@ case " $CI_COMMANDS " in
   *) echo "pnm-ci: refused: \"$cmd $sub\" is not a command the CI legs use" >&2; exit 2 ;;
 esac
 # No verbose output through the environment either.
-unset RUST_LOG RUST_BACKTRACE
+unset RUST_LOG RUST_BACKTRACE PNM_VTA
 PNM_HOME=$CI_PNM_HOME VTI_SECURE_STORE=file RUST_LOG=warn exec "$PNM_REAL" "$@"
