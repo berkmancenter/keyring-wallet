@@ -62,9 +62,10 @@ export const createDiskStore = ({ filesDir, publicUrl }) => ({
       return null
     }
   },
-  downloadUrl(storageUri) {
+  /** The phone-facing URL, or one on `origin` (the publisher's own way in). */
+  downloadUrl(storageUri, origin = publicUrl()) {
     const key = keyFromUri(storageUri)
-    return `${publicUrl()}/files/${key.split('/').map(encodeURIComponent).join('/')}`
+    return `${origin.replace(/\/+$/, '')}/files/${key.split('/').map(encodeURIComponent).join('/')}`
   },
   file(key) {
     return fileForKey(filesDir, key)

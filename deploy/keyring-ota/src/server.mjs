@@ -24,6 +24,7 @@ import { Readable } from 'node:stream'
 import { timingSafeEqual } from 'node:crypto'
 
 import { objectKey } from './diskStorage.mjs'
+import { requestOrigin } from './requestOrigin.mjs'
 import { hotUpdater, store } from './hotUpdater.mjs'
 
 const token = process.env.HOT_UPDATER_AUTH_TOKEN
@@ -64,6 +65,7 @@ const json = (res, status, body) => {
 const handleStorage = async (req, res, route) => {
   const request = toWebRequest(req)
   if (route === 'upload' && req.method === 'POST') {
+    req.on('aborted', () => console.error(`${new Date().toISOString()} upload aborted by the client`))
     const form = await request.formData()
     const file = form.get('file')
     const key = form.get('key')
@@ -82,7 +84,8 @@ const handleStorage = async (req, res, route) => {
     res.writeHead(200, { 'content-type': 'text/plain' })
     return res.end(text)
   }
-  if (route === 'getDownloadUrl') return json(res, 200, { fileUrl: store.downloadUrl(storageUri) })
+  // The publisher's existence checks and downloads come back the way it came in.
+  if (route === 'getDownloadUrl') return json(res, 200, { fileUrl: store.downloadUrl(storageUri, requestOrigin(req.headers)) })
   return json(res, 404, { error: 'unknown storage route' })
 }
 
@@ -119,9 +122,22 @@ export const server = createServer(async (req, res) => {
     }
     return json(res, 404, { error: 'not found' })
   } catch (error) {
-    console.error(`${req.method} ${req.url?.split('?')[0]}: ${error}`)
+    // Upload and management failures are always logged (OTA_LOG_CHECKS or not):
+    // a publish that fails must say why on the server too.
+    console.error(`${new Date().toISOString()} ${req.method} ${req.url?.split('?')[0]}: ${error}`)
     if (!res.headersSent) json(res, 500, { error: 'internal error' })
   }
+})
+
+// A publish uploads a 10+ MB archive and dozens of assets back to back. Node's
+// defaults close an idle keep-alive socket after 5 s, which races the client's
+// reuse of it on a loaded machine; keep sockets longer than any client waits.
+server.keepAliveTimeout = 65_000
+server.headersTimeout = 66_000
+server.requestTimeout = 600_000
+server.on('clientError', (error, socket) => {
+  console.error(`${new Date().toISOString()} client error: ${error.code ?? error.message}`)
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
 })
 
 server.listen(port, () => console.log(`keyring-ota listening on :${port}, public URL ${process.env.OTA_PUBLIC_URL ?? '(unset)'}`))
