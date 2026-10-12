@@ -1,0 +1,199 @@
+name: Gate (CI runners)
+
+# The release gate's Android Farm legs on GitHub-hosted runners, instead of the Mac (owner's decision 10-11, D-7).
+# One leg per job, ONE AT A TIME: every leg acts as the same CI-only runner-admin identity, and the mediator keeps one
+# live connection per identity, so two jobs at once would drop each other's calls.
+#
+# Not usable until the owner approves the CI identity (D-8) and the protected environment "gate-ci" holds:
+#   GATE_CI_ENV            the CI configuration (runner slugs, DIDs, URLs, community values, FARM_VERSIONS): the
+#                          Mac's farm.env without PNM_BIN. Its RUNNER_*_SLUG and COMMUNITY_AGENT_SLUG are the only agents
+#                          pnm may reach on CI (CI_ALLOWED_SLUGS); a person's agent is refused even if named there.
+#   GATE_CI_PNM_HOME_B64   base64 of a .tar.gz of that identity's pnm session directory (file store, PNM_HOME)
+# Until then every leg job stops at once as ENV ("no CI Farm identity"), never a verdict on the app.
+# The environment must allow main only (deployment branch rule): a pull_request job never sees these.
+#
+# Guards (the gate review's conditions for the identity): only farm3-runner-* VTAs, never a person's agent
+# (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
+# outside every uploaded path, removed in an always() step; CI's pnm must match the Farm (farm-drift.mjs) or the leg
+# stops as ENV. Revoking: delete the identity's ACL entry on each runner VTA and empty the two secrets.
+#
+#   gh workflow run gate-ci.yml -R berkmancenter/keyring-wallet -f legs="testreq linkwait"
+
+on:
+  workflow_dispatch:
+    inputs:
+      legs:
+        description: "Legs to run, space-separated (Android, one emulator, one build)"
+        type: string
+        default: "smoke-android testreq linkwait linkresume lostreq waiting agents"
+      run-id:
+        description: "test-builds run whose push-off APK to test (default: the newest green push build of main)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+# One identity: one leg anywhere at a time, across runs too.
+concurrency:
+  group: gate-ci-identity
+  cancel-in-progress: false
+
+env:
+  APPIUM_VERSION: "3.5.0"
+  UIAUTOMATOR2_VERSION: "8.6.3"
+  # Not on CI yet: devices (several emulators), relaunch-android and update-android (two builds), the push legs (a
+  # push-on build and the gateway), p1 (the openvtc TUI, a macOS build), the iOS legs (a macOS runner) and p2 (iOS and
+  # Android together).
+  CI_LEGS: "smoke-android testreq linkwait linkresume lostreq waiting agents linkfail pnmlink"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      run: ${{ steps.build.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Legs and their emulator ports
+        id: plan
+        shell: bash
+        env:
+          LEGS: ${{ inputs.legs }}
+        run: |
+          set -euo pipefail
+          items=()
+          for leg in $LEGS; do
+            [[ $leg =~ ^[a-z0-9-]+$ ]] || { echo "::error::not a leg name: $leg"; exit 1; }
+            case " $CI_LEGS " in *" $leg "*) ;; *) echo "::error::$leg cannot run on CI yet (see CI_LEGS)"; exit 1 ;; esac
+            ports=$(grep -oE 'emulator-[0-9]{4}' "e2e/gate/legs/$leg.sh" | sort -u)
+            [ "$(echo "$ports" | wc -l)" = 1 ] || { echo "::error::$leg uses more than one emulator: $ports"; exit 1; }
+            items+=("{\"leg\":\"$leg\",\"port\":${ports#emulator-}}")
+          done
+          echo "matrix={\"include\":[$(IFS=,; echo "${items[*]}")]}" >> "$GITHUB_OUTPUT"
+      - name: Which build
+        id: build
+        shell: bash
+        env:
+          RUN: ${{ inputs.run-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$RUN
+          [ -n "$run" ] || run=$(gh run list -R "$GITHUB_REPOSITORY" -w test-builds.yml -b main -e push -s success -L 1 --json databaseId --jq '.[0].databaseId')
+          [[ $run =~ ^[0-9]+$ ]] || { echo "::error::no test-builds run: $run"; exit 1; }
+          echo "run=$run" >> "$GITHUB_OUTPUT"; echo "test-builds run $run" >> "$GITHUB_STEP_SUMMARY"
+
+  pnm:
+    uses: ./.github/workflows/pnm-linux.yml
+
+  leg:
+    needs: [plan, pnm]
+    runs-on: ubuntu-22.04
+    environment: gate-ci
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: leg ${{ matrix.leg }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Fail closed, as ENV: no identity yet, or CI's pnm not the Farm's version.
+      - name: The CI identity and the Farm's version
+        shell: bash
+        env:
+          GATE_CI_ENV: ${{ secrets.GATE_CI_ENV }}
+          GATE_CI_PNM_HOME_B64: ${{ secrets.GATE_CI_PNM_HOME_B64 }}
+        run: |
+          if [ -z "$GATE_CI_ENV" ] || [ -z "$GATE_CI_PNM_HOME_B64" ]; then
+            echo "::error::ENV no CI Farm identity (decision D-8): gate-ci has no GATE_CI_ENV / GATE_CI_PNM_HOME_B64"
+            echo "### leg ${{ matrix.leg }}: **env** — no CI Farm identity yet (D-8), not a verdict on the app" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$GATE_CI_ENV" > "$RUNNER_TEMP/gate-ci.env"
+          farm=$(grep -m1 '^FARM_VERSIONS=' "$RUNNER_TEMP/gate-ci.env" | cut -d= -f2- | tr -d '"')
+          line=$(node e2e/gate/farm-drift.mjs --farm "$farm"); rc=$?
+          echo "$line"
+          if [ $rc != 0 ]; then echo "::error::ENV $line"; echo "### leg ${{ matrix.leg }}: **env** — $line" >> "$GITHUB_STEP_SUMMARY"; exit 1; fi
+          home=$(mktemp -d "$RUNNER_TEMP/pnm-home.XXXXXX"); chmod 700 "$home"
+          printf '%s' "$GATE_CI_PNM_HOME_B64" | base64 -d | tar -xzf - -C "$home"
+          chmod -R go-rwx "$home"
+          echo "GATE_ENV=$RUNNER_TEMP/gate-ci.env" >> "$GITHUB_ENV"
+          echo "CI_PNM_HOME=$home" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.pnm.outputs.artifact }}
+          path: ${{ runner.temp }}/pnm-bin
+      - name: The CI pnm
+        shell: bash
+        run: |
+          chmod +x "$RUNNER_TEMP/pnm-bin/pnm"
+          echo "PNM_REAL=$RUNNER_TEMP/pnm-bin/pnm" >> "$GITHUB_ENV"
+          echo "VTI_SECURE_STORE=file" >> "$GITHUB_ENV"
+
+      - name: The build under test (push-off APK)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ needs.plan.outputs.run }}
+        run: |
+          set -euo pipefail
+          name=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" --paginate --jq '.artifacts[].name' | grep -E '^keyring-android-' | grep -v -- '-push-on$' | head -1)
+          [ -n "$name" ] || { echo "::error::run $RUN has no push-off Android artifact"; exit 1; }
+          gh run download "$RUN" -R "$GITHUB_REPOSITORY" -n "$name" -D "$RUNNER_TEMP/build"
+          apk=$(ls "$RUNNER_TEMP"/build/*.apk | head -1); m=$RUNNER_TEMP/build/manifest.txt
+          { echo "APK_OFF=$apk"; echo "CAND_WALLET=$(grep '^wallet=' "$m" | cut -d= -f2)"; echo "CAND_BIFOLD=$(grep '^bifold=' "$m" | cut -d= -f2)"; } >> "$GITHUB_ENV"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+      - name: Appium and the drivers' packages
+        shell: bash
+        run: |
+          npm install -g "appium@$APPIUM_VERSION" > /dev/null
+          appium driver install "uiautomator2@$UIAUTOMATOR2_VERSION"
+          (cd e2e && npm ci --no-audit --no-fund)
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: Leg ${{ matrix.leg }} on an emulator (port ${{ matrix.port }})
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          LEG_DIR: ${{ runner.temp }}/leg-${{ matrix.leg }}
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          disable-animations: false
+          emulator-boot-timeout: 900
+          emulator-port: ${{ matrix.port }}
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash e2e/gate/ci/gate-ci-leg.sh ${{ matrix.leg }}
+
+      # The identity never outlives the job, and never sits in an uploaded path.
+      - name: Remove the identity and the configuration
+        if: always()
+        shell: bash
+        run: |
+          case "${CI_PNM_HOME:-}" in "$RUNNER_TEMP"/leg-*) echo "::error::PNM_HOME inside an uploaded path"; exit 1 ;; esac
+          rm -rf "${CI_PNM_HOME:-/nonexistent}" "$RUNNER_TEMP/gate-ci.env"
+
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-ci-${{ matrix.leg }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/leg-${{ matrix.leg }}
+          retention-days: 14
