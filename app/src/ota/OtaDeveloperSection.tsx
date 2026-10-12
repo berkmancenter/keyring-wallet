@@ -16,6 +16,7 @@ import { DEFAULT_RING, Ring, setRing } from './rings'
 export const OTA_TEST_IDS = {
   bundleId: 'OtaBundleId',
   ring: 'OtaRing',
+  rolledBack: 'OtaRolledBack',
   joinRing0: 'OtaJoinRing0',
   leaveRing0: 'OtaLeaveRing0',
   rolledBack: 'OtaRolledBack',
