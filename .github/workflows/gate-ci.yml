@@ -13,7 +13,11 @@ name: Gate (CI runners)
 # Until then every leg job stops at once as ENV ("no CI Farm identity"), never a verdict on the app.
 # The environment must allow main only (deployment branch rule): a pull_request job never sees these.
 #
-# Guards (the gate review's conditions for the identity): only farm3-runner-* VTAs, never a person's agent
+# The identity (D-8, D-10): a SUPER admin on the three test runners only (farm3-runner-prague, -uiux, -openvtc), because
+# a phone's entry is an unrestricted admin and only a super admin may delete it. Its ACL entries expire every 30 days
+# and a person renews them; CI cannot renew itself. What keeps it to the legs' needs is ci/pnm-ci.sh's command
+# allowlist (CI_COMMANDS), not the VTA.
+# Guards (the gate review's conditions for the identity): only the configuration's runners, never a person's agent
 # (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
 # outside every uploaded path, removed in an always() step; CI's pnm must match the Farm (farm-drift.mjs) or the leg
 # stops as ENV. Every configuration value is masked in the logs; before upload, the leg's folder is scrubbed

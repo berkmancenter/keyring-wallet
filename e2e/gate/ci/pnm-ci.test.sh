@@ -17,6 +17,12 @@ check refuse --vta farm acl list
 check refuse --vta bob acl list
 check refuse --vta runner-main --verbose acl list
 check refuse acl list
+check refuse --vta runner-main acl create --did did:key:x --role admin
+check refuse --vta runner-main contexts create --id x
+check refuse --vta runner-main keys rotate
+check ok --vta runner-main approvals approvers remove gate-set did:key:x
+check ok --vta runner-main policy upsert --file p.json
+check ok --vta runner-main health
 check refuse --vta runner-main acl list --vta alice
 check refuse --vta runner-main --vta=alice acl list
 chmod 755 "$T/home"; check refuse --vta runner-main acl list
