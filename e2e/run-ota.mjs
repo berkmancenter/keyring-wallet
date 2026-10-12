@@ -44,17 +44,22 @@ async function waitForServer(re, from, ms) {
   return re.test(logSince(from));
 }
 
-/** The update server through the tunnel the APK was built against; a dead tunnel is the environment's, not the app's. */
+/**
+ * The update server through the tunnel the APK was built against; a dead tunnel is the environment's, not the app's.
+ * When it does not answer, `envDown` is set: the rows still to run are SKIPs that say so, and the leg exits 2.
+ */
+let envDown = false;
+const ENV_DOWN = "the update server was unreachable through the tunnel (ENV, not a verdict on the app)";
 async function serverUp() {
   for (let i = 0; i < 3; i++) {
     const ok = await fetch(`${PUBLIC_URL}/hot-updater/version`, { signal: AbortSignal.timeout(15000) }).then((r) => r.ok, () => false);
     if (ok) return;
     await sleep(5000);
   }
-  console.log("ENV update server unreachable through the tunnel");
-  rows.summary();
-  process.exit(2);
+  envDown = true;
+  throw new Error(ENV_DOWN);
 }
+const unlessEnvDown = () => ({ skip: envDown ? ENV_DOWN : undefined });
 const rows = createRows({
   label: "ota",
   needs: { "ota-join-ring0": ["ota-embedded"], "ota-applies": ["ota-join-ring0"], "ota-crash-rollback": ["ota-applies"], "ota-withdraw": ["ota-applies"] },
@@ -109,7 +114,7 @@ async function twoColdStarts(d, id) {
 let d;
 let good;
 try {
-  await serverUp();
+  await serverUp().catch(() => undefined); // a dead tunnel at the start: every row is an ENV SKIP
   await ensureAppium();
   d = await makeDriver({ platform: PLATFORM, udid: process.env.UDID, keepState: true });
   rows.setDriver(d);
@@ -119,7 +124,7 @@ try {
   await rows.row("ota-embedded", async () => {
     const s = await otaState(d);
     return { ok: s.bundle.startsWith("embedded"), detail: `running "${s.bundle}", ring "${s.ring}"` };
-  });
+  }, unlessEnvDown());
 
   await rows.row("ota-join-ring0", async () => {
     await scrollToTestId(d, "OtaJoinRing0");
@@ -127,13 +132,13 @@ try {
     await sleep(1000);
     const s = await otaState(d);
     return { ok: s.ring.includes("ring0"), detail: `ring "${s.ring}" after Join ring 0` };
-  });
+  }, unlessEnvDown());
 
   await rows.row("ota-applies", async () => {
     good = await ctl(d, "publish");
     const s = await twoColdStarts(d, good);
     return { ok: Boolean(good) && s.bundle.includes(good), detail: `published ${good}; served ${s.served ? "yes" : "NO"}; running "${s.bundle}"` };
-  });
+  }, unlessEnvDown());
 
   await rows.row("ota-crash-rollback", async () => {
     const bad = await ctl(d, "crash");
@@ -163,20 +168,24 @@ try {
     } finally {
       await ctl(d, "disable", bad).catch((e) => console.log(`[ota] could not disable the crash bundle: ${e.message}`)); // never left enabled behind the next row
     }
-  });
+  }, unlessEnvDown());
 
   await rows.row("ota-withdraw", async () => {
     await ctl(d, "disable", good);
     const s = await twoColdStarts(d, null);
     const home = await existsTestId(d, "Settings", 5000);
     return { ok: s.bundle.startsWith("embedded") && home, detail: `withdrew ${good}; running "${s.bundle}"; Home ${home ? "reached" : "NOT reached"}` };
-  });
+  }, unlessEnvDown());
 } catch (e) {
   rows.fatal(e);
   if (d) await screenshot(d, "ota-failure").catch(() => undefined);
 } finally {
   rows.summary();
   process.exitCode = rows.exitCode();
+  if (envDown) {
+    console.log("ENV update server unreachable through the tunnel");
+    process.exitCode = 2; // the environment, not the app
+  }
   if (d) await d.deleteSession().catch(() => undefined);
   stopAppium();
 }
