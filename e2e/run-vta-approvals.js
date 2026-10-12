@@ -130,7 +130,17 @@ async function answerOwner(d, tag) {
 /** Into the approval card for a held request: the banner on Your agent, or the card on Requests. */
 async function awaitCard(d, ms) {
   let card = false;
+  let homeChecked = false;
   for (const until = Date.now() + ms; Date.now() < until && !card; await sleep(2000)) {
+    // Not on the agent's home (Agent settings, say) and the card is not here: once, go back to My Agent and to its
+    // Requests section, where the card lives after bifold #297.
+    if (!homeChecked && !(await existsTestId(d, "AgentRequestsRow", 300)) && !(await existsTestId(d, "AgentSegment_manage", 300))) {
+      homeChecked = true;
+      if (!(await existsTestId(d, "AgentApprovalCard", 300))) {
+        await tapTestId(d, "MyAgent", 5000).catch(() => undefined);
+        await scrollToTestId(d, "AgentRequestsRow", 8).catch(() => undefined);
+      }
+    }
     if (await existsTestId(d, "AgentApprovalBanner", 300)) await tapTestId(d, "AgentApprovalBanner", 3000).catch(() => undefined);
     card = (await existsTestId(d, "AgentApprovalCard", 500)) || Boolean(await scrollToTestId(d, "AgentApprovalCard", 2).catch(() => false));
   }
@@ -230,10 +240,13 @@ try {
     await sleep(8000);
   }
   await tapTestId(d, "MyAgent", 15000);
-  // Manage: a segment before bifold #297, the "Agent settings" row after.
+  // Where the approval card shows: on the Manage segment before bifold #297; after it, in the Requests section of the
+  // agent's home (VtaAgentHome → RequestsSection, always rendered since 239), which can sit below the fold. Scroll to
+  // it there, and only when there is none go to Agent settings: the 1012-2223 rerun on 240 checked AgentRequestsRow
+  // without scrolling, went to Agent settings, and waited 180 s there while the tab read "1 request waiting".
   if (await existsTestId(d, "AgentSegment_manage", 5000)) {
     await tapTestId(d, "AgentSegment_manage", 5000);
-  } else if (!(await existsTestId(d, "AgentRequestsRow", 1500))) {
+  } else if (!(await scrollToTestId(d, "AgentRequestsRow", 8).then(() => true, () => false))) {
     await scrollToTestId(d, "AgentSettings", 8).catch(() => undefined);
     await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
   }
