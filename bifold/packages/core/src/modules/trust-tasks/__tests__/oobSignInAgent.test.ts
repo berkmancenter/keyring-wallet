@@ -14,6 +14,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { jcsCanonicalize, verifyDocumentProof } from '../documentProof'
 import {
   OOB_TASKS,
+  SIGN_IN_FAILURE_MESSAGES,
   SignInError,
   newThrowawayKey,
   signWithKey,
@@ -597,10 +598,26 @@ describe('approving a sign-in', () => {
     })
   })
 
-  it('does not send a grant the VTA signed for authentication', async () => {
+  // Findings F1: an agent from before sign-in signing (vta-service 0.56.0,
+  // VTI-Eucalyptus — the Farm's) serves vault/sign-trust-task/0.2 but signs the
+  // grant as the persona for `authentication`. It was reported as a bad answer,
+  // after the person had approved; it is an agent that needs an update.
+  it('a grant the VTA signed for authentication (an agent from before sign-in signing): agent needs an update, nothing sent', async () => {
     const { deps, community, vtaFake, proved: p } = await proved()
     vtaFake.signTrustTask.mockImplementationOnce(async ({ unsignedEnvelope }) =>
       signWithKey(unsignedEnvelope, personaSecret, `${PERSONA}#key-0`, 'authentication')
+    )
+    const error = await failureOf(approveSignIn(p, deps))
+    expect(error.reason).toBe('agentNeedsUpdate')
+    expect(error.message).toBe(SIGN_IN_FAILURE_MESSAGES.agentNeedsUpdate)
+    expect(community.post).toHaveBeenCalledTimes(1)
+  })
+
+  it("a grant signed by a key that is not the persona's is still a bad answer, nothing sent", async () => {
+    const { deps, community, vtaFake, proved: p } = await proved()
+    const stranger = ed25519.utils.randomSecretKey()
+    vtaFake.signTrustTask.mockImplementationOnce(async ({ unsignedEnvelope }) =>
+      signWithKey(unsignedEnvelope, stranger, `${PERSONA}#key-0`, 'authentication')
     )
     const error = await failureOf(approveSignIn(p, deps))
     expect(error.reason).toBe('badAnswer')
