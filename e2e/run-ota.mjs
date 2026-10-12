@@ -13,7 +13,8 @@
  *   PLATFORM=android UDID=<emulator serial> E2E_RELEASE=1 OTA_CTL=e2e/gate/ci/ota-ctl.sh node run-ota.mjs
  */
 import "./lib/cli-guard.js";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { completeOnboarding, openDeveloperScreen, restartApp } from "./lib/flows.js";
 import { makeDriver } from "./lib/keyringRoles.js";
@@ -22,23 +23,29 @@ import { createRows } from "./lib/rows.js";
 const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const PLATFORM = process.env.PLATFORM === "android" ? "android" : "ios";
 const CTL = process.env.OTA_CTL || "e2e/gate/ci/ota-ctl.sh";
+const run = promisify(execFile);
 const rows = createRows({
   label: "ota",
   needs: { "ota-join-ring0": ["ota-embedded"], "ota-applies": ["ota-join-ring0"], "ota-crash-rollback": ["ota-applies"], "ota-withdraw": ["ota-applies"] },
 });
 
-/** The server-side move; returns the bundle id it printed ("id=…"), if any. */
-function ctl(...args) {
-  let out;
+/**
+ * The server-side move; returns the bundle id it printed ("id=…"), if any. A publish takes minutes on a runner, longer
+ * than Appium's idle timeout (300 s on Android), so the session is kept alive with a light command every minute.
+ */
+async function ctl(d, ...args) {
+  const keepAlive = setInterval(() => d.getWindowSize().catch(() => undefined), 60000);
   try {
-    out = execFileSync("bash", [CTL, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 15 * 60 * 1000 });
-  } catch (e) {
-    // What ota-ctl.sh printed is the reason (ota-deploy's refusal, say): show it before failing the row.
-    process.stdout.write(String(e.stdout || "").split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
-    throw new Error(`ota-ctl ${args.join(" ")} failed (exit ${e.status}): ${String(e.stdout || "").trim().split("\n").slice(-2).join(" | ")}`);
+    const { stdout } = await run("bash", [CTL, ...args], { encoding: "utf8", timeout: 20 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }).catch((e) => {
+      // What ota-ctl.sh printed is the reason (ota-deploy's refusal, say): show it before failing the row.
+      process.stdout.write(`${String(e.stdout || "")}${String(e.stderr || "")}`.split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
+      throw new Error(`ota-ctl ${args.join(" ")} failed (exit ${e.code}): ${String(e.stdout || "").trim().split("\n").slice(-2).join(" | ")}`);
+    });
+    process.stdout.write(stdout.split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
+    return (stdout.match(/^id=(\S+)$/m) || [])[1];
+  } finally {
+    clearInterval(keepAlive);
   }
-  process.stdout.write(out.split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
-  return (out.match(/^id=(\S+)$/m) || [])[1];
 }
 
 /** What the Developer screen says: the running bundle (OtaBundleId's label) and the ring (OtaRing's). */
@@ -83,21 +90,21 @@ try {
   });
 
   await rows.row("ota-applies", async () => {
-    good = ctl("publish");
+    good = await ctl(d, "publish");
     const s = await twoColdStarts(d);
     return { ok: Boolean(good) && s.bundle.includes(good), detail: `published ${good}; running "${s.bundle}"` };
   });
 
   await rows.row("ota-crash-rollback", async () => {
-    const bad = ctl("crash");
+    const bad = await ctl(d, "crash");
     const s = await twoColdStarts(d);
     const home = await existsTestId(d, "Settings", 5000);
-    ctl("disable", bad); // never left enabled behind the next row
+    await ctl(d, "disable", bad); // never left enabled behind the next row
     return { ok: s.bundle.includes(good) && !s.bundle.includes(bad) && home, detail: `crash bundle ${bad}; running "${s.bundle}" (want ${good}); Home ${home ? "reached" : "NOT reached"}` };
   });
 
   await rows.row("ota-withdraw", async () => {
-    ctl("disable", good);
+    await ctl(d, "disable", good);
     const s = await twoColdStarts(d);
     const home = await existsTestId(d, "Settings", 5000);
     return { ok: s.bundle.startsWith("embedded") && home, detail: `withdrew ${good}; running "${s.bundle}"; Home ${home ? "reached" : "NOT reached"}` };
