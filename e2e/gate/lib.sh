@@ -13,8 +13,14 @@ VTC_ADMIN=$REPO/tsp-reference/ref-20-local-vetting/vtc-admin.mjs
 BID=asml.bkc.harvard.wallet
 GH_REPO=berkmancenter/keyring-wallet
 
-export PATH=$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator:$PATH
-export ANDROID_HOME=$HOME/Library/Android/sdk ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
+# GATE_TARGET=ci: a leg run by .github/workflows/gate-ci.yml on a GitHub-hosted runner, one leg per job. The runner
+# brings its own Android SDK and the emulator (the workflow's emulator step), pnm is the CI build (pnm-linux.yml) with
+# a CI-only identity, and the private configuration is a file the workflow writes from its protected environment.
+is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
+if ! is_ci; then
+  export PATH=$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator:$PATH
+  export ANDROID_HOME=$HOME/Library/Android/sdk ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
+fi
 
 utc() { date -u +%H:%M:%SZ; }
 stamp() { date -u +%Y-%m-%dT%H:%M:%S; }
@@ -48,7 +54,18 @@ disk_free_gb() { df -g / | awk 'NR==2 {print $4}'; }
 # pnm on a runner, through the repo's per-slug lock. Prints what it said whatever its exit status.
 # Never on the caller's stdin: the sweep and rules_clear call pnm inside a `| while read` loop over a list, and a pnm
 # that read stdin (a prompt, a TTY check) would swallow the rest of that list, one removal per sweep. sweep.test.mjs.
-pnm() { local slug=$1; shift; PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" </dev/null 2>&1; }
+# On CI the identity is a CI-only runner admin: it reaches only the configuration's own agents (CI_ALLOWED_SLUGS) and
+# never a person's (the same refused slugs as e2e/lib/aclCleanup.js), and pnm never runs verbose there (derived tokens
+# are not masked). e2e/gate/ci/pnm-ci.sh enforces the same for the drivers' calls.
+CI_REFUSED_SLUGS="alice alberto3 alberto-push-vta-2 farm"
+pnm() {
+  local slug=$1; shift
+  if is_ci; then
+    case " $CI_REFUSED_SLUGS " in *" $slug "*) echo "pnm: refused on CI: $slug is a person's agent, never the CI identity's" >&2; return 2 ;; esac
+    case " ${CI_ALLOWED_SLUGS:-} " in *" $slug "*) ;; *) echo "pnm: refused on CI: $slug is not one of the CI configuration's agents" >&2; return 2 ;; esac
+  fi
+  PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" </dev/null 2>&1
+}
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
@@ -141,6 +158,12 @@ use_build() {
 # once, with emu.sh's own reason: setup, not a verdict on the app, and --only-failed reruns the whole leg.
 emu_start() {
   local port=$1 out rc why
+  if is_ci; then
+    # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
+    perl -e 'alarm 120; exec @ARGV' adb -s "emulator-$port" wait-for-device 2>/dev/null \
+      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { echo "emulator-$port up (CI)"; return 0; }
+    broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
+  fi
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
   echo "$out" | tail -1
@@ -148,7 +171,7 @@ emu_start() {
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }
-emu_stop() { "$EMU_SH" stop 2>&1 | tail -1; }
+emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
