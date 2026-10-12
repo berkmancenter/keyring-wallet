@@ -398,6 +398,8 @@ cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
   echo "== $1 · $(grep -E '^(target|wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
   ! grep -q '^scope=' "$rd/meta" || echo "   $(grep -m1 '^scope=' "$rd/meta" | cut -d= -f2-)"
+  # CI's pinned pnm against the Farm (farm-drift.mjs): shown only when it is not OK.
+  ! grep -qE '^farm-drift=(DRIFT|UNKNOWN)' "$rd/meta" || echo "   !! $(grep -m1 '^farm-drift=' "$rd/meta" | cut -d= -f2-)"
   local leg rc s e first= last=0
   while IFS=$'\t' read -r leg rc s e; do
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s

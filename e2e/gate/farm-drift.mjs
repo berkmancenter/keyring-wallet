@@ -3,6 +3,10 @@
 // hand to a VTI commit and its vta-service version (FARM_VTI_REF, FARM_VTI_VERSION): it moves with the Farm, never ahead.
 // The Farm's own record is FARM_VERSIONS in the private farm.env, free text ("vta-service 0.56.0 (openapi …) · …").
 // This compares the two versions; the workflow itself checks that the commit is that version's release tag.
+// It compares two hand-written RECORDS: a stale FARM_VERSIONS hides drift (the Farm moved, nobody updated the record,
+// and this prints OK). A live reading (the Farm's openapi hash) replaces the record once CI has an identity to probe it.
+// Locally it only warns: the Mac gate runs the Mac's own pnm, so CI's pin says nothing about that run. A CI gate job
+// that runs legs with the CI-built pnm must check first and fail closed as ENV on DRIFT or UNKNOWN.
 //
 //   node e2e/gate/farm-drift.mjs --farm "$FARM_VERSIONS"   -> prints one line; exit 0 match, 1 drift, 2 unknown
 // gate.sh writes the line into every run's meta (farm-drift=), so a drifted pin shows on the report, loudly.
