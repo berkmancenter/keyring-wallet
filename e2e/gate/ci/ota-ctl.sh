@@ -18,7 +18,18 @@ export HUSKY=0
 publish() {
   local out id
   [ -z "$(git status --porcelain)" ] || { echo "tree not clean before publishing:"; git status --porcelain | head -20; }
-  out=$(cd app && BIFOLD_GIT="$PWD/../bifold" node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform android --channel "$OTA_CHANNEL" --message "$1" 2>&1) || { echo "$out"; exit 1; }
+  # One retry, only for the storage upload dropping (seen once, run 38205449691: "fetch failed" uploading to the
+  # local server). A retry builds and uploads afresh; the id parsed below is the attempt that landed. Logged, so a
+  # pattern of retries shows up rather than hiding.
+  local try
+  for try in 1 2; do
+    if out=$(cd app && BIFOLD_GIT="$PWD/../bifold" node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform android --channel "$OTA_CHANNEL" --message "$1" 2>&1); then break; fi
+    if [ "$try" = 1 ] && echo "$out" | grep -q 'Failed to upload bundle to storage'; then
+      echo "RETRY publish: the storage upload failed ($(echo "$out" | grep -m1 -oE 'fetch failed|ECONN[A-Z]+|socket hang up' || echo unknown)); trying once more"
+      continue
+    fi
+    echo "$out"; exit 1
+  done
   echo "$out" | tail -5
   id=$(echo "$out" | sed -n 's/.*android bundle \([0-9a-f-]*\) is on .*/\1/p' | tail -1)
   [ -n "$id" ] || { echo "no bundle id in ota-deploy's output"; exit 1; }
