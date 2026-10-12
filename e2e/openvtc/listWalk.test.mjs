@@ -75,20 +75,21 @@ test('rowSelected: the row carrying the cursor names the ticket', () => {
  * A list in a pane `height` rows tall that scrolls apart from its cursor, as
  * openvtc's content panel does: Down/Up move the ▸, PageDown/PageUp move the view.
  */
-function fakePane(rows, { at = 0, height = 27 } = {}) {
+function fakePane(rows, { at = 0, height = 27, page = height, clock = false, noCursor = false } = {}) {
   return {
     at,
     top: 0,
     presses: [],
     screen() {
-      return rows.slice(this.top, this.top + height).map((r, i) => `${this.top + i === this.at ? '▸ ' : '  '}${r}`).join('\n');
+      const pane = rows.slice(this.top, this.top + height).map((r, i) => `║${!noCursor && this.top + i === this.at ? '▸ ' : '  '}${r}`);
+      return clock ? [...pane, `│[${this.presses.length}] Activity Log tick`].join('\n') : pane.join('\n');
     },
     async pressEach([key]) {
       this.presses.push(key);
       if (key === 'Down') this.at = Math.min(this.at + 1, rows.length - 1);
       if (key === 'Up') this.at = Math.max(this.at - 1, 0);
-      if (key === 'PageDown') this.top = Math.min(this.top + height, Math.max(rows.length - height, 0));
-      if (key === 'PageUp') this.top = Math.max(this.top - height, 0);
+      if (key === 'PageDown') this.top = Math.min(this.top + page, Math.max(rows.length - height, 0));
+      if (key === 'PageUp') this.top = Math.max(this.top - page, 0);
     },
   };
 }
@@ -118,4 +119,21 @@ test('with reveal, a code that is not there still ends the walk: false', async (
   const tui = fakePane(tickets(60), { height: 25 });
   assert.equal(await walkTo(tui, ticketWanted('ZZZZ-ZZZZ'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), false);
   assert.ok(tui.presses.length < 400);
+});
+
+test('with reveal, a cursor above the view: paging down finds nothing, so it pages back up to the ▸', async () => {
+  // The pane scrolled past the cursor (a PageDown longer than the cursor's step): ▸ at row 5, the view at 40-59.
+  const tui = fakePane(tickets(120), { at: 5, height: 20 });
+  tui.top = 40;
+  assert.equal(await walkTo(tui, ticketWanted('T060-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 60);
+  assert.ok(tui.presses.includes('PageUp'), 'paged back up to find the cursor');
+});
+
+test('with reveal, a ticking Activity Log does not keep the pager going: the pane alone says it stopped', async () => {
+  // No ▸ anywhere (the pane shows something else): paging cannot reveal one, and the clock below the pane changes on
+  // every press, so only a comparison of the pane's own lines sees the pager reach its end.
+  const tui = fakePane(tickets(30), { height: 25, clock: true, noCursor: true });
+  assert.equal(await walkTo(tui, ticketWanted('T010-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), false);
+  assert.ok(tui.presses.length < 30, `${tui.presses.length} presses`);
 });
