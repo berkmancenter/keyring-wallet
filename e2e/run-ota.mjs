@@ -137,16 +137,32 @@ try {
 
   await rows.row("ota-crash-rollback", async () => {
     const bad = await ctl(d, "crash");
-    const s = await twoColdStarts(d, bad);
-    const home = await existsTestId(d, "Settings", 5000);
-    await ctl(d, "disable", bad); // never left enabled behind the next row
-    // The path must have run: served, tried and rolled back. Still being on `good` alone proves nothing.
-    const v = crashRolledBack({ served: s.served, rolledBackLabel: s.rolledBack, running: s.bundle, good, bad, home });
-    const rolledBack = v.rolledBack;
-    return {
-      ok: v.ok,
-      detail: `crash bundle ${bad}: served ${s.served ? "yes" : "NO"}, rolled back ${rolledBack ? "yes" : `NO ("${s.rolledBack}")`}; running "${s.bundle}" (want ${good}); Home ${home ? "reached" : "NOT reached"}`,
-    };
+    try {
+      // Start 1 downloads and stages the crash bundle; start 2 runs it, and it throws while its JS loads.
+      await serverUp();
+      const from = logSize();
+      await restartApp(d);
+      const served = await waitForServer(servedPattern(bad), from, 120000);
+      await sleep(15000);
+      await d.terminateApp(BID).catch(() => undefined);
+      await d.activateApp(BID).catch(() => undefined);
+      await sleep(20000);
+      // The loader may relaunch the app on the previous bundle at once (seen on a device); the plan's criterion is
+      // "rolled back on the next cold start", so the leg reopens it like a user would and records which happened.
+      const front = await d.getCurrentPackage().catch(() => "?");
+      const relaunched = front === BID;
+      console.log(`[ota] after the crash start the foreground is ${front}: ${relaunched ? "the app (relaunched by itself)" : "not the app (it closed)"}`);
+      await restartApp(d);
+      const s = await otaState(d);
+      const home = await existsTestId(d, "Settings", 5000);
+      const v = crashRolledBack({ served, rolledBackLabel: s.rolledBack, running: s.bundle, good, bad, home });
+      return {
+        ok: v.ok,
+        detail: `crash bundle ${bad}: served ${served ? "yes" : "NO"}, rolled back ${v.rolledBack ? "yes" : `NO ("${s.rolledBack}")`}, ${relaunched ? "relaunched by itself" : "closed, reopened"}; running "${s.bundle}" (want ${good}); Home ${home ? "reached" : "NOT reached"}`,
+      };
+    } finally {
+      await ctl(d, "disable", bad).catch((e) => console.log(`[ota] could not disable the crash bundle: ${e.message}`)); // never left enabled behind the next row
+    }
   });
 
   await rows.row("ota-withdraw", async () => {
