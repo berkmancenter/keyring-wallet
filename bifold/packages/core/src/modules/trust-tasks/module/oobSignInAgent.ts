@@ -248,6 +248,20 @@ async function signedByAgent(
   }
   const personaDidDocument = await resolveOrUnreachable(deps, persona.did)
   if (!(await proofVerifies(signed, persona.did, personaDidDocument, proofPurpose))) {
+    // An agent from before sign-in signing (VTI #1997; vta-service 0.56.0,
+    // VTI-Eucalyptus) serves this task but signs every document for
+    // `authentication`, so a grant comes back the persona's yet for the wrong
+    // purpose (findings F1). That is an agent that needs an update, not a bad
+    // answer: say so in those words.
+    if (
+      proofPurpose === 'assertionMethod' &&
+      (await proofVerifies(signed, persona.did, personaDidDocument, 'authentication'))
+    ) {
+      throw new SignInError(
+        'agentNeedsUpdate',
+        'the agent signed the grant for authentication, as agents before #1997 do'
+      )
+    }
     throw new SignInError('badAnswer', `the agent's proof is not the persona's, for ${proofPurpose}`)
   }
   return signed
