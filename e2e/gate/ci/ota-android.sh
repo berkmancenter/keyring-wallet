@@ -22,4 +22,20 @@ grep -E 'HotUpdater|BundleStorage|AndroidRuntime' "$LEG_DIR/logcat-all.txt" > "$
 rm -f "$LEG_DIR/logcat-all.txt"
 cat "$LEG_DIR/leg.log"
 echo "leg rc=$rc"
+# The job summary leads with whose result it is: rc 2 (the leg's ENV line) is the environment, a dead tunnel, never a
+# verdict on the app; rc 3 is an app check that failed; rc 1 is the leg breaking.
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  case $rc in
+    0) verdict="**pass**: every row passed" ;;
+    2) verdict="**env**: $(grep -m1 '^ENV ' "$LEG_DIR/leg.log" | sed 's/^ENV //') — not a verdict on the app; rerun" ;;
+    3) verdict="**app**: a row failed (below)" ;;
+    *) verdict="**broken**: the leg stopped before its rows finished (exit $rc)" ;;
+  esac
+  {
+    echo "### OTA leg (Android): $verdict"; echo
+    echo "| Status | Row | Detail |"; echo "|---|---|---|"
+    grep '^ROW ' "$LEG_DIR/leg.log" | sed -E 's/^ROW ([^ ]+) ([A-Z]+) — (.*)$/| \2 | \1 | \3 |/' | cut -c1-400
+    echo; grep -m1 '^LEG ota' "$LEG_DIR/leg.log" | sed 's/^/`/; s/$/`/'
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 exit $rc
