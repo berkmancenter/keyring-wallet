@@ -29,7 +29,14 @@ const rows = createRows({
 
 /** The server-side move; returns the bundle id it printed ("id=…"), if any. */
 function ctl(...args) {
-  const out = execFileSync("bash", [CTL, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 15 * 60 * 1000 });
+  let out;
+  try {
+    out = execFileSync("bash", [CTL, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 15 * 60 * 1000 });
+  } catch (e) {
+    // What ota-ctl.sh printed is the reason (ota-deploy's refusal, say): show it before failing the row.
+    process.stdout.write(String(e.stdout || "").split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
+    throw new Error(`ota-ctl ${args.join(" ")} failed (exit ${e.status}): ${String(e.stdout || "").trim().split("\n").slice(-2).join(" | ")}`);
+  }
   process.stdout.write(out.split("\n").map((l) => `[ota-ctl] ${l}`).join("\n") + "\n");
   return (out.match(/^id=(\S+)$/m) || [])[1];
 }

@@ -17,6 +17,7 @@ export HUSKY=0
 
 publish() {
   local out id
+  [ -z "$(git status --porcelain)" ] || { echo "tree not clean before publishing:"; git status --porcelain | head -20; }
   out=$(cd app && BIFOLD_GIT="$PWD/../bifold" node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform android --channel "$OTA_CHANNEL" --message "$1" 2>&1) || { echo "$out"; exit 1; }
   echo "$out" | tail -5
   id=$(echo "$out" | sed -n 's/.*android bundle \([0-9a-f-]*\) is on .*/\1/p' | tail -1)

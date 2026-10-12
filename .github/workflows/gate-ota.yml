@@ -114,7 +114,10 @@ jobs:
           git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false
           # HUSKY=0: the repo's hooks require signed commits, which protects what is pushed. These commits live only in
           # this throwaway checkout (never pushed; persist-credentials is off), as the base ota-deploy measures from.
-          HUSKY=0 git commit -qam "ci: the store build's OTA settings (never pushed)"
+          # add -A, not commit -a: fingerprint create writes a new fingerprint.json, and ota-deploy refuses a dirty tree.
+          git add -A
+          git status --short
+          HUSKY=0 git commit -qm "ci: the store build's OTA settings (never pushed)"
           echo "OTA_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "OTA_SIGNING_KEY=$RUNNER_TEMP/keys/private-key.pem" >> "$GITHUB_ENV"
 
@@ -151,7 +154,7 @@ jobs:
           ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --stacktrace
           apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           mkdir -p "$RUNNER_TEMP/build" && cp "$apk" "$RUNNER_TEMP/build/keyring-ota.apk"
-          git -C ../.. status --porcelain | head -5
+          echo "tree after the build (ota-deploy needs it clean):"; git -C ../.. status --porcelain | head -20
 
       - name: Appium
         shell: bash
