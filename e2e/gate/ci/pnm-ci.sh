@@ -26,7 +26,7 @@ for a in "$@"; do case "$a" in -V|-VV|-v|-vv|--verbose|--debug|--trace) echo "pn
 : "${PNM_REAL:?the CI pnm binary}" "${CI_PNM_HOME:?the session directory of the CI identity}"
 [ "$(stat -c %a "$CI_PNM_HOME" 2>/dev/null || stat -f %Lp "$CI_PNM_HOME")" = 700 ] || { echo "pnm-ci: $CI_PNM_HOME must be mode 700" >&2; exit 2; }
 # The command, as "<command> <subcommand>": the two words after --vta <slug>.
-CI_COMMANDS="acl:list acl:get acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require approvals:explain did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr health:"
+CI_COMMANDS="acl:list acl:get acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr"
 cmd=${3:-}; sub=${4:-}; case "$sub" in -*) sub="" ;; esac
 case " $CI_COMMANDS " in
   *" $cmd:$sub "*|*" $cmd: "*) ;;

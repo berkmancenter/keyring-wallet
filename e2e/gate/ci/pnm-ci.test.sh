@@ -22,7 +22,9 @@ check refuse --vta runner-main contexts create --id x
 check refuse --vta runner-main keys rotate
 check ok --vta runner-main approvals approvers remove gate-set did:key:x
 check ok --vta runner-main policy upsert --file p.json
-check ok --vta runner-main health
+check refuse --vta runner-main health
+check refuse --vta runner-main approvals explain acl/grant
+check refuse --vta runner-main --json acl list
 check refuse --vta runner-main -V acl list
 check refuse --vta runner-main acl list -v alice
 check refuse --vta runner-main acl list --vta alice
