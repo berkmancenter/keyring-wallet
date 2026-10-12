@@ -5,9 +5,10 @@ name: Gate (CI runners)
 # live connection per identity, so two jobs at once would drop each other's calls.
 #
 # Not usable until the owner approves the CI identity (D-8) and the protected environment "gate-ci" holds:
-#   GATE_CI_ENV            the CI configuration (runner slugs, DIDs, URLs, community values, FARM_VERSIONS): the
-#                          Mac's farm.env without PNM_BIN. Its RUNNER_*_SLUG and COMMUNITY_AGENT_SLUG are the only agents
-#                          pnm may reach on CI (CI_ALLOWED_SLUGS); a person's agent is refused even if named there.
+#   GATE_CI_ENV            the CI configuration (runner slugs, DIDs, URLs, RUNNER_MEDIATOR_HOST, FARM_VERSIONS): the
+#                          Mac's farm.env WITHOUT PNM_BIN and WITHOUT any community admin value (C_ADMIN_CRED). Its
+#                          RUNNER_MAIN/A/B_SLUG are the only agents pnm may reach on CI (CI_ALLOWED_SLUGS); a person's
+#                          agent is refused even if named there.
 #   GATE_CI_PNM_HOME_B64   base64 of a .tar.gz of that identity's pnm session directory (file store, PNM_HOME)
 # Until then every leg job stops at once as ENV ("no CI Farm identity"), never a verdict on the app.
 # The environment must allow main only (deployment branch rule): a pull_request job never sees these.
@@ -15,7 +16,10 @@ name: Gate (CI runners)
 # Guards (the gate review's conditions for the identity): only farm3-runner-* VTAs, never a person's agent
 # (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
 # outside every uploaded path, removed in an always() step; CI's pnm must match the Farm (farm-drift.mjs) or the leg
-# stops as ENV. Revoking: delete the identity's ACL entry on each runner VTA and empty the two secrets.
+# stops as ENV. Every configuration value is masked in the logs; before upload, the leg's folder is scrubbed
+# (ci/scrub-artifacts.sh): a credential anywhere fails the job and nothing is uploaded, identifiers are redacted.
+# The gate's sleep marking (gate.sh run_leg) is bypassed here: a hosted runner does not sleep.
+# Revoking: delete the identity's ACL entry on each runner VTA and empty the two secrets.
 #
 #   gh workflow run gate-ci.yml -R berkmancenter/keyring-wallet -f legs="testreq linkwait"
 
@@ -25,7 +29,7 @@ on:
       legs:
         description: "Legs to run, space-separated (Android, one emulator, one build)"
         type: string
-        default: "smoke-android testreq linkwait linkresume lostreq waiting agents"
+        default: "smoke-android testreq linkwait linkresume linkfail pnmlink"
       run-id:
         description: "test-builds run whose push-off APK to test (default: the newest green push build of main)"
         type: string
@@ -46,7 +50,10 @@ env:
   # Not on CI yet: devices (several emulators), relaunch-android and update-android (two builds), the push legs (a
   # push-on build and the gateway), p1 (the openvtc TUI, a macOS build), the iOS legs (a macOS runner) and p2 (iOS and
   # Android together).
-  CI_LEGS: "smoke-android testreq linkwait linkresume lostreq waiting agents linkfail pnmlink"
+  CI_LEGS: "smoke-android testreq linkwait linkresume linkfail pnmlink"
+  # Mac-only by the owner's decision (D-8, 10-12): they need the community VTC's ADMIN credential (C_ADMIN_CRED,
+  # lib.sh c_admin), which stays out of CI for now; revisit after the CI gate has run a while.
+  MAC_ONLY_LEGS: "agents waiting lostreq"
 
 jobs:
   plan:
@@ -68,6 +75,7 @@ jobs:
           items=()
           for leg in $LEGS; do
             [[ $leg =~ ^[a-z0-9-]+$ ]] || { echo "::error::not a leg name: $leg"; exit 1; }
+            case " $MAC_ONLY_LEGS " in *" $leg "*) echo "::error::$leg is Mac-only (D-8: the community admin credential stays out of CI)"; exit 1 ;; esac
             case " $CI_LEGS " in *" $leg "*) ;; *) echo "::error::$leg cannot run on CI yet (see CI_LEGS)"; exit 1 ;; esac
             ports=$(grep -oE 'emulator-[0-9]{4}' "e2e/gate/legs/$leg.sh" | sort -u)
             [ "$(echo "$ports" | wc -l)" = 1 ] || { echo "::error::$leg uses more than one emulator: $ports"; exit 1; }
@@ -118,6 +126,15 @@ jobs:
           fi
           umask 077
           printf '%s\n' "$GATE_CI_ENV" > "$RUNNER_TEMP/gate-ci.env"
+          # Every value, one by one: Actions masks the registered secret as a whole, not each value a leg prints alone.
+          while IFS= read -r l; do
+            case "$l" in ''|'#'*) continue ;; esac
+            v=${l#*=}; v=${v#\"}; v=${v%\"}
+            [ ${#v} -ge 4 ] && echo "::add-mask::$v"
+          done < "$RUNNER_TEMP/gate-ci.env"
+          if grep -qE '^C_ADMIN_CRED=' "$RUNNER_TEMP/gate-ci.env"; then
+            echo "::error::ENV GATE_CI_ENV holds C_ADMIN_CRED: the community admin credential is not part of the CI identity (D-8)"; exit 1
+          fi
           farm=$(grep -m1 '^FARM_VERSIONS=' "$RUNNER_TEMP/gate-ci.env" | cut -d= -f2- | tr -d '"')
           line=$(node e2e/gate/farm-drift.mjs --farm "$farm"); rc=$?
           echo "$line"
@@ -182,16 +199,24 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash e2e/gate/ci/gate-ci-leg.sh ${{ matrix.leg }}
 
-      # The identity never outlives the job, and never sits in an uploaded path.
-      - name: Remove the identity and the configuration
+      # Artifacts are never masked: a credential anywhere in the leg's folder fails the job and blocks the upload.
+      - name: Scrub the leg's files
+        id: scrub
         if: always()
         shell: bash
         run: |
           case "${CI_PNM_HOME:-}" in "$RUNNER_TEMP"/leg-*) echo "::error::PNM_HOME inside an uploaded path"; exit 1 ;; esac
-          rm -rf "${CI_PNM_HOME:-/nonexistent}" "$RUNNER_TEMP/gate-ci.env"
+          [ -f "$RUNNER_TEMP/gate-ci.env" ] || exit 0
+          bash e2e/gate/ci/scrub-artifacts.sh "$RUNNER_TEMP/leg-${{ matrix.leg }}" "$RUNNER_TEMP/gate-ci.env" "${CI_PNM_HOME:-}"
+
+      # The identity never outlives the job.
+      - name: Remove the identity and the configuration
+        if: always()
+        shell: bash
+        run: rm -rf "${CI_PNM_HOME:-/nonexistent}" "$RUNNER_TEMP/gate-ci.env"
 
       - name: Logs
-        if: always()
+        if: always() && steps.scrub.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: gate-ci-${{ matrix.leg }}-${{ github.run_id }}

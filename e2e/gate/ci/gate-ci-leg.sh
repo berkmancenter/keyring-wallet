@@ -10,13 +10,18 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 export GATE_TARGET=ci GATE_HOME=$RUNNER_TEMP/gate PNM_BIN=$HERE/pnm-ci.sh
 export E2E_RUN_DIR=$LEG_DIR RUN_DIR=$RUNNER_TEMP/gate/run E2E_ONLY_ROWS=${E2E_ONLY_ROWS:-}
 mkdir -p "$GATE_HOME" "$RUN_DIR" "$LEG_DIR"
-# The agents pnm may reach: the configuration's runners and its community agent, nothing else (pnm-ci.sh).
-CI_ALLOWED_SLUGS=$(grep -E '^(RUNNER_MAIN|RUNNER_A|RUNNER_B|COMMUNITY_AGENT)_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"' | tr '\n' ' ')
+# The agents pnm may reach: the configuration's three runners, nothing else (pnm-ci.sh). Not the community agent: that
+# widens the identity beyond a runner admin, and no CI leg needs it yet.
+CI_ALLOWED_SLUGS=$(grep -E '^(RUNNER_MAIN|RUNNER_A|RUNNER_B)_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"' | tr '\n' ' ')
 [ -n "${CI_ALLOWED_SLUGS// /}" ] || { echo "ENV the CI configuration names no runner slugs" | tee "$LEG_DIR/leg.log"; exit 2; }
 export CI_ALLOWED_SLUGS
 serial=$(adb devices | awk '$1 ~ /^emulator-/ {print $1; exit}')
 [ -n "$serial" ] || { echo "ENV no emulator on adb" | tee "$LEG_DIR/leg.log"; exit 2; }
 "$HERE/android-settle.sh" "$serial" "${ANDROID_SETTLE_MAX:-90}"
+# The mediator-block legs need root (iptables): a google_apis image gives it; a playstore image would not, silently.
+adb -s "$serial" root >/dev/null 2>&1; sleep 3; adb -s "$serial" wait-for-device
+uid=$(adb -s "$serial" shell id -u 2>/dev/null | tr -d '\r')
+[ "$uid" = 0 ] || { echo "ENV adb root gave uid ${uid:-?}, not 0 (the emulator image must be google_apis)" | tee "$LEG_DIR/leg.log"; exit 2; }
 rc=0
 bash "$HERE/../legs/$leg.sh" > "$LEG_DIR/leg.log" 2>&1 || rc=$?
 cat "$LEG_DIR/leg.log"
