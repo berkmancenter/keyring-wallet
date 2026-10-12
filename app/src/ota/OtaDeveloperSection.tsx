@@ -19,7 +19,6 @@ export const OTA_TEST_IDS = {
   rolledBack: 'OtaRolledBack',
   joinRing0: 'OtaJoinRing0',
   leaveRing0: 'OtaLeaveRing0',
-  rolledBack: 'OtaRolledBack',
 } as const
 
 const readSafely = (): OtaStatus | undefined => {
