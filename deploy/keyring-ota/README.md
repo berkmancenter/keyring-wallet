@@ -80,3 +80,37 @@ npx hot-updater bundle disable <id> -y    # phones on it go back to the previous
 ## Tests
 
 `npm test` (Node's test runner; the storage module only).
+
+## Hosting (phase 1)
+
+`docker compose up -d` with a filled-in `.env` (`.env.example`) runs the server
+behind Caddy, which obtains the certificate for `OTA_HOST`. One small instance is
+enough (decision 5: Lightsail in the existing AWS account). Only Caddy publishes
+ports, and neither container keeps an access log.
+
+- **Back up the `ota-data` volume.** If the database is lost, every phone on an
+  update is told to roll back to its store bundle on its next check (seen in the
+  spike). That is safe, but every update must then be published again.
+- **The publisher reaches the server directly**, at `OTA_HOST`, not through a CDN.
+  Before each upload the CLI checks objects with HEAD requests on the URLs the
+  server returns, and a cache or a rate limiter in between breaks publishes. The
+  server answers those requests on the origin the publisher came in on.
+- Not built or run here yet: the image and the compose file are checked
+  (`docker compose config`) but not deployed.
+
+## Configuration in the repository (phase 1)
+
+| Name | Kind | Holds | Used by |
+| --- | --- | --- | --- |
+| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off** | staging.yaml (both store builds) |
+| `OTA_PUBLIC_KEY` | variable | the loader's RSA public key (PEM; public) | staging.yaml, ota-publish.yml |
+| `OTA_CHANNEL` | variable | the channel, default `production` | staging.yaml, ota-publish.yml |
+| `OTA_SERVER_URL` | variable | `https://<OTA_HOST>` for the publisher | ota-publish.yml |
+| `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the RSA private key | ota-publish.yml |
+| `HOT_UPDATER_AUTH_TOKEN` | secret, environment `ota` | the server's management token | ota-publish.yml |
+| environment `ota-approval` | required reviewers | the two approvers; holds no secrets | ota-publish.yml |
+
+The key pair is generated offline (`npx hot-updater keys generate`). The public
+half goes into `OTA_PUBLIC_KEY`; the private half goes into the `ota` environment
+plus an offline backup. Replacing the key takes a store build, because the public
+key is compiled into the binary.
