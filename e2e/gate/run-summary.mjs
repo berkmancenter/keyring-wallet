@@ -127,7 +127,7 @@ export function summarize(runDir, repos) {
   const appFail = legs.some((l) => l.verdict === 'app' && l.result === 'fail');
   const overall = appFail ? 'fail' : legs.length && legs.every((l) => l.verdict === 'app' && l.result === 'pass') ? 'pass' : 'incomplete';
   const heads = {};
-  for (const k of ['wallet', 'bifold', 'harness', 'target', 'farm', 'openvtc', 'builds', 'push-on']) if (meta[k] !== undefined) heads[k] = first(meta[k]);
+  for (const k of ['wallet', 'bifold', 'harness', 'target', 'farm', 'farm-drift', 'openvtc', 'builds', 'push-on']) if (meta[k] !== undefined) heads[k] = first(meta[k]);
   return {
     run: path.basename(runDir),
     kind: first(meta.kind) || null,

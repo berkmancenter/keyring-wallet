@@ -145,7 +145,7 @@ cmd_run() {
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
   local rd; rd=$(new_run "$pin" "$kind")
-  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; } >> "$rd/meta"
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
   say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
@@ -227,7 +227,7 @@ cmd_changed() {
     [ -z "$unmapped" ] || echo "changed-unmapped=$unmapped (owns no testID: not covered by this run)"
     printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const j=JSON.parse(t);for(const l of j.legs){const w=j.reasons[l]||[];console.log(`changed-why=${l}: ${[...new Set(w.map(x=>x.id))].slice(0,8).join(",")} via ${[...new Set(w.map(x=>x.unit))].slice(0,3).join(", ")}`)}})'
   } >> "$rd/meta"
-  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; } >> "$rd/meta"
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   say "run $(basename "$rd"): CHANGED LEGS ONLY (not the release gate) · target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} · legs $legs"
   run_legs "$rd" "$legs" 0
@@ -398,6 +398,8 @@ cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
   echo "== $1 · $(grep -E '^(target|wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
   ! grep -q '^scope=' "$rd/meta" || echo "   $(grep -m1 '^scope=' "$rd/meta" | cut -d= -f2-)"
+  # CI's pinned pnm against the Farm (farm-drift.mjs): shown only when it is not OK.
+  ! grep -qE '^farm-drift=(DRIFT|UNKNOWN)' "$rd/meta" || echo "   !! $(grep -m1 '^farm-drift=' "$rd/meta" | cut -d= -f2-)"
   local leg rc s e first= last=0
   while IFS=$'\t' read -r leg rc s e; do
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s

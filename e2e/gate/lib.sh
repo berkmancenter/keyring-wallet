@@ -205,6 +205,14 @@ for n,ms in (j.get('approverSets') or {}).items():
 
 # Delete the phone grants (label keyring-admin) made on $1 since $2, retrying a busy or rate-limited runner.
 # A grant made before the leg began (a seated vetter's, a person's) is never touched.
+# Whether CI's pinned pnm (pnm-linux.yml) still matches the Farm's vta-service version: one line for the run's meta,
+# and a loud line on the terminal when it has drifted (farm-drift.mjs).
+farm_drift() {
+  local line; line=$(node "$GATE_SRC/farm-drift.mjs" --farm "${FARM_VERSIONS:-}" 2>&1 | tail -1)
+  case "$line" in DRIFT*) echo "!! $line" >&2 ;; esac
+  echo "$line"
+}
+
 keys_since() {
   local slug=$1 t0=$2 k r i
   # t0 is compared as a string with each entry's ISO createdAt: anything else (epoch seconds, empty) sorts below
