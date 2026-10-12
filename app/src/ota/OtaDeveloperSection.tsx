@@ -16,6 +16,7 @@ import { DEFAULT_RING, Ring, setRing } from './rings'
 export const OTA_TEST_IDS = {
   bundleId: 'OtaBundleId',
   ring: 'OtaRing',
+  rolledBack: 'OtaRolledBack',
   joinRing0: 'OtaJoinRing0',
   leaveRing0: 'OtaLeaveRing0',
 } as const
@@ -63,7 +64,7 @@ const OtaDeveloperSection: React.FC = () => {
       {line('Channel', status.channel)}
       {line('Ring', status.ring ?? 'none', OTA_TEST_IDS.ring)}
       {line('Native fingerprint', status.fingerprint ?? 'none')}
-      {status.rolledBack.length > 0 && line('Rolled back', status.rolledBack.join(', '))}
+      {status.rolledBack.length > 0 && line('Rolled back', status.rolledBack.join(', '), OTA_TEST_IDS.rolledBack)}
       {status.enabled && (
         <Pressable
           onPress={() => moveTo(inRing0 ? DEFAULT_RING : 'ring0')}
