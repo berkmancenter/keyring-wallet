@@ -38,6 +38,9 @@ env:
   # The Farm's VTA: vta-service v0.56.0 (FARM_VERSIONS in the gate's farm.env, checked 2026-10-11). Move this with
   # the Farm, never ahead of it.
   FARM_VTI_REF: 39c801ed091cdd0aaa8247b8c7aa8e564903d4d6
+  # The release FARM_VTI_REF is: the commit must be this tag's (checked below). The gate compares this version with the
+  # Farm's recorded one on every run (e2e/gate/farm-drift.mjs, farm-drift= in the run's meta).
+  FARM_VTI_VERSION: "0.56.0"
   RUST_VERSION: "1.95.0"
   FEATURES: config-session,tsp
   # Upstream's explicit switch to the file session store, first in its priority order: a job that runs pnm sets it
@@ -64,6 +67,20 @@ jobs:
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "artifact=pnm-linux-x86_64-${ref:0:12}" >> "$GITHUB_OUTPUT"
           echo "features=${FEATURES//,/+}" >> "$GITHUB_OUTPUT"
+
+      # The pin is a release, never a stray commit: vta-service-v<FARM_VTI_VERSION> must point at FARM_VTI_REF.
+      - name: The pin is the release tag's commit
+        if: steps.name.outputs.ref == env.FARM_VTI_REF
+        shell: bash
+        run: |
+          tag="vta-service-v$FARM_VTI_VERSION"
+          # An annotated tag lists its tag object and, as "^{}", the commit it points at: the commit is what is pinned.
+          refs=$(git ls-remote https://github.com/OpenVTC/verifiable-trust-infrastructure "refs/tags/$tag^{}" "refs/tags/$tag")
+          sha=$(echo "$refs" | awk '$2 ~ /\^\{\}$/ {print $1}' | head -1)
+          [ -n "$sha" ] || sha=$(echo "$refs" | awk '{print $1}' | head -1)
+          [ -n "$sha" ] || { echo "::error::no tag $tag upstream"; exit 1; }
+          [ "$sha" = "$FARM_VTI_REF" ] || { echo "::error::$tag is $sha, but FARM_VTI_REF is $FARM_VTI_REF: move both together"; exit 1; }
+          echo "$tag = $FARM_VTI_REF"
 
       - name: Cached binary
         id: cache
