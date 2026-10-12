@@ -27,9 +27,18 @@ bash "$HERE/../legs/$leg.sh" > "$LEG_DIR/leg.log" 2>&1 || rc=$?
 cat "$LEG_DIR/leg.log"
 echo "leg $leg rc=$rc"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  # The summary is built from leg.log before the scrub step runs, and is not an artifact: every configuration value is
+  # replaced here, whatever Actions' masking does or does not cover in a job summary.
+  sum=$(mktemp)
   case $rc in 0) v="**pass**" ;; 2) v="**env** — not a verdict on the app" ;; 3) v="**app**: a row failed" ;; *) v="**broken** (exit $rc): setup, not a verdict on the app" ;; esac
   { echo "### Gate leg $leg (CI): $v"; echo; echo "| Status | Row | Detail |"; echo "|---|---|---|"
     grep '^ROW ' "$LEG_DIR/leg.log" | sed 's/|/\\|/g' | sed -E 's/^ROW ([^ ]+) ([A-Z]+) — (.*)$/| \2 | \1 | \3 |/' | cut -c1-400
-    echo; grep -m1 -E '^LEG ' "$LEG_DIR/leg.log" | sed 's/^/`/; s/$/`/'; } >> "$GITHUB_STEP_SUMMARY"
+    echo; grep -m1 -E '^LEG ' "$LEG_DIR/leg.log" | sed 's/^/`/; s/$/`/'; } > "$sum"
+  while IFS= read -r l; do
+    case "$l" in ''|'#'*) continue ;; esac
+    k=${l%%=*}; v=${l#*=}; v=${v#\"}; v=${v%\"}
+    [ ${#v} -ge 4 ] && V="$v" K="$k" perl -pi -e 's/\Q$ENV{V}\E/[redacted:$ENV{K}]/g' "$sum"
+  done < "$GATE_ENV"
+  cat "$sum" >> "$GITHUB_STEP_SUMMARY"; rm -f "$sum"
 fi
 exit $rc
