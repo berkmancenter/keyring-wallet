@@ -454,6 +454,11 @@ async function linkCase(driver, which) {
     const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
+  // Entries created at or after `since` (ms): a case's own writes, whatever else writes to the runner meanwhile.
+  const aclSince = (since) => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))).filter((e) => Date.parse(e.createdAt) >= since - 2000); } catch { return null; }
+  };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
   // Share and Copy, so a text read came back empty); empty when there is none, for the row to record.
@@ -557,6 +562,7 @@ async function linkCase(driver, which) {
     // screen with no window open and no AgentCreateWaiting (a driver bug, not the app's). Block first, then Copy:
     // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
+    const grantMark = Date.now();
     grant(did);
     block(true);
     // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
@@ -627,9 +633,16 @@ async function linkCase(driver, which) {
     }
     const linked = checkAgain && (await ready());
     const after = aclSize();
-    const keyHeld = sameKey === true || (sameKey === null && linked && after === before + 1);
-    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey === null ? "(no key text in this layout; judged by the link: " + keyHeld + ")" : sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+    // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
+    // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
+    // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
+    const mine = aclSince(grantMark);
+    const oneGrant = Array.isArray(mine) && mine.length === 1;
+    const sameSubject = oneGrant && mine[0].subject === did;
+    const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
+    const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
+    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install.
