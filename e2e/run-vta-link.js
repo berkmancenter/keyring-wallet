@@ -590,6 +590,9 @@ async function linkCase(driver, which) {
       const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
       if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
       if (waiting && Date.now() - touched > 110000) {
+        // The case scrolled down to Copy, which can leave the body text above the view: bring it back first (the
+        // swipe is a touch too), so the tap lands on screen where the root PanResponder sees it.
+        await scrollToTestId(driver, inert, 3, { direction: "up" }).catch(() => undefined);
         await tapTestId(driver, inert, 3000).catch(() => undefined);
         touched = Date.now();
       }
