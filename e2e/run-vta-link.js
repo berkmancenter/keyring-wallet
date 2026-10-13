@@ -579,16 +579,18 @@ async function linkCase(driver, which) {
     // The window is 600 s; past 606 s of it, AgentCreateError is due. Look until 720 s.
     // A person waiting on Create touches the screen now and then; a test that only polls does not, and the wallet's
     // 5-min inactivity lock (contexts/activity.tsx: any touch resets it, through the root PanResponder) signed the
-    // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap the waiting line (plain text, no action)
-    // every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
-    // what this row tests: "didn't answer" + Check again.
+    // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap inert text every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
+    // what this row tests: "didn't answer" + Check again. The tap goes on the card's body text (AgentCreateOwnerBody,
+    // or AgentCreateAsDevice for a device link), never the waiting row: Connect sits right under that row and moves
+    // into its place when the window ends, so a tap there could restart the checks (review on #415).
+    const inert = (await existsTestId(driver, "AgentCreateOwnerBody", 1000)) ? "AgentCreateOwnerBody" : "AgentCreateAsDevice";
     let touched = Date.now();
     for (const until = mark + 720000; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
       const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
       if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
       if (waiting && Date.now() - touched > 110000) {
-        await tapTestId(driver, "AgentCreateWaiting", 3000).catch(() => undefined);
+        await tapTestId(driver, inert, 3000).catch(() => undefined);
         touched = Date.now();
       }
       waited = Math.round((Date.now() - mark) / 1000);
