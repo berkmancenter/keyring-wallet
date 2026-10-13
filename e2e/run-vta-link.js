@@ -606,18 +606,30 @@ async function linkCase(driver, which) {
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
-    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
-    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    // The key after "didn't answer": as text where Create shows it (AgentCreateOwnerDid, after AgentCreateShowCode).
+    // A phone with no screen lock joins as a device, and that layout shows no key text, only Copy and Share (the
+    // 1013-1753 rerun read nothing there and called a kept key "not the same"). Copy is not tapped again (it would
+    // start a new window); there the key is proved by the link itself: linked after Check again with no new ACL entry
+    // means the same granted key. sameKey null = "shown no text; judged by the link".
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+    const keyNow = (await existsTestId(driver, "AgentCreateOwnerDid", 1000)) ? (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") : "";
+    const sameKey = keyNow ? keyNow === did : null;
     let marks = 0;
     try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
     await screenshot(driver, `${which}-blocked`);
     block(false);
     await sleep(3000);
     if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    // Check again starts a new window: wait until the old "didn't answer" has gone (the screen back on
+    // AgentCreateWaiting) before waiting for ready, or the stale AgentCreateError ends the wait at once (1013-1753).
+    if (checkAgain) {
+      for (const until = Date.now() + 15000; Date.now() < until && (await existsTestId(driver, "AgentCreateError", 500)); ) await sleep(1000);
+    }
     const linked = checkAgain && (await ready());
     const after = aclSize();
-    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+    const keyHeld = sameKey === true || (sameKey === null && linked && after === before + 1);
+    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && after === before + 1,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey === null ? "(no key text in this layout; judged by the link: " + keyHeld + ")" : sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install.
