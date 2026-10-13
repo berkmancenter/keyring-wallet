@@ -559,7 +559,14 @@ async function linkCase(driver, which) {
     const did = await addressCode();
     grant(did);
     block(true);
-    await (await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => byTestId(driver, "AgentCreateCopyCode"))).click();
+    // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
+    // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) {
+      block(false);
+      throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    }
+    await copy.click();
     const mark = Date.now();
     const waitingShown = await existsTestId(driver, "AgentCreateWaiting", 15000);
     if (!waitingShown) {
