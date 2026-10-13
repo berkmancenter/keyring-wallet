@@ -455,10 +455,12 @@ async function linkCase(driver, which) {
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
   // Entries created at or after `since` (ms): a case's own writes, whatever else writes to the runner meanwhile.
-  const aclSince = (since) => {
+  // `since` is the VTA's own createdAt (an ISO string), not the Mac's clock: the two can disagree by seconds.
+  const aclList = () => {
     const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
-    try { return JSON.parse(t.slice(t.indexOf("["))).filter((e) => Date.parse(e.createdAt) >= since - 2000); } catch { return null; }
+    try { return JSON.parse(t.slice(t.indexOf("["))); } catch { return null; }
   };
+  const aclSince = (since) => { const l = aclList(); return l && since ? l.filter((e) => Date.parse(e.createdAt) >= Date.parse(since)) : null; };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
   // Share and Copy, so a text read came back empty); empty when there is none, for the row to record.
@@ -562,8 +564,9 @@ async function linkCase(driver, which) {
     // screen with no window open and no AgentCreateWaiting (a driver bug, not the app's). Block first, then Copy:
     // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
-    const grantMark = Date.now();
     grant(did);
+    // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
+    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
     block(true);
     // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
     // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
@@ -636,7 +639,7 @@ async function linkCase(driver, which) {
     // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
     // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
     // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
-    const mine = aclSince(grantMark);
+    const mine = aclSince(grantAt);
     const oneGrant = Array.isArray(mine) && mine.length === 1;
     const sameSubject = oneGrant && mine[0].subject === did;
     const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
