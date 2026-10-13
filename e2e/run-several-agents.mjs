@@ -81,7 +81,9 @@ const admin = (...a) => {
 const json = (s) => JSON.parse(s.slice(s.indexOf("{")));
 const txt = (d, id) => said(d, id);
 /** The phone's temporary key granted on `slug` (the enrolment script), for the page objects' link steps. */
-const grant = async (temp, slug) => execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+// Bounded: on the 1013-1753 rerun one enrolment on the community agent never returned and the leg sat 105 min until its
+// alarm (rc 142), losing every row after it. A hang now fails that row (ETIMEDOUT) and the leg carries on.
+const grant = async (temp, slug) => execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" }, timeout: 180000, killSignal: "SIGKILL" });
 const logcatSince = (mark) => {
   try {
     const lines = readFileSync(E.LOGCAT, "utf8").split("\n");
