@@ -40,6 +40,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
+import { useActivity } from '../../../contexts/activity'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
@@ -402,6 +403,15 @@ const VtaCreateAgent: React.FC = () => {
       setPollUntil(Date.now() + left)
     }
   }, [appActive, pollUntil, pollExpired])
+  // The person is watching for the agent and need not touch the phone: the
+  // auto-lock is held off while the window runs here, and only for what is
+  // left of it (CREATE-WAIT-LOCK). It used to lock after 5 minutes and take
+  // this screen, and its "didn't answer" and Check again, with it.
+  const holdLock = useActivity()?.holdLock
+  useEffect(() => {
+    if (!waiting || !appActive || !holdLock || pollUntil === undefined) return
+    return holdLock(Math.max(0, pollUntil - Date.now()))
+  }, [waiting, appActive, holdLock, pollUntil])
   useEffect(() => {
     if (!waiting || !focused || !appActive || !agent || pollUntil === undefined) return
     const timer = setInterval(() => {
