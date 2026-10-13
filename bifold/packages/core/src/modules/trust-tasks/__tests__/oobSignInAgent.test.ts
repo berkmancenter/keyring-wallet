@@ -658,6 +658,67 @@ describe('approving a sign-in', () => {
   })
 })
 
+describe("the community's answer to the grant", () => {
+  async function provedWith(answer: (req: Record<string, unknown>) => Record<string, unknown>) {
+    const community = fakeCommunity()
+    const real = community.post.getMockImplementation()!
+    community.post.mockImplementation(async (url: string, doc: Record<string, unknown>) =>
+      (doc as { type?: string }).type === OOB_TASKS.respond ? answer(doc) : real(url, doc)
+    )
+    const deps = depsWith(community, fakeVta())
+    return { deps, proved: await identifyAndProve(claimedSignIn(), MATCH, deps) }
+  }
+
+  // Report 26JE-SQ6R: a community on VTI b345ebd1 or later (2026-10-11) signs
+  // this answer as its attestation, for assertionMethod, like steps 1 and 2.
+  // The browser was signed in; Keyring said the answer couldn't be checked.
+  it("is taken when signed as the community's attestation (assertionMethod), as VTI now signs it", async () => {
+    const { deps, proved: p } = await provedWith((req) =>
+      signWithKey(
+        {
+          id: 'urn:uuid:respond-attested',
+          type: `${OOB_TASKS.respond}#response`,
+          issuer: VTC,
+          recipient: req.issuer,
+          threadId: req.id,
+          payload: { status: 'approved' },
+        },
+        vtcAssert,
+        `${VTC}#key-0`,
+        'assertionMethod'
+      )
+    )
+    await expect(approveSignIn(p, deps)).resolves.toEqual({ status: 'approved' })
+  })
+
+  it('is still taken when signed for authentication, as communities before b345ebd1 sign it', async () => {
+    const { deps, proved: p } = await provedWith(() =>
+      signWithKey(
+        { type: `${OOB_TASKS.respond}#response`, payload: { status: 'approved' } },
+        vtcAuth,
+        `${VTC}#key-1`,
+        'authentication'
+      )
+    )
+    await expect(approveSignIn(p, deps)).resolves.toEqual({ status: 'approved' })
+  })
+
+  it("is not taken when signed by a key that is not the community's, for either purpose", async () => {
+    const stranger = new Uint8Array(32).fill(9)
+    for (const purpose of ['assertionMethod', 'authentication'] as const) {
+      const { deps, proved: p } = await provedWith(() =>
+        signWithKey(
+          { type: `${OOB_TASKS.respond}#response`, payload: { status: 'approved' } },
+          stranger,
+          `${VTC}#key-0`,
+          purpose
+        )
+      )
+      expect(await failureOf(approveSignIn(p, deps))).toMatchObject({ reason: 'badAnswer', responded: true })
+    }
+  })
+})
+
 describe("the persona's sign-in vault entry", () => {
   const persona = { did: PERSONA, signingKeyId: `${PERSONA}#key-0`, contextId: 'vta' }
   const entry = (over: Partial<VtaVaultEntry> = {}): VtaVaultEntry => ({
