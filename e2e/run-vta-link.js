@@ -454,6 +454,13 @@ async function linkCase(driver, which) {
     const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
+  // Entries created at or after `since` (ms): a case's own writes, whatever else writes to the runner meanwhile.
+  // `since` is the VTA's own createdAt (an ISO string), not the Mac's clock: the two can disagree by seconds.
+  const aclList = () => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))); } catch { return null; }
+  };
+  const aclSince = (since) => { const l = aclList(); return l && since ? l.filter((e) => Date.parse(e.createdAt) >= Date.parse(since)) : null; };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
   // Share and Copy, so a text read came back empty); empty when there is none, for the row to record.
@@ -558,6 +565,8 @@ async function linkCase(driver, which) {
     // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
     grant(did);
+    // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
+    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
     block(true);
     // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
     // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
@@ -606,18 +615,37 @@ async function linkCase(driver, which) {
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
-    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
-    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    // The key after "didn't answer": as text where Create shows it (AgentCreateOwnerDid, after AgentCreateShowCode).
+    // A phone with no screen lock joins as a device, and that layout shows no key text, only Copy and Share (the
+    // 1013-1753 rerun read nothing there and called a kept key "not the same"). Copy is not tapped again (it would
+    // start a new window); there the key is proved by the link itself: linked after Check again with no new ACL entry
+    // means the same granted key. sameKey null = "shown no text; judged by the link".
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+    const keyNow = (await existsTestId(driver, "AgentCreateOwnerDid", 1000)) ? (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") : "";
+    const sameKey = keyNow ? keyNow === did : null;
     let marks = 0;
     try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
     await screenshot(driver, `${which}-blocked`);
     block(false);
     await sleep(3000);
     if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    // Check again starts a new window: wait until the old "didn't answer" has gone (the screen back on
+    // AgentCreateWaiting) before waiting for ready, or the stale AgentCreateError ends the wait at once (1013-1753).
+    if (checkAgain) {
+      for (const until = Date.now() + 15000; Date.now() < until && (await existsTestId(driver, "AgentCreateError", 500)); ) await sleep(1000);
+    }
     const linked = checkAgain && (await ready());
     const after = aclSize();
-    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+    // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
+    // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
+    // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
+    const mine = aclSince(grantAt);
+    const oneGrant = Array.isArray(mine) && mine.length === 1;
+    const sameSubject = oneGrant && mine[0].subject === did;
+    const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
+    const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
+    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install.
