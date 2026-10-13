@@ -577,9 +577,20 @@ async function linkCase(driver, which) {
     let failedEarly = false;
     let waited = 0;
     // The window is 600 s; past 606 s of it, AgentCreateError is due. Look until 720 s.
+    // A person waiting on Create touches the screen now and then; a test that only polls does not, and the wallet's
+    // 5-min inactivity lock (contexts/activity.tsx: any touch resets it, through the root PanResponder) signed the
+    // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap the waiting line (plain text, no action)
+    // every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
+    // what this row tests: "didn't answer" + Check again.
+    let touched = Date.now();
     for (const until = mark + 720000; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
-      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
+      if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
+      if (waiting && Date.now() - touched > 110000) {
+        await tapTestId(driver, "AgentCreateWaiting", 3000).catch(() => undefined);
+        touched = Date.now();
+      }
       waited = Math.round((Date.now() - mark) / 1000);
       await idle(20000);
     }
