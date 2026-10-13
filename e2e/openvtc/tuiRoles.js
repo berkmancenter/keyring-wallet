@@ -122,9 +122,13 @@ export async function declineStale(tui) {
   return declined;
 }
 
-/** Move the desk to one of its views: Requests, Tickets or Issued (←/→). */
+/**
+ * Move the desk to one of its views: Requests, Tickets or Issued (←/→). With enough tickets out the Tickets view's
+ * detail and key hints sit below the pane (1013-1633 rerun: 29 tickets, none of its markers on screen, so the walk
+ * cycled past it); a ticket row ("ABCD-1234  <community>  spent or expired | N left, until …") marks it too.
+ */
 export async function deskView(tui, view) {
-  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
+  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket|[0-9A-Z]{4}-[0-9A-Z]{4}\s{2}.+\s{2}(spent or expired|\d+ left, until)/, Issued: /You have not signed any vetting statements|signed/ }[view];
   for (let i = 0; i < 3; i++) {
     if (marker.test(tui.screen())) return tui;
     await tui.pressEach(['Right'], 700);
