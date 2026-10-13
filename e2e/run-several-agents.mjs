@@ -27,12 +27,13 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { dumpSource, ensureAppium, existsTestId, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { pasteLinkOnScanScreen } from "./lib/flows.js";
+import { runGrouped, TIMED_OUT } from "./lib/groupRun.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows, selectedRows } from "./lib/rows.js";
@@ -81,7 +82,26 @@ const admin = (...a) => {
 const json = (s) => JSON.parse(s.slice(s.indexOf("{")));
 const txt = (d, id) => said(d, id);
 /** The phone's temporary key granted on `slug` (the enrolment script), for the page objects' link steps. */
-const grant = async (temp, slug) => execFileSync("bash", [ENROL, temp, slug, "admin"], { stdio: "ignore", env: { ...process.env, EXPIRES: "1h" } });
+// Bounded: on the 1013-1753 rerun one enrolment on the community agent never returned and the leg sat 105 min until its
+// alarm (rc 142), losing every row after it. A hang now fails that row (ETIMEDOUT) and the leg carries on. Its output
+// goes to enrol.log in the run folder (it was discarded), so a timeout shows whether the agent or pnm stalled.
+const ENROL_LOG = path.join(process.env.E2E_RUN_DIR || here, "enrol.log");
+const grant = async (temp, slug) => {
+  const fd = openSync(ENROL_LOG, "a");
+  try {
+    writeSync(fd, `== ${new Date().toISOString()} enrol ${temp.slice(-12)} on ${slug}\n`);
+    // In its own process group, killed whole after 180 s: pnm under pnm-locked holds the slug's lock, and a kill of
+    // bash alone would leave it holding it (review on #420).
+    runGrouped("bash", [ENROL, temp, slug, "admin"], { timeoutS: 180, stdio: ["ignore", fd, fd], env: { ...process.env, EXPIRES: "1h" } });
+  } catch (e) {
+    const hung = e.status === TIMED_OUT;
+    writeSync(fd, `== ${new Date().toISOString()} ${hung ? "hung >180 s, killed with its pnm" : `failed: ${e.status ?? ""} ${e.signal ?? ""}`}\n`);
+    if (hung) throw new Error(`enrol-manager hung >180 s on ${slug} (killed with its pnm; see enrol.log)`);
+    throw e;
+  } finally {
+    closeSync(fd);
+  }
+};
 const logcatSince = (mark) => {
   try {
     const lines = readFileSync(E.LOGCAT, "utf8").split("\n");
