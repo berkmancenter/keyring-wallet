@@ -30,6 +30,12 @@ import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
 import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS, readyNameOf } from '../screens/VtaCreateAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+const mockRelease = jest.fn()
+const mockHoldLock = jest.fn((_forMs: number) => mockRelease)
+jest.mock('../../../contexts/activity', () => ({
+  ...jest.requireActual('../../../contexts/activity'),
+  useActivity: () => ({ appStateStatus: 'active', holdLock: mockHoldLock }),
+}))
 const mockOpenScanner = jest.fn()
 jest.mock('../screens/openScanner', () => ({ openScanner: (...a: unknown[]) => mockOpenScanner(...a) }))
 jest.mock('../module/ownerConfirm', () => ({
@@ -357,6 +363,34 @@ describe('the owner code is handed out only after Face ID', () => {
     })
     expect(confirmOwner).toHaveBeenCalledTimes(1)
     expect(check).toHaveBeenCalled()
+  })
+
+  // CREATE-WAIT-LOCK: waiting here without touching the phone, the auto-lock
+  // fired at 5 minutes and took the screen and its 10-minute window with it.
+  test('while it waits for the agent, the auto-lock is held off for the window, and let go after', async () => {
+    showingKey()
+    mockHoldLock.mockClear()
+    mockRelease.mockClear()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    const copy = jest.spyOn(Clipboard, 'setString')
+    const tree = show()
+    expect(mockHoldLock).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    // For what is left of the window, no longer.
+    expect(mockHoldLock).toHaveBeenCalledTimes(1)
+    const forMs = mockHoldLock.mock.calls[0][0]
+    expect(forMs).toBeGreaterThan(GRANT_POLL_WINDOW_MS - 5_000)
+    expect(forMs).toBeLessThanOrEqual(GRANT_POLL_WINDOW_MS)
+    expect(mockRelease).not.toHaveBeenCalled()
+    // The link goes on: the wait is over, and so is the hold.
+    await act(async () => {
+      controller.set({ link: { kind: 'linking', vtaDid: VTA, label: VTA, step: 'connecting' } })
+    })
+    expect(mockRelease).toHaveBeenCalled()
+    copy.mockRestore()
   })
 
   test('Share sends the code inside a sentence, never the bare did:key (AirDrop took it for a link)', async () => {

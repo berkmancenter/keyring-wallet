@@ -29,6 +29,16 @@ export const AutoLockTime = {
 
 export interface ActivityContext {
   appStateStatus: AppStateStatus
+  /**
+   * Keep the app from locking for inactivity while something the person is
+   * watching runs in the foreground (a wait for an agent, which needs no
+   * touch). While a hold is open the inactivity timer re-arms instead of
+   * locking; the last release starts a fresh full timeout. Every hold lapses
+   * on its own after `forMs`, so one never released (a bug) cannot keep the
+   * phone unlocked: it locks at most one timeout after the hold lapses. Going
+   * to the background is unaffected. Returns the release; calling it twice is safe.
+   */
+  holdLock: (forMs: number) => () => void
 }
 
 export const ActivityContext = createContext<ActivityContext>(null as unknown as ActivityContext)
@@ -42,6 +52,9 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const defaultAutoLockoutTime = customAutoLockTimes?.default?.time ?? defaultAutoLockTime
   const timeoutInMilliseconds = useRef<number>((store.preferences.autoLockTime ?? defaultAutoLockoutTime) * 60000)
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Open holds, each with the time it lapses.
+  const holdsRef = useRef(new Map<number, number>())
+  const nextHoldRef = useRef(0)
   const prevAppStateStatusRef = useRef(AppState.currentState)
   const [appStateStatus, setAppStateStatus] = useState<AppStateStatus>(AppState.currentState)
 
@@ -57,16 +70,45 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
   const resetInactivityTimeout = useCallback(
     (milliseconds: number) => {
-      clearInactivityTimeoutIfExists()
-      lastActiveTimeRef.current = Date.now()
+      const arm = () => {
+        clearInactivityTimeoutIfExists()
+        lastActiveTimeRef.current = Date.now()
 
-      // do not set timeout if timeout duration is set to 0
-      if (milliseconds > 0) {
-        // create new timeout
-        inactivityTimeoutRef.current = setTimeout(() => lockOutUser(LockoutReason.Timeout), milliseconds)
+        // do not set timeout if timeout duration is set to 0
+        if (milliseconds > 0) {
+          // create new timeout; a hold re-arms it instead of locking, and counts
+          // as activity, so time held never counts toward a later lock
+          inactivityTimeoutRef.current = setTimeout(
+            () =>
+              [...holdsRef.current.values()].some((until) => until > Date.now())
+                ? arm()
+                : lockOutUser(LockoutReason.Timeout),
+            milliseconds
+          )
+        }
       }
+      arm()
     },
     [clearInactivityTimeoutIfExists, lockOutUser]
+  )
+
+  const holdLock = useCallback(
+    (forMs: number) => {
+      const id = ++nextHoldRef.current
+      holdsRef.current.set(id, Date.now() + Math.max(0, forMs))
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        holdsRef.current.delete(id)
+        // The last hold gone: a fresh full timeout, unless the app is in the
+        // background, where no timer runs.
+        if (holdsRef.current.size === 0 && AppState.currentState !== 'background') {
+          resetInactivityTimeout(timeoutInMilliseconds.current)
+        }
+      }
+    },
+    [resetInactivityTimeout]
   )
 
   useEffect(() => {
@@ -150,7 +192,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
   }, [resetInactivityTimeout])
 
   return (
-    <ActivityContext.Provider value={{ appStateStatus }}>
+    <ActivityContext.Provider value={{ appStateStatus, holdLock }}>
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
         {children}
       </View>
