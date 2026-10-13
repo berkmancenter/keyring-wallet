@@ -186,7 +186,11 @@ rerun_legs() {
       0) ;;
       # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
       1|4|143) run_leg "$rd" "$leg" ;;
-      *) names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
+      # GATE_RERUN_WHOLE="agents …": these legs run whole even with only some rows failed, when a failed row needs one
+      # that passed (1013-1633: agents' R5/R7 need the second agent that "R1 add + keep" adds, which --only-failed
+      # skipped as not selected, so every one of them found a single agent).
+      *) if [[ " ${GATE_RERUN_WHOLE:-} " == *" $leg "* ]]; then run_leg "$rd" "$leg"; continue; fi
+         names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
          run_leg "$rd" "$leg" "$names" ;;
     esac
   done 3< "$old/legs.tsv"
