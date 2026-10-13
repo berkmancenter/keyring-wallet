@@ -552,18 +552,41 @@ async function linkCase(driver, which) {
     // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
     // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.
     // The cut is the whole Farm: every ic3.dev host shares the blocked Cloudflare addresses, the agent too.
+    // Create's 600 s window (wall clock, foreground) starts only on Copy, Share or Connect (VtaCreateAgent.tsx
+    // :334-337, handOut/onConnect): showing the code alone starts nothing, so the 1013-1106 rerun waited 669 s on a
+    // screen with no window open and no AgentCreateWaiting (a driver bug, not the app's). Block first, then Copy:
+    // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
     grant(did);
-    const mark = Date.now();
     block(true);
+    // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
+    // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) {
+      block(false);
+      throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    }
+    await copy.click();
+    const mark = Date.now();
+    const waitingShown = await existsTestId(driver, "AgentCreateWaiting", 15000);
+    if (!waitingShown) {
+      await screenshot(driver, `${which}-no-window`);
+      block(false);
+      return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s of AgentCreateCopyCode");
+    }
     let failedEarly = false;
     let waited = 0;
-    for (const until = Date.now() + 660000; Date.now() < until; ) {
+    // The window is 600 s; past 606 s of it, AgentCreateError is due. Look until 720 s.
+    for (const until = mark + 720000; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
-      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000)) && !(await existsTestId(driver, "AgentCreateError", 500))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
       waited = Math.round((Date.now() - mark) / 1000);
       await idle(20000);
     }
+    waited = Math.round((Date.now() - mark) / 1000);
+    // "didn't answer" before the window ran out would be a failure too: the checks must not end it early.
+    const tooSoon = waited < 590;
+    failedEarly = failedEarly || tooSoon;
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
@@ -578,7 +601,7 @@ async function linkCase(driver, which) {
     const linked = checkAgain && (await ready());
     const after = aclSize();
     return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install.
