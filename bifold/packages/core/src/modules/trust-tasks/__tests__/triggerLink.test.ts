@@ -63,10 +63,11 @@ describe("Keyring's own reading", () => {
     expect(action).toMatchObject({ kind: 'proceed', flow: 'sign-in', trigger: { id: 'q3Vn7Zk2Xo9Rt1LwPb4HdA' } })
   })
 
-  it('knows an agent claim but does not carry it through yet: update', () => {
+  // An agent host's one-scan setup (vtaClaim.ts): carried through since 241.
+  it('carries an agent claim through', () => {
     const result = readTrigger(link('/vti/flow/vta-claim/0.1'), { now })
     expect(result).toMatchObject({ outcome: 'accept', flow: 'vta-claim' })
-    expect(triggerAction(result)).toEqual({ kind: 'say', ui: 'update' })
+    expect(triggerAction(result)).toMatchObject({ kind: 'proceed', flow: 'vta-claim', trigger: { flow: 'vta-claim' } })
   })
 
   it('says update for a link that names no flow', () => {
@@ -93,8 +94,11 @@ describe("Keyring's own reading", () => {
     expect(JSON.stringify(result)).not.toContain('portal.community.example')
   })
 
-  it('implements only sign-in', () => {
-    expect(KEYRING_TRIGGER_CONFIG.flows?.filter((f) => f.implemented).map((f) => f.flow)).toEqual(['sign-in'])
+  it('implements sign-in and the agent claim', () => {
+    expect(KEYRING_TRIGGER_CONFIG.flows?.filter((f) => f.implemented).map((f) => f.flow)).toEqual([
+      'sign-in',
+      'vta-claim',
+    ])
   })
 
   it('is switched on', () => {

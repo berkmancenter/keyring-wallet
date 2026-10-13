@@ -1903,6 +1903,52 @@ export class VtaAgentController {
     return this.beginManualLink(agent, vtaDid, label, true)
   }
 
+  /**
+   * A key for claiming an agent from a Farm (`vta-claim`, vtaClaim.ts): the
+   * same temporary did:key the manual link shows as the owner code, made
+   * before the Farm is told of it. It becomes the agent's administrator once
+   * the Farm hands the agent over ({@link finishClaimedLink}); a claim that
+   * ends otherwise never stores it.
+   */
+  async createClaimKey(agent: Agent): Promise<string> {
+    return createVtiTemporaryDidKey(agent)
+  }
+
+  /**
+   * The Farm handed over `vtaDid`, administered by `did` (`vta-claim`): finish
+   * as the manual link does once its owner code was added — the key recorded
+   * as this agent's temporary key, shown, checked (signed in as it), then
+   * swapped onto a long-term key and remembered as this phone's own agent.
+   * The person already compared the claim check and confirmed as owner, so
+   * nothing is asked here. With an agent already current it is the "add
+   * another agent" path, which keeps that one.
+   */
+  async finishClaimedLink(agent: Agent, vtaDid: string, did: string, label: string = vtaDid): Promise<void> {
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
+    const current = this.state.link
+    if (current.kind === 'linked' || current.kind === 'revoked') await this.startAddingAgent()
+    if (this.state.link.kind !== 'notLinked') throw new Error('vtaAgent: another link is in progress')
+    this.ownerFor = vtaDid
+    const token = ++this.attemptToken
+    try {
+      await resolveVtaMediator(agent, vtaDid)
+      await this.identityStore(agent).setManager({
+        vtaDid,
+        did,
+        createdAt: new Date(this.now()).toISOString(),
+        stage: 'temporary',
+      })
+      if (token !== this.attemptToken) return
+      this.dispatch({ type: 'keyShown', vtaDid, label, did })
+    } catch (error) {
+      if (token !== this.attemptToken) return
+      const detail = error instanceof Error ? error.message : String(error)
+      this.dispatch({ type: 'failed', failure: { reason: 'unreachable', detail } })
+      return
+    }
+    await this.checkManualGrant(agent)
+  }
+
   private async beginManualLink(
     agent: Agent,
     vtaDid: string,

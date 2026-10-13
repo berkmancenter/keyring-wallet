@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "d86785b447cac839013878f60981dc0058a8aad8",
+  "generatedFrom": "2fe992bd180bada9375dfba75c6baa9515124152",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -903,6 +903,23 @@
     "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VtaClaim": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCancel": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimClaiming": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCode": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeCancel": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeStatus": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeValue": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConfirm": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConfirmError": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConnecting": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimContinue": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimDone": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimFailed": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimHost": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimHostDid": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimReady": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimResultMessage": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkAwaitingApproval": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
@@ -1415,6 +1432,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkTitle"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaClaim.tsx": "key"
     },
     {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAdd"

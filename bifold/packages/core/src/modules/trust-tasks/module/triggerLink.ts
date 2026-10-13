@@ -117,7 +117,8 @@ export const KEYRING_TRIGGER_CONFIG: TriggerConfig = {
       expRequired: true,
       allowedVidTypes: ['did:webvh', 'did:web'],
       supported: { '0': [1] },
-      implemented: false,
+      // An agent host's one-scan setup (vtaClaim.ts).
+      implemented: true,
     },
   ],
 }

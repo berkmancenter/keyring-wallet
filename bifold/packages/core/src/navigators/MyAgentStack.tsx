@@ -22,6 +22,7 @@ import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
+import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -145,6 +146,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.SignIn}
         component={SignIn as React.FC}
         options={{ title: t('Screens.SignIn'), ...ScreenOptionsDictionary[Screens.SignIn] }}
+      />
+      <Stack.Screen
+        name={Screens.VtaClaim}
+        component={VtaClaim as React.FC}
+        options={{ title: t('Screens.VtaClaim'), ...ScreenOptionsDictionary[Screens.VtaClaim] }}
       />
     </Stack.Navigator>
   )

@@ -90,6 +90,7 @@ export enum Screens {
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
   SignIn = 'Sign in to a community',
+  VtaClaim = 'Set up your agent',
 }
 
 export enum Stacks {
@@ -161,6 +162,7 @@ export type MyAgentStackParams = {
   [Screens.VtaNewPhoneOffer]: undefined
   [Screens.VtiJoin]: undefined
   [Screens.SignIn]: undefined
+  [Screens.VtaClaim]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }
 

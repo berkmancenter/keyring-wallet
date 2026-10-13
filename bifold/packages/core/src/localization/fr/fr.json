@@ -1043,7 +1043,8 @@
     "VtaAskMe": "Me demander avant…",
     "VtaAgentSettings": "Paramètres de l'agent",
     "Invited": "Rejoindre sur invitation",
-    "Join": "Rejoindre une communauté"
+    "Join": "Rejoindre une communauté",
+    "VtaClaim": "Configurer votre agent"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -2248,6 +2249,41 @@
       "agentUnreachable": "Votre agent est injoignable, aucune connexion n'a eu lieu. Réessayez plus tard.",
       "agentNeedsUpdate": "Votre agent doit être mis à jour avant de pouvoir vous connecter à des sites web.",
       "unknown": "Un problème est survenu, rien n'a été connecté. Actualisez la page de connexion et réessayez."
+    }
+  },
+  "VtaClaim": {
+    "ConfirmTitle": "Ajouter ce téléphone à votre nouvel agent ?",
+    "ConfirmBody": "Votre hébergeur d'agent à {{host}} a un agent prêt pour vous. Ce téléphone en devient le propriétaire. Vous allez ensuite comparer un code court avec la page qui a affiché le code scanné.",
+    "From": "De",
+    "Continue": "Continuer",
+    "Cancel": "Annuler",
+    "ConfirmReason": "Devenir propriétaire de votre nouvel agent",
+    "NotConfirmed": "Keyring n'a pas pu confirmer que c'est vous. Réessayez.",
+    "Claiming": "Demande à votre hébergeur d'agent…",
+    "CodeTitle": "Vérifiez le code",
+    "CodeBody": "Sur la page qui a affiché le code scanné, vérifiez qu'elle affiche aussi ces caractères, puis choisissez Les codes correspondent.",
+    "WaitingConfirm": "En attente de votre confirmation sur cette page…",
+    "Provisioning": "Confirmé. Votre hébergeur configure votre agent…",
+    "Connecting": "Connexion à votre agent…",
+    "ReadyTitle": "Votre agent est prêt",
+    "ReadyBody": "Ce téléphone en est maintenant le propriétaire.",
+    "FailedTitle": "Votre agent n'a pas été configuré",
+    "Done": "Terminé",
+    "Failure": {
+      "invalidCode": "Ce code ne permet pas de configurer un agent.",
+      "expired": "Ce code a expiré. Créez-en un nouveau sur la page de votre hébergeur et scannez-le à nouveau.",
+      "unreachable": "Keyring n'a pas pu joindre votre hébergeur d'agent. Vérifiez votre connexion, créez un nouveau code et scannez-le.",
+      "badAnswer": "La réponse de votre hébergeur n'a pas pu être vérifiée, Keyring s'est donc arrêté. Créez un nouveau code et scannez-le.",
+      "alreadyClaimed": "Un autre téléphone a réclamé ce code en premier. Sur la page, choisissez Pas le mien, puis créez un nouveau code.",
+      "rejected": "La page a indiqué que ce n'était pas votre téléphone ; rien n'a été ajouté. Créez un nouveau code pour réessayer.",
+      "handleExpired": "Le délai de confirmation est écoulé. Créez un nouveau code et scannez-le.",
+      "handleNotFound": "Votre hébergeur ne connaît plus ce code. Créez un nouveau code et scannez-le.",
+      "notClaimant": "Ce code a été réclamé avec une autre clé. Créez un nouveau code et scannez-le.",
+      "refused": "Votre hébergeur a refusé la demande. Créez un nouveau code et scannez-le.",
+      "cannotOwn": "Ce téléphone n'a pas de verrouillage d'écran ; il ne peut pas être propriétaire d'un agent. Activez un verrouillage d'écran, puis scannez à nouveau le code.",
+      "linkFailed": "Votre agent a été configuré, mais ce téléphone n'a pas encore pu s'y connecter. Ouvrez Mon agent et vérifiez à nouveau.",
+      "alreadyOnPhone": "Ce téléphone a déjà cet agent.",
+      "noCode": "Il n'y a aucun code à utiliser. Scannez à nouveau le code sur la page de votre hébergeur."
     }
   }
 }

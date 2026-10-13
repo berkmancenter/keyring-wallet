@@ -1114,7 +1114,8 @@
     "AddDevice": "Add another device",
     "VtaDevices": "My devices",
     "VtaNewPhoneOffer": "Your other devices",
-    "SignIn": "Sign in"
+    "SignIn": "Sign in",
+    "VtaClaim": "Set up your agent"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -2317,6 +2318,41 @@
       "agentUnreachable": "Your agent couldn't be reached.",
       "agentNeedsUpdate": "Your agent needs an update before it can sign you in to websites.",
       "unknown": "Something went wrong, so nothing was signed in. Refresh the sign-in page and try again."
+    }
+  },
+  "VtaClaim": {
+    "ConfirmTitle": "Add this phone to your new agent?",
+    "ConfirmBody": "Your agent host at {{host}} has an agent ready for you. This phone becomes its owner. Next you'll check a short code against the page that showed the code you scanned.",
+    "From": "From",
+    "Continue": "Continue",
+    "Cancel": "Cancel",
+    "ConfirmReason": "Become the owner of your new agent",
+    "NotConfirmed": "Keyring couldn't confirm it's you. Try again.",
+    "Claiming": "Asking your agent host…",
+    "CodeTitle": "Check the code",
+    "CodeBody": "On the page that showed the code you scanned, check that it shows these characters too, then choose Codes match there.",
+    "WaitingConfirm": "Waiting for you to confirm on that page…",
+    "Provisioning": "Confirmed. Your agent host is setting up your agent…",
+    "Connecting": "Connecting to your agent…",
+    "ReadyTitle": "Your agent is ready",
+    "ReadyBody": "This phone is now its owner.",
+    "FailedTitle": "Your agent wasn't set up",
+    "Done": "Done",
+    "Failure": {
+      "invalidCode": "This code can't be used to set up an agent.",
+      "expired": "This code has expired. Make a new one on your agent host's page and scan it again.",
+      "unreachable": "Keyring couldn't reach your agent host. Check your connection, make a new code and scan it again.",
+      "badAnswer": "Your agent host's answer didn't check out, so Keyring stopped. Make a new code and scan it again.",
+      "alreadyClaimed": "Another phone claimed this code first. On the page, choose Not mine, then make a new code.",
+      "rejected": "The page said this wasn't your phone, so nothing was added. Make a new code to try again.",
+      "handleExpired": "The time to confirm ran out. Make a new code and scan it again.",
+      "handleNotFound": "Your agent host no longer knows this code. Make a new code and scan it again.",
+      "notClaimant": "This code was claimed with a different key. Make a new code and scan it again.",
+      "refused": "Your agent host refused the request. Make a new code and scan it again.",
+      "cannotOwn": "This phone has no screen lock, so it can't own an agent. Turn on a screen lock, then scan the code again.",
+      "linkFailed": "Your agent was set up, but this phone couldn't connect to it yet. Open My Agent and check again.",
+      "alreadyOnPhone": "This phone already has that agent.",
+      "noCode": "There's no code to use. Scan the code on your agent host's page again."
     }
   }
 }

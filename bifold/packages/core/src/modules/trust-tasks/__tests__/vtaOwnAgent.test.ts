@@ -328,7 +328,7 @@ import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { VtaClient } from '../module/VtaClient'
 import type { VtaLink } from '../module/VtaLinkStore'
 import type { VtiManagerIdentity, VtiPersona } from '../module/VtiIdentityStore'
-import { VtaAgentController } from '../module/vtaAgent'
+import { AgentAlreadyOnPhone, VtaAgentController } from '../module/vtaAgent'
 import {
   DeviceActionRefused,
   DeviceCannotOwn,
@@ -905,6 +905,37 @@ describe('creating an agent', () => {
     mockVta.acl.set(TEMPORARY, { role: 'admin' })
     await vta.checkManualGrant(agent)
     expect(disk.link?.owner).toBeUndefined()
+  })
+
+  // One-scan setup (vta-claim): the host handed the agent over to the key the
+  // phone claimed with, so there is no code to paste; the rest is the manual
+  // link's own finish, owned, and swapped onto the long-term key.
+  it("a claimed agent links as this phone's own, with the key it claimed with", async () => {
+    const { vta, disk } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const key = await vta.createClaimKey(agent)
+    expect(key).toBe(TEMPORARY)
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.finishClaimedLink(agent, VTA, key)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+    expect(disk.link).toMatchObject({ vtaDid: VTA, owner: true })
+    expect(vta.getState().ownsAgent).toBe(true)
+    expect(mockVta.acl.has(PERMANENT)).toBe(true)
+    expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+  })
+
+  it('a claimed agent that has not taken the key yet waits on it, and a later check finishes', async () => {
+    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    const key = await vta.createClaimKey(agent)
+    await vta.finishClaimedLink(agent, VTA, key)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: VTA, did: TEMPORARY })
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: VTA })
+  })
+
+  it('a claimed agent this phone already has is refused', async () => {
+    const { vta } = await linkedPhone()
+    await expect(vta.finishClaimedLink(agent, VTA, 'did:key:z6MkOther')).rejects.toBeInstanceOf(AgentAlreadyOnPhone)
   })
 
   it('the owned marker survives a restart', async () => {
