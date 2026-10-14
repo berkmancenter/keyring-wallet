@@ -20,6 +20,7 @@ import VtaAskMe from '../modules/trust-tasks/screens/VtaAskMe'
 import VtaAgentSettings from '../modules/trust-tasks/screens/VtaAgentSettings'
 import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
+import VtiHiddenVetting from '../modules/trust-tasks/screens/VtiHiddenVetting'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import SignIn from '../modules/trust-tasks/screens/SignIn'
 import VtaClaim from '../modules/trust-tasks/screens/VtaClaim'
@@ -81,6 +82,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
       >
         {() => <VtiVetting config={config.vti} />}
       </Stack.Screen>
+      <Stack.Screen
+        name={Screens.VtiHiddenVetting}
+        component={VtiHiddenVetting}
+        options={{ title: t('Screens.HiddenVetting'), ...ScreenOptionsDictionary[Screens.VtiHiddenVetting] }}
+      />
       <Stack.Screen
         name={Screens.VtaLink}
         component={VtaLink}

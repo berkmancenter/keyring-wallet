@@ -122,6 +122,12 @@ export interface JoinWay {
   /** The fault in the reader's words, for Details — never for the sentence a person reads. */
   unusableDetail?: string
   /**
+   * With `vettingPrivate`: the hidden-vetting parameters' suite, as published.
+   * Whether the person's agent can do it is asked only when they tap (it may
+   * push a consent request to an approver), so the way stays unusable here.
+   */
+  hiddenVetting?: { suite?: string }
+  /**
    * Whether what the phone holds now meets it. `unknown` where the wallet does
    * not evaluate the requirement here (a credential query).
    */
@@ -156,6 +162,17 @@ const ISSUERS: readonly string[] = ['any', 'community', 'recognised']
 
 /** Where a community that runs hidden vetting publishes its parameters, under `vetting.ext`. */
 export const HIDDEN_VETTING_EXT = 'org.openvtc.hidden-vetting'
+
+/** The hidden-vetting suite a person's agent can run (vta-service 0.60, vta/pcs/*). */
+export const HIDDEN_VETTING_SUITE = 'ps-ddh-bls12381'
+
+/** The suite a criterion's hidden-vetting parameters name, read from its raw JSON. */
+export function hiddenVettingSuite(criterion: VtiCriterion): string | undefined {
+  const ext = (criterion.vetting as { ext?: unknown } | undefined)?.ext
+  const params = ext && typeof ext === 'object' ? (ext as Record<string, unknown>)[HIDDEN_VETTING_EXT] : undefined
+  const suite = params && typeof params === 'object' ? (params as { suite?: unknown }).suite : undefined
+  return typeof suite === 'string' ? suite : undefined
+}
 
 /**
  * The hidden-vetting parameters a community leaves out of the digest: how it
@@ -332,6 +349,7 @@ function wayOf(criterion: VtiCriterion, wire: JoinWire, holds: JoinHolds): JoinW
     ...(typeof criterion.requirementsDigest === 'string' ? { digest: criterion.requirementsDigest } : {}),
     usable: !fault.unusableBecause,
     ...fault,
+    ...(fault.unusableBecause === 'vettingPrivate' ? { hiddenVetting: { suite: hiddenVettingSuite(criterion) } } : {}),
     meets,
   }
 }
