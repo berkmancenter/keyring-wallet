@@ -32,10 +32,14 @@ echo "installed over: $(shasum -a 256 "$(xcrun simctl get_app_container "$SIM" "
 C_DID= perl -e 'alarm 600; exec @ARGV' node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1   # no join on iOS here: no community to check
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
-ios_log_save "$SIM" "$LEG_DIR/device-after-update.log" "$(( ($(date +%s) - UPD_T) / 60 + 2 ))m"
+# The app's log from the update on (every line counted is the updated app's), read back before the simulator goes.
+ios_log_save "$SIM" "$LEG_DIR/device-after-update.log" "$UPD_T"
 n=$(grep -c "not found in backend" "$LEG_DIR/device-after-update.log"); app=$(ios_log_app_lines "$LEG_DIR/device-after-update.log")
-# An empty log is no evidence: until 10-14 this row passed on a 3-line stream header with no app line in it.
-if [ "$app" -lt 20 ]; then row update-no-missing-key FAIL "the device log has $app app line(s): the check could not look (log capture, not the app)"
+# An empty log is no evidence: until 10-14 this row passed on a 3-line stream header with no app line in it. Too few
+# lines is the capture's failure, not the app's: the leg is broken (harness), no row about the app. The floor is a
+# first guess; set it from the first good run's count (printed below).
+echo "device log after the update: $app app line(s)"
+if [ "$app" -lt 20 ]; then broken "update-no-missing-key could not look: the device log has $app app line(s) after the update (log capture, not the app)"
 elif [ "$n" -eq 0 ]; then row update-no-missing-key PASS "no \"not found in backend\" in $app app lines of the device log after the update"
 else row update-no-missing-key FAIL "$n \"not found in backend\" line(s); first: $(grep -m1 'not found in backend' "$LEG_DIR/device-after-update.log" | cut -c1-200)"
   grep -n -B5 -A5 -m3 "not found in backend" "$LEG_DIR/device-after-update.log" | cut -c1-260; fi
