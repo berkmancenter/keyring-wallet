@@ -9,7 +9,9 @@ const path = require('path')
 
 const [major, minor] = process.versions.node.split('.').map(Number)
 if (major < 20 || (major === 20 && minor < 19)) {
-  throw new Error(`witness: Node ${process.versions.node} cannot load @openvtc/vti-tsp-js (ESM-only); it needs Node 20.19 or later`)
+  throw new Error(
+    `witness: Node ${process.versions.node} cannot load @openvtc/vti-tsp-js (ESM-only); it needs Node 20.19 or later`
+  )
 }
 const ENTRY = { '@openvtc/vti-tsp-js': 'dist/index.js', '@openvtc/vti-tsp-js/hpke': 'dist/crypto/hpke.js' }
 const resolve = Module._resolveFilename
