@@ -1885,9 +1885,16 @@ export class VtaClient {
    */
   async servesPcs(): Promise<boolean | undefined> {
     try {
-      await this.task(PCS_VTA_TASK.applicationsShow, { applicationId: PCS_PROBE_APPLICATION_ID }, 30000, {}, undefined, {
-        waitForConsent: false,
-      })
+      await this.task(
+        PCS_VTA_TASK.applicationsShow,
+        { applicationId: PCS_PROBE_APPLICATION_ID },
+        30000,
+        {},
+        undefined,
+        {
+          waitForConsent: false,
+        }
+      )
       // An agent that answered at all serves the family; a hit on this id is
       // not credible, but it would still prove the task is implemented.
       return true

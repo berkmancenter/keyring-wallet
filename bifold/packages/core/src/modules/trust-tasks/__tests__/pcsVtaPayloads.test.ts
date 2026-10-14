@@ -200,18 +200,7 @@ describe('a refusal is read from the error document', () => {
 describe('the vendored schemas still match the registry', () => {
   // Only meaningful where the registry is checked out: this repository does not
   // depend on it, and CI has no copy.
-  const registry = join(
-    __dirname,
-    '..',
-    '..',
-    '..',
-    '..',
-    '..',
-    '..',
-    '..',
-    'external',
-    'dtgwg-trust-tasks-tf'
-  )
+  const registry = join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'external', 'dtgwg-trust-tasks-tf')
   const have = existsSync(registry)
   const maybe = have ? it : it.skip
 
