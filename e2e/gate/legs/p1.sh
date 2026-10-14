@@ -49,7 +49,12 @@ elif [ -z "${P1_BLOCKED:-}" ]; then row p1-tui-vets SKIP "not selected"; fi
 
 # Approvals on the same linked phone (run-vta-approvals.js reads artifacts/last-link.json from the link).
 t=$(date +%s)
-DEVICE_PIN=1234 OWNER_ROWS=1 CARD_ROWS=1 galarm 1200 node run-vta-approvals.js > "$LEG_DIR/approvals.out" 2>&1; rc=$?
+# ANDROID-NOTIF-CHANNEL (wallet #421): only on a build whose dex declares the keyring_wake channel (native code: the
+# JS-bundle markers cannot see it).
+WCC=; unzip -p "$APK" 'classes*.dex' 2>/dev/null | grep -aq keyring_wake && WCC=1
+[ -n "$WCC" ] || row ANDROID-NOTIF-CHANNEL SKIP "build lacks the keyring_wake channel (wallet #421)"
+row ANDROID-NOTIF-MESSAGE-WAKE SKIP "tracked: a message wake (a peer's message over a VRC connection) needs infra PR #12 (gateway -p4 + webhook secret) and the mediator's webhook URL; push lane"
+DEVICE_PIN=1234 OWNER_ROWS=1 CARD_ROWS=1 WAKE_CHANNEL_CHECK=$WCC galarm 1200 node run-vta-approvals.js > "$LEG_DIR/approvals.out" 2>&1; rc=$?
 grep -E '^\[e2e\] [0-9]|^PUSH-CAPABLE|^RATE-LIMITED' "$LEG_DIR/approvals.out" | cut -c1-200
 take_rows "$LEG_DIR/approvals.out"
 if [ $rc -eq 0 ]; then row approvals PASS "held for consent, approved on the phone, then let through ($(( $(date +%s) - t ))s)"
