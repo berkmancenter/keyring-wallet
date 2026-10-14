@@ -43,7 +43,7 @@ farm_rows() {
 # with a note appended to each ROW's detail when given.
 welcome_try() {
   local sfx=${1:-} t0; t0=$(date +%s); WELCOME_OUT=$LEG_DIR/$PLATFORM-welcome$sfx.out
-  (cd "$E2E" && perl -e 'alarm 1200; exec @ARGV' node run-welcome.mjs > "$WELCOME_OUT" 2>&1); WELCOME_RC=$?
+  (cd "$E2E" && galarm 1200 node run-welcome.mjs > "$WELCOME_OUT" 2>&1); WELCOME_RC=$?
   local a s; a=$(grep -oE '^\[welcome\] appium ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$'); s=$(grep -oE '^\[welcome\] session ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$')
   [ -z "$a" ] || step_at "appium-start$sfx" "$t0" "$a"
   [ -z "$s" ] || step_at "appium-session$sfx" "$((t0 + ${a:-0}))" "$s"
@@ -84,7 +84,7 @@ ios)
   LEG_HEADS_EXTRA="device=\"$NAME\" runtime=${DEVVER:-?}"
   leg_begin smoke-ci-ios "$(shasum -a 256 "$APP/main.jsbundle" | cut -c1-12)"
   echo "SMOKE iOS (CI) start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' "$MANIFEST" | tr '\n' ' ')· bundle $(shasum -a 256 "$APP/main.jsbundle" | cut -c1-12) · GoogleService-Info project $(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' "$APP/GoogleService-Info.plist" 2>/dev/null || echo '(no plist in the app)') · sim $NAME $SIM ${DEVVER:-}"
-  t=$(date +%s); xcrun simctl boot "$SIM" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$SIM" >/dev/null 2>&1; xcrun simctl uninstall "$SIM" $BID 2>/dev/null; step sim-bootstatus "$t"
+  t=$(date +%s); xcrun simctl boot "$SIM" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$SIM" >/dev/null 2>&1; xcrun simctl uninstall "$SIM" $BID 2>/dev/null; step sim-bootstatus "$t"
   t=$(date +%s); L0=$t; xcrun simctl install "$SIM" "$APP"; step install-app "$t"
   t=$(date +%s); P=$(xcrun simctl launch "$SIM" $BID | awk '{print $2}'); echo "plain launch pid $P $(date -u +%T)Z"
   sleep 20; xcrun simctl io "$SIM" screenshot "$LEG_DIR/ios-plain-20s.png" >/dev/null 2>&1; a1=$(ps -p "$P" >/dev/null 2>&1 && echo alive || echo GONE)

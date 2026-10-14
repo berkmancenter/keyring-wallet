@@ -17,6 +17,23 @@ GH_REPO=berkmancenter/keyring-wallet
 # brings its own Android SDK and the emulator (the workflow's emulator step), pnm is the CI build (pnm-linux.yml) with
 # a CI-only identity, and the private configuration is a file the workflow writes from its protected environment.
 is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
+# galarm <seconds> <command…>: the command in its own process group, the whole group killed past <seconds>. A plain
+# `galarm N` killed only the driver: its Appium (and anything else it started) lived on, and on
+# 1013-1753 an orphaned Appium on :4762 broke the next leg. Exit 142 on the alarm, as before (128 + SIGALRM). A stop
+# that reaches this shell (TERM, INT, HUP from gate.sh's stop_forward) is passed on to the group, since the group is no
+# longer the leg's own.
+galarm() {
+  local t=$1; shift
+  perl -e '
+    my $t = shift; my $p = fork; die "galarm: fork: $!" unless defined $p;
+    if (!$p) { setpgrp(0, 0); exec @ARGV; exit 127 }
+    setpgrp($p, $p);
+    for my $s (qw(TERM INT HUP)) { $SIG{$s} = sub { kill $s, -$p; waitpid($p, 0); exit 128 + { TERM => 15, INT => 2, HUP => 1 }->{$s} } }
+    $SIG{ALRM} = sub { kill "KILL", -$p; waitpid($p, 0); exit 142 };
+    alarm $t; waitpid($p, 0);
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
+  ' "$t" "$@"
+}
 if ! is_ci; then
   export PATH=$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator:$PATH
   export ANDROID_HOME=$HOME/Library/Android/sdk ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
@@ -68,7 +85,7 @@ pnm() {
 }
 
 # The community's admin calls (decide join requests, list and remove members).
-c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
@@ -160,7 +177,7 @@ emu_start() {
   local port=$1 out rc why
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
-    perl -e 'alarm 120; exec @ARGV' adb -s "emulator-$port" wait-for-device 2>/dev/null \
+    galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
       && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { echo "emulator-$port up (CI)"; return 0; }
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
@@ -172,7 +189,7 @@ emu_start() {
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
-sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
+sim_boot() { xcrun simctl boot "$1" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
 # gate_sweep: before any leg, take off every runner what a gate leg creates and may have left there, and nothing

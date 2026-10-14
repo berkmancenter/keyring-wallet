@@ -25,25 +25,25 @@ cd "$E2E"
 adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat-link.log" 2>/dev/null & LCL=$!
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$PREV_APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
-  perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link-prev.out" 2>&1 || broken "link on the previous build: $(grep -E '✅|❌' "$LEG_DIR/link-prev.out" | tail -1 | cut -c1-120)"
+  galarm 1800 node run-vta-link.js > "$LEG_DIR/link-prev.out" 2>&1 || broken "link on the previous build: $(grep -E '✅|❌' "$LEG_DIR/link-prev.out" | tail -1 | cut -c1-120)"
 { [ -n "${LCL:-}" ] && kill "$LCL" 2>/dev/null; }
 row relaunch-linked PASS "linked to the main runner"
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME JOIN_APPROVE=1 C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
-  PERSONA_SHOTS=$LEG_DIR/persona-did perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/join-prev.out" 2>&1
+  PERSONA_SHOTS=$LEG_DIR/persona-did galarm 900 node run-join-waiting.mjs > "$LEG_DIR/join-prev.out" 2>&1
 member=$(grep -c '^ROW join-approved-card PASS' "$LEG_DIR/join-prev.out")
 row relaunch-member "$([ "$member" -gt 0 ] && echo PASS || echo FAIL)" "joined C: $(grep -E '^ROW join-approved-card' "$LEG_DIR/join-prev.out" | cut -c1-120)"
 adb -s $E shell locksettings set-pin 1234 >/dev/null 2>&1; sleep 8
 MAIN_NAME=$(grep -oE 'home now "[^"]+"' "$LEG_DIR/link-prev.out" | tail -1 | cut -d'"' -f2)
 ROWS="R1" A_SLUG=$RUNNER_MAIN_SLUG A_DID=$RUNNER_MAIN_DID A_NAME=${MAIN_NAME:-$RUNNER_MAIN_NAME} B_SLUG=$RUNNER_B_SLUG B_DID=$RUNNER_B_DID B_NAME=$RUNNER_B_NAME \
   C_DID=$C_DID C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" DEVICE_PIN=1234 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 PNM_BIN=$PNM_BIN \
-  perl -e 'alarm 1500; exec @ARGV' node run-several-agents.mjs > "$LEG_DIR/second-agent.out" 2>&1
+  galarm 1500 node run-several-agents.mjs > "$LEG_DIR/second-agent.out" 2>&1
 two=$(grep -c '^ROW R1 add + keep PASS' "$LEG_DIR/second-agent.out")
 row relaunch-two-agents "$([ "$two" -gt 0 ] && echo PASS || echo FAIL)" "$(grep -E '^ROW R1 add' "$LEG_DIR/second-agent.out" | cut -c1-140)"
 # The relaunch: the process ends (as an update, a crash or the system does) and the app starts again.
 adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat-after-update.log" 2>/dev/null & LC=$!
 adb -s $E shell am force-stop $BID; sleep 2
 USE_PERSONA=1 C_NAME=$C_NAME PLATFORM=android UDID=$E APPIUM_PORT=4762 C_DID= EXPECT_AGENTS=$([ "$two" -gt 0 ] && echo 2 || echo 1) \
-  perl -e 'alarm 600; exec @ARGV' node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1
+  galarm 600 node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
 sleep 3; kill "$LC" 2>/dev/null; LC=
