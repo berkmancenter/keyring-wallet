@@ -9,6 +9,9 @@ leg=${1:?leg}
 HERE=$(cd "$(dirname "$0")" && pwd)
 export GATE_TARGET=ci GATE_HOME=$RUNNER_TEMP/gate PNM_BIN=$HERE/pnm-ci.sh
 export E2E_RUN_DIR=$LEG_DIR RUN_DIR=$RUNNER_TEMP/gate/run E2E_ONLY_ROWS=${E2E_ONLY_ROWS:-}
+# The Mac's builds also bring the iOS simulator app and the push-on APK; a CI leg job downloads only the push-off APK.
+# Empty, not unset: legs run under `set -u` and copy them (smoke-android: APP=$CAND_APP) even when they don't use them.
+export CAND_APP=${CAND_APP:-} APK_ON=${APK_ON:-}
 mkdir -p "$GATE_HOME" "$RUN_DIR" "$LEG_DIR"
 # The agents pnm may reach: the configuration's three runners, nothing else (pnm-ci.sh). Not the community agent: that
 # widens the identity beyond a runner admin, and no CI leg needs it yet.
