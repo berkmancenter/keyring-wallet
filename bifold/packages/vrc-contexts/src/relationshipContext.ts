@@ -9,6 +9,8 @@
  * JSON-LD canonicalization produces identical results during signing and verification.
  */
 
+import { DTG_REGISTRY_CONTEXT_V1_DOCUMENT } from './dtgRegistryContextV1'
+
 // DTGCredential base context
 export const DTG_CONTEXT_URL = 'https://www.firstperson.network/dtg/v1'
 
@@ -173,7 +175,27 @@ export const REGISTRY_DTG_CONTEXT_SOURCE = String.raw`{
 export const REGISTRY_DTG_CONTEXT_SHA256_HEX = '3e1376acf401016a0162c1cdb31e44a85a7dd56749caed94a1dc0a0be6cbb448'
 export const REGISTRY_DTG_CONTEXT_DIGEST_MULTIBASE = 'zQmSWyCagdx8oPfXn3piSUx6yqVy5MZ7ZG7nW1TC64QvKZh'
 
-export const REGISTRY_DTG_CONTEXT_DOCUMENT = JSON.parse(REGISTRY_DTG_CONTEXT_SOURCE) as {
+/**
+ * The parsed registry v1 context.
+ *
+ * This is `DTG_REGISTRY_CONTEXT_V1_DOCUMENT` itself, not a second parse of the
+ * same bytes. The VSC stack and main arrived at this context independently and
+ * named it differently — `REGISTRY_DTG_CONTEXT_*` here, `DTG_REGISTRY_CONTEXT_V1_*`
+ * in ./dtgRegistryContextV1 — with byte-identical sources and the same sha256
+ * pin (3e1376ac…b448, asserted by both packages' tests).
+ *
+ * Two parses meant two objects for one URL, and document loaders bundling
+ * "the" context could hand back either. That is not hypothetical: with both
+ * copies live, `@bifold/vrc-shared`'s loader served this one while
+ * witness-server's test asserted identity with the other, and the witnessed/1
+ * expansion test failed because its offline loader checks the document it gets
+ * back IS the bundled object. Aliasing restores one object per URL, and the
+ * deep-frozen canonical definition is the one that survives.
+ *
+ * `REGISTRY_DTG_CONTEXT_SOURCE` and the digest constants stay as they are:
+ * their own tests pin them against the file on disk.
+ */
+export const REGISTRY_DTG_CONTEXT_DOCUMENT = DTG_REGISTRY_CONTEXT_V1_DOCUMENT as {
   '@context': Record<string, unknown>
 }
 
