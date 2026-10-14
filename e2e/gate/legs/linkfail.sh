@@ -30,7 +30,7 @@ said() { grep -oE 'swap failed as expected \([a-zA-Z]+\): ".*"' "$1" | head -1 |
 if selected swap-held; then
   echo "  approver set: $(pnm "$RUNNER_MAIN_SLUG" approvals approvers add "$SET" "$RUNNER_A_DID" | tail -1 | cut -c1-80)"; sleep 3
   echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
-  L env EXPECT_REFUSAL=swapHeld galarm 1200 node run-vta-link.js > "$LEG_DIR/held.out" 2>&1; rc=$?
+  L galarm 1200 env EXPECT_REFUSAL=swapHeld node run-vta-link.js > "$LEG_DIR/held.out" 2>&1; rc=$?
   if [ $rc -eq 0 ]; then row swap-held PASS "$(said "$LEG_DIR/held.out")"; else row swap-held FAIL "rc=$rc $(grep -E '❌|Error:' "$LEG_DIR/held.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
   echo "  rule off: $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
 fi
@@ -40,7 +40,7 @@ if selected swap-refused; then
     "decision := {\"decision\": \"deny\", \"explanation\": \"gate: acl/swap-key refused on purpose (#325 row)\"} if {" \
     "  input.request.typeUri == \"$TASK\"" '}' > "$LEG_DIR/deny-swap.rego"
   echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"; sleep 3
-  L env EXPECT_REFUSAL=swapRefused galarm 1200 node run-vta-link.js > "$LEG_DIR/refused.out" 2>&1; rc=$?
+  L galarm 1200 env EXPECT_REFUSAL=swapRefused node run-vta-link.js > "$LEG_DIR/refused.out" 2>&1; rc=$?
   if [ $rc -eq 0 ]; then row swap-refused PASS "$(said "$LEG_DIR/refused.out")"; else row swap-refused FAIL "rc=$rc $(grep -E '❌|Error:' "$LEG_DIR/refused.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
 fi
 # 239 (bifold #355), on VtaLink's scan branch (the address path's AgentCreateError has no Try again): a held swap
@@ -56,8 +56,8 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
     echo "  rule: $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
     if selected swap-held-try-again || selected swap-held-no-retry; then
     HOOK="PNM_BIN=$PNM_BIN $REPO/scripts/openvtc/pnm-locked --vta $RUNNER_MAIN_SLUG approvals remove $TASK | tail -1"
-    L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld TRY_AGAIN_EXPECT=yes NO_RETRY_CHECK=1 TRY_AGAIN_HOOK="$HOOK" \
-      galarm 1500 node run-vta-link.js > "$LEG_DIR/held-scan.out" 2>&1; rc=$?
+    L galarm 1500 env LINK_VIA=scan EXPECT_REFUSAL=swapHeld TRY_AGAIN_EXPECT=yes NO_RETRY_CHECK=1 TRY_AGAIN_HOOK="$HOOK" \
+      node run-vta-link.js > "$LEG_DIR/held-scan.out" 2>&1; rc=$?
     t=$(line "$LEG_DIR/held-scan.out" TRYAGAIN-LINKED); s=$(line "$LEG_DIR/held-scan.out" "TRYAGAIN "); n=$(line "$LEG_DIR/held-scan.out" NO-RETRY)
     a=$(echo "$t" | grep -oE 'ACL [0-9]+ → [0-9]+'); grow=$(echo "$a" | awk '{print ($4 > $2)}')
     row swap-held-try-again "$([[ $s == "TRYAGAIN shown"* && $t == "TRYAGAIN-LINKED yes"* && $grow == 0 ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${t:-no TRYAGAIN-LINKED line}"
@@ -74,8 +74,8 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
       for i in $(seq 1 "${RESCAN_RUNS:-1}"); do
         echo "  rule (again, for rescan run $i): $(pnm "$RUNNER_MAIN_SLUG" approvals require "$TASK" --consent --set "$SET" | tail -1 | cut -c1-80)"; sleep 3
         adb -s $E logcat -c 2>/dev/null; adb -s $E logcat -v threadtime > "$LEG_DIR/held-rescan-$i.logcat" 2>&1 & lc=$!
-        L env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 RESCAN_LIFT_HOOK="$LIFT" RESCAN_WAIT_MS=${RESCAN_WAIT_MS:-240000} \
-          galarm 1500 node run-vta-link.js > "$LEG_DIR/held-rescan-$i.out" 2>&1; rc=$?
+        L galarm 1500 env LINK_VIA=scan EXPECT_REFUSAL=swapHeld RESCAN_AFTER=1 RESCAN_LIFT_HOOK="$LIFT" RESCAN_WAIT_MS=${RESCAN_WAIT_MS:-240000} \
+          node run-vta-link.js > "$LEG_DIR/held-rescan-$i.out" 2>&1; rc=$?
         kill "$lc" 2>/dev/null; wait "$lc" 2>/dev/null
         # The app's own lines: its pids from the log (it is reinstalled each run), plus ReactNativeJS.
         pids=$(grep -oE "Start proc [0-9]+:$BID" "$LEG_DIR/held-rescan-$i.logcat" | grep -oE '[0-9]+' | sort -u | tr '\n' '|' | sed 's/|$//')
@@ -91,8 +91,8 @@ if unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkTryA
   fi
   if selected swap-refused-no-try-again; then
     pnm "$RUNNER_MAIN_SLUG" policy list | grep -q "$POL" || echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"
-    L env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 RESCAN_AFTER=1 \
-      galarm 1200 node run-vta-link.js > "$LEG_DIR/refused-scan.out" 2>&1; rc=$?
+    L galarm 1200 env LINK_VIA=scan EXPECT_REFUSAL=swapRefused TRY_AGAIN_EXPECT=no NO_RETRY_CHECK=1 RESCAN_AFTER=1 \
+      node run-vta-link.js > "$LEG_DIR/refused-scan.out" 2>&1; rc=$?
     s=$(line "$LEG_DIR/refused-scan.out" "TRYAGAIN "); n=$(line "$LEG_DIR/refused-scan.out" NO-RETRY)
     row swap-refused-no-try-again "$([[ $s == "TRYAGAIN absent"* && $n == "NO-RETRY ok"* ]] && echo PASS || echo FAIL)" "rc=$rc · ${s:-no TRYAGAIN line} · ${n:-no NO-RETRY line}"
     x=$(line "$LEG_DIR/refused-scan.out" RESCAN)

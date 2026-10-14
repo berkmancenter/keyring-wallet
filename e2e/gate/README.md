@@ -61,6 +61,8 @@ e2e/gate/gate.sh run --pin <wallet-sha>            # every leg, on that pin's CI
 e2e/gate/gate.sh run --pin <sha> --legs kk,p1      # some legs
 e2e/gate/gate.sh rerun <run-id> --only-failed      # only the rows that FAILed or did not run, same builds
 GATE_RERUN_WHOLE="agents" e2e/gate/gate.sh rerun <run-id> --only-failed   # …but these legs whole (a failed row needs one that passed)
+GATE_RERUN_SKIP="p2" e2e/gate/gate.sh rerun <run-id> --only-failed        # …leaving these legs out (a known cause a rerun cannot change; rerun-skipped= in the meta)
+GATE_LOGCAT=1 e2e/gate/gate.sh rerun <run-id> --only-failed               # every Android leg saves its emulator's whole log (emulator-NNNN.logcat)
 e2e/gate/gate.sh dry --golden                      # these drivers against the shipped build, before a candidate
 e2e/gate/gate.sh watch --pr <n>                    # start `run` when that pin PR merges and its builds finish
 e2e/gate/gate.sh watch --main                      # continuous gating: a run for every new green push build of main

@@ -13,7 +13,7 @@ const gate = readFileSync(path.join(here, 'gate.sh'), 'utf8');
 const rerunLegs = gate.match(/^rerun_legs\(\) \{[\s\S]*?^\}$/m)?.[0];
 
 /** Run a rerun loop over legs.tsv with a run_leg that reads all of stdin, as a real leg's programs can. */
-function rerun(loop) {
+function rerun(loop, env = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'rerun-'));
   try {
     writeFileSync(path.join(dir, 'legs.tsv'), ['kk\t0\t1\t2', 'update-ios\t1\t3\t4', 'p1\t4\t5\t5', 'testreq\t143\t6\t7', 'linkwait\t3\t8\t9', ''].join('\n'));
@@ -24,9 +24,11 @@ function rerun(loop) {
       ${loop}
       rerun_legs "$OLD" "$NEW"
     `;
-    execFileSync('bash', ['-c', script], { env: { ...process.env, OLD: dir, NEW: dir, CALLS: path.join(dir, 'calls') }, input: 'stdin of the caller\n' });
+    execFileSync('bash', ['-c', script], { env: { ...process.env, ...env, OLD: dir, NEW: dir, CALLS: path.join(dir, 'calls') }, input: 'stdin of the caller\n' });
     const calls = path.join(dir, 'calls');
-    return existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n') : [];
+    const meta = path.join(dir, 'meta');
+    const ran = existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n') : [];
+    return env.GATE_RERUN_SKIP === undefined ? ran : { ran, meta: existsSync(meta) ? readFileSync(meta, 'utf8').trim().split('\n') : [] };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -44,4 +46,11 @@ test('the same loop fed on stdin loses the legs after the first (the bug this gu
   const onStdin = rerunLegs.replace(' <&3; do', '; do').replace(/done 3< "\$old\/legs\.tsv"/, 'done < "$old/legs.tsv"');
   assert.notEqual(onStdin, rerunLegs, 'the stdin variant was not made');
   assert.deepEqual(rerun(onStdin), ['update-ios|']);
+});
+
+test('GATE_RERUN_SKIP leaves those legs out and names each failed one in the meta', () => {
+  assert.deepEqual(rerun(rerunLegs, { GATE_RERUN_SKIP: 'p1 linkwait kk' }), {
+    ran: ['update-ios|', 'testreq|'],
+    meta: ['rerun-skipped=p1', 'rerun-skipped=linkwait'],
+  });
 });

@@ -17,6 +17,19 @@ GH_REPO=berkmancenter/keyring-wallet
 # brings its own Android SDK and the emulator (the workflow's emulator step), pnm is the CI build (pnm-linux.yml) with
 # a CI-only identity, and the private configuration is a file the workflow writes from its protected environment.
 is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
+# ios_log_save <sim udid> <file> <since>: the app's own log from a booted simulator, read back with `log show`
+# (smoke-ios's way, which finds the app's lines). <since> is an epoch second (the log from then on: a window that
+# starts at the step it checks, however long the leg took) or a span such as 30m. A `log stream` attached through
+# simctl spawn caught nothing but its header on every run checked (update-ios 1012-2223: 3 lines), so rows that
+# grepped it passed without looking.
+ios_log_save() {
+  local when=(--last "$3")
+  [[ $3 =~ ^[0-9]{9,}$ ]] && when=(--start "$(date -r "$3" '+%Y-%m-%d %H:%M:%S')")
+  xcrun simctl spawn "$1" log show "${when[@]}" --style compact --info --debug \
+    --predicate 'process == "KeyRing" OR subsystem == "com.facebook.react.log"' > "$2" 2>&1
+}
+# The app's lines in a saved log: not the header `log show` prints, nor its own complaints.
+ios_log_app_lines() { local n; n=$(grep -cE ' KeyRing\[|com\.facebook\.react\.log' "$1" 2>/dev/null); echo "${n:-0}"; }
 # galarm <seconds> <command…>: the command in its own process group, the whole group killed past <seconds>. A plain
 # `perl -e 'alarm N; exec @ARGV'` killed only the driver: its Appium (and anything else it started) lived on, and on
 # 1013-1753 an orphaned Appium on :4762 broke the next leg.
@@ -218,9 +231,27 @@ emu_start() {
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
   echo "$out" | tail -1
-  [ "$rc" = 0 ] && return 0
+  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
+}
+# GATE_LOGCAT=1: the emulator's whole log for the leg, in the leg's folder (emulator-NNNN.logcat), so a row's verdict
+# can rest on what the phone logged. A leg's own `logcat -c` empties the buffer, not this stream. A leg's `adb root`
+# restarts adbd and ends the stream (1014-1651: linkwait's log stayed empty), so it reconnects, from the moment it
+# dropped (-T), with a marked line. Stopped by PID in leg_end: the loop, and through its trap the adb it waits on.
+leg_logcat() {
+  [ "${GATE_LOGCAT:-0}" = 1 ] && [ -n "${LEG_DIR:-}" ] || return 0
+  (
+    c=; since=
+    trap '[ -n "$c" ] && kill "$c" 2>/dev/null; exit 0' TERM
+    while :; do
+      adb -s "$1" logcat -v threadtime ${since:+-T "$since"} & c=$!
+      wait "$c"; since=$(date '+%m-%d %H:%M:%S.000')
+      echo "--- gate: logcat stream ended $(date -u +%H:%M:%SZ), reconnecting ---"; sleep 2
+    done
+  ) >> "$LEG_DIR/$1.logcat" 2>&1 &
+  LEG_LOGCAT_PIDS="${LEG_LOGCAT_PIDS:-} $!"
+  echo "logcat: $1 → $1.logcat"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
@@ -380,6 +411,7 @@ leg_end() {
   trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
   galarm_reap "${LEG_NAME:-gate}"
+  local p; for p in ${LEG_LOGCAT_PIDS:-}; do kill "$p" 2>/dev/null; done
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
     LEG_PASS=$(grep -cE '^ROW .* PASS — ' "$LEG_DIR/leg.log"); LEG_FAILS=$(grep -cE '^ROW .* FAIL — ' "$LEG_DIR/leg.log"); LEG_SKIP=$(grep -cE '^ROW .* SKIP — ' "$LEG_DIR/leg.log")
