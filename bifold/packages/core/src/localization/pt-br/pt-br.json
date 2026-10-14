@@ -1152,6 +1152,7 @@
     "CardCheckedOn": "Verificada em",
     "CardUntil": "Válido até",
     "CardFromCommunity": "Este cartão vem de {{community}}. Para abrir mão dele, saia da comunidade.",
+    "CardRoleMember": "Função: membro",
     "CardOpenCommunity": "Abrir {{community}}",
     "LeaveKeepWhat": "O que {{community}} deve guardar?",
     "LeavePurge": "Apagar-me dos registros",

@@ -1307,6 +1307,7 @@
     "CardCheckedOn": "Checked on",
     "CardUntil": "Valid until",
     "CardFromCommunity": "This card comes from {{community}}. To give it up, leave the community.",
+    "CardRoleMember": "Role: member",
     "CardOpenCommunity": "Open {{community}}",
     "LeaveKeepWhat": "What should {{community}} keep?",
     "LeavePurge": "Erase me from its records",
