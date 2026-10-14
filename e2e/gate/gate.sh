@@ -182,6 +182,8 @@ cmd_rerun() {
 rerun_legs() {
   local old=$1 rd=$2 leg rc s e names
   while IFS=$'\t' read -r leg rc s e <&3; do
+    # GATE_RERUN_SKIP="p2 …": legs left out on purpose (a known cause a rerun cannot change), named in the meta.
+    if [[ " ${GATE_RERUN_SKIP:-} " == *" $leg "* ]]; then [ "$rc" = 0 ] || echo "rerun-skipped=$leg" >> "$rd/meta"; continue; fi
     case $rc in
       0) ;;
       # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
