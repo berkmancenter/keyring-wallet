@@ -22,7 +22,7 @@ is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
 # 1013-1753 an orphaned Appium on :4762 broke the next leg.
 # Exits: 142 = the alarm fired (128 + SIGALRM 14), the group killed; 143/130/129 = a stop (TERM/INT/HUP) reached the
 # wrapper, which passes it to the group, waits up to 10 s for it to end, then kills what is left; otherwise the
-# command's own status. Each group is listed in $GATE_HOME/galarm-groups ("<pgid> <leg> <epoch> <command>"), so a group
+# command's own status. Each group is listed in $GATE_HOME/galarm-groups ("<pgid> <leg> <epoch> <leader start> <command>", tab-separated), so a group
 # whose wrapper was killed with the leg (a SIGKILL of the leg's whole group) is still found: leg_end reaps its own
 # leg's, and gate_sweep, at the start of every run, all of them (galarm_reap).
 GALARM_GROUPS=$GATE_HOME/galarm-groups
@@ -33,7 +33,10 @@ galarm() {
     my $t = shift; my $p = fork; die "galarm: fork: $!" unless defined $p;
     if (!$p) { setpgrp(0, 0); exec @ARGV; exit 127 }
     setpgrp($p, $p);
-    if (open(my $g, ">>", $ENV{GALARM_GROUPS})) { print $g "$p $ENV{GALARM_LEG} " . time() . " $ARGV[0]\n"; close $g }
+    # The start time of the leader (ps lstart, fixed at fork, kept across exec) names this group beyond its number:
+    # numbers are reused, and a reap must never kill a stranger that got the same one.
+    my $ls = `ps -o lstart= -p $p`; $ls =~ s/^\s+|\s+$//g;
+    if (open(my $g, ">>", $ENV{GALARM_GROUPS})) { print $g join("\t", $p, $ENV{GALARM_LEG}, time(), $ls, $ARGV[0]) . "\n"; close $g }
     sub stop { my ($sig, $code) = @_; kill $sig, -$p;
       for (1 .. 100) { last if waitpid($p, WNOHANG) > 0; select(undef, undef, undef, 0.1) }
       kill "KILL", -$p; waitpid($p, WNOHANG); exit $code }
@@ -43,15 +46,25 @@ galarm() {
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
   ' "$t" "$@"
 }
-# galarm_reap [leg]: kill every listed group still alive (that leg's, or all), by its process group id, and drop the
-# list's dead lines. Says what it killed.
+# galarm_reap [leg]: kill every listed group still alive (that leg's, or all) whose leader is still the very process
+# galarm started (same PID and start time), and drop every other line. Says what it killed, and any orphan members
+# of a group whose leader has gone (never killed by number: the number may be reused).
 galarm_reap() {
-  local only=${1:-} pg leg ep cmd keep=""
+  local only=${1:-} pg leg ep ls cmd now leader keep=""
   [ -f "$GALARM_GROUPS" ] || return 0
-  while read -r pg leg ep cmd; do
+  while IFS=$'\t' read -r pg leg ep ls cmd; do
     [ -n "$pg" ] || continue
-    if [ -n "$only" ] && [ "$leg" != "$only" ]; then kill -0 -- "-$pg" 2>/dev/null && keep+="$pg $leg $ep $cmd"$'\n'; continue; fi
-    if kill -0 -- "-$pg" 2>/dev/null; then kill -KILL -- "-$pg" 2>/dev/null; echo "  galarm: killed a leftover group $pg ($leg, $cmd, started $(date -u -r "$ep" +%H:%M:%SZ 2>/dev/null || echo "$ep"))"; fi
+    if ! kill -0 "$pg" 2>/dev/null; then
+      # The leader is gone: the number may already be someone else's group. Never kill by it; say if members live.
+      kill -0 -- "-$pg" 2>/dev/null && echo "  galarm: orphan members of group $pg ($leg, $cmd), leader gone, not killed"
+      continue
+    fi
+    now=$(ps -o lstart= -p "$pg" 2>/dev/null | sed 's/^ *//; s/ *$//')
+    # Start times resolve to a second; the leader's command (the one galarm ran) must match too.
+    leader=$(ps -o comm= -p "$pg" 2>/dev/null); leader=${leader##*/}
+    if [ "$now" != "$ls" ] || [ "$leader" != "${cmd##*/}" ]; then continue; fi   # another process now: not ours, dropped
+    if [ -n "$only" ] && [ "$leg" != "$only" ]; then keep+="$pg"$'\t'"$leg"$'\t'"$ep"$'\t'"$ls"$'\t'"$cmd"$'\n'; continue; fi
+    kill -KILL -- "-$pg" 2>/dev/null && echo "  galarm: killed a leftover group $pg ($leg, $cmd, started $ls)"
   done < "$GALARM_GROUPS"
   printf '%s' "$keep" > "$GALARM_GROUPS"
 }

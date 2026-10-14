@@ -63,3 +63,25 @@ test('a group orphaned by a SIGKILL of the whole leg is reaped from the list', a
   await new Promise((r2) => setTimeout(r2, 500));
   assert.equal(left(marker), '');
 });
+
+// Review on #423: group numbers are reused. A listed group that ended, whose number a stranger now holds, is never
+// killed: the leader's start time no longer matches. (The reuse can't be forced, so the line is pointed at a
+// stranger's group.)
+test('a reused group number is not killed: the leader start time does not match', async () => {
+  const fs = await import('node:fs');
+  const home = fs.mkdtempSync(path.join((await import('node:os')).tmpdir(), 'galarm-home-'));
+  const r1 = spawnSync('bash', ['-c', `GATE_TARGET=ci GATE_HOME="${home}" . "${LIB}"; LEG_NAME=t; galarm 10 bash -c 'exit 0'`]);
+  assert.equal(r1.status, 0);
+  const line = fs.readFileSync(path.join(home, 'galarm-groups'), 'utf8').trim().split('\n')[0].split('\t');
+  const marker = `galarm-${process.pid}-stranger`;
+  await new Promise((r) => setTimeout(r, 1500)); // a later second: start times resolve to one
+  const stranger = spawn('perl', ['-e', 'setpgrp(0,0); sleep 30', marker], { stdio: 'ignore', detached: true });
+  await new Promise((r) => setTimeout(r, 500));
+  line[0] = String(stranger.pid); // the old line, its number now the stranger's
+  fs.writeFileSync(path.join(home, 'galarm-groups'), line.join('\t') + '\n');
+  const r = spawnSync('bash', ['-c', `GATE_TARGET=ci GATE_HOME="${home}" . "${LIB}"; galarm_reap`], { encoding: 'utf8' });
+  assert.doesNotMatch(r.stdout, /killed/);
+  assert.notEqual(left(marker), '', 'the stranger lives');
+  assert.equal(fs.readFileSync(path.join(home, 'galarm-groups'), 'utf8'), '', 'the stale line is dropped');
+  process.kill(stranger.pid, 'SIGKILL');
+});
