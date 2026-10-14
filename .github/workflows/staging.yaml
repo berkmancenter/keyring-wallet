@@ -980,8 +980,9 @@ jobs:
           path: export/KeyRing.ipa
           retention-days: 30
 
+      # Runs on every event. It once ran on a push only, so a build run by hand
+      # (every release/* build) shipped a version number as its notes (247, 248).
       - name: Summarise what this build adds
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
         shell: bash
         run: |
