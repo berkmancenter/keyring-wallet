@@ -12,6 +12,16 @@ interface IASEnvironmentProps {
   shouldDismissModal: () => void
 }
 
+/** The row's testID per environment: the name in lower case, as before, now spelled out. */
+export const IASEnvironmentIds = {
+  Production: 'production',
+  Development: 'development',
+  Test: 'test',
+} as const
+
+const environmentTestId = (name: string): string =>
+  IASEnvironmentIds[name as keyof typeof IASEnvironmentIds] ?? name.toLocaleLowerCase()
+
 const IASEnvironmentScreen: React.FC<IASEnvironmentProps> = ({ shouldDismissModal }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme, SettingsTheme } = useTheme()
@@ -72,7 +82,7 @@ const IASEnvironmentScreen: React.FC<IASEnvironmentProps> = ({ shouldDismissModa
                 }}
                 isChecked={name === store.developer.environment.name}
                 disableBuiltInState
-                testID={testIdWithKey(name.toLocaleLowerCase())}
+                testID={testIdWithKey(environmentTestId(name))}
               />
             </View>
           )

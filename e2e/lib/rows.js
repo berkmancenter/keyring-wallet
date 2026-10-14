@@ -4,7 +4,7 @@
  *
  * Lines a leg prints (the runner parses only these, and the exit code):
  *
- *   HEADS <label> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8>
+ *   HEADS <label> wallet=<sha8> bifold=<sha8> build=<sha12> harness=<sha8> [caps=<n>]
  *   ROW <name> PASS — <detail>
  *   ROW <name> FAIL — <detail>
  *   ROW <name> SKIP — <reason>
@@ -17,13 +17,29 @@
  *
  * Row names must be stable across runs — no times or DIDs in a name, only in
  * the detail — because `E2E_ONLY_ROWS` (the runner's --only-failed) selects
- * rows by exact name.
+ * rows by exact name. A row left out of the selection is reported as
+ * "not selected" and does not run; a row that `needs` it still runs, since it
+ * was left out for passing last time. `caps=<n>` on HEADS is how many of the
+ * manifests' testID keys the build holds (lib/buildHas.js).
  *
- *   const rows = createRows({ label: "approvals", driver: d });
- *   rows.heads({ wallet, bifold, build, harness });
+ * A row that needs another is declared once, in the `needs` map given to
+ * createRows: the dependent SKIPs when the need did not pass, and selecting the
+ * dependent (E2E_ONLY_ROWS) selects its needs too, all the way up, so a rerun
+ * of the dependent alone still runs what it needs. A need that is still not
+ * selected (it is outside the rerun's whole chain) counts as met. A row for a
+ * feature a build may lack SKIPs with the reason `skip` gives.
+ *
+ *   const rows = createRows({ label: "approvals", driver: d, needs: { "test request held": ["rule shows as this phone's own"] } });
+ *   rows.heads({ wallet, bifold, build, harness, caps });
  *   await rows.row("rule shows as this phone's own", async () => ({ ok: on, detail: `switch ${on}` }));
- *   await rows.row("test request held", check, { needs: ["rule shows as this phone's own"] });
+ *   await rows.row("test request held", check);
+ *   await rows.row("sections ruled", check, { skip: buildLacks("AgentSectionRule", { platform }) });
  *   try { … } catch (err) { rows.fatal(err) } finally { rows.summary(); process.exitCode = rows.exitCode(); }
+ *
+ * The flow's actions (taps, pnm calls) belong outside `fn`, which only reads
+ * what they left on screen: a row that is not selected must not stop the
+ * actions the rows after it depend on. `rows.outcome(name)` says how a row
+ * ended, for an action that is pointless after a FAIL.
  */
 import { runPath } from "./runDir.js";
 
@@ -52,6 +68,7 @@ export function selectedRows(env = process.env) {
 }
 
 /**
+ * `needs` maps a row's name to the names it needs (`{ dependent: [need, …] }`).
  * `driver`, when given (or set later with `setDriver`), is used for a failing
  * row's screenshot and page source, best effort. `log`, `now`, `only` and
  * `capture` are for tests.
@@ -59,6 +76,7 @@ export function selectedRows(env = process.env) {
 export function createRows({
   label,
   driver,
+  needs: needsOf = {},
   log = console.log,
   now = Date.now,
   only = selectedRows(),
@@ -67,6 +85,8 @@ export function createRows({
   if (!label) throw new Error("createRows: no label (the leg's name)");
   const started = now();
   const results = new Map();
+  const notSelected = new Set();
+  const selected = only && withNeeds(only, needsOf);
   let broken = false;
   let current = driver;
 
@@ -80,22 +100,28 @@ export function createRows({
       current = d;
     },
 
-    /** The heads this leg runs on; pass what the driver knows. */
-    heads({ wallet = "?", bifold = "?", build = "?", harness = "?" } = {}) {
+    /** The heads this leg runs on; pass what the driver knows. `caps`: a count, or buildCaps()'s { present }. */
+    heads({ wallet = "?", bifold = "?", build = "?", harness = "?", caps } = {}) {
+      const n = caps === undefined || caps === null ? undefined : typeof caps === "object" ? caps.present : caps;
       log(
-        `HEADS ${label} wallet=${String(wallet).slice(0, 8)} bifold=${String(bifold).slice(0, 8)} build=${String(build).slice(0, 12)} harness=${String(harness).slice(0, 8)}`
+        `HEADS ${label} wallet=${String(wallet).slice(0, 8)} bifold=${String(bifold).slice(0, 8)} build=${String(build).slice(0, 12)} harness=${String(harness).slice(0, 8)}${n === undefined ? "" : ` caps=${n}`}`
       );
     },
 
     /**
      * Run one row. `fn` passes by returning true (or nothing), fails by
      * returning false or `{ ok: false }`, or by throwing; `{ ok, detail }` says
-     * what was seen. It is skipped, without running, when E2E_ONLY_ROWS does not
-     * name it, or when a row it `needs` did not pass. Never throws.
+     * what was seen. It is skipped, without running, when E2E_ONLY_ROWS names
+     * neither it nor a row that needs it, when `skip` gives a reason (a build
+     * that lacks the feature: `buildLacks(id)`), or when a row it needs did not
+     * pass; a need that was not selected counts as met. `needs` here, when
+     * given, replaces the map's entry for this row — for the SKIP only, not for
+     * the selection, so declare the needs in the map. Never throws.
      */
-    async row(name, fn, { needs = [] } = {}) {
-      if (only && !only.has(name)) return record(name, "SKIP", "not selected"), "SKIP";
-      const blocked = needs.find((need) => results.get(need) !== "PASS");
+    async row(name, fn, { needs = needsOf[name] ?? [], skip } = {}) {
+      if (selected && !selected.has(name)) return notSelected.add(name), record(name, "SKIP", "not selected"), "SKIP";
+      if (skip) return record(name, "SKIP", String(skip)), "SKIP";
+      const blocked = needs.find((need) => results.get(need) !== "PASS" && !notSelected.has(need));
       if (blocked !== undefined) {
         const was = results.get(blocked);
         return record(name, "SKIP", `needs "${blocked}", which ${was ? `was ${was}` : "did not run"}`), "SKIP";
@@ -124,6 +150,11 @@ export function createRows({
       record(name, "SKIP", reason);
     },
 
+    /** How a row ended: "PASS", "FAIL", "SKIP", or undefined when it has not run. */
+    outcome(name) {
+      return results.get(name);
+    },
+
     /** The leg broke outside a row: the runner reruns it whole. */
     fatal(err) {
       broken = true;
@@ -144,6 +175,18 @@ export function createRows({
       return out;
     },
   };
+}
+
+/** The selected names and, through the `needs` map, every name they need: what a rerun must run. */
+export function withNeeds(only, needsOf) {
+  const out = new Set();
+  const walk = (name) => {
+    if (out.has(name)) return;
+    out.add(name);
+    for (const need of needsOf[name] ?? []) walk(need);
+  };
+  for (const name of only) walk(name);
+  return out;
 }
 
 /** A failing row's screenshot and page source, into the run's directory. */

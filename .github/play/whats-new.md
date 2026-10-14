@@ -1,6 +1,6 @@
-• Interrupted links resume with the same key; refused links stay stopped.
-• Linking survives the app locking; expired host codes are flagged first.
-• Agents already on this phone are refused; Done opens the agent's page.
-• Cards from unlinked agents are hidden.
-• Hidden-vetting communities show their vetting option again.
-• Join reaches a second community; another community's ticket waits only during a join.
+• Sign in to community websites: scan the site's QR code, check the two-digit number, approve with your fingerprint. Needs the next agent release; until then Keyring says your agent needs an update.
+• A vetter in two communities gets the right desk for each.
+• My devices lists every key on your agent.
+• Keyring suggests a phone name when you grant access by hand.
+• A link held for an approval says so.
+• "Join again" sits at the top after a refusal.
