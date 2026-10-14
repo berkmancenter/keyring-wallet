@@ -108,6 +108,8 @@ ios)
   ;;
 android)
   APK=$BUILD; E=$DEV
+  # This leg uninstalls with adb: only ever an emulator, never a person's phone (lib/prodGuard.js on the JS side).
+  [[ $E =~ ^emulator-[0-9]{4}$ ]] || { echo "smoke-ci: refusing $E: not an emulator serial (this leg uninstalls the app)"; exit 2; }
   LEG_HEADS_EXTRA="device=\"${DEVNAME:-$E}\" runtime=${DEVVER:-$(adb -s "$E" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')}"
   leg_begin smoke-ci-android "$(shasum -a 256 "$APK" | cut -c1-12)"
   echo "SMOKE Android (CI) start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' "$MANIFEST" | tr '\n' ' ')· APK $(shasum -a 256 "$APK" | cut -c1-12) · $E $(adb -s "$E" shell getprop ro.product.model 2>/dev/null | tr -d '\r') API $(adb -s "$E" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"

@@ -11,6 +11,7 @@
 // The peer wallet's platform is injected by the caller (iOS simulator or a
 // second Android emulator) — nothing here depends on which.
 import { execSync } from "node:child_process";
+import { assertResetAllowed } from "./prodGuard.js";
 import { remote } from "webdriverio";
 
 import {
@@ -134,6 +135,10 @@ export async function runStoreMigration({ baselineApk, createPeerSession, primeP
 
     // ---------- Phase 1: populate the old-format store ----------
     console.log(`[e2e] installing BASELINE apk: ${baselineApk}`);
+    // adb picks the device here (no serial): ask which, and never uninstall the production app from a person's own
+    // phone (prodGuard.js).
+    const serial = (() => { try { return adb("get-serialno").trim(); } catch { return ""; } })();
+    assertResetAllowed({ platform: "android", udid: serial || "unknown-device", bundleId: APP_ID, action: "uninstall" });
     try {
       adb(`uninstall ${APP_ID}`);
     } catch {
