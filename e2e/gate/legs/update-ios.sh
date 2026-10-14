@@ -26,14 +26,16 @@ IOS_APP=$PREV_APP E2E_KEEP_APP=1 perl -e 'alarm 1500; exec @ARGV' node run-vta-l
 row update-prev-linked PASS "previous build ${PREV_W:0:8} linked to the main runner"
 wda_stop; xcrun simctl terminate "$SIM" "$BID" 2>/dev/null
 # The update: the candidate over the installed app, container kept.
-xcrun simctl spawn "$SIM" log stream --style compact --level debug --predicate 'process == "KeyRing"' > "$LEG_DIR/device-after-update.log" 2>&1 & LS=$!
+UPD_T=$(date +%s)
 xcrun simctl install "$SIM" "$NEW_APP" || broken "the candidate did not install over the previous build"
 echo "installed over: $(shasum -a 256 "$(xcrun simctl get_app_container "$SIM" "$BID")/main.jsbundle" | cut -c1-12)"
 C_DID= perl -e 'alarm 600; exec @ARGV' node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1   # no join on iOS here: no community to check
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
-sleep 3; kill "$LS" 2>/dev/null; LS=
-n=$(grep -c "not found in backend" "$LEG_DIR/device-after-update.log")
-if [ "$n" -eq 0 ]; then row update-no-missing-key PASS "no \"not found in backend\" in the device log after the update ($(wc -l < "$LEG_DIR/device-after-update.log" | tr -d ' ') lines)"
+ios_log_save "$SIM" "$LEG_DIR/device-after-update.log" "$(( ($(date +%s) - UPD_T) / 60 + 2 ))m"
+n=$(grep -c "not found in backend" "$LEG_DIR/device-after-update.log"); app=$(ios_log_app_lines "$LEG_DIR/device-after-update.log")
+# An empty log is no evidence: until 10-14 this row passed on a 3-line stream header with no app line in it.
+if [ "$app" -lt 20 ]; then row update-no-missing-key FAIL "the device log has $app app line(s): the check could not look (log capture, not the app)"
+elif [ "$n" -eq 0 ]; then row update-no-missing-key PASS "no \"not found in backend\" in $app app lines of the device log after the update"
 else row update-no-missing-key FAIL "$n \"not found in backend\" line(s); first: $(grep -m1 'not found in backend' "$LEG_DIR/device-after-update.log" | cut -c1-200)"
   grep -n -B5 -A5 -m3 "not found in backend" "$LEG_DIR/device-after-update.log" | cut -c1-260; fi

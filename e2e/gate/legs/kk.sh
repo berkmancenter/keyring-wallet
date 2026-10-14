@@ -11,6 +11,9 @@ leg_begin kk "$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)" "$CAND_AP
 T0=$(stamp)
 wda_stop() { local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$1" | grep -v grep | awk '{print $1}'); do kill "$p"; done; }
 fin() {
+  # Both apps' own logs, read back before the simulators go down: the evidence for any join or apply failure.
+  ios_log_save "$APPLICANT_SIM_UDID" "$LEG_DIR/applicant-ios.log" 45m; ios_log_save "$VETTER_SIM_UDID" "$LEG_DIR/vetter-ios.log" 45m
+  echo "ios logs: applicant $(ios_log_app_lines "$LEG_DIR/applicant-ios.log") app lines, vetter $(ios_log_app_lines "$LEG_DIR/vetter-ios.log")"
   wda_stop "$VETTER_SIM_UDID"; wda_stop "$APPLICANT_SIM_UDID"; sim_down "$VETTER_SIM_UDID"; sim_down "$APPLICANT_SIM_UDID"
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
 }
