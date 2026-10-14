@@ -268,16 +268,20 @@ try {
   log(`request held: ${lastLine(asked)}`);
   if (notifCheck) {
     let record = "";
-    for (const until = Date.now() + 90000; Date.now() < until && !record; await sleep(3000)) {
+    // Up to 2 min: under load the app can ANR on FCM's receive broadcast and the wake is redelivered ~1.5 min later
+    // (push lane, 10-11). Home, never force-stop: a force-stopped app gets no FCM delivery until opened.
+    for (const until = Date.now() + 120000; Date.now() < until && !record; await sleep(3000)) {
       record = adb("shell", "dumpsys", "notification", "--noredact").split("\n").find((l) => l.includes(`pkg=${BID}`) && /channel=/.test(l)) ?? "";
     }
     const channel = (record.match(/channel=([^\s)]+)/) || [])[1] ?? "(no notification)";
+    // when= says which wake this is: wakes share the collapse id keyring-wake, so a later one replaces an earlier.
+    const when = (record.match(/when=(\d+)/) || [])[1] ?? "?";
     const all = adb("shell", "dumpsys", "notification");
     const def = (all.match(/NotificationChannel\{mId='keyring_wake'[^}]*\}/) || [""])[0];
     const importance = Number((def.match(/mImportance=(\d+)/) || [])[1] ?? 0);
     const name = (def.match(/mName=([^,]+)/) || [])[1] ?? "";
     await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
-      `wake posted on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+      `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
     await d.activateApp(BID);
     await sleep(2000);
   }
