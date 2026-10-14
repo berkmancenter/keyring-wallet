@@ -285,6 +285,9 @@ export function iosCaps() {
     "appium:wdaLaunchTimeout": 180000,
     ...prebuiltWdaCaps("sim"),
     "appium:simulatorStartupTimeout": 300000,
+    // E2E_IOS_HEADLESS=1: no Simulator window. Xcode 27 ships no Simulator.app, and without isHeadless the xcuitest
+    // driver (11.10.0) stops at once ("…/Developer/Applications/Simulator.app does not exist"; Mac mini, 10-14).
+    ...(process.env.E2E_IOS_HEADLESS === "1" ? { "appium:isHeadless": true } : {}),
     // A second worktree's Metro on another host port: a simulator shares the
     // host's localhost, so point the app at it with the NSUserDefaults key
     // React Native's bundle URL provider reads (RCT_jsLocation), passed as a
