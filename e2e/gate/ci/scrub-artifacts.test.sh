@@ -14,6 +14,7 @@ E
 mkdir -p "$T/home"
 rec='{"client_did":"did:key:z6MkPlantedClientDid","private_key":"zPlantedPrivateKeyMultibase0123","vta_did":"did:webvh:planted-runner-did","access_token":"planted-access-token-0123456789","access_expires_at":1,"token_origin":"https://planted.example.invalid","needs_rotation":false,"future_field":"planted-unknown-field-value"}'
 jq -n --arg r "$rec" '{"keyring-ci-gate-farm3-runner-test": $r}' > "$T/home/sessions.json"
+printf 'default_vta = "keyring-ci-gate-farm3-runner-test"\n\n[vtas.keyring-ci-gate-farm3-runner-test]\nname = "keyring-ci-gate farm3-runner-test"\nvta_did = "did:webvh:planted-runner-did"\nurl = "https://planted.example.invalid"\n' > "$T/home/config.toml"
 # 1. identifiers only: redacted in text, binary removed, exit 0
 mkdir -p "$T/a"; echo "linked farm3-runner-test at https://planted.example.invalid/vta (did:webvh:planted-runner-did)" > "$T/a/leg.log"
 printf 'PNG\0\0did:webvh:planted-runner-did\0' > "$T/a/shot.png"
@@ -41,4 +42,24 @@ out=$("$here/scrub-artifacts.sh" "$T/f" "$T/ci.env" "$T/home"); rc=$?
 mkdir -p "$T/e"; echo "acl: did:key:z6MkPlantedClientDid on https://planted.example.invalid" > "$T/e/link.out"
 out=$("$here/scrub-artifacts.sh" "$T/e" "$T/ci.env" "$T/home"); rc=$?
 [ $rc = 0 ] && ! grep -q Planted "$T/e/link.out" && ok "client_did and token_origin redacted: $(cat "$T/e/link.out")" || bad "session identifiers: exit $rc, $(cat "$T/e/link.out")"
+# 5. the pnm home fails closed (Prague's review of #429): a fresh home per case
+home2() { local h=$T/$1; rm -rf "$h"; mkdir -p "$h"; cp "$T/home/sessions.json" "$T/home/config.toml" "$h/"; echo "$h"; }
+mkdir -p "$T/g"; echo "nothing secret here" > "$T/g/leg.log"
+h=$(home2 h-notjson); echo "not json at all" > "$h/sessions.json"
+out=$("$here/scrub-artifacts.sh" "$T/g" "$T/ci.env" "$h"); rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q 'cannot read the pnm sessions' && ok "sessions.json not JSON: exit 1" || bad "sessions.json not JSON: exit $rc ($out)"
+h=$(home2 h-norecord); echo '{"x": "{}"}' > "$h/sessions.json"
+out=$("$here/scrub-artifacts.sh" "$T/g" "$T/ci.env" "$h"); rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q 'no record with a client_did' && ok "sessions.json with no client_did: exit 1" || bad "no client_did: exit $rc ($out)"
+h=$(home2 h-keyfile); printf 'k\0planted-key-file-material-0123456789\0' > "$h/keys.bin"
+mkdir -p "$T/i"; echo "dump planted-key-file-material-0123456789" > "$T/i/leg.log"
+out=$("$here/scrub-artifacts.sh" "$T/i" "$T/ci.env" "$h"); rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q 'PNM_HOME.keys.bin' && ok "another PNM_HOME file's value in the leg: exit 1" || bad "keys.bin: exit $rc ($out)"
+h=$(home2 h-cfgsecret); echo 'api_token = "planted-config-token-0123456789"' >> "$h/config.toml"
+mkdir -p "$T/j"; echo "cfg planted-config-token-0123456789" > "$T/j/leg.log"
+out=$("$here/scrub-artifacts.sh" "$T/j" "$T/ci.env" "$h"); rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q 'PNM_CONFIG.api_token' && ok "unknown config.toml key: exit 1" || bad "config key: exit $rc ($out)"
+mkdir -p "$T/k"; echo "Name: keyring-ci-gate farm3-runner-test" > "$T/k/leg.log"
+out=$("$here/scrub-artifacts.sh" "$T/k" "$T/ci.env" "$T/home"); rc=$?
+[ $rc = 0 ] && ! grep -q 'runner-test' "$T/k/leg.log" && ok "config.toml name redacted: $(cat "$T/k/leg.log")" || bad "config name: exit $rc, $(cat "$T/k/leg.log")"
 exit $fails
