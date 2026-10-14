@@ -13,7 +13,7 @@ import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { VtaClaimError, type ClaimedVta, type RedeemState } from '../module/vtaClaim'
 import type { VtaClaimSteps } from '../module/vtaClaimSteps'
-import { claimedDomainPath, VtaClaimFlow } from '../screens/VtaClaim'
+import { VtaClaimFlow } from '../screens/VtaClaim'
 import { VtaClaimIds } from '../screens/VtaClaim.ids'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -166,21 +166,6 @@ describe('the one-scan agent setup', () => {
     await press(tree, VtaClaimIds.continue)
     await press(tree, VtaClaimIds.codeCancel)
     expect(onClose).toHaveBeenCalled()
-  })
-})
-
-describe('who a code says it is from (VTI-LNK-050)', () => {
-  it.each([
-    ['did:webvh:QmScid:dids.example.org:farm-auth', 'dids.example.org/farm-auth'],
-    ['did:webvh:QmScid:dids.example.org', 'dids.example.org'],
-    ['did:webvh:QmScid:dids.example.org%3A8443:a:b', 'dids.example.org:8443/a/b'],
-    ['did:web:example.org:users:x', 'example.org/users/x'],
-    ['did:web:example.org', 'example.org'],
-  ])('%s → %s', (did, shown) => expect(claimedDomainPath(did)).toBe(shown))
-
-  it('a DID with no domain shows none', () => {
-    expect(claimedDomainPath('did:key:z6MkExampleClaimantKey')).toBeUndefined()
-    expect(claimedDomainPath('did:peer:2.Vz6Mk')).toBeUndefined()
   })
 })
 

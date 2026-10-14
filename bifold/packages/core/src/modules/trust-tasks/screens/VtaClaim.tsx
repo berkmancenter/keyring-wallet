@@ -26,33 +26,11 @@ import { AgentAlreadyOnPhone } from '../module/vtaAgent'
 import { VtaClaimError, type ClaimedVta, type RedeemState, type VtaClaimFailure } from '../module/vtaClaim'
 import { agentVtaClaimSteps, pendingVtaClaimLink, vtaClaimOf, type VtaClaimSteps } from '../module/vtaClaimSteps'
 
-import { didHost } from './communityName'
+import { didDomainPath, didHost } from './communityName'
 import { DidDetails } from './DidDetails'
 import { VtaClaimIds } from './VtaClaim.ids'
 
 const id = (key: string) => testIdWithKey(key)
-
-/**
- * Who a code says it is from, before anything is resolved (VTI-LNK-050): the
- * domain of a host-named DID, followed by its path where it has one —
- * `did:webvh:<SCID>:dids.example.org:farm-auth` is `dids.example.org/farm-auth`,
- * `did:web:example.org:a` is `example.org/a`. Undefined for a DID with no
- * domain. Local until communityName's didDomainPath lands, then swapped for it.
- */
-export function claimedDomainPath(did: string): string | undefined {
-  const parts = did.split(':')
-  if (parts[0] !== 'did') return undefined
-  const rest = parts[1] === 'webvh' ? parts.slice(3) : parts[1] === 'web' ? parts.slice(2) : []
-  if (!rest.length || !rest[0]) return undefined
-  const [domain, ...path] = rest.map((p) => {
-    try {
-      return decodeURIComponent(p)
-    } catch {
-      return p
-    }
-  })
-  return [domain, ...path].join('/')
-}
 
 /** Every way the screen can end besides a ready agent; each has words (`VtaClaim.Failure.<reason>`). */
 export type VtaClaimEndReason =
@@ -120,7 +98,7 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
       kind: 'confirm',
       trigger: read,
       host: didHost(read.from) ?? read.from,
-      where: claimedDomainPath(read.from),
+      where: didDomainPath(read.from),
     })
   }, [link])
 
