@@ -110,7 +110,9 @@ describe('1. confirm, before anything is sent', () => {
     expect(steps.community).toHaveBeenCalledWith(VTC)
     expect(tree.getByTestId(id(SignInIds.confirm))).toBeTruthy()
     expect(tree.getByTestId(id(SignInIds.community))).toHaveTextContent('Test Community')
-    expect(tree.getByTestId(id(SignInIds.host))).toHaveTextContent('webvh.storm.ws')
+    // VTI-LNK-050: the domain and then the path, marked unverified.
+    expect(tree.getByTestId(id(SignInIds.host))).toHaveTextContent('webvh.storm.ws/test-vtc')
+    expect(tree.getByTestId(id(SignInIds.unverified))).toHaveTextContent('SignIn.Unverified')
     expect(tree.getByText('SignIn.ConfirmTitle')).toBeTruthy()
     expect(steps.claim).not.toHaveBeenCalled()
 

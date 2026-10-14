@@ -775,6 +775,7 @@
     "SignInSessionOnly": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSystem": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInTimeLeft": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInUnverified": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInWebsite": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "Skip": ["src/screens/Onboarding.tsx"],
     "SlowLoadBody": ["src/components/views/LoadingPlaceholder.tsx"],

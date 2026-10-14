@@ -2,9 +2,10 @@
  * signInSteps — what the sign-in screen calls, behind one object, so the
  * screen is tested with fakes and the protocol stays in `oobSignIn`.
  *
- * `community` reads Keyring's own records only (no network): whether this
- * phone holds a current membership of the community, and the name it knows
- * it by. Every other step is a protocol call: `claim` (claimSignIn),
+ * `community` reads Keyring's own records: whether this phone holds a
+ * current membership of the community, and the name it knows it by. Only for
+ * a member with no name on record does it read the name the community
+ * publishes; for any other community nothing goes out before Continue. Every other step is a protocol call: `claim` (claimSignIn),
  * `identifyAndProve`, `approve` (approveSignIn) and `cancel` (cancelSignIn).
  *
  * @module trust-tasks/module/signInSteps
@@ -44,7 +45,7 @@ export type { ProvedSignIn, SignInRequester } from './oobSignInAgent'
 export type SignInEndReason = SignInFailure
 
 export type SignInSteps = {
-  /** Local only: membership and the recorded name. Never reaches the network. */
+  /** Membership and the recorded name; the published name only for a member with none on record. */
   community: (vtcDid: string) => Promise<{ member: boolean; name?: string }>
   claim: (link: string) => Promise<ClaimedSignIn>
   identifyAndProve: (claimed: ClaimedSignIn, enteredNumber: string) => Promise<ProvedSignIn>
@@ -60,9 +61,11 @@ async function recordedCommunity(agent: Agent, vtcDid: string): Promise<{ member
   const name =
     communityTarget.publishedNameOf(vtcDid) ??
     (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)?.name ??
-    // A community this phone never joined has no name on record: the one it
-    // publishes, read once, so a sign-in from it is not shown as a raw DID (IN-249).
-    (await publishedName(agent, vtcDid))
+    // A community this phone is a member of but has no name on record for:
+    // the one it publishes, read once, so it is not shown as a raw DID
+    // (IN-249). Only for a member: before the person continues, nothing is
+    // resolved for a community the phone does not know (VTI-LNK-050, 051).
+    (member ? await publishedName(agent, vtcDid) : undefined)
   return { member, name }
 }
 

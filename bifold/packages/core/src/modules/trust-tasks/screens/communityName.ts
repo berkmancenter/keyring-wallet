@@ -148,6 +148,24 @@ export function didPathName(did: string): string | undefined {
 }
 
 /**
+ * Where a DID says it lives, for people, before anything is resolved
+ * (VTI-LNK-050): its domain, then its path where it has one —
+ * `did:webvh:<SCID>:dids.example.org:farm-auth` reads
+ * `dids.example.org/farm-auth`. Read from the DID alone, so it is only what
+ * the DID claims. did:webvh and did:web only: any other DID has no domain.
+ */
+export function didDomainPath(did: string): string | undefined {
+  const parts = did.split(':')
+  const rest = parts[1] === 'webvh' ? parts.slice(3) : parts[1] === 'web' ? parts.slice(2) : []
+  if (!rest[0]) return undefined
+  try {
+    return rest.map((part) => decodeURIComponent(part)).join('/')
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * What to call a community where several stand side by side — the cards of
  * "Your agent", one per community — so that two unnamed ones never both read
  * "a community" (2026-09-26, a vetter holding two).
