@@ -1,13 +1,14 @@
 # Data Rooms in Keyring — Starting-Point Plan
 
-**Status:** Draft starting point. Not a commitment to implement, and **not yet filed** under `keyring-wallet/docs/plans/`. It is written to the conventions in that directory's `CLAUDE.md` so it can be moved there with little rework (see §10).
+**Status:** Draft — a starting point, not a commitment to implement. What remains before it leaves draft is §10.
+**Subtasks:** [`rooms_s3_storage_subtask.md`](./openvtc-rooms-plan/rooms_s3_storage_subtask.md) — host-side S3 storage for record bodies. [`rooms_encrypted_spaces_subtask.md`](./openvtc-rooms-plan/rooms_encrypted_spaces_subtask.md) — the Encrypted Spaces merk as a backend behind a proposed `RecordStore` seam (none exists at the pin), and its fit for rooms' storage and sync. [`rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging and linked files as a profile on rooms.
 **Scope:** Keyring as a **member client** of VTI data rooms — reading, writing and curating records, and holding an agent's access to them. Owner/host operation is out of scope except where §5 says the wallet must cope with it.
 **Parent:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) — rooms are a new consumer of the Trust Task operation layer that plan adopts (its §5).
 **Siblings:** [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) — the VTA client this plan extends (rooms are a PNM surface, §3 below). [`trust_tasks_subtask.md`](./openvtc-integration-plan/trust_tasks_subtask.md) — the VRC/witness recast, which §6's admission-evidence idea depends on. [`locality-plan.md`](./locality-plan.md) — co-presence evidence, a candidate admission gate (§6).
-**Reasoning:** none yet. When a decision in §9 is made, record it in a dated companion, not here.
-**Baseline:** every claim is measured against the pinned clone `external/verifiable-trust-infrastructure` at **afcf2470** (2026-09-29, `scripts/openvtc/PINS.json`) unless marked otherwise, and carries a file path. A second pin, `verifiable-trust-infrastructure-v047` at 439a0333 (2026-10-01), also contains `room-host`, `vti-rooms`, `vti-rooms-dtg` and `vti-rooms-wasm`. Re-verify after any pin advance.
+**Reasoning:** [`2026-10-06-bam.md`](./openvtc-rooms-plan/2026-10-06-bam.md) — the Encrypted Spaces assessment, input to the Encrypted Spaces subtask. [`2026-10-13-bam.md`](./openvtc-rooms-plan/2026-10-13-bam.md) — the re-baselining findings at 49f5f1be, including the Keyring-side re-check in §5a. Record each §9 decision in a dated companion, not here.
+**Baseline:** every claim is measured against the pinned clone `external/verifiable-trust-infrastructure` at **49f5f1be** (tag `VTI-Eucalyptus`, 2026-10-07; vta-service 0.56.0, vta-sdk 0.64.2; `scripts/openvtc/PINS.json`) unless marked otherwise, and carries a file path; `VTI/` below means that pin. A second pin, `verifiable-trust-infrastructure-v047` at 439a0333 (2026-10-01, tag `vta-service-v0.47.0`), also contains `room-host`, `vti-rooms`, `vti-rooms-dtg` and `vti-rooms-wasm`; it exists for `card-verify-v047` and is not a rooms baseline. The Keyring side (§5a) is measured at `origin/main` 0da7eead with its `bifold` submodule at d86785b4. Re-verify after any pin advance.
 
-**Verification note.** The first survey of rooms was read from a sibling checkout (`~/code/verifiable-trust-infrastructure`, 121 commits ahead of afcf2470), which `CLAUDE.md` warns against. It was then cross-checked against the pin: the operator guide `docs/02-vta/data-rooms.md` and the joining, read-through, verified-reads and epoch-anchoring notes are **byte-identical** in the pin; `docs/05-design-notes/data-rooms.md` differs by 19 lines that were not examined; and every room Trust Task URI named below appears in the pin's Rust sources. Nothing in this document depends on the 121 later commits. Re-confirm the 19-line difference before relying on the design note.
+**Verification note.** Every claim below is read from the pin's git objects (`git show 49f5f1be:<path>`), not from a working tree; the `external/` clone's checkout can lag its pin. Room credentials at the pin carry an `issuerScope` (`public` on a VIC or VAC the room issues, `directed` on an attenuated leaf; `vta-service/src/trust_tasks/room_owner.rs`, `vti-rooms-wasm/src/identity.rs`), and in-room endorsements are a VSC under `endorses/1` ([[ROOMS-DESIGN]] §4). Every room Trust Task URI named below appears in the pin's Rust sources. What moved relative to the older baselines the draft was written against is recorded in [`2026-10-13-bam.md`](./openvtc-rooms-plan/2026-10-13-bam.md).
 
 **References:**
 
@@ -67,26 +68,28 @@ Stale against the pin's code (verified in Rust, not only prose):
 - **`present` is `0.2`** and carries no `audience`; the guide's §7 payload example still shows one.
 - **`issue-authority` is `0.2`** and makes `validUntil` a required typed member, so it is enforced by the envelope schema before dispatch.
 - **`rooms/keys/{read,browse}`, `rooms/owner/anchor`, `rooms/epoch/{commits,prune}`** exist in code and are not in the guide's §12 tables.
+- **Cryptographic deletion has a verb.** The guide's §2 calls it "Primitive only … No verb reaches it", but `rooms/epoch/prune/0.1` drops the epoch key chain below an epoch on both hosts (`room-host/src/lib.rs`, `epoch_prune`; `vtc-service/src/rooms/handlers.rs`, `handle_epoch_prune`). It severs the rungs, not the records.
+- **The private-tier refusal on the wire** is `vti-rooms-dtg`'s "room `…` is private, and this host has no zero-knowledge profile configured …" (`vti-rooms-dtg/src/lib.rs`); the guide's §11 string `a private room must not be served without a ZK profile` appears in code only as an `unreachable!` in `room-host/examples/data_room.rs`.
 
 Not built at all, per the guide's §2 and the design notes:
 
 - **The owner's MLS half** (`RoomGroup::{create,add_member}`) is library-only: no task, no CLI. Admitting a member to a **sealed** room is Rust.
 - **A join request.** [[ROOMS-JOINING]] §1: "Twenty-two room tasks and **not one is a join request**." The proposal recommends not writing the spec until the demo shows what gets abused (§7 there).
 - **`private` rooms** are stored but refused at serve time; the zero-knowledge profile is unsettled.
-- **Verified reads** ([[ROOMS-VERIFIED]]) and `rooms/keys/write` ([[ROOMS-READTHROUGH]] §6) are proposals / planned.
-- **Cryptographic deletion** has a primitive and no verb.
+- **`pnm` owner verbs.** `pnm rooms` is the member surface only (`list`, `get`, `put`, `curate`, `renew`, `create`; `pnm-cli/src/cli.rs`, `RoomCommands`), and `put` still refuses a sealed room ([[ROOMS-GUIDE]] §2).
+- **Verified reads** ([[ROOMS-VERIFIED]]) and `rooms/keys/write` ([[ROOMS-READTHROUGH]] §6) are proposals / planned; neither appears in the pin's Rust sources.
 
 ## 3. Where rooms sit in the Keyring architecture
 
 ### 3.1 The decision (proposed)
 
-Rooms are **a PNM surface**: a module in the same client package the PNM/CNM subtask designs (`vti-client`, parent §5.2), calling the member's VTA over the same Trust Task spine. They are not a new transport and not a new wallet core.
+Rooms are **a PNM surface**: a module beside the wallet's VTA client, calling the member's VTA over the same Trust Task spine. They are not a new transport and not a new wallet core. The PNM/CNM subtask designs that client as a `vti-client` package (parent §5.2); on `main` it is `VtaClient` and its `vtaAgent` controller in `bifold/packages/core/src/modules/trust-tasks/module/` (§5a), and the rooms module goes wherever that client lives when it is packaged.
 
-*Conditional on* the PNM/CNM subtask's P2 (an authenticated VTA session) landing as designed. If P2 slips, rooms inherit the delay for everything except the pure-wasm read path in §3.3.
+*Conditional on* an authenticated VTA session (the PNM/CNM subtask's P2). `VtaClient` already holds one for the community-vetting work (§5a); if it is reshaped into the subtask's package first, rooms follow it, and nothing but the pure-wasm read path in §3.3 can start without it.
 
 ### 3.2 Why, against the alternatives
 
-- **Port the browser plugin's `packages/core/src/rooms/` module** ([[ROOMS-TS]]) instead of writing a new client. It already splits VTA and host calls, builds the create-only sealed write as a pair, and imports generated payload types from `@openvtc/trust-tasks/rooms/…`. It depends on `TaskParty`, `TrustTaskSender` and `buildTrustTask` from the plugin's `vta/` layer, which is the same layer the PNM/CNM subtask measures for portability (its §3.3). **To verify:** that those imports are free of browser-only APIs.
+- **Port the browser plugin's `packages/core/src/rooms/` module** ([[ROOMS-TS]]) instead of writing a new client. It already splits VTA and host calls, builds the create-only sealed write as a pair, and imports generated payload types from `@openvtc/trust-tasks/rooms/…`. It depends on `TaskParty`, `TrustTaskSender` and `buildTrustTask` from the plugin's `vta/` layer, which is the same layer the PNM/CNM subtask measures for portability (its §3.3). A first read at 43e2cc7 finds no extension or DOM API on that path: `vta/channel.ts` is type-only, and `vta/trust-task.ts` pulls `trust-tasks/{sign,verify}.ts`, `siop/self-issued.ts` and `didcomm/index.ts` (`@noble/curves`, `@openvtc/vti-didcomm-js`, `@openvtc/trust-tasks`). What React Native must supply is `globalThis.crypto.randomUUID` and `getRandomValues`, and `fetch` for DID resolution. R0 confirms this by running it under Hermes.
 - **Do not widen the transport to pass a host recipient through** the wallet's signing surface. [[ROOMS-READTHROUGH]] §1 rejects this for the browser console, "trad[ing] a real property for a convenience". The accepted answer is `rooms/keys/read` and `rooms/keys/browse`: the member's own agent makes the host call in their name.
 - **Do not compile `vti-rooms-wasm` into the app first.** It compiles the member half (group custody, sealing, opening, the epoch chain) so a browser can be a member with no VTA at all ([[ROOMS-DEMO]] §3.1). That bypasses the VTA oracle and puts a group key on the phone, contradicting §2.2 item 1. Revisit only for the no-VTA case in §6.
 
@@ -107,15 +110,16 @@ A wallet with no VTA, or one that cannot reach it, has no oracle. [[ROOMS-DEMO]]
 ## 5. Constraints from upstream that shape the work
 
 - **Every room call is a signed Trust Task document, not a bare JSON body.** The guide's §11 lists "`missing field 'id'`" as the symptom. On a VTC, `recipient` must be the VTC's own DID.
-- **A VTC caps Trust Task bodies at 64 KiB**; `room-host` imposes only axum's 2 MB default. Plan record sizes for the smaller.
+- **A VTC caps Trust Task bodies at 64 KiB** ([[ROOMS-GUIDE]] §5.2; per type, "64 KiB unless its specification needs more", `vtc-service/src/routes/mod.rs`); `room-host` imposes only axum's 2 MB default ([[ROOMS-GUIDE]] §8.1). Plan record sizes for the smaller.
+- **`room-host` verifies a request's proof over the document as received** (VTI-45, `room-host/src/lib.rs`, `presenter`), so a client's signed bytes are what is judged; nothing in the client may re-serialise a document after signing it.
 - **A browser or wallet client needs the host to allow its origin** (`room-host --allow-origin`), explicit and without a wildcard. A native app is not a browser, so this applies to any WebView path only.
 - **Admission to a sealed room needs a Rust step by the owner.** A Keyring member can only join sealed rooms whose owner has tooling for it. Until that is a task, expect to test sealed-room joins with an owner-side script, not a second phone.
-- **`private` rooms do not serve.** Keyring should refuse to create or join one and say why, using the guide's own refusal string (`a private room must not be served without a ZK profile`).
+- **`private` rooms do not serve.** Keyring should refuse to create or join one and say why. Match the host's refusal by its stable part, "no zero-knowledge profile" (`vti-rooms-dtg/src/lib.rs`), not by the guide's §11 string, which the host does not send (§2.3).
 - **Authority has no revocation, only expiry.** `validUntil` is required on a VAC because "nothing withdraws [a chain root] by waiting" ([[ROOMS-GUIDE]] §5.3). The wallet must show expiry prominently and warn on long windows.
 
 ## 5a. Readiness and blockers
 
-Two sides, assessed separately. The rooms side was measured at the pin (§2). The Keyring side was measured in this repo at the time of writing; re-check it before filing.
+Two sides, assessed separately. The rooms side is measured at the pin (§2). The Keyring side is measured at `origin/main` 0da7eead, reading `bifold` at the submodule commit it pins (d86785b4).
 
 ### Rooms side — usable now, with holes
 
@@ -126,36 +130,38 @@ Two sides, assessed separately. The rooms side was measured at the pin (§2). Th
 | Sealed-room admission | **Blocked upstream for a non-Rust owner**: the owner's MLS add step has no task or CLI |
 | Join without an inbox | **Not built**; a proposal that recommends waiting for the demo ([[ROOMS-JOINING]] §7) |
 | `private` tier | **Refused at serve time** (no ZK profile) |
-| Verified reads, `rooms/keys/write`, cryptographic deletion verb | **Proposals / planned** |
+| Verified reads, `rooms/keys/write` | **Proposals / planned** |
+| Cryptographic deletion | **Served** as `rooms/epoch/prune/0.1`, though the guide still says it has no verb (§2.3) |
 | Docs | **Drifting**: the guide lags the code (§2.3) |
 | Hosting | **No Farm story**: `room-host` is a deployed binary, so every claim is local-lab only (§8) |
 
-### Keyring side — not ready; the groundwork is a draft
+### Keyring side — a VTA client exists; no room code
 
-Measured in this repo:
+Paths below are in `bifold/packages/core/src/modules/trust-tasks/module/` unless given in full.
 
-- **No VTA client exists.** `bifold/packages/` has `trust-tasks` and `credo-tsp-adapter` but no `vti-client`, and no `pnm-core` appears in any `package.json`. The package this plan builds on (§3.1) is the one [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) *designs*, and that subtask's status line reads "Draft for discussion. Not a commitment to implement."
-- **No room code exists.** A search of `bifold/packages` and `app/src` for `roomPresent`, `room-present` and `RoomPresent` found nothing; no room screen or module was seen.
-- **A wallet-to-VTA attachment does not exist.** The 2026-09-07 review (`2026-09-07-al.md`, per the parent plan's index) notes "nothing says how a VTA gets attached to a wallet at all" and that the policy surface is specified as `pnm-cli` commands the wallet has no equivalent of. Every room call except host-only reads needs that attachment.
-- **Transport is in flight.** `TspCarriage` is dev-flag-gated and its e2e spec was written but unverified (`2026-09-02-bam.md`). Rooms do not need TSP to the host, but the VTA leg rides the same carriage work.
-- **`did:webvh` resolution is a gap.** Rooms are normally `did:webvh`, and Credo 0.6.3 returned `unsupportedDidMethod` in `ref-06x` (same 09-07 review). A wallet that cannot resolve a room DID cannot verify what the room issued. Not confirmed whether this is closed.
-- **Not verified:** whether the wallet's existing `DTGCredential` handling accepts a VIC, VMC or VAC as the room issues them, and whether the VTA credential vault ("`pnm cred-vault receive`") has a wallet-side equivalent.
+- **A VTA client exists, inside `@bifold/core` rather than as a package.** `VtaClient.ts` ("the phone as the manager of a personal VTA") and its controller `vtaAgent.ts` speak `auth/whoami`, `acl/{list,grant,update,revoke}`, `vta/contexts/*`, `vta/webvh/dids/*`, `keys/export-secret`, `task-consent/*`, `policy/*` and `vault/*` to the user's own VTA over the DIDComm v2 mediator transport (`VtiMediatorTransport.ts`), choosing a carriage through `tspCapability.ts`. There is no `vti-client` or `pnm-core` package and no `@openvtc/pnm-core` dependency in any `package.json`; the `@openvtc/pnm-core` 0.4.0 entry in `scripts/openvtc/PINS.json` is an upstream-watch tripwire under `npm`, not a dependency. [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), which designs the packaged client, still reads "Draft for discussion. Not a commitment to implement."
+- **No room code exists.** A search of `app/` and `scripts/` at `origin/main`, and of `bifold/packages` at d86785b4, for `roomPresent`, `room-present`, `RoomPresent`, `rooms/keys`, `rooms/records` and `trusttasks.org/spec/rooms` finds nothing.
+- **A wallet-to-VTA attachment exists.** The phone links to its agent by QR enrolment (`vtaEnrolment.ts`: a temporary manager key, an enrolment code, an admin grant, then a rotation onto a long-lived key), tracked by one link state machine (`vtaLinkMachine.ts`), with the "My agent" screens in `bifold/packages/core/src/navigators/MyAgentStack.tsx` (`VtaLink`, `VtaAgentHome`, …). The design is [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) (status "Proposal for review") and its [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4 B ("every Keyring user has a VTA of their own"; status "In execution"). What it does not yet do for rooms: grant an ACL entry narrowed to `room-present` (R4), and hold room credentials where the oracle finds them (below).
+- **Carriage.** `TspCarriage.ts` is wallet-to-wallet only (TSP inside DIDComm v1) and does not reach a VTA; the VTA leg is `VtiMediatorTransport` with TSP Rev 3 as a build-time carriage choice (`vtiTsp.ts`, `tspCapability.ts`). Rooms do not need TSP to the host.
+- **`did:webvh` resolution is registered.** `RetryingWebVhDidResolver` (`bifold/packages/core/src/utils/RetryingWebVhDidResolver.ts`, over Credo's `WebVhDidResolver`) is in the app's agent (`app/src/utils/bc-agent-modules.ts`). Resolving a **room** DID from the wallet is **(unverified at 49f5f1be)**: no test exercises one.
+- **DTG credentials.** The wallet keeps a community's `InvitationCredential` and `MembershipCredential` verbatim (`VtiCommunityStore.ts`), reads role `AuthorityCredential`s (`bifold/packages/trust-tasks/src/vetting/roleCard.ts`), and ships the DTG v1 registry context with `issuerScope` and `authority` (`bifold/packages/vrc-contexts/src/dtgRegistryContextV1.ts`). Whether it accepts a VIC, VMC or VAC **as a room issues them** (`issuerScope: public`, `authority.scope` = the room DID; a `directed` attenuated leaf) is **(unverified at 49f5f1be)**.
+- **The VTA credential vault has a wallet-side equivalent** for community cards: `vtiCardVault.ts` pushes membership, role and vetter-grant cards to the VTA by `vault/credentials/receive/0.1`. Whether room credentials should reach the VTA that way, or only through the push-shaped admission in §4, is part of R1's credential-receipt step.
 
 ### Blockers, ordered by what they gate
 
 | # | Blocker | Side | Gates | Kind |
 |---|---|---|---|---|
 | B1 | No decision that Keyring wants rooms (§9 Q1) | Keyring | everything | Not decided |
-| B2 | No wallet-to-VTA attachment or authenticated session (PNM/CNM P2) | Keyring | R1 onward | Not built; its plan is a draft |
-| B3 | `vti-client` package does not exist | Keyring | R1 onward | Not built |
-| B4 | `did:webvh` resolution in the wallet | Keyring | R1 onward, if rooms are `did:webvh` | Unconfirmed |
-| B5 | Owner's MLS add step has no task | Rooms | R2 against a real second owner, and sealed-room joins generally | Waiting on upstream |
-| B6 | Admission policy undefined | Rooms | §6 item 1 | Waiting on upstream's demo |
-| B7 | No `pnm rooms put` to sealed rooms; no `rooms/keys/write` | Rooms | R3 sealed writes via a single call; the two-call path in [[ROOMS-TS]] works | Workaround exists |
+| B2 | The wallet's VTA session (`VtaClient`) carries no room tasks, and its ACL grants are not yet narrowed to `room-present` | Keyring | R1 onward (session), R4 (grant) | Built for community vetting; rooms work is additive |
+| B3 | Where the rooms module lives: the PNM/CNM subtask's `vti-client` package does not exist, and `VtaClient` sits inside `@bifold/core` | Keyring | R1 onward | Not decided; packaging is the PNM/CNM subtask's call |
+| B4 | Resolving a room's `did:webvh` and accepting its VIC, VMC and VAC (`issuerScope`) in the wallet | Keyring | R1 onward, if rooms are `did:webvh` | Resolver registered; room credentials unverified |
+| B5 | Owner's MLS add step has no task (`RoomGroup::add_member` has no caller in `vta-service`, `vtc-service`, `pnm-cli` or `vta-cli-common` at the pin) | Rooms | R2 against a real second owner, and sealed-room joins generally | Waiting on upstream |
+| B6 | Admission policy undefined ([[ROOMS-JOINING]] still a proposal at the pin) | Rooms | §6 item 1 | Waiting on upstream's demo |
+| B7 | No `pnm rooms put` to sealed rooms (`vta-cli-common/src/commands/rooms.rs` refuses sealed tiers); no `rooms/keys/write` | Rooms | R3 sealed writes via a single call; the two-call path in [[ROOMS-TS]] works | Workaround exists |
 | B8 | `private` tier refused | Rooms | any `private` use | Waiting on the DTG working group |
-| B9 | Guide drift, and an unexamined 19-line design-note diff | Rooms | trust in this plan's citations | Cheap; R0 |
+| B9 | Guide drift (§2.3) | Rooms | trust in this plan's citations | Cheap; the drift is listed in §2.3 and the design note is read at the pin |
 
-**Only R0 (measurement, no app code) is unblocked today.** B2–B4 are shared with the PNM/CNM and parent plans, so rooms cannot be scheduled ahead of them; R1 starts when they land.
+**Only R0 (measurement, no app code) is unblocked today.** B1 gates everything; B3 is a placement decision shared with the PNM/CNM subtask; B2 and B4 are additive work on a VTA session that already exists, so R1 starts once Q1 is answered and B3 is placed.
 
 ## 6. Where Keyring could add something upstream does not have
 
@@ -175,11 +181,11 @@ Each phase carries acceptance criteria. "Verified" means the named check passes 
 Ground every assumption in this plan.
 
 - Run `cargo run -p room-host --example data_room` at the pin and capture its four acts as the reference trace.
-- Stand up `room-host` and the local VTA from `scripts/openvtc/local-vti-stack`; create an `open` and an `attributed` room by `pnm rooms create`.
-- Read [[ROOMS-TS]]'s imports and list every dependency that is browser-only.
-- Diff the 19 lines in `docs/05-design-notes/data-rooms.md` between the pin and the sibling.
+- Stand up the local VTA from `scripts/openvtc/local-vti-stack` and a `room-host` beside it (the stack does not start one; §8); create an `open` and an `attributed` room by `pnm rooms create`.
+- Run [[ROOMS-TS]]'s `rooms/` module and its `vta/` imports under Hermes, confirming the first read in §3.2 that nothing on the path is browser-only.
+- Check that the wallet's DTG handling accepts a room-issued VIC, VMC and VAC (`issuerScope` `public`, and a `directed` leaf), and that the wallet resolves a room's `did:webvh` (B4).
 
-**Done when:** a dated companion records the reference trace, the dependency list and the diff conclusion, and §9 Q1 and Q3 are answered or re-scoped.
+**Done when:** a dated companion records the reference trace, the Hermes result and the credential check, and §9 Q1 and Q3 are answered or re-scoped.
 
 ### R1 — Read-only member (open and attributed rooms)
 
@@ -215,7 +221,7 @@ The wallet writes to an `open` room by `rooms/records/put` and to a sealed room 
 
 The wallet is where a person grants a room agent `roomPresent` (and optionally `roomOpen`), sees what it holds, and withdraws it.
 
-- The grant is a role-ceilinged ACL entry narrowed with `--capabilities room-present` at creation (the guide says to prefer creation-time narrowing, since it leaves no window where the entry is wider).
+- The grant is a role-ceilinged ACL entry narrowed with `--capabilities room-present` at creation (the guide says to prefer creation-time narrowing, since it leaves no window where the entry is wider). On the wire the capability rides the ACL entry as `"org.openvtc.capabilities": ["room-present"]` (`vta-sdk/src/protocols/acl_management/update.rs`); `VtaClient` already sends `acl/grant` and `acl/update` (§5a), so this phase adds the narrowing, not the call.
 - The consent surface follows the PNM/CNM subtask's P1 rules; room access is never granted by default.
 
 **Done when:** (a) an agent obtains a 4-hour, one-action presentation and reads; (b) removing the ACL entry stops further presentations; (c) a presentation captured and replayed from a different signer is refused.
@@ -228,7 +234,7 @@ The wallet is where a person grants a room agent `roomPresent` (and optionally `
 
 ## 8. Test and lab
 
-- The local lab is `scripts/openvtc/local-vti-stack`. `room-host` is a separate binary from the VTA ("not part of the VTA, on purpose", [[ROOMS-GUIDE]] §8.1), so the lab must add it. **Not yet verified:** whether the stack already starts one.
+- The local lab is `scripts/openvtc/local-vti-stack`. `room-host` is a separate binary from the VTA ("not part of the VTA, on purpose", [[ROOMS-GUIDE]] §8.1), so the lab must add it: at `origin/main` no script under `scripts/openvtc/local-vti-stack/` mentions a room or `room-host`.
 - Per the `vti-lab-and-field` skill, a claim the local lab supports and a claim the Farm supports are different; rooms have no Farm story today, so every R-phase claim is **local-lab only** unless a Farm host is found.
 - `room-host` flags the lab needs: `--data-dir`, `--listen`, and `--resolve-dids` for `did:webvh` rooms (off by default; it lets unauthenticated requests trigger a fetch, a decision to make deliberately). For a mirror test, `--mirror-config` and `--mirror-interval-secs`.
 - Add an e2e rung only after R1 passes by hand; follow `e2e/README.md`.
@@ -245,18 +251,20 @@ The wallet is where a person grants a room agent `roomPresent` (and optionally `
 | Q6 | Where does a wallet reach a host from: through its VTA only (`keys/read`, `browse`), or directly for any call? | Leaning VTA-only per [[ROOMS-READTHROUGH]] §1 | R1 design |
 | Q7 | Should an agent's memory live in a room? [[ROOMS-VERIFIED]] and [[ROOMS-READTHROUGH]] make the agent "the room's memory" | Product question | R4 |
 
-## 10. Moving this into the repo
+## 10. Before this leaves draft
 
-1. Resolve the 19-line difference noted at the top; update the verification note to state it either way.
-2. Place the file as `docs/plans/openvtc-integration-plan/rooms_subtask.md` (parent-owned, like the other two subtasks) **or** as its own `docs/plans/rooms-plan.md` with a companion folder. The parent plan's §5.2 module list and the `docs/plans/README.md` table both need a row.
-3. Fix the relative links in the header to match the final location.
-4. Open the first dated companion with R0's findings, per `docs/plans/CLAUDE.md`.
-5. Run `node scripts/openvtc/setup-external.mjs` first, so every path above is read from the pin.
+The plan is filed as its own `docs/plans/openvtc-rooms-plan.md` with a companion folder, and has a row in `docs/plans/README.md`. What remains:
+
+1. **The parent plan does not name it.** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §5.2's module list has no rooms row, and nothing in that plan mentions rooms. Add the row, pointing here, when §9 Q1 is answered.
+2. **Placement of the rooms module (B3)** is agreed with the PNM/CNM subtask: inside `@bifold/core` beside `VtaClient`, or in the packaged client that subtask designs.
+3. **R0's companion.** R0's findings go in a dated companion in `openvtc-rooms-plan/`, per `docs/plans/CLAUDE.md`, and §2.3 and §5a are re-measured against whatever pin is current then.
+4. **§9 Q1 is answered.** Until Keyring decides it wants rooms, this stays a draft.
 
 ## 11. Sources
 
-- `external/verifiable-trust-infrastructure` @ afcf2470 — `docs/02-vta/data-rooms.md`; `docs/05-design-notes/data-rooms*.md`; `room-host/src/main.rs`; `vta-service/src/trust_tasks/{room_keys,room_group,room_owner}.rs`; `vta-cli-common/src/commands/rooms.rs`; `pnm-cli/src/cli.rs` (`RoomCommands`: `list`, `get`, `put`, `curate`, `renew`, `create`); `vtc-service/src/rooms/handlers.rs`; `vti-rooms/src/wire.rs`.
-- `external/verifiable-trust-infrastructure-v047` @ 439a0333 — same crates.
-- `external/vta-browser-plugin` @ 43e2cc7 — `packages/core/src/rooms/index.ts`; `packages/extension/src/manager/room-host-setup.ts`.
+- `external/verifiable-trust-infrastructure` @ 49f5f1be (`VTI-Eucalyptus`) — `docs/02-vta/data-rooms.md`; `docs/05-design-notes/data-rooms*.md`; `room-host/src/{main,lib}.rs`, `room-host/examples/data_room.rs`; `vta-service/src/trust_tasks/{room_keys,room_group,room_owner}.rs`, `vta-service/src/operations/{room_oracle,room_groups}.rs`; `vta-cli-common/src/commands/rooms.rs`; `pnm-cli/src/cli.rs` (`RoomCommands`: `list`, `get`, `put`, `curate`, `renew`, `create` — unchanged since afcf2470; the file's changes in between are outside rooms); `vtc-service/src/rooms/handlers.rs`, `vtc-service/src/routes/mod.rs`; `vti-rooms/src/{wire,mls,storage}.rs`; `vti-rooms-dtg/src/lib.rs`; `vti-rooms-wasm/src/identity.rs`; `vta-sdk/src/protocols/acl_management/update.rs`. Rooms-relevant delta read from afcf2470: `git diff afcf2470 49f5f1be` over those paths.
+- `external/verifiable-trust-infrastructure-v047` @ 439a0333 — contains the same four room crates; not a rooms baseline.
+- `external/vta-browser-plugin` @ 43e2cc7 — `packages/core/src/rooms/index.ts` (821 lines); `packages/core/src/vta/{channel,trust-task}.ts`; `packages/extension/src/manager/room-host-setup.ts`.
 - [RFC 9420 — Messaging Layer Security](https://www.rfc-editor.org/rfc/rfc9420).
-- Keyring: `docs/plans/openvtc-integration-plan.md`, `…/pnm_cnm_subtask.md`, `docs/plans/locality-plan.md`, `docs/plans/CLAUDE.md`, `scripts/openvtc/PINS.json`.
+- Keyring @ `origin/main` 0da7eead: `docs/plans/openvtc-integration-plan.md`, `…/pnm_cnm_subtask.md`, `docs/plans/keyring-on-the-vta-farm.md`, `…/community_vetting_subtask.md`, `docs/plans/locality-plan.md`, `docs/plans/CLAUDE.md`, `scripts/openvtc/PINS.json`, `scripts/openvtc/local-vti-stack/`, `app/src/utils/bc-agent-modules.ts`.
+- `bifold` @ d86785b4 (the submodule commit `origin/main` pins) — `packages/core/src/modules/trust-tasks/module/{VtaClient,vtaAgent,vtaEnrolment,vtaLinkMachine,VtiMediatorTransport,TspCarriage,vtiTsp,tspCapability,VtiCommunityStore,vtiCardVault}.ts`; `packages/core/src/navigators/MyAgentStack.tsx`; `packages/core/src/utils/RetryingWebVhDidResolver.ts`; `packages/trust-tasks/src/vetting/roleCard.ts`; `packages/vrc-contexts/src/dtgRegistryContextV1.ts`.

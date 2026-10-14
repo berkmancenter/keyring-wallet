@@ -1,19 +1,19 @@
 # Group Messaging and Linked File Sharing on Data Rooms — Architecture Plan
 
-**Status:** Draft architecture plan. Nothing here is built, and it is not a commitment to implement.
+**Status:** Draft — architecture subtask. Nothing here is built, and it is not a commitment to implement.
 **Scope:** A group messaging service — conversations, threads, edits, reactions, real-time delivery, offline sync — plus **file sharing where files are linked to conversations**: attachments on messages, a per-conversation file library, file-to-thread references, one file reused across conversations, and file versions. Built as an **application profile on top of VTI data rooms**, not beside them.
-**Parent:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md) (Keyring as a member client of rooms). Section references to it are marked "plan §". Companions it relies on: [`rooms_s3_storage_subtask.md`](rooms_s3_storage_subtask.md) ("S3 note §") and [`rooms_encrypted_spaces_subtask.md`](rooms_encrypted_spaces_subtask.md) ("ES note §").
-**Reasoning:** decisions proposed here are marked **(proposed)**. When one is made, record it in a further dated companion, not by editing this file.
-**Baseline:** rooms behaviour is read from the VTI checkout at `seas/vtafarm/vta-build-pipeline` (HEAD `b9c5703a`, 2026-10-01), abbreviated `VTI/`, because the plan's pin `afcf2470` is not on disk (ES note, "Sources"). Claims about that code carry a path. Everything about the messaging and file layers is design, not measurement.
+**Parent:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md) (Keyring as a member client of rooms). Section references to it are marked "plan §". Sibling subtasks it relies on: [`rooms_s3_storage_subtask.md`](./rooms_s3_storage_subtask.md) ("S3 subtask §") and [`rooms_encrypted_spaces_subtask.md`](./rooms_encrypted_spaces_subtask.md) ("ES subtask §").
+**Reasoning:** [`2026-10-13-bam.md`](./2026-10-13-bam.md) (re-baselining onto the pin). Decisions proposed here are marked **(proposed)**; when one is made, record it in a dated companion, not by editing this file.
+**Baseline:** VTI `49f5f1be` (tag VTI-Eucalyptus, 2026-10-07), Keyring's pin in `scripts/openvtc/PINS.json`, read from the git objects of `external/verifiable-trust-infrastructure` and abbreviated `VTI/`. Claims about that code carry a path. Everything about the messaging and file layers is design, not measurement.
 
 **References** (the `[[…]]` tags follow the plan's header; new ones are added here):
 
 - **[[ROOMS-GUIDE]]** — `VTI/docs/02-vta/data-rooms.md`. Operator guide; §2 is the built/designed line.
 - **[[ROOMS-DESIGN]]** — `VTI/docs/05-design-notes/data-rooms.md`. Invariants I1–I5 (§2), visibility ladder (§3.1), credentials (§4), MLS (§5), epoch chain (§5.5), records (§6), hosting and mirrors (§7), audit (§8), lifecycle (§9), open items (§14).
 - **[[ROOMS-JOINING]]**, **[[ROOMS-READTHROUGH]]**, **[[ROOMS-VERIFIED]]**, **[[ROOMS-ANCHOR]]** — the sibling design notes in the same directory.
-- **[[ROOMS-SEALED]]** — `VTI/vti-rooms/src/sealed.rs`. AEAD binds `roomId | key | version | epoch`; "version is bound before it is known".
-- **[[ROOMS-STORAGE]]** — `VTI/vti-rooms/src/storage.rs`. Keyspaces, version assignment, the four store calls.
-- **[[ROOM-HOST-DIDCOMM]]** — `VTI/room-host/src/didcomm.rs`. A host reachable at a mediator (`--mediator-did`), authorization unchanged by carrier.
+- **[[ROOMS-SEALED]]** — `VTI/vti-rooms/src/sealed.rs`. AEAD binds `roomId | key | version | epoch` (`associated_data`, :328); module doc "Version is bound before it is known" (:19).
+- **[[ROOMS-STORAGE]]** — `VTI/vti-rooms/src/storage.rs`. Keyspaces, version assignment (module doc :16–22; `put_record` :370), listing pages (`MAX_PAGE = 500`, :630), the record tree head (`tree_head`, :706).
+- **[[ROOM-HOST-DIDCOMM]]** — `VTI/room-host/src/didcomm.rs`. A host reachable at a mediator (`didcomm` feature + `--mediator-did`, both off by default, :21), authorization unchanged by carrier.
 - **[[MLS-ATTACH]]** — [draft-sullivan-mls-attachments](https://www.ietf.org/archive/id/draft-sullivan-mls-attachments-01.html), already cited by [[ROOMS-DESIGN]] §5.1 for exporter-derived content keys.
 - **[[MIMI]]** — [MIMI protocol](https://datatracker.ietf.org/doc/draft-ietf-mimi-protocol/) and room policy drafts, already "taken" in [[ROOMS-DESIGN]] §11.
 - **[[RFC9420]]** — MLS.
@@ -28,7 +28,7 @@ The service adds three things rooms do not have:
 
 1. **A messaging profile** — the record-body schema and key scheme for messages, threads, edits, reactions and read markers. This is a client convention inside sealed bodies, so it needs no host change.
 2. **A change feed** — a hint channel that tells members' VTAs a room has advanced, so delivery is not polling. Content never rides it.
-3. **A blob layer** — chunked, resumable, ciphertext-addressed storage outside the Trust Task body, authorized by the same room presentations. This **does** need an upstream spec (S3 note Option C), because the 64 KiB VTC body cap (plan §5) rules out inline files.
+3. **A blob layer** — chunked, resumable, ciphertext-addressed storage outside the Trust Task body, authorized by the same room presentations. This **does** need an upstream spec (S3 subtask Option C), because the 64 KiB VTC body cap (plan §5) rules out inline files.
 
 Two upstream frictions are load-bearing and are called out early because they decide feasibility, not polish:
 
@@ -55,7 +55,7 @@ Two upstream frictions are load-bearing and are called out early because they de
 - **Voice, video, screen share.** Out of scope; SFrame ([RFC 9605](https://www.rfc-editor.org/info/rfc9605)) over the same MLS exporter is the natural later path.
 - **Public broadcast channels with unbounded readership.** A room is an explicit set of DIDs ([[ROOMS-DESIGN]] §3). A broadcast product is a different design.
 - **Federation with Matrix, Signal or other networks.** MIMI alignment is a direction, not a deliverable.
-- **Deniable messaging.** Rooms want attribution, via in-body signatures (ES note §2, "Deniability").
+- **Deniable messaging.** Rooms want attribution, via in-body signatures (ES subtask §2, "Deniability").
 - **Server-side content moderation or scanning on sealed tiers.** The host cannot read; §8.6 says what replaces it.
 - **Owner/admin tooling for MLS adds.** Upstream has no task for it (plan §2.3, B5); this plan consumes whatever ships.
 
@@ -264,11 +264,12 @@ sequenceDiagram
     V->>V: sign body as member, pad
     V->>V: rooms/keys/seal (key=e/eventId, version=N+1, epoch=E)
     V->>H: rooms/records/put  expectedVersion:0, presentation(write)
-    alt version still N+1
-        H-->>V: signed ack {key, version, epoch, root}
-    else someone else took N+1
-        H-->>V: conflict {current: N+k}
-        V->>V: re-seal at N+k+1, retry (bounded)
+    alt host assigned N+1
+        H-->>V: signed ack {key, version: N+1, epoch}
+    else someone else took N+1 (host still accepts, assigns v ≠ N+1)
+        H-->>V: signed ack {key, version: v, epoch}
+        V->>V: stored record will not open; re-seal at next expected version
+        V->>H: rooms/records/put  expectedVersion:v (rewrite, bounded retry)
     end
     H->>F: room advanced to version v
     F-->>M: hint {roomId, headVersion}  (TSP/DIDComm via mediator)
@@ -276,7 +277,7 @@ sequenceDiagram
     V-->>C: sent (version, signed ack)
 ```
 
-Steps 3–6 already exist as `rooms/keys/seal` then `rooms/records/put` ([[ROOMS-TS]] builds this pair). A future `rooms/keys/write` ([[ROOMS-READTHROUGH]] §6) would collapse them into one VTA call, which is what a chat client wants.
+Steps 3–6 already exist as `rooms/keys/seal` then `rooms/records/put` ([[ROOMS-TS]] builds this pair). The host does not compare the sealed version with the one it assigns: `put_record` (`VTI/vti-rooms/src/storage.rs:370`) rejects only on the per-key `expectedVersion` precondition, then stamps `room.next_version` (:451), and the ack is `PutRecordResponse {key, version, epoch}` (`VTI/vti-rooms/src/wire.rs:216`) with no root — the root comes from a separate tree-head read. A lost race is therefore discovered by the writer comparing the acked version with the one it sealed under, not by a host conflict, and it leaves an unopenable record at the lost version until rewritten or retracted. A future `rooms/keys/write` ([[ROOMS-READTHROUGH]] §6) would collapse them into one VTA call, which is what a chat client wants.
 
 ### 6.2 Ordering
 
@@ -286,7 +287,7 @@ Steps 3–6 already exist as `rooms/keys/seal` then `rooms/records/put` ([[ROOMS
 
 ### 6.3 The version race — the main messaging-specific risk
 
-[[ROOMS-SEALED]] binds the **version** into the AEAD and the host assigns it from a **room-wide** counter. A create-only sealed write therefore succeeds only if no one else wrote in between. In a busy group, N concurrent senders produce up to N−1 conflicts per round, each costing a VTA re-seal and a host round-trip.
+[[ROOMS-SEALED]] binds the **version** into the AEAD and the host assigns it from a **room-wide** counter. A create-only sealed write therefore produces an openable record only if no one else wrote in between (the host stores it either way, §6.1). In a busy group, N concurrent senders produce up to N−1 conflicts per round, each costing a VTA re-seal and a host round-trip.
 
 Options, in order of preference:
 
@@ -302,10 +303,10 @@ Options, in order of preference:
 
 | Property | Guarantee | Mechanism |
 |---|---|---|
-| Send idempotency | exactly-once **effect** | `eventId` is the record key; `expectedVersion: 0` makes a retried put a conflict that returns the existing record, which the sender recognises as its own |
+| Send idempotency | exactly-once **effect** | `eventId` is the record key; `expectedVersion: 0` makes a retried put a conflict ("already exists (create-only requested)", `VTI/vti-rooms/src/storage.rs:384–388`). The conflict carries no record, so the sender reads `e/<eventId>` back and recognises its own signed body |
 | Durability on ack | once acked, durable at the primary | signed ack; R2.1 "Remote-First": the client marks *sent* only on the ack, never on local enqueue |
 | Delivery to members | at-least-once, eventually | hints are best-effort; `sinceVersion` pull is the source of truth |
-| Gap detection | detected, not assumed | versions may **skip** by design ([[ROOMS-STORAGE]]: "can only skip a version, never duplicate"), so contiguity proves nothing. Use the signed tree head's `headVersion` + `recordCount` and Merkle traces ([[ROOMS-DESIGN]] §14.7) |
+| Gap detection | detected, not assumed | versions may **skip** by design ([[ROOMS-STORAGE]] :19–22: the failure "is a *skipped* version rather than a duplicated one"), so contiguity proves nothing. Use the signed tree head's `headVersion` + `recordCount` and Merkle traces ([[ROOMS-DESIGN]] §14.7) |
 | Withheld records | detectable as of the last anchor | verified reads + witnessed anchor ([[ROOMS-VERIFIED]], [[ROOMS-ANCHOR]]); the VTA keeps root memory per room |
 | Equivocation / fork | detectable at anchors | epoch authenticator + version watermark in the witnessed log ([[ROOMS-DESIGN]] §9). High-assurance conversations anchor per commit |
 | Ordering consistency | identical for all members | single primary; mirrors are read-only and never reorder |
@@ -361,7 +362,7 @@ Rooms have no push today. The design note expects the room DID to be "messageabl
 
 ### 8.1 Why files cannot be records
 
-The Trust Task body is capped at **64 KiB on a VTC** and 2 MB on `room-host` (plan §5); the body is inside a signed document, so no presigned upload fits the current schema (S3 note Option C). Files therefore need **a blob layer whose bytes travel outside Trust Task bodies, while every authorization decision still rides a room presentation**.
+The Trust Task body is capped at **64 KiB on a VTC** and 2 MB on `room-host` (plan §5); the body is inside a signed document, so no presigned upload fits the current schema (S3 subtask Option C). Files therefore need **a blob layer whose bytes travel outside Trust Task bodies, while every authorization decision still rides a room presentation**.
 
 ### 8.2 The `rooms/blobs/*` task family (new, upstream spec first)
 
@@ -376,7 +377,7 @@ Served by the host, authorized exactly like `rooms/records/*` — a presentation
 | `rooms/blobs/unlink` | `curate` (or the uploader within a grace window) | removes a room's link; GC decides whether bytes go |
 | `rooms/blobs/usage` | `read` | room bytes used / quota |
 
-The **byte route** (`PUT`/`GET` of ciphertext chunks) is a declared foreign-protocol exception in the same spirit as the VTI backup blob transfer (`GET|POST /backup/blob/{id}`, S3 note §4 Option C): it carries no authority of its own, only a grant minted by a Trust Task. With an S3 backend the grant is a presigned URL and bytes never touch the host process.
+The **byte route** (`PUT`/`GET` of ciphertext chunks) is a declared foreign-protocol exception in the same spirit as the VTI backup blob transfer (`GET|POST /backup/blob/{id}`, S3 subtask §4 Option C): it carries no authority of its own, only a grant minted by a Trust Task. With an S3 backend the grant is a presigned URL and bytes never touch the host process.
 
 ### 8.3 Upload: chunking, encryption, resumability
 
@@ -406,8 +407,8 @@ sequenceDiagram
 
 - **Encryption is per file version, client-side**, with a random `K_file`. Chunks use a STREAM-style construction (chunk index and last-chunk flag in AAD) so truncation, reordering and splicing fail to open. Same AEAD family as rooms (ChaCha20-Poly1305 or XChaCha20-Poly1305).
 - **`K_file` lives only inside the sealed manifest**, so it inherits the room's key schedule: readable by whoever can open the manifest's epoch, back to the retention floor, and cryptographically deleted when epoch links are pruned. This is the [[MLS-ATTACH]] pattern that [[ROOMS-DESIGN]] §5.1 already cites, with one level of indirection so a file can be shared into other rooms without re-encrypting (§9.3).
-- **Resumable:** `begin` is idempotent on `(roomId, sessionId)`; the host reports which `blobId`s it already holds; a client resumes by asking again. Sessions expire (proposed 24 h); orphan chunks are swept (S3 note S3: "orphans are deleted and no live object is").
-- **Ordering is object-first** (S3 note S2): bytes, then link rows, then the manifest record. A crash leaves orphans, never a manifest pointing at missing bytes.
+- **Resumable:** `begin` is idempotent on `(roomId, sessionId)`; the host reports which `blobId`s it already holds; a client resumes by asking again. Sessions expire (proposed 24 h); orphan chunks are swept (S3 subtask S3: "orphans are deleted and no live object is").
+- **Ordering is object-first** (S3 subtask S2): bytes, then link rows, then the manifest record. A crash leaves orphans, never a manifest pointing at missing bytes.
 - **Chunk size** 4 MiB default; the manifest records it, so it can change per file.
 
 ### 8.4 Content addressing and dedupe
@@ -421,7 +422,7 @@ sequenceDiagram
 - **Quota unit is the room** (bytes linked to it), set by host governance: `rooms.rego` on a VTC, the owner on a T1 host. Per-member quotas only on `attributed`/`open`, where the host knows who acted; `private` gets room-level caps only ([[ROOMS-DESIGN]] §4.5).
 - A blob linked to several rooms counts against **each** (simple, and it stops a cheap room from parking bytes on an expensive one).
 - **GC:** a blob is deleted when its last `(roomId, blobId)` link goes. Links go on `unlink`, on room reclamation ([[ROOMS-DESIGN]] §9), and by the room's `retentionDays`. The host **cannot** reference-count by manifests on sealed tiers — it cannot read them — so a manifest may outlive its bytes (the UI shows "file no longer available") but bytes never outlive every link.
-- **Deletion vs. bucket versioning:** the S3 note §5.3 trap applies; the blob store must hard-delete (lifecycle rules, no retained versions) or "deleted" is a promise. Cryptographic deletion (pruning epoch links before the manifest's epoch) is the stronger guarantee and does not depend on the bucket.
+- **Deletion vs. bucket versioning:** the S3 subtask §5.3 trap applies; the blob store must hard-delete (lifecycle rules, no retained versions) or "deleted" is a promise. Cryptographic deletion (pruning epoch links before the manifest's epoch) is the stronger guarantee and does not depend on the bucket.
 
 ### 8.6 Malware scanning
 
@@ -540,7 +541,7 @@ Rooms' rule is that **the app holds no room credential and no group key** (plan 
 - **Forward secrecy for members:** removal is forward-only (MLS + epoch chain, [[ROOMS-DESIGN]] §5.5).
 - **Post-compromise security for stored content is given up** under `Chained` retention: a compromised current key reaches every retained epoch, and so every retained `K_file`. Same trade rooms already make; conversations that need it choose `FromJoin` + pruning.
 - **Disappearing messages** = scheduled pruning of epoch links plus `retentionDays`. Requires the upstream prune verb ([[ROOMS-DESIGN]] §12.2); until then, "disappearing" must not be offered on sealed tiers, because host deletion alone is a promise.
-- **Key custody without a TEE:** the VTA guards MLS state; plain-mode VTAs keep group secrets in the clear on disk (ES note §5.2). Messaging inherits that; production deployments should run hardened mode or the enclave.
+- **Key custody without a TEE:** the VTA guards MLS state; plain-mode VTAs keep group secrets in the clear on disk (ES subtask §5.2). Messaging inherits that; production deployments should run hardened mode or the enclave.
 
 ### 10.4 Untrusted content, both directions
 
@@ -564,10 +565,10 @@ Every message, file name, preview and file body is attacker-controlled input to 
 | Dimension | Rooms assumption | Chat reality | Action |
 |---|---|---|---|
 | Writes per room | low | bursts of 10s/second | §6.3 option A; measure in M0 |
-| Records per room | small | 10⁵–10⁶ over a year | Merkle store is incremental now ([[ROOMS-DESIGN]] §14.7); confirm `list` paging and `tree_head` costs at 10⁶ (ES note P0) |
+| Records per room | small | 10⁵–10⁶ over a year | The Merkle store exists ([[ROOMS-DESIGN]] §14.7), but at the pin `tree_head` is **not** incremental: it scans and hashes every record on each call, deliberately uncached (`VTI/vti-rooms/src/storage.rs:609–619`, :706). Measure `list` paging and `tree_head` cost at 10⁶ (ES subtask P0) |
 | Body size | ≤ 64 KiB | mostly < 1 KiB | pad buckets; host stores inline in fjall; S3 Option B for bodies is unnecessary for messages |
 | Reads | per-record VTA open | every member opens every message | batch `rooms/keys/browse`; VTA caches plaintext |
-| Hosts | one process, in-memory replay guard | HA expected | replay guard must persist / be shared before any multi-instance host (ES note §1 "Limits") |
+| Hosts | one process, in-memory replay guard | HA expected | replay guard must persist / be shared before any multi-instance host (ES subtask §1 "Limits") |
 
 ### 12.2 Failure modes
 
@@ -588,7 +589,7 @@ Every message, file name, preview and file body is attacker-controlled input to 
 ### 12.3 Host scaling shape
 
 - **Partition by room.** All writes for a room go to its single primary; rooms spread across host instances by `roomId` hash. No cross-room transactions exist, except `blobs/link`, which only adds rows.
-- **Metadata in fjall, bytes in the blob store** (S3 note Option B for record bodies is optional; files are always out of fjall).
+- **Metadata in fjall, bytes in the blob store** (S3 subtask Option B for record bodies is optional; files are always out of fjall).
 - **Feed fan-out** is per room and stateless beyond the subscriber set; one mediator socket per host DID (VTI rule: one websocket per DID).
 
 ---
@@ -596,7 +597,7 @@ Every message, file name, preview and file body is attacker-controlled input to 
 ## 13. Observability
 
 - **Host metrics (no content, no DIDs on `private`):** puts/s and conflict rate per room bucket, `list` latency, `tree_head` time, feed fan-out latency (put → hint send), subscriber counts, upload sessions started/completed/abandoned, bytes stored and egressed, GC deletions, quota refusals.
-- **Audit:** room actions go through `vti_rooms::audit`, which already decides once which actor a host may record per tier ([[ROOMS-DESIGN]] §8). New actions: `room.blob.begin|complete|grant|link|unlink`. Read events on files are the sensitive ones; they inherit the room's read-event retention.
+- **Audit:** room actions go through `vti_rooms::audit`, which already decides once which actor a host may record per tier ([[ROOMS-DESIGN]] §8). New actions, following the existing `room.records.put` naming (`VTI/vti-rooms/src/audit.rs:150–153`): `room.blobs.begin|complete|grant|link|unlink`. Read events on files are the sensitive ones; they inherit the room's read-event retention.
 - **VTA metrics:** per-room watermark lag (host `headVersion` − local watermark), commit lag (anchored epoch − applied epoch), seal retries, open failures by cause (missing commit vs. tampering), verified-read failures.
 - **Client:** time-to-first-message after reconnect, send-to-ack latency, end-to-end send-to-render latency measured with **local** timestamps only (no telemetry that reveals who talks to whom).
 - **Health flags are not latched** (VTI rule R6.2): "feed connected" must be able to go false again.
@@ -605,7 +606,7 @@ Every message, file name, preview and file body is attacker-controlled input to 
 
 ## 14. Phased rollout
 
-Phases are prefixed **M** to keep them apart from the plan's R-phases and the S3 note's S-phases. "Verified" means against the local lab stack (plan §8), not only a unit test. All are local-lab only until rooms have a Farm story.
+Phases are prefixed **M** to keep them apart from the plan's R-phases and the S3 subtask's S-phases. "Verified" means against the local lab stack (plan §8), not only a unit test. All are local-lab only until rooms have a Farm story.
 
 | Phase | Scope | Depends on | Done when |
 |---|---|---|---|
@@ -645,14 +646,14 @@ Phases are prefixed **M** to keep them apart from the plan's R-phases and the S3
 - **Owner as single point of liveness** for membership changes.
 - **Metadata leakage** (§10.2) is real even on sealed tiers; the product must not market `attributed` as "the host knows nothing".
 - **Client-enforced rules** (edit-own, version-own) can be bypassed by a malicious member writing records directly; honest clients ignore them, but a buggy client renders them. Test with adversarial records.
-- **Doc drift.** [[ROOMS-GUIDE]] already lags the code (plan §2.3), and this plan reads `b9c5703a`, not the plan's pin. Re-verify every cited behaviour against the pin before M1.
+- **Doc drift.** [[ROOMS-GUIDE]] already lags the code (plan §2.3). Cited behaviour is verified at the pin `49f5f1be`; re-verify against whatever the pin is when M1 starts.
 
 ---
 
 ## 16. Where the work lives
 
 - **Upstream (VTI + `dtgwg-trust-tasks-tf`):** feed task, `rooms/blobs/*`, append-mode AAD, `rooms/keys/write`, prune verb. Specs first, code through a `trust-tasks-rs` bump.
-- **`room-host` / `vtc-service`:** feed fan-out, blob sessions and grants, blob-store backend (S3 note Option B extended to blobs), GC sweeper, audit actions.
+- **`room-host` / `vtc-service`:** feed fan-out, blob sessions and grants, blob-store backend (S3 subtask Option B extended to blobs), GC sweeper, audit actions.
 - **`vta-service`:** feed subscription, per-room watermark and root memory, search index, file-key release (Q1), batched open.
 - **Client library (new, TypeScript, beside [[ROOMS-TS]]):** messaging profile codec, outbox, local store, library index, chunked crypto (wasm), preview generation. Keyring consumes it through the `vti-client` package the PNM/CNM subtask designs (plan §3.1).
 
@@ -663,6 +664,6 @@ This plan edits neither the rooms plan nor its companions.
 ## 17. Sources
 
 - [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md) — the parent plan.
-- `/srv/dev/code/rooms_s3_storage_subtask.md`, `/srv/dev/code/rooms_encrypted_spaces_subtask.md` — companions.
-- `seas/vtafarm/vta-build-pipeline` @ `b9c5703a`: `docs/05-design-notes/data-rooms.md` (§1–§15), `docs/02-vta/data-rooms.md` (§1–§2), `vti-rooms/src/sealed.rs` (version binding), `vti-rooms/src/storage.rs` (version assignment), `room-host/src/didcomm.rs` (mediator reachability), the workspace's top-level contributor guide (transport preference, retry ownership, Remote-First, spec-first rule).
+- [`rooms_s3_storage_subtask.md`](./rooms_s3_storage_subtask.md), [`rooms_encrypted_spaces_subtask.md`](./rooms_encrypted_spaces_subtask.md) — sibling subtasks; [`2026-10-13-bam.md`](./2026-10-13-bam.md) — re-baselining findings.
+- VTI (`verifiable-trust-infrastructure`) @ `49f5f1be`: `docs/05-design-notes/data-rooms.md` (§1–§15), `docs/05-design-notes/data-rooms-read-through.md` (§6), `docs/02-vta/data-rooms.md` (§1–§2), `vti-rooms/src/sealed.rs` (version binding), `vti-rooms/src/storage.rs` (version assignment, put preconditions, paging, tree head), `vti-rooms/src/wire.rs` (put ack), `vti-rooms/src/audit.rs` (action names), `room-host/src/lib.rs` (put handler), `room-host/src/didcomm.rs` (mediator reachability), the workspace's top-level contributor guide (transport preference, retry ownership, Remote-First, spec-first rule).
 - [RFC 9420 — MLS](https://www.rfc-editor.org/rfc/rfc9420); [draft-sullivan-mls-attachments](https://www.ietf.org/archive/id/draft-sullivan-mls-attachments-01.html); [RFC 9605 — SFrame](https://www.rfc-editor.org/info/rfc9605); [MIMI](https://datatracker.ietf.org/doc/draft-ietf-mimi-protocol/).

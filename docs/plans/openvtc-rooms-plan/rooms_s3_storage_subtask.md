@@ -1,18 +1,18 @@
-# Storing Room Records in S3 — Design Sketch
+# Storing Room Records in S3 — Subtask
 
-**Status:** Draft companion to [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md). A design sketch from reading the code. Nothing here has been built or tested, and it is not a commitment to implement.
-**Scope:** The **host side** of rooms: where `room-host` (and `vti-rooms`) could keep record bodies. This is outside the parent plan's scope, which treats the host operator as a non-role (§4, "Host operator: No") and `room-host` as a lab binary (§8). It is written as a companion so that boundary stays visible. Keyring is a member client and is not changed by anything below (§7).
+**Status:** Draft — a subtask of [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md), sketched from reading the code. Nothing here has been built or tested, and it is not a commitment to implement.
+**Scope:** The **host side** of rooms: where `room-host` (and `vti-rooms`) could keep record bodies. This is outside the parent plan's own scope, which treats the host operator as a non-role (plan §4, "Host operator: No") and `room-host` as a lab binary (plan §8). It is kept as a separate subtask so that boundary stays visible. Keyring is a member client and is not changed by anything below (§7).
 **Parent:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md). Section references (§) to that plan are marked "plan §"; bare § references are to this document.
-**Reasoning:** none beyond this note. A decision in §9 belongs in a further dated companion.
-**Baseline:** as in the plan, every claim is measured against the pinned clone `external/verifiable-trust-infrastructure` at **afcf2470** (2026-09-29, `scripts/openvtc/PINS.json`) unless marked otherwise, and carries a file path where it can. The plan's verification note applies unchanged: the 121 later commits in the sibling checkout were **not** checked for S3 or object-store support, and nothing here depends on them.
+**Reasoning:** [`2026-10-13-bam.md`](./2026-10-13-bam.md) (re-baselining against the current pin). A decision in §9 belongs in a further dated companion.
+**Baseline:** every claim is measured against the pinned clone `external/verifiable-trust-infrastructure` at **VTI 49f5f1be** (tag VTI-Eucalyptus, 2026-10-07; Keyring's pin in `scripts/openvtc/PINS.json`) unless marked otherwise, and carries a file path where it can.
 
 **References:** the `[[…]]` tags are those defined in the plan's header.
 
-- **[[ROOMS-HOST]]** — `room-host/` (`src/main.rs`, `README.md`). Opens the store.
-- **[[ROOMS-GUIDE]]** — `docs/02-vta/data-rooms.md`. Operator guide: hosting (§8), lifecycle (§10), records and retraction.
+- **[[ROOMS-HOST]]** — `room-host/` (`src/main.rs`, `src/lib.rs`, `README.md`). Opens the store.
+- **[[ROOMS-GUIDE]]** — `docs/02-vta/data-rooms.md`. Operator guide: hosting and mirrors (§8), records and retraction (§9), lifecycle (§10).
 - **[[ROOMS-DESIGN]]** — `docs/05-design-notes/data-rooms.md`. Cites `draft-sullivan-mls-attachments` for key derivation.
 - **[[ROOMS-SEC-V2]]** — `docs/05-design-notes/data-rooms-security-review-v2.md`. Accepts metadata leakage; names padding buckets as the mitigation.
-- **[[ROOMS-STORAGE]]** — `vti-rooms/src/storage.rs`. Keyspace layout and the four store calls rooms use.
+- **[[ROOMS-STORAGE]]** — `vti-rooms/src/storage.rs`. Key layout and the four store calls rooms use.
 
 ---
 
@@ -26,7 +26,7 @@ It could be added in a contained way. **Recommendation: keep metadata in fjall a
 
 ### 2.1 Backend
 
-Hosts open a local fjall store through `vti_common::store`. `room-host` does it in `open_state_with_resolver` with `Store::open(&StoreConfig { data_dir })` ([[ROOMS-HOST]]). The only setting is `--data-dir`. Fjall memory tuning exists but applies to the VTA and VTC, not `room-host`.
+Hosts open a local fjall store through `vti_common::store`. `room-host` does it in `open_state_with_resolver` (`room-host/src/lib.rs:1433`, called from `src/main.rs:161`) with `Store::open(&StoreConfig { data_dir })`, then opens three keyspaces: rooms, records and epoch links ([[ROOMS-HOST]]). The only setting is `--data-dir` (default `./room-host-data`). Fjall memory tuning (`Store::open_with(&config.store, &config.fjall)`) exists but is used by the VTA and VTC, not `room-host`.
 
 ### 2.2 Layout
 
@@ -36,26 +36,27 @@ Three keyspaces with plain string keys ([[ROOMS-STORAGE]]):
 rooms:<roomId>                     -> Room (owner, visibility, epoch, expiry, retention, next_version)
 room_records:<roomId>:<key>        -> Record
 room_epoch_links:<roomId>:<epoch>  -> EpochLink (epoch zero-padded to 10 digits)
+room-commit:<roomId>:<epoch>       -> relayed MLS commit (same epoch-links keyspace, zero-padded)
 ```
 
 - **Room-exact scans.** The trailing `:` stops one room's scan from matching another room whose ID begins the same way.
 - **Version assignment.** Versions come from the room row's counter, so they are monotonic per room. A write reads the room, takes the next number, writes the record, then writes the room back. That is not atomic across keyspaces. The code states this can only skip a version, never duplicate one, and that skipping is the safe direction.
-- **Record body.** `Record` carries sealed content inline as a base64url sealed string with a nonce. On open rooms the put request carries cleartext fields instead. **Not read:** how those cleartext fields are stored.
-- **Size limits.** A VTC caps a Trust Task body at 64 KiB; `room-host` has only axum's 2 MB default (plan §5). Listings are capped at 500 records per page.
+- **Record body.** `Record` (`vti-rooms/src/lib.rs:385`) carries the body inline: `sealed` (base64url) with `nonce` on the sealed tiers, or `cleartext` (a JSON value) on an `Open` room. Both live in the same fjall row as the metadata, alongside `author` and `updated_at`.
+- **Size limits.** A VTC caps a Trust Task document at 64 KiB by default (`vtc-service/src/trust_tasks/size.rs`, `DEFAULT_MAX_DOCUMENT_BYTES`); `room-host` sets no body limit, so axum's 2 MB default applies (plan §5). Listings are capped at 500 records per page (`MAX_PAGE`).
 
 ### 2.3 The seam for a new backend
 
-- **Closed enums.** `Store` has two variants: `Local` (fjall) and `Vsock` (the Nitro Enclave backend, behind a `vsock-store` feature). `KeyspaceHandle` is a matching enum.
+- **Closed enums.** `Store` (`vti-common/src/store/mod.rs:72`) has two variants: `Local` (fjall) and `Vsock` (the Nitro Enclave backend, behind a `vsock-store` feature). `KeyspaceHandle` (`:131`) is a matching enum. The pin's new `vti-common/src/store/test_fixture.rs` (test-only, behind `cfg(test)` or `test-support`) copies template fjall databases to speed up tests; it opens a `LocalStore` and adds no backend trait.
 - **Concrete handle.** Room code is written against the concrete `KeyspaceHandle`, not a trait.
 - **Small call surface.** `storage.rs` calls only `get_raw`, `insert`, `prefix_iter_raw` and `remove`. The wider `Store` API also has `insert_if_absent`, `swap` and `move_if_unchanged`.
-- **Encryption at rest.** `KeyspaceHandle::with_encryption` provides AES-256-GCM bound to (keyspace, key). No call to it was seen in `room-host`, so rooms do not use it by default.
+- **Encryption at rest.** `KeyspaceHandle::with_encryption` provides AES-256-GCM bound to the value's location (`vti-common/src/store/encryption.rs`). Neither `room-host` nor `vti-rooms` calls it, so rooms do not use it.
 
 ## 3. Where the "S3" idea may have come from
 
 Three nearby things are easy to mistake for room S3 support. None is.
 
-- **`vti-secrets` `aws-secrets` feature.** AWS Secrets Manager for VTA secrets. Not S3, not rooms.
-- **`contentStoredAt` and `didControlledBy`.** The VTC policy input names these "hosting axes". [[ROOMS-GUIDE]] says the published `rooms/create/0.1` schema has no member for either, so no host can know them. They read as a design placeholder.
+- **`vti-secrets` `aws-secrets` feature.** AWS Secrets Manager for secrets; `room-host` re-exports it (`room-host/Cargo.toml`) for its own host identity. Not S3, and not record storage.
+- **`contentStoredAt` and `didControlledBy`.** The design's policy input contract names these "hosting axes" (`vtc-service/src/rooms/policy.rs`). [[ROOMS-GUIDE]] (§8.2) says the published `rooms/create/0.1` schema has no member for either, so no host can know them. They read as a design placeholder.
 - **`draft-sullivan-mls-attachments`.** Cited by [[ROOMS-DESIGN]] for key derivation. The draft concerns attachments stored outside the group, but rooms borrow only the key pattern.
 
 ## 4. Options
@@ -67,7 +68,7 @@ Each fjall key becomes an S3 object key, such as `room_records/<roomId>:<key>`.
 - **Maps cleanly.** `get_raw` → GetObject, `insert` → PutObject, `remove` → DeleteObject, `prefix_iter_raw` → ListObjectsV2 with a prefix. S3 lists in lexicographic order, so the zero-padded epoch keys and room-exact prefixes keep working. S3 has been strongly read-after-write consistent since 2020.
 - **Atomic writes.** `insert_if_absent`, `swap` and `move_if_unchanged` need conditional writes (`If-None-Match`, `If-Match`). AWS S3 supports these. S3-compatible stores such as MinIO or R2 vary, so check the target.
 - **Version assignment.** The existing read-modify-write window widens with network latency.
-- **Cost and latency.** Every list becomes paged ListObjectsV2 calls of up to 1000 keys, and the room row is rewritten on every write. **Assumed, not read:** that the Merkle tree-head code (`vti-rooms/src/merkle.rs`) scans records.
+- **Cost and latency.** Every list becomes paged ListObjectsV2 calls of up to 1000 keys, and the room row is rewritten on every write. The Merkle tree head also scans every record in the room (`storage::tree_head` and `tree_head_with_trace` call `list_records`), so each served commitment becomes a full listing.
 - **Key encoding.** Client-chosen record keys need encoding and a length cap, since S3 keys max at 1024 bytes.
 
 The most general option and the worst fit: it moves small, hot metadata onto a slow store.
@@ -88,11 +89,11 @@ If step 3 fails there is an orphan object and no dangling row. That is the failu
 
 **Read path.** Read the row from fjall, then GetObject the body. Listings never touch S3, because [[ROOMS-GUIDE]] says listings return metadata and never bodies.
 
-**Where the code changes.** `put_record` and `get_record` in [[ROOMS-STORAGE]], the `Record` struct, the mirror path (`store_mirrored_record`), and anything that copies bodies.
+**Where the code changes.** `put_record`, `get_record`, `curate_record` and `purge_record` in [[ROOMS-STORAGE]], the `Record` struct, the mirror path (`store_mirrored_record`, called from `room-host/src/mirror.rs`), and anything that copies bodies. The Merkle tree head hashes every record (Option A, cost note); whether it needs body bytes or only stored fields is **(unverified at 49f5f1be)** and decides whether a tree head must fetch from S3.
 
 ### Option C — Presigned URLs, client uploads straight to S3
 
-Keeps bytes off the host entirely and is the only way to lift the 64 KiB and 2 MB caps. It **needs a spec change**: the body travels inside the signed Trust Task document, and the published schema has no member for an external reference. Upstream owns that spec. The repo's backup transfer (`GET|POST /backup/blob/{id}`) is a precedent for a separate blob endpoint.
+Keeps bytes off the host entirely and is the only way to lift the 64 KiB and 2 MB caps. It **needs a spec change**: the body travels inside the signed Trust Task document, and the published schema has no member for an external reference. Upstream owns that spec. The repo's backup transfer (`GET|POST /backup/blob/{id}`, `docs/01-concepts/architecture.md`) is a precedent for a separate blob endpoint.
 
 ### Not recommended: fjall directory on an S3 mount
 
@@ -104,26 +105,26 @@ An inference, not tested. Fjall is an LSM-tree engine that depends on fsync and 
 
 - **Flags.** Something like `--s3-bucket`, `--s3-prefix` and `--s3-endpoint` (for MinIO or R2).
 - **Credentials.** The standard AWS credential chain.
-- **Opt-in.** `room-host` makes every capability an operator decision: `--listen`, `--resolve-dids`, `--allow-origin`, `--mediator-did` and `--secrets` are all opt-in (plan §8, §2.3). S3 should follow that.
+- **Opt-in.** `room-host` makes every capability an operator decision: `--listen`, `--resolve-dids`, `--allow-origin`, `--mirror-config`, `--mediator-did` and `--secrets` are all opt-in (`room-host/src/main.rs`; plan §8, §2.3). S3 should follow that.
 - **Build gating.** A Cargo feature, as with `didcomm` and `onboarding`.
 
 ### 5.2 Security
 
 - **Sealed rooms.** The AEAD binds `roomId | key | version | epoch` (plan §7, R3 criterion (b)), so a bucket operator who alters or relocates a body makes it fail to open. S3 need not be trusted more than the host already is.
-- **Open rooms.** Bodies are cleartext. Per the guide, records are signed by their writer; **not traced:** where that signature is stored or checked. Treat bucket policy, encryption (SSE-S3 or SSE-KMS) and access logging as the real boundary.
+- **Open rooms.** Bodies are cleartext. The guide says records are signed ([[ROOMS-GUIDE]] §8.3), but the stored `Record` has an `author` field and no signature field; the request document's proof is verified on arrival (`HostState::presenter`, `room-host/src/lib.rs`) and is not kept. Whether any per-record writer signature survives into storage is **(unverified at 49f5f1be)**. Treat bucket policy, encryption (SSE-S3 or SSE-KMS) and access logging as the real boundary.
 - **Metadata still leaks.** Object sizes, counts and access timing are visible to the bucket owner. [[ROOMS-SEC-V2]] accepts this and names padding buckets as the mitigation if a real adversary appears.
 
 ### 5.3 Deletion
 
-There is a trap. The guide says `retracted` is a tombstone where "the body goes, the key/version/epoch stay", and a curation assigns a new version. With immutable per-version objects, retracting a record **leaves the old object in S3** unless the code deletes it. If bucket Versioning is on, even DeleteObject keeps old versions. The design needs an explicit rule, and probably S3 lifecycle rules.
+There is a trap. The guide (§9) says `retracted` is a tombstone where "the body goes, the key/version/epoch stay", and a curation assigns a new version. With immutable per-version objects, retracting a record **leaves the old object in S3** unless the code deletes it. If bucket Versioning is on, even DeleteObject keeps old versions. The design needs an explicit rule, and probably S3 lifecycle rules. The same applies to `purge_record`, the separate erasure path that removes a record tombstone included.
 
 This also touches the plan's note that cryptographic deletion "has a primitive and no verb" (plan §2.3).
 
-Separately, no code was found that deletes a room's data when it becomes reclaimable (plan §7, R5 lists Reclaimable as a computed state). S3 lifecycle expiry could do that job, but it would be a new policy.
+Separately, no code was found that deletes a room's data when it becomes reclaimable: `Lifecycle::Reclaimable` is computed (`vti-rooms/src/lifecycle.rs`; guide §10.1; plan §7, R5) and nothing in `room-host` acts on it. S3 lifecycle expiry could do that job, but it would be a new policy.
 
 ### 5.4 Mirrors and backups
 
-- **Mirrors.** A mirror stores its own copy. It needs its own bucket or prefix, or it shares the primary's objects.
+- **Mirrors.** A mirror (`--mirror-config`, `room-host/src/mirror.rs`) pulls from its write-primary and stores its own copy through `store_mirrored_record`. It needs its own bucket or prefix, or it shares the primary's objects.
 - **Backups.** `room-host` has no export task today. Bucket-level replication or versioning would be a new option for body backup, and the fjall metadata would still need backing up separately.
 
 ## 6. What it does not fix
@@ -137,7 +138,7 @@ Separately, no code was found that deletes a room's data when it becomes reclaim
 
 This is a `room-host` and `vti-rooms` change, **not a Keyring one**. The wallet reaches records only through host calls via its VTA (plan §2.1, §3.2), so nothing in plan R1–R5 changes. Contributing upstream is cleaner than forking: a fork carries a storage patch that drifts whenever the `Record` shape changes.
 
-The plan itself is not edited; this note stays a companion to it.
+The parent plan does not take on this work; it stays in this subtask.
 
 ## 8. A rough plan
 
@@ -160,10 +161,10 @@ Phases are prefixed **S** to keep them apart from the plan's R-phases. As in pla
 | Q2 | What is the deletion rule when bucket Versioning is on (§5.3)? | Not decided | S4 |
 | Q3 | Do mirrors share the primary's objects or get their own prefix (§5.4)? | Not decided | S2, S5 |
 | Q4 | Is the 64 KiB / 2 MB cap a real problem for any intended use? If so, Option C needs an upstream spec change | Not decided | choice of B over C |
-| Q5 | Where are cleartext open-room bodies stored, and where is the writer signature checked (§2.2, §5.2)? | Measurable | Option B's code surface |
+| Q5 | Is any per-record writer signature stored, and does the Merkle tree head need body bytes (§4 Option B, §5.2)? | Measurable | Option B's code surface |
 
 ## 10. What was and was not verified
 
-- **Verified in the pin:** the `Store` and `KeyspaceHandle` enums, the keyspace layout, the operations `storage.rs` calls, the inline sealed field, the size caps, and the absence of any S3 code or reference in the room crates.
-- **Inferred, not tested:** the object naming scheme, the write-order argument, every statement about S3 behavior, the FUSE comment, and the Merkle scan cost.
-- **Not checked:** whether the 121 later commits in the sibling checkout add anything like this, and where cleartext open bodies are stored.
+- **Verified at 49f5f1be:** the `Store` and `KeyspaceHandle` enums (no backend trait, including in the new test fixture), the key layout, the operations `storage.rs` calls, the inline `sealed`/`nonce`/`cleartext` fields, the size caps, that the tree head scans all records, and the absence of any S3 or object-store code or reference in `room-host`, `vti-rooms`, `vti-common` and `vtc-service` (the only DynamoDB mentions are comments about atomic-claim backends for auth and integrity, not rooms).
+- **Inferred, not tested:** the object naming scheme, the write-order argument, every statement about S3 behavior, the FUSE comment, and the Merkle cost under S3.
+- **Not checked:** whether a per-record writer signature is stored, and whether the tree head needs body bytes (Q5).

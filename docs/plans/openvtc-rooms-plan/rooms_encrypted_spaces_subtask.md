@@ -1,19 +1,26 @@
 # OpenVTC data rooms × Encrypted Spaces: storage and sync fit
 
-Date: 2026-10-06
+**Status:** Draft — analysis and proposed integration (option B below); not scheduled, nothing
+built.
+**Parent:** [`../openvtc-rooms-plan.md`](../openvtc-rooms-plan.md)
+**Reasoning:** [`./2026-10-06-bam.md`](./2026-10-06-bam.md) (the Encrypted Spaces assessment
+this builds on); [`./2026-10-13-bam.md`](./2026-10-13-bam.md) (re-baselining onto the VTI pin)
+**Baseline:** VTI `49f5f1be` (tag VTI-Eucalyptus, 2026-10-07), Keyring's pin in
+`scripts/openvtc/PINS.json`
 
-## Sources and which rooms material was used
+## Sources
 
-- **Rooms planning doc:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md). It cites a VTI pin
-  (`afcf2470`) under `keyring-wallet/external/`. That pin is **not on disk**: the
-  `external/verifiable-trust-infrastructure*` checkouts present have no rooms crates.
-- **Rooms code and design actually read:** `/srv/dev/code/seas/vtafarm/vta-build-pipeline`
-  (VTI checkout, HEAD `b9c5703a`, 2026-10-01). It is the only tree on disk with `vti-rooms`,
-  `room-host`, `vti-rooms-dtg`, `vti-rooms-wasm` and `docs/05-design-notes/data-rooms*.md`. It
-  may differ from the plan's pin. Paths below are relative to this checkout (abbreviated
-  `VTI/`).
-- **Encrypted Spaces (ES):** `[`2026-10-06-bam.md`](./2026-10-06-bam.md)`, plus
-  the cloned `prototype` and `merk` repos in the earlier session's scratchpad. Both are Apache-2.0.
+- **Rooms planning doc:** [`openvtc-rooms-plan.md`](../openvtc-rooms-plan.md).
+- **Rooms code and design:** verifiable-trust-infrastructure at the pin `49f5f1be`, the
+  `external/verifiable-trust-infrastructure` clone managed by `scripts/openvtc/setup-external.mjs`
+  (read from its git objects at the pinned commit). Paths written `VTI/...` are relative to
+  that commit.
+- **Encrypted Spaces (ES):** the assessment [`2026-10-06-bam.md`](./2026-10-06-bam.md), plus
+  [github.com/encrypted-spaces/prototype](https://github.com/encrypted-spaces/prototype) at
+  `aa7440b` (tag `v0.0.2`, 2026-09-22) and
+  [github.com/encrypted-spaces/merk](https://github.com/encrypted-spaces/merk) at `9954382`
+  (tag `v0.0.2`, the revision `prototype`'s `Cargo.lock` resolves). Both are Apache-2.0. ES
+  paths below are relative to `prototype` unless prefixed `merk/`.
 
 An important finding before anything else: **rooms have already looked at ES and taken parts of
 it.** `VTI/vti-rooms/src/retention.rs` (header) implements the upper tier of ES's retention key
@@ -33,6 +40,8 @@ adopt, not whether the two connect at all.
   (`VTI/vti-common/src/store/mod.rs`, `pub enum Store` / `pub enum KeyspaceHandle`), with two
   variants: local **fjall** and **vsock** (a store proxied to the parent instance for Nitro
   enclaves). An optional `encryption` feature adds at-rest encryption with location-bound AAD.
+  At the pin the module also has `store/test_fixture.rs`, compiled only under `cfg(test)` or the
+  `test-support` feature: it opens pre-created fjall keyspaces for tests and adds no backend.
   To add a backend you would add an enum variant or pull out a trait. No other backend
   (SQL, S3, DynamoDB) is planned for rooms. `vta-tee` uses DynamoDB, but not for rooms.
 - *The one real trait seam is for authorization, not storage:* `ChainVerifier`
@@ -56,7 +65,7 @@ adopt, not whether the two connect at all.
 | Encryption | `attributed`: one sealed blob per record under the MLS exporter key. AEAD binds `roomId\|key\|version\|epoch` (ChaCha20-Poly1305). Host sees opaque keys, status, version, epoch, timestamps | §3.1, §6; `sealed.rs` |
 | Deletion | `purge_record` is a request the host is trusted to honour. **Cryptographic** deletion works by pruning epoch links (`prune_epoch_links_before`) | `storage.rs`, `retention.rs` |
 | Verifiability | Host computes a Merkle tree head and inclusion proof **on every read by rescanning the whole room** (`storage::tree_head`, about line 706). The commitments are optional in responses. Anchoring them in the witnessed `did:webvh` log is decided but not built | `room-host/src/lib.rs` ~760-850; `data-rooms-epoch-anchoring.md`; `data-rooms-verified-reads.md` |
-| Limits | 64 KiB Trust Task body on a VTC, 2 MB on `room-host`. The replay guard is in-memory and single-process | rooms plan §5; `room-host/src/lib.rs` ~497 |
+| Limits | 64 KiB Trust Task body on a VTC, 2 MB on `room-host` (axum's default body limit; `room-host` sets none of its own). The replay guard is in-memory and single-process (`InMemoryReplayGuard`) | rooms plan §5; `room-host/src/lib.rs` ~499 |
 
 ## 2. Fit analysis: ES as a backend for rooms
 
@@ -65,7 +74,7 @@ adopt, not whether the two connect at all.
 | Room (DID, owner, visibility) | Space | Partial. ES has no DID and no owner/succession concept |
 | Record `(roomId,key)` + sealed blob | Table row: plaintext key/status/version columns + encrypted blob column | Good. ES encrypts all non-`plaintext` columns |
 | Per-room `version`, `sinceVersion` | Server-ordered changelog `change_id`, `fast_forward(change_id)` | Good |
-| `expectedVersion` CAS | Unclear. ES write ACLs are predicates over columns; a CAS on version is **unverified** | Unknown |
+| `expectedVersion` CAS | Unclear. ES write ACLs are predicates over columns; no per-row conditional write was found in `sdk/src` or `backend/src` (the only compare-and-swap is `MerkStorage::commit_candidate` on the whole-tree root), so a CAS on version is **unverified** | Unknown |
 | `curate` vs `write` | ACL predicates on the `status` column | Possible |
 | Membership: VMC/VAC credential chains, MLS group, VTA-held keys | `users` table (`uid` i64 + KEM/sig keys), invite = `InviteRequest{root_commitment, PoseidonMveProof}`, rekey | **Conflict.** Two group-key layers. Rooms rejected ES's |
 | Identity: DIDs, presenter-bound presentations | `AuthContext{user_id}`, **client-asserted stub** (`sdk/src/authentication.rs`, test-gated) | **Mismatch.** Needs a DID→uid binding that is verified, not asserted |
@@ -127,8 +136,11 @@ already have these.
 - **Maturity:** tagged 0.0.2, "DO NOT USE IN PRODUCTION", no audit, API churn. Pin it and vendor it.
 - **Rust-only SDK.** This suits the VTA and hosts but not the RN wallet, which goes through the
   VTA anyway (rooms plan §3.1). The SDK has a wasm build (`sdk/README.md`); untested here.
-- **`merk` is an in-memory AVL tree** (`merk/README.md`). How ES persists it, and how that would
-  sit alongside fjall/vsock, is **unverified**. Enclave (vsock) compatibility is unknown.
+- **`merk` is an in-memory AVL tree** (`merk/README.md`: "an in-memory Merkle AVL tree with
+  copy-on-write nodes"), and ES does not persist it: `backend/src/merk_storage/mod.rs` describes
+  itself as "In-memory storage" and has no disk path. A rooms store would have to supply
+  persistence itself (rebuild from fjall on open, or snapshot the tree); how that sits
+  alongside fjall/vsock, and enclave (vsock) compatibility, are unknown.
 - **Leaf encoding mismatch.** Rooms leaves commit to RFC 8785 canonical JSON of the wire record
   (`merkle.rs`). The spec's existing `dataCommitment`/trace format would need a versioned change.
 
@@ -136,7 +148,10 @@ already have these.
 
 **Seam:** extract a `RecordStore` trait from the free functions in
 `VTI/vti-rooms/src/storage.rs` (put/get/list/tree_head/tree_head_with_trace/epoch links),
-following the `ChainVerifier` pattern in `authz.rs`. The current fjall/vsock path becomes the
+following the `ChainVerifier` pattern in `authz.rs`. No such trait exists at the pin: the only
+`trait …Store` definitions in `vti-rooms` and `vti-common` are `SessionStore`
+(`vti-common/src/auth/backend.rs`) and `SeedStore` (`vti-common/src/seed_store.rs`), neither a
+record store. The current fjall/vsock path becomes the
 first implementation and a merk-backed store the second. Authorization, sealing, MLS and Trust
 Task wiring stay as they are. Verification goes in `vti-rooms` (and therefore `vti-rooms-wasm`)
 and is called by the VTA's `rooms/keys/read|browse`.
@@ -144,7 +159,8 @@ and is called by the VTA's `rooms/keys/read|browse`.
 **Phases:**
 
 1. **P0, measure (no code).** Benchmark the current per-read `tree_head` rescan at realistic room
-   sizes. Read ES `backend/src/merk_storage` for persistence and its proof API. Run ES
+   sizes. Read ES `backend/src/merk_storage` for its proof API, and decide how a merk tree is
+   rebuilt or persisted across restarts (ES keeps it in memory only). Run ES
    `ffproof` in dev mode with the RISC Zero toolchain (see the assessment's follow-up).
 2. **P1, trait extraction.** Behaviour-preserving refactor with the existing tests.
 3. **P2, merk store behind a feature flag.** Same leaf commitment (canonical JSON), maintained
@@ -159,10 +175,10 @@ and is called by the VTA's `rooms/keys/read|browse`.
 
 **Open questions:**
 
-- Is the `afcf2470` pin the same as `b9c5703a` for `vti-rooms` storage and merkle? Not checked.
-- Does ES support conditional writes (an `expectedVersion` equivalent)?
+- Does ES support conditional writes (an `expectedVersion` equivalent)? None found in code.
 - Can ES's trace format carry rooms' leaf encoding, or must one side change?
-- Does merk persistence survive the vsock/enclave store path?
+- How is a merk tree persisted or rebuilt for rooms, and does that survive the vsock/enclave
+  store path?
 - Who pays for real fast-forward proofs (GPU per batch), and is the witnessed anchor enough
   without them (`data-rooms-verified-reads.md` §2 argues yes)?
 - Would ES ACL-in-proof ever be worth a second policy language beside VACs and `rooms.rego`?
@@ -170,9 +186,9 @@ and is called by the VTA's `rooms/keys/read|browse`.
 
 ## 5. Privacy guarantees compared, and running without a TEE
 
-Sources: rooms material from `seas/vtafarm/vta-build-pipeline` @ `b9c5703a` (`data-rooms.md`
-§3-6, §12; `sealed.rs`; `vta-keyspaces/src/lib.rs`; `docs/02-vta/tee-architecture.md`); ES
-material from the `prototype` clone and whitepaper v1.1. Items marked (inferred) are
+Sources: rooms material from VTI `49f5f1be` (`data-rooms.md` §3-6, §12; `sealed.rs`;
+`vta-keyspaces/src/lib.rs`; `docs/02-vta/tee-architecture.md`); ES material from
+`prototype` @ `aa7440b` and whitepaper v1.1. Items marked (inferred) are
 inference, not verified from docs or code. Cryptographic soundness of either system was
 not verified.
 
@@ -234,4 +250,3 @@ hosts the data.
 - Whether MLS commits on the `attributed` tier use PublicMessage or PrivateMessage.
 - ES per-column keys and key-refresh/PCS semantics in code.
 - ES deletion and retention behaviour end to end.
-- Whether `afcf2470` matches `b9c5703a`.
