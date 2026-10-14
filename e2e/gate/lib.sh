@@ -278,7 +278,7 @@ for n,ms in (j.get('approverSets') or {}).items():
 
 # ---- runner cleanup: what a leg made on a runner since it started ----
 
-# Delete the phone grants (label keyring-admin) made on $1 since $2, retrying a busy or rate-limited runner.
+# Delete the phone grants (label keyring-admin, or keyring-phone from the enrolment page) made on $1 since $2, retrying a busy or rate-limited runner.
 # A grant made before the leg began (a seated vetter's, a person's) is never touched.
 # Whether CI's pinned pnm (pnm-linux.yml) still matches the Farm's vta-service version: one line for the run's meta,
 # and a loud line on the terminal when it has drifted (farm-drift.mjs).
@@ -293,7 +293,7 @@ keys_since() {
   # t0 is compared as a string with each entry's ISO createdAt: anything else (epoch seconds, empty) sorts below
   # every date and would take every phone key on the runner (a seated vetter's, on 237's gate).
   [[ $t0 =~ ^20[0-9][0-9]-[01][0-9]-[0-3][0-9]T ]] || { echo "  $slug keys: NOT cleaned, start time \"$t0\" is not an ISO stamp"; return 1; }
-  # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin): one
+  # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin or keyring-phone): one
   # leg's cleanup would take another's live key. gate.sh then cleans each runner once, after both platforms.
   if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then echo "  $slug keys: deferred to the run's end"; echo "$slug" >> "$RUN_DIR/defer-keys"; return; fi
   local list; list=$(for i in 1 2 3 4; do pnm "$slug" acl list --json | python3 -c "
