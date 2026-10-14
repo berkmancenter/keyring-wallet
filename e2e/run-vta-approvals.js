@@ -300,7 +300,11 @@ try {
       ? `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel)`
       : "no wake arrived in 2 min (no Keyring notification posted)";
     await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
-      `${seen} · agent says pushCapable ${capable} · ${fcm.length} FCM line(s) in the phone's log since Home (wake-logcat.txt) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+      `${seen} · agent says pushCapable ${capable} · ${fcm.length} FCM line(s) in the phone's log since Home (wake-logcat.txt) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`,
+      // Tracked (coordinator, 10-14): in rerun 1014-1651 the app registered (wakeable, pushCapable true) but no FCM
+      // line reached the emulator, so nothing was posted. A google_apis emulator does receive FCM (push lane: 9 wakes
+      // on 10-11), so the loss is on the push path, which the push lane is investigating.
+      { tracked: "wake not received; the push path (Farm VTA → gateway → FCM) is being investigated by the push lane" });
     await d.activateApp(BID);
     await sleep(2000);
     // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
