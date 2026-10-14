@@ -787,7 +787,10 @@ async function linkCase(driver, which) {
       const out = deleteAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME, subject: e.subject });
       console.log(`[e2e] removed this phone's key …${e.subject.slice(-12)}: ${out.trim().split("\n").pop()?.slice(0, 60)}`);
     }
-    // The phone hears of it on its next call: the app to the background and back, My Agent, past an introduction.
+    // The phone hears of it on its presence tick (bifold vtaPresence.ts: heartbeat, then "DID not in ACL" moves the
+    // link on), which runs every HEARTBEAT_INTERVAL_MS (5 min, vtaDevices.ts) from app start; a foreground or My
+    // Agent does not call the agent (rerun 1014-1651: six nudges, no call in 181 s after the removal). So the wait
+    // covers one whole tick and a margin. The nudge keeps the app unlocked and on My Agent meanwhile.
     const nudge = async () => {
       await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
       await sleep(1500);
@@ -796,7 +799,7 @@ async function linkCase(driver, which) {
       await waitForTestId(driver, "MyAgent", 15000).then((el) => el.click(), () => undefined).catch(() => undefined);
     };
     await nudge();
-    const removed = (await link.awaitRemoved({ nudge })).value;
+    const removed = (await link.awaitRemoved({ nudge, timeoutMs: 6.5 * 60_000 })).value;
     await screenshot(driver, `${which}-removed`);
     const again = await scanAndLink(did);
     await screenshot(driver, which);
