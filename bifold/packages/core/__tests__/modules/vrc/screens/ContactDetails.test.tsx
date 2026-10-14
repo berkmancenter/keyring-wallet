@@ -582,6 +582,46 @@ describe('ContactDetails Screen', () => {
     })
   })
 
+  describe('only a witness credential this device verified earns the marks', () => {
+    const confirmed = {
+      localityConfirmed: true,
+      localityMethod: 'ble-challenge-response/0.1',
+      localityVenue: 'ATL, Room 2',
+    }
+    const renderWith = (vwc: W3cCredentialRecord) => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: { w3cCredentialRecords: [vwc] },
+      } as any)
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      return render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    }
+
+    test('shows neither the Witnessed nor the In-Person badge for a credential the wallet never verified', async () => {
+      // A peer-supplied record claiming a confirmed in-person exchange, without the ceremony's verified mark.
+      const { findByText, queryByTestId, queryByText } = renderWith(
+        createLocalityVwc(TEST_CONTACTS.alice.issuer.id, confirmed, false)
+      )
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(queryByTestId('WitnessedBadge')).toBeNull()
+        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+        expect(queryByText('In-Person')).toBeNull()
+        expect(queryByText('Confirmed — ATL, Room 2')).toBeNull()
+      })
+    })
+
+    test('shows both badges for the same credential once the ceremony verified it', async () => {
+      const { findByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, confirmed, true))
+
+      await waitFor(async () => {
+        expect(await findByTestId('WitnessedBadge')).toBeTruthy()
+        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
+      })
+    })
+  })
+
   describe('linked profile display', () => {
     test('shows the live profile name and photo, in a card, when sharedProfileId still resolves to an existing profile', async () => {
       const photo =
