@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -84,4 +85,18 @@ test('a reused group number is not killed: the leader start time does not match'
   assert.notEqual(left(marker), '', 'the stranger lives');
   assert.equal(fs.readFileSync(path.join(home, 'galarm-groups'), 'utf8'), '', 'the stale line is dropped');
   process.kill(stranger.pid, 'SIGKILL');
+});
+
+// galarm is a shell function: a command runner (env, nohup, xargs, timeout...) in front of it looks for a galarm on the
+// PATH and fails 127 before the driver starts. The 241 gate (1014-0451) lost linkfail's 7 rows and devices that way;
+// the variables go after it instead (`galarm 1200 env X=1 node ...`).
+test('no leg runs galarm through env or another command runner', () => {
+  const LEGS = path.join(path.dirname(LIB), 'legs');
+  const bad = [];
+  for (const f of [...readdirSync(LEGS).filter((n) => n.endsWith('.sh')).map((n) => path.join(LEGS, n)), LIB]) {
+    const src = readFileSync(f, 'utf8').replace(/\\\n\s*/g, ' ');
+    for (const line of src.split('\n'))
+      if (/(?:^|[\s;|&(])(?:env|nohup|xargs|timeout|exec|sudo|time)\s(?:[^;|&]*\s)?galarm\s/.test(line)) bad.push(`${path.basename(f)}: ${line.trim().slice(0, 100)}`);
+  }
+  assert.deepEqual(bad, []);
 });
