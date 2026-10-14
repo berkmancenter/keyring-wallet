@@ -50,7 +50,7 @@ adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
 CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
   STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
-grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
+grep -E '^\[e2e\] [0-9]|^(PROBE|ISSUED) ' "$LEG_DIR/card.out" | cut -c1-260
 take_rows "$LEG_DIR/card.out"
 # A driver that never printed its row (killed by its alarm, a crash): FAIL on a build with #386, tracked before it.
 if ! grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out"; then

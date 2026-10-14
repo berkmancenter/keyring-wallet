@@ -137,6 +137,19 @@ async function main() {
   const sniRule = ["OUTPUT", "-p", "tcp", "-m", "string", "--string", host, "--algo", "bm", "-j", "REJECT", "--reject-with", "tcp-reset"];
   const ipRule = ["OUTPUT", "-d", host, "-j", "REJECT"];
   let cut = "";
+  // The cut seen from the phone itself: a TLS fetch of the status host with the device's curl, before the cut (the
+  // control: an HTTP code) and during it (a refusal). 1014-2239 could not tell a cut that did not block the app's
+  // fetch from a card with no status entry; this says which. Logged as PROBE lines, not a row.
+  const probe = (when) => {
+    let said;
+    try {
+      said = `http ${adb("curl", "-sS", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}", `https://${host}/`) || "?"}`;
+    } catch (e) {
+      said = `refused: ${String(e.stderr ?? e.message).replace(/\s+/g, " ").trim().slice(0, 120)}`;
+    }
+    console.log(`PROBE ${when} ${host}: ${said}`);
+    return said;
+  };
   let tried = false;
   // The server-name rule matches the host as a substring of any server name: refuse when C's messaging host or the
   // host in C's own DID would match too, or the cut would also cut the answer (or C's DID resolution).
@@ -220,6 +233,7 @@ async function main() {
     log(`request ${req.id} from …${String(req.applicantDid).slice(-24)}`);
 
     // The cut, then the answer.
+    probe("before the cut");
     try {
       cut = block();
     } catch (e) {
@@ -227,11 +241,35 @@ async function main() {
       return rows.exitCode();
     }
     log(`${host} cut ${cut}`);
+    probe("during the cut");
     // Named before the approval, so a timeout after it is still cleaned up (lostreq's fin removes the member).
     console.log(`JOIN_MEMBER ${req.applicantDid}`);
     const said = admin("join-decide", req.id, "approved");
     approved = true;
     log(`admin approves ${req.id}: ${(said.split("\n").filter((l) => /->/.test(l)).pop() ?? "").trim()}`);
+    // What C issued this applicant, read-only (vtc/members/credentials/0.1): each card's types and where its status
+    // list is, so a card filed without a status check can be told from one whose check got through.
+    await sleep(5000);
+    try {
+      const creds = admin("member-credentials", req.applicantDid);
+      const body = JSON.parse(creds.slice(creds.indexOf("{")));
+      const cards = [];
+      const walk = (o) => {
+        if (Array.isArray(o)) return o.forEach(walk);
+        if (!o || typeof o !== "object") return;
+        if (o.type && o.credentialSubject) {
+          const types = [].concat(o.type).filter((t) => t !== "VerifiableCredential").join("+");
+          const st = [].concat(o.credentialStatus ?? []).map((x) => `${x.type} at ${String(x.statusListCredential ?? "").replace(/^(https?:\/\/[^/]+).*$/, "$1")}`);
+          cards.push(`${types}: ${st.length ? st.join(", ") : "no status entry"}`);
+        }
+        Object.values(o).forEach(walk);
+      };
+      walk(body);
+      console.log(`ISSUED ${cards.length} card(s): ${cards.join(" · ") || "none listed"}`);
+    } catch (e) {
+      console.log(`ISSUED unreadable: ${String(e.message).split("\n")[0].slice(0, 120)}`);
+    }
+    setTimeout(() => probe("30 s after the approval"), 25000);
     const listed = statusListHostIn(said);
     const mismatch = listed && listed !== host ? ` (the card names its status list at ${listed}, not ${host}: the wrong host was cut)` : "";
 
