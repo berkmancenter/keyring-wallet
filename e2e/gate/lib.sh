@@ -231,9 +231,18 @@ emu_start() {
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
   echo "$out" | tail -1
-  [ "$rc" = 0 ] && return 0
+  [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
+}
+# GATE_LOGCAT=1: the emulator's whole log for the leg, in the leg's folder (emulator-NNNN.logcat), so a row's verdict
+# can rest on what the phone logged. A leg's own `logcat -c` empties the buffer, not this stream. Stopped by PID in
+# leg_end (it would also end with the emulator).
+leg_logcat() {
+  [ "${GATE_LOGCAT:-0}" = 1 ] && [ -n "${LEG_DIR:-}" ] || return 0
+  adb -s "$1" logcat -v threadtime > "$LEG_DIR/$1.logcat" 2>&1 &
+  LEG_LOGCAT_PIDS="${LEG_LOGCAT_PIDS:-} $!"
+  echo "logcat: $1 → $1.logcat"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { xcrun simctl boot "$1" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
@@ -393,6 +402,7 @@ leg_end() {
   trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
   galarm_reap "${LEG_NAME:-gate}"
+  local p; for p in ${LEG_LOGCAT_PIDS:-}; do kill "$p" 2>/dev/null; done
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
     LEG_PASS=$(grep -cE '^ROW .* PASS — ' "$LEG_DIR/leg.log"); LEG_FAILS=$(grep -cE '^ROW .* FAIL — ' "$LEG_DIR/leg.log"); LEG_SKIP=$(grep -cE '^ROW .* SKIP — ' "$LEG_DIR/leg.log")
