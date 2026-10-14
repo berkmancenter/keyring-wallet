@@ -50,8 +50,18 @@ if (lacks) {
       const host = (await textOf(d, "VtaClaimHost").catch(() => "")).trim();
       const unverified = await existsTestId(d, "VtaClaimUnverified", 2000);
       await tapTestId(d, "VtaClaimContinue", 15000);
-      // 2. The owner check, then the claim.
-      await answerOwnerCheck(d, "farm claim", { pin: PIN });
+      // 2. The owner check comes before the claim (VtaClaim.tsx onContinue: canOwn → confirmOwner → claiming). A
+      // phone that cannot own the agent (no screen lock) fails at once, with no prompt; a cancelled or failed check
+      // stays on the confirmation (VtaClaim.NotConfirmed).
+      const prompted = await answerOwnerCheck(d, "farm claim", { pin: PIN });
+      if (await existsTestId(d, "VtaClaimFailed", 3000)) {
+        const why = (await textOf(d, "VtaClaimResultMessage").catch(() => "")).trim();
+        return { ok: false, detail: `host "${host}" · failed before the claim${prompted ? "" : " (no owner prompt)"}: "${why}"` };
+      }
+      if (!(await existsTestId(d, "VtaClaimClaiming", 20000)) && !(await existsTestId(d, "VtaClaimCodeValue", 1000))) {
+        const said = (await textOf(d, "VtaClaimConfirmError").catch(() => "")).trim();
+        return { ok: false, detail: `host "${host}" · the owner check did not pass${prompted ? "" : " (no prompt)"}: still on the confirmation${said ? `, "${said}"` : ""}` };
+      }
       // 3. The code the person compares on the Farm page.
       await waitForTestId(d, "VtaClaimCodeValue", 90000);
       const code = (await textOf(d, "VtaClaimCodeValue")).replace(/\s+/g, "");
@@ -68,13 +78,21 @@ if (lacks) {
       if (end !== "ready") return { ok: false, detail: `host "${host}" · code ${code} · ${end || "no Ready or Failed in 10 min"}${said ? `: "${said}"` : ""}` };
       await tapTestId(d, "VtaClaimDone", 10000).catch(() => undefined);
       // Then My Agent: the claimed agent, linked and online.
+      // VtaClaimDone goes back to where the paste started, not to My Agent.
       await tapTestId(d, "MyAgent", 15000).catch(() => undefined);
+      // A first link shows the agent intro before the home (VtaAgentHome introSeen): part of the experience, then skipped.
+      const intro = await existsTestId(d, "AgentIntro", 15000);
+      if (intro) await tapTestId(d, "AgentIntroSkip", 10000).catch(() => undefined);
       const name = await readHomeName(d).catch(() => "");
-      const status = (await textOf(d, "VtaStatusText").catch(() => "")).trim();
+      // The status line passes through "Connecting to your agent…" first (VtaStatus.tsx): poll for "Online".
+      let status = "";
+      for (const until = Date.now() + 60000; Date.now() < until && !/^online$/i.test(status); await sleep(2000)) {
+        status = (await textOf(d, "VtaStatusText").catch(() => "")).trim();
+      }
       await screenshot(d, "farm-onescan-my-agent");
       return {
-        ok: Boolean(name) && /online/i.test(status),
-        detail: `host "${host}" (unverified shown ${unverified}) · code ${code} · Ready · My Agent "${name}", status "${status}"`,
+        ok: Boolean(name) && /^online$/i.test(status),
+        detail: `host "${host}" (unverified shown ${unverified}) · code ${code} · Ready · intro ${intro} · My Agent "${name}", status "${status}"`,
       };
     });
   } catch (e) {
