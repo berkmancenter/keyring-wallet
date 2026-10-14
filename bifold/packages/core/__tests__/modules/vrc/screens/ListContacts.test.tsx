@@ -672,4 +672,55 @@ describe('ListContacts Screen', () => {
       })
     })
   })
+
+  describe('only a witness credential this device verified earns a badge', () => {
+    const renderWith = (vwc: W3cCredentialRecord) => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential, vwc],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+      return render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+    }
+
+    it('shows neither badge for a witness credential the wallet holds but never verified, though it claims locality', async () => {
+      // A peer-supplied record, typed exactly right and saying locality was confirmed, but without the
+      // ceremony's verified mark: the contact is listed, unbadged.
+      const { findByText, queryByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, false))
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(queryByTestId('WitnessVerifiedBadge')).toBeNull()
+        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+      })
+    })
+
+    it('shows both badges for the same credential once the ceremony verified it', async () => {
+      const { findByText, findByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, true))
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(await findByTestId('WitnessVerifiedBadge')).toBeTruthy()
+        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
+      })
+    })
+  })
 })
