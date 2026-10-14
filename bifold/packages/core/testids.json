@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "20484c6c7664c96ca01911900c37a0bee0d8681f",
+  "generatedFrom": "f37c84947ae6f0889cb0e56a6d1e7e23979ecdbd",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -253,6 +253,7 @@
     "CommunityCardDetails": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardFrom": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardOpenCommunity": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
+    "CommunityCardRole": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCriteria": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDetailsToggle": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDid": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -774,6 +775,7 @@
     "SignInSessionOnly": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInSystem": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInTimeLeft": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInUnverified": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "SignInWebsite": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "Skip": ["src/screens/Onboarding.tsx"],
     "SlowLoadBody": ["src/components/views/LoadingPlaceholder.tsx"],

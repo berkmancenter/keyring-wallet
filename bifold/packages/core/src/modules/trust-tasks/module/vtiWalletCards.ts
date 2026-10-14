@@ -95,6 +95,24 @@ export function walletCardKey(vc: Json): string | undefined {
 const isPlainMemberRole = (vc: Json) => roleNameOf(vc)?.replace(/^custom:/, '') === 'member'
 
 /**
+ * The role a membership card's Details name because the Wallet shows no card
+ * of its own for it: the plain "member" role card that came with this
+ * membership card (above). Undefined for any other card, and when the role
+ * has its own card.
+ */
+export async function roleShownWithMembershipCard(
+  store: Pick<VtiCommunityStore, 'listMemberships'>,
+  card: Json
+): Promise<'member' | undefined> {
+  const key = walletCardKey(card)
+  if (!key) return undefined
+  for (const m of await store.listMemberships()) {
+    if (m.vmc && walletCardKey(m.vmc) === key && m.roleVec && isPlainMemberRole(m.roleVec)) return 'member'
+  }
+  return undefined
+}
+
+/**
  * The agents linked to this phone, once they have been read; undefined
  * before, when nothing is to be hidden yet.
  */

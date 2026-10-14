@@ -432,12 +432,20 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
 
   const respond = keyA.sign(oobEnvelope(OOB_TASKS.respond, { grant }, keyA.did, vtcDid, requestId), 'authentication')
   const answer = await sendToCommunity(deps, base, respond, { responded: true })
-  // The answer is signed for `authentication`, not `assertionMethod` (G2).
+  // The answer is the community's attestation, signed for `assertionMethod`
+  // like steps 1 and 2, since VTI b345ebd1 (2026-10-11, #2024). A community
+  // on an earlier build signs it for `authentication` (findings G2, VTI
+  // 03a3562f); both are the community's own key, so either is taken. Pinning
+  // the older purpose ended a sign-in the community had already completed in
+  // "the community's answer couldn't be checked" (report 26JE-SQ6R).
   const vtcDocument = await resolveOrUnreachable(deps, vtcDid).catch((e: SignInError) => {
     throw new SignInError(e.reason, e.detail, { responded: true })
   })
-  if (!(await proofVerifies(answer, vtcDid, vtcDocument, 'authentication'))) {
-    throw new SignInError('badAnswer', "the respond answer is not signed by the community's authentication key", {
+  if (
+    !(await proofVerifies(answer, vtcDid, vtcDocument, 'assertionMethod')) &&
+    !(await proofVerifies(answer, vtcDid, vtcDocument, 'authentication'))
+  ) {
+    throw new SignInError('badAnswer', "the respond answer is not signed by the community's own key", {
       responded: true,
     })
   }
