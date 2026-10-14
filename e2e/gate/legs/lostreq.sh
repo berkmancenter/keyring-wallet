@@ -37,9 +37,9 @@ E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
 take_rows "$LEG_DIR/lost.out"
 driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
-# IN-258, tracked (no fix yet): the same phone, not a member and with no open request, asks to join C and is approved
+# IN-258 (fixed by bifold #386): the same phone, not a member and with no open request, asks to join C and is approved
 # while only the status-list host is cut; the card must say its status could not be checked (run-card-status.mjs, row
-# card-status-unreachable-notice: SKIP "tracked: …" until the fix lands). iptables needs root, as above.
+# card-status-unreachable-notice; tracked only on a build without #386's CardStatusNotice). iptables needs root.
 # Anything run-join-lost's ask left at C is declined now, before the card-status run asks again: that run tells its
 # own request by what is new, and a leftover one would make the phone "already asked".
 for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '{print $2}' | sort -u); do
@@ -52,5 +52,9 @@ E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_R
   STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
 take_rows "$LEG_DIR/card.out"
-# Tracked to the end: a driver that never printed its row (killed by its alarm, a crash) is the tracked row's detail.
-grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out" || row card-status-unreachable-notice SKIP "tracked (IN-258 fix pending): the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"
+# A driver that never printed its row (killed by its alarm, a crash): FAIL on a build with #386, tracked before it.
+if ! grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out"; then
+  why="the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"
+  if [ -n "$CS_STRICT" ]; then row card-status-unreachable-notice FAIL "$why"
+  else row card-status-unreachable-notice SKIP "tracked (a build without bifold #386's CardStatusNotice): $why"; fi
+fi

@@ -144,13 +144,16 @@ test("the row is tracked: SKIP without the notice, PASS with it, FAIL only when 
   const tracked = cardStatusOutcome({ notice: "", observed: 'card status "Approved"' });
   assert.equal(tracked.status, "SKIP");
   assert.equal(tracked.detail, `${TRACKED}: observed: card status "Approved"`);
-  assert.match(tracked.detail, /^tracked \(IN-258 fix pending\): observed: /);
+  assert.match(tracked.detail, /^tracked \(a build without bifold #386's CardStatusNotice\): observed: /);
   assert.equal(cardStatusOutcome({ notice: "", observed: "o", strict: true }).status, "FAIL");
   // bifold #386's notice: its testID and its words.
   assert.equal(noticeIn('<android.view.View resource-id="com.ariesbifold:id/CardStatusNotice" />'), 'testID CardStatusNotice');
   assert.match(noticeIn('<x text="Keyring couldn\'t check this card\'s status, so it isn\'t kept yet. Keyring keeps trying." />'), /couldn't check this card's status/);
-  // A setup that never reached the check is SKIP whatever `strict` says.
-  const setup = cardStatusOutcome({ setup: "no new pending request", strict: true });
+  // A setup that never reached the check: tracked on a build without #386, a FAIL that says so on one with it.
+  const setup = cardStatusOutcome({ setup: "no new pending request" });
   assert.equal(setup.status, "SKIP");
-  assert.match(setup.detail, /^tracked \(IN-258 fix pending\): setup did not reach the check: no new pending request$/);
+  assert.match(setup.detail, /^tracked \(a build without bifold #386's CardStatusNotice\): setup did not reach the check: no new pending request$/);
+  const strictSetup = cardStatusOutcome({ setup: "no new pending request", strict: true });
+  assert.equal(strictSetup.status, "FAIL");
+  assert.match(strictSetup.detail, /^setup did not reach the check \(the harness, not a verdict on the app\): no new pending request$/);
 });
