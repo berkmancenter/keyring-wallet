@@ -18,9 +18,25 @@ mkdir -p "$GATE_HOME" "$RUN_DIR" "$LEG_DIR"
 CI_ALLOWED_SLUGS=$(grep -E '^(RUNNER_MAIN|RUNNER_A|RUNNER_B)_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"' | tr '\n' ' ')
 [ -n "${CI_ALLOWED_SLUGS// /}" ] || { echo "ENV the CI configuration names no runner slugs" | tee "$LEG_DIR/leg.log"; exit 2; }
 export CI_ALLOWED_SLUGS
+# One pnm call before the leg (read-only, its JSON discarded): an identity, store or network fault is ENV with pnm's own
+# words, not a driver failure four steps later (run 38496808904: the drivers logged only "Command failed: … acl list").
+main=$(grep -m1 '^RUNNER_MAIN_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"')
+perr=$("$PNM_BIN" --vta "$main" acl list --json 2>&1 >/dev/null); prc=$?
+if [ $prc != 0 ]; then
+  echo "ENV pnm preflight failed (exit $prc): $(printf '%s' "$perr" | tail -3 | tr '\n' ' ' | cut -c1-300)" | tee "$LEG_DIR/leg.log"
+  exit 2
+fi
+echo "pnm preflight ok (acl list on the main runner)"
 serial=$(adb devices | awk '$1 ~ /^emulator-/ {print $1; exit}')
 [ -n "$serial" ] || { echo "ENV no emulator on adb" | tee "$LEG_DIR/leg.log"; exit 2; }
 "$HERE/android-settle.sh" "$serial" "${ANDROID_SETTLE_MAX:-90}"
+# The legs pass $AVD to the drivers (ANDROID_AVD), which attach only to an emulator of that AVD name
+# (lib/emulator.js pinToRunningEmulator). gate_env's default is the Mac's; here it is whatever the workflow booted,
+# read the way the driver reads it (gate-ci run 38496808904: "AVD Pixel_6_API_33 is not running").
+avd=$(adb -s "$serial" shell getprop ro.boot.qemu.avd_name 2>/dev/null | tr -d '\r')
+[ -n "$avd" ] || avd=$(adb -s "$serial" emu avd name 2>/dev/null | head -1 | tr -d '\r')
+[ -n "$avd" ] || { echo "ENV cannot read the emulator's AVD name" | tee "$LEG_DIR/leg.log"; exit 2; }
+export AVD=$avd
 # The mediator-block legs need root (iptables): a google_apis image gives it; a playstore image would not, silently.
 adb -s "$serial" root >/dev/null 2>&1; sleep 3; adb -s "$serial" wait-for-device
 uid=$(adb -s "$serial" shell id -u 2>/dev/null | tr -d '\r')

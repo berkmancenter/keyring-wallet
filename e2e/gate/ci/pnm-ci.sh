@@ -3,7 +3,8 @@
 # scripts/openvtc/pnm-locked, which runs "$PNM_BIN --vta <slug> …". This guard sits there, so no caller can reach past it:
 #  - only the agents the CI configuration names (CI_ALLOWED_SLUGS: its runners and the community agent), and never a
 #    person's agent (the slugs e2e/lib/aclCleanup.js refuses), even if the configuration named one;
-#  - only the commands the CI legs use (CI_COMMANDS): the identity is a super admin on the test runners (D-10: a
+#  - only the commands the CI legs use (CI_COMMANDS; acl create is the enrolment page granting the test phone its key,
+#    which D-8 covers): the identity is a super admin on the test runners (D-10: a
 #    phone's entry is an unrestricted admin, which only a super admin may delete), so this list, not the VTA, is
 #    what keeps it to cleanup, the approval-rule set-up and tear-down of linkfail and the sweep, and reads;
 #  - never verbose or debug output: Actions masks only exact secret strings, not what pnm derives from them;
@@ -26,7 +27,7 @@ for a in "$@"; do case "$a" in -V|-VV|-v|-vv|--verbose|--debug|--trace) echo "pn
 : "${PNM_REAL:?the CI pnm binary}" "${CI_PNM_HOME:?the session directory of the CI identity}"
 [ "$(stat -c %a "$CI_PNM_HOME" 2>/dev/null || stat -f %Lp "$CI_PNM_HOME")" = 700 ] || { echo "pnm-ci: $CI_PNM_HOME must be mode 700" >&2; exit 2; }
 # The command, as "<command> <subcommand>": the two words after --vta <slug>.
-CI_COMMANDS="acl:list acl:get acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr"
+CI_COMMANDS="acl:list acl:get acl:create acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr"
 cmd=${3:-}; sub=${4:-}; case "$sub" in -*) sub="" ;; esac
 case " $CI_COMMANDS " in
   *" $cmd:$sub "*|*" $cmd: "*) ;;
