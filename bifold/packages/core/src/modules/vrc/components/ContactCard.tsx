@@ -109,7 +109,14 @@ const ContactCard: React.FC<ContactCardProps> = ({
       <View style={styles.badgeContainer}>
         {hardwareVerified && <Icon name="shield-check" size={18} color={BADGE_HW_TEAL} style={styles.badgeIcon} />}
         {contact.hasWitnessCredentials && (
-          <Icon name="check-decagram" size={18} color={BADGE_WITNESS_PURPLE} style={styles.badgeIcon} />
+          <Icon
+            name="check-decagram"
+            size={18}
+            color={BADGE_WITNESS_PURPLE}
+            style={styles.badgeIcon}
+            testID="WitnessVerifiedBadge"
+            accessibilityLabel="Witnessed"
+          />
         )}
         {contact.hasLocalityConfirmed && (
           <Icon

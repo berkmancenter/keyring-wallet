@@ -20,6 +20,7 @@ import {
   TEST_CONTACTS,
   generateTestDid,
 } from '../fixtures/dtg-credentials'
+import { WITNESS_VERIFIED_TAG } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
 import { testIdWithKey } from '../../../../src/utils/testable'
 
 const ALICE_PHOTO =
@@ -61,9 +62,13 @@ function createReceivedRCard(issuerDid: string, holderDid: string, form: RCardFo
  * witnessCredentialUtils.test.ts's own `vwcWith`, since the code under test
  * (getWitnessCredentialsForSubject/extractWitnessInfo) only ever reads
  * `.encoded`. */
-function createLocalityVwc(subjectId: string, localityConfirmed: boolean): W3cCredentialRecord {
+function createLocalityVwc(subjectId: string, localityConfirmed: boolean, verified = true): W3cCredentialRecord {
   return {
     id: 'credential-locality-vwc',
+    // What the ceremony paths mark a credential with once they have verified
+    // it (WITNESS_VERIFIED_TAG). The badges come from marked records only;
+    // pass verified=false for one the wallet holds but never checked.
+    getTags: () => (verified ? { [WITNESS_VERIFIED_TAG]: 'true' } : {}),
     encoded: {
       type: ['VerifiableCredential', 'WitnessCredential'],
       issuer: 'did:example:witness',

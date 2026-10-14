@@ -17,7 +17,7 @@ import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecor
 import { BaseTourID } from '../../../types/tour'
 import EmptyContactsList from '../components/EmptyContactsList'
 import {
-  getWitnessCredentialsForSubject,
+  getVerifiedWitnessCredentialsForSubject,
   extractWitnessInfo,
   hasVrcHardwareAttestation,
   getVrcCredentialJsonForSubject,
@@ -51,7 +51,7 @@ const ListContacts: React.FC = () => {
   // Helper function to check if contact has witness credentials
   const hasWitnessCredential = useCallback(
     (contactIssuerId: string): boolean => {
-      const vwcs = getWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
+      const vwcs = getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
       return vwcs.length > 0
     },
     [w3cCredentialRecords]
@@ -62,7 +62,7 @@ const ListContacts: React.FC = () => {
   // enough, same "any, not all" rule as hasWitnessCredential above.
   const hasLocalityConfirmed = useCallback(
     (contactIssuerId: string): boolean => {
-      const vwcs = getWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
+      const vwcs = getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
       return vwcs.some((vwc) => extractWitnessInfo(vwc)?.locality?.outcome === 'confirmed')
     },
     [w3cCredentialRecords]
@@ -77,7 +77,7 @@ const ListContacts: React.FC = () => {
       if (hasVrcHardwareAttestation(w3cCredentialRecords, contactIssuerId)) {
         return true
       }
-      const vwcs = getWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
+      const vwcs = getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
       return vwcs.some((vwc) => {
         const info = extractWitnessInfo(vwc)
         return info?.hardwareAttestationIncluded === true

@@ -44,6 +44,8 @@ import {
   taskDigestMultibase,
   verifyDocumentProof,
 } from './documentProof'
+import { WITNESS_VERIFIED_TAG } from '../vrc/utils/witnessCredentialUtils'
+
 import { taskCitationOf } from './taskCitation'
 
 const LOG_PREFIX = '[TrustTasks:Witness]'
@@ -297,9 +299,14 @@ export async function runWitnessSession(
       : `${LOG_PREFIX} locality not confirmed for session ${sessionId}${observation?.reason ? ` (${observation.reason})` : ' (no observation)'}`
   )
 
-  await agent.w3cCredentials.store({
-    record: new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] }),
-  })
+  // Mark it verified: everything above this line is the verification — the
+  // taskContext binds the VWC to this session, and a claimed locality
+  // observation had to match the transcript this device itself produced.
+  // Only marked records earn the witness and locality marks in the UI
+  // (WITNESS_VERIFIED_TAG, getVerifiedWitnessCredentialsForSubject).
+  const vwcRecord = new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] })
+  vwcRecord.setTags({ [WITNESS_VERIFIED_TAG]: 'true' } as never)
+  await agent.w3cCredentials.store({ record: vwcRecord })
   logger.info(`${LOG_PREFIX} VWC stored — taskContext bound to session ${sessionId} (outcome evidence retained)`)
 
   return { sessionId, vwc, locality: directive ? { transcriptProduced: transcript !== null } : undefined }
