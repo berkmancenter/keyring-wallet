@@ -24,11 +24,10 @@
  * Row (lib/rows.js):
  *   card-status-unreachable-notice   PASS: a notice about the card's status shows (words like "couldn't check" with
  *                                    "status" on the page, or a testID with "StatusUnreadable"/"CardStatus").
- *                                    TRACKED until the IN-258 fix lands: without the notice the row is
- *                                    SKIP "tracked: IN-258 fix pending; observed: <what the card said>", and FAIL only
- *                                    with CARD_STATUS_STRICT=1 (set it, or gate the row on the fix's testID with
- *                                    buildHas, when the fix lands). A setup that never reached the check (no request,
- *                                    no cut) is a SKIP with the same prefix.
+ *                                    On a build with IN-258's fix (bifold #386, CardStatusNotice; lostreq.sh sets
+ *                                    CARD_STATUS_STRICT=1 by buildHas) no notice is a FAIL, and so is a setup that
+ *                                    never reached the check (no request, no cut), saying so. On an older build both
+ *                                    are SKIP "tracked (a build without bifold #386's CardStatusNotice): …".
  * Prints `STATUS_BLOCK_HOST <host>` (the caller drops both rule forms for it in its cleanup), `JOIN_MEMBER <did>` for
  * the member it made, and `ARRIVED_REQ <id>` for a request it made and did not approve (the caller declines it).
  *   E2E_APP_ID=… UDID=emulator-5572 APPIUM_PORT=4762 C_DID=… C_NAME=… C_REST=… C_ADMIN="<rest> <did> <cred>"
@@ -45,7 +44,7 @@ import { communityCardKey } from "./lib/testIdKeys.js";
 import { join } from "./lib/pages/join.js";
 
 export const ROW = "card-status-unreachable-notice";
-export const TRACKED = "tracked (IN-258 fix pending)";
+export const TRACKED = "tracked (a build without bifold #386's CardStatusNotice)";
 
 /** The host the status lists are served from: the override, else the community's REST host. */
 export function statusHostOf(cRest, override) {
@@ -80,9 +79,13 @@ export function noticeIn(source) {
   return id ? `testID ${id[1]}` : "";
 }
 
-/** How the row ends: PASS on the notice, else SKIP as tracked (FAIL when strict). */
+/**
+ * How the row ends: PASS on the notice, else SKIP as tracked (FAIL when strict). Strict is a build with bifold #386
+ * (IN-258's fix, CardStatusNotice): there the row is a real check, so a setup that never reached it is a FAIL too,
+ * saying so, rather than a SKIP that reads like a known gap (1014-0451, 1014-1857: it never ran on 241).
+ */
 export function cardStatusOutcome({ notice, observed, setup, strict = false }) {
-  if (setup) return { status: "SKIP", detail: `${TRACKED}: setup did not reach the check: ${setup}` };
+  if (setup) return strict ? { status: "FAIL", detail: `setup did not reach the check (the harness, not a verdict on the app): ${setup}` } : { status: "SKIP", detail: `${TRACKED}: setup did not reach the check: ${setup}` };
   if (notice) return { status: "PASS", detail: `notice "${notice}"; ${observed}` };
   return strict ? { status: "FAIL", detail: `no status notice; ${observed}` } : { status: "SKIP", detail: `${TRACKED}: observed: ${observed}` };
 }
@@ -188,6 +191,10 @@ async function main() {
     await ensureAppium();
     d = await makeDriver({ platform: "android", udid: UDID, keepState: true });
     rows.setDriver(d);
+    // A fresh start: the leg's run-join-lost leaves Join on its "Your agent didn't answer" step on purpose, and
+    // resuming there, join.ask found no JoinStart (1014-0451, 1014-1857). Nothing is lost: that ask never sent a
+    // request, and the leg declined any that reached C.
+    await d.terminateApp(BID).catch(() => undefined);
     await d.activateApp(BID);
     await unlockToHome(d).catch(async (e) => {
       if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
