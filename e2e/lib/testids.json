@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f37c84947ae6f0889cb0e56a6d1e7e23979ecdbd",
+  "generatedFrom": "befa9c71c744dc10d18d17b0150e09b502c47557",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -533,12 +533,14 @@
     "JoinSuggestedWhere": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinThisCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinVersionUnsupported": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinVettingNotSupported": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinWays": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysMissing": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysNoneUsable": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthers": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthersToggle": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinWaysVettingNotSupported": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "KeysMoved": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
@@ -1091,6 +1093,7 @@
     "VetterHeaderBackground": ["src/components/views/VetterHeaderBackground.tsx"],
     "WitnessRecord": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessSection": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "WitnessVerifiedBadge": ["src/modules/vrc/components/ContactCard.tsx"],
     "WitnessedBadge": ["src/modules/vrc/screens/ContactDetails.tsx"]
   },
   "derived": [
@@ -1888,6 +1891,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.versionUnsupported"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.vettingNotSupported"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.waysTitle"
