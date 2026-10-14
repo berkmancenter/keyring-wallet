@@ -26,14 +26,20 @@ IOS_APP=$PREV_APP E2E_KEEP_APP=1 galarm 1500 node run-vta-link.js > "$LEG_DIR/li
 row update-prev-linked PASS "previous build ${PREV_W:0:8} linked to the main runner"
 wda_stop; xcrun simctl terminate "$SIM" "$BID" 2>/dev/null
 # The update: the candidate over the installed app, container kept.
-xcrun simctl spawn "$SIM" log stream --style compact --level debug --predicate 'process == "KeyRing"' > "$LEG_DIR/device-after-update.log" 2>&1 & LS=$!
+UPD_T=$(date +%s)
 xcrun simctl install "$SIM" "$NEW_APP" || broken "the candidate did not install over the previous build"
 echo "installed over: $(shasum -a 256 "$(xcrun simctl get_app_container "$SIM" "$BID")/main.jsbundle" | cut -c1-12)"
 C_DID= galarm 600 node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1   # no join on iOS here: no community to check
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
-sleep 3; kill "$LS" 2>/dev/null; LS=
-n=$(grep -c "not found in backend" "$LEG_DIR/device-after-update.log")
-if [ "$n" -eq 0 ]; then row update-no-missing-key PASS "no \"not found in backend\" in the device log after the update ($(wc -l < "$LEG_DIR/device-after-update.log" | tr -d ' ') lines)"
+# The app's log from the update on (every line counted is the updated app's), read back before the simulator goes.
+ios_log_save "$SIM" "$LEG_DIR/device-after-update.log" "$UPD_T"
+n=$(grep -c "not found in backend" "$LEG_DIR/device-after-update.log"); app=$(ios_log_app_lines "$LEG_DIR/device-after-update.log")
+# An empty log is no evidence: until 10-14 this row passed on a 3-line stream header with no app line in it. Too few
+# lines is the capture's failure, not the app's: the leg is broken (harness), no row about the app. The floor is a
+# first guess; set it from the first good run's count (printed below).
+echo "device log after the update: $app app line(s)"
+if [ "$app" -lt 20 ]; then broken "update-no-missing-key could not look: the device log has $app app line(s) after the update (log capture, not the app)"
+elif [ "$n" -eq 0 ]; then row update-no-missing-key PASS "no \"not found in backend\" in $app app lines of the device log after the update"
 else row update-no-missing-key FAIL "$n \"not found in backend\" line(s); first: $(grep -m1 'not found in backend' "$LEG_DIR/device-after-update.log" | cut -c1-200)"
   grep -n -B5 -A5 -m3 "not found in backend" "$LEG_DIR/device-after-update.log" | cut -c1-260; fi

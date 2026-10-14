@@ -17,6 +17,19 @@ GH_REPO=berkmancenter/keyring-wallet
 # brings its own Android SDK and the emulator (the workflow's emulator step), pnm is the CI build (pnm-linux.yml) with
 # a CI-only identity, and the private configuration is a file the workflow writes from its protected environment.
 is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
+# ios_log_save <sim udid> <file> <since>: the app's own log from a booted simulator, read back with `log show`
+# (smoke-ios's way, which finds the app's lines). <since> is an epoch second (the log from then on: a window that
+# starts at the step it checks, however long the leg took) or a span such as 30m. A `log stream` attached through
+# simctl spawn caught nothing but its header on every run checked (update-ios 1012-2223: 3 lines), so rows that
+# grepped it passed without looking.
+ios_log_save() {
+  local when=(--last "$3")
+  [[ $3 =~ ^[0-9]{9,}$ ]] && when=(--start "$(date -r "$3" '+%Y-%m-%d %H:%M:%S')")
+  xcrun simctl spawn "$1" log show "${when[@]}" --style compact --info --debug \
+    --predicate 'process == "KeyRing" OR subsystem == "com.facebook.react.log"' > "$2" 2>&1
+}
+# The app's lines in a saved log: not the header `log show` prints, nor its own complaints.
+ios_log_app_lines() { local n; n=$(grep -cE ' KeyRing\[|com\.facebook\.react\.log' "$1" 2>/dev/null); echo "${n:-0}"; }
 # galarm <seconds> <command…>: the command in its own process group, the whole group killed past <seconds>. A plain
 # `perl -e 'alarm N; exec @ARGV'` killed only the driver: its Appium (and anything else it started) lived on, and on
 # 1013-1753 an orphaned Appium on :4762 broke the next leg.
