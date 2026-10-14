@@ -13,6 +13,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import {
   COMMUNITY,
   fakeAgent,
+  fakeCommunityStore,
   membership,
   membershipCard,
   roleCard,
@@ -184,6 +185,36 @@ describe("a community card's Details", () => {
     expect(tree.getByTestId(testIdWithKey('CommunityCardFrom'))).toBeTruthy()
     fireEvent.press(tree.getByTestId(testIdWithKey('CommunityCardOpenCommunity')))
     expect(open).toHaveBeenCalledWith(COMMUNITY)
+  })
+
+  it('a membership card names the plain "member" role, which has no card of its own in the Wallet', async () => {
+    const { store } = fakeCommunityStore({ memberships: [membership] })
+    const tree = render(
+      <BasicAppContext>
+        <CommunityCardDetails card={membershipCard} onOpenCommunity={jest.fn()} store={store} />
+      </BasicAppContext>
+    )
+    expect(await tree.findByTestId(testIdWithKey('CommunityCardRole'))).toHaveTextContent('Community.CardRoleMember')
+  })
+
+  it('no role line beside a role with its own card, or on the role card itself', async () => {
+    const withVetter = fakeCommunityStore({ memberships: [{ ...membership, role: 'vetter', roleVec: vetterGrant }] })
+    const vetterTree = render(
+      <BasicAppContext>
+        <CommunityCardDetails card={membershipCard} onOpenCommunity={jest.fn()} store={withVetter.store} />
+      </BasicAppContext>
+    )
+    const plain = fakeCommunityStore({ memberships: [membership] })
+    const roleTree = render(
+      <BasicAppContext>
+        <CommunityCardDetails card={roleCard} onOpenCommunity={jest.fn()} store={plain.store} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve))
+    })
+    expect(vetterTree.queryByTestId(testIdWithKey('CommunityCardRole'))).toBeNull()
+    expect(roleTree.queryByTestId(testIdWithKey('CommunityCardRole'))).toBeNull()
   })
 
   it('shows nothing for a credential that is not a community card', () => {

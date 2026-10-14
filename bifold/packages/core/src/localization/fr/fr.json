@@ -1246,6 +1246,7 @@
     "CardCheckedOn": "Vérifiée le",
     "CardUntil": "Valable jusqu’au",
     "CardFromCommunity": "Cette carte vient de {{community}}. Pour y renoncer, quittez la communauté.",
+    "CardRoleMember": "Rôle : membre",
     "CardOpenCommunity": "Ouvrir {{community}}",
     "LeaveKeepWhat": "Que doit garder {{community}} ?",
     "LeavePurge": "M'effacer de ses registres",

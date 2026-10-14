@@ -11,7 +11,8 @@
  * @module trust-tasks/screens/CommunityCardDetails
  */
 
-import React from 'react'
+import { useAgent } from '@bifold/react-hooks'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, View } from 'react-native'
 
@@ -21,7 +22,8 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens, Stacks, TabStacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { classifyCredential } from '../module/vtiInbox'
-import { isCommunityCard } from '../module/vtiWalletCards'
+import { GenericRecordsCommunityStore, type VtiCommunityStore } from '../module/VtiCommunityStore'
+import { isCommunityCard, roleShownWithMembershipCard } from '../module/vtiWalletCards'
 
 import { CardKeptRow } from './CardKeptRow'
 import { communityCardKey } from './CommunityCard'
@@ -53,10 +55,28 @@ export const openCommunityFrom = (navigation: unknown, communityDid: string): vo
 export const CommunityCardDetails: React.FC<{
   card: Record<string, unknown>
   onOpenCommunity: (did: string) => void
-}> = ({ card, onOpenCommunity }) => {
+  /** The community store; the agent's by default. */
+  store?: Pick<VtiCommunityStore, 'listMemberships'>
+}> = ({ card, onOpenCommunity, store }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
+  const { agent } = useAgent()
   const of = communityCardOf(card)
+  // A plain "member" role has no card of its own in the Wallet (IN-109): the
+  // membership card's Details say it instead, so the role is not hidden.
+  const [role, setRole] = useState<'member'>()
+  const isMembership = of?.kind === 'membership'
+  useEffect(() => {
+    const source = store ?? (agent ? new GenericRecordsCommunityStore(agent) : undefined)
+    if (!isMembership || !source) return
+    let live = true
+    roleShownWithMembershipCard(source, card)
+      .then((r) => live && setRole(r))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, store, card, isMembership])
   if (!of) return null
   const community = communityHeadingOf(of.communityDid, t, { claim: 'plain' })
   const handle = communityCardKey(of.communityDid)
@@ -72,6 +92,9 @@ export const CommunityCardDetails: React.FC<{
         handle={handle}
         community={community}
       />
+      {role ? (
+        <ThemedText testID={testIdWithKey('CommunityCardRole')}>{t('Community.CardRoleMember')}</ThemedText>
+      ) : null}
       <ThemedText style={styles.muted} testID={testIdWithKey('CommunityCardFrom')}>
         {t('Community.CardFromCommunity', { community, interpolation: { escapeValue: false } })}
       </ThemedText>
