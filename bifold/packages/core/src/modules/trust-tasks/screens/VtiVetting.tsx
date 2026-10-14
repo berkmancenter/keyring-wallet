@@ -586,12 +586,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       const notSupported = vettingNotSupportedFor(m, digest)
       if (notSupported) {
         throw new InWords(
-          tp(VETTING_NOT_SUPPORTED_KEY[notSupported], { community: communityLabelOf(communityDid ?? '', t) })
+          t(VETTING_NOT_SUPPORTED_KEY[notSupported], {
+            community: communityLabelOf(communityDid, t),
+            interpolation: { escapeValue: false },
+          }) as string
         )
       }
       return m
     },
-    [manifest, communityDid, tp, t]
+    [manifest, communityDid, t]
   )
 
   useEffect(() => {
