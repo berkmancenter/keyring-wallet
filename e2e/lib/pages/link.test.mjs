@@ -472,3 +472,79 @@ test("every id the page names is in the app's manifest, or allowlisted with a re
   assert.deepEqual(unknown, [], `unknown ids in link.js: ${unknown.join(", ")}`);
   assert.ok(named.size > 40, `only ${named.size} ids found in link.js`);
 });
+
+test("pasteScanned: an agent's bare DID starts the link: VtaLink's add-this-phone card", async () => {
+  const p = fakePhone();
+  p.show("PasteUrlButton");
+  p.onPaste(() => {
+    p.hide("PasteUrlButton");
+    p.at(p.now() + 6000, () => p.show("VtaLinkForOtherPhone", "VtaLinkShowAsText"));
+  });
+  const r = await page(p).pasteScanned("did:webvh:Qm1:agents.example:runner");
+  assert.deepEqual(r.value, { state: "started", on: "VtaLinkForOtherPhone", said: "" });
+  assert.ok(p.calls.includes("paste did:webvh:Qm1:agents.example:runner"));
+});
+
+test("pasteScanned: the scanner's refusal is the answer, with its title and words, not a throw", async () => {
+  const p = fakePhone();
+  p.show("PasteUrlButton");
+  p.onPaste(() => {
+    // What the paste helper does on the error modal: it throws.
+    p.show("ErrorModal", "Try Again");
+    p.say("HeaderText", "Code not usable");
+    p.say("BodyText", "This code isn't an agent or a community, so there's nothing to do with it here.");
+    throw new Error("android: the app refused the pasted link");
+  });
+  const r = await page(p).pasteScanned("did:webvh:Qm2:no-rest.example");
+  assert.equal(r.ok, true);
+  assert.equal(r.value.state, "refused");
+  assert.equal(r.value.said, "Code not usable: This code isn't an agent or a community, so there's nothing to do with it here.");
+});
+
+test("pasteScanned: a scanner that never opened is still a failure by name", async () => {
+  const p = fakePhone();
+  p.onPaste(() => {
+    throw new Error("android: the Scan screen never showed its paste-URL button");
+  });
+  await assert.rejects(page(p).pasteScanned("did:webvh:Qm3:x"), (err) => {
+    assert.ok(err instanceof StepError);
+    assert.equal(err.message, "link.pasteScanned: android: the Scan screen never showed its paste-URL button");
+    return true;
+  });
+});
+
+test("pasteScanned: neither a link nor a refusal: state none, with the screen it sat on", async () => {
+  const p = fakePhone();
+  p.show("PasteUrlButton");
+  p.onPaste(() => p.hide("PasteUrlButton") || p.show("VtaLinkScanAgain"));
+  const r = await page(p).pasteScanned("did:webvh:Qm4:x", { timeoutMs: 10000 });
+  assert.equal(r.value.state, "none");
+  assert.equal(r.value.on, "VtaLinkScanAgain");
+});
+
+test("awaitRemoved: nudged every 30 s until the removed-phone card shows, its words read", async () => {
+  const p = fakePhone();
+  p.show("AgentHome");
+  let nudges = 0;
+  const nudge = async () => {
+    nudges++;
+    if (nudges === 2) {
+      p.hide("AgentHome");
+      p.show("RemovedPhone", "VtaLinkScanAgain");
+      p.say("VtaLinkError", "This phone is no longer linked to  keyring-runner. ");
+    }
+  };
+  const r = await page(p).awaitRemoved({ nudge });
+  assert.deepEqual(r.value, { said: "This phone is no longer linked to keyring-runner.", nudges: 2 });
+  assert.ok(p.now() >= 60000 && p.now() < 70000, `two nudges 30 s apart, then the card (at ${p.now()} ms)`);
+});
+
+test("awaitRemoved: never removed fails by name, saying where it sat and how often it was nudged", async () => {
+  const p = fakePhone();
+  p.show("AgentHome");
+  await assert.rejects(page(p).awaitRemoved({ timeoutMs: 100000, nudge: async () => undefined }), (err) => {
+    assert.match(err.message, /^link\.awaitRemoved: stuck at "AgentHome" for 10\d s, waiting for RemovedPhone$/);
+    assert.equal(err.record.observed.nudges, 3);
+    return true;
+  });
+});

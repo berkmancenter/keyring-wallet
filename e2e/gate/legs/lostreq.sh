@@ -12,9 +12,15 @@ T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell cmd connectivity airplane-mode disable >/dev/null 2>&1
   [ -n "${C_MEDIATOR_HOST:-}" ] && for t in iptables ip6tables; do adb -s $E shell $t -D OUTPUT -d "$C_MEDIATOR_HOST" -j REJECT >/dev/null 2>&1; done
+  # IN-258's cut of the status-list host (run-card-status.mjs puts it back itself; this is for a driver that was killed).
+  local h; for h in $(grep -oE '^STATUS_BLOCK_HOST [^ ]+' "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do for t in iptables ip6tables; do
+    adb -s $E shell $t -D OUTPUT -p tcp -m string --string "$h" --algo bm -j REJECT --reject-with tcp-reset >/dev/null 2>&1; adb -s $E shell $t -D OUTPUT -d "$h" -j REJECT >/dev/null 2>&1; done; done
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
-  local r; for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '{print $2}' | sort -u); do
+  local r; for r in $(grep -hoE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  decline $r: $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined after the leg' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
+  done
+  local m; for m in $(grep -oE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do
+    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: IN-258 card-status member, removed after the leg" | grep -oE -- '-> [0-9]+' | tail -1)"
   done
 }
 LEG_CLEANUP=fin
@@ -23,11 +29,28 @@ for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; do
 cd "$E2E"
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
-  perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
+  galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 # Block only the community's messaging host (needs root: google_apis image).
 if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: $(adb -s $E shell id -u)"; fi
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
-  perl -e 'alarm 900; exec @ARGV' node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
+  galarm 900 node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
 take_rows "$LEG_DIR/lost.out"
 driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
+# IN-258, tracked (no fix yet): the same phone, not a member and with no open request, asks to join C and is approved
+# while only the status-list host is cut; the card must say its status could not be checked (run-card-status.mjs, row
+# card-status-unreachable-notice: SKIP "tracked: …" until the fix lands). iptables needs root, as above.
+# Anything run-join-lost's ask left at C is declined now, before the card-status run asks again: that run tells its
+# own request by what is new, and a leftover one would make the phone "already asked".
+for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '{print $2}' | sort -u); do
+  echo "  decline $r (before card-status): $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined before the next ask' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
+done
+adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
+# A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
+CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
+E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
+  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
+grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
+take_rows "$LEG_DIR/card.out"
+# Tracked to the end: a driver that never printed its row (killed by its alarm, a crash) is the tracked row's detail.
+grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out" || row card-status-unreachable-notice SKIP "tracked (IN-258 fix pending): the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"

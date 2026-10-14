@@ -17,6 +17,7 @@
 // stands; 177a218's line is given alongside when it moved.
 
 import { rowSelected, selectedLine, walkTo } from './listWalk.js';
+import { sweepSpentTickets } from './ticketSweep.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -122,9 +123,13 @@ export async function declineStale(tui) {
   return declined;
 }
 
-/** Move the desk to one of its views: Requests, Tickets or Issued (←/→). */
+/**
+ * Move the desk to one of its views: Requests, Tickets or Issued (←/→). With enough tickets out the Tickets view's
+ * detail and key hints sit below the pane (1013-1633 rerun: 29 tickets, none of its markers on screen, so the walk
+ * cycled past it); a ticket row ("ABCD-1234  <community>  spent or expired | N left, until …") marks it too.
+ */
 export async function deskView(tui, view) {
-  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
+  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket|[0-9A-Z]{4}-[0-9A-Z]{4}\s{2}.+\s{2}(spent or expired|\d+ left, until)/, Issued: /You have not signed any vetting statements|signed/ }[view];
   for (let i = 0; i < 3; i++) {
     if (marker.test(tui.screen())) return tui;
     await tui.pressEach(['Right'], 700);
@@ -140,6 +145,11 @@ export async function deskView(tui, view) {
  */
 export async function issueTicket(tui) {
   await deskView(tui, 'Tickets');
+  // TICKET_SWEEP: unset or "list" lists the vetter's tickets (read-only); "delete" also deletes the spent or expired
+  // ones, local to this harness vetter's profile (ticketSweep.js). Then back to the top of the list.
+  const swept = await sweepSpentTickets(tui, { mode: process.env.TICKET_SWEEP === 'delete' ? 'delete' : 'list', log: (l) => console.log(`[tickets] ${l}`) });
+  tui.record('vetter.ticketSweep', true, new Date(), { value: swept });
+  await tui.pressEach(['Home'], 400);
   await tui.pressEach(['t'], 800);
   await tui.waitFor('Hand out a ticket', { step: 'vetter.ticketForm', source: src(tui, 'ui/pages/main/vetting_panel.rs:543', 'ui/pages/main/components/vetting_panel.rs:344') });
   await tui.pressEach(['Enter'], 1500);
@@ -156,7 +166,9 @@ export async function issueTicket(tui) {
   // then the only sign it is selected.
   const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen()) || rowSelected(tui.screen(), code);
   // The tickets view grows by one every run; its position is the ticket read aloud.
-  await walkTo(tui, selected, { pace: 600, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
+  // The pane does not follow the ▸ (main/mod.rs:562-577 scroll it on PageUp/PageDown/Home/End only): page after
+  // it, or a ticket below the fold is never reached (1012-2223 rerun: 28 tickets out, the new one last).
+  await walkTo(tui, selected, { pace: 600, reveal: { Down: 'PageDown', Up: 'PageUp' }, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
   if (!selected()) throw tui.failure('vetter.ticketSelect', new Date(), `could not select ticket ${code} on the Tickets view`);
   await tui.pressEach(['End'], 800);
   const uri = scrapeTicketUri(tui.screen());

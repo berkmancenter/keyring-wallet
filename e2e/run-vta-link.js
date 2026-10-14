@@ -50,19 +50,22 @@
  */
 import "./lib/cli-guard.js";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 
+import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
+import { buildHas } from "./lib/buildHas.js";
+import { decodeQrSvg } from "./lib/qrSvg.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -413,6 +416,13 @@ async function afterRefusal(driver, said, temporaryDid) {
  *                              (AgentCreateWaiting), not Check again
  *   link-try-again             host code: the mediator blocked once granted, until "This phone was not linked" with
  *                              VtaLinkTryAgain (about 14 min); unblocked, Try again links with the same key, no ACL growth
+ * 241 (pnmlink.sh), each by the scanner:
+ *   pnmqr-scan                 the SVG `pnm vta qr` wrote (PNM_QR_SVG) decodes to the runner's DID, which the scanner
+ *                              then takes to Linked (pasted: no helper feeds an image to the emulator's camera)
+ *   scan-agent-no-rest         NO_REST_AGENT_DID (an agent whose DID document has no VTARest) on the scanner: a link
+ *                              must start. TRACKED until the scanner fix: a failure is reported as a SKIP
+ *   link-again-rescan          IN-251 (bifold #383): linked, the agent removes this phone, RemovedPhone shows; Link
+ *                              again, the same agent scanned: a link starts (not "already has that agent") and links
  */
 async function linkCase(driver, which) {
   const udid = driver.e2eUdid;
@@ -445,6 +455,13 @@ async function linkCase(driver, which) {
     const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
+  // Entries created at or after `since` (ms): a case's own writes, whatever else writes to the runner meanwhile.
+  // `since` is the VTA's own createdAt (an ISO string), not the Mac's clock: the two can disagree by seconds.
+  const aclList = () => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))); } catch { return null; }
+  };
+  const aclSince = (since) => { const l = aclList(); return l && since ? l.filter((e) => Date.parse(e.createdAt) >= Date.parse(since)) : null; };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
   // Share and Copy, so a text read came back empty); empty when there is none, for the row to record.
@@ -538,38 +555,117 @@ async function linkCase(driver, which) {
     await screenshot(driver, which);
     return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
   }
+  if (which === "create-wait-no-lock") {
+    // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5
+    // min, half-way through the 10-min window (the 1013-1633 rerun found it). Copy starts the window; then no touch
+    // at all for 400 s (idle only polls), past the 5-min lock: still waiting, no PIN screen. No grant is made, so the
+    // window has nothing to find and keeps waiting.
+    await addressCode();
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    await copy.click();
+    if (!(await existsTestId(driver, "AgentCreateWaiting", 15000))) return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s");
+    const copied = Date.now();
+    await idle(400000);
+    const locked = await existsTestId(driver, "EnterPIN", 2000);
+    const still = await existsTestId(driver, "AgentCreateWaiting", 2000);
+    // Read inside the 600 s window, or "still waiting" would say nothing about the lock (review on #426).
+    const at = Math.round((Date.now() - copied) / 1000);
+    await screenshot(driver, which);
+    return row(!locked && still && at < 590, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before the 600 s window ends: ${at < 590})`);
+  }
   if (which === "link-no-answer") {
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
     // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
     // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.
     // The cut is the whole Farm: every ic3.dev host shares the blocked Cloudflare addresses, the agent too.
+    // Create's 600 s window (wall clock, foreground) starts only on Copy, Share or Connect (VtaCreateAgent.tsx
+    // :334-337, handOut/onConnect): showing the code alone starts nothing, so the 1013-1106 rerun waited 669 s on a
+    // screen with no window open and no AgentCreateWaiting (a driver bug, not the app's). Block first, then Copy:
+    // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
     grant(did);
-    const mark = Date.now();
+    // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
+    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
     block(true);
+    // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
+    // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) {
+      block(false);
+      throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    }
+    await copy.click();
+    const mark = Date.now();
+    const waitingShown = await existsTestId(driver, "AgentCreateWaiting", 15000);
+    if (!waitingShown) {
+      await screenshot(driver, `${which}-no-window`);
+      block(false);
+      return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s of AgentCreateCopyCode");
+    }
     let failedEarly = false;
     let waited = 0;
-    for (const until = Date.now() + 660000; Date.now() < until; ) {
+    // The window is 600 s; past 606 s of it, AgentCreateError is due. Look until 720 s.
+    // A person waiting on Create touches the screen now and then; a test that only polls does not, and the wallet's
+    // 5-min inactivity lock (contexts/activity.tsx: any touch resets it, through the root PanResponder) signed the
+    // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap inert text every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
+    // what this row tests: "didn't answer" + Check again. The tap goes on the card's body text (AgentCreateOwnerBody,
+    // or AgentCreateAsDevice for a device link), never the waiting row: Connect sits right under that row and moves
+    // into its place when the window ends, so a tap there could restart the checks (review on #415).
+    const inert = (await existsTestId(driver, "AgentCreateOwnerBody", 1000)) ? "AgentCreateOwnerBody" : "AgentCreateAsDevice";
+    let touched = Date.now();
+    for (const until = mark + 720000; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
-      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000)) && !(await existsTestId(driver, "AgentCreateError", 500))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
+      if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
+      if (waiting && Date.now() - touched > 110000) {
+        // The case scrolled down to Copy, which can leave the body text above the view: bring it back first (the
+        // swipe is a touch too), so the tap lands on screen where the root PanResponder sees it.
+        await scrollToTestId(driver, inert, 3, { direction: "up" }).catch(() => undefined);
+        await tapTestId(driver, inert, 3000).catch(() => undefined);
+        touched = Date.now();
+      }
       waited = Math.round((Date.now() - mark) / 1000);
       await idle(20000);
     }
+    waited = Math.round((Date.now() - mark) / 1000);
+    // "didn't answer" before the window ran out would be a failure too: the checks must not end it early.
+    const tooSoon = waited < 590;
+    failedEarly = failedEarly || tooSoon;
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
-    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
-    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    // The key after "didn't answer": as text where Create shows it (AgentCreateOwnerDid, after AgentCreateShowCode).
+    // A phone with no screen lock joins as a device, and that layout shows no key text, only Copy and Share (the
+    // 1013-1753 rerun read nothing there and called a kept key "not the same"). Copy is not tapped again (it would
+    // start a new window); there the key is proved by the link itself: linked after Check again with no new ACL entry
+    // means the same granted key. sameKey null = "shown no text; judged by the link".
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+    const keyNow = (await existsTestId(driver, "AgentCreateOwnerDid", 1000)) ? (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") : "";
+    const sameKey = keyNow ? keyNow === did : null;
     let marks = 0;
     try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
     await screenshot(driver, `${which}-blocked`);
     block(false);
     await sleep(3000);
     if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    // Check again starts a new window: wait until the old "didn't answer" has gone (the screen back on
+    // AgentCreateWaiting) before waiting for ready, or the stale AgentCreateError ends the wait at once (1013-1753).
+    if (checkAgain) {
+      for (const until = Date.now() + 15000; Date.now() < until && (await existsTestId(driver, "AgentCreateError", 500)); ) await sleep(1000);
+    }
     const linked = checkAgain && (await ready());
     const after = aclSize();
-    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+    // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
+    // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
+    // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
+    const mine = aclSince(grantAt);
+    const oneGrant = Array.isArray(mine) && mine.length === 1;
+    const sameSubject = oneGrant && mine[0].subject === did;
+    const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
+    const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
+    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install.
@@ -624,7 +720,138 @@ async function linkCase(driver, which) {
     const after = aclSize();
     return row(tryAgain && done && after <= mid, `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses): "not linked" + Try again ${tryAgain} · linked after Try again ${done} · ACL ${mid} → ${after} (key ${view.did.slice(-12)})`);
   }
+  // 241: the scanner given `did`; when a link starts, the host grants the key it shows (enrol-manager, as every
+  // manual link) and the end is awaited. `went` is what the scanner made of it (link.pasteScanned).
+  const scanAndLink = async (did) => {
+    const { entry } = (await link.open()).value;
+    const went = (await link.pasteScanned(did)).value;
+    if (went.state !== "started") return { went, entry };
+    const { did: key } = (await link.readKey()).value;
+    runTempDids.push(key);
+    const since = new Date(Date.now() - 2000).toISOString();
+    grant(key);
+    const end = (await link.awaitLinked({ timeoutMs: 240000 })).value;
+    if (end.state === "done") recordHeir(since);
+    return { went, entry, key, end };
+  };
+  const scanSaid = (went) => (went.state === "refused" ? `the scanner said "${went.said.slice(0, 160)}"` : `no link within 45 s (on ${went.on ?? "none of the link's screens"})`);
+  const endSaid = (end) => (end.state === "done" ? "Linked" : `not linked: "${end.said.slice(0, 120)}"`);
+  if (which === "pnmqr-scan") {
+    // `pnm vta qr` draws the agent's bare DID and nothing else (VTI-Eucalyptus pnm-cli vta.rs show_qr,
+    // vta-cli-common qr.rs) and prints it on a "DID  <did>" line. The SVG is read back here; no helper feeds an image
+    // to the emulator's camera, so what it holds reaches the scanner by the scanner's own paste.
+    const svg = process.env.PNM_QR_SVG || "";
+    const pnmSaid = (() => { try { return readFileSync(process.env.PNM_QR_OUT || "", "utf8").replace(/\x1b\[[0-9;]*m/g, ""); } catch { return ""; } })();
+    if (!existsSync(svg)) return row(false, `pnm wrote no SVG (${svg || "PNM_QR_SVG unset"}): ${pnmSaid.trim().split("\n").pop()?.slice(0, 120) || "no output"}`);
+    const qr = decodeQrSvg(readFileSync(svg, "utf8"));
+    const want = runnerVtaDid();
+    const printed = (pnmSaid.match(/^DID\s+(did:\S+)/m) || [])[1] || "";
+    const drew = `pnm drew a version-${qr.version} level-${qr.ecLevel} code`;
+    if (qr.text !== want) return row(false, `${drew} holding "…${qr.text.slice(-24)}", not the runner's DID (…${want.slice(-24)})`);
+    if (printed !== want) return row(false, `${drew} of the runner's DID, but printed "DID  …${printed.slice(-24) || "(no DID line)"}"`);
+    const { went, end } = await scanAndLink(qr.text);
+    await screenshot(driver, which);
+    const how = `${drew} holding exactly the runner's DID (…${want.slice(-12)}), the same it printed; it reached the scanner decoded+pasted (no camera feed)`;
+    if (!end) return row(false, `${how}; ${scanSaid(went)}`);
+    return row(end.state === "done", `${how}; a link started; ${endSaid(end)}`);
+  }
+  if (which === "scan-agent-no-rest") {
+    // An agent whose DID document has no VTARest service: classifyDid.ts calls it "other" today ("nothing to do with
+    // it here"), though "Use your agent's address" links it. The row passes when the scanner starts the link. With
+    // the agent's own slug (the leg makes it RUNNER_VTA) the link is also finished and said so; a start passes alone.
+    const did = process.env.NO_REST_AGENT_DID;
+    if (process.env.NO_REST_AGENT_SLUG && process.env.NO_REST_AGENT_SLUG === VTA_SLUG) {
+      const { went, end } = await scanAndLink(did);
+      await screenshot(driver, which);
+      if (!end) return row(false, scanSaid(went));
+      return row(true, `the scanner started the link (${went.on}); granted on the agent: ${endSaid(end)}`);
+    }
+    await link.open();
+    const went = (await link.pasteScanned(did)).value;
+    await screenshot(driver, which);
+    if (went.state !== "started") return row(false, scanSaid(went));
+    return row(true, `the scanner started the link (${went.on}); not finished: no NO_REST_AGENT_SLUG to grant it on`);
+  }
+  if (which === "link-again-rescan") {
+    // IN-251 (bifold #383): Link again after a removal moved the link to "not linked" but left the agent on the
+    // phone's list, so scanning it again said "This phone already has that agent" with nothing to switch to.
+    const did = runnerVtaDid();
+    const first = await scanAndLink(did);
+    if (first.end?.state !== "done") return row(false, `the first link: ${first.end ? endSaid(first.end) : scanSaid(first.went)}`);
+    await link.continueToAgent();
+    // The host removes this phone: this run's entries on the agent (the swap left its long-term key there).
+    if (!aclBefore) return row(false, "no ACL snapshot at the start, so this phone's keys cannot be told from others'");
+    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !aclBefore.has(e.subject)), first.key, runHeirs);
+    if (!mine.length) return row(false, "found no key of this phone's on the agent to remove");
+    for (const e of mine) {
+      const out = deleteAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME, subject: e.subject });
+      console.log(`[e2e] removed this phone's key …${e.subject.slice(-12)}: ${out.trim().split("\n").pop()?.slice(0, 60)}`);
+    }
+    // The phone hears of it on its next call: the app to the background and back, My Agent, past an introduction.
+    const nudge = async () => {
+      await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
+      await sleep(1500);
+      await unlockIfLocked(driver).catch(() => undefined);
+      if (await existsTestId(driver, "AgentIntroSkip", 1000)) await tapTestId(driver, "AgentIntroSkip", 5000).catch(() => undefined);
+      await waitForTestId(driver, "MyAgent", 15000).then((el) => el.click(), () => undefined).catch(() => undefined);
+    };
+    await nudge();
+    const removed = (await link.awaitRemoved({ nudge })).value;
+    await screenshot(driver, `${which}-removed`);
+    const again = await scanAndLink(did);
+    await screenshot(driver, which);
+    // link.open takes the card's "Link again" (VtaLinkScanAgain) when it shows; anything else is not the path asked for.
+    if (again.entry !== "VtaLinkScanAgain") return row(false, `removed: "${removed.said.slice(0, 80)}", but My Agent offered no Link again (opened by ${again.entry})`);
+    const head = `removed (${mine.length} key${mine.length === 1 ? "" : "s"}): "${removed.said.slice(0, 80)}"; Link again, the same agent scanned:`;
+    if (!again.end) return row(false, `${head} ${scanSaid(again.went)}`);
+    return row(again.end.state === "done", `${head} a link started; ${endSaid(again.end)}`);
+  }
   return row(false, `no such LINK_CASE ${which}`);
+}
+
+/**
+ * A LINK_CASE that cannot run here, and why, decided before any device or agent is touched; undefined when it runs.
+ * A row that runs and fails says its own why.
+ */
+function linkCaseSkip(which) {
+  if (which === "pnmqr-scan") {
+    if (existsSync(process.env.PNM_QR_SVG || "")) return undefined;
+    let said = "";
+    try { said = readFileSync(process.env.PNM_QR_OUT || "", "utf8"); } catch { /* none */ }
+    if (/unrecognized subcommand|unexpected argument|invalid subcommand/i.test(said)) return "this pnm has no `vta qr` (VTI-Eucalyptus and later draw the agent's QR)";
+  }
+  if (which === "scan-agent-no-rest" && !process.env.NO_REST_AGENT_DID) {
+    return "needs an agent without VTARest (NO_REST_AGENT_DID, and NO_REST_AGENT_SLUG for the grant); none on the Farm";
+  }
+  if (which === "link-again-rescan" && process.env.EXPECT_IN251 !== "1") {
+    // #383 adds no testID or words; its new method's name is in the bundle's string table (Hermes keeps property names).
+    const has = buildHas("forgetRemovedAgent", { platform });
+    if (has === false) return "this build lacks forgetRemovedAgent (bifold #383, IN-251): Link again still keeps the removed agent";
+    if (has === undefined) return "no build file to check for bifold #383 (IN-251); EXPECT_IN251=1 runs it anyway";
+  }
+  return undefined;
+}
+
+/** A case decided before the run: reported as its SKIP row, with nothing started. */
+class CaseSkipped extends Error {}
+
+/**
+ * Cases expected to fail until a Keyring fix lands: a failure is a SKIP that says what was seen, a pass is a PASS.
+ * Kept here: rows.js has no tracked option (another branch may add one; move this onto it then).
+ */
+const TRACKED = { "scan-agent-no-rest": "tracked: expected until the scanner fix" };
+async function trackedRow(name, fn) {
+  let got;
+  try {
+    got = await fn();
+  } catch (e) {
+    got = { ok: false, detail: `threw: ${String(e?.message ?? e).split("\n")[0].slice(0, 300)}` };
+  }
+  if (got?.ok === false) {
+    await screenshot(driver, `row-${name}`).catch(() => undefined);
+    return rows.skip(name, `${TRACKED[name]}; observed: ${got.detail ?? "failed"}`);
+  }
+  return rows.row(name, async () => got);
 }
 
 /**
@@ -1331,6 +1558,10 @@ const runTempDids = [];
 const runHeirs = [];
 let runFailed = false;
 try {
+  // A case that cannot run here (241's: no SVG from pnm, no agent without VTARest, a build without #383) stops
+  // before the ACL, the page or a session: its SKIP row is printed below.
+  const skipWhy = process.env.LINK_CASE ? linkCaseSkip(process.env.LINK_CASE) : undefined;
+  if (skipWhy) throw new CaseSkipped(skipWhy);
   // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
   try {
     aclBefore = snapshotAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME });
@@ -1371,7 +1602,11 @@ try {
 
   if (process.env.LINK_CASE) {
     // IN-135 (239): one link case, its row through rows.js (a throw is that row's FAIL); 3 when a row failed.
-    await rows.row(process.env.LINK_CASE, () => linkCase(driver, process.env.LINK_CASE));
+    const run = () => linkCase(driver, process.env.LINK_CASE);
+    // A case for a fix the build under test does not carry is a SKIP that says so, never a red against an old build.
+    const skip = { "create-wait-no-lock": () => buildLacks("holdLock", { platform: driver.e2ePlatform }) }[process.env.LINK_CASE]?.();
+    if (TRACKED[process.env.LINK_CASE]) await trackedRow(process.env.LINK_CASE, run);
+    else await rows.row(process.env.LINK_CASE, run, { skip: skip ? `${skip} (bifold #396)` : undefined });
     rows.summary();
     process.exitCode = rows.exitCode();
   } else if (LINK_MODE === "manual") {
@@ -1439,14 +1674,21 @@ try {
   process.exitCode = 0;
   }
 } catch (err) {
-  runFailed = true;
-  console.error(err);
-  if (driver) {
-    await screenshot(driver, "link-failure").catch(() => undefined);
-    await dumpSource(driver, "link-failure").catch(() => undefined);
+  if (err instanceof CaseSkipped) {
+    rows = createRows({ label: "vta-link", only: null });
+    await rows.row(process.env.LINK_CASE, async () => true, { skip: err.message });
+    rows.summary();
+    process.exitCode = rows.exitCode();
+  } else {
+    runFailed = true;
+    console.error(err);
+    if (driver) {
+      await screenshot(driver, "link-failure").catch(() => undefined);
+      await dumpSource(driver, "link-failure").catch(() => undefined);
+    }
+    printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
+    process.exitCode = 1;
   }
-  printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
-  process.exitCode = 1;
 } finally {
   // Only this run's keys. A link is usually the FIRST step of a chain (link →
   // invite → vetting), and removing its keys after a success unlinks the phone

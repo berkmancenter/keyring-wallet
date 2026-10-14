@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "85f6d40b32e028b57ca2af50ea42e00d555a641c",
+  "generatedFrom": "f37c84947ae6f0889cb0e56a6d1e7e23979ecdbd",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -46,6 +46,7 @@
     "AgentCreateAddressContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateAddressInput": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateAsDevice": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateAwaitingApproval": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateCheckAgain": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateConnect": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
@@ -67,6 +68,7 @@
     "AgentCreateScroll": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateShareCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateShowCode": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
+    "AgentCreateSuggestedLabel": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateSwitchToExisting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateWaiting": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentDetails": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
@@ -230,6 +232,10 @@
     "CancelDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "CancelDeleteProfileButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "CancelRemoveButton": ["src/components/modals/CommonRemoveModal.tsx"],
+    "CardStatusNotice": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeStill": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeText": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
+    "CardStatusNoticeTryAgain": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
     "Change Pin": ["src/screens/Settings.tsx"],
     "ChangePIN": ["src/screens/PINChange.tsx"],
     "ClearPastedUrl": ["src/screens/PasteUrl.tsx"],
@@ -247,6 +253,7 @@
     "CommunityCardDetails": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardFrom": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCardOpenCommunity": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
+    "CommunityCardRole": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
     "CommunityCriteria": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDetailsToggle": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDid": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -740,6 +747,36 @@
     "SiblingNotice": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SiblingNoticeDismiss": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
     "SiblingNoticeOpen": ["src/modules/trust-tasks/screens/SiblingNotice.tsx"],
+    "SignIn": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInApprove": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInBrowser": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInBusy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInCancel": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInChecking": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInClaiming": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInCommunity": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInCommunityDid": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInConfirm": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInContinue": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInDecline": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInDone": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInHost": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInIdentifiedAs": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInLocation": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInNotMember": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInNumber": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInNumberContinue": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInNumberInput": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInReportedBy": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInResult": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInResultMessage": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInReview": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInSameNetwork": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInSessionOnly": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInSystem": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInTimeLeft": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInUnverified": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
+    "SignInWebsite": ["src/modules/trust-tasks/screens/SignIn.ids.ts"],
     "Skip": ["src/screens/Onboarding.tsx"],
     "SlowLoadBody": ["src/components/views/LoadingPlaceholder.tsx"],
     "SlowLoadTitle": ["src/components/views/LoadingPlaceholder.tsx"],
@@ -868,7 +905,26 @@
     "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VtaClaim": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCancel": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimClaiming": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCode": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeCancel": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeStatus": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimCodeValue": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConfirm": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConfirmError": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimConnecting": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimContinue": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimDone": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimFailed": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimHost": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimHostDid": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimReady": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimResultMessage": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimUnverified": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
+    "VtaLinkAwaitingApproval": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkByAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkCancel": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
@@ -918,6 +974,7 @@
       "src/modules/trust-tasks/screens/HostSetupSteps.tsx",
       "src/modules/trust-tasks/screens/VtaLink.ids.ts"
     ],
+    "VtaLinkSuggestedLabel": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkTryAgain": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkWaitingForPhone": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaOfflineBanner": ["src/modules/trust-tasks/screens/VtaStatus.tsx"],
@@ -967,6 +1024,7 @@
     "AgentCommunityPrimary_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCommunityStatus_": ["src/modules/trust-tasks/screens/CommunityCard.tsx"],
     "AgentCreateStep_": ["src/modules/trust-tasks/screens/VtaCreateAgent.tsx"],
+    "AgentDeviceAccess_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceDetails_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceDid_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceRemove_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
@@ -1190,6 +1248,21 @@
       "src/modules/trust-tasks/screens/SaidFailure.tsx": "testID"
     },
     {
+      "src/modules/trust-tasks/screens/SignIn.tsx": "key"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Copy`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Hint`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "`${testIdStem}Value`"
+    },
+    {
+      "src/modules/trust-tasks/screens/SuggestedAccessLabel.tsx": "testIdStem"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.addedCard"
     },
     {
@@ -1364,6 +1437,9 @@
       "src/modules/trust-tasks/screens/VtaAgentSettings.tsx": "VtaAgentSettingsIds.unlinkTitle"
     },
     {
+      "src/modules/trust-tasks/screens/VtaClaim.tsx": "key"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.backupAdd"
     },
     {
@@ -1425,6 +1501,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAsDevice"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createAwaitingApproval"
     },
     {
       "src/modules/trust-tasks/screens/VtaCreateAgent.tsx": "VtaCreateAgentIds.createCheckAgain"
@@ -1506,6 +1585,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.agentAddress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.awaitingApproval"
     },
     {
       "src/modules/trust-tasks/screens/VtaLink.tsx": "VtaLinkIds.button"
@@ -2055,6 +2137,18 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "requestTestKey(r.requestDocumentId)"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.notice"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.still"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.text"
+    },
+    {
+      "src/modules/trust-tasks/screens/cardStatusNotice.tsx": "CardStatusNoticeIds.tryAgain"
     },
     {
       "src/screens/AutoLock.tsx": "testID"

@@ -1,10 +1,12 @@
 import { execFileSync as execFileSyncForSim } from "node:child_process";
+import { assertCapsSafe } from "./prodGuard.js";
 import { remote } from "webdriverio";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
@@ -72,6 +74,13 @@ async function checkMetroIsThisWorktree() {
 
 let appiumProc;
 
+/** ANDROID_HOME for Appium: as set, else ANDROID_SDK_ROOT, else the SDK's usual place on a Mac when it is there. */
+export function androidHomeEnv(env = process.env, exists = existsSync) {
+  if (env.ANDROID_HOME) return {};
+  const guess = env.ANDROID_SDK_ROOT || path.join(os.homedir(), "Library", "Android", "sdk");
+  return exists(guess) ? { ANDROID_HOME: guess } : {};
+}
+
 export async function ensureAppium() {
   await checkMetroIsThisWorktree();
   if (await portInUse(APPIUM_PORT)) {
@@ -113,6 +122,8 @@ export async function ensureAppium() {
     {
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
+      // Appium's Android driver needs ANDROID_HOME, or session creation fails (#397 device run, 10-14).
+      env: { ...process.env, ...androidHomeEnv() },
     }
   );
   appiumProc.stdout.pipe(log);
@@ -183,6 +194,8 @@ export async function createSession(platform, capsOverride) {
   const requested =
     capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
   const realDevice = Boolean(requested["appium:udid"]);
+  // Never fullReset (uninstall) the production app on a person's own phone (prodGuard.js).
+  assertCapsSafe(platform, requested);
   // Attach to a running emulator by udid; never let Appium launch one (emulator.js).
   const capabilities = pinToRunningEmulator(requested);
   console.log(
@@ -196,6 +209,8 @@ export async function createSession(platform, capsOverride) {
     capabilities,
   });
   driver.e2ePlatform = platform;
+  // The device the harness asked for, on every platform (Appium's echo of it varies by driver): deviceWait keys on it.
+  driver.e2eRequestedUdid = capabilities["appium:udid"] || undefined;
   // Two simulators of the same platform both logged as "ios", so a two-sim run
   // could not say WHICH phone was stuck (2026-09-23: five minutes spent working
   // out which of two iPhones was sitting on a PIN pad). Keep the simulator name

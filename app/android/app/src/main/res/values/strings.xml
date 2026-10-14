@@ -3,4 +3,8 @@
     <!-- The one line a push wake shows (docs/plans/push-notifications-plan.md §3):
          the gateway sends only this key, never text. The same line for every wake. -->
     <string name="KEYRING_WAKE">Something is waiting for you in Keyring.</string>
+    <!-- The notification channel every wake is shown in (MainApplication.kt), as
+         the phone's notification settings name it. -->
+    <string name="notification_channel_wake_name">Requests and messages</string>
+    <string name="notification_channel_wake_description">Tells you when something is waiting in Keyring.</string>
 </resources>

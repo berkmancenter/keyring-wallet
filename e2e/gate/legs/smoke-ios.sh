@@ -13,7 +13,7 @@ export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_U
 SIM=$SMOKE_SIM_UDID; NAME=$SMOKE_SIM_NAME
 wda_stop(){ local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$SIM" | grep -v grep | awk '{print $1}'); do kill $p; done; }
 echo "SMOKE iOS start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' $(dirname $APP)/manifest.txt | tr '\n' ' ')· bundle $(shasum -a 256 $APP/main.jsbundle | cut -c1-12) · GoogleService-Info project $(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' $APP/GoogleService-Info.plist 2>/dev/null || echo '(no plist in the app)') · sim $NAME $SIM"
-xcrun simctl boot $SIM 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus $SIM >/dev/null 2>&1; xcrun simctl uninstall $SIM $BID 2>/dev/null
+xcrun simctl boot $SIM 2>/dev/null; galarm 180 xcrun simctl bootstatus $SIM >/dev/null 2>&1; xcrun simctl uninstall $SIM $BID 2>/dev/null
 L0=$(date +%s); xcrun simctl install $SIM $APP && P=$(xcrun simctl launch $SIM $BID | awk '{print $2}'); echo "plain launch pid $P $(date -u +%T)Z"
 sleep 20; xcrun simctl io $SIM screenshot $LEG_DIR/ios-plain-20s.png >/dev/null 2>&1; a1=$(ps -p $P >/dev/null 2>&1 && echo alive || echo GONE)
 sleep 25; xcrun simctl io $SIM screenshot $LEG_DIR/ios-plain-45s.png >/dev/null 2>&1; a2=$(ps -p $P >/dev/null 2>&1 && echo alive || echo GONE)
@@ -28,13 +28,18 @@ echo "ROW ios-cold-launch-no-crash $([ $a1 = alive ] && [ $a2 = alive ] && [ $CR
 xcrun simctl terminate $SIM $BID 2>/dev/null
 ( export PLATFORM=ios IOS_APP=$APP UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 ENROL_PORT=8198
 # The welcome slides (wallet #339) on the fresh install, before onboarding: link, agent words, icon size.
-(cd $E2E; perl -e 'alarm 300; exec @ARGV' node run-welcome.mjs > $LEG_DIR/ios-welcome.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-welcome.out; driver_rc ios-welcome-driver "$wrc" $LEG_DIR/ios-welcome.out)
-cd $E2E; t=$(date +%s); E2E_KEEP_APP=1 perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > $LEG_DIR/ios-link.out 2>&1; rc=$?
+(cd $E2E; galarm 300 node run-welcome.mjs > $LEG_DIR/ios-welcome.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-welcome.out; driver_rc ios-welcome-driver "$wrc" $LEG_DIR/ios-welcome.out)
+cd $E2E; t=$(date +%s); E2E_KEEP_APP=1 galarm 1500 node run-vta-link.js > $LEG_DIR/ios-link.out 2>&1; rc=$?
 echo "ROW ios-onboarding-home $([ $rc -eq 0 ] && echo PASS || echo FAIL) — link run rc=$rc $(( $(date +%s)-t ))s $(grep -E '✅|❌' $LEG_DIR/ios-link.out | tail -1 | cut -c1-110); push steps in the transcript: $(grep -c 'PushNotificationContinue' $LEG_DIR/ios-link.out)"
 ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/ios-link.out); if [ -n "$ic" ]; then st=FAIL; [[ $ic == "INTRO-CENTRE ok"* ]] && st=PASS; echo "ROW agent-intro-centred-ios $st — above/below: ${ic#INTRO-CENTRE } (#340)"; fi
 # The probe's own row, ios-push-<expect> (run-push-off-probe.mjs); a probe that stopped early is a FAIL row of its own.
-[ $rc -eq 0 ] && { cd $E2E; EXPECT=${PROBE_EXPECT:-off} perl -e 'alarm 600; exec @ARGV' node run-push-off-probe.mjs > $LEG_DIR/ios-push-off.out 2>&1; prc=$?; take_rows $LEG_DIR/ios-push-off.out; driver_rc ios-push-driver "$prc" $LEG_DIR/ios-push-off.out; } )
+[ $rc -eq 0 ] && { cd $E2E; EXPECT=${PROBE_EXPECT:-off} galarm 600 node run-push-off-probe.mjs > $LEG_DIR/ios-push-off.out 2>&1; prc=$?; take_rows $LEG_DIR/ios-push-off.out; driver_rc ios-push-driver "$prc" $LEG_DIR/ios-push-off.out; } )
 # Your agent's header, Join menu and chips (#329/#330/#331), measured on the linked phone.
 (cd $E2E && PLATFORM=ios UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 \
-  perl -e 'alarm 600; exec @ARGV' node run-agent-header.mjs > $LEG_DIR/ios-header.out 2>&1; hrc=$?; take_rows $LEG_DIR/ios-header.out; driver_rc ios-header-driver "$hrc" $LEG_DIR/ios-header.out)
+  galarm 600 node run-agent-header.mjs > $LEG_DIR/ios-header.out 2>&1; hrc=$?; take_rows $LEG_DIR/ios-header.out; driver_rc ios-header-driver "$hrc" $LEG_DIR/ios-header.out)
+# IN-249 (bifold #385): a sign-in code from C, which this linked phone never joined, names C and not its DID. Then IN-257
+# (#384): a wrong PIN on the unlock screen empties the field and the right one unlocks. Each SKIPs on a build without its fix.
+(cd $E2E && export PLATFORM=ios IOS_APP=$APP UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 C_DID=${C_DID:-} C_NAME="${C_NAME:-}"
+  galarm 420 node run-signin-unjoined.mjs > $LEG_DIR/ios-signin.out 2>&1; grc=$?; take_rows $LEG_DIR/ios-signin.out; driver_rc ios-signin-driver "$grc" $LEG_DIR/ios-signin.out
+  galarm 420 node run-wrong-pin.mjs > $LEG_DIR/ios-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-wrong-pin.out; driver_rc ios-wrong-pin-driver "$wrc" $LEG_DIR/ios-wrong-pin.out)
 wda_stop; xcrun simctl shutdown $SIM 2>/dev/null; echo "SMOKE iOS done $(date -u +%T)Z";

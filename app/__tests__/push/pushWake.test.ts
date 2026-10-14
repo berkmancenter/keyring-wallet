@@ -40,7 +40,10 @@ describe('making this phone wakeable', () => {
       allowedTriggers: [AGENT],
     })
     expect(register).toHaveBeenCalledWith('https://push.example.org', FCM, AGENT)
-    expect(setWake).toHaveBeenCalledWith({ gateway: GATEWAY_DID, handle: 'zHandle' }, { pushPlatform: 'fcm' })
+    expect(setWake).toHaveBeenCalledWith(
+      { gateway: GATEWAY_DID, handle: 'zHandle' },
+      { pushPlatform: 'fcm', suggestedTriggers: [GATEWAY_DID] }
+    )
     expect(JSON.stringify(setWake.mock.calls)).not.toContain('fcm-token')
   })
 
@@ -78,6 +81,35 @@ describe('making this phone wakeable', () => {
     await expect(enablePushWake(d)).resolves.toEqual({
       status: 'notWakeable',
       handle: { gateway: GATEWAY_DID, handle: 'zHandle' },
+    })
+  })
+
+  it('gives the mediator the handle, never the token, once the agent can wake the phone', async () => {
+    const setMediatorDeviceInfo = jest.fn(async () => undefined)
+    const { d } = deps({ setMediatorDeviceInfo })
+    await expect(enablePushWake(d)).resolves.toMatchObject({ status: 'wakeable', messages: 'set' })
+    expect(setMediatorDeviceInfo).toHaveBeenCalledWith({ handle: 'zHandle', platform: 'fcm' })
+    expect(JSON.stringify(setMediatorDeviceInfo.mock.calls)).not.toContain('fcm-token')
+  })
+
+  it('does not give the mediator a handle the agent will not wake', async () => {
+    const setMediatorDeviceInfo = jest.fn(async () => undefined)
+    const { d } = deps({ setMediatorDeviceInfo, setWake: async () => ({ pushCapable: false }) })
+    await expect(enablePushWake(d)).resolves.toMatchObject({ status: 'notWakeable' })
+    expect(setMediatorDeviceInfo).not.toHaveBeenCalled()
+  })
+
+  it('stays wakeable for approvals when the mediator cannot be told', async () => {
+    const { d } = deps({
+      setMediatorDeviceInfo: async () => {
+        throw new Error('no mediator connection to set device info on')
+      },
+    })
+    await expect(enablePushWake(d)).resolves.toEqual({
+      status: 'wakeable',
+      handle: { gateway: GATEWAY_DID, handle: 'zHandle' },
+      allowedTriggers: [AGENT],
+      messages: 'failed',
     })
   })
 

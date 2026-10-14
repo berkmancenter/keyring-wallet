@@ -6,10 +6,19 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Sign in to community websites with Keyring. On a community's website, choose to sign in with your wallet and scan the QR code. Keyring names the community, asks for the two-digit number the page shows, and you approve with Face ID or your fingerprint. No password. This needs your agent to support website sign-in, which arrives with the next agent release. Until then, Keyring tells you your agent needs an update.
-• A vetter in two communities gets the right desk for each.
-• My devices lists every key on your agent; narrower ones say "Limited access".
-• When you grant access by hand, Keyring suggests a name for this phone to copy.
-• A link held for an approval says it's waiting for the approval.
-• After a refused request, "Join again" sits at the top.
-• If a phone gets no notification token, Keyring tries again.
+• Set up a new agent with one scan. On your agent host's page, choose to set up with Keyring and scan the code. Keyring shows the address the code says it's from (marked "Unverified" until you continue), you match the six characters on both screens, and the agent is linked as yours. No address or owner code to copy.
+• Website sign-in works with communities on the newest server version. It no longer ends in "the community's answer couldn't be checked". If your agent doesn't support website sign-in yet, Keyring now says "Your agent needs an update" instead of a general error.
+• The sign-in screen shows the community's full address and says it hasn't been checked yet, and it shows the community's name (or short handle) instead of a long code.
+• After a wrong PIN, the field clears so you can type it again straight away.
+• If your agent removed this phone, "Link again" lets you scan your agent's code and link it again.
+• Backing out of a link that is waiting for an approval no longer lets it finish later on its own.
+• While you wait for your agent host during setup, the app no longer locks itself and loses your place.
+• Agents that don't publish a web address can be linked by scanning their code.
+• After reinstalling Keyring, role cards such as "vetter" come back from your agent with your membership cards, and a membership card's details show your role.
+• If Keyring can't check a card's status, it says so and offers Try again.
+• When a community admits you, Keyring sends your half of the membership record back to the community.
+• On Android, Keyring's notifications use their own "Requests and messages" channel, so approval requests show as a banner.
+• Hardware-attested exchanges are checked more strictly against exactly what you see.
+• Profile and name fields are a little taller, and a new community identity is kept in your agent's main space.
+• On a community that uses private vetting, Keyring now says it isn't supported yet, instead of sending statements the community would refuse.
+• Contacts: the witnessed and in-person marks now appear only for witness records Keyring verified when it received them. Marks from before this update come back the next time that relationship is witnessed.

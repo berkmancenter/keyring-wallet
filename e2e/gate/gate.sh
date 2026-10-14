@@ -7,6 +7,8 @@
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
 #   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
+#   gate.sh summary <run-id>                                  write the run's summary.json (the board's feed) again
+#   gate.sh changed --pin <sha> (--range a..b | --files f,…)  only the legs a fix touches: a fast check, not the gate
 #   gate.sh pause [reason]                                    legs running finish; no further leg or gate starts
 #   gate.sh resume                                            lift a pause (then: rerun <run> --only-failed)
 # Lead our own process group, so a stop passed to "the group" (stop_forward's kill -TERM 0) reaches the gate and
@@ -19,19 +21,19 @@ fi
 . "$(dirname "$0")/lib.sh"
 
 # Legs in the order they run on one platform, and which device each needs.
-LEGS_IOS="kk smoke-ios update-ios"
+LEGS_IOS="kk p2 smoke-ios update-ios"
 LEGS_ANDROID="p1 testreq agents waiting lostreq linkresume smoke-android devices update-android relaunch-android linkwait"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
-LEGS_SOLO="linkfail"
+LEGS_SOLO="linkfail pnmlink"
 # iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
 # so they run first, with nothing beside them; the rest of iOS then runs beside Android.
-LEGS_IOS_ALONE="kk smoke-ios"
+LEGS_IOS_ALONE="kk p2 smoke-ios"
 # Mostly waiting (IN-135's slow cases, about 35 min) on the emulator, so it runs beside the iOS-alone legs, where the
 # emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
 LEGS_BESIDE_IOS_ALONE="linkwait"
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- one leg ----
 
@@ -123,7 +125,7 @@ new_run() {
   local pin=$1 kind=$2 rd
   rd=$GATE_HOME/runs/$(date -u +%m%d-%H%M)-${pin:0:8}-$kind
   mkdir -p "$rd"
-  { echo "pin=$pin"; echo "kind=$kind"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; } > "$rd/meta"
+  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; } > "$rd/meta"
   echo "$rd"
 }
 
@@ -143,11 +145,13 @@ cmd_run() {
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
   [ $held = 1 ] && say "hold released"
   local rd; rd=$(new_run "$pin" "$kind")
-  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; } >> "$rd/meta"
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
-  say "run $(basename "$rd"): wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
+  say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
 
@@ -165,8 +169,10 @@ cmd_rerun() {
   gate_sweep
   local rd; rd=$(new_run "$pin" "rerun")
   echo "rerun-of=$id" >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   rerun_legs "$old" "$rd"
   echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
   cmd_report "$(basename "$rd")"
 }
 
@@ -176,14 +182,64 @@ cmd_rerun() {
 rerun_legs() {
   local old=$1 rd=$2 leg rc s e names
   while IFS=$'\t' read -r leg rc s e <&3; do
+    # GATE_RERUN_SKIP="p2 …": legs left out on purpose (a known cause a rerun cannot change), named in the meta.
+    if [[ " ${GATE_RERUN_SKIP:-} " == *" $leg "* ]]; then [ "$rc" = 0 ] || echo "rerun-skipped=$leg" >> "$rd/meta"; continue; fi
     case $rc in
       0) ;;
       # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
       1|4|143) run_leg "$rd" "$leg" ;;
-      *) names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
+      # GATE_RERUN_WHOLE="agents …": these legs run whole even with only some rows failed, when a failed row needs one
+      # that passed (1013-1633: agents' R5/R7 need the second agent that "R1 add + keep" adds, which --only-failed
+      # skipped as not selected, so every one of them found a single agent).
+      *) if [[ " ${GATE_RERUN_WHOLE:-} " == *" $leg "* ]]; then run_leg "$rd" "$leg"; continue; fi
+         names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
          run_leg "$rd" "$leg" "$names" ;;
     esac
   done 3< "$old/legs.tsv"
+}
+
+# Only the legs a fix touches (changed.mjs): a fast check that the fix works where the gate looks, minutes not hours.
+# NEVER the release gate: its run is "<id>-changed", which the watcher does not count as a gate of the commit, and
+# its meta and report say "changed legs only". An external release still needs the full gate. A changed file that owns
+# no testID cannot be mapped: the command stops and says to run the full gate (--with-unmapped runs the mapped part).
+cmd_changed() {
+  local pin="" with_unmapped=0 sel=()
+  while [ $# -gt 0 ]; do case $1 in
+    --pin) pin=$2; shift 2 ;; --range) sel=(--range "$2"); shift 2 ;; --files) sel=(--files "$2"); shift 2 ;;
+    --with-unmapped) with_unmapped=1; shift ;; *) usage ;;
+  esac; done
+  [ -n "$pin" ] && [ ${#sel[@]} -gt 0 ] || usage
+  gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
+  local json rc legs unmapped
+  json=$(node "$GATE_SRC/changed.mjs" "${sel[@]}" --json); rc=$?
+  legs=$(printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).legs.join(",")))')
+  unmapped=$(printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).unmapped.join(" ")))')
+  case $rc in
+    0) ;;
+    1) die "no gate leg names a testID these files own: the gate does not look at this change. Write a row for it, or run the full gate" ;;
+    2) [ "$with_unmapped" = 1 ] && [ -n "$legs" ] || die "own no testID, so no leg can be chosen for them: $unmapped. Run the full gate (or --with-unmapped for the mapped part)" ;;
+    *) die "changed.mjs failed (exit $rc)" ;;
+  esac
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
+  run_lock
+  gate_sweep
+  local rd; rd=$(new_run "$pin" "changed")
+  printf '%s\n' "$json" > "$rd/changed.json"
+  {
+    echo "scope=changed legs only: a fast check for a fix, not the release gate"
+    echo "changed-legs=$legs"
+    [ -z "$unmapped" ] || echo "changed-unmapped=$unmapped (owns no testID: not covered by this run)"
+    printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const j=JSON.parse(t);for(const l of j.legs){const w=j.reasons[l]||[];console.log(`changed-why=${l}: ${[...new Set(w.map(x=>x.id))].slice(0,8).join(",")} via ${[...new Set(w.map(x=>x.unit))].slice(0,3).join(", ")}`)}})'
+  } >> "$rd/meta"
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
+  say "run $(basename "$rd"): CHANGED LEGS ONLY (not the release gate) · target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} · legs $legs"
+  run_legs "$rd" "$legs" 0
+  echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
+  cmd_report "$(basename "$rd")"
 }
 
 # The drivers against the build testers already have: a FAIL here is the driver's, found before a candidate.
@@ -339,9 +395,17 @@ cmd_watch() {
 }
 
 # Rows per leg, and the wall-clock from the first leg's start to the last leg's end.
+# summary.json in the run dir (run-summary.mjs): the feed the board reads. Written at every run's end; `gate.sh
+# summary <run>` writes it again after meta notes are added (env=, env-legs=, harness-legs=).
+write_summary() { node "$GATE_SRC/run-summary.mjs" "$1" >/dev/null 2>&1 || say "summary.json not written for $(basename "$1")"; }
+cmd_summary() { local rd=$GATE_HOME/runs/${1:?usage: gate.sh summary <run-id>}; [ -f "$rd/meta" ] || die "no run $1"; node "$GATE_SRC/run-summary.mjs" "$rd"; }
+
 cmd_report() {
   local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
-  echo "== $1 · $(grep -E '^(wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
+  echo "== $1 · $(grep -E '^(target|wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
+  ! grep -q '^scope=' "$rd/meta" || echo "   $(grep -m1 '^scope=' "$rd/meta" | cut -d= -f2-)"
+  # CI's pinned pnm against the Farm (farm-drift.mjs): shown only when it is not OK.
+  ! grep -qE '^farm-drift=(DRIFT|UNKNOWN)' "$rd/meta" || echo "   !! $(grep -m1 '^farm-drift=' "$rd/meta" | cut -d= -f2-)"
   local leg rc s e first= last=0
   while IFS=$'\t' read -r leg rc s e; do
     [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s
@@ -360,6 +424,8 @@ case ${1:-} in
   dry) shift; cmd_dry "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   report) shift; cmd_report "$@" ;;
+  summary) shift; gate_env; cmd_summary "$@" ;;
+  changed) shift; cmd_changed "$@" ;;
   pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
   resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
   *) usage ;;

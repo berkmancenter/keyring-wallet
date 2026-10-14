@@ -45,6 +45,21 @@ out.push("", `### Rows: ${rows.filter((r) => r.status === "PASS").length} pass, 
 out.push("| Status | Row | Detail |", "|---|---|---|");
 for (const r of rows) out.push(`| ${r.status} | ${esc(r.name)} | ${esc(r.detail).slice(0, 300)} |`);
 out.push("");
+// Layout findings (lib/layoutRules.js): advisory until the rules are calibrated, so listed, not counted as fails.
+const layout = log.split("\n").filter((l) => l.startsWith("LAYOUT "));
+if (layout.length) {
+  out.push(`### Layout findings: ${layout.length} (advisory)`, "", "| Screen | Rule | Element and detail |", "|---|---|---|");
+  for (const l of layout.slice(0, 40)) { const [, screen, rule, ...rest] = l.split(" "); out.push(`| ${esc(screen)} | ${esc(rule)} | ${esc(rest.join(" ")).slice(0, 200)} |`); }
+  if (layout.length > 40) out.push(`| … | | ${layout.length - 40} more in the leg log |`);
+  out.push("");
+}
+// Allowlisted findings (lib/layout.allow.json): named with their reason, never counted.
+const allowed = log.split("\n").filter((l) => l.startsWith("LAYOUT-ALLOWED "));
+if (allowed.length) {
+  out.push(`### Layout findings allowed: ${allowed.length}`, "", "| Screen | Rule | Element, detail and reason |", "|---|---|---|");
+  for (const l of allowed.slice(0, 40)) { const [, screen, rule, ...rest] = l.split(" "); out.push(`| ${esc(screen)} | ${esc(rule)} | ${esc(rest.join(" ")).slice(0, 240)} |`); }
+  out.push("");
+}
 if (broken) out.push(`**${esc(broken)}**`, "");
 out.push(done ? `\`${done}\`` : "_no LEG DONE line_", "");
 

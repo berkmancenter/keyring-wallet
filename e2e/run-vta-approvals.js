@@ -43,13 +43,14 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 import { listAcl, ownedBy, removeRunKeys } from "./lib/aclCleanup.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 import { buildLacks } from "./lib/buildHas.js";
@@ -94,6 +95,7 @@ function pnm(args, timeout = 120000) {
   return out;
 }
 const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
+const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
 const rows = createRows({ label: "vta-approvals" });
 const ASKS = "317 Approve asks the owner";
@@ -130,7 +132,17 @@ async function answerOwner(d, tag) {
 /** Into the approval card for a held request: the banner on Your agent, or the card on Requests. */
 async function awaitCard(d, ms) {
   let card = false;
+  let homeChecked = false;
   for (const until = Date.now() + ms; Date.now() < until && !card; await sleep(2000)) {
+    // Not on the agent's home (Agent settings, say) and the card is not here: once, go back to My Agent and to its
+    // Requests section, where the card lives after bifold #297.
+    if (!homeChecked && !(await existsTestId(d, "AgentRequestsRow", 300)) && !(await existsTestId(d, "AgentSegment_manage", 300))) {
+      homeChecked = true;
+      if (!(await existsTestId(d, "AgentApprovalCard", 300))) {
+        await tapTestId(d, "MyAgent", 5000).catch(() => undefined);
+        await scrollToTestId(d, "AgentRequestsRow", 8).catch(() => undefined);
+      }
+    }
     if (await existsTestId(d, "AgentApprovalBanner", 300)) await tapTestId(d, "AgentApprovalBanner", 3000).catch(() => undefined);
     card = (await existsTestId(d, "AgentApprovalCard", 500)) || Boolean(await scrollToTestId(d, "AgentApprovalCard", 2).catch(() => false));
   }
@@ -230,12 +242,25 @@ try {
     await sleep(8000);
   }
   await tapTestId(d, "MyAgent", 15000);
-  // Manage: a segment before bifold #297, the "Agent settings" row after.
+  // Where the approval card shows: on the Manage segment before bifold #297; after it, in the Requests section of the
+  // agent's home (VtaAgentHome → RequestsSection, always rendered since 239), which can sit below the fold. Scroll to
+  // it there, and only when there is none go to Agent settings: the 1012-2223 rerun on 240 checked AgentRequestsRow
+  // without scrolling, went to Agent settings, and waited 180 s there while the tab read "1 request waiting".
   if (await existsTestId(d, "AgentSegment_manage", 5000)) {
     await tapTestId(d, "AgentSegment_manage", 5000);
-  } else if (!(await existsTestId(d, "AgentRequestsRow", 1500))) {
+  } else if (!(await scrollToTestId(d, "AgentRequestsRow", 8).then(() => true, () => false))) {
     await scrollToTestId(d, "AgentSettings", 8).catch(() => undefined);
     await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
+  }
+
+  // ANDROID-NOTIF-CHANNEL (wallet #421, 241): an approval wake reaching the phone in the background is posted on
+  // the app's own high-importance channel keyring_wake ("Requests and messages"), so it shows as a heads-up banner,
+  // not on FCM's fallback channel. WAKE_CHANNEL_CHECK=1 (p1, on a build whose dex has the channel) and push on.
+  const notifCheck = PLATFORM === "android" && process.env.WAKE_CHANNEL_CHECK === "1" && approver && pushCapableOf(approver) === "true";
+  if (notifCheck) {
+    adb("shell", "input", "keyevent", "3"); // Home: the app in the background before the request
+    adb("logcat", "-c"); // the wake's own lines only, saved below
+    await sleep(2000);
   }
 
   // The request: read the probe context, which the rule now holds for consent.
@@ -243,6 +268,41 @@ try {
   const asked = pnm(["contexts", "get", contextId], 180000);
   if (!/consent required/i.test(asked)) throw new Error(`the request was not held for consent: ${lastLine(asked)}`);
   log(`request held: ${lastLine(asked)}`);
+  if (notifCheck) {
+    let record = "";
+    // Up to 2 min: under load the app can ANR on FCM's receive broadcast and the wake is redelivered ~1.5 min later
+    // (push lane, 10-11). Home, never force-stop: a force-stopped app gets no FCM delivery until opened.
+    for (const until = Date.now() + 120000; Date.now() < until && !record; await sleep(3000)) {
+      record = adb("shell", "dumpsys", "notification", "--noredact").split("\n").find((l) => l.includes(`pkg=${BID}`) && /channel=/.test(l)) ?? "";
+    }
+    const channel = (record.match(/channel=([^\s)]+)/) || [])[1] ?? "(no notification)";
+    // when= says which wake this is: wakes share the collapse id keyring-wake, so a later one replaces an earlier.
+    const when = (record.match(/when=(\d+)/) || [])[1] ?? "?";
+    const all = adb("shell", "dumpsys", "notification");
+    const def = (all.match(/NotificationChannel\{mId='keyring_wake'[^}]*\}/) || [""])[0];
+    const importance = Number((def.match(/mImportance=(\d+)/) || [])[1] ?? 0);
+    const name = (def.match(/mName=([^,]+)/) || [])[1] ?? "";
+    // Whether a wake reached the phone at all, apart from where it was posted: the agent's own view of this phone
+    // (pushCapable) and the phone's FCM lines since Home, saved whole (wake-logcat.txt) for the verdict.
+    const capable = pushCapableOf(approver);
+    const lc = adb("logcat", "-d", "-v", "threadtime");
+    const fcm = lc.split("\n").filter((l) => /FirebaseMessaging|FcmBroadcast|CloudMessag|com\.google\.android\.c2dm|keyring[-_]wake/i.test(l));
+    try {
+      writeFileSync(path.join(process.env.E2E_RUN_DIR || "artifacts", "wake-logcat.txt"), lc);
+    } catch (e) {
+      log(`wake-logcat.txt not saved: ${e.message}`);
+    }
+    const seen = record
+      ? `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel)`
+      : "no wake arrived in 2 min (no Keyring notification posted)";
+    await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
+      `${seen} · agent says pushCapable ${capable} · ${fcm.length} FCM line(s) in the phone's log since Home (wake-logcat.txt) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+    await d.activateApp(BID);
+    await sleep(2000);
+    // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
+    // has passed); unlock before the card is looked for (review on #428).
+    await unlockIfLocked(d).catch(() => undefined);
+  }
 
   const t0 = Date.now();
   const card = await awaitCard(d, 180000);

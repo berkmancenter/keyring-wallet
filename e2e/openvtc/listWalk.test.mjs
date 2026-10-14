@@ -70,3 +70,70 @@ test('rowSelected: the row carrying the cursor names the ticket', () => {
   // The Activity Log names the new ticket too; that is not a selection.
   assert.equal(rowSelected('│[10:57:22] Ticket 4CPB-TAXR for did:webvh:… — press ⏎', '4CPB-TAXR'), false);
 });
+
+/**
+ * A list in a pane `height` rows tall that scrolls apart from its cursor, as
+ * openvtc's content panel does: Down/Up move the ▸, PageDown/PageUp move the view.
+ */
+function fakePane(rows, { at = 0, height = 27, page = height, clock = false, noCursor = false } = {}) {
+  return {
+    at,
+    top: 0,
+    presses: [],
+    screen() {
+      const pane = rows.slice(this.top, this.top + height).map((r, i) => `║${!noCursor && this.top + i === this.at ? '▸ ' : '  '}${r}`);
+      return clock ? [...pane, `│[${this.presses.length}] Activity Log tick`].join('\n') : pane.join('\n');
+    },
+    async pressEach([key]) {
+      this.presses.push(key);
+      if (key === 'Down') this.at = Math.min(this.at + 1, rows.length - 1);
+      if (key === 'Up') this.at = Math.max(this.at - 1, 0);
+      if (key === 'PageDown') this.top = Math.min(this.top + page, Math.max(rows.length - height, 0));
+      if (key === 'PageUp') this.top = Math.max(this.top - page, 0);
+    },
+  };
+}
+const tickets = (n) => Array.from({ length: n }, (_, i) => `T${String(i).padStart(3, '0')}-ABCD  Keyring Lab Community  spent or expired`);
+const ticketWanted = (code) => (screen) => rowSelected(screen, code);
+
+test('1012-2223: without reveal, a ticket below the fold of a pane that does not follow is never reached', async () => {
+  const tui = fakePane(tickets(28));
+  assert.equal(await walkTo(tui, ticketWanted('T027-ABCD'), { pace: 0 }), false);
+});
+
+test('with reveal, the walk pages after the cursor and reaches the last of 28 tickets', async () => {
+  const tui = fakePane(tickets(28));
+  assert.equal(await walkTo(tui, ticketWanted('T027-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 27);
+  assert.ok(tui.presses.includes('PageDown'));
+});
+
+test('with reveal, a long list several pages deep, then back up to a row above the start', async () => {
+  const tui = fakePane(tickets(200), { at: 150, height: 20 });
+  tui.top = 140;
+  assert.equal(await walkTo(tui, ticketWanted('T005-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 5);
+});
+
+test('with reveal, a code that is not there still ends the walk: false', async () => {
+  const tui = fakePane(tickets(60), { height: 25 });
+  assert.equal(await walkTo(tui, ticketWanted('ZZZZ-ZZZZ'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), false);
+  assert.ok(tui.presses.length < 400);
+});
+
+test('with reveal, a cursor above the view: paging down finds nothing, so it pages back up to the ▸', async () => {
+  // The pane scrolled past the cursor (a PageDown longer than the cursor's step): ▸ at row 5, the view at 40-59.
+  const tui = fakePane(tickets(120), { at: 5, height: 20 });
+  tui.top = 40;
+  assert.equal(await walkTo(tui, ticketWanted('T060-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), true);
+  assert.equal(tui.at, 60);
+  assert.ok(tui.presses.includes('PageUp'), 'paged back up to find the cursor');
+});
+
+test('with reveal, a ticking Activity Log does not keep the pager going: the pane alone says it stopped', async () => {
+  // No ▸ anywhere (the pane shows something else): paging cannot reveal one, and the clock below the pane changes on
+  // every press, so only a comparison of the pane's own lines sees the pager reach its end.
+  const tui = fakePane(tickets(30), { height: 25, clock: true, noCursor: true });
+  assert.equal(await walkTo(tui, ticketWanted('T010-ABCD'), { pace: 0, reveal: { Down: 'PageDown', Up: 'PageUp' } }), false);
+  assert.ok(tui.presses.length < 30, `${tui.presses.length} presses`);
+});

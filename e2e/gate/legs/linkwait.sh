@@ -22,12 +22,14 @@ cd "$E2E"
 # The host-code cases (link-host-sleep, link-host-lock-after-grant, host-code-lapsed, link-try-again) need an https
 # callback on ic3.dev or firstperson.dev (agentHostConnection.ts, AGENT_HOST_SITES): the gate's local http page cannot
 # serve one, so for 239 they are unit-only (vtaAgentHostLink) plus manual. LINK_CASES overrides.
-for c in ${LINK_CASES:-create-window-paused link-no-answer}; do
+for c in ${LINK_CASES:-create-window-paused link-no-answer create-wait-no-lock}; do
   selected "$c" || continue
   adb -s $E uninstall $BID >/dev/null 2>&1
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
     LINK_MODE=manual LINK_CASE=$c BLOCK_HOST=$RUNNER_MEDIATOR_HOST RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL \
-    PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always perl -e 'alarm 2400; exec @ARGV' node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
+    PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always galarm 2400 node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
   r=$(grep -E "^ROW $c(-[a-z]+)? " "$LEG_DIR/$c.out")
-  if [ -n "$r" ]; then echo "$r"; else row "$c" FAIL "rc=$rc, no row: $(grep -E '❌|Error:' "$LEG_DIR/$c.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
+  # A driver failure (the case's own "driver: …" error) is no verdict on the app: the leg is broken, not red.
+  d=$(grep -m1 -oE 'driver: .*' "$LEG_DIR/$c.out" | cut -c1-160)
+  if [ -n "$r" ]; then echo "$r"; elif [ -n "$d" ]; then broken "$c: $d"; else row "$c" FAIL "rc=$rc, no row: $(grep -E '❌|Error:' "$LEG_DIR/$c.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
 done
