@@ -1,4 +1,5 @@
 import { execFileSync as execFileSyncForSim } from "node:child_process";
+import { assertCapsSafe } from "./prodGuard.js";
 import { remote } from "webdriverio";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
@@ -183,6 +184,8 @@ export async function createSession(platform, capsOverride) {
   const requested =
     capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
   const realDevice = Boolean(requested["appium:udid"]);
+  // Never fullReset (uninstall) the production app on a person's own phone (prodGuard.js).
+  assertCapsSafe(platform, requested);
   // Attach to a running emulator by udid; never let Appium launch one (emulator.js).
   const capabilities = pinToRunningEmulator(requested);
   console.log(
