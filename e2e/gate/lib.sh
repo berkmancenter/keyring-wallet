@@ -236,11 +236,20 @@ emu_start() {
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }
 # GATE_LOGCAT=1: the emulator's whole log for the leg, in the leg's folder (emulator-NNNN.logcat), so a row's verdict
-# can rest on what the phone logged. A leg's own `logcat -c` empties the buffer, not this stream. Stopped by PID in
-# leg_end (it would also end with the emulator).
+# can rest on what the phone logged. A leg's own `logcat -c` empties the buffer, not this stream. A leg's `adb root`
+# restarts adbd and ends the stream (1014-1651: linkwait's log stayed empty), so it reconnects, from the moment it
+# dropped (-T), with a marked line. Stopped by PID in leg_end: the loop, and through its trap the adb it waits on.
 leg_logcat() {
   [ "${GATE_LOGCAT:-0}" = 1 ] && [ -n "${LEG_DIR:-}" ] || return 0
-  adb -s "$1" logcat -v threadtime > "$LEG_DIR/$1.logcat" 2>&1 &
+  (
+    c=; since=
+    trap '[ -n "$c" ] && kill "$c" 2>/dev/null; exit 0' TERM
+    while :; do
+      adb -s "$1" logcat -v threadtime ${since:+-T "$since"} & c=$!
+      wait "$c"; since=$(date '+%m-%d %H:%M:%S.000')
+      echo "--- gate: logcat stream ended $(date -u +%H:%M:%SZ), reconnecting ---"; sleep 2
+    done
+  ) >> "$LEG_DIR/$1.logcat" 2>&1 &
   LEG_LOGCAT_PIDS="${LEG_LOGCAT_PIDS:-} $!"
   echo "logcat: $1 → $1.logcat"
 }
