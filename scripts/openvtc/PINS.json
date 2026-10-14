@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-07",
+  "updated": "2026-10-11",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -132,6 +132,53 @@
         "src/",
         "Cargo.toml",
         "docs/"
+      ]
+    },
+    "verifiable-trust-infrastructure-signin": {
+      "url": "https://github.com/OpenVTC/verifiable-trust-infrastructure.git",
+      "sha": "03a3562f",
+      "commitDate": "2026-10-10",
+      "pinnedOn": "2026-10-11",
+      "why": "A separate clone of VTI main for the trigger-link sign-in test bed only (keyring-wallet #354 sign-in half; dtgwg-vti-spec #58). Carries #1997 (auth/oob grants signed for assertionMethod, UV-key enrolment) and #2007 (the VTC sign-in service and member portal), which no release has yet. Upstream says never track VTI main: this pin feeds the test bed alone. The release pin above, its clone, the lab baseline and the gate do not move with it. Replace with a release tag once one carries both.",
+      "watch": [
+        "vta-service/src/trust_tasks/oob_sign_in.rs",
+        "vta-service/src/trust_tasks/vault.rs",
+        "vta-sdk/src/trust_task_proof/purpose.rs",
+        "vtc-service/src/trust_tasks/oob_tasks.rs",
+        "vtc-service/src/member_portal/"
+      ]
+    },
+    "vta-browser-plugin-signin": {
+      "url": "https://github.com/OpenVTC/vta-browser-plugin.git",
+      "sha": "e964b559",
+      "commitDate": "2026-10-10",
+      "pinnedOn": "2026-10-11",
+      "why": "A separate clone of the browser plugin with the reference trigger-link reader and auth/oob approver (#303), and its follow-ups #304 and #305 (register the install as a device before sign-in). Read as the reference for Keyring's sign-in; the main plugin pin above does not move.",
+      "watch": [
+        "packages/core/src/sign-in/",
+        "packages/core/src/trigger-link.ts",
+        "packages/core/src/oob-sign-in.ts"
+      ]
+    },
+    "dtgwg-trust-tasks-tf-signin": {
+      "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
+      "sha": "aaa75db1",
+      "commitDate": "2026-10-10",
+      "pinnedOn": "2026-10-11",
+      "why": "Tag trust-tasks-v0.27.8, the first release carrying the auth/oob task specs (#738: claim, identify, prove, grant, respond, request, redeem, cancel). Cited by the sign-in rungs (tsp-reference ref-21+). Kept separate from the v0.27.7 pin above, which matches the VTI release the lab runs.",
+      "watch": [
+        "specs/auth/oob/"
+      ]
+    },
+    "affinidi-tdk-rs-signin": {
+      "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
+      "sha": "7d28c4bf",
+      "commitDate": "2026-10-10",
+      "pinnedOn": "2026-10-11",
+      "why": "A separate clone of tdk main for the sign-in test bed's own TSP mediator (port 7057, Redis db 3): the lab mediator is a did:peer with no TSPTransport, so a VTA on it may not advertise #tsp, and Keyring talks TSP to its agents. Main is 5 commits past VTI-Eucalyptus, including #928 (mediator secrets in one backend secret, breaking) and #930; nothing in them changes TSP. VTI main 03a3562f builds with messaging-sdk 0.33.2, the same as the release pin. The release pin above, the lab mediator and the gate do not move.",
+      "watch": [
+        "crates/messaging/affinidi-messaging-mediator/",
+        "crates/messaging/affinidi-tsp/"
       ]
     }
   },
