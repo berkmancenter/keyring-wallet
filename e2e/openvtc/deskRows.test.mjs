@@ -3,7 +3,7 @@
 // request below the fold (1014-1651 rerun, p1: 29 earlier requests, "card verified —" never on screen).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { awaitCard } from './tuiRoles.js';
+import { awaitCard, deskView } from './tuiRoles.js';
 
 /** A Requests view `height` rows tall over `n` signed requests and the new one last; its card verifies after `after` ms. */
 function fakeDesk(n, { height = 26, after = 0 } = {}) {
@@ -51,5 +51,40 @@ test('fails as vetter.cardVerified when the card never verifies', async () => {
 test('a short desk with the row on screen needs no key', async () => {
   const tui = fakeDesk(3);
   await awaitCard(tui, { timeoutMs: 1000 });
+  assert.deepEqual(tui.presses, []);
+});
+
+/** The desk's three views on ←/→, either wrapping round or stopping at the ends, starting on `start`. */
+function fakeViews(start, { wraps }) {
+  const views = ['Requests', 'Tickets', 'Issued'];
+  const body = { Requests: '  did:webvh:Qm1:dids.ic3.dev:old-1  statement signed', Tickets: '▸ 3CXB-P14R  Keyring Lab Community  1 left, until 2026-10-17', Issued: '  did:webvh:Qm1  signed 2026-10-14' };
+  return {
+    at: views.indexOf(start), presses: [],
+    screen() { return `│║   Requests (30)  Tickets (4)  Issued (27)    ←/→\n│║${body[views[this.at]]}`; },
+    async pressEach([k]) {
+      this.presses.push(k);
+      const step = k === 'Right' ? 1 : k === 'Left' ? -1 : 0;
+      this.at = wraps ? (this.at + step + 3) % 3 : Math.min(Math.max(this.at + step, 0), 2);
+    },
+    async waitFor(re, { step }) { if (!re.test(this.screen())) throw new Error(`${step}: not shown`); },
+  };
+}
+
+test('deskView reaches Requests from Tickets when the views stop at their ends (Left, after Right)', async () => {
+  const tui = fakeViews('Tickets', { wraps: false });
+  await deskView(tui, 'Requests');
+  assert.equal(tui.at, 0);
+});
+
+test('deskView reaches Requests from Tickets when the views wrap, with Right alone', async () => {
+  const tui = fakeViews('Tickets', { wraps: true });
+  await deskView(tui, 'Requests');
+  assert.equal(tui.at, 0);
+  assert.ok(!tui.presses.includes('Left'));
+});
+
+test('deskView presses nothing when the view is already showing', async () => {
+  const tui = fakeViews('Requests', { wraps: false });
+  await deskView(tui, 'Requests');
   assert.deepEqual(tui.presses, []);
 });

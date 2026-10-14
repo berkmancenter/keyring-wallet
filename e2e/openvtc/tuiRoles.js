@@ -147,9 +147,15 @@ export async function declineStale(tui) {
  */
 export async function deskView(tui, view) {
   const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket|[0-9A-Z]{4}-[0-9A-Z]{4}\s{2}.+\s{2}(spent or expired|\d+ left, until)/, Issued: /You have not signed any vetting statements|signed/ }[view];
-  for (let i = 0; i < 3; i++) {
-    if (marker.test(tui.screen())) return tui;
-    await tui.pressEach(['Right'], 700);
+  // Right three times, then Left three times, looking after every press: whether the views wrap or stop at their
+  // ends, one of the two reaches every view. Right alone left the desk on Tickets after the ticket sweep's deletes
+  // and a new ticket (1014-1857 gate, p1: vetter.view.Requests with Tickets (4) on screen; 1014-0451 the same).
+  if (marker.test(tui.screen())) return tui;
+  for (const key of ['Right', 'Left']) {
+    for (let i = 0; i < 3; i++) {
+      await tui.pressEach([key], 1000);
+      if (marker.test(tui.screen())) return tui;
+    }
   }
   await tui.waitFor(marker, { step: `vetter.view.${view}`, timeoutMs: 3000 });
   return tui;
