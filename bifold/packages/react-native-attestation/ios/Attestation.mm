@@ -122,6 +122,25 @@ static NSData *sha256OfData(NSData *data) {
     return [NSData dataWithBytes:hash length:CC_SHA256_DIGEST_LENGTH];
 }
 
+// Content binding (G33): a supplied content hash (from the evidence or the caller)
+// is only ever compared against the recomputed SHA-256 of the content; it never
+// substitutes for it. Returns NO and sets *error (prefixed "contentBindingMismatch")
+// when a non-empty supplied value is not valid base64 or is not exactly `computed`.
+static BOOL checkSuppliedClientDataHash(NSData *computed, NSString *suppliedB64, NSString **error) {
+    NSString *trimmed = [[suppliedB64 ?: @"" componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsJoinedByString:@""];
+    if (trimmed.length == 0) return YES;
+    NSData *supplied = [[NSData alloc] initWithBase64EncodedString:trimmed options:0];
+    if (supplied == nil) {
+        if (error) *error = @"contentBindingMismatch: supplied content hash is not valid base64";
+        return NO;
+    }
+    if (![supplied isEqualToData:computed]) {
+        if (error) *error = @"contentBindingMismatch: supplied content hash does not equal SHA-256 of the signed content";
+        return NO;
+    }
+    return YES;
+}
+
 NSArray<NSNumber *> *dataToBytes(NSData *data) {
     const uint8_t *bytes = (const uint8_t *)[data bytes];
     NSMutableArray *array = [NSMutableArray arrayWithCapacity:data.length];
@@ -1434,26 +1453,21 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
                     NSLog(@"[VRC:iOS]   CBOR parsed: authData=%lub, sig=%lub",
                           (unsigned long)authenticatorData.length, (unsigned long)assertionSignature.length);
 
-                    NSData *clientDataHash = nil;
+                    // clientDataHash is always the recomputed SHA-256 of the content;
+                    // a supplied hash must equal it and never substitutes for it.
                     NSData *contentData = [signedContent dataUsingEncoding:NSUTF8StringEncoding];
-                    uint8_t computedHash[CC_SHA256_DIGEST_LENGTH];
-                    CC_SHA256(contentData.bytes, (CC_LONG)contentData.length, computedHash);
-                    NSData *computedHashData = [NSData dataWithBytes:computedHash length:CC_SHA256_DIGEST_LENGTH];
-
-                    if (signedContentHashBase64 != nil && signedContentHashBase64.length > 0) {
-                        clientDataHash = [[NSData alloc] initWithBase64EncodedString:signedContentHashBase64 options:0];
-                        if (clientDataHash == nil || clientDataHash.length != CC_SHA256_DIGEST_LENGTH) {
-                            NSLog(@"[VRC:iOS] ⚠ Invalid embedded signedContentHash (base64 decode failed or wrong length) — falling back to computed hash");
-                            clientDataHash = computedHashData;
-                        }
-                        NSLog(@"[VRC:iOS]   Using embedded signedContentHash [%lub]", (unsigned long)clientDataHash.length);
-                        if (![clientDataHash isEqualToData:computedHashData]) {
-                            NSLog(@"[VRC:iOS]   ⚠ Embedded hash differs from SHA256(signedContent) — expected for cross-device VRC");
-                        }
-                    } else {
-                        clientDataHash = computedHashData;
-                        NSLog(@"[VRC:iOS]   ⚠ No embedded signedContentHash — falling back to SHA256(signedContent)");
+                    NSString *bindingError = nil;
+                    if (contentData == nil) {
+                        bindingError = @"signedContent is not valid UTF-8";
                     }
+                    NSData *clientDataHash = contentData ? sha256OfData(contentData) : nil;
+                    if (clientDataHash != nil && !checkSuppliedClientDataHash(clientDataHash, signedContentHashBase64, &bindingError)) {
+                        clientDataHash = nil;
+                    }
+                    if (clientDataHash == nil) {
+                        [errors addObject:bindingError];
+                        NSLog(@"[VRC:iOS]   ✗ Content binding failed: %@", bindingError);
+                    } else {
 
                     NSMutableData *payload = [NSMutableData dataWithData:authenticatorData];
                     [payload appendData:clientDataHash];
@@ -1473,6 +1487,7 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
                         [errors addObject:@"Assertion signature invalid"];
                         NSLog(@"[VRC:iOS]   ✗ Assertion signature invalid");
                     }
+                    }
                 } else {
                     [errors addObject:@"Failed to parse CBOR assertion"];
                     NSLog(@"[VRC:iOS]   ✗ CBOR assertion parse failed (input: %lub)", (unsigned long)sigData.length);
@@ -1480,17 +1495,28 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
             } else {
                 // Raw ECDSA signature (e.g. Android evidence verified on iOS, or non-assertion format)
                 NSData *contentData = [signedContent dataUsingEncoding:NSUTF8StringEncoding];
+                NSString *rawBindingError = nil;
+                if (contentData == nil) {
+                    rawBindingError = @"signedContent is not valid UTF-8";
+                } else {
+                    checkSuppliedClientDataHash(sha256OfData(contentData), signedContentHashBase64, &rawBindingError);
+                }
                 CFErrorRef verifyError = NULL;
-                sigValid = SecKeyVerifySignature(pubKey,
-                                                 kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
-                                                 (__bridge CFDataRef)contentData,
-                                                 (__bridge CFDataRef)sigData,
-                                                 &verifyError);
-                if (!sigValid) {
+                if (rawBindingError != nil) {
+                    [errors addObject:rawBindingError];
+                    NSLog(@"[VRC:iOS]   ✗ Content binding failed: %@", rawBindingError);
+                } else {
+                    sigValid = SecKeyVerifySignature(pubKey,
+                                                     kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
+                                                     (__bridge CFDataRef)contentData,
+                                                     (__bridge CFDataRef)sigData,
+                                                     &verifyError);
+                }
+                if (rawBindingError == nil && !sigValid) {
                     NSString *vErrMsg = verifyError ? (__bridge_transfer NSString *)CFErrorCopyDescription(verifyError) : @"Signature mismatch";
                     [errors addObject:[NSString stringWithFormat:@"Signature invalid: %@", vErrMsg]];
                     if (verifyError) CFRelease(verifyError);
-                } else {
+                } else if (rawBindingError == nil) {
                     NSLog(@"[VRC:iOS]   3/3 ECDSA signature: VALID");
                 }
             }

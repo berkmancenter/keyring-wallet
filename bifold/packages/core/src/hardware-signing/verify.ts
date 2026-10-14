@@ -32,6 +32,7 @@
 
 import { verifyHardwareEvidence, type NativeVerificationResult } from '@bifold/react-native-attestation'
 
+import { CONTENT_BINDING_MISMATCH, checkEmbeddedContentHash, contentHashBase64 } from './binding'
 import type { HardwareAttestationEvidence, HardwareSigningLogger, SignedPayloadAttestation } from './types'
 
 const LOG_PREFIX = '[HW:Verify]'
@@ -75,11 +76,17 @@ export class HardwareSignatureVerifier {
   /**
    * Verify hardware attestation evidence via native verification.
    *
-   * @param signedContent - the exact string the signature was produced over
+   * The verifier always recomputes the content hash from `signedContent`. The
+   * evidence's embedded `signedContentHash` is only compared against it (a
+   * difference is `contentBindingMismatch`) and is never passed to native as the
+   * hash to verify against.
+   *
+   * @param signedContent - the exact string the signature was produced over, as
+   *   reconstructed by the verifier from the credential it holds. Required.
    */
   public async verifyEvidence(
     evidence: HardwareAttestationEvidence,
-    signedContent?: string
+    signedContent: string
   ): Promise<SignatureVerificationResult> {
     const { platform, keyStorage } = evidence.hardwareBinding
     this.log.info(`${LOG_PREFIX} ▶ Verifying [${platform}/${keyStorage}, ${evidence.attestation.format}]`)
@@ -87,14 +94,41 @@ export class HardwareSignatureVerifier {
     const startTime = Date.now()
     const verifiedAt = new Date().toISOString()
 
+    const bindingFailure = (error: string): SignatureVerificationResult => {
+      this.log.warn(`${LOG_PREFIX} ✗ ${error}`)
+      return {
+        valid: false,
+        details: {
+          certificateChainValid: false,
+          publicKeyMatchesCert: false,
+          signatureValid: false,
+          verificationLevel: 'none',
+          cryptoLibraryAvailable: true,
+        },
+        error,
+        verifiedAt,
+        platform,
+        securityLevel: keyStorage,
+      }
+    }
+
+    if (!signedContent) {
+      return bindingFailure(
+        'signedContent is required: hardware evidence cannot be verified without the content it signs'
+      )
+    }
+    const embeddedCheck = checkEmbeddedContentHash(evidence, signedContent)
+    if (!embeddedCheck.ok) return bindingFailure(embeddedCheck.error)
+
     try {
       const nativeResult: NativeVerificationResult = await verifyHardwareEvidence(
         evidence.attestation.certificateChain,
         evidence.signature.value,
-        signedContent || '',
+        signedContent,
         evidence.hardwareBinding.publicKey,
         evidence.attestation.format,
-        evidence.signature.signedContentHash
+        // The verifier's own recomputation, never the value from the evidence.
+        contentHashBase64(signedContent)
       )
 
       const elapsed = Date.now() - startTime
@@ -111,7 +145,9 @@ export class HardwareSignatureVerifier {
         details: {
           certificateChainValid: nativeResult.certificateChainValid,
           publicKeyMatchesCert: nativeResult.publicKeyMatchesLeafCert,
-          signatureValid: nativeResult.signatureValid,
+          signatureValid:
+            nativeResult.signatureValid &&
+            !(nativeResult.errors ?? []).some((e) => e.startsWith(CONTENT_BINDING_MISMATCH)),
           verificationLevel: level,
           cryptoLibraryAvailable: true, // Always true — native crypto is always available
         },
