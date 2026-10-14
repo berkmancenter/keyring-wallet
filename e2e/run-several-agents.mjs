@@ -34,6 +34,7 @@ import { dumpSource, ensureAppium, existsTestId, scrollToTestId, sleep, stopAppi
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { pasteLinkOnScanScreen } from "./lib/flows.js";
 import { runGrouped, TIMED_OUT } from "./lib/groupRun.js";
+import { buildLacks } from "./lib/buildHas.js";
 import { APP_ID } from "./lib/config.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows, selectedRows } from "./lib/rows.js";
@@ -751,11 +752,15 @@ try {
         return { ok: walletBefore === 2 && now === 1, detail: `Wallet cards for ${E.C_NAME}: ${walletBefore} with B linked → ${now} after unlinking B (want 1: A's)` };
       });
     }
+    // 240: a link backed out of while held for an approval (swap-held-add-returns) finishes on its own once the last
+    // agent goes, and the app shows "Linked" to it instead of a link offer: a known issue, fixed by bifold #398 in 241.
+    // A build without that fix carries this row as tracked.
+    const r4Known = buildLacks("settleBackedOut", { platform: "android" });
     await rows.row("R4 unlink the last", async () => {
       const { linkOffered } = (await agents.unlinkLast(d, { owner })).value;
       await shot(d, "agents-r4-unlinked");
       return { ok: linkOffered, detail: linkOffered ? "the phone offers to link an agent" : "no link offer" };
-    });
+    }, r4Known ? { tracked: `known issue on this build (${r4Known}): a held link backed out of finishes on its own; fixed by bifold #398` } : {});
   }
 } catch (err) {
   log(`error: ${err.message}`);

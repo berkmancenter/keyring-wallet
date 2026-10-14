@@ -29,11 +29,11 @@ for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; do
 cd "$E2E"
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
-  perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
+  galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 # Block only the community's messaging host (needs root: google_apis image).
 if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: $(adb -s $E shell id -u)"; fi
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
-  perl -e 'alarm 900; exec @ARGV' node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
+  galarm 900 node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
 take_rows "$LEG_DIR/lost.out"
 driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
@@ -49,7 +49,7 @@ adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
 # A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
 CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
-  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} perl -e 'alarm 1200; exec @ARGV' node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
+  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
 grep -E '^\[e2e\] [0-9]' "$LEG_DIR/card.out" | cut -c1-220
 take_rows "$LEG_DIR/card.out"
 # Tracked to the end: a driver that never printed its row (killed by its alarm, a crash) is the tracked row's detail.

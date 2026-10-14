@@ -50,6 +50,7 @@ import path from "node:path";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 import { listAcl, ownedBy, removeRunKeys } from "./lib/aclCleanup.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 import { buildLacks } from "./lib/buildHas.js";
@@ -94,6 +95,7 @@ function pnm(args, timeout = 120000) {
   return out;
 }
 const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
+const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
 const rows = createRows({ label: "vta-approvals" });
 const ASKS = "317 Approve asks the owner";
@@ -251,11 +253,42 @@ try {
     await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
   }
 
+  // ANDROID-NOTIF-CHANNEL (wallet #421, 241): an approval wake reaching the phone in the background is posted on
+  // the app's own high-importance channel keyring_wake ("Requests and messages"), so it shows as a heads-up banner,
+  // not on FCM's fallback channel. WAKE_CHANNEL_CHECK=1 (p1, on a build whose dex has the channel) and push on.
+  const notifCheck = PLATFORM === "android" && process.env.WAKE_CHANNEL_CHECK === "1" && approver && pushCapableOf(approver) === "true";
+  if (notifCheck) {
+    adb("shell", "input", "keyevent", "3"); // Home: the app in the background before the request
+    await sleep(2000);
+  }
+
   // The request: read the probe context, which the rule now holds for consent.
   const contextId = probeContext;
   const asked = pnm(["contexts", "get", contextId], 180000);
   if (!/consent required/i.test(asked)) throw new Error(`the request was not held for consent: ${lastLine(asked)}`);
   log(`request held: ${lastLine(asked)}`);
+  if (notifCheck) {
+    let record = "";
+    // Up to 2 min: under load the app can ANR on FCM's receive broadcast and the wake is redelivered ~1.5 min later
+    // (push lane, 10-11). Home, never force-stop: a force-stopped app gets no FCM delivery until opened.
+    for (const until = Date.now() + 120000; Date.now() < until && !record; await sleep(3000)) {
+      record = adb("shell", "dumpsys", "notification", "--noredact").split("\n").find((l) => l.includes(`pkg=${BID}`) && /channel=/.test(l)) ?? "";
+    }
+    const channel = (record.match(/channel=([^\s)]+)/) || [])[1] ?? "(no notification)";
+    // when= says which wake this is: wakes share the collapse id keyring-wake, so a later one replaces an earlier.
+    const when = (record.match(/when=(\d+)/) || [])[1] ?? "?";
+    const all = adb("shell", "dumpsys", "notification");
+    const def = (all.match(/NotificationChannel\{mId='keyring_wake'[^}]*\}/) || [""])[0];
+    const importance = Number((def.match(/mImportance=(\d+)/) || [])[1] ?? 0);
+    const name = (def.match(/mName=([^,]+)/) || [])[1] ?? "";
+    await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
+      `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+    await d.activateApp(BID);
+    await sleep(2000);
+    // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
+    // has passed); unlock before the card is looked for (review on #428).
+    await unlockIfLocked(d).catch(() => undefined);
+  }
 
   const t0 = Date.now();
   const card = await awaitCard(d, 180000);

@@ -30,6 +30,57 @@ ios_log_save() {
 }
 # The app's lines in a saved log: not the header `log show` prints, nor its own complaints.
 ios_log_app_lines() { local n; n=$(grep -cE ' KeyRing\[|com\.facebook\.react\.log' "$1" 2>/dev/null); echo "${n:-0}"; }
+# galarm <seconds> <command…>: the command in its own process group, the whole group killed past <seconds>. A plain
+# `perl -e 'alarm N; exec @ARGV'` killed only the driver: its Appium (and anything else it started) lived on, and on
+# 1013-1753 an orphaned Appium on :4762 broke the next leg.
+# Exits: 142 = the alarm fired (128 + SIGALRM 14), the group killed; 143/130/129 = a stop (TERM/INT/HUP) reached the
+# wrapper, which passes it to the group, waits up to 10 s for it to end, then kills what is left; otherwise the
+# command's own status. Each group is listed in $GATE_HOME/galarm-groups ("<pgid> <leg> <epoch> <leader start> <command>", tab-separated), so a group
+# whose wrapper was killed with the leg (a SIGKILL of the leg's whole group) is still found: leg_end reaps its own
+# leg's, and gate_sweep, at the start of every run, all of them (galarm_reap).
+GALARM_GROUPS=$GATE_HOME/galarm-groups
+galarm() {
+  local t=$1; shift
+  GALARM_LEG=${LEG_NAME:-gate} GALARM_GROUPS=$GALARM_GROUPS perl -e '
+    use POSIX ":sys_wait_h";
+    my $t = shift; my $p = fork; die "galarm: fork: $!" unless defined $p;
+    if (!$p) { setpgrp(0, 0); exec @ARGV; exit 127 }
+    setpgrp($p, $p);
+    # The start time of the leader (ps lstart, fixed at fork, kept across exec) names this group beyond its number:
+    # numbers are reused, and a reap must never kill a stranger that got the same one.
+    my $ls = `ps -o lstart= -p $p`; $ls =~ s/^\s+|\s+$//g;
+    if (open(my $g, ">>", $ENV{GALARM_GROUPS})) { print $g join("\t", $p, $ENV{GALARM_LEG}, time(), $ls, $ARGV[0]) . "\n"; close $g }
+    sub stop { my ($sig, $code) = @_; kill $sig, -$p;
+      for (1 .. 100) { last if waitpid($p, WNOHANG) > 0; select(undef, undef, undef, 0.1) }
+      kill "KILL", -$p; waitpid($p, WNOHANG); exit $code }
+    $SIG{TERM} = sub { stop("TERM", 143) }; $SIG{INT} = sub { stop("INT", 130) }; $SIG{HUP} = sub { stop("HUP", 129) };
+    $SIG{ALRM} = sub { kill "KILL", -$p; waitpid($p, 0); exit 142 };
+    alarm $t; waitpid($p, 0);
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
+  ' "$t" "$@"
+}
+# galarm_reap [leg]: kill every listed group still alive (that leg's, or all) whose leader is still the very process
+# galarm started (same PID and start time), and drop every other line. Says what it killed, and any orphan members
+# of a group whose leader has gone (never killed by number: the number may be reused).
+galarm_reap() {
+  local only=${1:-} pg leg ep ls cmd now leader keep=""
+  [ -f "$GALARM_GROUPS" ] || return 0
+  while IFS=$'\t' read -r pg leg ep ls cmd; do
+    [ -n "$pg" ] || continue
+    if ! kill -0 "$pg" 2>/dev/null; then
+      # The leader is gone: the number may already be someone else's group. Never kill by it; say if members live.
+      kill -0 -- "-$pg" 2>/dev/null && echo "  galarm: orphan members of group $pg ($leg, $cmd), leader gone, not killed"
+      continue
+    fi
+    now=$(ps -o lstart= -p "$pg" 2>/dev/null | sed 's/^ *//; s/ *$//')
+    # Start times resolve to a second; the leader's command (the one galarm ran) must match too.
+    leader=$(ps -o comm= -p "$pg" 2>/dev/null); leader=${leader##*/}
+    if [ "$now" != "$ls" ] || [ "$leader" != "${cmd##*/}" ]; then continue; fi   # another process now: not ours, dropped
+    if [ -n "$only" ] && [ "$leg" != "$only" ]; then keep+="$pg"$'\t'"$leg"$'\t'"$ep"$'\t'"$ls"$'\t'"$cmd"$'\n'; continue; fi
+    kill -KILL -- "-$pg" 2>/dev/null && echo "  galarm: killed a leftover group $pg ($leg, $cmd, started $ls)"
+  done < "$GALARM_GROUPS"
+  printf '%s' "$keep" > "$GALARM_GROUPS"
+}
 if ! is_ci; then
   export PATH=$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator:$PATH
   export ANDROID_HOME=$HOME/Library/Android/sdk ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
@@ -81,7 +132,7 @@ pnm() {
 }
 
 # The community's admin calls (decide join requests, list and remove members).
-c_admin() { perl -e 'alarm 90; exec @ARGV' node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
@@ -173,7 +224,7 @@ emu_start() {
   local port=$1 out rc why
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
-    perl -e 'alarm 120; exec @ARGV' adb -s "emulator-$port" wait-for-device 2>/dev/null \
+    galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
       && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { echo "emulator-$port up (CI)"; return 0; }
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
@@ -185,7 +236,7 @@ emu_start() {
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
-sim_boot() { xcrun simctl boot "$1" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
+sim_boot() { xcrun simctl boot "$1" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
 # gate_sweep: before any leg, take off every runner what a gate leg creates and may have left there, and nothing
@@ -199,6 +250,7 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
   local slug seen=" "
+  galarm_reap
   for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
     [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     gate_sweep_runner "$slug"
@@ -239,7 +291,7 @@ for n,ms in (j.get('approverSets') or {}).items():
 
 # ---- runner cleanup: what a leg made on a runner since it started ----
 
-# Delete the phone grants (label keyring-admin) made on $1 since $2, retrying a busy or rate-limited runner.
+# Delete the phone grants (label keyring-admin, or keyring-phone from the enrolment page) made on $1 since $2, retrying a busy or rate-limited runner.
 # A grant made before the leg began (a seated vetter's, a person's) is never touched.
 # Whether CI's pinned pnm (pnm-linux.yml) still matches the Farm's vta-service version: one line for the run's meta,
 # and a loud line on the terminal when it has drifted (farm-drift.mjs).
@@ -254,7 +306,7 @@ keys_since() {
   # t0 is compared as a string with each entry's ISO createdAt: anything else (epoch seconds, empty) sorts below
   # every date and would take every phone key on the runner (a seated vetter's, on 237's gate).
   [[ $t0 =~ ^20[0-9][0-9]-[01][0-9]-[0-3][0-9]T ]] || { echo "  $slug keys: NOT cleaned, start time \"$t0\" is not an ISO stamp"; return 1; }
-  # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin): one
+  # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin or keyring-phone): one
   # leg's cleanup would take another's live key. gate.sh then cleans each runner once, after both platforms.
   if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then echo "  $slug keys: deferred to the run's end"; echo "$slug" >> "$RUN_DIR/defer-keys"; return; fi
   local list; list=$(for i in 1 2 3 4; do pnm "$slug" acl list --json | python3 -c "
@@ -262,7 +314,7 @@ import sys,json
 t=sys.stdin.read()
 if '[' not in t: sys.exit(1)
 for e in json.loads(t[t.index('['):]):
-    if e.get('label')=='keyring-admin' and str(e.get('createdAt',''))>='$t0': print(e['subject'])
+    if e.get('label') in ('keyring-admin','keyring-phone') and str(e.get('createdAt',''))>='$t0': print(e['subject'])
 " && break; sleep 15; done)
   for k in $list; do
     for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -q deleted && break; sleep 15; done
@@ -340,6 +392,7 @@ leg_end() {
   local rc=$?
   trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
+  galarm_reap "${LEG_NAME:-gate}"
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
     LEG_PASS=$(grep -cE '^ROW .* PASS — ' "$LEG_DIR/leg.log"); LEG_FAILS=$(grep -cE '^ROW .* FAIL — ' "$LEG_DIR/leg.log"); LEG_SKIP=$(grep -cE '^ROW .* SKIP — ' "$LEG_DIR/leg.log")

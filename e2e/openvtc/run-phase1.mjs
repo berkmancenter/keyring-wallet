@@ -14,6 +14,7 @@
 // through to a member in the community's own list.
 
 import { execFileSync } from 'node:child_process';
+import { assertResetAllowed } from '../lib/prodGuard.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -88,6 +89,8 @@ const apkSha = createHash('sha256')
 // Keyring side's own tooling); the run only checks it is the build named.
 if (!a['no-install']) {
   if (a.platform === 'ios') throw new Error('iOS runs need --no-install: the simulator is prepared beforehand');
+  // Never on a person's own phone with the production id (prodGuard.js).
+  assertResetAllowed({ platform: 'android', udid: a.udid, bundleId: 'asml.bkc.harvard.wallet', action: 'uninstall' });
   execFileSync('adb', ['-s', a.udid, 'uninstall', 'asml.bkc.harvard.wallet'], { stdio: 'ignore' });
   execFileSync('adb', ['-s', a.udid, 'install', '-r', a.apk], { stdio: 'inherit' });
 }

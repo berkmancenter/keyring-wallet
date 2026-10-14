@@ -3,7 +3,8 @@
 # scripts/openvtc/pnm-locked, which runs "$PNM_BIN --vta <slug> …". This guard sits there, so no caller can reach past it:
 #  - only the agents the CI configuration names (CI_ALLOWED_SLUGS: its runners and the community agent), and never a
 #    person's agent (the slugs e2e/lib/aclCleanup.js refuses), even if the configuration named one;
-#  - only the commands the CI legs use (CI_COMMANDS): the identity is a super admin on the test runners (D-10: a
+#  - only the commands the CI legs use (CI_COMMANDS; acl create is the enrolment page granting the test phone its key,
+#    which D-8 covers): the identity is a super admin on the test runners (D-10: a
 #    phone's entry is an unrestricted admin, which only a super admin may delete), so this list, not the VTA, is
 #    what keeps it to cleanup, the approval-rule set-up and tear-down of linkfail and the sweep, and reads;
 #  - never verbose or debug output: Actions masks only exact secret strings, not what pnm derives from them;
@@ -26,12 +27,37 @@ for a in "$@"; do case "$a" in -V|-VV|-v|-vv|--verbose|--debug|--trace) echo "pn
 : "${PNM_REAL:?the CI pnm binary}" "${CI_PNM_HOME:?the session directory of the CI identity}"
 [ "$(stat -c %a "$CI_PNM_HOME" 2>/dev/null || stat -f %Lp "$CI_PNM_HOME")" = 700 ] || { echo "pnm-ci: $CI_PNM_HOME must be mode 700" >&2; exit 2; }
 # The command, as "<command> <subcommand>": the two words after --vta <slug>.
-CI_COMMANDS="acl:list acl:get acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr"
+CI_COMMANDS="acl:list acl:get acl:create acl:delete policy:list policy:get policy:upsert policy:delete approvals:list approvals:approvers approvals:remove approvals:require did-mgmt:dids contexts:list contexts:get cred-vault:query keys:list vta:qr"
 cmd=${3:-}; sub=${4:-}; case "$sub" in -*) sub="" ;; esac
 case " $CI_COMMANDS " in
   *" $cmd:$sub "*|*" $cmd: "*) ;;
   *) echo "pnm-ci: refused: \"$cmd $sub\" is not a command the CI legs use" >&2; exit 2 ;;
 esac
+# acl create is bounded to the gate's phone grant (an extension of D-8, coordinator 10-14): exactly --did <did:key or
+# did:peer> --role admin --label keyring-phone|keyring-admin --expires <N>s|m|h of 24 h or less, no contexts, no
+# approve, handoff or step-up flags. Every key it makes carries one of the two labels keys_since cleans, and an expiry.
+if [ "$cmd:$sub" = acl:create ]; then
+  did=""; role=""; label=""; exp=""; set -- "${@:5}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --did) did=${2:-}; shift 2 ;;
+      --role) role=${2:-}; shift 2 ;;
+      --label) label=${2:-}; shift 2 ;;
+      --expires) exp=${2:-}; shift 2 ;;
+      *) echo "pnm-ci: refused: acl create with $1 (only --did --role --label --expires)" >&2; exit 2 ;;
+    esac
+  done
+  case "$did" in did:key:z*|did:peer:*) ;; *) echo "pnm-ci: refused: acl create for a subject that is not a phone key" >&2; exit 2 ;; esac
+  [ "$role" = admin ] || { echo "pnm-ci: refused: acl create --role $role (phone grants are admin)" >&2; exit 2; }
+  case "$label" in keyring-phone|keyring-admin) ;; *) echo "pnm-ci: refused: acl create --label $label (only keyring-phone, keyring-admin)" >&2; exit 2 ;; esac
+  if [[ $exp =~ ^([0-9]+)([smh])$ ]]; then
+    n=${BASH_REMATCH[1]}; case ${BASH_REMATCH[2]} in s) secs=$n ;; m) secs=$((n * 60)) ;; h) secs=$((n * 3600)) ;; esac
+    [ "$secs" -ge 1 ] && [ "$secs" -le 86400 ] || { echo "pnm-ci: refused: acl create --expires $exp (1 s to 24 h)" >&2; exit 2; }
+  else
+    echo "pnm-ci: refused: acl create needs --expires <N>s|m|h (the CI identity expires, and so must what it grants)" >&2; exit 2
+  fi
+  set -- --vta "$slug" acl create --did "$did" --role admin --label "$label" --expires "$exp"
+fi
 # No verbose output through the environment either.
 unset RUST_LOG RUST_BACKTRACE PNM_VTA
 PNM_HOME=$CI_PNM_HOME VTI_SECURE_STORE=file RUST_LOG=warn exec "$PNM_REAL" "$@"
