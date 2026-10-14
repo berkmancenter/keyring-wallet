@@ -17,6 +17,7 @@
 // stands; 177a218's line is given alongside when it moved.
 
 import { rowSelected, selectedLine, walkTo } from './listWalk.js';
+import { sweepSpentTickets } from './ticketSweep.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -144,6 +145,11 @@ export async function deskView(tui, view) {
  */
 export async function issueTicket(tui) {
   await deskView(tui, 'Tickets');
+  // TICKET_SWEEP: unset or "list" lists the vetter's tickets (read-only); "delete" also deletes the spent or expired
+  // ones, local to this harness vetter's profile (ticketSweep.js). Then back to the top of the list.
+  const swept = await sweepSpentTickets(tui, { mode: process.env.TICKET_SWEEP === 'delete' ? 'delete' : 'list', log: (l) => console.log(`[tickets] ${l}`) });
+  tui.record('vetter.ticketSweep', true, new Date(), { value: swept });
+  await tui.pressEach(['Home'], 400);
   await tui.pressEach(['t'], 800);
   await tui.waitFor('Hand out a ticket', { step: 'vetter.ticketForm', source: src(tui, 'ui/pages/main/vetting_panel.rs:543', 'ui/pages/main/components/vetting_panel.rs:344') });
   await tui.pressEach(['Enter'], 1500);
