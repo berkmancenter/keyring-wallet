@@ -46,24 +46,36 @@ mirrored in TypeScript and tested against the registry.
 from the raw JSON. `prove:noUsableAttestation` means not enough valid
 attestations yet and is a progress state, not a failure.
 
-### 0.1 Why a hidden criterion may still be unusable, and what the user is told
+### 0.1 Why a hidden criterion may still be unusable, and when the user is told
 
 A hidden criterion is usable only when the suite is `ps-ddh-bls12381`, the
 user's agent serves `vta/pcs/*` (vta-service 0.60+), and the app's identity at
-that agent holds `pcs-applicant`. Otherwise the join way fails closed with a
-reason, resolved before the user acts: `suiteUnsupported` from the manifest,
-`agentTooOld` from a `vta/pcs/applications/show` probe answering
-`unsupportedType`, `phoneNotAllowed` from `VtaClient.listAcl()` showing no
-`pcs-applicant`. Precedence is suite, then version, then capability, because
-`pcs-applicant` cannot exist on a pre-0.60 agent, so "update your agent" is the
-step that unblocks. The strings are UI/UX's.
+that agent holds `pcs-applicant`. Otherwise the join fails closed with a reason:
+`suiteUnsupported`, `agentTooOld` or `phoneNotAllowed`. Precedence is suite,
+then version, then capability, because `pcs-applicant` cannot exist on a
+pre-0.60 agent, so "update your agent" is the step that unblocks. The strings
+are UI/UX's.
 
-**Neither probe may raise a consent prompt.** Every dispatched Trust Task goes
-through the agent's policy gate, reads included, so a rule may answer
-`requireConsent` or `requireStepUp`. Treat both as *unknown* on the probes —
-never a reason, never route the consent requests they carry — and resolve that
-reason on tap instead, where a prompt is legitimate. A regression test asserts a
-consent-gated probe produces no consent request and no reason.
+**Nothing is asked of the user's agent until the user taps to join.** The join
+card names the criterion as private vetting and carries no reason; the reason is
+resolved after the tap, from the suite (local, free), then
+`vta/pcs/applications/show` with an unknown id (`unsupportedType` ⇒
+`agentTooOld`), then `VtaClient.listAcl()` (no `pcs-applicant` ⇒
+`phoneNotAllowed`).
+
+The reason it cannot be resolved while the card renders: every dispatched Trust
+Task passes the agent's policy gate, reads included, so a rule may answer
+`requireConsent` — and a gated task does not merely fail. The VTA pushes a
+signed `task-consent/request` to each approver through the mediator, with the
+caller-relayed annex only as a fallback for when it has no route
+(`trust_tasks/consent_request.rs`, `trust_tasks/helpers.rs`, read at
+`vta-service-v0.60.0`). Probing to decorate a list would therefore wake an
+approver — who may not be the user — because a screen rendered. A probe after
+the tap is a different thing: the user has just asked to join, so a prompt
+belongs to an action they took.
+
+A regression test asserts that rendering the join ways dispatches no Trust Task
+to the user's agent.
 
 ### 0.2 What is parked
 
