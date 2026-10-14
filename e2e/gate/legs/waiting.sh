@@ -67,9 +67,10 @@ if [ -n "${OUTSIDE_VTC_DID:-}" ]; then
   take_rows "$LEG_DIR/outside.out"; driver_rc outside-driver "$orc" "$LEG_DIR/outside.out"
 fi
 # Cards back on a new install, last (it wipes the app): the same agent linked again, "Get your cards", both cards back.
-# Tracked (lib/rows.js `tracked`): Keyring recovers by purpose only and the vault files the role card with none.
+# Tracked (lib/rows.js `tracked`): a new install does not adopt the agent's identities yet (planned for 242); the
+# purpose-only vault query was fixed by bifold #389.
 CB_ROW=cards-back-new-install
-CB_TRACKED="cards back on a new install: a fresh install takes over no identities yet, and recovery asks by purpose only (role); UI/UX fix pending"
+CB_TRACKED="new install: identities not adopted from the agent (planned for 242, Alberto 10-14)"
 if ! selected "$CB_ROW"; then row "$CB_ROW" SKIP "not selected"
 elif [ "$APPROVE" != 1 ]; then row "$CB_ROW" SKIP "flow B did not run (WAITING_DECLINE=1): no member to take cards back for"
 elif ! grep -qE '^JOIN_MEMBER did:' "$LEG_DIR/waiting.out"; then row "$CB_ROW" SKIP "tracked ($CB_TRACKED): not run, flow B approved no request"

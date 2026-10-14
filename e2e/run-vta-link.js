@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 
+import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
@@ -553,6 +554,22 @@ async function linkCase(driver, which) {
     const after = aclSize();
     await screenshot(driver, which);
     return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
+  }
+  if (which === "create-wait-no-lock") {
+    // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5
+    // min, half-way through the 10-min window (the 1013-1633 rerun found it). Copy starts the window; then no touch
+    // at all for 400 s (idle only polls), past the 5-min lock: still waiting, no PIN screen. No grant is made, so the
+    // window has nothing to find and keeps waiting.
+    await addressCode();
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    await copy.click();
+    if (!(await existsTestId(driver, "AgentCreateWaiting", 15000))) return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s");
+    await idle(400000);
+    const locked = await existsTestId(driver, "EnterPIN", 2000);
+    const still = await existsTestId(driver, "AgentCreateWaiting", 2000);
+    await screenshot(driver, which);
+    return row(!locked && still, `400 s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock)`);
   }
   if (which === "link-no-answer") {
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
@@ -1583,8 +1600,10 @@ try {
   if (process.env.LINK_CASE) {
     // IN-135 (239): one link case, its row through rows.js (a throw is that row's FAIL); 3 when a row failed.
     const run = () => linkCase(driver, process.env.LINK_CASE);
+    // A case for a fix the build under test does not carry is a SKIP that says so, never a red against an old build.
+    const skip = { "create-wait-no-lock": () => buildLacks("holdLock", { platform: driver.e2ePlatform }) }[process.env.LINK_CASE]?.();
     if (TRACKED[process.env.LINK_CASE]) await trackedRow(process.env.LINK_CASE, run);
-    else await rows.row(process.env.LINK_CASE, run);
+    else await rows.row(process.env.LINK_CASE, run, { skip: skip ? `${skip} (bifold #396)` : undefined });
     rows.summary();
     process.exitCode = rows.exitCode();
   } else if (LINK_MODE === "manual") {

@@ -6,7 +6,9 @@
  * (AgentGetCards → AgentGetCardsButton), then Your agent's card for C must show BOTH cards again, the membership card
  * and the role card (CardKeptRow: AgentCard_membership_<key>, AgentCard_role_<key>).
  *
- * Row cards-back-new-install is TRACKED (lib/rows.js `tracked`): recoverCardsFromAgent asks the vault by purpose only
+ * Row cards-back-new-install is TRACKED (lib/rows.js `tracked`): a new install does not adopt the agent's identities
+ * yet (planned for 242, Alberto 10-14); the vault query by purpose only was fixed by bifold #389. Formerly:
+ * recoverCardsFromAgent asked the vault by purpose only
  * (membership, role, endorsement: bifold vtiCardVault.ts), and the vault files C's role card (AuthorityCredential)
  * with no purpose (vta-vault receive.rs infer_purpose), so the role card does not come back; the UI/UX fix is
  * pending. A further gap the detail names when it shows: a new install holds no identity for C until it adopts its
@@ -20,7 +22,7 @@ import { makeDriver, unlockToHome } from "./lib/keyringRoles.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows } from "./lib/rows.js";
 
-const CARDS_BACK_TRACKED = "role card recovery: vtiCardVault recovers by purpose only; UI/UX fix pending";
+const CARDS_BACK_TRACKED = "new install: identities not adopted from the agent (planned for 242, Alberto 10-14)";
 
 const C_DID = process.env.C_DID || "";
 const key = communityCardKey(C_DID);
