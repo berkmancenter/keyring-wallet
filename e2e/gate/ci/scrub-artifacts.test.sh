@@ -12,7 +12,7 @@ FARM_VERSIONS="vta-service 0.56.0"
 E
 # The file backend's shape (vta-sdk session.rs Session), one record per slug, stored as a JSON string in the map.
 mkdir -p "$T/home"
-rec='{"client_did":"did:key:z6MkPlantedClientDid","private_key":"zPlantedPrivateKeyMultibase0123","vta_did":"did:webvh:planted-runner-did","access_token":"planted-access-token-0123456789","access_expires_at":1,"token_origin":"https://planted.example.invalid","needs_rotation":false}'
+rec='{"client_did":"did:key:z6MkPlantedClientDid","private_key":"zPlantedPrivateKeyMultibase0123","vta_did":"did:webvh:planted-runner-did","access_token":"planted-access-token-0123456789","access_expires_at":1,"token_origin":"https://planted.example.invalid","needs_rotation":false,"future_field":"planted-unknown-field-value"}'
 jq -n --arg r "$rec" '{"keyring-ci-gate-farm3-runner-test": $r}' > "$T/home/sessions.json"
 # 1. identifiers only: redacted in text, binary removed, exit 0
 mkdir -p "$T/a"; echo "linked farm3-runner-test at https://planted.example.invalid/vta (did:webvh:planted-runner-did)" > "$T/a/leg.log"
@@ -33,6 +33,10 @@ mkdir -p "$T/c"; printf 'x\0planted-access-token-0123456789\0' > "$T/c/dump.bin"
 mkdir -p "$T/d"; echo "key zPlantedPrivateKeyMultibase0123" > "$T/d/x.log"
 out=$("$here/scrub-artifacts.sh" "$T/d" "$T/ci.env" "$T/home"); rc=$?
 [ $rc = 1 ] && echo "$out" | grep -q 'PNM_SESSION.private_key' && ok "session private key: exit 1, named by field" || bad "session private key: exit $rc ($out)"
+# 3b. a session field nobody has classified yet fails closed, named by field
+mkdir -p "$T/f"; echo "x planted-unknown-field-value" > "$T/f/x.log"
+out=$("$here/scrub-artifacts.sh" "$T/f" "$T/ci.env" "$T/home"); rc=$?
+[ $rc = 1 ] && echo "$out" | grep -q 'PNM_SESSION.future_field' && ok "unknown session field: exit 1 (fail closed)" || bad "unknown session field: exit $rc ($out)"
 # 4. the session's public fields are identifiers: redacted, never a failure (the run-38493411138 false positive)
 mkdir -p "$T/e"; echo "acl: did:key:z6MkPlantedClientDid on https://planted.example.invalid" > "$T/e/link.out"
 out=$("$here/scrub-artifacts.sh" "$T/e" "$T/ci.env" "$T/home"); rc=$?

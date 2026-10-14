@@ -2,9 +2,10 @@
 # Before a CI gate leg's folder is uploaded (artifacts are never masked):
 #   scrub-artifacts.sh <leg dir> <CI configuration file> [<pnm session dir>]
 # 1. Credentials anywhere, text or binary: the values of *_CRED, *_TOKEN, *_SECRET, *_KEY and *PASSWORD* lines, and the
-#    secret fields of the pnm sessions (vta-sdk session.rs Session: private_key, access_token; any *key*/*token*/*secret*
-#    field, to be safe). One hit fails (exit 1) and nothing may be uploaded; the report names files and fields, never
-#    values. The sessions' public fields (client_did, vta_did, token_origin) are identifiers: redacted, like below.
+#    fields of the pnm sessions (vta-sdk session.rs Session) other than the three known public ones: private_key and
+#    access_token, and ANY field not known to be public (fail closed). One hit fails (exit 1) and nothing may be uploaded;
+#    the report names files and fields, never values. The public fields (client_did, vta_did, token_origin) are
+#    identifiers: redacted, like below.
 # 2. Identifiers the legs print as a matter of course (the values of *_SLUG, *_DID, *_URL, *_REST, *_HOST, *_NAME lines)
 #    are replaced with [redacted:<KEY>] in text files; a binary file holding one (a screenshot, a page source with a DID)
 #    is removed, and listed.
@@ -24,8 +25,10 @@ session_fields() {
 if [ -n "$home" ] && [ -d "$home" ]; then
   for f in "$home"/sessions.json; do
     session_fields "$f" | while IFS=$'\t' read -r k v; do
+      # Only the three known public fields are identifiers; every other string field, known secret or not yet known,
+      # is a credential: a new field in a future vta-sdk blocks the upload until someone classifies it.
       case "$k" in client_did|vta_did|token_origin) printf 'PNM_SESSION.%s\t%s\n' "$k" "$v" >> "$ids" ;;
-        *[Kk]ey*|*[Tt]oken*|*[Ss]ecret*|*seed*) printf 'PNM_SESSION.%s\t%s\n' "$k" "$v" >> "$creds" ;; *) printf 'PNM_SESSION.%s\t%s\n' "$k" "$v" >> "$ids" ;; esac
+        *) printf 'PNM_SESSION.%s\t%s\n' "$k" "$v" >> "$creds" ;; esac
     done
   done
 fi
