@@ -14,9 +14,9 @@ on:
         description: >-
           Who gets this build. "all" ships as usual. "internal" keeps it from
           outside testers: on iOS only the internal TestFlight group gets it, and
-          on Android nothing is uploaded to Google Play (the signed APK is this
-          run's artifact, to side-load). For a build that must be checked on our
-          own phones first.
+          on Android it goes to Google Play internal testing (the internal track;
+          the signed APK is also kept as this run's artifact). External testers
+          get it when the release PR merges to staging.
         type: choice
         options: [all, internal]
         default: all
@@ -633,10 +633,9 @@ jobs:
           path: app/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      # An internal-audience run uploads nothing to Google Play, so the build
-      # reaches a phone as this APK: the same code and signing key as the
-      # bundle, installable with adb. A phone that has the Play copy must
-      # uninstall it first (Play re-signs what it delivers).
+      # An internal-audience run also keeps this APK: the same code and
+      # signing key as the bundle, installable with adb. A phone that has the
+      # Play copy must uninstall it first (Play re-signs what it delivers).
       - name: Upload the signed APK (internal audience only)
         if: inputs.audience == 'internal'
         uses: actions/upload-artifact@v4
@@ -683,14 +682,16 @@ jobs:
           AUDIENCE: ${{ inputs.audience }}
         run: |
           if [ "${AUDIENCE}" = "internal" ]; then
-            echo "- Audience (Android): **internal only**. Nothing is uploaded to Google Play; side-load the APK artifact." >>"$GITHUB_STEP_SUMMARY"
+            echo "- Audience (Android): **internal testers** (Google Play internal testing; the APK artifact is kept too)." >>"$GITHUB_STEP_SUMMARY"
           else
             echo "- Audience (Android): **all testers** (Google Play internal testing)." >>"$GITHUB_STEP_SUMMARY"
           fi
 
-      # inputs.audience is empty on a push to staging, which ships as usual.
+      # Google Play's internal testing track is the internal audience on
+      # Android (the same people as the TestFlight internal group), so every
+      # run ships here; only iOS holds an internal-audience build back from
+      # its external group.
       - name: Ship to Google Play Internal Testing
-        if: inputs.audience != 'internal'
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
