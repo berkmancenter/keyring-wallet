@@ -18,21 +18,42 @@ GH_REPO=berkmancenter/keyring-wallet
 # a CI-only identity, and the private configuration is a file the workflow writes from its protected environment.
 is_ci() { [ "${GATE_TARGET:-}" = ci ]; }
 # galarm <seconds> <command…>: the command in its own process group, the whole group killed past <seconds>. A plain
-# `galarm N` killed only the driver: its Appium (and anything else it started) lived on, and on
-# 1013-1753 an orphaned Appium on :4762 broke the next leg. Exit 142 on the alarm, as before (128 + SIGALRM). A stop
-# that reaches this shell (TERM, INT, HUP from gate.sh's stop_forward) is passed on to the group, since the group is no
-# longer the leg's own.
+# `perl -e 'alarm N; exec @ARGV'` killed only the driver: its Appium (and anything else it started) lived on, and on
+# 1013-1753 an orphaned Appium on :4762 broke the next leg.
+# Exits: 142 = the alarm fired (128 + SIGALRM 14), the group killed; 143/130/129 = a stop (TERM/INT/HUP) reached the
+# wrapper, which passes it to the group, waits up to 10 s for it to end, then kills what is left; otherwise the
+# command's own status. Each group is listed in $GATE_HOME/galarm-groups ("<pgid> <leg> <epoch> <command>"), so a group
+# whose wrapper was killed with the leg (a SIGKILL of the leg's whole group) is still found: leg_end reaps its own
+# leg's, and gate_sweep, at the start of every run, all of them (galarm_reap).
+GALARM_GROUPS=$GATE_HOME/galarm-groups
 galarm() {
   local t=$1; shift
-  perl -e '
+  GALARM_LEG=${LEG_NAME:-gate} GALARM_GROUPS=$GALARM_GROUPS perl -e '
+    use POSIX ":sys_wait_h";
     my $t = shift; my $p = fork; die "galarm: fork: $!" unless defined $p;
     if (!$p) { setpgrp(0, 0); exec @ARGV; exit 127 }
     setpgrp($p, $p);
-    for my $s (qw(TERM INT HUP)) { $SIG{$s} = sub { kill $s, -$p; waitpid($p, 0); exit 128 + { TERM => 15, INT => 2, HUP => 1 }->{$s} } }
+    if (open(my $g, ">>", $ENV{GALARM_GROUPS})) { print $g "$p $ENV{GALARM_LEG} " . time() . " $ARGV[0]\n"; close $g }
+    sub stop { my ($sig, $code) = @_; kill $sig, -$p;
+      for (1 .. 100) { last if waitpid($p, WNOHANG) > 0; select(undef, undef, undef, 0.1) }
+      kill "KILL", -$p; waitpid($p, WNOHANG); exit $code }
+    $SIG{TERM} = sub { stop("TERM", 143) }; $SIG{INT} = sub { stop("INT", 130) }; $SIG{HUP} = sub { stop("HUP", 129) };
     $SIG{ALRM} = sub { kill "KILL", -$p; waitpid($p, 0); exit 142 };
     alarm $t; waitpid($p, 0);
     exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
   ' "$t" "$@"
+}
+# galarm_reap [leg]: kill every listed group still alive (that leg's, or all), by its process group id, and drop the
+# list's dead lines. Says what it killed.
+galarm_reap() {
+  local only=${1:-} pg leg ep cmd keep=""
+  [ -f "$GALARM_GROUPS" ] || return 0
+  while read -r pg leg ep cmd; do
+    [ -n "$pg" ] || continue
+    if [ -n "$only" ] && [ "$leg" != "$only" ]; then kill -0 -- "-$pg" 2>/dev/null && keep+="$pg $leg $ep $cmd"$'\n'; continue; fi
+    if kill -0 -- "-$pg" 2>/dev/null; then kill -KILL -- "-$pg" 2>/dev/null; echo "  galarm: killed a leftover group $pg ($leg, $cmd, started $(date -u -r "$ep" +%H:%M:%SZ 2>/dev/null || echo "$ep"))"; fi
+  done < "$GALARM_GROUPS"
+  printf '%s' "$keep" > "$GALARM_GROUPS"
 }
 if ! is_ci; then
   export PATH=$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator:$PATH
@@ -203,6 +224,7 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
   local slug seen=" "
+  galarm_reap
   for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
     [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     gate_sweep_runner "$slug"
@@ -344,6 +366,7 @@ leg_end() {
   local rc=$?
   trap '' TERM INT HUP
   [ -n "${LEG_CLEANUP:-}" ] && { $LEG_CLEANUP || true; }
+  galarm_reap "${LEG_NAME:-gate}"
   # Count from the leg's own log when there is one: a ROW line printed in a subshell, or by a driver, counts too.
   if [ -f "${LEG_DIR:-}/leg.log" ]; then
     LEG_PASS=$(grep -cE '^ROW .* PASS — ' "$LEG_DIR/leg.log"); LEG_FAILS=$(grep -cE '^ROW .* FAIL — ' "$LEG_DIR/leg.log"); LEG_SKIP=$(grep -cE '^ROW .* SKIP — ' "$LEG_DIR/leg.log")

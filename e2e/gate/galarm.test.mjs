@@ -45,3 +45,21 @@ test('a command that finishes: its own exit status', () => {
   const r = spawnSync('bash', ['-c', `GATE_TARGET=ci . "${LIB}"; galarm 10 bash -c 'exit 3'`]);
   assert.equal(r.status, 3);
 });
+
+// Review on #423: a SIGKILL of the leg's whole group kills the wrapper too; the driver's group, in a group of its own,
+// lives on. It is listed, and galarm_reap finds and kills it.
+test('a group orphaned by a SIGKILL of the whole leg is reaped from the list', async () => {
+  const marker = `galarm-${process.pid}-d`;
+  const home = (await import('node:fs')).mkdtempSync(path.join((await import('node:os')).tmpdir(), 'galarm-home-'));
+  // The "leg": its own group (detached), running galarm around a hanging driver with a child.
+  const leg = spawn('bash', ['-c', `GATE_TARGET=ci GATE_HOME="${home}" . "${LIB}"; LEG_NAME=t; galarm 600 ${hang(marker)}`], { stdio: 'ignore', detached: true });
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.notEqual(left(marker), '', 'the marker child runs');
+  process.kill(-leg.pid, 'SIGKILL'); // the leg's whole group, wrapper included
+  await new Promise((r) => setTimeout(r, 500));
+  assert.notEqual(left(marker), '', 'orphaned: still running after the leg was killed');
+  const r = spawnSync('bash', ['-c', `GATE_TARGET=ci GATE_HOME="${home}" . "${LIB}"; galarm_reap t`], { encoding: 'utf8' });
+  assert.match(r.stdout, /killed a leftover group/);
+  await new Promise((r2) => setTimeout(r2, 500));
+  assert.equal(left(marker), '');
+});
