@@ -38,9 +38,22 @@ truth, so local state lost is re-read rather than rebuilt.
 
 **No Rust.** `VtaClient.ts` already builds and signs `vta/*` Trust Tasks in
 TypeScript, so these five are five more task types, not a `vta-mobile-core`
-dependency and a cross-compile. The cost is that their builder validates
-payloads against generated spec types and ours does not, so the schemas are
-mirrored in TypeScript and tested against the registry.
+dependency and a cross-compile.
+
+**And no framework bump.** The registry does generate TypeScript payload types
+for all twelve PCS tasks, and the app already imports generated types of that
+kind (`witnessCeremony.ts` takes `@openvtc/trust-tasks/witness/session/0.1/payload`)
+— but they are published in `@openvtc/trust-tasks` 0.26.1 and this repository is
+pinned at 0.9.0 behind a deliberate tripwire: *"the Cypress lock; any bump past
+0.9.x = post-Cypress framework movement"* (`scripts/openvtc/PINS.json`). 0.9.0
+carries no `vta/pcs` types, so there is no partial path.
+
+So the five applicant payloads are **mirrored by hand in TypeScript**, and their
+tests validate those shapes against the registry's own
+`specs/vta/pcs/*/0.1/payload.schema.json`, read out of `external/` — upstream's
+source of truth checks us while the dependency stays where it is. The 0.9 → 0.26
+bump is queued as its own item with its own testing pass, after this work; it is
+not smuggled in under hidden vetting (decided with the coordinator, 2026-10-14).
 
 **Errors** arrive as `trust-task-error` documents, so `payload.code` is read
 from the raw JSON. `prove:noUsableAttestation` means not enough valid
