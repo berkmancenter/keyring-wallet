@@ -565,11 +565,14 @@ async function linkCase(driver, which) {
     if (!copy) throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
     await copy.click();
     if (!(await existsTestId(driver, "AgentCreateWaiting", 15000))) return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s");
+    const copied = Date.now();
     await idle(400000);
     const locked = await existsTestId(driver, "EnterPIN", 2000);
     const still = await existsTestId(driver, "AgentCreateWaiting", 2000);
+    // Read inside the 600 s window, or "still waiting" would say nothing about the lock (review on #426).
+    const at = Math.round((Date.now() - copied) / 1000);
     await screenshot(driver, which);
-    return row(!locked && still, `400 s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock)`);
+    return row(!locked && still && at < 590, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before the 600 s window ends: ${at < 590})`);
   }
   if (which === "link-no-answer") {
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
