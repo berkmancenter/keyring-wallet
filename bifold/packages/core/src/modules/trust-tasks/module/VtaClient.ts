@@ -32,6 +32,17 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
 import {
+  PCS_ERROR,
+  PCS_PROBE_APPLICATION_ID,
+  PCS_VTA_TASK,
+  pcsErrorCode,
+  type ApplicationsCreatePayload,
+  type PcsApplication,
+  type ProvePayload,
+  type VerifyAttestationPayload,
+} from './pcsVtaPayloads'
+
+import {
   EPHEMERAL_KMS_BACKEND,
   heldInMemory,
   importVtaKey,
@@ -1848,5 +1859,99 @@ export class VtaClient {
       fetched = true
     }
     return fetched
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hidden vetting (PCS): the applicant's five tasks.
+  //
+  // The agent holds the per-application PCS key and builds the proof; this
+  // client only carries messages (zero-knowledge-plan D4). The other seven
+  // `vta/pcs/*` tasks belong to a vetter and are not here.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether this agent serves `vta/pcs/*` at all — `applications/show` with an
+   * id it cannot hold.
+   *
+   * `notFound` means the family is served, which is the answer we want: the
+   * probe asks a question whose "failure" is the success signal.
+   * `unsupportedType` means the agent predates vta-service 0.60.
+   *
+   * Returns `undefined` for "cannot tell", which includes a policy holding the
+   * probe for consent or step-up. `waitForConsent: false` keeps that cheap: a
+   * held task is refused at once rather than waiting, and the caller must NOT
+   * treat the refusal as a verdict — a rule covering reads is not evidence
+   * about the agent's version.
+   */
+  async servesPcs(): Promise<boolean | undefined> {
+    try {
+      await this.task(PCS_VTA_TASK.applicationsShow, { applicationId: PCS_PROBE_APPLICATION_ID }, 30000, {}, undefined, {
+        waitForConsent: false,
+      })
+      // An agent that answered at all serves the family; a hit on this id is
+      // not credible, but it would still prove the task is implemented.
+      return true
+    } catch (error) {
+      const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
+      if (code?.endsWith(':notFound') || code === 'notFound') return true
+      if (code === PCS_ERROR.unsupportedType || code?.endsWith(':unsupportedType')) return false
+      return undefined
+    }
+  }
+
+  /** `vta/pcs/applications/create/0.1`. One per join attempt, before any vetter is asked. */
+  async createPcsApplication(payload: ApplicationsCreatePayload): Promise<PcsApplication> {
+    const answer = await this.task<{ application?: PcsApplication }>(
+      PCS_VTA_TASK.applicationsCreate,
+      payload as unknown as Record<string, unknown>
+    )
+    const application = answer?.application
+    if (!application?.applicationId) throw new Error('vta/pcs/applications/create returned no application')
+    return application
+  }
+
+  /** `vta/pcs/applications/show/0.1`. The agent is the source of truth; this re-reads it. */
+  async showPcsApplication(applicationId: string): Promise<PcsApplication | undefined> {
+    const answer = await this.task<{ application?: PcsApplication }>(PCS_VTA_TASK.applicationsShow, { applicationId })
+    return answer?.application
+  }
+
+  /**
+   * `vta/pcs/verify-attestation/0.1`. The agent verifies the vetter's
+   * attestation and keeps it; nothing is stored on the device, by design.
+   */
+  async verifyPcsAttestation(payload: VerifyAttestationPayload): Promise<PcsApplication | undefined> {
+    const answer = await this.task<{ application?: PcsApplication }>(
+      PCS_VTA_TASK.verifyAttestation,
+      payload as unknown as Record<string, unknown>
+    )
+    return answer?.application
+  }
+
+  /**
+   * `vta/pcs/prove/0.1`. Ninety seconds, not the usual thirty: the agent is
+   * building a zero-knowledge proof, and upstream allows that much for it.
+   *
+   * `prove:noUsableAttestation` is a progress state — too few attestations yet
+   * — and reaches the caller as an error to read with `pcsErrorCode`, not as a
+   * failure of the call.
+   */
+  async provePcs(payload: ProvePayload): Promise<Record<string, unknown>> {
+    const answer = await this.task<{ hiddenVetting?: Record<string, unknown> }>(
+      PCS_VTA_TASK.prove,
+      payload as unknown as Record<string, unknown>,
+      90000
+    )
+    const hiddenVetting = answer?.hiddenVetting
+    if (!hiddenVetting) throw new Error('vta/pcs/prove returned no hiddenVetting object')
+    return hiddenVetting
+  }
+
+  /**
+   * `vta/pcs/applications/delete/0.1`, once the join is decided either way.
+   * Removes the application's key path and its attestations from the agent.
+   */
+  async deletePcsApplication(applicationId: string): Promise<void> {
+    await this.task(PCS_VTA_TASK.applicationsDelete, { applicationId })
   }
 }

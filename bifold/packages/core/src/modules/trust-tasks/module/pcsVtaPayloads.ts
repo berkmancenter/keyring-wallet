@@ -106,6 +106,21 @@ export interface ApplicationsCreatePayload {
   parameters: PublishedConfig
 }
 
+/**
+ * The id the version probe asks for: no agent can hold it, so the answer is
+ * `notFound` from one that serves `vta/pcs/*` and `unsupportedType` from one
+ * that does not. A probe must not create anything, and this creates nothing.
+ */
+export const PCS_PROBE_APPLICATION_ID = 'urn:uuid:00000000-0000-4000-8000-000000000000'
+
+/** What the agent returns for an application. `attestations` is the progress surface. */
+export interface PcsApplication {
+  applicationId: string
+  /** The applicant's PCS identifier, carried to vetters in the request's ext. */
+  id?: string
+  attestations?: Array<{ meta?: Record<string, unknown> } & Record<string, unknown>>
+}
+
 /** `vta/pcs/applications/show/0.1`. The agent is the source of truth; this re-reads it. */
 export interface ApplicationsShowPayload {
   applicationId: string
