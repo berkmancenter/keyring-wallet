@@ -4,8 +4,8 @@ Subtask of `../release-cadence-and-testing-strategy.md` (a local export; see
 `2026-10-08-al.md` for how it was produced). Companions: `2026-10-14-al.md`
 holds the measurements, the coverage map and the sources this plan rests on;
 `ota_updates_subtask.md` owns the OTA rings this plan uses as a trial channel.
-This is a proposal: nothing here changes the gate or the harness until the
-project lead approves it, and each phase names what it needs from him.
+The project lead approved the design on 14 October 2026 (the decisions are
+in `2026-10-14-al.md` §5); each phase below names what it still waits on.
 
 ## What the gate is for
 
@@ -154,16 +154,18 @@ port range. Legs of one lane run one after another; lanes run side by side.
 
 | Lane | Machine | Identity | Runners | Legs |
 |---|---|---|---|---|
-| mac | the MacBook | the gate's | prague (main), uiux (A), openvtc (B) | iOS: `kk`, `smoke-ios`, `update-ios`; Android: `agents` (needs all three runners), `waiting`, `p1` |
-| mini | the Mac mini | `keyring-mini-gate` (pending) | its own main runner | `update-android` (merged), `smoke-android`, `devices`, `lostreq`'s nightly twin, the layout sweep |
-| ci | GitHub runners | `keyring-ci-gate` | its own main runner | `linkwait` (merged), `linkfail`, `pnmlink`, `testreq`'s twin when the shared phone is not available |
+| mac | the MacBook | the gate's | prague (main), uiux (A), openvtc (B), the community's agent | iOS: `kk`, `smoke-ios`, `update-ios`; Android: `agents` (needs all three runners), `waiting`, `p1`, `devices`' refusal row (it links to the community's agent and cleans its keys) |
+| mini | the Mac mini | `keyring-mini-gate` (pending) | its own main runner | `update-android` (merged), `smoke-android`, `devices`' screen rows, `lostreq`'s nightly twin, the layout sweep |
+| ci | GitHub runners | `keyring-ci-gate` | its own main runner (an existing runner's DID serves as `linkfail`'s approver, with no admin on it) | `linkwait` (merged), `linkfail`, `pnmlink`, `testreq`'s twin when the shared phone is not available |
 
 Two lanes on one runner collide on its ACL and its rate limit (the
 coordinator's rule of 14 October), so the mini and ci lanes need runner VTAs
 of their own on the Farm: two more "main" runners, and nothing else, since
-only `agents` needs A and B. **Blocked on the project lead**: Farm changes are
-his call. Until then, two lanes share the Farm by turns (ci runs while the
-Mac is idle), which is the ordering the coordinator set.
+only `agents` needs A and B, and the mini lane needs no entry on the
+community's agent. **Decided, waiting on creation**: the project lead creates
+them in the Farm console (the specification is in `2026-10-14-al.md` §5).
+Until they exist, two lanes share the Farm by turns (ci runs while the Mac
+is idle), which is the ordering the coordinator set.
 
 Computed from the 248 durations, after §2 to §4: the mac lane is about 70
 minutes (iOS 26 beside Android 65), the mini lane about 45, the ci lane about
@@ -260,9 +262,9 @@ Three of the five anchors have no row today:
 
 | Anchor | Today | Row to add | Needs |
 |---|---|---|---|
-| Farm one-scan setup (vta-claim) | `run-farm-onescan.mjs` exists, attended (a person presses "Codes match" on the Farm page); every gate link is the manual enrol-page link | a `smoke` row that scans the Farm's QR and completes the claim | a way to press the Farm page's confirmation from the harness: a browser driver against the page, or a Farm endpoint. **Design needed; owner: the Farm lane; the project lead chooses the way** |
+| Farm one-scan setup (vta-claim) | `run-farm-onescan.mjs` exists, attended (a person presses "Codes match" on the Farm page); every gate link is the manual enrol-page link | none automated: the project lead runs the one-scan setup himself once per release, on the TestFlight build, and his result is a row in the release report | nothing; the attended run is the check. A harness-driven row would need the Farm page's confirmation pressed from the harness, which is not worth building while the Farm page changes |
 | Mediator | implicit in every link; blocked, never measured | a round-trip row in each smoke: a message from the runner reaches the phone, with its time, flagged over 2× the last release's | nothing new; the runner can message the phone today |
-| Website sign-in | the unjoined negative case only | a member phone claims a sign-in code from the community's site and the site shows it signed in | a sign-in page the harness can drive, in the local VTI stack or on the Farm community. **Design needed; owner: the VTI lane** |
+| Website sign-in | the unjoined negative case only | a member phone claims a sign-in code from the community's site and the site shows it signed in | a sign-in page the harness can drive, in the local VTI stack or on the Farm community. **Design needed; owned by the application lane** |
 
 ## Phases
 
@@ -284,7 +286,7 @@ effective values; the `linkwait` rows read them.
 *Done when* `linkwait` passes under 15 minutes on a short-clock test build,
 the same rows pass overnight on the shipped build with real clocks, and the
 store build's fingerprint is unchanged.
-**Needs the project lead's yes** on build-time overrides in test builds.
+Approved 14 October.
 
 **Phase 2: shared phone and merges.** The phone ledger; `needs=` per leg;
 `testreq` and `devices`' screen rows on the shared phone; `linkresume` into
@@ -293,14 +295,14 @@ row as a component test with the device twin nightly; `p2` nightly.
 *Done when* the summed leg time on one pin drops by at least 40 minutes
 against the 248 baseline, the manifest diff removes no row except the ones
 named here, and every merged row's evidence path is unchanged in the report.
-**Needs the project lead's yes** on the `relaunch-android` merge.
+Approved 14 October.
 
 **Phase 3: lanes.** The mini's identity and the ci identity on their own
 runners; `gate.sh run --lanes mac,mini,ci` scheduling by `needs` and runner
 set; one report across lanes.
 *Done when* one pin's full gate completes in 75 minutes or less across three
 lanes with the same rows as a Mac-only run, three times.
-**Blocked on** two runner VTAs on the Farm (the project lead).
+**Waits on** the two runner VTAs, approved 14 October, created by the project lead.
 
 **Phase 4: down the pyramid.** The component tests in §7, each landing with
 its device twin kept for two releases; the timer tests; the VTA contract
@@ -316,24 +318,31 @@ rows of §9 once their designs are chosen.
 main build by the smoke plus `changed`, and the nightly and weekly runs
 reported without a person starting them.
 
-## Decisions needed from the project lead
+## Work order
 
-1. Build-time clock overrides in test builds (phase 1). Recommended: yes;
-   the store build is untouched and the real durations are pinned by tests.
-2. Merge `relaunch-android` into `update-android`, proving the relaunch on an
-   updated app (phase 2). Recommended: yes, with the #336 unit guard. The
-   alternative keeps both at 12 minutes per gate.
-3. Two more runner VTAs on the Farm for the mini and ci lanes (phase 3).
-   Without them the gate is Mac-only at about 2 h 15 m after phases 1 and 2.
-4. The flakiness numbers: quarantine under 90% over 14 days, return after 10
-   passes, admission after 3 clean dry runs. Recommended: adopt and revisit
-   after a month.
-5. Dropping a device row from the per-release gate two releases after its
-   component test lands, keeping it nightly. Recommended: yes.
-6. `p2` and `lostreq`'s device row nightly instead of per release.
-7. How the one-scan Farm setup is driven from the harness (a browser driver
-   on the Farm page, or a Farm endpoint), and who owns the sign-in row.
-8. Stay on Appium; no Detox or Maestro migration. Recommended: yes.
+The phases above in pull requests, smallest first, each reviewed by the
+research lane and merged on green by the coordinator. "Harness" is the gate
+lane; "app" is whichever application lane the coordinator assigns.
+
+| # | Change | Owner | Depends on |
+|---|---|---|---|
+| 1 | The CI cleanup deletes the phone key the link driver keeps (`keys_since` in CI covers `keyring-admin` keys made after the leg start) | harness | nothing |
+| 2 | Phase 0: a `step` helper writing `steps.tsv` in every leg, per-step time in `gate.sh report`, the coverage manifest generator with its committed manifest, the flakiness ledger over `runs/*/summary.json`, each with a node test | harness | nothing |
+| 3 | `E2E_CLOCKS=short`: the switch read by bifold's clock constants, the Developer screen showing the effective values under testIDs, the unit tests pinning the real durations and the background pause; `test-builds.yml` sets it | app, then harness for the workflow line | nothing |
+| 4 | `linkwait` reads the effective clocks from the Developer screen; `linkresume`'s cases join it; the nightly real-clock run in the watcher's schedule | harness | 3 built |
+| 5 | The Jest guard for #336's plain relaunch (keys fetched on use) | app | nothing |
+| 6 | `relaunch-android` merged into `update-android` | harness | 5 merged |
+| 7 | The phone ledger and `needs=` per leg; `testreq` and `devices`' screen rows on the shared phone; keys deferred per lane | harness | 2 |
+| 8 | `lostreq`'s offline error as a component test | app | nothing |
+| 9 | `lostreq`'s device row and `p2` in the nightly schedule | harness | 8 merged |
+| 10 | Lanes: `gate.sh run --lanes`, runner sets per lane from the environment, the mini's identity on its runner | harness with the mini lane | the two runner VTAs |
+| 11 | The ci lane on its own runner: the environment and the identity's session updated, `linkfail`'s approver DID from an existing runner | research (CI) | the two runner VTAs |
+| 12 | The component tests of §7, one PR per screen, each keeping its device twin for two releases | app | nothing |
+| 13 | The timer tests of §7 | app | 3 |
+| 14 | The VTA contract fixtures: the recorder, the consumer tests, the weekly provider diff | app with research | nothing |
+| 15 | Policy in the watcher: the automatic env rerun, quarantine and admission from the ledger, the cleanup cap | harness | 2 |
+| 16 | The mediator round-trip row in both smokes | harness | nothing |
+| 17 | The website sign-in row, once its page exists | app | its design |
 
 ## What this plan does not do
 
