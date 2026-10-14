@@ -4,6 +4,10 @@
 # Done when sys.boot_completed is 1, no "Application Not Responding" window is up (one that is gets dismissed,
 # android-anr.sh), the launcher has the focus, and the guest's one-minute load is at or under its core count;
 # or when the time is up. Prints one "settle:" line with what it saw (the ci step mark around it gives the time).
+# The time limit holds whatever the screen does: it is checked first on every pass, so an ANR dialog that keeps coming
+# back can no longer hold the loop (gate-ci run 38501730502: the launcher's ANR returned after every BACK for 87 min,
+# until the job's 90 min timeout). When time is up with an ANR still on screen the line says "ANR still up", which a
+# caller can treat as the environment's failure.
 # Why: on run 38045665103 System UI hung during a 195 s boot on a cold runner, and its ANR dialog covered the
 # app from before the plain launch to the welcome driver (both welcome rows FAIL); local runs never show it.
 # The focus comes from `dumpsys window` (the whole dump), as the leg's rows read it: `dumpsys window windows`
@@ -15,21 +19,24 @@ adb_() { adb -s "$S" "$@"; }
 t0=$(date +%s); dismissed=0; last=""
 cores=$(adb_ shell nproc 2>/dev/null | tr -d '\r'); case $cores in ''|*[!0-9]*) cores=2;; esac
 adb_ shell wm dismiss-keyguard >/dev/null 2>&1
+anr_up=0
 while :; do
+  if [ $(( $(date +%s) - t0 )) -ge "$MAX" ]; then
+    echo "settle: time up after $MAX s (going on), ANR dialogs dismissed $dismissed$([ $anr_up = 1 ] && echo ', ANR still up'); $last"; exit 0
+  fi
   boot=$(adb_ shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
   focus=$(adb_ shell dumpsys window 2>/dev/null | tr -d '\r' | grep -E 'mCurrentFocus|mFocusedApp' | tr -s ' ' | tr '\n' ' ')
   load=$(adb_ shell cat /proc/loadavg 2>/dev/null | tr -d '\r' | cut -d' ' -f1-3)
   last="boot_completed=${boot:-?} load=[${load:-?}] cores=$cores focus=[${focus:-?}]"
   if echo "$focus" | grep -q 'Not Responding'; then
+    anr_up=1
     "$HERE/android-anr.sh" "$S" | sed 's/^/  anr: /'; case ${PIPESTATUS[0]} in 2) dismissed=$((dismissed + 1));; esac
     sleep 3; continue
   fi
+  anr_up=0
   under=$(echo "${load:-99}" | awk -v c="$cores" '{print ($1 <= c) ? 1 : 0}')
   if [ "$boot" = 1 ] && echo "$focus" | grep -qi 'launcher' && [ "$under" = 1 ]; then
     echo "settle: ready after $(( $(date +%s) - t0 )) s, ANR dialogs dismissed $dismissed; $last"; exit 0
-  fi
-  if [ $(( $(date +%s) - t0 )) -ge "$MAX" ]; then
-    echo "settle: time up after $MAX s (going on), ANR dialogs dismissed $dismissed; $last"; exit 0
   fi
   sleep 5
 done

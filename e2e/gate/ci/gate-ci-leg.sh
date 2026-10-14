@@ -32,7 +32,12 @@ fi
 echo "pnm preflight ok (acl list on the main runner)"
 serial=$(adb devices | awk '$1 ~ /^emulator-/ {print $1; exit}')
 [ -n "$serial" ] || { echo "ENV no emulator on adb" | tee "$LEG_DIR/leg.log"; exit 2; }
-"$HERE/android-settle.sh" "$serial" "${ANDROID_SETTLE_MAX:-90}"
+settle=$("$HERE/android-settle.sh" "$serial" "${ANDROID_SETTLE_MAX:-90}"); echo "$settle"
+# An ANR dialog that would not go away covers whatever the leg launches: the environment, not a verdict on the app.
+if printf '%s' "$settle" | grep -q 'ANR still up'; then
+  echo "ENV the emulator kept an ANR dialog up through settling: $(printf '%s' "$settle" | tail -1 | cut -c1-200)" | tee "$LEG_DIR/leg.log"
+  exit 2
+fi
 # The legs pass $AVD to the drivers (ANDROID_AVD), which attach only to an emulator of that AVD name
 # (lib/emulator.js pinToRunningEmulator). gate_env's default is the Mac's; here it is whatever the workflow booted,
 # read the way the driver reads it (gate-ci run 38496808904: "AVD Pixel_6_API_33 is not running").
