@@ -32,6 +32,28 @@ import { VtaClaimIds } from './VtaClaim.ids'
 
 const id = (key: string) => testIdWithKey(key)
 
+/**
+ * Who a code says it is from, before anything is resolved (VTI-LNK-050): the
+ * domain of a host-named DID, followed by its path where it has one —
+ * `did:webvh:<SCID>:dids.example.org:farm-auth` is `dids.example.org/farm-auth`,
+ * `did:web:example.org:a` is `example.org/a`. Undefined for a DID with no
+ * domain. Local until communityName's didDomainPath lands, then swapped for it.
+ */
+export function claimedDomainPath(did: string): string | undefined {
+  const parts = did.split(':')
+  if (parts[0] !== 'did') return undefined
+  const rest = parts[1] === 'webvh' ? parts.slice(3) : parts[1] === 'web' ? parts.slice(2) : []
+  if (!rest.length || !rest[0]) return undefined
+  const [domain, ...path] = rest.map((p) => {
+    try {
+      return decodeURIComponent(p)
+    } catch {
+      return p
+    }
+  })
+  return [domain, ...path].join('/')
+}
+
 /** Every way the screen can end besides a ready agent; each has words (`VtaClaim.Failure.<reason>`). */
 export type VtaClaimEndReason =
   | Exclude<VtaClaimFailure, 'cancelled'>
@@ -42,7 +64,7 @@ export type VtaClaimEndReason =
 
 type Step =
   | { kind: 'reading' }
-  | { kind: 'confirm'; trigger: TriggerAccept; host: string }
+  | { kind: 'confirm'; trigger: TriggerAccept; host: string; where?: string }
   | { kind: 'claiming' }
   | { kind: 'code'; claimed: ClaimedVta; state?: RedeemState }
   | { kind: 'connecting' }
@@ -94,7 +116,12 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
       setStep({ kind: 'failed', reason: reasonOf(read) })
       return
     }
-    setStep({ kind: 'confirm', trigger: read, host: didHost(read.from) ?? read.from })
+    setStep({
+      kind: 'confirm',
+      trigger: read,
+      host: didHost(read.from) ?? read.from,
+      where: claimedDomainPath(read.from),
+    })
   }, [link])
 
   const onContinue = async (trigger: TriggerAccept) => {
@@ -148,6 +175,13 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
         content: { flexGrow: 1, padding: 20, gap: 16 },
         card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
         muted: { color: ColorPalette.grayscale.mediumGrey },
+        unverified: {
+          color: ColorPalette.grayscale.mediumGrey,
+          borderWidth: 1,
+          borderColor: ColorPalette.grayscale.mediumGrey,
+          borderRadius: 4,
+          paddingHorizontal: 6,
+        },
         error: { color: ColorPalette.semantic.error },
         code: { fontSize: 40, letterSpacing: 8, textAlign: 'center', fontWeight: 'bold' },
         actions: { marginTop: 'auto', gap: 12 },
@@ -176,10 +210,18 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
           <ThemedText>
             {t('VtaClaim.ConfirmBody', { host: step.host, interpolation: { escapeValue: false } })}
           </ThemedText>
+          {/* What the code claims, before anything is checked (VTI-LNK-050): the
+              domain and path, marked unverified; nothing is resolved until
+              Continue (VTI-LNK-111). */}
           <ThemedText style={styles.muted}>{t('VtaClaim.From')}</ThemedText>
-          <ThemedText variant="headingFour" testID={id(VtaClaimIds.host)}>
-            {step.host}
-          </ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <ThemedText variant="headingFour" testID={id(VtaClaimIds.host)}>
+              {step.where ?? t('VtaClaim.NoDomain')}
+            </ThemedText>
+            <ThemedText style={styles.unverified} testID={id(VtaClaimIds.unverified)}>
+              {t('VtaClaim.Unverified')}
+            </ThemedText>
+          </View>
           <DidDetails did={step.trigger.from} testIdStem={VtaClaimIds.hostDid} />
           {confirmError ? (
             <ThemedText style={styles.error} testID={id(VtaClaimIds.confirmError)}>

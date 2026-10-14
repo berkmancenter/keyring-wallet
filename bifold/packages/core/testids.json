@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "2fe992bd180bada9375dfba75c6baa9515124152",
+  "generatedFrom": "20484c6c7664c96ca01911900c37a0bee0d8681f",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -920,6 +920,7 @@
     "VtaClaimHostDid": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaClaimReady": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaClaimResultMessage": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
+    "VtaClaimUnverified": ["src/modules/trust-tasks/screens/VtaClaim.ids.ts"],
     "VtaLinkAgentAddress": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkAwaitingApproval": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],
     "VtaLinkButton": ["src/modules/trust-tasks/screens/VtaLink.ids.ts"],

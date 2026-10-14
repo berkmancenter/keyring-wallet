@@ -5,6 +5,7 @@ export const VtaClaimIds = {
   confirm: 'VtaClaimConfirm',
   host: 'VtaClaimHost',
   hostDid: 'VtaClaimHostDid',
+  unverified: 'VtaClaimUnverified',
   continue: 'VtaClaimContinue',
   cancel: 'VtaClaimCancel',
   confirmError: 'VtaClaimConfirmError',

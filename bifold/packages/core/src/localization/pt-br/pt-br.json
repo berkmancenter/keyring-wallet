@@ -2163,7 +2163,9 @@
   "VtaClaim": {
     "ConfirmTitle": "Adicionar este telefone ao seu novo agente?",
     "ConfirmBody": "Seu provedor de agente em {{host}} tem um agente pronto para você. Este telefone se torna o proprietário. Em seguida, você vai comparar um código curto com a página que mostrou o código escaneado.",
-    "From": "De",
+    "From": "Este código diz ser de",
+    "Unverified": "Não verificado",
+    "NoDomain": "um contato sem domínio para mostrar",
     "Continue": "Continuar",
     "Cancel": "Cancelar",
     "ConfirmReason": "Tornar-se proprietário do seu novo agente",

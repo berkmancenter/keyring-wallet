@@ -2323,7 +2323,9 @@
   "VtaClaim": {
     "ConfirmTitle": "Add this phone to your new agent?",
     "ConfirmBody": "Your agent host at {{host}} has an agent ready for you. This phone becomes its owner. Next you'll check a short code against the page that showed the code you scanned.",
-    "From": "From",
+    "From": "This code says it is from",
+    "Unverified": "Unverified",
+    "NoDomain": "a contact with no domain to show",
     "Continue": "Continue",
     "Cancel": "Cancel",
     "ConfirmReason": "Become the owner of your new agent",

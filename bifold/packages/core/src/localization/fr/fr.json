@@ -2254,7 +2254,9 @@
   "VtaClaim": {
     "ConfirmTitle": "Ajouter ce téléphone à votre nouvel agent ?",
     "ConfirmBody": "Votre hébergeur d'agent à {{host}} a un agent prêt pour vous. Ce téléphone en devient le propriétaire. Vous allez ensuite comparer un code court avec la page qui a affiché le code scanné.",
-    "From": "De",
+    "From": "Ce code indique provenir de",
+    "Unverified": "Non vérifié",
+    "NoDomain": "un contact sans domaine à afficher",
     "Continue": "Continuer",
     "Cancel": "Annuler",
     "ConfirmReason": "Devenir propriétaire de votre nouvel agent",
