@@ -101,13 +101,19 @@ const isPlainMemberRole = (vc: Json) => roleNameOf(vc)?.replace(/^custom:/, '') 
  * has its own card.
  */
 export async function roleShownWithMembershipCard(
-  store: Pick<VtiCommunityStore, 'listMemberships'>,
+  store: Pick<VtiCommunityStore, 'listMemberships'> & Partial<Pick<VtiCommunityStore, 'listHeldCredentials'>>,
   card: Json
 ): Promise<'member' | undefined> {
   const key = walletCardKey(card)
   if (!key) return undefined
   for (const m of await store.listMemberships()) {
-    if (m.vmc && walletCardKey(m.vmc) === key && m.roleVec && isPlainMemberRole(m.roleVec)) return 'member'
+    if (!m.vmc || walletCardKey(m.vmc) !== key) continue
+    if (m.roleVec) return isPlainMemberRole(m.roleVec) ? 'member' : undefined
+    // A role card that arrived before its membership card was held on its
+    // own, and a phone that kept it so still holds it there (241 gate).
+    const held = (await store.listHeldCredentials?.('role', m.communityDid).catch(() => [])) ?? []
+    const role = held.filter((h) => !h.subjectDid || h.subjectDid === m.personaDid).slice(-1)[0]?.credential
+    return role && isPlainMemberRole(role) ? 'member' : undefined
   }
   return undefined
 }
