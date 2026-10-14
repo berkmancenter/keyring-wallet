@@ -231,21 +231,34 @@ describe('the private vetting screen', () => {
     expect(seam.deleteApplication).not.toHaveBeenCalled()
   })
 
-  it('a challenge that lapsed during the proof: one fresh challenge, one more proof', async () => {
-    let first = true
+  it('a challenge that lapsed while the agent proved: by its time, one fresh challenge and one more proof', async () => {
     const seam = fakeSeam({
-      prove: jest.fn(async () => {
-        if (first) {
-          first = false
-          throw pcsError('vta/pcs/prove:challengeExpired')
-        }
-        return { proof: 'p2' }
-      }),
+      fetchChallenge: jest
+        .fn()
+        .mockResolvedValueOnce({ challenge: 'c-1', expiresAt: new Date(Date.now() - 1000).toISOString() })
+        .mockResolvedValueOnce({ challenge: 'c-2', expiresAt: new Date(Date.now() + 60000).toISOString() }),
     })
     const tree = await open(seam)
     await press(tree, 'HiddenVettingSend')
     expect(seam.fetchChallenge).toHaveBeenCalledTimes(2)
-    expect(seam.submitJoin).toHaveBeenCalledWith(expect.anything(), record, criterion, { proof: 'p2' })
+    expect(seam.prove).toHaveBeenLastCalledWith(expect.anything(), record, criterion, 'c-2')
+    expect(seam.submitJoin).toHaveBeenCalledTimes(1)
+  })
+
+  it('the community did not count the proof (no-proof): once more, a fresh challenge and proof, never the same proof', async () => {
+    const seam = fakeSeam({
+      fetchChallenge: jest.fn().mockResolvedValueOnce({ challenge: 'c-1' }).mockResolvedValueOnce({ challenge: 'c-2' }),
+      prove: jest.fn().mockResolvedValueOnce({ proof: 'p1' }).mockResolvedValueOnce({ proof: 'p2' }),
+      submitJoin: jest
+        .fn()
+        .mockResolvedValueOnce({ effect: 'deny', needs: ['vetting:hidden:no-proof'] })
+        .mockResolvedValueOnce({ effect: 'refer' }),
+    })
+    const tree = await open(seam)
+    await press(tree, 'HiddenVettingSend')
+    expect(seam.submitJoin).toHaveBeenCalledTimes(2)
+    expect(seam.submitJoin).toHaveBeenLastCalledWith(expect.anything(), record, criterion, { proof: 'p2' })
+    expect(tree.getByTestId(id('HiddenVettingResult'))).toHaveTextContent('Vetting.Hidden.Sent')
   })
 
   it('a community that changed its way in since: says so, and starts afresh rather than proving', async () => {
@@ -272,6 +285,7 @@ describe('error codes, in words', () => {
     ['vta/pcs/verify-attestation:notFound', 'Vetting.Hidden.ApplicationGone'],
     ['vta/pcs/verify-attestation:attestationInvalid', 'Vetting.Hidden.AttestationRefused'],
     ['vta/pcs/prove:parametersInvalid', 'Vetting.Hidden.ErrorGeneric'],
+    ['vta/pcs/prove:unsupportedSuite', 'Join.Ways.PrivateVetting'],
     [undefined, 'Vetting.Hidden.ErrorGeneric'],
   ])('%s → %s', (code, key) => {
     expect(hiddenVettingErrorKey(code)).toBe(key)

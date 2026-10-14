@@ -70,11 +70,31 @@ export function hiddenVettingErrorKey(code: string | undefined): string {
   if (code.endsWith(':noUsableAttestation')) return 'Vetting.Hidden.NotEnoughYet'
   if (code.endsWith(':notFound')) return 'Vetting.Hidden.ApplicationGone'
   if (code.endsWith(':attestationInvalid')) return 'Vetting.Hidden.AttestationRefused'
+  // The community runs a suite agents cannot: what Join says of it.
+  if (code.endsWith(':unsupportedSuite')) return 'Join.Ways.PrivateVetting'
   return 'Vetting.Hidden.ErrorGeneric'
 }
 
-/** A lapsed or spent challenge: one fresh challenge and one more proof are worth trying. */
-const challengeLapsed = (code: string | undefined) => Boolean(code && /challenge/i.test(code))
+/**
+ * A challenge that has lapsed, or nearly, when the proof comes back. The
+ * agent does not check it (it only binds it into the proof); the community
+ * does, so the screen goes by the time it was given, with a little margin.
+ */
+export const CHALLENGE_MARGIN_MS = 5000
+const lapsed = (expiresAt: string | undefined, now: number) =>
+  Boolean(expiresAt) && Date.parse(expiresAt as string) - now < CHALLENGE_MARGIN_MS
+
+/**
+ * The community did not count the proof (`vetting:hidden:no-proof`): where a
+ * challenge that lapsed on the way lands. Worth one fresh challenge and proof.
+ */
+const noProof = (answer: unknown) => {
+  try {
+    return JSON.stringify(answer ?? '').includes('vetting:hidden:no-proof')
+  } catch {
+    return false
+  }
+}
 
 /** The community's answer, in words (the same effects as a named application). */
 export function verdictKey(verdict: HiddenVettingVerdict): string {
@@ -211,22 +231,32 @@ const VtiHiddenVetting: React.FC = () => {
   const send = () =>
     run('send', async () => {
       if (!agent || !record || !criterion) return
-      const proveOnce = async () => {
-        setStep('challenge')
-        const { challenge } = await seam.fetchChallenge(agent, record, criterion)
-        setStep('prove')
-        return seam.prove(agent, record, criterion, challenge)
+      // A challenge is single-use and lapses; a proof is bound to one. Each try
+      // is a fresh challenge and a fresh proof, never a proof sent again.
+      const proveFresh = async () => {
+        for (let attempt = 0; ; attempt++) {
+          setStep('challenge')
+          const { challenge, expiresAt } = await seam.fetchChallenge(agent, record, criterion)
+          setStep('prove')
+          const proof = await seam.prove(agent, record, criterion, challenge)
+          // The proof took long enough for the challenge to lapse: once more.
+          if (attempt === 0 && lapsed(expiresAt, Date.now())) continue
+          return proof
+        }
       }
-      let proof: unknown
+      const sendOnce = async () => {
+        const proof = await proveFresh()
+        setStep('submit')
+        return seam.submitJoin(agent, record, criterion, proof)
+      }
+      let answer: HiddenVettingVerdict
       try {
-        proof = await proveOnce()
+        answer = await sendOnce()
+        if (noProof(answer)) answer = await sendOnce()
       } catch (e) {
-        // A challenge is single-use and lapses: one fresh one, one more proof.
-        if (!challengeLapsed(pcsErrorCode(e))) throw e
-        proof = await proveOnce()
+        if (!noProof(e) && !noProof(pcsErrorCode(e))) throw e
+        answer = await sendOnce()
       }
-      setStep('submit')
-      const answer = await seam.submitJoin(agent, record, criterion, proof)
       setVerdict(answer)
       // Decided either way: the application's keys and attestations leave the agent.
       if (answer.effect === 'allow' || answer.effect === 'deny') {
