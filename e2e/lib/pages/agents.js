@@ -74,6 +74,10 @@ export async function answerOwnerCheck(d, tag, { pin = "", adb = adbOf(d), say =
     win = (adb("shell", "dumpsys", "window", "windows").match(/Window\{[^}]*(AuthContainer|BiometricPrompt|ConfirmDeviceCredential)[^}]*\}/i) || [""])[0];
   }
   if (!win) return false;
+  // The prompt's window exists before it has animated in. A PIN verified in that time is dropped: SystemUI waits for
+  // onDialogAnimatedIn, then dismisses, and the app gets "Authentication canceled" (code 10) though the PIN was right
+  // (rerun 1014-1651 p1: shown 11:54:10.298, verified .371, animated in .596). A person never types that fast.
+  await wait(1000);
   say(`owner check (${tag}): ${win.slice(0, 60)}; typing the PIN`);
   adb("shell", "input", "text", pin);
   adb("shell", "input", "keyevent", "66");

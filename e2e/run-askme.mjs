@@ -82,6 +82,10 @@ async function answerCredential(d, tag) {
     log(`credential prompt (${tag}): none shown in 8 s (focus ${focus.trim().slice(0, 120)}); nothing typed`);
     return false;
   }
+  // The prompt's window exists before it has animated in. A PIN verified in that time is dropped: SystemUI waits for
+  // onDialogAnimatedIn, then dismisses, and the app gets "Authentication canceled" (code 10) though the PIN was right
+  // (rerun 1014-1651 p1: shown 11:54:10.298, verified .371, animated in .596). A person never types that fast.
+  await sleep(1000);
   log(`credential prompt (${tag}): ${win.slice(0, 140)} · focus ${focus.trim().slice(0, 100)}; typing the PIN`);
   adb("shell", "input", "text", PIN_DEV);
   adb("shell", "input", "keyevent", "66");
