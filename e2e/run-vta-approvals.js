@@ -43,7 +43,7 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
@@ -259,6 +259,7 @@ try {
   const notifCheck = PLATFORM === "android" && process.env.WAKE_CHANNEL_CHECK === "1" && approver && pushCapableOf(approver) === "true";
   if (notifCheck) {
     adb("shell", "input", "keyevent", "3"); // Home: the app in the background before the request
+    adb("logcat", "-c"); // the wake's own lines only, saved below
     await sleep(2000);
   }
 
@@ -281,8 +282,21 @@ try {
     const def = (all.match(/NotificationChannel\{mId='keyring_wake'[^}]*\}/) || [""])[0];
     const importance = Number((def.match(/mImportance=(\d+)/) || [])[1] ?? 0);
     const name = (def.match(/mName=([^,]+)/) || [])[1] ?? "";
+    // Whether a wake reached the phone at all, apart from where it was posted: the agent's own view of this phone
+    // (pushCapable) and the phone's FCM lines since Home, saved whole (wake-logcat.txt) for the verdict.
+    const capable = pushCapableOf(approver);
+    const lc = adb("logcat", "-d", "-v", "threadtime");
+    const fcm = lc.split("\n").filter((l) => /FirebaseMessaging|FcmBroadcast|CloudMessag|com\.google\.android\.c2dm|keyring[-_]wake/i.test(l));
+    try {
+      writeFileSync(path.join(process.env.E2E_RUN_DIR || "artifacts", "wake-logcat.txt"), lc);
+    } catch (e) {
+      log(`wake-logcat.txt not saved: ${e.message}`);
+    }
+    const seen = record
+      ? `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel)`
+      : "no wake arrived in 2 min (no Keyring notification posted)";
     await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
-      `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+      `${seen} · agent says pushCapable ${capable} · ${fcm.length} FCM line(s) in the phone's log since Home (wake-logcat.txt) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
     await d.activateApp(BID);
     await sleep(2000);
     // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
