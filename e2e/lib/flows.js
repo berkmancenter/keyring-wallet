@@ -1,3 +1,4 @@
+import { isPhysical } from "./prodGuard.js";
 import {
   acceptSystemAlertIfPresent,
   collapseNotificationShadeIfOpen,
@@ -1655,6 +1656,18 @@ export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5
  *  - "issue receipt matched" — the peer's receipt correlated to our delivery.
  * No-op on iOS drivers (no logcat; the Android log covers both directions).
  */
+/**
+ * A wait on a physical iPhone is at least E2E_DEVICE_TIMEOUT_MS (default 240 s). On the #397 device run (10-14) an
+ * iPhone 11's App Attest took a retry plus a key replacement before the ceremony's discovery, so the 90 s proposal
+ * window expired about 30 s early, and a 60 s marker window failed a run in which both wallets showed the
+ * relationship confirmed. Emulators and simulators keep the given time.
+ */
+export function deviceWait(driver, ms) {
+  const udid = driver?.e2eUdid || driver?.capabilities?.["appium:udid"] || driver?.capabilities?.udid;
+  if (driver?.e2ePlatform !== "ios" || !isPhysical("ios", udid)) return ms;
+  return Math.max(ms, Number(process.env.E2E_DEVICE_TIMEOUT_MS) || 240000);
+}
+
 export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   const required = [
     [/\[TrustTasks:Ceremony\] discovery (sent|answered|confirmed propose support)/, "discovery"],
@@ -1664,7 +1677,7 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:Ceremony\] issue receipt sent/, "issue receipt sent"],
     [/\[TrustTasks:Ceremony\] issue receipt matched/, "issue receipt matched"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1698,7 +1711,7 @@ export async function assertTspCarriageMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
     [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1833,7 +1846,7 @@ export async function assertDidCommV2CarriageMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:DidCommV2Carriage\] envelope sent/, "envelope sent"],
     [/\[TrustTasks:DidCommV2Carriage\] envelope received/, "envelope received"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1865,7 +1878,7 @@ export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
     [/\[TrustTasks:TspCarriage\] envelope received on v2 connection/, "TSP envelope received on v2"],
   ];
   const forbidden = /\[TrustTasks:DidCommV2Carriage\] envelope (sent|received)/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1893,7 +1906,7 @@ export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
  */
 export async function assertV2MediationMarker(driver, timeout = 60000) {
   const re = /\[TrustTasks:V2Mediation\] Coordinate Mediation 2\.0 granted/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     // Provisioning runs at agent start, which only happens after unlock: a
     // wallet left on its PIN screen would make this wait pointless.
@@ -1923,7 +1936,7 @@ export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
     [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
     [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -2011,7 +2024,7 @@ export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
   const { execSync } = await import("node:child_process");
   const confirmed = /\[TrustTasks:Witness\] locality confirmed for session/;
   const notConfirmed = /\[TrustTasks:Witness\] locality not confirmed for session[^\n]*/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
       encoding: "utf8",
@@ -2038,7 +2051,7 @@ export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
  * false after the wait, which is expected.
  */
 export async function acceptRelationshipProposalIfPrompted(driver, timeout = 90000) {
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     if (await existsTestId(driver, "ProposalAccept", 3000)) {
       await tapTestId(driver, "ProposalAccept");

@@ -4,8 +4,9 @@ import { remote } from "webdriverio";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
@@ -73,6 +74,13 @@ async function checkMetroIsThisWorktree() {
 
 let appiumProc;
 
+/** ANDROID_HOME for Appium: as set, else ANDROID_SDK_ROOT, else the SDK's usual place on a Mac when it is there. */
+export function androidHomeEnv(env = process.env, exists = existsSync) {
+  if (env.ANDROID_HOME) return {};
+  const guess = env.ANDROID_SDK_ROOT || path.join(os.homedir(), "Library", "Android", "sdk");
+  return exists(guess) ? { ANDROID_HOME: guess } : {};
+}
+
 export async function ensureAppium() {
   await checkMetroIsThisWorktree();
   if (await portInUse(APPIUM_PORT)) {
@@ -114,6 +122,8 @@ export async function ensureAppium() {
     {
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
+      // Appium's Android driver needs ANDROID_HOME, or session creation fails (#397 device run, 10-14).
+      env: { ...process.env, ...androidHomeEnv() },
     }
   );
   appiumProc.stdout.pipe(log);
