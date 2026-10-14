@@ -20,15 +20,25 @@
  * @module trust-tasks/screens/joinWays
  */
 
-import type { JoinAsks, JoinCredentialIssuers, JoinHolds, JoinWay, JoinWayFault } from '../module/joinManifest'
+import {
+  joinAsks,
+  type JoinAsks,
+  type JoinCredentialIssuers,
+  type JoinHolds,
+  type JoinWay,
+  type JoinWayFault,
+  type VtiManifest,
+} from '../module/joinManifest'
 
 /**
  * Why a way cannot be used, as the person is told it. Every fault is the
  * community's description, never the person: `incomplete` (a member the
  * format requires is missing), `unreadable` (a value this app does not know
  * yet), `changed` (the way does not match the fingerprint published for it).
+ * `privateVetting` and `unsupportedVetting` are this app's limit instead: the
+ * way runs vetting this version cannot do (IN-264).
  */
-export type JoinCannotUse = 'incomplete' | 'unreadable' | 'changed'
+export type JoinCannotUse = 'incomplete' | 'unreadable' | 'changed' | 'privateVetting' | 'unsupportedVetting'
 
 const CANNOT_USE: Record<JoinWayFault, JoinCannotUse> = {
   idMissing: 'incomplete',
@@ -39,6 +49,8 @@ const CANNOT_USE: Record<JoinWayFault, JoinCannotUse> = {
   issuersUnknown: 'unreadable',
   vettingUnreadable: 'unreadable',
   digestMismatch: 'changed',
+  vettingPrivate: 'privateVetting',
+  vettingExtUnsupported: 'unsupportedVetting',
 }
 
 /** One thing a way asks for. */
@@ -89,9 +101,25 @@ export interface JoinWayRow {
  */
 export type JoinButton = 'join' | 'ask' | 'start' | 'invited' | 'none'
 
+/**
+ * Vetting a way asks for that this version cannot do: `private` (hidden
+ * vetting, which refuses the named statements Keyring gathers) or `other` (a
+ * critical extension it does not implement). Said plainly, and no such way is
+ * offered (IN-264).
+ */
+export type JoinVettingNotSupported = 'private' | 'other'
+
+/** What the person is told for each: the community named (IN-264). */
+export const VETTING_NOT_SUPPORTED_KEY: Record<JoinVettingNotSupported, string> = {
+  private: 'Join.Ways.PrivateVetting',
+  other: 'Join.Ways.UnsupportedVetting',
+}
+
 export type JoinCard =
   | { mode: 'legacy' }
   | { mode: 'notAccepting' }
+  /** A 0.2 manifest whose criteria run vetting this version cannot do: nothing to offer. */
+  | { mode: 'vettingNotSupported'; vetting: JoinVettingNotSupported }
   | {
       mode: 'ways'
       rows: JoinWayRow[]
@@ -103,6 +131,8 @@ export type JoinCard =
       missing: Array<'invitation'>
       /** Not one way can be used as published: the person is told nothing is wrong on their side. */
       noneUsable: boolean
+      /** A way runs vetting this version cannot do: said for the whole card. */
+      vettingNotSupported?: JoinVettingNotSupported
     }
 
 const needsOf = (way: JoinWay): JoinNeed[] => {
@@ -120,8 +150,18 @@ const needsOf = (way: JoinWay): JoinNeed[] => {
 const sameWay = (a: JoinWay | undefined, b: JoinWay) => Boolean(a) && a!.id === b.id && a!.digest === b.digest
 
 export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
-  // 0.2: no criterion states its admission. Said as today, whatever it lists.
-  if (offer.wire === '0.2') return { mode: 'legacy' }
+  const notSupported: JoinVettingNotSupported | undefined = offer.ways.some(
+    (way) => way.unusableBecause === 'vettingPrivate'
+  )
+    ? 'private'
+    : offer.ways.some((way) => way.unusableBecause === 'vettingExtUnsupported')
+      ? 'other'
+      : undefined
+  // 0.2: no criterion states its admission. Said as today, whatever it lists —
+  // unless it runs vetting this version cannot do: then nothing is offered,
+  // since the legacy view would start named vetting (IN-264).
+  if (offer.wire === '0.2')
+    return notSupported ? { mode: 'vettingNotSupported', vetting: notSupported } : { mode: 'legacy' }
   // No criteria, or it says so: the community accepts no applications.
   if (!offer.accepting || offer.ways.length === 0) return { mode: 'notAccepting' }
 
@@ -174,5 +214,25 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
     alsoAsk: button === 'start' && Boolean(suggested),
     missing,
     noneUsable: rows.every((row) => row.cannotUse),
+    ...(notSupported ? { vettingNotSupported: notSupported } : {}),
   }
+}
+
+/**
+ * Whether the vetting an application gathers for is vetting this version
+ * cannot do (IN-264), for the vetting screen, which must neither start it, ask
+ * a vetter for it, nor send it. The criterion the application named
+ * (`digest`) when it named one; otherwise every way in that asks for vetting,
+ * since any of them may be the one it is decided by. Undefined when named
+ * vetting is what is asked, or the community asks for no vetting at all.
+ */
+export function vettingNotSupportedFor(manifest: VtiManifest, digest?: string): JoinVettingNotSupported | undefined {
+  const vettingWays = joinAsks(manifest).ways.filter((way) => way.requires.vetting)
+  const named = digest ? vettingWays.filter((way) => way.digest === digest) : []
+  const ways = named.length ? named : vettingWays
+  if (!ways.length) return undefined
+  const notSupported = (way: JoinWay) =>
+    way.unusableBecause === 'vettingPrivate' || way.unusableBecause === 'vettingExtUnsupported'
+  if (!ways.every(notSupported)) return undefined
+  return ways.some((way) => way.unusableBecause === 'vettingPrivate') ? 'private' : 'other'
 }

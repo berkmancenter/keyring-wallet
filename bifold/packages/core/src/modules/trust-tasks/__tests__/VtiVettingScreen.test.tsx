@@ -23,6 +23,9 @@ import * as grantState from '../module/vtiGrantState'
 import { VtiApplicant, VtiVetterDesk } from '../module/vtiVetting'
 import { routeKeyringAgentLink } from '../module/vtiLinks'
 import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import { readManifest, type VtiManifest } from '../module/joinManifest'
+
+import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The desk's attest asks for a face or fingerprint first; here it is given.
@@ -280,8 +283,13 @@ describe('Vetting — one filled button per step', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     setVta({ link: linked })
+    // The community's ways in, read before a vetter is asked (IN-264): named vetting, by default.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
   })
-  afterEach(() => jest.useRealTimers())
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
 
   const renderWith = async (records: Rec[]) => {
     mockUseAgent.mockReturnValue(withRecords(records))
@@ -378,6 +386,31 @@ describe('Vetting — one filled button per step', () => {
     })
     expect(ask).toHaveBeenCalledWith({ link: ticket })
     ask.mockRestore()
+  })
+
+  // IN-264: someone part-way through named vetting on a community that now
+  // runs private vetting. Keyring does not ask the vetter (the community
+  // would refuse the statement), and says why, as Join does.
+  test('a community that runs private vetting: the vetter is not asked, and the screen says why', async () => {
+    const [hiddenExample] = specExamples.filter((e) => e.title.startsWith('A criterion whose vetting parameters'))
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue(readManifest(hiddenExample.document.payload as Partial<VtiManifest>, '0.3'))
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
+      jest.advanceTimersByTime(10)
+    })
+    expect(await tree.findByTestId(testIdWithKey('VettingError'))).toHaveTextContent('Join.Ways.PrivateVetting')
+    expect(ask).not.toHaveBeenCalled()
   })
 
   test('a link for another community does not become the step', async () => {

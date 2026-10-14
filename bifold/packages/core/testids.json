@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "881d284bc3d620959cba8af65f2cb9ee615bc730",
+  "generatedFrom": "befa9c71c744dc10d18d17b0150e09b502c47557",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -533,12 +533,14 @@
     "JoinSuggestedWhere": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinThisCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinVersionUnsupported": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinVettingNotSupported": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinWays": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysMissing": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysNoneUsable": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthers": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysOthersToggle": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinWaysVettingNotSupported": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "KeysMoved": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
@@ -1889,6 +1891,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.versionUnsupported"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.vettingNotSupported"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.waysTitle"
