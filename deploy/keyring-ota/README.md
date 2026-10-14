@@ -84,7 +84,12 @@ npx hot-updater bundle disable <id> -y    # phones on it go back to the previous
 ## Hosting (phase 1)
 
 `docker compose up -d` with a filled-in `.env` (`.env.example`) runs the server
-behind Caddy, which obtains the certificate for `OTA_HOST`. One small instance is
+behind Caddy, which obtains the certificate for `OTA_HOST`. Data lives under
+`./data` (`ota/` for the database and bundles, `caddy/` for certificates);
+`mkdir -p data/ota && sudo chown 1000:1000 data/ota` before the first start on
+Linux, since the server runs as the image's `node` user. The GCP host is defined
+in the private infrastructure repository (`infra/environments/ota-prod`), which
+mounts its snapshotted data disk over `./data`. One small instance is
 enough (decision 5: Lightsail in the existing AWS account). Only Caddy publishes
 ports, and neither container keeps an access log.
 
