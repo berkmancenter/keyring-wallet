@@ -267,7 +267,9 @@ export const getCachedHardwareKeyAttestation =
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       // eslint-disable-next-line no-console
-      console.warn(`${LOG_PREFIX} Cached attestation read failed: ${errorMessage}`);
+      console.warn(
+        `${LOG_PREFIX} Cached attestation read failed: ${errorMessage}`
+      );
       return null;
     }
   };

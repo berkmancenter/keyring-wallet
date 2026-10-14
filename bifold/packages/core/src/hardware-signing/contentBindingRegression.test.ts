@@ -35,8 +35,7 @@ import type { HardwareAttestationEvidence } from './types'
 const CONTENT = '{"the":"content the verifier holds and will show"}'
 const OTHER = '{"the":"content a signature was really made over"}'
 
-const hashOf = (s: string) =>
-  btoa(String.fromCharCode(...sha256(new TextEncoder().encode(s))))
+const hashOf = (s: string) => btoa(String.fromCharCode(...sha256(new TextEncoder().encode(s))))
 
 const evidenceWith = (hash: string): HardwareAttestationEvidence =>
   ({
