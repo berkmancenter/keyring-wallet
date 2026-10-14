@@ -4,3 +4,7 @@ ios/
 android/
 node_modules/
 generate-app-package-json.js
+# Vendored upstream schemas: byte-identical copies of the Trust Tasks
+# registry (see the README beside them). Reformatting them would break the
+# drift test and make the OWFa attribution false.
+packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-schemas/*.json

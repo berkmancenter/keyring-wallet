@@ -146,21 +146,27 @@ describe('every payload validates against the registry schema it is built for', 
       attestation: {
         suite: HIDDEN_VETTING_SUITE,
         attestation: 'z2attestationBytes',
+        // The values are the spec's own: `method` and `declaredRelationship`
+        // are enums, and every multibase member must be base58btc — which
+        // excludes 0, O, I and lowercase l, so "…Example" is not a legal
+        // suffix. An earlier fixture invented the enums and used excluded
+        // characters, and the schema caught every one; that is the point of
+        // validating against upstream's file rather than our reading of it.
         meta: {
           community: 'did:webvh:QmCommunity:example.org',
-          requirementsDigest: 'zQmRequirements',
-          method: 'in-person',
+          requirementsDigest: 'zQmaRequirementsDigest',
+          method: 'inPerson',
           claimsVerified: ['name'],
           livenessConfirmed: true,
-          declaredRelationship: 'colleague',
-          identityCommitment: 'zQmIdentity',
-          cardDigestMultibase: 'zQmCard',
+          declaredRelationship: 'closeFriend',
+          identityCommitment: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+          cardDigestMultibase: 'zQmaCardDigest',
           validFrom: '2026-10-14T00:00:00Z',
           validUntil: '2026-11-14T00:00:00Z',
           tokenLabel: 'token/2026-10',
-          tokenSerial: 'z2serial',
+          tokenSerial: 'z2TokenSer',
         },
-        token: { label: 'token/2026-10', serial: 'z2serial', shown: 'z2shown' },
+        token: { label: 'token/2026-10', serial: 'z2TokenSer', shown: 'z2Shown' },
       },
     }
     const validate = validatorFor('vta-pcs-verify-attestation.payload.schema.json')
