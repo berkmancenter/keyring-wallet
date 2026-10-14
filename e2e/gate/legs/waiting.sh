@@ -32,13 +32,13 @@ cd "$E2E"
 link_phone() {
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
     LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
-    perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$1" 2>&1
+    galarm 1800 node run-vta-link.js > "$1" 2>&1
 }
 link_phone "$LEG_DIR/link.out" || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 APPROVE=1; [ "${WAITING_DECLINE:-}" = 1 ] && APPROVE=0
 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME PERSONA_SHOTS=$LEG_DIR/persona-did \
   JOIN_APPROVE=$APPROVE C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" RUNNER_VTA=$RUNNER_MAIN_SLUG PNM_BIN=$PNM_BIN COMMUNITY_B_DID="${COMMUNITY_B_DID:-}" COMMUNITY_B_TICKET_CMD="${COMMUNITY_B_TICKET_CMD:-}" \
-  perl -e 'alarm 900; exec @ARGV' node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1; drc=$?
+  galarm 900 node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^PERSONA-DID|^WAITING-STATUS|^JOIN-IDENTITY-NAME' "$LEG_DIR/waiting.out" | cut -c1-220
 take_rows "$LEG_DIR/waiting.out"   # flow B's rows (a)–(g) when approved
 # The request whose identity the phone must show: the newest pending one, or (approved) the one it came from.
@@ -63,7 +63,7 @@ driver_rc waiting-driver "$drc" "$LEG_DIR/waiting.out"
 # on Join and nothing is joined; skipped without OUTSIDE_VTC_DID.
 if [ -n "${OUTSIDE_VTC_DID:-}" ]; then
   E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 OUTSIDE_VTC_DID=$OUTSIDE_VTC_DID \
-    perl -e 'alarm 300; exec @ARGV' node run-join-outside.mjs > "$LEG_DIR/outside.out" 2>&1; orc=$?
+    galarm 300 node run-join-outside.mjs > "$LEG_DIR/outside.out" 2>&1; orc=$?
   take_rows "$LEG_DIR/outside.out"; driver_rc outside-driver "$orc" "$LEG_DIR/outside.out"
 fi
 # Cards back on a new install, last (it wipes the app): the same agent linked again, "Get your cards", both cards back.
@@ -80,7 +80,7 @@ else
   if link_phone "$LEG_DIR/link-again.out"; then
     row relink-wiped-app PASS "the wiped app linked to the same agent again"
     E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME \
-      perl -e 'alarm 600; exec @ARGV' node run-cards-back.mjs > "$LEG_DIR/cards-back.out" 2>&1; cbrc=$?
+      galarm 600 node run-cards-back.mjs > "$LEG_DIR/cards-back.out" 2>&1; cbrc=$?
     grep -E '^\[e2e\] [0-9]' "$LEG_DIR/cards-back.out" | cut -c1-220
     take_rows "$LEG_DIR/cards-back.out"
     # Tracked to the end: a driver that never printed its row (killed by its alarm, or a crash before the row) is the

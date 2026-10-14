@@ -21,7 +21,7 @@ echo "previous ${PREV_W:0:8} → candidate ${CAND_WALLET:0:8}"
 sim_boot "$SIM"; xcrun simctl uninstall "$SIM" "$BID" 2>/dev/null
 xcrun simctl install "$SIM" "$PREV_APP" || broken "the previous build did not install"
 cd "$E2E"
-IOS_APP=$PREV_APP E2E_KEEP_APP=1 perl -e 'alarm 1500; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link-prev.out" 2>&1 \
+IOS_APP=$PREV_APP E2E_KEEP_APP=1 galarm 1500 node run-vta-link.js > "$LEG_DIR/link-prev.out" 2>&1 \
   || broken "link on the previous build: $(grep -E '✅|❌' "$LEG_DIR/link-prev.out" | tail -1 | cut -c1-120)"
 row update-prev-linked PASS "previous build ${PREV_W:0:8} linked to the main runner"
 wda_stop; xcrun simctl terminate "$SIM" "$BID" 2>/dev/null
@@ -29,7 +29,7 @@ wda_stop; xcrun simctl terminate "$SIM" "$BID" 2>/dev/null
 xcrun simctl spawn "$SIM" log stream --style compact --level debug --predicate 'process == "KeyRing"' > "$LEG_DIR/device-after-update.log" 2>&1 & LS=$!
 xcrun simctl install "$SIM" "$NEW_APP" || broken "the candidate did not install over the previous build"
 echo "installed over: $(shasum -a 256 "$(xcrun simctl get_app_container "$SIM" "$BID")/main.jsbundle" | cut -c1-12)"
-C_DID= perl -e 'alarm 600; exec @ARGV' node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1   # no join on iOS here: no community to check
+C_DID= galarm 600 node run-after-update.mjs > "$LEG_DIR/after.out" 2>&1   # no join on iOS here: no community to check
 grep -E '^AFTER-UPDATE' "$LEG_DIR/after.out" | cut -c1-240
 take_rows "$LEG_DIR/after.out"
 sleep 3; kill "$LS" 2>/dev/null; LS=

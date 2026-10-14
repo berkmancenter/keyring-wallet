@@ -22,7 +22,7 @@ cd "$E2E"
 sim_boot "$APPLICANT_SIM_UDID"; xcrun simctl uninstall "$APPLICANT_SIM_UDID" "$BID" 2>/dev/null
 t=$(date +%s)
 PLATFORM=ios IOS_APP=$CAND_APP UDID=$APPLICANT_SIM_UDID IOS_DEVICE_NAME=$APPLICANT_SIM_NAME IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4771 LINK_MODE=manual E2E_KEEP_APP=1 \
-  perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/applicant-link.out" 2>&1; rc=$?
+  galarm 1800 node run-vta-link.js > "$LEG_DIR/applicant-link.out" 2>&1; rc=$?
 if [ $rc -eq 0 ]; then row kk-link PASS "$(( $(date +%s) - t ))s"; else row kk-link FAIL "rc=$rc $(grep -E '✅|❌' "$LEG_DIR/applicant-link.out" | tail -1 | cut -c1-120)"; broken "the applicant did not link"; fi
 
 sim_boot "$VETTER_SIM_UDID"
@@ -31,7 +31,7 @@ xcrun simctl install "$VETTER_SIM_UDID" "$CAND_APP" || broken "could not install
 t=$(date +%s)
 VETTER_DID=$VETTER_DID E2E_KEEP_STATE=1 E2E_KEEP_APP=1 APPLICANT_DOOR=link PLATFORMS=ios,ios APPLICANT_IOS_SIM=$APPLICANT_SIM_NAME VETTER_IOS_SIM=$VETTER_SIM_NAME \
   IOS_APP=$CAND_APP IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4772 PERSONA_SHOTS=$LEG_DIR/persona-did JOIN_WAYS=invited-member,vetted-member,review \
-  perl -e 'alarm 1800; exec @ARGV' node run-vti-vetting.js > "$LEG_DIR/vetting.out" 2>&1; rc=$?
+  galarm 1800 node run-vti-vetting.js > "$LEG_DIR/vetting.out" 2>&1; rc=$?
 if [ $rc -eq 0 ]; then row kk-vetting PASS "$(( $(date +%s) - t ))s"
 else row kk-vetting FAIL "rc=$rc · $(grep -E '^\[step\].*FAILED' "$LEG_DIR/vetting.out" | tail -1 | cut -c1-160)"; fi
 grep -E '^(PERSONA-DID|DESK-FINISHED|\[step\])' "$LEG_DIR/vetting.out" | cut -c1-200
