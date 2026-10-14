@@ -95,7 +95,24 @@ export async function openDesk(tui) {
  * of six stopped short); walkTo covers any length. True once selected.
  */
 async function selectDeskRow(tui, isWanted) {
-  return walkTo(tui, (screen) => screen.split('\n').some((l) => l.includes('▸') && isWanted(l)));
+  return walkTo(tui, (screen) => screen.split('\n').some((l) => l.includes('▸') && isWanted(l)), { reveal: DESK_REVEAL });
+}
+// The desk's pane does not follow the ▸ (listWalk.js): with enough earlier requests, the new one sits below the fold.
+const DESK_REVEAL = { Down: 'PageDown', Up: 'PageUp' };
+
+/**
+ * Wait until a desk row in state `text` is selected and on screen, however many earlier requests sit above it: while
+ * it is not on screen, walk the desk to it (1014-1651 rerun, p1: 29 earlier requests, the new one 30th and below the
+ * fold, so "card verified —" never showed though the TUI had the card). Fails as `step`, like waitFor.
+ */
+async function awaitDeskRow(tui, text, { step, source, timeoutMs, everyMs = 5000 }) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    if (rowSelected(tui.screen(), text) || (await selectDeskRow(tui, (l) => l.includes(text)))) break;
+    if (Date.now() >= until) break;
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return tui.waitFor(text, { step, source, timeoutMs: 1000 });
 }
 
 /**
@@ -218,8 +235,8 @@ export function panelRows(screen) {
 export async function awaitRequest(tui, { timeoutMs = 180000 } = {}) {
   const ACCEPTED = 'accepted — open a session when you are together';
   await deskView(tui, 'Requests');
-  await tui.waitFor(ACCEPTED, { step: 'vetter.requestAccepted', source: src(tui, 'state_handler/vetting_actions.rs:335', 'state_handler/vetting_actions.rs:338'), timeoutMs });
-  if (!(await selectDeskRow(tui, (l) => l.includes(ACCEPTED)))) throw tui.failure('vetter.requestSelect', new Date(), 'could not select the accepted request on the desk');
+  await awaitDeskRow(tui, ACCEPTED, { step: 'vetter.requestAccepted', source: src(tui, 'state_handler/vetting_actions.rs:335', 'state_handler/vetting_actions.rs:338'), timeoutMs });
+  if (!rowSelected(tui.screen(), ACCEPTED)) throw tui.failure('vetter.requestSelect', new Date(), 'could not select the accepted request on the desk');
 }
 
 /**
@@ -248,7 +265,7 @@ export async function openSession(tui) {
 
 /** The card arrives and the TUI verifies it with the VTI SDK. */
 export async function awaitCard(tui, { timeoutMs = 180000 } = {}) {
-  await tui.waitFor('card verified — check the person, then attest or decline', {
+  await awaitDeskRow(tui, 'card verified — check the person, then attest or decline', {
     step: 'vetter.cardVerified',
     source: src(tui, 'state_handler/vetting_actions.rs:347', 'state_handler/vetting_actions.rs:350'),
     timeoutMs,
