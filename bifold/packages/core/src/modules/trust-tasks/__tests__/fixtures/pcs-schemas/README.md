@@ -25,10 +25,17 @@ Required by the licence (see below), and useful on its own terms.
 | `vta-pcs-prove.payload.schema.json` | `specs/vta/pcs/prove/0.1/payload.schema.json` |
 | `vta-shared-pcs-engine.schema.json` | `specs/vta/_shared/0.4/pcs-engine.schema.json` |
 | `vetting-shared-hidden-vetting.schema.json` | `specs/vetting/_shared/0.1/hidden-vetting.schema.json` |
+| `framework-0.2.schema.json` | `specs/_framework/0.2/framework.schema.json` |
 
 The flat names exist because the registry's cross-file `$ref`s are relative
-paths; the test registers each file under both its flat name and the tail its
-siblings reference it by, so the schemas resolve **without being edited**. They
+paths. The test registers each file under its own `$id` *and* under the URL its
+siblings actually reach it by — which is not the same thing here: `pcs-engine`
+declares `…/spec/vta/_shared/0.4/pcs-engine`, while a payload's
+`../../../_shared/0.4/pcs-engine.schema.json` resolves to
+`…/spec/_shared/0.4/pcs-engine.schema.json`. Those URLs are written out in the
+test rather than computed, so an upstream change shows up as a resolution
+failure instead of being papered over. The schemas themselves are **never
+edited**. They
 are byte-identical to the registry's, which is what the drift test in
 `pcsVtaPayloads.test.ts` checks wherever `external/dtgwg-trust-tasks-tf` is
 checked out.

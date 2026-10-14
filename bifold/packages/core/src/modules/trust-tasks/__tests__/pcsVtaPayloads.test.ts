@@ -14,7 +14,10 @@
 import { existsSync, readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
-import Ajv from 'ajv'
+// The registry's schemas declare draft 2020-12; ajv's default export is
+// draft-07 and refuses them with "no schema with key or ref
+// https://json-schema.org/draft/2020-12/schema".
+import Ajv from 'ajv/dist/2020'
 
 import {
   ApplicationsCreatePayload,
@@ -28,26 +31,43 @@ import {
 const SCHEMA_DIR = join(__dirname, 'fixtures', 'pcs-schemas')
 
 /**
- * Ajv with every vendored schema registered under both the id it declares and
- * the relative path its siblings `$ref` it by, so cross-file references
- * resolve without rewriting the schemas we are supposed to be checked against.
+ * Where each shared schema has to be registered for the payload schemas'
+ * relative `$ref`s to resolve.
+ *
+ * Ajv resolves a relative `$ref` against the *referring* schema's `$id`, and
+ * in this registry that does not land on the referenced schema's own `$id`:
+ * `pcs-engine` declares `…/spec/vta/_shared/0.4/pcs-engine` (no `.json`),
+ * while a payload at `…/spec/vta/pcs/prove/0.1` refs
+ * `../../../_shared/0.4/pcs-engine.schema.json`, which resolves to
+ * `…/spec/_shared/0.4/pcs-engine.schema.json`. Registering by `$id` alone
+ * therefore fails with "can't resolve reference", which is exactly how this
+ * first went red. These are the URLs the refs actually produce — written out
+ * rather than computed, so a change upstream shows up as a failure to resolve
+ * instead of being silently papered over.
  */
+const REGISTER_AS: Record<string, string[]> = {
+  'vta-shared-pcs-engine.schema.json': ['https://trusttasks.org/spec/_shared/0.4/pcs-engine.schema.json'],
+  'vetting-shared-hidden-vetting.schema.json': [
+    'https://trusttasks.org/spec/vetting/_shared/0.1/hidden-vetting.schema.json',
+  ],
+  'framework-0.2.schema.json': ['https://trusttasks.org/_framework/0.2/framework.schema.json'],
+}
+
+/** Ajv with the vendored schemas registered under their own ids and the urls their siblings reach them by. */
 function validatorFor(file: string) {
-  const ajv = new Ajv({ strict: false, allErrors: true })
+  // `logger: false` only silences ajv's "unknown format date ignored" notes —
+  // the shared schemas use formats ajv does not know without ajv-formats, and
+  // a format it ignores cannot make a payload wrongly valid for the members
+  // these tests assert on.
+  const ajv = new Ajv({ strict: false, allErrors: true, logger: false })
   const files = readdirSync(SCHEMA_DIR).filter((f) => f.endsWith('.json'))
   const byName: Record<string, unknown> = {}
   for (const f of files) byName[f] = JSON.parse(readFileSync(join(SCHEMA_DIR, f), 'utf8'))
 
-  // The registry refs siblings by relative path; map each to the flat name it
-  // was vendored under, so '…/_shared/0.4/pcs-engine.schema.json' resolves.
-  const alias: Record<string, string> = {
-    'vta-shared-pcs-engine.schema.json': 'pcs-engine.schema.json',
-    'vetting-shared-hidden-vetting.schema.json': 'hidden-vetting.schema.json',
-  }
   for (const [f, schema] of Object.entries(byName)) {
-    const s = schema as Record<string, unknown>
-    const tail = alias[f]
-    for (const id of [f, tail].filter(Boolean) as string[]) {
+    if (f === file) continue // the one being compiled is passed directly
+    const s = schema as { $id?: string }
+    for (const id of [s.$id, ...(REGISTER_AS[f] ?? [])].filter(Boolean) as string[]) {
       try {
         ajv.addSchema(s, id)
       } catch {
