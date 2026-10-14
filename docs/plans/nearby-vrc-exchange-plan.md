@@ -3,7 +3,8 @@
 **Scope.** Two people standing together form a relationship by finding each
 other's phone over Bluetooth Low Energy instead of scanning a QR code. Each confirms
 a short code on both screens, then exchanges Verifiable Relationship Credentials
-through the ceremony Keyring already runs. No witness takes part. The plan keeps
+through the ceremony Keyring already runs. No witness is needed; when one is
+available, the exchange hands off to the witnessed ceremony (§4.1). The plan keeps
 the principles of the witnessed exchange:
 
 - a live ceremony bound to a challenge;
@@ -48,6 +49,7 @@ What Bluetooth buys here is different and still real:
 | Companion | Contents |
 |---|---|
 | [2026-10-11-al.md](./nearby-vrc-exchange-plan/2026-10-11-al.md) | The request, the conflict with the locality plan's closure and how this plan stays inside it, the three shapes considered (rendezvous, offline carriage, phone-as-witness) and why rendezvous comes first |
+| [2026-10-14-al.md](./nearby-vrc-exchange-plan/2026-10-14-al.md) | The product owner's answers on the two open questions: the offline carriage is wanted but optional (Phase 3, later, blocking nothing), and Nearby hands off to the witnessed ceremony when a witness is available (§4.1) |
 
 ---
 
@@ -128,7 +130,7 @@ It adds:
 The default carriage stays the mediator (`didcomm-v1` / `didcomm-v2` / `tsp`).
 Bluetooth replaces the QR code and authenticates the start of the connection. It
 does not replace the network. Carrying the exchange itself over Bluetooth, so it
-works offline, is a separate decision (Phase 3, §5).
+works offline, is an optional later phase (Phase 3, §5).
 
 ---
 
@@ -338,11 +340,33 @@ Contacts → Add contact
   - Timeout: "Couldn't finish nearby. Try again, or use a QR code."
   - Bluetooth off or no permission: a direct link to Settings. The existing #327
     "Nearby devices" text applies.
-- **Contacts badge.** The contact shows **"Exchanged nearby"**. It never shows the
-  witness's "Confirmed in person" (`locality-plan.md` §8.4). If a witness is also
-  connected, the existing witnessed path runs instead and decides the badge.
+- **Contacts badge.** The contact shows **"Exchanged nearby"**. A nearby exchange
+  never shows the witness's "Confirmed in person" (`locality-plan.md` §8.4) unless a
+  witness took part (§4.1), in which case the witness's result decides the badge.
 - **Accessibility.** The code is read out by the screen reader digit by digit, and it
   can be enlarged.
+
+### 4.1 When a witness is available
+
+**Nearby hands off to the witnessed ceremony whenever a witness is available.**
+The code confirmation and the session binding (§2.2–§2.4) run exactly as above.
+Then the proposer sends `propose` with `witnessed: true`, as the ceremony already does
+whenever a witness is connected and witnessing is preferred (`openRelationshipExchange`).
+Each party runs its own `witness/session`, including the locality leg if the witness
+offers or requires one (`locality-plan.md` §5).
+
+- **The nearby binding still applies.** `propose` carries both `witnessed: true` and
+  `ext.nearby.sessionDigest`. The responder checks the digest before anything else, so
+  a witnessed ceremony cannot start on a connection the two people did not confirm.
+- **The witness decides any co-presence claim.** If the witness confirms locality, the
+  contact shows "Confirmed in person"; otherwise the witness's existing outcome note
+  applies (keyring-bifold #327: unwitnessed, or nearby not confirmed). The nearby code
+  adds nothing to that claim.
+- **A witness that fails or drops out** leaves the exchange unwitnessed, as today
+  ("continuing unwitnessed"), and the badge falls back to "Exchanged nearby".
+- **The phone keeps one radio role at a time.** The host stops advertising its nearby
+  service once both people confirm the code, before the witness's locality leg starts
+  its own advert. The two adverts never overlap.
 
 ---
 
@@ -377,6 +401,7 @@ physical phones (§6).
   - Both permission paths: Android 12+ with `BLUETOOTH_SCAN`, `BLUETOOTH_ADVERTISE`
     and `BLUETOOTH_CONNECT`, and iOS `NSBluetoothAlwaysUsageDescription`.
   - The status states from §3 and the "Exchanged nearby" note.
+  - The hand-off to the witnessed ceremony when a witness is available (§4.1).
 - **Acceptance:**
   - Jest tests cover the flow store, the permission gating, and the failure paths
     (mismatch, timeout, permission missing, Bluetooth off) with a mocked radio.
@@ -385,6 +410,9 @@ physical phones (§6).
     contact badge reads "Exchanged nearby", for one Android+iPhone pair.
   - Nothing new appears in the VRC beyond today's unwitnessed credential: a fixture
     diff test.
+  - With a witness connected, a Jest case shows that `propose` carries
+    `witnessed: true`, and that a failed witness falls back to the unwitnessed path
+    with the "Exchanged nearby" badge.
 
 ### Phase 2 — Bind the session to the ceremony
 
@@ -402,10 +430,10 @@ physical phones (§6).
   - The real-device e2e from Phase 1 passes again, with both bindings verified in the
     log.
 
-### Phase 3 — conditional: an offline carriage over Bluetooth
+### Phase 3 — optional, later: an offline carriage over Bluetooth
 
-**Decision for the product owner: whether a nearby exchange must work with no network at all.**
-If yes:
+A nearby exchange that works with no network at all is **wanted but optional**. It
+comes after Phases 0–2, and none of them depends on it. When it is opened, it will:
 
 - add a `ble-gatt` carriage beside `didcomm-v1`, `didcomm-v2` and `tsp` in
   `selectCarriage`;
@@ -447,7 +475,10 @@ Status"). Physical phones must prove:
 6. The hardware-signed nearby binding verifies against the VRC evidence key on both
    platforms: App Attest assertions on iOS, `CryptoObject` signatures on Android
    (Phase 2).
-7. Low-end Android: the slow devices that needed a release build and a fixed
+7. With a witness available, the hand-off of §4.1: the nearby advert stops before
+   the witness's locality advert starts, and the witnessed ceremony completes after a
+   nearby code confirmation (Phase 1).
+8. Low-end Android: the slow devices that needed a release build and a fixed
    mediator pickup in the locality runs (locality-plan companion 2026-09-13-al).
 
 Unit tests with a mocked radio, and the existing simulator e2e for the unwitnessed
@@ -457,13 +488,8 @@ ceremony, cover everything above the radio.
 
 ## 7. Open questions
 
-1. **Offline carriage.** Is Phase 3 wanted? (Product owner.)
-2. **Ceremony evidence in the credential.** Should any member derived from §2.4 enter
+1. **Ceremony evidence in the credential.** Should any member derived from §2.4 enter
    the VRC, and under what name? It needs review against `locality-plan.md` §2.1
    before it is proposed. (Reviewer.)
-3. **Central dependency.** ble-plx, or a native central in the existing module?
+2. **Central dependency.** ble-plx, or a native central in the existing module?
    (Decided by Phase 0 measurements.)
-4. **Interaction with a connected witness.** When both people also have a witness
-   available, does "Nearby" hand off to the witnessed ceremony? Recommended: yes, the
-   witness path takes precedence and the badge follows it. Or does it stay
-   unwitnessed? (Product owner.)
