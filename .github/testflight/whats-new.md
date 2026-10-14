@@ -20,3 +20,5 @@
 • On Android, Keyring's notifications use their own "Requests and messages" channel, so approval requests show as a banner.
 • Hardware-attested exchanges are checked more strictly against exactly what you see.
 • Profile and name fields are a little taller, and a new community identity is kept in your agent's main space.
+• On a community that uses private vetting, Keyring now says it isn't supported yet, instead of sending statements the community would refuse.
+• Contacts: the witnessed and in-person marks now appear only for witness records Keyring verified when it received them. Marks from before this update come back the next time that relationship is witnessed.
