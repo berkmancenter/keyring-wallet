@@ -82,17 +82,10 @@ import {
 
 import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
-import { LocalityAssertion } from './trustTasks/locality'
 import { BleLocalityProvider, TaskLocalityProvider } from './trustTasks/BleLocalityProvider'
 import { NobleLocalityProvider } from './trustTasks/NobleLocalityProvider'
 
 // Import shared modules from @bifold/vrc-contexts and @bifold/vrc-shared
-import {
-  WITNESSED_EXCHANGE_CONTEXT_URL,
-  CREDENTIALS_V2_CONTEXT_URL,
-  ED25519_2018_SUITE_CONTEXT_URL,
-  jcsCanonicalize,
-} from '@bifold/vrc-contexts'
 import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
@@ -103,13 +96,6 @@ import { WitnessTaskSessions } from './trustTasks/WitnessTaskSessions'
 
 // Session expiration time in minutes (default)
 const DEFAULT_SESSION_EXPIRATION_MINUTES = 30
-
-/**
- * Default expiration time for VWC credentials (in days)
- * Set via W3C VC v1 `expirationDate` field
- */
-const DEFAULT_CREDENTIAL_EXPIRATION_DAYS = 7
-const DEFAULT_CREDENTIAL_EXPIRATION_MS = DEFAULT_CREDENTIAL_EXPIRATION_DAYS * 24 * 60 * 60 * 1000
 
 /**
  * Persisted invitation file format
@@ -172,212 +158,28 @@ interface GetWitnessModulesOptions {
   didcommVersions?: Array<'v1' | 'v2'>
 }
 
-// ============================================
-// Pure verification / VWC-building logic
-// (exported so unit tests exercise the real implementation — see
-// __tests__/unit/WitnessService.test.ts)
-// ============================================
-
-// Wallets backdate issuance by up to 5 minutes to tolerate clock skew
-// between devices, so the freshness window must be that allowance plus
-// a real freshness margin.
-export const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
-export const FRESHNESS_MARGIN_MS = 5 * 60 * 1000
-export const FRESHNESS_WINDOW_MS = CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS
-
-export type VrcFreshnessResult = { fresh: true; ageMs: number } | { fresh: false; error: string }
-
-/**
- * Freshness check used by handlePresentationSubmission (Step 5): the VRC's
- * timestamp must be within FRESHNESS_WINDOW_MS of the witness's clock, in
- * either direction. VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate.
- */
-export function checkVrcFreshness(
-  vrcJson: { validFrom?: string; issuanceDate?: string },
-  now: Date = new Date()
-): VrcFreshnessResult {
-  const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate || '')
-  if (Number.isNaN(issuanceDate.getTime())) {
-    return { fresh: false, error: 'Credential has no parseable validFrom/issuanceDate' }
-  }
-  const ageMs = Math.abs(now.getTime() - issuanceDate.getTime())
-  if (ageMs > FRESHNESS_WINDOW_MS) {
-    return { fresh: false, error: 'Credential issuance date is not fresh (>10 minutes old)' }
-  }
-  return { fresh: true, ageMs }
-}
-
-/**
- * SHA-256 digest of the VRC over its JCS (RFC 8785) canonical form, so any
- * implementation can recompute the same digest from the same JSON data
- * regardless of key order or serializer.
- */
-export function computeVrcDigest(vrcJson: unknown): string {
-  return 'sha256:' + createHash('sha256').update(jcsCanonicalize(vrcJson)).digest('hex')
-}
-
-export interface WitnessCredentialBuildContext {
-  issuerDid: string
-  witnessName: string
-  sessionId: string
-  verificationMethod: string
-  eventName?: string
-  /** The LEGACY basic-message ceremony's nested evidence shape — untouched; that path is standing down for v4 pairs. */
-  localityEvidence?: LocalityEvidence
-  /**
-   * The Trust Tasks ceremony's locality assertion (locality-plan.md §7.1) —
-   * flat `locality*` members, never nested (bbs-2023 discloses at the
-   * RDF-quad level; a nested object is a blank node whose path must be
-   * revealed to disclose anything under it). Absent entirely when the
-   * witness's locality policy is `off` — that absence IS the third,
-   * explicit state (§7.1 rule 5), not something this function infers.
-   */
-  localityAssertion?: LocalityAssertion
-}
-
-/**
- * Build the (unsigned) VWC JSON for an observed presentation.
- *
- * Mirrors the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
- * a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
- * validate the pair with the same code path it used for the VRC. The
- * PROOF FAMILY is mirrored the same way (see the offer site): a DI VRC
- * gets a DI VWC, whose @context needs no suite URL at all (credentials/v2
- * already defines the DataIntegrityProof terms).
- */
-export function buildWitnessCredentialJson(
-  observedPresentation: any,
-  buildContext: WitnessCredentialBuildContext
-): any {
-  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence, localityAssertion } =
-    buildContext
-
-  const vwcId = `urn:uuid:${utils.uuid()}`
-
-  const credentials = observedPresentation.verifiableCredential || []
-  const vrcJson = credentials[0]
-
-  if (!vrcJson) {
-    throw new Error('No VRC found in presentation')
-  }
-
-  const digest = computeVrcDigest(vrcJson)
-
-  const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
-
-  const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
-
-  // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
-  const witnessContext: Record<string, any> = {
-    sessionId,
-    method: verificationMethod,
-    // Flag indicating whether the VRC included hardware attestation evidence
-    // This does NOT mean the evidence was verified by the witness
-    // It means the participant's device performed hardware-backed authentication
-    hardwareAttestationIncluded: hasHardwareAttestationEvidence,
-  }
-
-  // Only include event if configured
-  if (eventName) {
-    witnessContext.event = eventName
-  }
-
-  // Include locality verification evidence if available
-  if (localityEvidence) {
-    witnessContext.localityVerification = localityEvidence
-  }
-
-  // Trust Tasks ceremony: flat locality* members, spread directly into
-  // witnessContext (never nested — see WitnessCredentialBuildContext).
-  if (localityAssertion) {
-    Object.assign(witnessContext, localityAssertion)
-  }
-
-  const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
-  const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
-  const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
-  // Backdate validFrom, exactly as the wallet already does when it builds a VRC
-  // ("Backdate issuance to tolerate clock skew between issuer and holder
-  // devices — the holder rejects credentials whose issuanceDate is in its
-  // future", vrc-manager.buildVrcCredential). The witness never got the same
-  // treatment, and it is the one issuer whose credential is verified within a
-  // second of being signed, so it is the most exposed:
-  //   "The current date time (…54.965Z) is before validFrom (…55.261Z)"
-  // — a 296 ms miss observed on device 2026-08-30. The holder's
-  // outcome-evidence self-check then failed and it withheld its witness-share,
-  // so the peer never received a VWC about them and their contact showed no
-  // witness badge. It presented as intermittent and platform-specific; it was
-  // neither, just clock skew.
-  //
-  // Safe: the credential attests an exchange that has already happened, and
-  // validUntil still runs from now. CLOCK_SKEW_ALLOWANCE_MS is the same
-  // allowance the freshness window above is already built around.
-  const issuedTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
-  const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
-
-  if (vrcIsVc20) {
-    // On the 2018 path the Ed25519 suite context must be present at build
-    // time (the v2 base context doesn't define the suite terms), or the
-    // signed VWC won't match the offer/request in credo's holder-side
-    // equality check.
-    return {
-      '@context': vrcUsesDi
-        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
-        : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
-      id: vwcId,
-      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: {
-        id: issuerDid,
-        name: witnessName,
-      },
-      validFrom: issuedTimestamp,
-      validUntil: expirationTimestamp,
-      credentialSubject: {
-        id: vrcIssuer,
-        digest: digest,
-        witnessContext,
-      },
-    }
-  }
-
-  return {
-    '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
-    id: vwcId,
-    type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-    issuer: {
-      id: issuerDid,
-      name: witnessName,
-    },
-    issuanceDate: issuedTimestamp,
-    // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
-    expirationDate: expirationTimestamp,
-    validUntil: expirationTimestamp,
-    credentialSubject: {
-      id: vrcIssuer,
-      digest: digest,
-      witnessContext,
-    },
-  }
-}
-
-/**
- * The observed VRC's hardware-attestation public key, if it carries one —
- * for locality's §7.3 step-6 key-match check (does the key that answered on
- * the radio match the key that signed this VRC?). Duck-typed rather than
- * importing `@bifold/core`'s evidence types (that would drag React Native
- * into this Node service, the same reason documentProof.ts/locality.ts are
- * duplicated here rather than imported).
- */
-function extractVrcHardwareAttestationPublicKey(presentation: Record<string, unknown>): string | undefined {
-  const credentials = (presentation as { verifiableCredential?: unknown[] }).verifiableCredential ?? []
-  const vrcJson = credentials[0] as { evidence?: unknown[] } | undefined
-  const evidence = Array.isArray(vrcJson?.evidence) ? vrcJson?.evidence : []
-  for (const entry of evidence ?? []) {
-    const publicKey = (entry as { hardwareBinding?: { publicKey?: string } } | undefined)?.hardwareBinding?.publicKey
-    if (typeof publicKey === 'string' && publicKey.length > 0) return publicKey
-  }
-  return undefined
-}
+// The pure verification / VWC-building logic (checkVrcFreshness,
+// computeVrcDigest, buildWitnessCredentialJson, extractVrcHardwareAttestationPublicKey,
+// and their supporting types/constants) now lives in ./credentialBuilder —
+// extracted 2026-09-29 (capture-harness task) so it can be imported without
+// WitnessService.ts's server/CLI-only dependency tree (langchain, node-ble,
+// three, ws). Re-exported here so every existing `from './WitnessService'`
+// import (including __tests__/unit/WitnessService.test.ts) keeps working.
+export {
+  CLOCK_SKEW_ALLOWANCE_MS,
+  FRESHNESS_MARGIN_MS,
+  FRESHNESS_WINDOW_MS,
+  checkVrcFreshness,
+  computeVrcDigest,
+  buildWitnessCredentialJson,
+  extractVrcHardwareAttestationPublicKey,
+} from './credentialBuilder'
+export type { VrcFreshnessResult, WitnessCredentialBuildContext } from './credentialBuilder'
+import {
+  checkVrcFreshness,
+  buildWitnessCredentialJson,
+  extractVrcHardwareAttestationPublicKey,
+} from './credentialBuilder'
 
 function getWitnessModules({
   walletId,
@@ -664,6 +466,7 @@ export class WitnessService {
       localityPolicy: this.config.localityPolicy,
       venueClaim: this.config.localityVenueClaim,
       localityProvider: this.taskLocalityProvider,
+      credentialShape: this.config.credentialShape,
       getIssuer: async () => {
         await this.ensureDedicatedIssuerDid()
         if (!this.issuerDid || !this.issuerVerificationMethodId) {
@@ -680,6 +483,7 @@ export class WitnessService {
           verificationMethod: this.config.verificationMethod,
           eventName: this.config.eventName,
           localityAssertion,
+          shape: this.config.credentialShape,
         })
       },
       vrcHardwareAttestationPublicKey: (presentation) => extractVrcHardwareAttestationPublicKey(presentation),
@@ -2761,6 +2565,22 @@ export class WitnessService {
    * attestation evidence. This allows verifiers to know:
    * 1. The exchange was witnessed (the VWC itself)
    * 2. The participant used hardware-backed authentication (hardwareAttestationIncluded flag)
+   *
+   * SHAPE: deliberately, always `wd02` — see the call site below. This is the
+   * legacy JSON-over-basicmessage witnessed-exchange dialect (kept so old
+   * wallets that never adopted the Trust Task carriages keep working,
+   * alongside `WitnessTaskSessions.ts`'s two newer ones). `sessionData` here
+   * is an in-memory bookkeeping record (`utils.uuid()`, a challenge, some
+   * `Map`s) — never a real, content-bearing Trust Task document exchanged
+   * with either party, unlike `WitnessTaskSessions.ts`'s `session.sessionDoc`
+   * (a real `witness/session` document that gets digested for
+   * `taskDigestMultibase`). The `dtg:witnessed` predicate profile makes
+   * `taskContext` REQUIRED for `vsc` shape, and there is nothing citable here
+   * to put in it — emitting one would assert a Trust Task document exists
+   * when it does not. So this dialect stays `wd02` permanently, not as an
+   * oversight: see `docs/plans/vsc-migration-plan/2026-09-29-bm.md` G26 for
+   * the investigation that reached this conclusion, and the plan's own §3.1
+   * paragraph on this dialect.
    */
   private buildWitnessCredential(
     sessionData: SessionData,
@@ -2785,6 +2605,11 @@ export class WitnessService {
       }
     }
 
+    // `shape` is deliberately NOT passed here -- see this function's own
+    // doc comment. `buildWitnessCredentialJson` defaults to `wd02` when
+    // `shape` is omitted, which is exactly the intended, permanent behavior
+    // for this legacy dialect, not `this.config.credentialShape` silently
+    // going unused by oversight.
     return buildWitnessCredentialJson(observedPresentation, {
       issuerDid: this.issuerDid,
       witnessName: this.name,

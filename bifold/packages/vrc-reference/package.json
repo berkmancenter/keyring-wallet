@@ -40,6 +40,9 @@
     "inquirer": "^8.2.7"
   },
   "devDependencies": {
+    "@bifold/dtg-vocab": "workspace:*",
+    "@bifold/trust-tasks": "workspace:*",
+    "@bifold/witness-server": "workspace:*",
     "@types/figlet": "^1.7.0",
     "@types/inquirer": "^8.2.12",
     "@types/jest": "^29.5.0",

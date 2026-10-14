@@ -26,6 +26,14 @@ describe('Witnessed Exchange Context', () => {
       )
     })
 
+    it('should define witnessName as a distinct term from name (credentialSubject sibling of witnessContext)', () => {
+      const context = WITNESSED_EXCHANGE_CONTEXT_DOCUMENT['@context']
+
+      expect(context['witnessName']).toBeDefined()
+      expect(context['witnessName']).toContain('witnessed-exchange#witnessName')
+      expect(context['witnessName']).not.toBe(context['name'])
+    })
+
     it('should define session-related terms', () => {
       const context = WITNESSED_EXCHANGE_CONTEXT_DOCUMENT['@context']
 

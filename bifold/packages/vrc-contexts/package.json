@@ -12,7 +12,8 @@
     "build": "echo 'building vrc-contexts 🏗️' && yarn run clean && yarn run compile && echo 'vrc-contexts built ✅'",
     "clean": "rimraf ./build",
     "compile": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no package-local tests: covered by @bifold/core vrc-contexts/vocabulary suites' && exit 0"
   },
   "repository": {
     "type": "git",

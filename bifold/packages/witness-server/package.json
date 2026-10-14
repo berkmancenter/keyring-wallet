@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@bifold/credo-tsp-adapter": "workspace:*",
+    "@bifold/dtg-vocab": "workspace:*",
     "@bifold/trust-tasks": "workspace:*",
     "@bifold/vrc-contexts": "workspace:*",
     "@bifold/vrc-shared": "workspace:*",

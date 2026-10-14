@@ -1,5 +1,12 @@
 import { createVrcDocumentLoader } from '../../createVrcDocumentLoader'
-import { DTG_CONTEXT_URL, DTG_CONTEXT_DOCUMENT } from '../../types/relationshipContext'
+import {
+  DTG_CONTEXT_URL,
+  DTG_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
+} from '../../types/relationshipContext'
 import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
@@ -83,11 +90,31 @@ describe('createVrcDocumentLoader', () => {
         document: WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
       })
     })
+
+    it('should resolve the real DTG registry context URL locally (dual-read, new-issuance VRCs)', async () => {
+      const result = await documentLoader(REGISTRY_DTG_CONTEXT_URL)
+
+      expect(result).toEqual({
+        contextUrl: null,
+        documentUrl: REGISTRY_DTG_CONTEXT_URL,
+        document: REGISTRY_DTG_CONTEXT_DOCUMENT,
+      })
+    })
+
+    it('should resolve the hardware-evidence context URL locally (offline, no network)', async () => {
+      const result = await documentLoader(HARDWARE_EVIDENCE_CONTEXT_URL)
+
+      expect(result).toEqual({
+        contextUrl: null,
+        documentUrl: HARDWARE_EVIDENCE_CONTEXT_URL,
+        document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
+      })
+    })
   })
 
   describe('HTTP fallback', () => {
     it('should fetch non-cached HTTPS URLs via network', async () => {
-      const fakeDocument = { '@context': { 'id': '@id' } }
+      const fakeDocument = { '@context': { id: '@id' } }
       const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
         json: () => Promise.resolve(fakeDocument),
       } as Response)
@@ -105,9 +132,7 @@ describe('createVrcDocumentLoader', () => {
     })
 
     it('should propagate fetch errors for unreachable URLs', async () => {
-      const fetchSpy = jest
-        .spyOn(global, 'fetch')
-        .mockRejectedValueOnce(new Error('Network request failed'))
+      const fetchSpy = jest.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('Network request failed'))
 
       await expect(documentLoader('https://dead-host.example/v1')).rejects.toThrow('Network request failed')
       fetchSpy.mockRestore()

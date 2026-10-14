@@ -37,6 +37,35 @@ import { taskCitationOf } from './taskCitation'
 const LOG_PREFIX = '[TrustTasks:Evidence]'
 const ERROR_TYPE_MARKER = '/trust-task-error/'
 
+/*
+ * `taskContext` dual-read (docs/plans/vsc-migration-plan.md §6 V4, D4):
+ * WD02 already REQUIRES `taskContext` at the credential's top level, sibling
+ * of `credentialSubject` — this codebase had been reading it out of
+ * `credentialSubject` instead, a standing conformance bug independent of the
+ * VSC migration (Alberto's 2026-09-17 review, finding A5). VSC shape emits it
+ * at the top level too (D4), so both shapes read the same way.
+ *
+ * This segment added a local `readTaskContext` for that. Main has since landed
+ * the same dual-read as `taskCitationOf` in ./taskCitation, which also covers
+ * `taskDigestMultibase` — so the local helper is dropped here in favour of it
+ * rather than keeping two implementations of one rule.
+ */
+
+/*
+ * The same applies to `taskDigestMultibase`, and it mattered: the spec's Base
+ * Structure requires it as a top-level sibling of `credentialSubject` for
+ * `vsc` shape (fixed in the issuance/read paths, `be8dd604`, 2026-09-29), but
+ * this self-check still only looked in the old nested
+ * `credentialSubject.taskDigestMultibase` location — so it unconditionally
+ * failed ("credential carries no taskDigestMultibase") for every `vsc`-shape
+ * VWC, on the one path that had actually been fixed. Found the same day the
+ * placement fix landed, on the first real end-to-end witnessed exchange to
+ * reach this check (orphan commit 9a008d7b).
+ *
+ * `taskCitationOf` dual-reads both members, so that fix is kept behaviourally
+ * and its local `readTaskDigestMultibase` helper is not reintroduced.
+ */
+
 /** A `taskContext`-bearing credential with its matching outcome evidence. */
 export interface VwcPresentationBundle {
   /** The signed Verifiable Presentation wrapping the VWC. */
@@ -226,6 +255,8 @@ export async function verifyVwcPresentationBundle(
 
   // 3–7. The pairing checklist.
   // Top level (DTG Credentials v1's witnessed/1) or in the subject (before it).
+  // This is what the orphan fix 9a008d7b set out to do — dual-read the digest
+  // in the self-check, not just taskContext. taskCitationOf already does both.
   const citation = taskCitationOf(vwc)
   const taskContext = citation.taskContext ?? ''
   const taskDigest = citation.taskDigestMultibase ?? ''

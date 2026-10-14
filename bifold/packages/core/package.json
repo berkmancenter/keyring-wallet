@@ -58,6 +58,7 @@
     "@animo-id/expo-secure-environment": "0.1.5",
     "@babel/core": "~7.28.6",
     "@babel/runtime": "~7.28.6",
+    "@bifold/dtg-vocab": "workspace:*",
     "@bifold/oca": "3.0.16",
     "@bifold/react-hooks": "3.0.16",
     "@bifold/react-native-attestation": "3.0.16",

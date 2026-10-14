@@ -22,6 +22,12 @@ This demo implements:
 | **VP**    | Verifiable Presentation - A VRC wrapped with a challenge/domain for submission             |
 | **VWC**   | Verifiable Witness Credential - Attestation from a Witness that it observed a VRC exchange |
 
+> The wire shape a VWC uses is a name, not a type string, as of the VSC
+> migration (`docs/plans/vsc-migration-plan.md`): the witness server can emit
+> either the legacy WD02 `WitnessCredential` shape (still the default) or a
+> `dtg:witnessed` VSC — see `bifold/packages/witness-server/README.md`'s
+> "Witness Credential (VWC) Structure" section for both.
+
 ---
 
 ## Prerequisites
@@ -312,6 +318,7 @@ yarn test:coverage
 The test suite includes comprehensive tests for DIDComm connections through a mediator (e.g., for agents behind NAT/firewall).
 
 **Configuration:**
+
 1. Copy `.env.sample` to `.env`
 2. Set `MEDIATOR_INVITATION_URL` to your mediator's OOB invitation URL
 3. Tests will automatically run if mediator is configured, or skip if not
@@ -323,6 +330,7 @@ MEDIATOR_CONNECTION_TIMEOUT=30000
 ```
 
 **Test Coverage:**
+
 - ✅ Connection establishment through mediator
 - ✅ DID exchange via mediated transport
 - ✅ WebSocket transport verification
@@ -330,6 +338,7 @@ MEDIATOR_CONNECTION_TIMEOUT=30000
 - ✅ Error handling and timeout scenarios
 
 **Comparing Direct vs Mediated:**
+
 ```sh
 # Direct HTTP connections (default)
 yarn test connectionFlow.test.ts
@@ -374,9 +383,9 @@ src/
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [`WITNESSED_FLOW.md`](./WITNESSED_FLOW.md) | Detailed walkthrough of all 5 phases of the witnessed exchange flow |
+| Document                                                 | Description                                                                                           |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [`WITNESSED_FLOW.md`](./WITNESSED_FLOW.md)               | Detailed walkthrough of all 5 phases of the witnessed exchange flow                                   |
 | [`BIFOLD_FLOW_ALIGNMENT.md`](./BIFOLD_FLOW_ALIGNMENT.md) | Alignment analysis between these reference tests and the app implementation in `core/src/modules/vrc` |
 
 ---

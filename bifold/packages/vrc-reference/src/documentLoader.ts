@@ -22,6 +22,8 @@ import {
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
   DTG_REGISTRY_CONTEXT_V1_URL,
   DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from '@bifold/vrc-contexts'
 
 /**
@@ -247,12 +249,23 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
     // DTG Credentials v1 (credentials from VTI 0.47.0 on): the registry's
     // frozen bytes, never fetched. The spec compares this IRI byte-exact, so
     // only the exact URL is served from here.
+    //
+    // This segment served the same context under its own name
+    // (REGISTRY_DTG_CONTEXT_*, relationshipContext.ts): same URL, byte-identical
+    // document, same sha256 pin. Main's dtgRegistryContextV1 is used because it
+    // also pins the digest and deep-freezes the parsed document.
     if (url === DTG_REGISTRY_CONTEXT_V1_URL) {
       return {
         contextUrl: null,
         documentUrl: url,
         document: DTG_REGISTRY_CONTEXT_V1_DOCUMENT,
       }
+    }
+    // The hardware-evidence context (provisional IRI) is new in this segment,
+    // bundled so new-issuance VRCs resolve offline here too. Matched on the
+    // fragment-stripped URL, like the other bundled contexts below.
+    if (normalizedUrl === HARDWARE_EVIDENCE_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT }
     }
 
     if (!/^https?:/i.test(normalizedUrl)) {
