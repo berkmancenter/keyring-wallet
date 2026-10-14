@@ -17,13 +17,14 @@ function fakeDesk(tickets, { height = 20 } = {}) {
       this.presses.push(k);
       const n = this.t.length;
       if (this.confirm) {
-        if (k === 'Enter') { const c = this.confirm; this.t = this.t.filter((x) => x.code !== c); this.msg = `Ticket ${c} deleted — anyone already holding it is now refused`; this.at = Math.min(this.at, this.t.length - 1); }
+        if (k === 'Enter') { const c = this.confirm; this.t = this.t.filter((x) => x.code !== c); this.msg = `Ticket ${c} deleted — anyone already holding it is now refused`; this.at = 0; }
         this.confirm = null; return;
       }
       if (k === 'Down') this.at = Math.min(this.at + 1, n - 1);
       if (k === 'Up') this.at = Math.max(this.at - 1, 0);
       if (k === 'PageDown') this.top = Math.min(this.top + height, Math.max(n - height, 0));
       if (k === 'PageUp') this.top = Math.max(this.top - height, 0);
+      if (k === 'Home') this.top = 0;
       if (k === 'd') this.confirm = this.t[this.at]?.code ?? null;
     },
   };

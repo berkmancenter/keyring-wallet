@@ -5,7 +5,9 @@
 // community holds no ticket records, so nothing of the community's changes.
 //
 // mode "list" (the default): read-only, counts the rows. mode "delete": deletes only rows that say "spent or
-// expired", each checked on the confirmation screen ("Delete this ticket", its code) before Enter.
+// expired", each checked on the confirmation screen ("Delete this ticket", its code) before Enter. openvtc's own
+// message on a delete: "anyone already holding it is now refused, and they are not told why". Harmless for a spent
+// or expired ticket, and the reason this must never widen to live ones.
 import { selectedLine, walkTo } from './listWalk.js';
 
 const ROW = /([0-9A-Z]{4}-[0-9A-Z]{4})\s{2}.+\s{2}(spent or expired|(\d+) left, until)/;
@@ -63,6 +65,10 @@ export async function sweepSpentTickets(tui, { mode = 'list', pace = 600, max = 
       break;
     }
     deleted++;
+    // A delete puts the ▸ back on the first row (vetting_actions.rs:1983-2011: selected = 0) and the pane does not
+    // follow it (main/mod.rs:562-577): Home scrolls the pane to the top, where the ▸ now is, and the next walk starts
+    // from there. The confirmation check above keeps a mis-placed cursor harmless all the same.
+    await tui.pressEach(['Home'], pace);
   }
   log(`TICKETS deleted ${deleted} spent or expired; ${seen.size - deleted} left`);
   return { total, spent, deleted, kept: seen.size - deleted };
