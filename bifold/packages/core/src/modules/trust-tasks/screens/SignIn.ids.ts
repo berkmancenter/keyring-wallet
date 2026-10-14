@@ -6,6 +6,7 @@ export const SignInIds = {
   community: 'SignInCommunity',
   communityDid: 'SignInCommunityDid',
   host: 'SignInHost',
+  unverified: 'SignInUnverified',
   continue: 'SignInContinue',
   cancel: 'SignInCancel',
   notMember: 'SignInNotMember',

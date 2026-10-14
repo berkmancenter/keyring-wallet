@@ -4,7 +4,13 @@
  * had published no name at all (report #14, 2026-09-22): a hostname in the
  * place of a name reads as a name.
  */
-import { communityLabelAnsweredOf, communityLabelOf, communityName, shortDid } from '../screens/communityName'
+import {
+  communityLabelAnsweredOf,
+  communityLabelOf,
+  communityName,
+  didDomainPath,
+  shortDid,
+} from '../screens/communityName'
 import { communityTarget } from '../module/vtiCommunityLink'
 
 const did = 'did:webvh:QmUsH14W1foRZyP9v7LtfxwFy7qWgzNBLSzhWhbMQeMPJB:keyring-vti-vtc.ngrok.app'
@@ -150,4 +156,25 @@ describe('naming a community that has just answered (the Leave toast)', () => {
     communityTarget.set({ communityDid: did })
     expect(communityLabelAnsweredOf(did, t)).toBe(communityLabelOf(did, t))
   })
+})
+
+// VTI-LNK-050: before anything is resolved, a reader shows the domain and
+// then the path where the identifier has one.
+describe('where a DID says it lives', () => {
+  it.each([
+    ['did:webvh:QmSCID:dids.example.org:farm-auth', 'dids.example.org/farm-auth'],
+    ['did:webvh:QmSCID:dids.example.org:a:b', 'dids.example.org/a/b'],
+    ['did:webvh:QmSCID:keyring-vti-vtc.ngrok.app', 'keyring-vti-vtc.ngrok.app'],
+    ['did:web:example.org%3A8443:vtc', 'example.org:8443/vtc'],
+    ['did:web:example.org', 'example.org'],
+  ])('%s reads %s', (input, shown) => {
+    expect(didDomainPath(input)).toBe(shown)
+  })
+
+  it.each(['did:peer:2.Ez6LSabc', 'did:key:z6Mkabc', 'did:webvh:QmSCID', 'not a did'])(
+    '%s has no domain to show',
+    (input) => {
+      expect(didDomainPath(input)).toBeUndefined()
+    }
+  )
 })

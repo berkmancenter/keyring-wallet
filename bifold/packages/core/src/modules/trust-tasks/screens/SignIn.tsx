@@ -47,7 +47,7 @@ import {
   type SignInSteps,
 } from '../module/signInSteps'
 
-import { didHost, unnamedCommunityLabel } from './communityName'
+import { didDomainPath, unnamedCommunityLabel } from './communityName'
 import { DidDetails } from './DidDetails'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { SignInIds } from './SignIn.ids'
@@ -165,7 +165,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         setCommunityName(label)
         setStep(
           member
-            ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didHost(read.vtcDid) }
+            ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didDomainPath(read.vtcDid) }
             : { kind: 'notMember', name: label, vtcDid: read.vtcDid }
         )
       })
@@ -316,7 +316,13 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             <ThemedText>{t('SignIn.ConfirmBody')}</ThemedText>
             <View style={styles.card}>
               {row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)}
-              {step.host ? row(t('SignIn.HostLabel'), step.host, SignInIds.host) : null}
+              {/* Who the code says the community is, domain and path, from
+                  the code alone: nothing is resolved before Continue, so it
+                  is marked unverified (VTI-LNK-050). */}
+              {row(t('SignIn.HostLabel'), step.host ?? t('SignIn.NoDomain'), SignInIds.host)}
+              <ThemedText style={styles.muted} testID={id(SignInIds.unverified)}>
+                {t('SignIn.Unverified')}
+              </ThemedText>
             </View>
             <View style={styles.actions}>
               <Button
