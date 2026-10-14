@@ -2,6 +2,7 @@ import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifo
 
 import { Screens } from '../../../types/navigators'
 import { pendingSignInLink } from '../module/signInSteps'
+import { pendingVtaClaimLink } from '../module/vtaClaimSteps'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
@@ -589,7 +590,6 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
         'Scan.TriggerLinkInvalid',
         /can't be used/,
       ],
-      ['an agent claim', live.replace('sign-in/0.1', 'vta-claim/0.1'), 'Scan.TriggerLinkUpdate', /newer version/],
     ])('says why for %s, and sends nothing', async (_, link, messageKey, message) => {
       const navigate = jest.fn()
       const resolve = jest.fn()
@@ -597,6 +597,20 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
       await expect(route).rejects.toMatchObject({ messageKey, message: expect.stringMatching(message) })
       expect(resolve).not.toHaveBeenCalled()
       expect(navigate).not.toHaveBeenCalled()
+    })
+
+    // An agent host's one-scan setup code (vta-claim): the setup screen, the
+    // code held for it, and nothing sent until the person continues there.
+    it('opens the agent setup screen for an agent claim it accepts, holding the code, and sends nothing', async () => {
+      const claim = live.replace('sign-in/0.1', 'vta-claim/0.1')
+      pendingVtaClaimLink.clear()
+      const navigate = jest.fn()
+      const resolve = jest.fn()
+      await routeKeyringAgentLink(claim, { dids: { resolve } } as never, navigate)
+      expect(navigate).toHaveBeenCalledWith('VtaClaim')
+      expect(pendingVtaClaimLink.peek()).toBe(claim)
+      expect(resolve).not.toHaveBeenCalled()
+      pendingVtaClaimLink.clear()
     })
 
     it('opens the sign-in screen for a sign-in it accepts, holding the code, and sends nothing', async () => {

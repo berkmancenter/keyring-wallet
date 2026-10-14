@@ -27,6 +27,7 @@ import { agentHomeScreen } from '../screens/agentHome'
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
 import { pendingSignInLink } from './signInSteps'
+import { pendingVtaClaimLink } from './vtaClaimSteps'
 import {
   readTrigger,
   TRIGGER_UI_MESSAGE_KEYS,
@@ -175,6 +176,16 @@ function signInToOpen(text: string): boolean {
   if (!triggerLinkSignInEnabled()) return false
   const action = triggerAction(readTrigger(text, { channel: 'scan' }))
   return action.kind === 'proceed' && action.flow === 'sign-in'
+}
+
+/**
+ * Whether a trigger link opens the agent-setup screen: an agent host's
+ * one-scan code (`vta-claim`) the reader accepts. Read offline; nothing is
+ * sent until the person continues on that screen.
+ */
+function vtaClaimToOpen(text: string): boolean {
+  const action = triggerAction(readTrigger(text, { channel: 'scan' }))
+  return action.kind === 'proceed' && action.flow === 'vta-claim'
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -334,6 +345,7 @@ export type MyAgentDestination =
   | 'VtiJoin'
   | 'VtiInvited'
   | 'SignIn'
+  | 'VtaClaim'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
@@ -346,6 +358,8 @@ export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtiInvited: Screens.VtiInvited,
   // A community sign-in code, read and accepted (trigger-link sign-in on).
   SignIn: Screens.SignIn,
+  // An agent host's one-scan setup code, read and accepted.
+  VtaClaim: Screens.VtaClaim,
 }
 
 /**
@@ -525,6 +539,11 @@ export async function routeKeyringAgentLink(
       if (signInToOpen(trimmed)) {
         pendingSignInLink.set(trimmed)
         navigate('SignIn')
+        return
+      }
+      if (vtaClaimToOpen(trimmed)) {
+        pendingVtaClaimLink.set(trimmed)
+        navigate('VtaClaim')
         return
       }
       throw triggerLinkError(trimmed)

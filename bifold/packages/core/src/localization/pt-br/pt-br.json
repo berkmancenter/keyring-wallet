@@ -962,7 +962,8 @@
     "VtaAskMe": "Pergunte antes…",
     "VtaAgentSettings": "Configurações do agente",
     "Invited": "Entrar por convite",
-    "Join": "Entrar em uma comunidade"
+    "Join": "Entrar em uma comunidade",
+    "VtaClaim": "Configurar seu agente"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -2160,6 +2161,43 @@
       "agentUnreachable": "Não foi possível contatar seu agente, então nada foi conectado. Tente mais tarde.",
       "agentNeedsUpdate": "Seu agente precisa ser atualizado antes de poder conectar você a sites.",
       "unknown": "Algo deu errado, então nada foi conectado. Atualize a página de login e tente novamente."
+    }
+  },
+  "VtaClaim": {
+    "ConfirmTitle": "Adicionar este telefone ao seu novo agente?",
+    "ConfirmBody": "Seu provedor de agente em {{host}} tem um agente pronto para você. Este telefone se torna o proprietário. Em seguida, você vai comparar um código curto com a página que mostrou o código escaneado.",
+    "From": "Este código diz ser de",
+    "Unverified": "Não verificado",
+    "NoDomain": "um contato sem domínio para mostrar",
+    "Continue": "Continuar",
+    "Cancel": "Cancelar",
+    "ConfirmReason": "Tornar-se proprietário do seu novo agente",
+    "NotConfirmed": "O Keyring não conseguiu confirmar que é você. Tente novamente.",
+    "Claiming": "Consultando seu provedor de agente…",
+    "CodeTitle": "Confira o código",
+    "CodeBody": "Na página que mostrou o código escaneado, confira se ela também mostra estes caracteres e escolha Os códigos coincidem.",
+    "WaitingConfirm": "Aguardando sua confirmação nessa página…",
+    "Provisioning": "Confirmado. Seu provedor está configurando seu agente…",
+    "Connecting": "Conectando ao seu agente…",
+    "ReadyTitle": "Seu agente está pronto",
+    "ReadyBody": "Este telefone agora é o proprietário.",
+    "FailedTitle": "Seu agente não foi configurado",
+    "Done": "Concluído",
+    "Failure": {
+      "invalidCode": "Este código não pode ser usado para configurar um agente.",
+      "expired": "Este código expirou. Gere um novo na página do seu provedor e escaneie novamente.",
+      "unreachable": "O Keyring não conseguiu falar com seu provedor de agente. Verifique sua conexão, gere um novo código e escaneie novamente.",
+      "badAnswer": "A resposta do seu provedor não pôde ser verificada, então o Keyring parou. Gere um novo código e escaneie novamente.",
+      "alreadyClaimed": "Outro telefone reivindicou este código primeiro. Na página, escolha Não é meu e gere um novo código.",
+      "rejected": "A página disse que este não era o seu telefone, então nada foi adicionado. Gere um novo código para tentar de novo.",
+      "handleExpired": "O tempo para confirmar acabou. Gere um novo código e escaneie novamente.",
+      "handleNotFound": "Seu provedor não reconhece mais este código. Gere um novo código e escaneie novamente.",
+      "notClaimant": "Este código foi reivindicado com outra chave. Gere um novo código e escaneie novamente.",
+      "refused": "Seu provedor recusou o pedido. Gere um novo código e escaneie novamente.",
+      "cannotOwn": "Este telefone não tem bloqueio de tela, então não pode ser proprietário de um agente. Ative um bloqueio de tela e escaneie o código novamente.",
+      "linkFailed": "Seu agente foi configurado, mas este telefone ainda não conseguiu se conectar a ele. Abra Meu agente e verifique novamente.",
+      "alreadyOnPhone": "Este telefone já tem esse agente.",
+      "noCode": "Não há código para usar. Escaneie novamente o código na página do seu provedor."
     }
   }
 }
