@@ -25,6 +25,31 @@ import { isPeerVrcCredential, isWitnessCredential } from '../credentialTypes'
 import { toRawCredential } from './rcardDisplayUtils'
 
 /**
+ * The tag a witness credential carries once THIS device has verified it, set
+ * where it is stored: `trust-tasks/witnessCeremony.ts` for our own session's
+ * VWC, and the witness-share leg of `trust-tasks/ceremony.ts` for the peer's.
+ * Both check the credential before storing — the session binding, and, where
+ * a locality observation is claimed, that it matches the transcript this
+ * device itself produced.
+ *
+ * A credential in the store without this tag has not been verified here. It
+ * may be perfectly genuine — one stored before this tag existed, say — but
+ * nothing has checked it, so it earns no witness or locality mark in the UI.
+ */
+export const WITNESS_VERIFIED_TAG = 'witnessVerified'
+
+/** Whether this record was verified and marked by one of the ceremony paths. */
+export function isVerifiedWitnessRecord(credential: W3cCredentialRecord): boolean {
+  try {
+    const tags = credential.getTags() as Record<string, unknown> | undefined
+    return tags?.[WITNESS_VERIFIED_TAG] === 'true'
+  } catch (_error) {
+    // A record shape without tags cannot have been marked.
+    return false
+  }
+}
+
+/**
  * Locality verification information from witnessContext
  *
  * @deprecated the pre-locality-plan nested shape (`witnessContext.localityVerification`).
@@ -194,15 +219,38 @@ export function hasWitnessCredentialType(credential: W3cCredentialRecord): boole
 }
 
 /**
- * Get all witness credentials for a specific subject DID
+ * The witness credentials for a subject DID that THIS device verified.
  *
- * This filters credentials where:
- * - Type includes "WitnessCredential"
- * - credentialSubject.id matches the provided subjectDid
+ * Narrower than `getWitnessCredentialsForSubject` below by the verification
+ * mark (see `WITNESS_VERIFIED_TAG`). This is what the contact list and the
+ * contact detail screen read, so that a witness mark, a locality mark and a
+ * witness's name only ever come from a credential this device checked —
+ * not from one a peer handed us.
  *
  * @param credentials - Array of W3C credential records
  * @param subjectDid - The DID to match against credentialSubject.id (counterparty's R-DID)
- * @returns Array of matching witness credential records
+ * @returns The verified matching records, newest-first order unchanged
+ */
+export function getVerifiedWitnessCredentialsForSubject(
+  credentials: W3cCredentialRecord[],
+  subjectDid: string
+): W3cCredentialRecord[] {
+  return getWitnessCredentialsForSubject(credentials, subjectDid).filter(isVerifiedWitnessRecord)
+}
+
+/**
+ * Every witness credential in the store naming this subject, verified here or
+ * not.
+ *
+ * Do NOT use this to decide what to show a user about a contact's
+ * trustworthiness: anything a peer can put in the wallet appears here.
+ * `getVerifiedWitnessCredentialsForSubject` above is the one the screens use.
+ * This one remains for callers that want the whole picture, including records
+ * this device never checked.
+ *
+ * This filters credentials where:
+ * - the credential names the WitnessCredential type (or the witnessed/1 shape)
+ * - credentialSubject.id matches the provided subjectDid
  */
 export function getWitnessCredentialsForSubject(
   credentials: W3cCredentialRecord[],

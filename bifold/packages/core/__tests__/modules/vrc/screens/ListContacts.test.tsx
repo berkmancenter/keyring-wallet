@@ -20,6 +20,7 @@ import {
   TEST_CONTACTS,
   generateTestDid,
 } from '../fixtures/dtg-credentials'
+import { WITNESS_VERIFIED_TAG } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
 import { testIdWithKey } from '../../../../src/utils/testable'
 
 const ALICE_PHOTO =
@@ -61,9 +62,13 @@ function createReceivedRCard(issuerDid: string, holderDid: string, form: RCardFo
  * witnessCredentialUtils.test.ts's own `vwcWith`, since the code under test
  * (getWitnessCredentialsForSubject/extractWitnessInfo) only ever reads
  * `.encoded`. */
-function createLocalityVwc(subjectId: string, localityConfirmed: boolean): W3cCredentialRecord {
+function createLocalityVwc(subjectId: string, localityConfirmed: boolean, verified = true): W3cCredentialRecord {
   return {
     id: 'credential-locality-vwc',
+    // What the ceremony paths mark a credential with once they have verified
+    // it (WITNESS_VERIFIED_TAG). The badges come from marked records only;
+    // pass verified=false for one the wallet holds but never checked.
+    getTags: () => (verified ? { [WITNESS_VERIFIED_TAG]: 'true' } : {}),
     encoded: {
       type: ['VerifiableCredential', 'WitnessCredential'],
       issuer: 'did:example:witness',
@@ -664,6 +669,57 @@ describe('ListContacts Screen', () => {
       await waitFor(async () => {
         expect(await findByText('Alice Smith')).toBeTruthy()
         expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+      })
+    })
+  })
+
+  describe('only a witness credential this device verified earns a badge', () => {
+    const renderWith = (vwc: W3cCredentialRecord) => {
+      const aliceCredential = createDTGCredential({
+        issuer: TEST_CONTACTS.alice.issuer,
+        credentialSubject: { id: holderDid },
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: {
+          w3cCredentialRecords: [aliceCredential, vwc],
+          sdJwtVcRecords: [],
+          mdocVcRecords: [],
+          openIDCredentialRecords: [],
+          isLoading: false,
+        },
+        getW3CCredentialById: jest.fn(),
+        getSdJwtCredentialById: jest.fn(),
+        getMdocCredentialById: jest.fn(),
+        storeCredential: jest.fn(),
+        removeCredential: jest.fn(),
+        resolveBundleForCredential: jest.fn(),
+      } as any)
+      return render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+    }
+
+    it('shows neither badge for a witness credential the wallet holds but never verified, though it claims locality', async () => {
+      // A peer-supplied record, typed exactly right and saying locality was confirmed, but without the
+      // ceremony's verified mark: the contact is listed, unbadged.
+      const { findByText, queryByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, false))
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(queryByTestId('WitnessVerifiedBadge')).toBeNull()
+        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+      })
+    })
+
+    it('shows both badges for the same credential once the ceremony verified it', async () => {
+      const { findByText, findByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, true))
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(await findByTestId('WitnessVerifiedBadge')).toBeTruthy()
+        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
       })
     })
   })

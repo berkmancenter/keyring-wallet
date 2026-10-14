@@ -3,7 +3,7 @@ import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
 import { ContactCredentialDetails } from '../../../types/navigators'
-import { getWitnessCredentialsForSubject, hasVrcHardwareAttestation } from './witnessCredentialUtils'
+import { getVerifiedWitnessCredentialsForSubject, hasVrcHardwareAttestation } from './witnessCredentialUtils'
 import { resolveContactDisplayInfo, toRawCredential } from './rcardDisplayUtils'
 
 /**
@@ -132,7 +132,7 @@ export async function getContactCredentialDetailsForConnection(
         organization: displayInfo.organization,
         photo: displayInfo.photo,
       },
-      hasWitnessCredentials: getWitnessCredentialsForSubject(w3cCredentialRecords, issuerId).length > 0,
+      hasWitnessCredentials: getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, issuerId).length > 0,
       hasHardwareAttestation: hasVrcHardwareAttestation(w3cCredentialRecords, issuerId),
     }
   } catch (_error) {

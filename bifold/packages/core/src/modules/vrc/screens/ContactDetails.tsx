@@ -16,7 +16,7 @@ import { ModalUsage } from '../../../types/remove'
 import { useDeleteContact } from '../hooks/useDeleteContact'
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import {
-  getWitnessCredentialsForSubject,
+  getVerifiedWitnessCredentialsForSubject,
   extractWitnessInfo,
   getVrcCredentialJsonForSubject,
   WitnessRecord,
@@ -78,7 +78,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   )
 
   const witnessCredentials = useMemo(() => {
-    return getWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
+    return getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
   }, [w3cCredentialRecords, contact.issuer.id])
 
   const witnessRecords = useMemo(() => {

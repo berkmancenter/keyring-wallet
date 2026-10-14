@@ -185,3 +185,26 @@ test('a vetting way the person can start says so on its own row, beside a review
   expect(tree.getByTestId(id('JoinWay_review'))).toBeTruthy()
   expect(tree.queryByTestId(id('JoinWayStart_review'))).toBeNull()
 })
+
+// IN-264: private vetting is this app's limit. The card says so, and not
+// "nothing is wrong on your side … the community needs to update".
+describe('a way that runs private vetting', () => {
+  const hiddenVetting = way({
+    id: 'vetted-member',
+    meets: 'no',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+    usable: false,
+    unusableBecause: 'vettingPrivate',
+    unusableDetail: 'org.openvtc.hidden-vetting',
+  })
+
+  it('the card says private vetting is not supported yet, and offers no vetting', () => {
+    const tree = showAll({ wire: '0.3', accepting: true, ways: [hiddenVetting] })
+    expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+    expect(tree.queryByTestId(id('JoinWaysNoneUsable'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+    expect(tree.getByTestId(id('JoinWayCannotUse_vetted-member'))).toHaveTextContent(
+      'Join.Ways.CannotUsePrivateVetting'
+    )
+  })
+})

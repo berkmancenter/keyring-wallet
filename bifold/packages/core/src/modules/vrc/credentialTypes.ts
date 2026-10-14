@@ -83,6 +83,31 @@ export function hasCredentialTypeName(input: CredentialTypeInput, typeName: stri
   return getCredentialTypeList(input).some((t) => t.includes(typeName))
 }
 
+/**
+ * The bare name of a type element: the part after the last `#` or `/` of an
+ * IRI, or the element itself when it is already a bare name.
+ */
+function typeNameOf(type: string): string {
+  const cut = Math.max(type.lastIndexOf('#'), type.lastIndexOf('/'))
+  return cut >= 0 ? type.slice(cut + 1) : type
+}
+
+/**
+ * Whether the credential NAMES this type, matched as a whole name rather than
+ * as a substring: `WitnessCredential` matches, and so does the expanded IRI
+ * form `https://…#WitnessCredential`, but `NotAWitnessCredentialReally` does
+ * not.
+ *
+ * `hasCredentialTypeName` above matches substrings, which is right for the
+ * display registry's tolerant "what kind of thing is this, roughly?" questions
+ * and wrong for deciding that a credential IS of a type — a decision a peer
+ * can otherwise steer by naming its credential something that merely contains
+ * the word. Use this one wherever the answer grants something.
+ */
+export function namesCredentialType(input: CredentialTypeInput, typeName: string): boolean {
+  return getCredentialTypeList(input).some((t) => t === typeName || typeNameOf(t) === typeName)
+}
+
 /** DTGCredential — the base type of the DTG/VRC credential family. */
 export function isDTGCredential(input: CredentialTypeInput): boolean {
   return hasCredentialTypeName(input, DTG_CREDENTIAL_TYPE)
@@ -151,10 +176,11 @@ function subjectPredicateOf(input: CredentialTypeInput): string | undefined {
  * instance (predicate under `claims`) is recognized as well as raw JSON.
  */
 export function isWitnessStatement(input: CredentialTypeInput): boolean {
-  // Exact type match, not the module's usual substring match: `includes` would
-  // accept a type like "NotAStatementCredentialReally". Main tightened this
-  // deliberately and has a test for it (trust-tasks/__tests__/witnessedV1).
-  if (!getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE)) return false
+  // Named, not merely contained: `hasCredentialTypeName` would accept a type
+  // like "NotAStatementCredentialReally". namesCredentialType matches the whole
+  // name or an IRI's last segment, so expanded JSON-LD still matches while a
+  // lookalike does not (trust-tasks/__tests__/witnessedV1 has the case).
+  if (!namesCredentialType(input, STATEMENT_CREDENTIAL_TYPE)) return false
   const predicate = subjectPredicateOf(input)
   if (!predicate) return false
   return predicate === DTG_PREDICATE_WITNESSED && predicate in getAcceptListConfig().profiles
@@ -178,8 +204,8 @@ export const isWitnessedStatement = isWitnessStatement
  * may want to recognize a VSC statement without caring which profile matched.
  */
 export function isStatementCredential(input: CredentialTypeInput): boolean {
-  // Exact type match, for the same reason as `isWitnessStatement` above.
-  if (!getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE)) return false
+  // Named, not merely contained, for the same reason as `isWitnessStatement`.
+  if (!namesCredentialType(input, STATEMENT_CREDENTIAL_TYPE)) return false
   const predicate = subjectPredicateOf(input)
   return predicate !== undefined && predicate in getAcceptListConfig().profiles
 }
@@ -190,7 +216,15 @@ export function isStatementCredential(input: CredentialTypeInput): boolean {
  * `dtg:witnessed` predicate form. See `isWitnessStatement` for the latter.
  */
 export function isWitnessCredential(input: CredentialTypeInput): boolean {
-  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE) || isWitnessStatement(input)
+  // Named, not merely contained: this answer decides whether a credential is
+  // auto-accepted and whether it can be counted as a witness's, so a peer must
+  // not be able to reach it by calling its credential something that happens
+  // to contain "WitnessCredential".
+  //
+  // The second term is the VSC shape, which additionally requires the
+  // predicate to be in @bifold/dtg-vocab's accept-list. `isWitnessedStatement`
+  // is an alias of it, so naming either here is the same check.
+  return namesCredentialType(input, WITNESS_CREDENTIAL_TYPE) || isWitnessStatement(input)
 }
 
 /**

@@ -119,10 +119,12 @@ describe('the ways in, at manifest/0.3', () => {
     expect(asks.outcomeIfMet).toBe('joined')
   })
 
-  it('reads a criterion whose vetting parameters this version does not name', () => {
+  // Its parameters are hidden vetting's (org.openvtc.hidden-vetting, critical):
+  // read, and not offered, since this version cannot do it (IN-264).
+  it('reads a criterion whose vetting parameters this version does not name, and does not offer it', () => {
     const [way] = joinAsks(example('A criterion whose vetting parameters')).ways
-    expect(way.usable).toBe(true)
     expect(way.requires.vetting).toBeDefined()
+    expect(way).toMatchObject({ usable: false, unusableBecause: 'vettingPrivate' })
   })
 
   it('reads a new community’s default criteria: reviewed with nothing in hand, admitted with an invitation', () => {
@@ -255,10 +257,11 @@ describe('requirementsDigest of a community that runs hidden vetting', () => {
     }
   )
 
-  it('its vetting way is usable, not taken for a changed one', () => {
+  // IN-264: its vetting way is not taken for a changed one, and not offered
+  // either: it runs private vetting, which refuses named statements.
+  it('its vetting way is not taken for a changed one: it is private vetting, not offered', () => {
     const way = joinAsks(first).ways.find((w) => w.id === 'vetted-member')
-    expect(way).toMatchObject({ usable: true })
-    expect(way?.unusableBecause).toBeUndefined()
+    expect(way).toMatchObject({ usable: false, unusableBecause: 'vettingPrivate' })
   })
 
   it('a new draw rate or live period leaves the digest as it was', () => {
@@ -280,6 +283,65 @@ describe('requirementsDigest of a community that runs hidden vetting', () => {
     const { requirementsDigest: _d, ...whole } = before
     before.requirementsDigest = digestMultibase(whole)
     const manifest = { ...first, criteria: [before] }
-    expect(joinAsks(manifest).ways[0]).toMatchObject({ usable: true })
+    // Its digest matches (not `digestMismatch`); it is private vetting, so not offered (IN-264).
+    expect(joinAsks(manifest).ways[0]).toMatchObject({ usable: false, unusableBecause: 'vettingPrivate' })
+  })
+})
+
+// IN-264: a community that runs hidden (private) vetting refuses named
+// statements (VTI #2051). Keyring gathered them anyway, and the join was
+// turned down with no reason the person could see. Such a way is now said to
+// be one this version cannot do, and never offered as named vetting; so is a
+// way that marks critical an extension Keyring does not implement.
+describe('vetting this wallet cannot do fails closed', () => {
+  // The specification's example criterion, as named vetting: its extension taken out.
+  const [specCriterion] = example('A criterion whose vetting parameters').criteria
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { ext: _ext, extCritical: _critical, ...namedVetting } = specCriterion.vetting as Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { requirementsDigest: _digest, ...base } = specCriterion
+  const wayFor = (vetting: Record<string, unknown>) => {
+    const criterion = published({ ...base, vetting: { ...namedVetting, ...vetting } })
+    return joinAsks({ wire: '0.3', criteria: [criterion] }).ways[0]
+  }
+
+  it('the same criterion as named vetting is offered: the check reads only what it should', () => {
+    expect(wayFor({})).toMatchObject({ usable: true })
+  })
+
+  it('a criterion that names hidden vetting, critical as published: private vetting', () => {
+    const way = wayFor({
+      ext: { [HIDDEN_VETTING_EXT]: { suite: 'ps-ddh-bls12381' } },
+      extCritical: [HIDDEN_VETTING_EXT],
+    })
+    expect(way).toMatchObject({ usable: false, unusableBecause: 'vettingPrivate', unusableDetail: HIDDEN_VETTING_EXT })
+  })
+
+  it('hidden vetting is private whether it is marked critical or only listed under ext', () => {
+    expect(wayFor({ ext: { [HIDDEN_VETTING_EXT]: {} } })).toMatchObject({ unusableBecause: 'vettingPrivate' })
+    expect(wayFor({ extCritical: [HIDDEN_VETTING_EXT] })).toMatchObject({ unusableBecause: 'vettingPrivate' })
+  })
+
+  it('another critical extension Keyring does not implement: not offered, and named', () => {
+    expect(wayFor({ ext: { 'org.example.other': {} }, extCritical: ['org.example.other'] })).toMatchObject({
+      usable: false,
+      unusableBecause: 'vettingExtUnsupported',
+      unusableDetail: 'org.example.other',
+    })
+  })
+
+  it('an extCritical that is not a list of names is not read as nothing: not offered', () => {
+    expect(wayFor({ extCritical: 'org.example.other' })).toMatchObject({ unusableBecause: 'vettingExtUnsupported' })
+    expect(wayFor({ extCritical: [42] })).toMatchObject({ unusableBecause: 'vettingExtUnsupported' })
+  })
+
+  it('an extension that is not critical, and not hidden vetting, changes nothing', () => {
+    expect(wayFor({ ext: { 'org.example.note': { hello: 1 } } })).toMatchObject({ usable: true })
+    expect(wayFor({ extCritical: [] })).toMatchObject({ usable: true })
+  })
+
+  it('such a way is never the suggested one', () => {
+    const criterion = published({ ...base, vetting: { ...namedVetting, extCritical: [HIDDEN_VETTING_EXT] } })
+    expect(joinAsks({ wire: '0.3', criteria: [criterion] }, { statements: 5 }).suggested).toBeUndefined()
   })
 })
