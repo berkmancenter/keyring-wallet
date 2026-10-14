@@ -151,7 +151,10 @@ function subjectPredicateOf(input: CredentialTypeInput): string | undefined {
  * instance (predicate under `claims`) is recognized as well as raw JSON.
  */
 export function isWitnessStatement(input: CredentialTypeInput): boolean {
-  if (!hasCredentialTypeName(input, STATEMENT_CREDENTIAL_TYPE)) return false
+  // Exact type match, not the module's usual substring match: `includes` would
+  // accept a type like "NotAStatementCredentialReally". Main tightened this
+  // deliberately and has a test for it (trust-tasks/__tests__/witnessedV1).
+  if (!getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE)) return false
   const predicate = subjectPredicateOf(input)
   if (!predicate) return false
   return predicate === DTG_PREDICATE_WITNESSED && predicate in getAcceptListConfig().profiles
@@ -175,7 +178,8 @@ export const isWitnessedStatement = isWitnessStatement
  * may want to recognize a VSC statement without caring which profile matched.
  */
 export function isStatementCredential(input: CredentialTypeInput): boolean {
-  if (!hasCredentialTypeName(input, STATEMENT_CREDENTIAL_TYPE)) return false
+  // Exact type match, for the same reason as `isWitnessStatement` above.
+  if (!getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE)) return false
   const predicate = subjectPredicateOf(input)
   return predicate !== undefined && predicate in getAcceptListConfig().profiles
 }
