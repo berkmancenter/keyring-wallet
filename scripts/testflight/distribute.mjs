@@ -9,7 +9,7 @@
 //
 // Env: ASC_KEY_ID, ASC_KEY_PATH, ASC_ISSUER_ID (optional), BUNDLE_ID,
 //      APP_VERSION (MAJOR.MINOR.PATCH), BUILD_NUMBER, BETA_GROUPS (comma-separated),
-//      WHATS_NEW (optional), PROCESSING_TIMEOUT_MINUTES (optional, default 45)
+//      WHATS_NEW (required, never blank), PROCESSING_TIMEOUT_MINUTES (optional, default 45)
 
 import { readFileSync } from 'node:fs'
 import { createSign } from 'node:crypto'
@@ -30,7 +30,9 @@ const groupNames = env('BETA_GROUPS')
   .split(',')
   .map((name) => name.trim())
   .filter(Boolean)
+// What to Test is all a tester sees about a build: blank fails before the long wait.
 const whatsNew = (process.env.WHATS_NEW || '').slice(0, 4000)
+if (!whatsNew.trim()) throw new Error('WHATS_NEW is required: What to Test must not be empty')
 const timeoutMs = Number(process.env.PROCESSING_TIMEOUT_MINUTES || 45) * 60 * 1000
 
 const base64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -107,24 +109,28 @@ const main = async () => {
     await sleep(30_000)
   }
 
-  if (whatsNew) {
-    const localizations = await api('GET', `/v1/builds/${build.id}/betaBuildLocalizations`)
-    const existing = localizations.data.find((l) => l.attributes.locale === 'en-US') ?? localizations.data[0]
-    if (existing) {
-      await api('PATCH', `/v1/betaBuildLocalizations/${existing.id}`, {
-        data: { type: 'betaBuildLocalizations', id: existing.id, attributes: { whatsNew } },
-      })
-    } else {
-      await api('POST', '/v1/betaBuildLocalizations', {
-        data: {
-          type: 'betaBuildLocalizations',
-          attributes: { locale: 'en-US', whatsNew },
-          relationships: { build: { data: { type: 'builds', id: build.id } } },
-        },
-      })
-    }
-    console.log('What to Test set')
+  const localizations = await api('GET', `/v1/builds/${build.id}/betaBuildLocalizations`)
+  const existing = localizations.data.find((l) => l.attributes.locale === 'en-US') ?? localizations.data[0]
+  if (existing) {
+    await api('PATCH', `/v1/betaBuildLocalizations/${existing.id}`, {
+      data: { type: 'betaBuildLocalizations', id: existing.id, attributes: { whatsNew } },
+    })
+  } else {
+    await api('POST', '/v1/betaBuildLocalizations', {
+      data: {
+        type: 'betaBuildLocalizations',
+        attributes: { locale: 'en-US', whatsNew },
+        relationships: { build: { data: { type: 'builds', id: build.id } } },
+      },
+    })
   }
+  // Read it back: the build is distributed only once App Store Connect holds the notes.
+  const stored = await api('GET', `/v1/builds/${build.id}/betaBuildLocalizations`)
+  const held = stored.data.map((l) => `${l.attributes.locale}: ${(l.attributes.whatsNew || '').length} chars`)
+  if (!stored.data.some((l) => (l.attributes.whatsNew || '').trim())) {
+    throw new Error(`What to Test is empty in App Store Connect after setting it (${held.join(', ') || 'no localizations'})`)
+  }
+  console.log(`What to Test set (${held.join(', ')})`)
 
   let external = false
   for (const group of groups) {
