@@ -50,6 +50,7 @@ import path from "node:path";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 import { listAcl, ownedBy, removeRunKeys } from "./lib/aclCleanup.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 import { buildLacks } from "./lib/buildHas.js";
@@ -284,6 +285,9 @@ try {
       `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
     await d.activateApp(BID);
     await sleep(2000);
+    // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
+    // has passed); unlock before the card is looked for (review on #428).
+    await unlockIfLocked(d).catch(() => undefined);
   }
 
   const t0 = Date.now();
