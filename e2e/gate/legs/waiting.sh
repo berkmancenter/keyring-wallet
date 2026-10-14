@@ -3,8 +3,9 @@
 # to join C by its admin-review way. While it waits, the Join screen and Your agent's community card must show the
 # identity the request came from, and each identity line and Join's actions must end above the tab bar.
 # Then C's admin approves it (our REST admin script): the card must turn to member, C must list the identity, and
-# the Wallet must show the card (run-join-waiting.mjs, JOIN_APPROVE=1); Your agent's card for C must show the role
-# card as well (join-approved-role-card); the runner agent's vault must hold both cards (cards-kept-on-agent, pnm
+# the Wallet must show the card (run-join-waiting.mjs, JOIN_APPROVE=1); the default "member" role must get no card of
+# its own and the membership card's details must say "Role: member" (join-approved-role-card); the runner agent's
+# vault must hold both cards (cards-kept-on-agent, pnm
 # cred-vault query); and, tracked until Keyring sends it, C must record the member's reciprocal membership credential
 # (member-vmc-sent). Last, the app is wiped and linked to the same agent again, and "Get your cards" must bring both
 # cards back (run-cards-back.mjs, cards-back-new-install, tracked). The member is removed at the end.
