@@ -301,7 +301,7 @@ import sys,json
 t=sys.stdin.read()
 if '[' not in t: sys.exit(1)
 for e in json.loads(t[t.index('['):]):
-    if e.get('label')=='keyring-admin' and str(e.get('createdAt',''))>='$t0': print(e['subject'])
+    if e.get('label') in ('keyring-admin','keyring-phone') and str(e.get('createdAt',''))>='$t0': print(e['subject'])
 " && break; sleep 15; done)
   for k in $list; do
     for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -q deleted && break; sleep 15; done

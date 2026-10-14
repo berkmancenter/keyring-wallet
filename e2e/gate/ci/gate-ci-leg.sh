@@ -18,6 +18,9 @@ mkdir -p "$GATE_HOME" "$RUN_DIR" "$LEG_DIR"
 CI_ALLOWED_SLUGS=$(grep -E '^(RUNNER_MAIN|RUNNER_A|RUNNER_B)_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"' | tr '\n' ' ')
 [ -n "${CI_ALLOWED_SLUGS// /}" ] || { echo "ENV the CI configuration names no runner slugs" | tee "$LEG_DIR/leg.log"; exit 2; }
 export CI_ALLOWED_SLUGS
+# Phone grants on CI must expire (pnm-ci.sh refuses one without --expires; the CI identity expires, and the VTA refuses
+# an entry that would outlive its granter). enrol-manager.sh reads EXPIRES; the enrolment page already uses 1h.
+export EXPIRES=${EXPIRES:-6h}
 # One pnm call before the leg (read-only, its JSON discarded): an identity, store or network fault is ENV with pnm's own
 # words, not a driver failure four steps later (run 38496808904: the drivers logged only "Command failed: … acl list").
 main=$(grep -m1 '^RUNNER_MAIN_SLUG=' "$GATE_ENV" | cut -d= -f2- | tr -d '"')

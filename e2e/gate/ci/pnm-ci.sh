@@ -33,6 +33,31 @@ case " $CI_COMMANDS " in
   *" $cmd:$sub "*|*" $cmd: "*) ;;
   *) echo "pnm-ci: refused: \"$cmd $sub\" is not a command the CI legs use" >&2; exit 2 ;;
 esac
+# acl create is bounded to the gate's phone grant (an extension of D-8, coordinator 10-14): exactly --did <did:key or
+# did:peer> --role admin --label keyring-phone|keyring-admin --expires <N>s|m|h of 24 h or less, no contexts, no
+# approve, handoff or step-up flags. Every key it makes carries one of the two labels keys_since cleans, and an expiry.
+if [ "$cmd:$sub" = acl:create ]; then
+  did=""; role=""; label=""; exp=""; set -- "${@:5}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --did) did=${2:-}; shift 2 ;;
+      --role) role=${2:-}; shift 2 ;;
+      --label) label=${2:-}; shift 2 ;;
+      --expires) exp=${2:-}; shift 2 ;;
+      *) echo "pnm-ci: refused: acl create with $1 (only --did --role --label --expires)" >&2; exit 2 ;;
+    esac
+  done
+  case "$did" in did:key:z*|did:peer:*) ;; *) echo "pnm-ci: refused: acl create for a subject that is not a phone key" >&2; exit 2 ;; esac
+  [ "$role" = admin ] || { echo "pnm-ci: refused: acl create --role $role (phone grants are admin)" >&2; exit 2; }
+  case "$label" in keyring-phone|keyring-admin) ;; *) echo "pnm-ci: refused: acl create --label $label (only keyring-phone, keyring-admin)" >&2; exit 2 ;; esac
+  if [[ $exp =~ ^([0-9]+)([smh])$ ]]; then
+    n=${BASH_REMATCH[1]}; case ${BASH_REMATCH[2]} in s) secs=$n ;; m) secs=$((n * 60)) ;; h) secs=$((n * 3600)) ;; esac
+    [ "$secs" -ge 1 ] && [ "$secs" -le 86400 ] || { echo "pnm-ci: refused: acl create --expires $exp (1 s to 24 h)" >&2; exit 2; }
+  else
+    echo "pnm-ci: refused: acl create needs --expires <N>s|m|h (the CI identity expires, and so must what it grants)" >&2; exit 2
+  fi
+  set -- --vta "$slug" acl create --did "$did" --role admin --label "$label" --expires "$exp"
+fi
 # No verbose output through the environment either.
 unset RUST_LOG RUST_BACKTRACE PNM_VTA
 PNM_HOME=$CI_PNM_HOME VTI_SECURE_STORE=file RUST_LOG=warn exec "$PNM_REAL" "$@"
