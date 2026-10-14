@@ -123,6 +123,10 @@ async function answerOwner(d, tag) {
     log(`owner check (${tag}): no prompt in 8 s; nothing typed`);
     return false;
   }
+  // The prompt's window exists before it has animated in. A PIN verified in that time is dropped: SystemUI waits for
+  // onDialogAnimatedIn, then dismisses, and the app gets "Authentication canceled" (code 10) though the PIN was right
+  // (rerun 1014-1651 p1: shown 11:54:10.298, verified .371, animated in .596). A person never types that fast.
+  await sleep(1000);
   log(`owner check (${tag}): ${win.slice(0, 120)}; typing the PIN`);
   adb("shell", "input", "text", PIN_DEV);
   adb("shell", "input", "keyevent", "66");
