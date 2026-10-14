@@ -50,6 +50,7 @@
     "@bifold/remote-logs": "3.0.16",
     "@bifold/trust-tasks": "0.1.0-alpha.1",
     "@bifold/verifier": "3.0.16",
+    "@bifold/dtg-vocab": "0.1.0-alpha.1",
     "@bifold/vrc-contexts": "0.1.0-alpha.1",
     "@craftzdog/react-native-buffer": "^6.1.1",
     "@credo-ts/anoncreds": "0.7.1-pr-2704-20260909134930",

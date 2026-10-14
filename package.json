@@ -114,6 +114,7 @@
     "@bifold/react-native-locality-peripheral": "portal:bifold/packages/react-native-locality-peripheral",
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
+    "@bifold/dtg-vocab": "portal:bifold/packages/dtg-vocab",
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
     "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
