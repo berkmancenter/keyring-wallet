@@ -45,7 +45,7 @@ import { claimWords, joinNeedWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
-import { joinCard } from './joinWays'
+import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { useCommunity } from './useCommunity'
@@ -577,6 +577,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             <View style={styles.card} testID={testIdWithKey(VtiJoinIds.versionUnsupported)}>
               <ThemedText>{t('Join.Ways.VersionUnsupported', named)}</ThemedText>
             </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // A 0.2 community whose vetting this version cannot do: said, and
+      // nothing offered — the legacy view would start named vetting (IN-264).
+      if (card?.mode === 'vettingNotSupported') {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.vettingNotSupported)}>
+              <ThemedText>{t(VETTING_NOT_SUPPORTED_KEY[card.vetting], named)}</ThemedText>
+            </View>
+            {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
           </>
         )
         actions = different

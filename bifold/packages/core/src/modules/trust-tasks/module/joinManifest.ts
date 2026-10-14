@@ -100,6 +100,8 @@ export type JoinWayFault =
   | 'issuersMissing'
   | 'issuersUnknown'
   | 'vettingUnreadable'
+  | 'vettingPrivate'
+  | 'vettingExtUnsupported'
 
 /** One way into a community: a criterion, read for the Join screen. */
 export interface JoinWay {
@@ -216,6 +218,39 @@ function queriedTypes(query: unknown): string[] {
   return [...new Set(types.filter((t): t is string => typeof t === 'string'))]
 }
 
+/**
+ * The vetting extensions this wallet implements: none yet. A criterion that
+ * marks any other one critical (`vetting.extCritical`) cannot be met by the
+ * vetting this wallet does, so it must not be tried.
+ */
+export const SUPPORTED_VETTING_EXT: readonly string[] = []
+
+/**
+ * Why this wallet must not gather vetting for a criterion, read from its raw
+ * JSON (a typed read can drop members it does not know): it runs hidden
+ * (private) vetting, which refuses named statements (VTI #2051), or it marks an
+ * extension critical that this wallet does not implement. Undefined when the
+ * named vetting this wallet does is what it asks for. Fail closed: a criterion
+ * is never downgraded to named vetting (IN-264).
+ */
+export function unsupportedVetting(
+  criterion: VtiCriterion
+): { fault: 'vettingPrivate' | 'vettingExtUnsupported'; detail: string } | undefined {
+  const vetting = criterion.vetting as { ext?: unknown; extCritical?: unknown } | undefined
+  if (!vetting || typeof vetting !== 'object') return undefined
+  const ext = vetting.ext && typeof vetting.ext === 'object' ? (vetting.ext as Record<string, unknown>) : undefined
+  const critical = vetting.extCritical
+  const listed = Array.isArray(critical) ? critical : []
+  if ((ext && HIDDEN_VETTING_EXT in ext) || listed.includes(HIDDEN_VETTING_EXT)) {
+    return { fault: 'vettingPrivate', detail: HIDDEN_VETTING_EXT }
+  }
+  if (critical !== undefined && (!Array.isArray(critical) || critical.some((n) => typeof n !== 'string'))) {
+    return { fault: 'vettingExtUnsupported', detail: 'extCritical is not a list of names' }
+  }
+  const unknown = (listed as string[]).filter((n) => !SUPPORTED_VETTING_EXT.includes(n))
+  return unknown.length ? { fault: 'vettingExtUnsupported', detail: unknown.join(', ') } : undefined
+}
+
 function faultOf(criterion: VtiCriterion, wire: JoinWire): Pick<JoinWay, 'unusableBecause' | 'unusableDetail'> {
   const fault = (unusableBecause: JoinWayFault, unusableDetail?: string) => ({ unusableBecause, unusableDetail })
   if (wire === '0.3') {
@@ -236,6 +271,10 @@ function faultOf(criterion: VtiCriterion, wire: JoinWire): Pick<JoinWay, 'unusab
       return fault('digestMismatch', `published ${published}, recomputed ${criterionDigest(criterion)}`)
     }
   }
+  // Vetting this wallet cannot do is said as such, before its requirements
+  // are read, and never offered as named vetting (IN-264).
+  const notSupported = unsupportedVetting(criterion)
+  if (notSupported) return fault(notSupported.fault, notSupported.detail)
   if (criterion.vetting !== undefined) {
     const shape = checkVettingRequirements(criterion.vetting)
     if (!shape.ok) return fault('vettingUnreadable', shape.detail)
