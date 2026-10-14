@@ -10,6 +10,15 @@ on:
         type: choice
         options: [both, android, ios]
         default: both
+      build_number:
+        description: >-
+          Optional. The build number to use instead of the run counter. Use it
+          to rebuild ONE platform of a release whose other platform already
+          shipped, so both stores carry the same number (e.g. 236). The store
+          rejects a number it has already accepted for that platform, so only
+          reuse a number that platform never uploaded. Empty = the run counter.
+        type: string
+        default: ''
       audience:
         description: >-
           Who gets this build. "all" ships as usual. "internal" keeps it from
@@ -41,7 +50,15 @@ jobs:
           OFFSET=200
           MIN_BUILD_NUMBER=201
 
-          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          if [ -n "${REQUESTED_BUILD_NUMBER}" ]; then
+            case "${REQUESTED_BUILD_NUMBER}" in
+              *[!0-9]*) echo "::error::build_number must be digits only, got '${REQUESTED_BUILD_NUMBER}'"; exit 1 ;;
+            esac
+            BUILD_NUMBER=${REQUESTED_BUILD_NUMBER}
+            echo "Using the requested build number ${BUILD_NUMBER} instead of the run counter"
+          else
+            BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          fi
           if [ $BUILD_NUMBER -lt $MIN_BUILD_NUMBER ]; then
             echo "Build number $BUILD_NUMBER is below the floor $MIN_BUILD_NUMBER"
             exit 1
@@ -51,6 +68,7 @@ jobs:
           echo "Calculated build number: $BUILD_NUMBER (run: $GITHUB_RUN_NUMBER + offset: $OFFSET, min: $MIN_BUILD_NUMBER)"
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          REQUESTED_BUILD_NUMBER: ${{ inputs.build_number }}
 
   extract-version:
     runs-on: ubuntu-22.04
