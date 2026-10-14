@@ -68,6 +68,8 @@ import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
 import { createTspCarriage } from './module/TspCarriage'
+import { WITNESS_VERIFIED_TAG } from '../vrc/utils/witnessCredentialUtils'
+
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { trustTaskRegistry } from './registry'
 import type { InboundContext as RegistryInboundContext } from './registry'
@@ -1378,9 +1380,12 @@ async function handleInboundWitnessShare(
         }
       })
       if (!alreadyStored) {
-        await agent.w3cCredentials.store({
-          record: new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] }),
-        })
+        // Verified above (the share is checked against the digest the peer
+        // committed to), so it is marked: only marked records earn the witness
+        // and locality marks in the UI (WITNESS_VERIFIED_TAG).
+        const sharedRecord = new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] })
+        sharedRecord.setTags({ [WITNESS_VERIFIED_TAG]: 'true' } as never)
+        await agent.w3cCredentials.store({ record: sharedRecord })
       }
       logger.info(`${LOG_PREFIX} witness-share verified and stored (exchange ${doc.threadId ?? doc.id})`)
       return respondWith(doc as never, utils.uuid(), { vwcDigestMultibase: sharedDigest }, () =>

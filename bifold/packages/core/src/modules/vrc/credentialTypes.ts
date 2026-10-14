@@ -53,6 +53,31 @@ export function hasCredentialTypeName(input: CredentialTypeInput, typeName: stri
   return getCredentialTypeList(input).some((t) => t.includes(typeName))
 }
 
+/**
+ * The bare name of a type element: the part after the last `#` or `/` of an
+ * IRI, or the element itself when it is already a bare name.
+ */
+function typeNameOf(type: string): string {
+  const cut = Math.max(type.lastIndexOf('#'), type.lastIndexOf('/'))
+  return cut >= 0 ? type.slice(cut + 1) : type
+}
+
+/**
+ * Whether the credential NAMES this type, matched as a whole name rather than
+ * as a substring: `WitnessCredential` matches, and so does the expanded IRI
+ * form `https://…#WitnessCredential`, but `NotAWitnessCredentialReally` does
+ * not.
+ *
+ * `hasCredentialTypeName` above matches substrings, which is right for the
+ * display registry's tolerant "what kind of thing is this, roughly?" questions
+ * and wrong for deciding that a credential IS of a type — a decision a peer
+ * can otherwise steer by naming its credential something that merely contains
+ * the word. Use this one wherever the answer grants something.
+ */
+export function namesCredentialType(input: CredentialTypeInput, typeName: string): boolean {
+  return getCredentialTypeList(input).some((t) => t === typeName || typeNameOf(t) === typeName)
+}
+
 /** DTGCredential — the base type of the DTG/VRC credential family. */
 export function isDTGCredential(input: CredentialTypeInput): boolean {
   return hasCredentialTypeName(input, DTG_CREDENTIAL_TYPE)
@@ -109,7 +134,11 @@ export function isWitnessedStatement(input: CredentialTypeInput): boolean {
  * which needs the credential, not just its types).
  */
 export function isWitnessCredential(input: CredentialTypeInput): boolean {
-  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE) || isWitnessedStatement(input)
+  // Named, not merely contained: this answer decides whether a credential is
+  // auto-accepted and whether it can be counted as a witness's, so a peer must
+  // not be able to reach it by calling its credential something that happens
+  // to contain "WitnessCredential".
+  return namesCredentialType(input, WITNESS_CREDENTIAL_TYPE) || isWitnessedStatement(input)
 }
 
 /**

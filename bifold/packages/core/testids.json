@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f37c84947ae6f0889cb0e56a6d1e7e23979ecdbd",
+  "generatedFrom": "881d284bc3d620959cba8af65f2cb9ee615bc730",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -1091,6 +1091,7 @@
     "VetterHeaderBackground": ["src/components/views/VetterHeaderBackground.tsx"],
     "WitnessRecord": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "WitnessSection": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "WitnessVerifiedBadge": ["src/modules/vrc/components/ContactCard.tsx"],
     "WitnessedBadge": ["src/modules/vrc/screens/ContactDetails.tsx"]
   },
   "derived": [

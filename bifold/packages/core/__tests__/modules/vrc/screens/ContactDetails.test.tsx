@@ -8,6 +8,7 @@ import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { TEST_CONTACTS, generateTestDid } from '../fixtures/dtg-credentials'
 import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { WITNESS_VERIFIED_TAG } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
 import { testIdWithKey } from '../../../../src/utils/testable'
 import { ContainerProvider } from '../../../../src/container-api'
 import { MainContainer } from '../../../../src/container-impl'
@@ -30,9 +31,23 @@ const TestContainerWrapper: React.FC<{ children: React.ReactNode }> = ({ childre
  * under test only ever reads `.encoded`. `witnessContext: {}` (no
  * `localityConfirmed` at all) represents a witness that never offered
  * locality — the three-state 'not-offered' case. */
-function createLocalityVwc(subjectId: string, witnessContext: Record<string, unknown>): W3cCredentialRecord {
+/**
+ * A VWC naming `subjectId`.
+ *
+ * `verified` is what the ceremony paths mark a credential with once they have
+ * checked it (WITNESS_VERIFIED_TAG); the screen shows witness and locality
+ * information for marked records only. It defaults to true here because these
+ * tests are about a genuine witnessed exchange — pass false for a record the
+ * wallet holds but never verified, which must earn nothing.
+ */
+function createLocalityVwc(
+  subjectId: string,
+  witnessContext: Record<string, unknown>,
+  verified = true
+): W3cCredentialRecord {
   return {
     id: 'credential-locality-vwc',
+    getTags: () => (verified ? { [WITNESS_VERIFIED_TAG]: 'true' } : {}),
     encoded: {
       type: ['VerifiableCredential', 'WitnessCredential'],
       issuer: 'did:example:witness',
