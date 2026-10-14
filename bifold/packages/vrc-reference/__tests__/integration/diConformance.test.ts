@@ -395,14 +395,18 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
         : {}),
     })
 
-    test.each([false, true])('DI sign + verify round trip (evidence: %s); proof is DataIntegrityProof/eddsa-rdfc-2022', async (ev) => {
-      const signed = await signDi(emitted(`urn:uuid:di-emitted-${ev}`, ev))
-      const json = JsonTransformer.toJSON(signed) as Record<string, any>
-      expect(json.issuerScope).toBe('pairwise')
-      expect(json.proof.type).toBe('DataIntegrityProof')
-      expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
-      expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
-    }, 30000)
+    test.each([false, true])(
+      'DI sign + verify round trip (evidence: %s); proof is DataIntegrityProof/eddsa-rdfc-2022',
+      async (ev) => {
+        const signed = await signDi(emitted(`urn:uuid:di-emitted-${ev}`, ev))
+        const json = JsonTransformer.toJSON(signed) as Record<string, any>
+        expect(json.issuerScope).toBe('pairwise')
+        expect(json.proof.type).toBe('DataIntegrityProof')
+        expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
+        expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+      },
+      30000
+    )
 
     test('issuerScope is covered by the proof: altering it invalidates the signature', async () => {
       const signed = await signDi(emitted('urn:uuid:di-emitted-tamper', true))

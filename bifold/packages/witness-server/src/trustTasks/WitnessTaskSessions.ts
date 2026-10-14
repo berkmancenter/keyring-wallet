@@ -548,9 +548,7 @@ export class WitnessTaskSessions {
           vpFailure = `threw: ${(error as Error).message}`
         }
         if (!vpValid) {
-          console.warn(
-            `[${this.host.name}] Task session ${sessionId}: presentation rejected — ${vpFailure}`
-          )
+          console.warn(`[${this.host.name}] Task session ${sessionId}: presentation rejected — ${vpFailure}`)
           return notBound(rawDoc as never, 'presentation not bound to this session')
         }
 

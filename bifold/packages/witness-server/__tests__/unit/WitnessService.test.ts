@@ -39,10 +39,7 @@ import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
 } from '@bifold/vrc-contexts'
 import { defaultConfig, isMediatorEnabled, WitnessServerConfig } from '../../src/config'
-import {
-  assertSupportedMediatorPickupStrategy,
-  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
-} from '@bifold/vrc-shared'
+import { assertSupportedMediatorPickupStrategy, SUPPORTED_MEDIATOR_PICKUP_STRATEGY } from '@bifold/vrc-shared'
 import { taskDigestMultibase, digestMultibase, digestBytesEqual } from '@bifold/trust-tasks'
 import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 
@@ -872,22 +869,16 @@ describe('WitnessService - Transport Configuration', () => {
     it.each(['Implicit', 'PickUpV2LiveMode', 'None'])(
       'rejects %s with an explanation, rather than failing silently at runtime',
       (strategy) => {
-        expect(() => assertSupportedMediatorPickupStrategy(strategy, 'test')).toThrow(
-          /cannot receive messages/
-        )
+        expect(() => assertSupportedMediatorPickupStrategy(strategy, 'test')).toThrow(/cannot receive messages/)
       }
     )
 
     it('rejects an unset strategy, since credo would fall back to persisted wallet state', () => {
-      expect(() => assertSupportedMediatorPickupStrategy(undefined, 'test')).toThrow(
-        /no mediator pickup strategy set/
-      )
+      expect(() => assertSupportedMediatorPickupStrategy(undefined, 'test')).toThrow(/no mediator pickup strategy set/)
     })
 
     it('accepts the supported strategy', () => {
-      expect(() =>
-        assertSupportedMediatorPickupStrategy(SUPPORTED_MEDIATOR_PICKUP_STRATEGY, 'test')
-      ).not.toThrow()
+      expect(() => assertSupportedMediatorPickupStrategy(SUPPORTED_MEDIATOR_PICKUP_STRATEGY, 'test')).not.toThrow()
     })
   })
 
@@ -1681,10 +1672,7 @@ describe('WitnessService - Opt-in Reporting', () => {
      * We test the gate logic directly (no agent spin-up needed).
      */
 
-    function simulateRegistrationHandling(
-      reportingEnabled: boolean,
-      reportingDid: string
-    ): { registered: boolean } {
+    function simulateRegistrationHandling(reportingEnabled: boolean, reportingDid: string): { registered: boolean } {
       // Mirrors the gate in WitnessService.registerMessageHandlers
       if (!reportingEnabled) return { registered: false }
       const isValid = typeof reportingDid === 'string' && reportingDid.startsWith('did:')
@@ -1977,12 +1965,14 @@ describe('WitnessService - Witness Request Preference', () => {
   /**
    * Helper to create a mock SessionData object with witnessRequested map
    */
-  function createMockSessionWithWitnessRequest(overrides: Partial<{
-    sessionId: string
-    participants: Set<string>
-    receivedPresentations: Map<string, any>
-    witnessRequested: Map<string, boolean>
-  }> = {}): {
+  function createMockSessionWithWitnessRequest(
+    overrides: Partial<{
+      sessionId: string
+      participants: Set<string>
+      receivedPresentations: Map<string, any>
+      witnessRequested: Map<string, boolean>
+    }> = {}
+  ): {
     sessionId: string
     participants: Set<string>
     receivedPresentations: Map<string, any>
@@ -2001,14 +1991,9 @@ describe('WitnessService - Witness Request Preference', () => {
    * Mirrors the logic in issueWitnessCredentials() for determining
    * whether to issue VWCs based on witness preferences.
    */
-  function shouldIssueVWCs(session: {
-    participants: Set<string>
-    witnessRequested: Map<string, boolean>
-  }): boolean {
+  function shouldIssueVWCs(session: { participants: Set<string>; witnessRequested: Map<string, boolean> }): boolean {
     const participantIds = Array.from(session.participants)
-    const bothWantWitness = participantIds.every(
-      (connId) => session.witnessRequested.get(connId) !== false
-    )
+    const bothWantWitness = participantIds.every((connId) => session.witnessRequested.get(connId) !== false)
     return bothWantWitness
   }
 
@@ -2143,11 +2128,9 @@ describe('WitnessService - Witness Request Preference', () => {
     /**
      * Mirrors the parsing logic in handleSessionRequest()
      */
-    function parseSessionRequest(message: {
-      myRelationshipDid: string
-      counterpartyDid: string
-      witness?: boolean
-    }): { witness: boolean } {
+    function parseSessionRequest(message: { myRelationshipDid: string; counterpartyDid: string; witness?: boolean }): {
+      witness: boolean
+    } {
       const witness = message.witness ?? true
       return { witness }
     }
@@ -2237,7 +2220,7 @@ describe('WitnessService - Witness Request Preference', () => {
      * Tests that verify the network UI will render non-witnessed edges correctly.
      * The network UI uses edgeScore(witnessed, attestationCount) to determine
      * the visual representation of edges.
-     * 
+     *
      * Non-witnessed edges now factor in attestationCount:
      * - 0 attestations: score 0, 10% thickness, 10% brightness
      * - 1 attestation: score 0.33, 16% thickness, 16% brightness
@@ -2250,8 +2233,8 @@ describe('WitnessService - Witness Request Preference', () => {
     it('should have score 0 for non-witnessed edges with no attestations', () => {
       const result = edgeScore(false, 0)
       expect(result.score).toBeCloseTo(0, 2)
-      expect(result.thicknessMultiplier).toBeCloseTo(0.10, 2)
-      expect(result.brightness).toBeCloseTo(0.10, 2)
+      expect(result.thicknessMultiplier).toBeCloseTo(0.1, 2)
+      expect(result.brightness).toBeCloseTo(0.1, 2)
     })
 
     it('should have score 0.33 for non-witnessed edges with 1 attestation', () => {
@@ -2326,9 +2309,7 @@ describe('WitnessService - Witness Request Preference', () => {
     /**
      * Simulates retrieving stored witness preference from pending request
      */
-    function getInitiatorWitnessPreference(
-      pendingRequest: PendingSessionRequest | undefined
-    ): boolean {
+    function getInitiatorWitnessPreference(pendingRequest: PendingSessionRequest | undefined): boolean {
       return pendingRequest?.initiatorWitnessPreference ?? true
     }
 
@@ -2355,12 +2336,7 @@ describe('WitnessService - Witness Request Preference', () => {
     })
 
     it('should retrieve initiator preference from pending request', () => {
-      const request = createPendingRequest(
-        'conn-alice',
-        'did:peer:alice-rel',
-        'did:peer:bob-rel',
-        false
-      )
+      const request = createPendingRequest('conn-alice', 'did:peer:alice-rel', 'did:peer:bob-rel', false)
 
       const preference = getInitiatorWitnessPreference(request)
       expect(preference).toBe(false)
@@ -2433,12 +2409,7 @@ describe('WitnessService - Witness Request Preference', () => {
     })
 
     it('should store false for both when neither wants witness', () => {
-      const session = createWitnessedSession(
-        'conn-alice',
-        'conn-bob',
-        false,
-        false
-      )
+      const session = createWitnessedSession('conn-alice', 'conn-bob', false, false)
 
       expect(session.witnessRequested.get('conn-alice')).toBe(false)
       expect(session.witnessRequested.get('conn-bob')).toBe(false)
@@ -2457,7 +2428,7 @@ describe('WitnessService - Witness Request Preference', () => {
         'conn-alice',
         'conn-bob',
         false, // Alice doesn't want witness
-        true   // Bob wants witness
+        true // Bob wants witness
       )
 
       expect(session.witnessRequested.get('conn-alice')).toBe(false)
@@ -2507,9 +2478,7 @@ describe('WitnessService - Witness Request Preference', () => {
 
       // Step 4: VWC issuance decision
       const participantIds = Array.from(session.participants)
-      const bothWantWitness = participantIds.every(
-        (connId) => session.witnessRequested.get(connId) !== false
-      )
+      const bothWantWitness = participantIds.every((connId) => session.witnessRequested.get(connId) !== false)
 
       return { shouldIssueVWC: bothWantWitness }
     }
@@ -2540,9 +2509,7 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
   /**
    * Helper to create a mock SessionData object with reporting DIDs
    */
-  function createMockSessionWithReportingDids(
-    receivedReportingDids: Map<string, string>
-  ): SessionData {
+  function createMockSessionWithReportingDids(receivedReportingDids: Map<string, string>): SessionData {
     return {
       sessionId: 'test-session-123',
       challenge: 'test-challenge-abc',
@@ -2612,9 +2579,7 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
     })
 
     it('should NOT record edge when only ONE party includes reportingDid', () => {
-      const session = createMockSessionWithReportingDids(
-        new Map([['conn-alice', 'did:peer:alice']])
-      )
+      const session = createMockSessionWithReportingDids(new Map([['conn-alice', 'did:peer:alice']]))
 
       const result = simulateOnSessionCompletedCallback(session)
 

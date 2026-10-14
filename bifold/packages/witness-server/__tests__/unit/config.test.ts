@@ -472,9 +472,7 @@ describe('WitnessServerConfig', () => {
       const result = parseEventTime('WITNESS_EVENT_START', 'not-a-date')
 
       expect(result).toBeUndefined()
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('WITNESS_EVENT_START')
-      )
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WITNESS_EVENT_START'))
       warnSpy.mockRestore()
     })
   })

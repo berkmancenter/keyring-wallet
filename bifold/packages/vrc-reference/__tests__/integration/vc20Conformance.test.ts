@@ -101,7 +101,8 @@ describe('VCDM 2.0 sign/verify conformance (Ed25519Signature2018)', () => {
       throw new Error('Failed to create issuer DID')
     }
     issuerDid = result.didState.did
-    const assertionOrAuth = result.didState.didDocument.assertionMethod?.[0] ?? result.didState.didDocument.authentication?.[0]
+    const assertionOrAuth =
+      result.didState.didDocument.assertionMethod?.[0] ?? result.didState.didDocument.authentication?.[0]
     verificationMethodId = typeof assertionOrAuth === 'string' ? assertionOrAuth : (assertionOrAuth?.id as string)
   }, 30000)
 
@@ -132,7 +133,12 @@ describe('VCDM 2.0 sign/verify conformance (Ed25519Signature2018)', () => {
     // suite context is included at build time so signing doesn't append it —
     // otherwise the signed credential's @context wouldn't equal the offer's and
     // credo's DIDComm holder-side equality check would reject the credential.
-    const inputContext = [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL]
+    const inputContext = [
+      CREDENTIALS_V2_CONTEXT_URL,
+      DTG_CONTEXT_URL,
+      RELATIONSHIP_CONTEXT_URL,
+      ED25519_2018_SUITE_CONTEXT_URL,
+    ]
     const { vcJson, isValid } = await signAndVerify({
       '@context': inputContext,
       type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],

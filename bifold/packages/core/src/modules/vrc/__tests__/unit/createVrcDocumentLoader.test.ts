@@ -114,7 +114,7 @@ describe('createVrcDocumentLoader', () => {
 
   describe('HTTP fallback', () => {
     it('should fetch non-cached HTTPS URLs via network', async () => {
-      const fakeDocument = { '@context': { 'id': '@id' } }
+      const fakeDocument = { '@context': { id: '@id' } }
       const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValueOnce({
         json: () => Promise.resolve(fakeDocument),
       } as Response)
@@ -132,9 +132,7 @@ describe('createVrcDocumentLoader', () => {
     })
 
     it('should propagate fetch errors for unreachable URLs', async () => {
-      const fetchSpy = jest
-        .spyOn(global, 'fetch')
-        .mockRejectedValueOnce(new Error('Network request failed'))
+      const fetchSpy = jest.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('Network request failed'))
 
       await expect(documentLoader('https://dead-host.example/v1')).rejects.toThrow('Network request failed')
       fetchSpy.mockRestore()

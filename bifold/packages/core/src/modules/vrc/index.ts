@@ -207,8 +207,5 @@ export { EvidenceBuilder, createEvidenceBuilder } from './services/EvidenceBuild
 export type { BuildEvidenceResult } from './services/EvidenceBuilder'
 
 // Export verification services
-export {
-  HardwareSignatureVerifier,
-  verifyVrcHardwareEvidence,
-} from './services/BiometricSignatureVerifier'
+export { HardwareSignatureVerifier, verifyVrcHardwareEvidence } from './services/BiometricSignatureVerifier'
 export type { SignatureVerificationResult, VerificationLevel } from './services/BiometricSignatureVerifier'

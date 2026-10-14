@@ -49,7 +49,7 @@ describe('RelationshipContext', () => {
 
     it('should be immutable (frozen)', () => {
       expect(() => {
-        (RELATIONSHIP_CONTEXT_DOCUMENT['@context'] as any).newProperty = 'test'
+        ;(RELATIONSHIP_CONTEXT_DOCUMENT['@context'] as any).newProperty = 'test'
       }).not.toThrow()
       // Note: In real scenarios, you might want to freeze the object
       // This test just verifies it doesn't throw when trying to modify

@@ -125,10 +125,7 @@ export function hasHardwareAttestationEvidence(credential: W3cCredentialRecord):
  * @param issuerDid - The counterparty's relationship DID (the credential issuer)
  * @returns True if any matching VRC has HW attestation evidence
  */
-export function hasVrcHardwareAttestation(
-  credentials: W3cCredentialRecord[],
-  issuerDid: string
-): boolean {
+export function hasVrcHardwareAttestation(credentials: W3cCredentialRecord[], issuerDid: string): boolean {
   return credentials.some((credential) => {
     try {
       const raw = toRawCredential(credential)
@@ -335,7 +332,11 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
           witnessContext = credentialSubject.witnessContext
         }
         // Second, check under credentialSubject.claims
-        else if ('claims' in credentialSubject && credentialSubject.claims && typeof credentialSubject.claims === 'object') {
+        else if (
+          'claims' in credentialSubject &&
+          credentialSubject.claims &&
+          typeof credentialSubject.claims === 'object'
+        ) {
           const claims = credentialSubject.claims
 
           if ('witnessContext' in claims && claims.witnessContext) {
