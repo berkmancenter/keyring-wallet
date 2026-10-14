@@ -11,9 +11,10 @@
  *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
  *   join-approved-listed     (c) the community lists that identity as a member
  *   join-approved-wallet     (d) the Wallet shows C's membership card
- *   join-approved-role-card  (e) Your agent's card for C shows the role card beside the membership card (VTI issues
- *                                both on admission; decide/0.1 names no role, so it is the default "member", which the
- *                                Wallet leaves out beside its membership card by design, IN-109)
+ *   join-approved-role-card  (e) the default "member" role (decide/0.1 names none) gets no card of its own, on Your
+ *                                agent or in the Wallet, and the membership card's details say "Role: member"
+ *                                (CommunityCardRole, bifold #399, UI/UX 10-14). A build without that line keeps the
+ *                                earlier check, tracked: the role card beside the membership on Your agent
  *   cards-kept-on-agent      (f) the runner agent's vault holds both cards C issued this identity, within 90 s
  *                                (pnm cred-vault query: purpose membership; type AuthorityCredential for the role)
  *   member-vmc-sent          (g) TRACKED: C's member row records the identity's reciprocal membership credential
@@ -36,6 +37,7 @@ import { pasteLinkFromHome } from "./lib/flows.js";
 import { capturePersonaDid, footClear } from "./lib/personaDid.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { createRows } from "./lib/rows.js";
+import { buildLacks } from "./lib/buildHas.js";
 import { credVaultQuery } from "./lib/pnm.js";
 import { agents } from "./lib/pages/agents.js";
 import { community, join, readMemberState, readStanding } from "./lib/pages/join.js";
@@ -259,28 +261,48 @@ async function approvedFlow(d, me) {
     await screenshot(d, "join-approved-wallet").catch(() => undefined);
     return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
   });
-  // (e) The role card beside the membership on Your agent's card for C (CardKeptRow: AgentCard_<kind>_<key>, and its
-  // "kept by your agent" line AgentCardKept_<kind>_<key>). The Wallet lists the membership alone when the role is the
-  // plain "member" (vtiWalletCards isPlainMemberRole, IN-109), so Your agent is where the role card shows.
-  await rows.row("join-approved-role-card", async () => {
-    await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
-    let role = false;
-    let membership = false;
-    for (const until = Date.now() + 60000; Date.now() < until && !(role && membership); await sleep(2000)) {
-      await scrollToTestId(d, `AgentCard_role_${key}`, 6).catch(() => undefined);
-      role = await existsTestId(d, `AgentCard_role_${key}`, 1500);
-      membership = await existsTestId(d, `AgentCard_membership_${key}`, 1000);
-    }
-    const kept = role ? (await textOf(d, `AgentCardKept_role_${key}`).catch(() => "")).replace(/\s+/g, " ").trim() : "";
-    const label = role ? String((await (await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/AgentCard_role_${key}")`)).getAttribute("content-desc").catch(() => "")) || "") : "";
-    await screenshot(d, "join-approved-role-card").catch(() => undefined);
-    return {
-      ok: role && membership,
-      detail: `AgentCard_role ${role}${kept ? ` ("${kept}")` : ""}${label ? ` [${label.slice(0, 80)}]` : ""} · AgentCard_membership ${membership} · decide/0.1 names no role: the default "member"`,
-    };
-    // Tracked (240 gate, 10-14): the role credential for a default "member" role is issued and kept on the agent
-    // (cards-kept-on-agent passes) but shows no card of its own; whether it should is UI/UX's call for 241.
-  }, { tracked: "role card for default member role: UI/UX decision pending" });
+  // (e) The role. UI/UX's decision (10-14, bifold #399): a role credential with the default "member" role gets no card
+  // of its own, on Your agent or in the Wallet; the membership card's details say "Role: member" (CommunityCardRole).
+  // A build without that line keeps the earlier check, tracked: the role card beside the membership on Your agent.
+  if (!buildLacks("CommunityCardRole", { platform: "android" })) {
+    await rows.row("join-approved-role-card", async () => {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      let membership = false;
+      for (const until = Date.now() + 60000; Date.now() < until && !membership; await sleep(2000)) {
+        await scrollToTestId(d, `AgentCard_membership_${key}`, 6).catch(() => undefined);
+        membership = await existsTestId(d, `AgentCard_membership_${key}`, 1500);
+      }
+      const roleCard = await existsTestId(d, `AgentCard_role_${key}`, 1500);
+      await screenshot(d, "join-approved-role-card-agent").catch(() => undefined);
+      // The membership card's details, from the Wallet (its tour closed, as in (d)).
+      await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+      await sleep(2000);
+      for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
+      const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
+      const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
+      const said = line ? (await textOf(d, "CommunityCardRole").catch(() => "")).replace(/\s+/g, " ").trim() : "";
+      await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      if (opened) await d.back().catch(() => undefined);
+      return {
+        ok: membership && !roleCard && /\bmember\b/i.test(said),
+        detail: `Your agent: AgentCard_membership ${membership} · AgentCard_role ${roleCard} (want none for "member") · Wallet card details ${opened ? `CommunityCardRole "${said || "absent"}"` : `not opened (no card naming ${C_NAME})`}`,
+      };
+    });
+  } else {
+    await rows.row("join-approved-role-card", async () => {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      let role = false;
+      let membership = false;
+      for (const until = Date.now() + 60000; Date.now() < until && !(role && membership); await sleep(2000)) {
+        await scrollToTestId(d, `AgentCard_role_${key}`, 6).catch(() => undefined);
+        role = await existsTestId(d, `AgentCard_role_${key}`, 1500);
+        membership = await existsTestId(d, `AgentCard_membership_${key}`, 1000);
+      }
+      await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      return { ok: role && membership, detail: `AgentCard_role ${role} · AgentCard_membership ${membership} · decide/0.1 names no role: the default "member"` };
+    }, { tracked: "role card for default member role: a build without CommunityCardRole (bifold #399)" });
+  }
   // (f) Both cards kept by the runner agent, as the phone pushed them (vault/credentials/receive/0.1).
   const want = me ? issuedCards(me, decided) : { membership: "", role: "" };
   console.log(`CARD_IDS ${want.membership || "-"} ${want.role || "-"}`);
