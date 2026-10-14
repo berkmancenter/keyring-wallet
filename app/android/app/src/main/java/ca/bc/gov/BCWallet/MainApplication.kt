@@ -1,7 +1,10 @@
 package asml.bkc.harvard.wallet
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.res.Configuration
+import android.os.Build
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -14,6 +17,14 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import org.wonday.orientation.OrientationActivityLifecycle
+
+/**
+ * The channel every push wake is shown in, named as Firebase's default
+ * (firebase.json messaging_android_notification_channel_id). Without it the
+ * wake went to Firebase's fallback channel, whose default importance shows no
+ * heads-up banner on stock Android: only an entry in the shade.
+ */
+const val WAKE_CHANNEL_ID = "keyring_wake"
 
 class MainApplication : Application(), ReactApplication {
 
@@ -37,8 +48,23 @@ class MainApplication : Application(), ReactApplication {
     override fun onCreate() {
         registerActivityLifecycleCallbacks(OrientationActivityLifecycle.getInstance())
         super.onCreate()
+        createWakeChannel()
         loadReactNative(this)
         ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    }
+
+    // High importance: a wake is something waiting for the person (an approval or
+    // a message), so it pops up as a banner. Created at every start, before any
+    // wake can arrive; creating an existing channel only refreshes its name and
+    // description, and never overrides what the person set for it.
+    private fun createWakeChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(
+            WAKE_CHANNEL_ID,
+            getString(R.string.notification_channel_wake_name),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply { description = getString(R.string.notification_channel_wake_description) }
+        getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
