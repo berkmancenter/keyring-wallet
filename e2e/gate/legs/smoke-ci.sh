@@ -22,6 +22,7 @@ _ah=${ANDROID_HOME:-}; _asr=${ANDROID_SDK_ROOT:-}; _path=$PATH
 [ -z "$_ah" ] || export ANDROID_HOME=$_ah; [ -z "$_asr" ] || export ANDROID_SDK_ROOT=$_asr; export PATH=$_path:$PATH
 export E2E_RUN_DIR=$LEG_DIR
 STEPS=$LEG_DIR/steps.tsv
+export GALARM_STEPS=0   # this leg times its own phases below; galarm's lines would count them twice
 step() { local n=$1 t0=$2 s; s=$(( $(date +%s) - t0 )); printf '%s\t%s\t%s\n' "$n" "$t0" "$s" >> "$STEPS"; echo "STEP $n ${s}s"; }
 step_at() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$STEPS"; echo "STEP $1 $3s"; }
 MANIFEST=$(dirname "$BUILD")/manifest.txt
