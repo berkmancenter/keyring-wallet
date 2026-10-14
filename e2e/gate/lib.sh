@@ -331,8 +331,18 @@ keys_since() {
 import sys,json
 t=sys.stdin.read()
 if '[' not in t: sys.exit(1)
-for e in json.loads(t[t.index('['):]):
-    if e.get('label') in ('keyring-admin','keyring-phone') and str(e.get('createdAt',''))>='$t0': print(e['subject'])
+new=[e for e in json.loads(t[t.index('['):]) if str(e.get('createdAt',''))>='$t0']
+mine={e['subject'] for e in new if e.get('label') in ('keyring-admin','keyring-phone')}
+# The key the phone rotates onto is labelled with the device's name, created by the grant it replaced: the link
+# driver keeps it for the next step, and nothing else took it, so every CI leg left one. Follow createdBy from
+# this leg's grants, within the keys made since the leg began.
+grew=True
+while grew:
+    grew=False
+    for e in new:
+        if e['subject'] not in mine and e.get('createdBy') in mine: mine.add(e['subject']); grew=True
+for e in new:
+    if e['subject'] in mine: print(e['subject'])
 " && break; sleep 15; done)
   for k in $list; do
     for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -q deleted && break; sleep 15; done

@@ -33,10 +33,22 @@ out=$(bash -c '
   T0=$(stamp)
   "$PNM_BIN" --vta runner-main acl create --did did:key:zPhoneA --role admin --label keyring-phone --expires 1h >/dev/null
   "$PNM_BIN" --vta runner-main acl create --did did:key:zPhoneB --role admin --label keyring-admin --expires 6h >/dev/null
+  # The phone rotates onto its long-term key (labelled with the device name, created by the grant), as a link does,
+  # and the link driver keeps it; beside it, a key some other client made during the leg, and an older key that
+  # zPhoneB once created (before the leg: never this leg'"'"'s).
+  python3 - "$FAKE_ACL" "$T0" <<PY2
+import json,sys
+p,t0=sys.argv[1],sys.argv[2]; acl=json.load(open(p))
+acl.append({"subject":"did:peer:2.zHeirB","label":"Computer","createdBy":"did:key:zPhoneB","createdAt":t0[:19]+".999999Z"})
+acl.append({"subject":"did:key:zElse","label":"Someone else","createdBy":"did:key:zCi","createdAt":t0[:19]+".999999Z"})
+acl.append({"subject":"did:peer:2.zOldHeir","label":"Computer","createdBy":"did:key:zPhoneB","createdAt":"2026-01-02T00:00:00Z"})
+json.dump(acl,open(p,"w"))
+PY2
   keys_since runner-main "$T0"
 ' 2>&1)
 left=$(python3 -c "import json;print(' '.join(sorted(e['subject'] for e in json.load(open('$T/acl.json')))))")
-[ "$left" = "did:key:zCi did:key:zOld" ] && ok "cleanup deleted both CI-granted phone keys, kept the CI entry and the older key ($left)" || bad "left: $left; output: $out"
+[ "$left" = "did:key:zCi did:key:zElse did:key:zOld did:peer:2.zOldHeir" ] && ok "cleanup deleted both CI-granted phone keys and the key the phone rotated onto; kept the CI entry, another client's key and the older keys ($left)" || bad "left: $left; output: $out"
+grep -q 'acl delete did:peer:2.zHeirB' "$T/acl.json.calls" && ok "the kept phone key (created by this leg's grant) was deleted" || bad "the kept phone key was not deleted: $(cat "$T/acl.json.calls")"
 grep -q 'acl delete did:key:zPhoneA' "$T/acl.json.calls" && grep -q 'acl delete did:key:zPhoneB' "$T/acl.json.calls" && ok "deletes went through the CI guard" || bad "calls: $(cat "$T/acl.json.calls")"
-! grep -qE 'acl delete did:key:z(Ci|Old)' "$T/acl.json.calls" && ok "never asked to delete the CI identity or an older key" || bad "deleted something it should not"
+! grep -qE 'acl delete (did:key:z(Ci|Old|Else)|did:peer:2.zOldHeir)' "$T/acl.json.calls" && ok "never asked to delete the CI identity, another client's key or an older key" || bad "deleted something it should not"
 exit $fails
