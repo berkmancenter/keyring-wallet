@@ -209,6 +209,8 @@ export async function createSession(platform, capsOverride) {
     capabilities,
   });
   driver.e2ePlatform = platform;
+  // The device the harness asked for, on every platform (Appium's echo of it varies by driver): deviceWait keys on it.
+  driver.e2eRequestedUdid = capabilities["appium:udid"] || undefined;
   // Two simulators of the same platform both logged as "ios", so a two-sim run
   // could not say WHICH phone was stuck (2026-09-23: five minutes spent working
   // out which of two iPhones was sitting on a PIN pad). Keep the simulator name

@@ -1663,7 +1663,7 @@ export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5
  * relationship confirmed. Emulators and simulators keep the given time.
  */
 export function deviceWait(driver, ms) {
-  const udid = driver?.e2eUdid || driver?.capabilities?.["appium:udid"] || driver?.capabilities?.udid;
+  const udid = driver?.e2eRequestedUdid || driver?.e2eUdid || driver?.capabilities?.udid;
   if (driver?.e2ePlatform !== "ios" || !isPhysical("ios", udid)) return ms;
   return Math.max(ms, Number(process.env.E2E_DEVICE_TIMEOUT_MS) || 240000);
 }

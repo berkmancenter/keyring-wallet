@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deviceWait } from "./flows.js";
 
-const phone = { e2ePlatform: "ios", capabilities: { "appium:udid": "00008030-001A2B3C4D5E802E" } };
+// As createSession records it: the udid the harness requested (review on #437).
+const phone = { e2ePlatform: "ios", e2eRequestedUdid: "00008030-001A2B3C4D5E802E" };
 
 test("a physical iPhone waits at least 240 s", () => {
   delete process.env.E2E_DEVICE_TIMEOUT_MS;
