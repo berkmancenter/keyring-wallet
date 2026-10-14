@@ -278,7 +278,9 @@ async function approvedFlow(d, me) {
       ok: role && membership,
       detail: `AgentCard_role ${role}${kept ? ` ("${kept}")` : ""}${label ? ` [${label.slice(0, 80)}]` : ""} · AgentCard_membership ${membership} · decide/0.1 names no role: the default "member"`,
     };
-  });
+    // Tracked (240 gate, 10-14): the role credential for a default "member" role is issued and kept on the agent
+    // (cards-kept-on-agent passes) but shows no card of its own; whether it should is UI/UX's call for 241.
+  }, { tracked: "role card for default member role: UI/UX decision pending" });
   // (f) Both cards kept by the runner agent, as the phone pushed them (vault/credentials/receive/0.1).
   const want = me ? issuedCards(me, decided) : { membership: "", role: "" };
   console.log(`CARD_IDS ${want.membership || "-"} ${want.role || "-"}`);
