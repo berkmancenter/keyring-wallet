@@ -613,6 +613,13 @@ export class VtaAgentController {
   private addingFrom?: string
   /** A pick-up of a link left part-way is under way (resumeLink). */
   private resuming = false
+  /**
+   * Agents whose link the person backed out of while its key swap was under
+   * way. The app's own pick-up never offers their key again, and the key goes
+   * once the swap settles. Without this, a link backed out of while an
+   * approval held its swap finished on its own after the last unlink (240 gate, R4).
+   */
+  private readonly backedOut = new Set<string>()
   /** The look at the other agents under way, if any. */
   private looking?: Promise<void>
 
@@ -1145,16 +1152,26 @@ export class VtaAgentController {
 
   cancelLink() {
     const cancelling = this.state.link
+    // The attempt given up: the one on screen, or the one a failure names
+    // (a swap held for an approval ends there, its key kept for Try again).
+    const attemptFor =
+      'vtaDid' in cancelling
+        ? cancelling.vtaDid
+        : cancelling.kind === 'notLinked'
+          ? cancelling.lastError?.vtaDid
+          : undefined
     this.attemptToken++
     this.offer = undefined
     this.hostOffer = undefined
     this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
     // Given up on purpose: its temporary key is not offered again (IN-135).
-    // Not from `linking`: the key swap may be under way, and a rotate already
-    // in flight would write the record back with its next key.
-    if (this.agent && 'vtaDid' in cancelling && cancelling.kind !== 'linked' && cancelling.kind !== 'linking') {
-      void this.forgetTemporaryKey(this.agent, cancelling.vtaDid)
+    // Not yet from `linking`: the key swap may be under way, and a rotate
+    // already in flight would write the record back with its next key. That
+    // key goes once the swap settles.
+    if (this.agent && attemptFor && cancelling.kind !== 'linked') {
+      if (cancelling.kind === 'linking') this.backedOut.add(attemptFor)
+      else void this.forgetTemporaryKey(this.agent, attemptFor)
     }
     // Adding another agent, given up: back to the one before.
     if (this.addingFrom && this.agent) void this.stopAddingAgent(this.agent)
@@ -1488,6 +1505,7 @@ export class VtaAgentController {
     if (this.hostOffer) return this.confirmHostOffer(agent)
     const offer = this.offer
     if (!offer || this.state.link.kind !== 'confirming') return
+    this.backedOut.delete(offer.vta)
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken
     this.dispatch({ type: 'confirmed' })
@@ -1513,7 +1531,7 @@ export class VtaAgentController {
         live
       )
     } catch (error) {
-      if (!live()) return
+      if (!live()) return this.settleBackedOut(this.agent ?? agent, offer.vta)
       const detail = error instanceof Error ? error.message : String(error)
       this.set({ status: 'failed', error: detail })
       this.dispatch({
@@ -1697,7 +1715,9 @@ export class VtaAgentController {
           // The list of agents is read again, as the link was added to it: an
           // agent left on it read as already on the phone, so a held swap
           // offered no Try again and a scan of it said "already linked".
-          await links.clear().catch(() => undefined)
+          // Only this agent's: a person who went back meanwhile made the one
+          // before current again, and that link stays.
+          await (links.remove ? links.remove(vtaDid) : links.clear()).catch(() => undefined)
           if (addingFrom && addingFrom !== vtaDid) {
             // An "Add" that did not finish: back is still back to the agent before.
             this.addingFrom = addingFrom
@@ -1809,6 +1829,8 @@ export class VtaAgentController {
           r.stage === 'temporary' &&
           !r.pendingNext &&
           !linked.has(r.vtaDid) &&
+          // The app's own pick-up skips a link the person backed out of.
+          (vtaDid !== undefined || !this.backedOut.has(r.vtaDid)) &&
           now - Date.parse(r.createdAt) < TEMPORARY_KEY_REUSE_MS
       )
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -1845,6 +1867,11 @@ export class VtaAgentController {
     } finally {
       this.resuming = false
     }
+  }
+
+  /** A swap the person backed out of has settled: its temporary key goes, as on any cancel. */
+  private settleBackedOut(agent: Agent, vtaDid: string): void {
+    if (this.backedOut.delete(vtaDid)) void this.forgetTemporaryKey(agent, vtaDid)
   }
 
   /** Drop a temporary key no attempt will use again (a cancel). A settled key is never touched. */
@@ -1912,6 +1939,8 @@ export class VtaAgentController {
   ): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
     if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
+    // The person links this agent again: no longer backed out of.
+    this.backedOut.delete(vtaDid)
     this.ownerFor = owner ? vtaDid : undefined
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken
@@ -2008,7 +2037,7 @@ export class VtaAgentController {
       this.dispatch({ type: 'granted' })
       await this.finishLink(agent, link.vtaDid, link.label, identities, live, client)
     } catch (error) {
-      if (!live()) return
+      if (!live()) return this.settleBackedOut(agent, link.vtaDid)
       const detail = error instanceof Error ? error.message : String(error)
       if (this.state.link.kind === 'showingKey' && ACCESS_REVOKED.test(detail)) {
         await this.reset()
