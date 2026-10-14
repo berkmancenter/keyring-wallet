@@ -122,6 +122,45 @@ describe('Join, at manifest 0.3', () => {
     return tree
   }
 
+  // IN-264: a community that runs private (hidden) vetting refuses named
+  // statements. Keyring started named vetting for it anyway, and the join was
+  // turned down with no reason the person could see.
+  describe('a community that runs private vetting', () => {
+    const privateVetting = {
+      ...vetted,
+      usable: false,
+      unusableBecause: 'vettingPrivate' as const,
+      unusableDetail: 'org.openvtc.hidden-vetting',
+    }
+
+    it('offers no vetting, and says this version does not support private vetting yet', async () => {
+      const tree = await toAsks({ wire: '0.3', accepting: true, ways: [privateVetting] })
+      expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+      expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+      expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+    })
+
+    it('beside a review way: "Ask to join" stays, "Meet a vetter" does not appear', async () => {
+      const tree = await toAsks({
+        wire: '0.3',
+        accepting: true,
+        ways: [privateVetting, review],
+        suggested: review,
+        outcomeIfMet: 'reviewed',
+      })
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+      expect(tree.queryByText(/Join\.Ways\.ButtonVetting/)).toBeNull()
+      expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toBeTruthy()
+    })
+
+    it('at manifest 0.2 too: the message, and no way to start', async () => {
+      const tree = await toAsks({ wire: '0.2', accepting: true, ways: [{ ...privateVetting, admission: 'unstated' }] })
+      expect(tree.getByTestId(id('JoinVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+      expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+    })
+  })
+
   it('leaves room at its foot for the tab bar, with its buttons in the page', async () => {
     const tree = await toAsks(defaults)
     const room = (testId: string, prop: 'style' | 'contentContainerStyle') =>

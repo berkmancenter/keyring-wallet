@@ -9,7 +9,8 @@ import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import { joinAsks, readManifest, type JoinAsks, type JoinWay, type VtiManifest } from '../module/joinManifest'
-import { joinCard } from '../screens/joinWays'
+import * as manifestModule from '../module/joinManifest'
+import { joinCard, vettingNotSupportedFor } from '../screens/joinWays'
 
 import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
 import vettingCommunity from './fixtures/join-0.3/vetting-community-manifest.json'
@@ -467,5 +468,99 @@ describe('the words', () => {
 
   it('name no provider', () => {
     for (const words of all) expect(JSON.stringify(ways(words))).not.toMatch(/farm/i)
+  })
+})
+
+// IN-264: a way that runs vetting this version cannot do is never offered as
+// named vetting, and the card says why: this app's limit, not the community's.
+describe('vetting this version cannot do', () => {
+  const hiddenVetting = way({
+    id: 'vetted-member',
+    meets: 'no',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+    usable: false,
+    unusableBecause: 'vettingPrivate',
+    unusableDetail: 'org.openvtc.hidden-vetting',
+  })
+
+  it('alone: no vetting to start, no button, and the card says private vetting', () => {
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [hiddenVetting] })
+    expect(card).toMatchObject({ mode: 'ways', button: 'none', vettingNotSupported: 'private', noneUsable: true })
+    if (card.mode !== 'ways') throw new Error('expected ways')
+    expect(card.rows[0]).toMatchObject({ canStartVetting: false, cannotUse: true, cannotUseBecause: 'privateVetting' })
+  })
+
+  it('beside a review way: asking stays open, vetting is not offered', () => {
+    const card = joinCard({ wire: '0.3', accepting: true, ways: [hiddenVetting, review], suggested: review })
+    expect(card).toMatchObject({ button: 'ask', alsoAsk: false, vettingNotSupported: 'private' })
+  })
+
+  it('another unsupported extension is said as such', () => {
+    const other = { ...hiddenVetting, unusableBecause: 'vettingExtUnsupported' as const, unusableDetail: 'org.x' }
+    expect(joinCard({ wire: '0.3', accepting: true, ways: [other] })).toMatchObject({
+      vettingNotSupported: 'other',
+    })
+  })
+
+  it('a 0.2 community with such a criterion is not shown the legacy way, which would start named vetting', () => {
+    expect(joinCard({ wire: '0.2', accepting: true, ways: [{ ...hiddenVetting, admission: 'unstated' }] })).toEqual({
+      mode: 'vettingNotSupported',
+      vetting: 'private',
+    })
+  })
+
+  it('the words say private vetting, the version, and never that the person did something wrong', () => {
+    for (const words of [enCopy, frCopy, ptBrCopy]) {
+      const w = (words as unknown as { Join: { Ways: Record<string, string> } }).Join.Ways
+      for (const key of ['PrivateVetting', 'UnsupportedVetting']) expect(w[key]).toContain('{{community}}')
+      for (const key of ['CannotUsePrivateVetting', 'PrivateVetting']) {
+        expect(w[key]).toMatch(/privat|privée|privada/i)
+      }
+    }
+    expect((enCopy as unknown as { Join: { Ways: Record<string, string> } }).Join.Ways.PrivateVetting).toMatch(
+      /this version of Keyring doesn't support yet/
+    )
+  })
+})
+
+// IN-264: the vetting screen asks this before it starts an application, asks a
+// vetter, or sends one.
+describe('whether an application may gather named vetting', () => {
+  const mockAsks = (ways: JoinWay[]) => {
+    jest.spyOn(manifestModule, 'joinAsks').mockReturnValue({ wire: '0.3', accepting: true, ways })
+    return { wire: '0.3', criteria: [] } as VtiManifest
+  }
+  afterEach(() => jest.restoreAllMocks())
+  const privateWay = way({
+    id: 'hidden',
+    digest: 'zHidden',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+    usable: false,
+    unusableBecause: 'vettingPrivate',
+  })
+  const namedWay = way({
+    id: 'named',
+    digest: 'zNamed',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+  })
+
+  it('every vetting way private: refused as private', () => {
+    expect(vettingNotSupportedFor(mockAsks([privateWay, review]))).toBe('private')
+  })
+
+  it('a named vetting way beside it: allowed, unless the application named the private one', () => {
+    const m = mockAsks([privateWay, namedWay])
+    expect(vettingNotSupportedFor(m)).toBeUndefined()
+    expect(vettingNotSupportedFor(m, 'zNamed')).toBeUndefined()
+    expect(vettingNotSupportedFor(m, 'zHidden')).toBe('private')
+  })
+
+  it('no vetting asked at all: nothing to refuse', () => {
+    expect(vettingNotSupportedFor(mockAsks([review]))).toBeUndefined()
+  })
+
+  it('an unsupported critical extension: refused as other', () => {
+    const other = { ...privateWay, unusableBecause: 'vettingExtUnsupported' as const }
+    expect(vettingNotSupportedFor(mockAsks([other]))).toBe('other')
   })
 })

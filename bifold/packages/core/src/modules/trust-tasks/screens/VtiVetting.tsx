@@ -73,6 +73,7 @@ import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
+import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
@@ -573,14 +574,40 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     [bump, ticketWords]
   )
 
+  // Vetting this version cannot do (private vetting, an unsupported critical
+  // extension) is never started, asked of a vetter, or sent: the community
+  // would refuse the named statements. Said as Join says it (IN-264). The
+  // manifest, read once.
+  const vettingManifest = useCallback(
+    async (digest?: string): Promise<VtiManifest> => {
+      if (!communityDid) throw new Error('no community to apply to')
+      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+      if (!manifest) setManifest(m)
+      const notSupported = vettingNotSupportedFor(m, digest)
+      if (notSupported) {
+        throw new InWords(
+          t(VETTING_NOT_SUPPORTED_KEY[notSupported], {
+            community: communityLabelOf(communityDid, t),
+            interpolation: { escapeValue: false },
+          }) as string
+        )
+      }
+      return m
+    },
+    [manifest, communityDid, t]
+  )
+
   useEffect(() => {
     const ticket = ticketLink.trim()
     if (!scanAsked.current || !ticket || !application || !communityDid || busy) return
     scanAsked.current = false
     // A ticket for another community is not asked with: the field shows why.
     if (!checkTicketFor(ticket, communityDid).ok) return
-    void run('request', () => applicantRef.current!.requestVetter({ link: ticket }))
-  }, [ticketLink, application, communityDid, busy, run])
+    void run('request', async () => {
+      await vettingManifest(application.requirementsDigest)
+      await applicantRef.current!.requestVetter({ link: ticket })
+    })
+  }, [ticketLink, application, communityDid, busy, run, vettingManifest])
 
   // Whose side this is, in the header: the vetter's desk has its own title and
   // the theme's gradient with one end changed; the applicant keeps the usual
@@ -1249,7 +1276,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         accessibilityRole="button"
         accessibilityState={{ disabled: !!busy || !ticketLink.trim() || !!ticketRefused }}
         disabled={!!busy || !ticketLink.trim() || !!ticketRefused}
-        onPress={() => run('request', () => applicantRef.current!.requestVetter({ link: ticketLink.trim() }))}
+        onPress={() =>
+          run('request', async () => {
+            await vettingManifest(application?.requirementsDigest)
+            await applicantRef.current!.requestVetter({ link: ticketLink.trim() })
+          })
+        }
       >
         {busy === 'request' ? (
           <ActivityIndicator color={look(VtiVettingIds.requestButton, applicantPrimaryId).spinner} />
@@ -1317,8 +1349,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // replace it, so it is withdrawn and this one sent (IN-127, 10-06).
   const sendApplication = (replace: boolean) =>
     run(replace ? 'replace' : 'apply', async () => {
+      // Before the confirmation: nothing is asked for an application that is not sent.
+      const m = await vettingManifest(application?.requirementsDigest)
       if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
-      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
       // Ask about the grants now, not when the statements were
       // gathered: the community applies the status at intake,
       // so a vetter revoked since is the case this catches.
@@ -1486,8 +1519,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   disabled={!!busy || !connected || !legalName.trim()}
                   onPress={() =>
                     run('start', async () => {
-                      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
-                      setManifest(m)
+                      const m = await vettingManifest()
                       await applicantRef.current!.start(
                         m,
                         { 'name.legal': legalName.trim() },

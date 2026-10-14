@@ -16,7 +16,13 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
 import { claimWords } from './claimWords'
-import type { JoinCannotUse, JoinCard, JoinNeed, JoinWayRow } from './joinWays'
+import {
+  VETTING_NOT_SUPPORTED_KEY,
+  type JoinCannotUse,
+  type JoinCard,
+  type JoinNeed,
+  type JoinWayRow,
+} from './joinWays'
 
 type WaysCard = Extract<JoinCard, { mode: 'ways' }>
 
@@ -56,6 +62,8 @@ const CANNOT_USE_KEY: Record<JoinCannotUse, string> = {
   incomplete: 'Join.Ways.CannotUseIncomplete',
   unreadable: 'Join.Ways.CannotUseUnreadable',
   changed: 'Join.Ways.CannotUseChanged',
+  privateVetting: 'Join.Ways.CannotUsePrivateVetting',
+  unsupportedVetting: 'Join.Ways.CannotUseUnsupportedVetting',
 }
 
 /**
@@ -150,7 +158,14 @@ export const JoinWaysCard: React.FC<{
   return (
     <View style={styles.card} testID={testIdWithKey('JoinWays')}>
       {usable.map((row) => wayView(row, true))}
-      {card.noneUsable ? (
+      {/* Vetting this version cannot do is this app's limit, not the
+          community's description: said as such, in place of "nothing is
+          wrong on your side" (IN-264). */}
+      {card.vettingNotSupported ? (
+        <ThemedText testID={testIdWithKey('JoinWaysVettingNotSupported')}>
+          {t(VETTING_NOT_SUPPORTED_KEY[card.vettingNotSupported], named)}
+        </ThemedText>
+      ) : card.noneUsable ? (
         <ThemedText testID={testIdWithKey('JoinWaysNoneUsable')}>{t('Join.Ways.NoneUsable', named)}</ThemedText>
       ) : null}
       {card.missing.length ? (
