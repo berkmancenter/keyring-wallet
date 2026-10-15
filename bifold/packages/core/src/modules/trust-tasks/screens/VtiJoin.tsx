@@ -47,6 +47,8 @@ import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
 import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
+import { hiddenVettingSeam } from './hiddenVettingSeam'
+import { PrivateVettingStart } from './PrivateVettingStart'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -236,6 +238,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setAgain(false)
     setChanged(false)
     setPlainRequest(false)
+    setHiddenWay(undefined)
   }, [communityDid])
 
   // What the card shows at 0.3: each way, the one this phone meets, the button.
@@ -248,12 +251,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     () => (manifest ? joinAsks(manifest, heldNow) : undefined),
     [manifest, heldNow]
   )
-  const card = offer ? joinCard(offer, heldNow) : undefined
+  // Private vetting is offered only in a build that carries it (hiddenVettingSeam).
+  const card = offer ? joinCard(offer, heldNow, { privateVettingAvailable: Boolean(hiddenVettingSeam()) }) : undefined
   const ways = card?.mode === 'ways' ? card : undefined
   // A request this screen sends itself: a way the phone meets that needs no
   // invitation (those go through "I was invited"). Chosen by the button the
   // person pressed, since a card can offer vetting and asking side by side.
   const [plainRequest, setPlainRequest] = useState(false)
+  // A private (hidden) vetting way the person chose: the identity is made as
+  // for any vetting, then its own screen, which carries it through the agent.
+  const [hiddenWay, setHiddenWay] = useState<string>()
+  /** What the identity step leads to: a plain request, named vetting, or one private way. */
+  const chooseNext = useCallback((plain: boolean, privateWay?: string) => {
+    setPlainRequest(plain)
+    setHiddenWay(privateWay)
+  }, [])
 
   // Read each time the screen comes into view, not only when it first mounts:
   // a join finished elsewhere (the invited screen, the vetting) shows here.
@@ -361,7 +373,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // Seed by copy: the chosen profile fills the identity's name in once.
       if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       const stack = navigation as unknown as { navigate: (name: string) => void }
-      stack.navigate(Screens.VtiVetting)
+      if (hiddenWay) {
+        ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
+          Screens.VtiHiddenVetting,
+          { communityDid, criterionId: hiddenWay }
+        )
+      } else stack.navigate(Screens.VtiVetting)
     } catch (e) {
       if (joinRequestRefusal(e) === 'criterionUnknown') {
         // The community changed what it asks while the request went: read it
@@ -384,7 +401,19 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again, plainRequest, config?.mediatorDid])
+  }, [
+    agent,
+    vtaDid,
+    communityDid,
+    name,
+    navigation,
+    t,
+    joinAs.selected,
+    again,
+    plainRequest,
+    hiddenWay,
+    config?.mediatorDid,
+  ])
 
   if (!vtaDid) {
     return (
@@ -637,13 +666,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               buttonType={ButtonType.Primary}
               onPress={() => {
                 if (ways.button === 'start') {
-                  setPlainRequest(false)
+                  chooseNext(false)
                   setStep('as')
                 } else if (suggestedWay?.requires.invitation) {
                   // An invitation the phone holds is presented from "I was invited", where it is.
                   toInvited()
                 } else {
-                  setPlainRequest(true)
+                  chooseNext(true)
                   setStep('as')
                 }
               }}
@@ -656,7 +685,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             title={t('Join.Ways.ButtonAsk')}
             buttonType={ButtonType.Secondary}
             onPress={() => {
-              setPlainRequest(true)
+              chooseNext(true)
               setStep('as')
             }}
             testID={testIdWithKey(VtiJoinIds.ask)}
@@ -699,19 +728,30 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               // the rows, out of reach of the standing card that replaces the
               // buttons below, and a removed member pressed "Meet a vetter"
               // under the old identity without "Join again" (IN-104, path B).
-              rowAction={
-                buttonsInRows
-                  ? (row) =>
-                      ways.alsoAsk
-                        ? row.id === vettingRow
-                          ? mainButton
-                          : row.suggested
-                            ? askButton
-                            : null
-                        : row.id === mainRow
-                          ? mainButton
-                          : null
-                  : undefined
+              rowAction={(row) =>
+                // A private way has its own button: whether this person's agent
+                // can do it is asked only when they tap it.
+                row.privateVetting ? (
+                  standingShown ? null : (
+                    <PrivateVettingStart
+                      criterion={manifest?.criteria.find((c) => c.id === row.id)}
+                      community={name}
+                      rowId={row.id}
+                      onReady={() => {
+                        chooseNext(false, row.id)
+                        setStep('as')
+                      }}
+                    />
+                  )
+                ) : !buttonsInRows ? null : ways.alsoAsk ? (
+                  row.id === vettingRow ? (
+                    mainButton
+                  ) : row.suggested ? (
+                    askButton
+                  ) : null
+                ) : row.id === mainRow ? (
+                  mainButton
+                ) : null
               }
             />
             {noVetting ? (
@@ -1072,7 +1112,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               title={t('Join.SendAgain')}
               buttonType={ButtonType.Primary}
               onPress={() => {
-                setPlainRequest(true)
+                chooseNext(true)
                 setStep('as')
               }}
               testID={testIdWithKey(VtiJoinIds.sendAgain)}

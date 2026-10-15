@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "049ea76c4f48ab65fc90e8e9b043468e7910e6b2",
+  "generatedFrom": "58f4a1a09d6b810d9a8da4affdf3ac304686d3fe",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -437,6 +437,23 @@
       "src/screens/OnboardingPages.tsx",
       "src/screens/ProofRequest.tsx"
     ],
+    "HiddenVetting": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingAskVetter": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingAsked": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingAttestation": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingChanged": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingError": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingNeedMore": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingNotAvailable": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingProgress": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingResult": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingSend": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingStart": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingStartAgain": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingStep": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingTicketInput": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingToAgent": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingWithdraw": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "Hide": ["src/components/inputs/PINInput.tsx"],
     "HideAll": ["src/components/record/Record.tsx"],
     "History": ["src/screens/Settings.tsx"],
@@ -1057,6 +1074,8 @@
     "DeleteProfile-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "DenyConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "Dismiss": ["src/components/listItems/NotificationListItem.tsx", "src/components/misc/InfoBox.tsx"],
+    "JoinPrivateVettingRefused_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
+    "JoinPrivateVettingStart_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinWayCannotUse_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWayDetail_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWayDetailsToggle_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
@@ -1757,6 +1776,54 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.scroll"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.askVetter"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.asked"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.changed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.needMore"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.notAvailable"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.progress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.result"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.screen"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.send"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.start"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.startAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.step"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.ticketInput"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.withdraw"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "`${HiddenVettingIds.attestation}_${i}`"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.actions"

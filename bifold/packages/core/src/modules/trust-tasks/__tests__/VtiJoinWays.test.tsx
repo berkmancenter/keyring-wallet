@@ -20,6 +20,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, VtiSentNoAnswer, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { identityWord } from '../screens/VtiJoin'
+import { registerHiddenVetting, type HiddenVettingSeam } from '../screens/hiddenVettingSeam'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../../vrc/vrc-biometric', () => ({
@@ -152,6 +153,33 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
       expect(tree.queryByText(/Join\.Ways\.ButtonVetting/)).toBeNull()
       expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toBeTruthy()
+    })
+
+    // 242: in a build that carries hidden vetting, the private way is offered.
+    // The person's agent is asked only on the tap; then the identity is made
+    // as for any vetting, and its own screen opens.
+    it('in a build that carries it: tap, the agent says yes, the identity, then the private vetting screen', async () => {
+      const check = jest.fn(async () => ({ ok: true as const }))
+      registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+      try {
+        const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+        expect(check).not.toHaveBeenCalled()
+        expect(tree.queryByTestId(id('JoinWaysVettingNotSupported'))).toBeNull()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinPrivateVettingStart_vetted-member'))))
+        expect(check).toHaveBeenCalled()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+        expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
+          communityDid: community,
+          criterionId: 'vetted-member',
+        })
+        expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+      } finally {
+        registerHiddenVetting(undefined)
+      }
     })
 
     it('at manifest 0.2 too: the message, and no way to start', async () => {

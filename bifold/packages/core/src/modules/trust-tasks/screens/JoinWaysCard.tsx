@@ -134,14 +134,22 @@ export const JoinWaysCard: React.FC<{
   const others = card.rows.filter(notYet)
   const wayView = (row: JoinWayRow, withAction: boolean) => (
     <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
-      {row.needs
-        .flatMap((need) => needLines(need, community, t))
-        .map((line) => (
-          <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
-            {'• '}
-            {line}
-          </ThemedText>
-        ))}
+      {(row.privateVetting
+        ? [
+            t('Join.Ways.PrivateVettingWay', {
+              community,
+              count:
+                (row.needs.find((n) => n.kind === 'vetting') as { statements?: number } | undefined)?.statements ?? 1,
+              interpolation: { escapeValue: false },
+            }) as string,
+          ]
+        : row.needs.flatMap((need) => needLines(need, community, t))
+      ).map((line) => (
+        <ThemedText key={line} variant={row.suggested || row.canStartVetting ? 'bold' : undefined}>
+          {'• '}
+          {line}
+        </ThemedText>
+      ))}
       {row.follows ? (
         <ThemedText style={styles.muted} testID={testIdWithKey(`JoinWayFollows_${row.id}`)}>
           {t(row.follows === 'automatic' ? 'Join.Ways.FollowsAutomatic' : 'Join.Ways.FollowsReview')}

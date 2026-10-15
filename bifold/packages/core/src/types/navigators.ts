@@ -79,6 +79,7 @@ export enum Screens {
   MyAgent = 'My Agent',
   VtiCommunity = 'Community',
   VtiVetting = 'Vetting',
+  VtiHiddenVetting = 'Private vetting',
   VtaLink = 'Link your agent',
   VtaCreateAgent = 'Claim your agent',
   VtaDevices = 'Your devices',
@@ -150,6 +151,7 @@ export type MyAgentStackParams = {
   [Screens.MyAgent]: undefined
   [Screens.VtiCommunity]: { communityDid: string }
   [Screens.VtiVetting]: undefined
+  [Screens.VtiHiddenVetting]: { communityDid: string; criterionId: string }
   [Screens.VtaLink]: undefined
   // `highlightCommunity`: a community just joined, picked out on its card for a moment (238).
   [Screens.VtaAgent]: { highlightCommunity?: string } | undefined

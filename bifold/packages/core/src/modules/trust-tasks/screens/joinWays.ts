@@ -21,6 +21,7 @@
  */
 
 import {
+  HIDDEN_VETTING_SUITE,
   joinAsks,
   type JoinAsks,
   type JoinCredentialIssuers,
@@ -86,6 +87,13 @@ export interface JoinWayRow {
    * on the row. A property of the app today, not of the criterion.
    */
   credentialNotYet: boolean
+  /**
+   * The way runs private (hidden) vetting in the suite a person's agent can
+   * run: offered, with its own button. Whether this person's agent can do it
+   * is asked only on that tap (it may push a consent request to an
+   * approver), never here.
+   */
+  privateVetting?: boolean
 }
 
 /**
@@ -149,9 +157,24 @@ const needsOf = (way: JoinWay): JoinNeed[] => {
 
 const sameWay = (a: JoinWay | undefined, b: JoinWay) => Boolean(a) && a!.id === b.id && a!.digest === b.digest
 
-export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
+/**
+ * A private way this app can offer: hidden vetting in the suite agents run,
+ * and this build able to carry it (`privateVettingAvailable`).
+ */
+const offersPrivately = (way: JoinWay, available: boolean) =>
+  available && way.unusableBecause === 'vettingPrivate' && way.hiddenVetting?.suite === HIDDEN_VETTING_SUITE
+
+export function joinCard(
+  offer: JoinAsks,
+  holds: JoinHolds = {},
+  options: {
+    /** This build carries hidden vetting through the person's agent. Off: every private way fails closed (#405). */
+    privateVettingAvailable?: boolean
+  } = {}
+): JoinCard {
+  const available = Boolean(options.privateVettingAvailable) && offer.wire === '0.3'
   const notSupported: JoinVettingNotSupported | undefined = offer.ways.some(
-    (way) => way.unusableBecause === 'vettingPrivate'
+    (way) => way.unusableBecause === 'vettingPrivate' && !offersPrivately(way, available)
   )
     ? 'private'
     : offer.ways.some((way) => way.unusableBecause === 'vettingExtUnsupported')
@@ -186,8 +209,9 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
     // A phone that is admitted now has no vetting to be sent to.
     canStartVetting: !joinsNow && startable(way),
     usable: way.usable,
-    cannotUse: !way.usable,
-    ...(!way.usable && way.unusableBecause
+    cannotUse: !way.usable && !offersPrivately(way, available),
+    ...(offersPrivately(way, available) ? { privateVetting: true } : {}),
+    ...(!way.usable && !offersPrivately(way, available) && way.unusableBecause
       ? {
           cannotUseBecause: CANNOT_USE[way.unusableBecause],
           cannotUseDetail: way.unusableDetail ? `${way.unusableBecause}: ${way.unusableDetail}` : way.unusableBecause,
