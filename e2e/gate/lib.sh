@@ -148,10 +148,12 @@ c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
-# dispatch_build <sha> on|off: the newest green dispatched test build of <sha> with that push setting, told apart by
-# its artifacts' names (a push-on build's end in -push-on; a push-off build has the iOS simulator app and the APK, so
+# dispatch_build <sha> on|off|real: the newest green dispatched test build of <sha> of that kind, told apart by its
+# artifacts' names (a push-on build's end in -push-on; a push-off build has the iOS simulator app and the APK, so
 # dispatch it with platform=both: an Android-only push-off build is never picked, a full gate needs both).
 # Taking "the newest green dispatch" as push-on picked a push-off build whenever a commit had both (release/240).
+# A real-clocks build (clocks=real, names ending -real-clocks: the store build's clocks, for the nightly real-clock
+# run) is never taken for either; `real` asks for its push-off Android APK.
 dispatch_build() {
   local sha=$1 want=$2 id names
   for id in $(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$sha" --event workflow_dispatch --json databaseId,conclusion \
@@ -161,7 +163,10 @@ dispatch_build() {
     case $want in
       on) grep -q -- '-push-on$' <<<"$names" && { echo "$id"; return; } ;;
       off) grep -q -- '-push-on$' <<<"$names" && continue
+           grep -q -- '-real-clocks$' <<<"$names" && continue
            grep -q '^keyring-ios-sim-' <<<"$names" && grep -q '^keyring-android-' <<<"$names" && { echo "$id"; return; } ;;
+      real) grep -q -- '-push-on' <<<"$names" && continue
+            grep -q -- '^keyring-android-.*-real-clocks$' <<<"$names" && { echo "$id"; return; } ;;
     esac
   done
 }
