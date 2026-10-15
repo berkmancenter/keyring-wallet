@@ -61,7 +61,7 @@ import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/confi
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { deleteAcl, fromGrant, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, fromGrant, grantAfter, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -536,13 +536,20 @@ async function linkCase(driver, which, timing) {
     sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     // The case's own entry is found by its grant (fromGrant), not by the ACL's size: another leg linking a phone to the
     // same runner meanwhile grew the ACL by two (1015-1852: kk's key landed mid-case, "ACL entries 2 → 4").
-    const grantEntry = () => (aclList() || []).find((e) => e.subject === did);
+    // The grant's entry, against the ACL just before it: by subject, or, when a live app's poll has rotated the key
+    // already, the entry new since then (grantAfter; `ambiguous` when another leg granted in the same moment).
+    let granted, ambiguous = false;
+    const grantNow = () => {
+      const pre = aclList() || [];
+      grant(did);
+      ({ entry: granted, ambiguous } = grantAfter(pre, aclList() || [], did));
+    };
     const ownOf = (g) => {
       const own = fromGrant(aclList() || [], g);
-      return { ok: own.length === 1, text: `own entries ${own.length}${own.length === 1 ? (own[0].subject === did ? " (not rotated yet)" : " (rotated)") : ""}` };
+      const how = own.length === 1 ? (own[0].subject === did ? " (not rotated yet)" : " (rotated)") : "";
+      return { ok: own.length === 1, text: `own entries ${own.length}${how}${ambiguous ? " (grant read among several new entries: another leg granted at the same moment)" : ""}` };
     };
-    let granted;
-    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grant(did); granted = grantEntry(); }
+    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grantNow(); }
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
     await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
@@ -561,8 +568,7 @@ async function linkCase(driver, which, timing) {
     const shown = await linkKey();
     const same = shown === did;
     console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
-    grant(did);
-    granted = grantEntry();
+    grantNow();
     if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await link.pressCheckGrant();
     const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
     const after = aclSize();

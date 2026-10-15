@@ -124,6 +124,22 @@ export function fromGrant(entries, grant) {
 }
 
 /**
+ * The entry a grant of `did` made, read after the grant against `before` (the ACL just before it). By subject while
+ * the phone has not rotated; once it has (a live app's poll can rotate within a second of the grant), the entry new
+ * since `before` labelled like the grant, the newest if several are (`ambiguous` then says so: another leg granted on
+ * the same runner in the same moment). Pure.
+ */
+export function grantAfter(before, after, did, label = "keyring-admin") {
+  const bySubject = after.find((e) => e.subject === did);
+  if (bySubject) return { entry: bySubject, ambiguous: false };
+  const seen = new Set(before.map((e) => e.subject));
+  const fresh = after
+    .filter((e) => !seen.has(e.subject) && e.label === label)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return { entry: fresh[0], ambiguous: fresh.length > 1 };
+}
+
+/**
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
