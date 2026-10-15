@@ -291,6 +291,7 @@ describe('error codes, in words', () => {
     ['vta/pcs/verify-attestation:notFound', 'Vetting.Hidden.ApplicationGone'],
     ['vta/pcs/verify-attestation:attestationInvalid', 'Vetting.Hidden.AttestationRefused'],
     ['vta/pcs/prove:parametersInvalid', 'Vetting.Hidden.ErrorGeneric'],
+    ['keyring/hidden-vetting/fetchChallenge:notImplemented', 'Vetting.Hidden.NotInThisBuild'],
     ['vta/pcs/prove:unsupportedSuite', 'Join.Ways.PrivateVetting'],
     [undefined, 'Vetting.Hidden.ErrorGeneric'],
   ])('%s → %s', (code, key) => {

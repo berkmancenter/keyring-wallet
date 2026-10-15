@@ -1879,7 +1879,8 @@
       "NotEnoughYet": "Not enough vetters have vouched for you yet. Ask another vetter, then try again.",
       "ApplicationGone": "This application is no longer on your agent. Start a new one.",
       "AttestationRefused": "Your agent couldn't verify an attestation from a vetter. Ask them to vet you again, or ask another vetter.",
-      "ErrorGeneric": "Something went wrong. Try again in a moment."
+      "ErrorGeneric": "Something went wrong. Try again in a moment.",
+      "NotInThisBuild": "This step isn't in this build of Keyring yet."
     },
     "YourIdentityHint": "Your vetter and the community's admins see this code for you. It is not a secret.",
     "TheirIdentity": "Their identity in this community",

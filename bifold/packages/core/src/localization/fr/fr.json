@@ -1818,7 +1818,8 @@
       "NotEnoughYet": "Pas encore assez de vérificateurs se sont portés garants de vous. Demandez à un autre vérificateur, puis réessayez.",
       "ApplicationGone": "Cette demande n'est plus sur votre agent. Commencez-en une nouvelle.",
       "AttestationRefused": "Votre agent n'a pas pu vérifier l'attestation d'un vérificateur. Demandez-lui de vous vérifier à nouveau, ou demandez à un autre vérificateur.",
-      "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant."
+      "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant.",
+      "NotInThisBuild": "Cette étape n'est pas encore dans cette version de Keyring."
     },
     "YourIdentityHint": "Votre vérificateur et les administrateurs de la communauté voient ce code pour vous. Ce n’est pas un secret.",
     "TheirIdentity": "Son identité dans cette communauté",
