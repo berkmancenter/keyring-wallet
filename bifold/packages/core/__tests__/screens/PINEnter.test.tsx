@@ -211,6 +211,40 @@ describe('PINEnter Screen', () => {
     await waitFor(() => expect(tree.getByTestId(testIdWithKey('EnterPIN')).props.value).toBe(''))
   })
 
+  // smoke's wrong-pin-clears (gate efficiency item 12), as a component test: a wrong PIN says so (inline, or in the
+  // Incorrect PIN popup, whichever the build configures) and empties the field; the right PIN then unlocks.
+  test('a wrong PIN is said and cleared, and the right one then unlocks', async () => {
+    const setAuthenticatedMock = jest.fn()
+    const mockAuthContext = {
+      ...authContext,
+      checkWalletPIN: jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true),
+      setAuthenticated: setAuthenticatedMock,
+    }
+    const main = new MainContainer(container.createChildContainer()).init()
+    const tree = render(
+      <ContainerProvider value={main}>
+        <StoreProvider initialState={{ ...defaultState }} reducer={stableReducer}>
+          <AuthContext.Provider value={mockAuthContext}>
+            <PINEnter setAuthenticated={setAuthenticatedMock} />
+          </AuthContext.Provider>
+        </StoreProvider>
+      </ContainerProvider>
+    )
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('EnterPIN')), '111111')
+    })
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey('EnterPIN')).props.value).toBe(''))
+    expect(tree.queryAllByText(/PINEnter\.IncorrectPIN/).length).toBeGreaterThan(0)
+    expect(setAuthenticatedMock).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('EnterPIN')), '123456')
+    })
+    await waitFor(() => expect(setAuthenticatedMock).toHaveBeenCalled())
+    expect(mockAuthContext.checkWalletPIN).toHaveBeenNthCalledWith(1, '111111')
+    expect(mockAuthContext.checkWalletPIN).toHaveBeenNthCalledWith(2, '123456')
+  })
+
   test('pin is submitted when pin input is filled', async () => {
     const setAuthenticatedMock = jest.fn()
     const mockAuthContext = {
