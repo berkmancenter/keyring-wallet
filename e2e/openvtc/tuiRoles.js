@@ -1217,6 +1217,44 @@ export async function joinWithStatements(tui, { communityDid, personaDid, person
   return awaitMembershipStored(tui, { community: communityDid, debugLog, since, timeoutMs, step: 'applicant.membershipStored' });
 }
 
+/**
+ * The vetting route rows on "Choose how to join" at 0.5.0, one per persona (state_handler/join_flow.rs:570-600):
+ * "Present your vetting statements as <who>" (satisfied, named), "Present your PCS ZKP proof as <who>" (satisfied,
+ * hidden), "Carry on with your application as <who>" (under way) and "Apply for vetting as a new persona". <who> is
+ * the persona shortened from the middle, so the DID's last segment survives. Each row: its text, and whether the
+ * cursor (▸) is on it.
+ */
+export function vettingRouteRows(screen) {
+  const row = /(Present your vetting statements as |Present your PCS ZKP proof as |Carry on with your application as |Apply for vetting as a new persona)/;
+  return String(screen)
+    .split('\n')
+    .filter((l) => row.test(l) && !/Your application, as /.test(l))
+    .map((l) => ({ text: l.replace(/[│]/g, '').trim(), focused: l.includes('▸') }));
+}
+
+/** Whether a route row presents THIS persona's statements: the row names it by its DID's last segment. */
+export function isOwnStatementsRow(text, personaDid) {
+  return /Present your vetting statements as /.test(text) && text.includes(didTail(personaDid));
+}
+
+/** 0.5.0: move the cursor onto this persona's "Present your vetting statements as …" row, then Enter. */
+async function joinRoutePerPersona(tui, { personaDid, started }) {
+  const SRC = 'state_handler/join_flow.rs:589';
+  const onOurs = () => {
+    const f = vettingRouteRows(tui.screen()).find((r) => r.focused);
+    return Boolean(f && isOwnStatementsRow(f.text, personaDid));
+  };
+  // The page opens on the first row; ours may be above or below it, behind other runs' applications.
+  for (let i = 0; i < 16 && !onOurs(); i++) await tui.pressEach(['Down'], 600);
+  for (let i = 0; i < 16 && !onOurs(); i++) await tui.pressEach(['Up'], 600);
+  if (!onOurs()) {
+    const rows = vettingRouteRows(tui.screen()).map((r) => `${r.focused ? '▸ ' : ''}${r.text}`).join(' / ');
+    throw tui.failure('applicant.joinRoute', started, `no "Present your vetting statements as …${didTail(personaDid)}" row to choose (rows: ${rows})`, SRC);
+  }
+  tui.record('applicant.joinRoute', true, started, { tuiState: `Present your vetting statements as …${didTail(personaDid)}`, tuiSource: SRC });
+  await tui.pressEach(['Enter'], 2000);
+}
+
 /** ed13d29: `j` on the application, then "Apply as" this persona and "Present your vetting statements". */
 async function joinRouteCurrent(tui, { personaDid, started }) {
   await tui.pressEach(['j'], 2000);
@@ -1226,6 +1264,12 @@ async function joinRouteCurrent(tui, { personaDid, started }) {
     timeoutMs: 60000,
   });
   if (String(page[0]) !== 'Choose how to join') throw tui.failure('applicant.joinRoutes', started, String(page[0]));
+  // 0.5.0 (2a4fa2b3) dropped the nested "Apply as" chooser: every persona is its own route row, "Present your vetting
+  // statements as <persona>" once its application is satisfied (state_handler/join_flow.rs:589).
+  if (!tui.screen().includes('Apply as') && vettingRouteRows(tui.screen()).length) {
+    await joinRoutePerPersona(tui, { personaDid, started });
+    return;
+  }
   // "Apply as" is a row only while the cursor is on the vetting route (state_handler/join.rs:306-326).
   const applyAs = () => tui.screen().split('\n').find((l) => /▸ Apply as\s/.test(l));
   for (let i = 0; i < 8 && !applyAs(); i++) await tui.pressEach(['Down'], 600);
