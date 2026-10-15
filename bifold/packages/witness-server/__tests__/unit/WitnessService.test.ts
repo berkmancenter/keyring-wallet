@@ -592,14 +592,23 @@ describe('WitnessService - VWC Building', () => {
 
   describe('VSC shape (docs/plans/vsc-migration-plan.md §6 V4)', () => {
     it('defaults to wd02 shape when `shape` is omitted — no behavior change for existing callers', () => {
-      const withoutShape = buildVwc(vc20DiVrc)
-      const explicitWd02 = buildVwc(vc20DiVrc, { shape: 'wd02' })
+      // One clock for both builds: validFrom/validUntil come from "now", and two builds a millisecond apart differed
+      // there alone (a flaky failure on an unrelated PR, 10-15).
+      jest.useFakeTimers({ now: new Date('2026-10-15T12:00:00.000Z') })
+      try {
+        const withoutShape = buildVwc(vc20DiVrc)
+        const explicitWd02 = buildVwc(vc20DiVrc, { shape: 'wd02' })
 
-      // id is a fresh urn:uuid per call — exclude it, compare everything else.
-      const { id: _id1, ...withoutShapeRest } = withoutShape
-      const { id: _id2, ...explicitWd02Rest } = explicitWd02
-      expect(withoutShapeRest).toEqual(explicitWd02Rest)
-      expect(withoutShape.type).toContain('WitnessCredential')
+        // id is a fresh urn:uuid per call — exclude it, compare everything else.
+        const { id: _id1, ...withoutShapeRest } = withoutShape
+        const { id: _id2, ...explicitWd02Rest } = explicitWd02
+        expect(withoutShapeRest).toEqual(explicitWd02Rest)
+        expect(withoutShape.type).toContain('WitnessCredential')
+        // Read from the frozen clock (backdated for skew, never ahead of it).
+        expect(Date.parse(String(withoutShape.validFrom))).toBeLessThanOrEqual(Date.parse('2026-10-15T12:00:00.000Z'))
+      } finally {
+        jest.useRealTimers()
+      }
     })
 
     it('emits StatementCredential as the only concrete DTGCredential subtype (D1)', () => {
