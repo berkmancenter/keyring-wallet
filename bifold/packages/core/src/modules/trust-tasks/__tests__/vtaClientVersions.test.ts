@@ -177,9 +177,39 @@ describe('the access list, against an agent that serves 0.2', () => {
       createdAt: '2026-10-03T08:00:00Z',
     }
     const { vta } = agentServing(V02, () => ({ entries: [entry], truncated: false }))
+    // The authority is now **kept**, where this used to assert it was dropped.
+    // Hidden vetting has to decide whether a phone may apply, and that is a
+    // question about exactly these members: `act` says what the entry may act
+    // on and `capabilities` whether it is narrowed. Dropping them left the only
+    // available signal `scopes`, which 0.2 does not send at all — so a
+    // consumer had to guess, and guessing is what produced a check that was
+    // wrong in both directions.
     await expect(vta.listAcl()).resolves.toEqual([
-      { subject: PHONE, role: 'admin', label: 'Keyring', createdAt: '2026-10-03T08:00:00Z' },
+      {
+        subject: PHONE,
+        role: 'admin',
+        label: 'Keyring',
+        createdAt: '2026-10-03T08:00:00Z',
+        act: { stated: 'all' },
+        capabilityScope: { stated: 'ceiling' },
+      },
     ])
+  })
+
+  it('reads no `scopes` from a 0.2 entry, because 0.2 does not send one', async () => {
+    // The member whose absence used to be indistinguishable from "no access".
+    const entry = {
+      subject: PHONE,
+      role: 'initiator',
+      act: { scope: 'contexts', contexts: ['vta'] },
+      keys: { scope: 'none' },
+      capabilities: { scope: 'listed', grants: [{ capability: 'pcs-applicant' }] },
+    }
+    const { vta } = agentServing(V02, () => ({ entries: [entry], truncated: false }))
+    const [parsed] = await vta.listAcl()
+    expect(parsed.scopes).toBeUndefined()
+    expect(parsed.act).toEqual({ stated: 'contexts', contexts: ['vta'] })
+    expect(parsed.capabilityScope).toEqual({ stated: 'listed', capabilities: ['pcs-applicant'] })
   })
 })
 

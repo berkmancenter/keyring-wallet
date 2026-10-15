@@ -25,13 +25,15 @@ jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 function clientWith(script: (uri: string) => Promise<unknown>) {
   const client = Object.create(VtaClient.prototype) as VtaClient
   const asked: string[] = []
+  const payloads: unknown[] = []
   Object.assign(client, {
-    task: async (uri: string) => {
+    task: async (uri: string, payload: unknown) => {
       asked.push(uri)
+      payloads.push(payload)
       return script(uri)
     },
   })
-  return { client, asked }
+  return { client, asked, payloads }
 }
 
 const refusal = (code: string) => Object.assign(new Error(code), { document: { payload: { code } } })
@@ -67,6 +69,33 @@ describe('what the agent says it serves', () => {
   })
 })
 
+describe('how the question is asked', () => {
+  it('sends no patterns, because a responder matches them against slugs', async () => {
+    // A URI-shaped pattern matches nothing: `matches_any` in
+    // vti-common/src/trust_task/discovery.rs slugs the served URI first, so
+    // `https://…/vta/pcs/*` can never match `vta/pcs/applications/show/0.1`.
+    // The empty list means "everything", and the filtering is done locally.
+    // This test exists because the first version of this code sent the URI
+    // form, which would have answered "does not serve it" for every agent.
+    const { client, payloads } = clientWith(async () => ({
+      supportedTypes: ['https://trusttasks.org/spec/vta/pcs/applications/show/0.1'],
+    }))
+    await client.servesPcs()
+    expect(payloads[0]).toEqual({})
+  })
+
+  it('treats an empty list as inconclusive, not as a no', async () => {
+    // An agent serving nothing is not a real answer, and it is what a pattern
+    // mismatch looks like. Falling through to the probe is the honest move.
+    const { client, asked } = clientWith(async (uri) => {
+      if (uri === DISCOVERY_TASK) return { supportedTypes: [] }
+      throw refusal('permissionDenied')
+    })
+    expect(await client.servesPcs()).toBeUndefined()
+    expect(asked).toEqual([DISCOVERY_TASK, PCS_VTA_TASK.applicationsShow])
+  })
+})
+
 describe('the probe, only when discovery cannot answer', () => {
   it('falls back when discovery is not served, and reads notFound as yes', async () => {
     const { client, asked } = clientWith(async (uri) => {
@@ -92,6 +121,18 @@ describe('the probe, only when discovery cannot answer', () => {
       throw refusal('permissionDenied')
     })
     expect(await client.servesPcs()).toBeUndefined()
+  })
+
+  it('is inconclusive when discovery is denied and the probe is denied too', async () => {
+    // 0.56 serves discovery (`mod.rs:2422`, class `[None None false]`) but the
+    // PDP gate runs before dispatch for every type, with no exemption, so a
+    // policy with enforcement on can deny discovery itself. Both doors shut is
+    // not evidence of absence.
+    const { client, asked } = clientWith(async () => {
+      throw refusal('permissionDenied')
+    })
+    expect(await client.servesPcs()).toBeUndefined()
+    expect(asked).toEqual([DISCOVERY_TASK, PCS_VTA_TASK.applicationsShow])
   })
 
   it('is inconclusive for a refusal it does not recognise', async () => {

@@ -2028,7 +2028,17 @@ export class VtaClient {
     try {
       const answer = await this.task<{ supportedTypes?: unknown }>(
         DISCOVERY_TASK,
-        { patterns: [`${PCS_FAMILY}*`] },
+        // **No patterns**, deliberately: a responder matches a pattern against
+        // a task's *slug*, not its Type URI
+        // (`vti-common/src/trust_task/discovery.rs` `matches_any` calls
+        // `slug_of(uri)` before `match_slug`), so a URI-shaped pattern matches
+        // nothing and the answer comes back empty — which would read as "does
+        // not serve it" for an agent that does. An empty pattern list means
+        // every supported task (`matches_any` returns true when
+        // `patterns.is_empty()`), and the filtering happens below where the
+        // Type URIs are unambiguous. The spec's own payload note says as much:
+        // a discoverer wanting more asks for everything and filters locally.
+        {},
         30000,
         {},
         undefined,
@@ -2042,7 +2052,9 @@ export class VtaClient {
           typeof t === 'string' ? t : t && typeof t === 'object' ? (t as { type?: unknown }).type : undefined
         )
         .filter((t): t is string => typeof t === 'string')
-      if (uris.length > 0 || types.length === 0) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
+      // An agent that lists nothing has not answered the question: an empty
+      // list is inconclusive, never a no.
+      if (uris.length > 0) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
     } catch {
       // An agent that does not serve discovery, or a policy that denies it,
       // leaves the question to the probe below.

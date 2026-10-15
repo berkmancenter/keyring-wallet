@@ -84,6 +84,9 @@ function fakeClient(over: Record<string, unknown> = {}) {
   return {
     managerDid: 'did:peer:2.Ephone',
     servesPcs: async () => true,
+    // What a 0.60 agent answers about this session: capabilities already
+    // resolved, and contexts as `ctx:<id>`.
+    whoAmI: async () => ({ roles: ['initiator'], scopes: ['ctx:vta'], capabilities: ['pcs-applicant'] }),
     // The 0.1 shape, which is what vta-service 0.60 sends: `scopes` is the
     // CONTEXT list and the capability narrowing rides
     // ext["org.openvtc.capabilities"]. An earlier fake put the capability in
@@ -108,6 +111,14 @@ function fakeClient(over: Record<string, unknown> = {}) {
     ...over,
   } as never
 }
+
+/**
+ * A client whose whoami carries no `capabilities`, so the question falls to the
+ * access list. Without this, every test below would be answered by the whoami
+ * route and would pass without exercising the ACL reading it is named for.
+ */
+const aclRouteClient = (over: Record<string, unknown> = {}) =>
+  fakeClient({ whoAmI: async () => ({ roles: ['initiator'], scopes: ['ctx:vta'] }), ...over })
 
 const start = (agent: never, client: never, minimum = 2) =>
   startHiddenApplication(agent, client, {
@@ -148,7 +159,7 @@ describe('whether the round can be run at all', () => {
   })
 
   it('reports that it could not tell when the access list cannot be read', async () => {
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () => {
         throw new Error('unreachable')
       },
@@ -156,8 +167,50 @@ describe('whether the round can be run at all', () => {
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'cannotTell' })
   })
 
-  it('refuses when no entry covers this phone', async () => {
+  it('takes the answer from whoami, without reading the access list', async () => {
+    // whoami needs no manage authority, so this is the route a
+    // least-privileged phone actually has. If it answers, the ACL is not read.
+    let readAcl = false
     const client = fakeClient({
+      listAcl: async () => {
+        readAcl = true
+        return parseAclEntries([])
+      },
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
+    expect(readAcl).toBe(false)
+  })
+
+  it('refuses when whoami does not name the capability', async () => {
+    const client = fakeClient({
+      whoAmI: async () => ({ roles: ['application'], scopes: ['ctx:vta'], capabilities: ['vault-read'] }),
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('refuses a non-admin session with no contexts, which can reach nothing', async () => {
+    const client = fakeClient({
+      whoAmI: async () => ({ roles: ['initiator'], scopes: [], capabilities: ['pcs-applicant'] }),
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('accepts an admin session with no contexts, which is unrestricted', async () => {
+    const client = fakeClient({
+      whoAmI: async () => ({ roles: ['admin'], scopes: [], capabilities: ['pcs-applicant'] }),
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
+  })
+
+  it('falls back to the access list when whoami carries no capabilities', async () => {
+    // An older agent, or one that answers without the member: the question
+    // falls to the ACL read, which needs manage authority and may be refused.
+    const client = fakeClient({ whoAmI: async () => ({ roles: ['initiator'], scopes: ['ctx:vta'] }) })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
+  })
+
+  it('refuses when no entry covers this phone', async () => {
+    const client = aclRouteClient({
       listAcl: async () =>
         parseAclEntries([
           {
@@ -176,7 +229,7 @@ describe('whether the round can be run at all', () => {
     // is not additive — so an `application` entry naming it would have been
     // refused at the ACL surface, and an entry claiming it cannot be trusted
     // into usability here either.
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () =>
         parseAclEntries([
           {
@@ -191,7 +244,7 @@ describe('whether the round can be run at all', () => {
   })
 
   it('refuses a narrowing that does not name the capability', async () => {
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () =>
         parseAclEntries([
           {
@@ -209,7 +262,7 @@ describe('whether the round can be run at all', () => {
     // No `capabilities` means the entry holds everything its role implies —
     // which is not the same as an empty array, and upstream omits the member
     // rather than sending one.
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['vta'] }]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
@@ -220,14 +273,14 @@ describe('whether the round can be run at all', () => {
     // context list is unrestricted only for an admin. For any other role it is
     // no access at all, so reporting it usable would send the person into a
     // flow that cannot start.
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: [] }]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
 
   it('accepts an admin entry with no contexts, which is unrestricted', async () => {
-    const client = fakeClient({
+    const client = aclRouteClient({
       listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'admin', scopes: [] }]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })

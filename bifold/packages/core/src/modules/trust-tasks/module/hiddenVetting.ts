@@ -108,6 +108,36 @@ export async function hiddenVettingUsable(client: VtaClient, published: unknown)
 
   const mine = client.managerDid
   if (!mine) return { usable: false, because: 'cannotTell' }
+
+  // Ask the agent about **this** session first. `auth/whoami/0.1` needs only a
+  // valid session — no manage authority — and it answers `capabilities`
+  // already resolved as the role's derived set intersected with the entry's
+  // narrowing (`effective_capabilities` in `vti-common/src/acl/mod.rs`), plus
+  // `scopes` as `ctx:<id>` built from `allowed_contexts`
+  // (`vta-service/src/trust_tasks/auth.rs:776-816`, present since 0.56). That
+  // is exactly the question here, computed by the side that owns the answer —
+  // so the role arithmetic and the 0.1-versus-0.2 entry shapes do not come
+  // into it at all.
+  try {
+    const me = await client.whoAmI()
+    const capabilities = Array.isArray(me?.capabilities)
+      ? me.capabilities.filter((c): c is string => typeof c === 'string')
+      : undefined
+    if (capabilities) {
+      if (!capabilities.includes(APPLICANT_CAPABILITY)) return { usable: false, because: 'phoneNotAllowed' }
+      // Contexts still matter: a capability reaches nothing without one, and
+      // an empty list is unrestricted only for an admin — the same reading
+      // `approvalRules` applies to its own `scoped` check.
+      const roles = me.roles ?? (me.role ? [me.role] : [])
+      const contexts = Array.isArray(me.scopes) ? me.scopes : []
+      if (!roles.includes('admin') && contexts.length === 0) return { usable: false, because: 'phoneNotAllowed' }
+      return { usable: true, parameters }
+    }
+  } catch {
+    // An agent that will not answer whoami leaves the question to the ACL read
+    // below, which needs more authority and may well also be refused.
+  }
+
   let entries
   try {
     entries = await client.listAcl()

@@ -22,8 +22,7 @@ module.exports = {
     // subpath with only `import`/`types` conditions, which jest (CJS) will not
     // resolve. They are how the relationship-forming invite is checked against
     // upstream's own bytes, so the path is mapped rather than the check dropped.
-    '^@openvtc/vti-tsp-js/unsafe-testing$':
-      '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
+    '^@openvtc/vti-tsp-js/unsafe-testing$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
     // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
     // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
     '^@verifiables/request-converter$': require('fs').existsSync(
@@ -65,6 +64,11 @@ module.exports = {
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: [
     '\\.snap$',
+    // `__tests__/fixtures/` holds vendored schemas and the helper that compares
+    // them with upstream — data and support, never tests. testRegex treats
+    // every .ts under __tests__ as a suite, so without this a helper file fails
+    // the run with "your test suite must contain at least one test".
+    '/__tests__/fixtures/',
     '<rootDir>/node_modules/',
     '<rootDir>/lib',
     '<rootDir>/__tests__/contexts/',
