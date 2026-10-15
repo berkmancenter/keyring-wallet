@@ -19,6 +19,7 @@ import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
+import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/vtiAgent', () => ({
@@ -218,6 +219,43 @@ describe('the community screen, for a member', () => {
     const tree = show()
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
+  })
+
+  // 243: a vetter in a community with a private way may vouch privately, in a
+  // build that carries it; nothing is asked of the agent until they open it.
+  it('a vetter where a way runs private vetting: "Vouch privately", only in a build that carries it', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership },
+      vetterGrant: { state: 'active', statusChecked: true },
+    }
+    const { vtiAgent: mocked } = jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }
+    const privateWay = {
+      id: 'vetted-member',
+      vetting: { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } },
+    }
+    mocked.fetchManifest.mockResolvedValue({ criteria: [privateWay] })
+    try {
+      const without = show()
+      await act(async () => undefined)
+      expect(without.queryByTestId(testIdWithKey('CommunityVouchPrivately'))).toBeNull()
+      without.unmount()
+
+      const standing = jest.fn()
+      registerHiddenVetter({ standing } as unknown as HiddenVetterSeam)
+      const tree = show()
+      await act(async () => undefined)
+      expect(standing).not.toHaveBeenCalled()
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      fireEvent.press(tree.getByTestId(testIdWithKey('CommunityVouchPrivately')))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetter, {
+        communityDid: expect.any(String),
+        criterionId: 'vetted-member',
+      })
+    } finally {
+      registerHiddenVetter(undefined)
+      mocked.fetchManifest.mockResolvedValue({ criteria: [] })
+    }
   })
 
   it('someone not yet a member still sees what is asked, and Apply', async () => {
