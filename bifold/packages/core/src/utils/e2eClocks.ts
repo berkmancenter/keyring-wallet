@@ -7,7 +7,11 @@ import Config from 'react-native-config'
  * it every clock here is the real one.
  */
 export const SHORT_GRANT_POLL_WINDOW_MS = 60 * 1000
-export const SHORT_AUTO_LOCK_MINUTES = 1
+/**
+ * Half a minute: shorter than the 60 s grant window, so a gate row can idle past the lock while the window is still
+ * open and see the hold keep it off (with the lock as long as the window, no moment shows that).
+ */
+export const SHORT_AUTO_LOCK_MINUTES = 0.5
 
 /** True only in a test build that was built with `E2E_CLOCKS=short`. Read on every call, never cached. */
 export const shortClocks = (): boolean => Config.E2E_CLOCKS === 'short'
