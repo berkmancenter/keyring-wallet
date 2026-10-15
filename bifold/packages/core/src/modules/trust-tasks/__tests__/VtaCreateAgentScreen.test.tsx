@@ -28,8 +28,10 @@ import { deviceCodeScan } from '../module/deviceCodeScan'
 import { AgentAlreadyOnPhone, vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
 import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS, readyNameOf } from '../screens/VtaCreateAgent'
+import Config from 'react-native-config'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('react-native-config', () => ({ __esModule: true, default: {} }))
 const mockRelease = jest.fn()
 const mockHoldLock = jest.fn((_forMs: number) => mockRelease)
 jest.mock('../../../contexts/activity', () => ({
@@ -773,6 +775,84 @@ describe('the phone waits for the agent to admit the code, on its own', () => {
     })
     expect(check.mock.calls).toHaveLength(calls + 1)
     expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+  })
+})
+
+// Gate efficiency item 3: a test build with E2E_CLOCKS=short waits 60 s for
+// the grant, so a gate row can see the window run out, pause and hold quickly.
+describe('in a test build with E2E_CLOCKS=short, the wait for the agent is 60 s', () => {
+  const config = Config as Record<string, string | undefined>
+  const showingKey = () =>
+    controller.set({
+      link: { kind: 'showingKey', vtaDid: VTA, label: 'a', did: 'did:key:z6MkOwner', checking: false },
+    })
+  const copied = async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    return tree
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    config.E2E_CLOCKS = 'short'
+  })
+  afterEach(() => {
+    delete config.E2E_CLOCKS
+    jest.useRealTimers()
+  })
+
+  test('still waiting at 50 s; at 60 s it stops and offers Check again', async () => {
+    const tree = await copied()
+    await act(async () => {
+      jest.advanceTimersByTime(50_000)
+    })
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(10_000 + GRANT_POLL_EVERY_MS)
+    })
+    expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
+    expect(tree.getByTestId(id('AgentCreateCheckAgain'))).toBeTruthy()
+  })
+
+  test('the auto-lock is held off for the short window, no longer', async () => {
+    mockHoldLock.mockClear()
+    await copied()
+    expect(mockHoldLock).toHaveBeenCalledTimes(1)
+    const forMs = mockHoldLock.mock.calls[0][0]
+    expect(forMs).toBeGreaterThan(55_000)
+    expect(forMs).toBeLessThanOrEqual(60_000)
+  })
+
+  // IN-135 under the short clock: time in the background still does not count.
+  test('time in the background does not count against the window, and it resumes after', async () => {
+    const changes: ((next: string) => void)[] = []
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, handler: (next: string) => void) => {
+      changes.push(handler)
+      return { remove: () => undefined }
+    }) as never)
+    const tree = await copied()
+    await act(async () => {
+      jest.advanceTimersByTime(30_000)
+    })
+    await act(async () => changes.forEach((c) => c('background')))
+    await act(async () => {
+      jest.advanceTimersByTime(10 * 60 * 1000)
+    })
+    await act(async () => changes.forEach((c) => c('active')))
+    await act(async () => {
+      jest.advanceTimersByTime(20_000)
+    })
+    // Fifty seconds in the app: still waiting.
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(15_000)
+    })
+    expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
   })
 })
 

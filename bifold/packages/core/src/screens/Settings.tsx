@@ -21,6 +21,7 @@ import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import { ThemedText } from '../components/texts/ThemedText'
 import { TOKENS, useServices } from '../container-api'
 import { defaultAutoLockTime } from '../constants'
+import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { AutoLockTime } from '../contexts/activity'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
@@ -62,7 +63,9 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
   // The lock time in force: the person's choice, else the build's default — the
   // same fallback the lock itself uses (contexts/activity). A wallet that never
   // chose has none stored, and this row read "undefined min" (219, iOS).
-  const autoLockTime = store.preferences.autoLockTime ?? customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  const autoLockTime =
+    store.preferences.autoLockTime ??
+    effectiveDefaultAutoLockMinutes(customAutoLockTimes?.default?.time ?? defaultAutoLockTime)
   const { fontScale } = useWindowDimensions()
   const fontIsGreaterThanCap = fontScale >= maxFontSizeMultiplier
   const defaultIconSize = 24

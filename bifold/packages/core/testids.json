@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "befa9c71c744dc10d18d17b0150e09b502c47557",
+  "generatedFrom": "049ea76c4f48ab65fc90e8e9b043468e7910e6b2",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -394,6 +394,10 @@
       "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
     ],
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
+    "E2EAutoLockMinutes": ["src/screens/Developer.tsx"],
+    "E2EClocksMode": ["src/screens/Developer.tsx"],
+    "E2EGrantWindowSeconds": ["src/screens/Developer.tsx"],
+    "E2EPhoneGrantWindowSeconds": ["src/screens/Developer.tsx"],
     "EnableWalletNamingSwitchElement": ["src/screens/Developer.tsx"],
     "Enter": ["src/screens/AttemptLockout.tsx", "src/screens/PINEnter.tsx"],
     "EnterOldPIN": ["src/screens/PINChange.tsx", "src/screens/PINVerify.tsx"],

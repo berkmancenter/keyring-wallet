@@ -14,6 +14,7 @@ import { TOKENS, useServices } from '../container-api'
 import { LockoutReason, useAuth } from './auth'
 import { useStore } from './store'
 import { defaultAutoLockTime } from '../constants'
+import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { useAppAgent } from '../utils/agent'
 
 // number of minutes before the timeout action is triggered
@@ -49,7 +50,9 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const { agent } = useAppAgent()
   const { lockOutUser } = useAuth()
   const lastActiveTimeRef = useRef<number | undefined>(undefined)
-  const defaultAutoLockoutTime = customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  const defaultAutoLockoutTime = effectiveDefaultAutoLockMinutes(
+    customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  )
   const timeoutInMilliseconds = useRef<number>((store.preferences.autoLockTime ?? defaultAutoLockoutTime) * 60000)
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   // Open holds, each with the time it lapses.
