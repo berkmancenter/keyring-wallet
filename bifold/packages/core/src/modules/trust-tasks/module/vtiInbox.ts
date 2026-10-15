@@ -215,6 +215,8 @@ export async function receiveIssue(
     acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
     /** Told of each credential not kept, and why — for the log. */
     onRefused?: (item: VtiReceivedCredential, refusal: VtiCredentialRefusal) => void
+    /** Told of each card once it is filed (a membership, a role card or a held credential) — for the log. */
+    onFiled?: (item: VtiReceivedCredential) => void
     /**
      * Checks a card before it is kept (`deliveredCardCheck(agent)`). Required,
      * so no caller can keep a card unchecked. It may throw to leave the
@@ -283,6 +285,7 @@ export async function receiveIssue(
       await store.saveHeldCredential({ ...item, kind: item.kind })
       if (news) DeviceEventEmitter.emit(VTI_VETTER_GRANTED_EVENT, { communityDid: item.communityDid })
     }
+    options.onFiled?.(item)
   }
   return kept
 }
