@@ -29,6 +29,7 @@ import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
 import testVtcCapture from './fixtures/join-0.3/test-vtc-hidden-vetting-2026-10-15.json'
 
 import { registerHiddenVetting } from '../screens/hiddenVettingSeam'
+import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The desk's attest asks for a face or fingerprint first; here it is given.
@@ -429,6 +430,11 @@ describe('Vetting — one filled button per step', () => {
       .spyOn(vtiAgent, 'fetchManifest')
       .mockResolvedValue(readManifest(hiddenExample.document.payload as Partial<VtiManifest>, '0.3'))
     const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    // The module's answer for an application under way: private (its checklist is the single answer).
+    const realChecklist = VtiApplicant.prototype.checklist
+    jest.spyOn(VtiApplicant.prototype, 'checklist').mockImplementation(async function (this: VtiApplicant) {
+      return { ...(await realChecklist.call(this)), mode: 'private' as const }
+    })
     registerHiddenVetting({} as never)
     try {
       const tree = await renderWith([persona, application])
@@ -733,6 +739,52 @@ describe('Vetting — the desk', () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
     })
     expect(attest).toHaveBeenCalledWith('r1', expect.objectContaining({ declaredRelationship: 'closeFriend' }))
+  })
+
+  // The quiet token line: read once when the desk opens, from the agent
+  // (vta/pcs/vetter/show), never on a poll. A date only when one is known.
+  describe('where a way is private: how many people the vetter can vouch for now', () => {
+    const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+    afterEach(() => registerHiddenVetter(undefined))
+
+    test('enrolled, with a next draw known: the count and the date, asked once', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      const standing = jest.fn(async () => ({ enrolled: true, tokens: 2, nextDrawAt: '2026-10-18T12:00:00Z' }))
+      registerHiddenVetter({ standing } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      const line = await tree.findByTestId(testIdWithKey('VettingVouchTokens'))
+      expect(line).toHaveTextContent(/Vetting\.Vouch\.Tokens/)
+      expect(line).toHaveTextContent(/Vetting\.Vouch\.NextDraw/)
+      await act(async () => {
+        jest.advanceTimersByTime(10000)
+      })
+      expect(standing).toHaveBeenCalledTimes(1)
+    })
+
+    test('no next draw known (a new phone): the count only, no invented date', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => ({ enrolled: true, tokens: 1 })),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      const line = await tree.findByTestId(testIdWithKey('VettingVouchTokens'))
+      expect(line).not.toHaveTextContent(/NextDraw/)
+    })
+
+    test('never enrolled: no line, and no error', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => {
+          throw Object.assign(new Error('nf'), { code: 'vta/pcs/vetter/show:notFound' })
+        }),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      await act(async () => {
+        jest.advanceTimersByTime(100)
+      })
+      expect(tree.queryByTestId(testIdWithKey('VettingVouchTokens'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+    })
   })
 
   test('a named request: no mark, no relationship question, attests as before', async () => {

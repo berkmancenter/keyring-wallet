@@ -77,7 +77,12 @@ import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
 import { hiddenVettingSeam, pcsErrorCode } from './hiddenVettingSeam'
 import { PrivateVettingBadge } from './PrivateVettingBadge'
-import { DECLARED_RELATIONSHIPS, type DeclaredRelationship } from './hiddenVetterSeam'
+import {
+  DECLARED_RELATIONSHIPS,
+  hiddenVetterSeam,
+  type DeclaredRelationship,
+  type HiddenVetterStanding,
+} from './hiddenVetterSeam'
 import { hiddenVetterErrorKey } from './VtiHiddenVetter'
 import { hiddenVettingErrorKey } from './VtiHiddenVetting'
 import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
@@ -677,19 +682,19 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const side: 'vetter' | 'applicant' | undefined =
     persona && !seatRead ? undefined : grant ? 'vetter' : persona ? 'applicant' : undefined
 
-  // Whether this application is private (hidden) vetting: the same steps, with
-  // the one mark that says so. From the way in the application named, so it
-  // shows before any vouch has come in; the checklist confirms it after.
+  // Whether this is private (hidden) vetting: the same steps, with the one mark
+  // that says so. Once an application exists the module's checklist is the
+  // single answer; before one does, the way in this community offers.
   const privateCriterion = manifest?.criteria.find(
     (c) =>
       hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE &&
       (!application?.requirementsDigest || c.requirementsDigest === application.requirementsDigest)
   )
-  const privateHere = carriesPrivate && (checklist?.mode === 'private' || Boolean(privateCriterion))
-  // The manifest, read once on the applicant's side in a build that carries
-  // private vetting, so the mark is there from the first step.
+  const privateHere = carriesPrivate && (checklist ? checklist.mode === 'private' : Boolean(privateCriterion))
+  // The manifest, read once in a build that carries private vetting: the
+  // applicant's mark from the first step, and the vetter's private way.
   useEffect(() => {
-    if (side !== 'applicant' || !carriesPrivate || manifest || !communityDid) return
+    if (!side || !(carriesPrivate || hiddenVetterSeam()) || manifest || !communityDid) return
     let live = true
     vtiAgent
       .fetchManifest(communityDid)
@@ -699,6 +704,26 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       live = false
     }
   }, [side, carriesPrivate, manifest, communityDid])
+
+  // A vetter where a way is private: where they stand to vouch, read once when
+  // the desk opens. Never on a poll or a redraw: it asks their agent, whose
+  // policy may ask an approver. "Never enrolled" is no line, not an error.
+  const [vetterStanding, setVetterStanding] = useState<HiddenVetterStanding>()
+  const standingRead = useRef(false)
+  const vetterPrivateWay = manifest?.criteria.find((c) => hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE)
+  useEffect(() => {
+    const seam = hiddenVetterSeam()
+    if (side !== 'vetter' || !agent || !communityDid || !vetterPrivateWay || !seam || standingRead.current) return
+    standingRead.current = true
+    let live = true
+    seam
+      .standing(agent, communityDid, vetterPrivateWay)
+      .then((st) => live && setVetterStanding(st))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [side, agent, communityDid, vetterPrivateWay])
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -926,6 +951,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           <KeyboardAwareScrollView {...keyboardAware}>
             {seatBanner('vetter', vetterStep === 'match')}
             {standingNotice}
+            {/* How many people this vetter can vouch for privately now, read
+                once when the desk opens (it is an agent round trip). */}
+            {vetterStanding?.enrolled ? (
+              <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchTokens)}>
+                {tp('Vetting.Vouch.Tokens', { count: vetterStanding.tokens })}
+                {vetterStanding.nextDrawAt
+                  ? ` · ${tp('Vetting.Vouch.NextDraw', { date: localDate(vetterStanding.nextDrawAt) })}`
+                  : ''}
+              </Text>
+            ) : null}
             <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.youVetFor)}>
               {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid, t) })}
             </Text>
