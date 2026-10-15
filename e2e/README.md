@@ -209,6 +209,28 @@ Debug builds for the emulator/Android phone load JS from **metro** — run
 `yarn start` in `app/` (the real-device runner starts it for you if it isn't
 running; the port is forwarded to the phone over USB with `adb reverse`).
 
+**Start metro as its own process, not as a child of the build.** `yarn android`
+starts metro for you, but as a child of that command: the moment the build
+command exits — including when a CI step or a background task that ran it
+finishes — metro dies with it. The `adb reverse` tunnel survives and keeps
+pointing at the dead port, so the app installs, launches, and renders nothing.
+
+What that looks like is **not** a bundler error. The suite waits on a screen
+that never arrives and reports:
+
+```
+onboarding did not finish within 5min (last action: )
+```
+
+Before chasing onboarding, check the server is actually there:
+
+```sh
+lsof -ti:8081            # nothing listening = metro is gone
+adb reverse --list       # the tunnel will still be there, pointing nowhere
+```
+
+Run `yarn start` in `app/` in its own long-lived shell and re-run.
+
 ## Simulator/emulator run (`yarn e2e:vrc`)
 
 > **One emulator at a time, through `scripts/emu.sh`.** The harness never
