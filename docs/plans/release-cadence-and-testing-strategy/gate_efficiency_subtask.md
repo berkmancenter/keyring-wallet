@@ -154,24 +154,45 @@ port range. Legs of one lane run one after another; lanes run side by side.
 
 | Lane | Machine | Identity | Runners | Legs |
 |---|---|---|---|---|
-| mac | the MacBook | the gate's | prague (main), uiux (A), openvtc (B), the community's agent | iOS: `kk`, `smoke-ios`, `update-ios`; Android: `agents` (needs all three runners), `waiting`, `p1`, `devices`' refusal row (it links to the community's agent and cleans its keys) |
-| mini | the Mac mini | `keyring-mini-gate` (pending) | its own main runner | `update-android` (merged), `smoke-android`, `devices`' screen rows, `lostreq`'s nightly twin, the layout sweep |
+| mac | the MacBook | the gate's | prague (main), uiux (A), openvtc (B), the community's agent | iOS: `kk`, `smoke-ios`, `update-ios`; Android: `agents` (needs all three runners), `waiting`, `p1`, `update-android` (merged; needs B and the community's admin credential), `devices`' refusal row (it links to the community's agent and cleans its keys) |
+| mini | the Mac mini | `keyring-mini-gate`, generated on the mini (file session store) | `keyring-runner-mini1`, its own main runner, and nothing else | Android only: `smoke-android`, `testreq`; `linkwait` and `linkresume` until item 11 moves them to ci; `devices`' screen rows once item 7 splits them off; `lostreq`'s nightly twin only if it needs no community credential; the layout sweep |
 | ci | GitHub runners | `keyring-ci-gate` | its own main runner (an existing runner's DID serves as `linkfail`'s approver, with no admin on it) | `linkwait` (merged), `linkfail`, `pnmlink`, `testreq`'s twin when the shared phone is not available |
 
 Two lanes on one runner collide on its ACL and its rate limit (the
 coordinator's rule of 14 October), so the mini and ci lanes need runner VTAs
 of their own on the Farm: two more "main" runners, and nothing else, since
-only `agents` needs A and B, and the mini lane needs no entry on the
-community's agent. **Decided, waiting on creation**: the project lead creates
-them in the Farm console (the specification is in `2026-10-14-al.md` §5).
-Until they exist, two lanes share the Farm by turns (ci runs while the Mac
-is idle), which is the ordering the coordinator set.
+only the mac lane's legs need A, B or the community's agent. The mini's runner
+exists (`keyring-runner-mini1`, vta-service 0.60), with `keyring-mini-gate` a
+super admin on it and nowhere else; the ci lane's is still to be created
+(item 11). Until both exist, two lanes share the Farm by turns (ci runs while
+the Mac is idle), which is the ordering the coordinator set.
+
+The mini lane holds no community admin credential and no A or B runner, so a
+leg needing either stays on the mac lane. It runs Android only: its disk (a
+256 GB drive, a 12 GB floor) has no room for an iOS build beside Android, and
+iOS on Xcode 27 runs headless (`E2E_IOS_HEADLESS=1`).
+
+**How lanes run.** Each lane has its own environment file on its own machine
+(`env/lane-<name>.env`: its runners, its identity, its devices); the
+variable names are the mac's, so a leg's `need` line fails at once where a
+lane lacks a runner it needs. Ports stay as the legs set them, since no two
+lanes share a machine. No lane sweeps or cleans keys on another lane's
+runner. `gate.sh run --lanes` on the MacBook starts each lane as soon as that
+lane's builds are ready (the mini over ssh, in a session that survives a
+dropped connection) and checks each lane's own start guards (stable machine,
+free devices, disk) on that machine. A pause reaches every lane. When all
+lanes end, it copies each remote run directory back and writes one report:
+one `legs.tsv` with a lane column, per-lane target and Farm fields in `meta`,
+and one verdict. `rerun --only-failed` reruns a leg on the lane that ran it.
 
 Computed from the 248 durations, after §2 to §4: the mac lane is about 70
 minutes (iOS 26 beside Android 65), the mini lane about 45, the ci lane about
 55 with short clocks. **Target: a release gate in 75 minutes wall-clock on
 three lanes; 2 h 15 m when only the Mac is available.** Both are estimates
-from measured legs, to be replaced by a measured run in phase 3.
+from measured legs, to be replaced by a measured run in phase 3. With
+`update-android` on the mac lane (984 s on 248), the mac's Android side grows
+and the mini's shrinks, so the 75-minute target depends on item 6 and the
+phase 3 measurement.
 
 ### 6. Cadence
 
@@ -311,7 +332,7 @@ runners; `gate.sh run --lanes mac,mini,ci` scheduling by `needs` and runner
 set; one report across lanes.
 *Done when* one pin's full gate completes in 75 minutes or less across three
 lanes with the same rows as a Mac-only run, three times.
-**Waits on** the two runner VTAs, approved 14 October, created by the project lead.
+**Waits on** the ci lane's runner VTA (item 11); the mini's (`keyring-runner-mini1`) exists, with its identity live.
 
 **Phase 4: down the pyramid.** The component tests in §7, each landing with
 its device twin kept for two releases; the timer tests; the VTA contract
@@ -344,7 +365,7 @@ lane; "app" is whichever application lane the coordinator assigns.
 | 7 | The phone ledger and `needs=` per leg; `testreq` and `devices`' screen rows on the shared phone; keys deferred per lane | harness | 2 |
 | 8 | `lostreq`'s offline error as a component test | app | nothing |
 | 9 | `lostreq`'s device row and `p2` in the nightly schedule | harness | 8 merged |
-| 10 | Lanes: `gate.sh run --lanes`, runner sets per lane from the environment, the mini's identity on its runner | harness with the mini lane | the two runner VTAs |
+| 10 | Lanes, as §5 describes: an environment file per lane, `PNM_HOME` kept for a file-store identity, the mini lane run by hand on one leg, then `gate.sh run --lanes` with one merged report | harness with the mini lane | the mini's runner (exists); ci's for the three-lane run |
 | 11 | The ci lane on its own runner: the environment and the identity's session updated, `linkfail`'s approver DID from an existing runner | research (CI) | the two runner VTAs |
 | 12 | The component tests of §7, one PR per screen, each keeping its device twin for two releases | app | nothing |
 | 13 | The timer tests of §7 | app | 3 |
@@ -367,3 +388,5 @@ testers receive.
   classification, the sources, and the positions this plan rejected.
 - `2026-10-15-al.md`: the VRC suites need debug builds (found on the 241
   re-pin, run 249).
+- `2026-10-15-mini.md`: the mini lane's legs (`update-android` moved to the
+  mac lane), how a lane is set up and run, and the PR order for item 10.
