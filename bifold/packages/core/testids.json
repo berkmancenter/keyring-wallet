@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "049ea76c4f48ab65fc90e8e9b043468e7910e6b2",
+  "generatedFrom": "eec7fec8e8bd1f920093062eb36d05190da0b45a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -886,6 +886,7 @@
     "VettingScanTicketButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingSeatBanner": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingSeatHint": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingSeatLoading": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingSendCardButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingSessionEnded": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingStanding": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
@@ -2069,6 +2070,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.seatHint"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.seatLoading"
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.sendCardButton"
