@@ -11,3 +11,4 @@ packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vtc-join-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vetting-schemas/*.json
+packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.json
