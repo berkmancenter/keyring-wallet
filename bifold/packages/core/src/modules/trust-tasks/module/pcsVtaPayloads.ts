@@ -30,6 +30,19 @@
 /** The suite this app implements. Anything else is refused, never downgraded. */
 export const HIDDEN_VETTING_SUITE = 'ps-ddh-bls12381'
 
+/** The type-URI prefix of the whole `vta/pcs/*` family, for a discovery query. */
+export const PCS_FAMILY = 'https://trusttasks.org/spec/vta/pcs/'
+
+/**
+ * `trust-task-discovery/0.1` — what the agent says it serves.
+ *
+ * The authoritative answer to "does this agent implement the family": it is
+ * built from the dispatch table, needs no capability, and distinguishes an
+ * agent that does not implement a task from one that will not let this caller
+ * use it. A refusal cannot do that reliably — see `servesPcs`.
+ */
+export const DISCOVERY_TASK = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
+
 /** The five task types of the applicant's round. */
 export const PCS_VTA_TASK = {
   applicationsCreate: 'https://trusttasks.org/spec/vta/pcs/applications/create/0.1',
@@ -175,6 +188,13 @@ export const PCS_ERROR = {
   unsupportedSuite: 'unsupportedSuite',
   /** The agent is older than 0.60 and does not serve vta/pcs at all. */
   unsupportedType: 'unsupportedType',
+  /**
+   * The identity does not carry `pcs-applicant`. A framework-standard code
+   * (`trust-tasks-rs` `StandardCode::PermissionDenied` → `permissionDenied`),
+   * and for the version probe it is a *positive* answer: the capability is
+   * checked inside the handler, so reaching it proves the handler exists.
+   */
+  permissionDenied: 'permissionDenied',
 } as const
 
 /** The code of a `trust-task-error`, or undefined when the document is not one. */

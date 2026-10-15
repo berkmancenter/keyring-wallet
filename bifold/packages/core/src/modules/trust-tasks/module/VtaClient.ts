@@ -40,6 +40,8 @@ import {
   type PcsApplication,
   type ProvePayload,
   type VerifyAttestationPayload,
+  PCS_FAMILY,
+  DISCOVERY_TASK,
 } from './pcsVtaPayloads'
 
 import {
@@ -2018,6 +2020,34 @@ export class VtaClient {
    * about the agent's version.
    */
   async servesPcs(): Promise<boolean | undefined> {
+    // Ask the agent what it serves, rather than inferring it from a refusal.
+    // `trust-task-discovery/0.1` answers from the dispatch table itself
+    // (`vta-service/src/trust_tasks/discovery.rs` passes `dispatched_uris()`)
+    // and its handler takes no capability check, so the answer is conclusive
+    // both ways and needs no grant.
+    try {
+      const answer = await this.task<{ supportedTypes?: unknown }>(
+        DISCOVERY_TASK,
+        { patterns: [`${PCS_FAMILY}*`] },
+        30000,
+        {},
+        undefined,
+        { waitForConsent: false }
+      )
+      const types = Array.isArray(answer?.supportedTypes) ? answer.supportedTypes : []
+      // Entries come as a bare URI or as `{type}` — both forms are legal in
+      // one list (spec 0.1 `supportedTypes`).
+      const uris = types
+        .map((t) =>
+          typeof t === 'string' ? t : t && typeof t === 'object' ? (t as { type?: unknown }).type : undefined
+        )
+        .filter((t): t is string => typeof t === 'string')
+      if (uris.length > 0 || types.length === 0) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
+    } catch {
+      // An agent that does not serve discovery, or a policy that denies it,
+      // leaves the question to the probe below.
+    }
+
     try {
       await this.task(
         PCS_VTA_TASK.applicationsShow,
@@ -2036,6 +2066,16 @@ export class VtaClient {
       const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
       if (code?.endsWith(':notFound') || code === 'notFound') return true
       if (code === PCS_ERROR.unsupportedType || code?.endsWith(':unsupportedType')) return false
+      // `permissionDenied` is NOT evidence either way, however tempting it is.
+      // At 0.60 it means the capability check inside the handler ran, so the
+      // handler exists — but the policy gate runs *before* dispatch on older
+      // agents, and with `policy.enforcement` on, a denial for an unknown type
+      // is also `permissionDenied`; so is a policy-store read failure, which
+      // fails closed with "policy evaluation unavailable"
+      // (`vta-service/src/trust_tasks/policy_gate.rs:123-141`, read at
+      // vta-service-v0.56.0). A pre-0.60 agent can therefore say
+      // `permissionDenied` to a task it does not implement, and reading that as
+      // "serves it" would claim hidden vetting is available where it is not.
       return undefined
     }
   }
