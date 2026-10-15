@@ -30,6 +30,21 @@ jobs:
             echo "::error::Private files are committed:"; echo "$found"; exit 1
           fi
 
+      # The e2e clock switch shortens the app's clocks for the release checks.
+      # Only test-builds.yml may write it into an app's .env; staging builds what
+      # ships, and refuses a .env that carries it, in both its app jobs.
+      - name: Only test builds set E2E_CLOCKS
+        run: |
+          found=$(grep -l 'E2E_CLOCKS[=]' .github/workflows/*.yml .github/workflows/*.yaml app/.env.sample \
+            | grep -vx '.github/workflows/test-builds.yml' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Only test-builds.yml may set E2E_CLOCKS:"; echo "$found"; exit 1
+          fi
+          guards=$(grep -c 'E2E_CLOCKS would be baked into a store build' .github/workflows/staging.yaml || true)
+          if [ "$guards" -lt 2 ]; then
+            echo "::error::staging.yaml must refuse E2E_CLOCKS in both the Android and the iOS build (found $guards guards)"; exit 1
+          fi
+
   lint:
     runs-on: ubuntu-22.04
     name: Lint+Format+Types
