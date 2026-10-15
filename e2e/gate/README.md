@@ -224,10 +224,13 @@ so `run` and `all` leave it out; `--legs p2` still names it), and `lostreq`, who
 `lost-ask-offline-error` runs only in a nightly run (its twin is bifold's `joinLostRequest.test.tsx`, #414). In a
 gate the row is a SKIP that says so; a rerun that names it runs it. Every leg gets its run's kind as `GATE_KIND`.
 
-`watch --main` starts the nightly legs once a day, at `GATE_NIGHTLY_HOUR` (local, default 3), on the newest green
-main build, only in a cycle where no gate started and under the same busy and stability rules as a gate;
-`nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day as started, so a long or failed run is not started twice.
-`GATE_NIGHTLY=0` turns it off. A nightly run is `<id>-nightly`, never counted as a gate of its commit.
+`watch --main` starts the nightly legs once a day, in a window of local hours from `GATE_NIGHTLY_HOUR` (default 3)
+until `GATE_NIGHTLY_UNTIL` (default 6), on the newest green main build, only in a cycle where no gate started and
+under the same busy and stability rules as a gate. `nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day: written once
+the run holds the run lock (so a long or failed run is not started twice, and one that never started is tried again
+in the window), or when the window passes with no run, which the watcher's log says. `GATE_NIGHTLY=0` turns it off.
+A nightly run is `<id>-nightly`, never counted as a gate of its commit. A running `watch --main` keeps the `gate.sh`
+it started with: after a change here, restart it (the LaunchAgent's bootout and bootstrap) between gates.
 
 ## Continuous gating on main
 

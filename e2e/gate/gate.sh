@@ -155,6 +155,8 @@ cmd_run() {
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
   use_build "$pin"
   run_lock
+  # A nightly run marks its day only now, holding the lock: one that never got this far is tried again in the window.
+  [ -z "${GATE_NIGHTLY_MARK:-}" ] || echo "started $(stamp)Z, pin ${pin:0:8}" > "$GATE_NIGHTLY_MARK"
   gate_sweep
   # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
   local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
@@ -270,15 +272,26 @@ cmd_nightly() {
   [ "${1:-}" = --pin ] && pin=${2:-}
   [ -n "$pin" ] || pin=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null | cut -d' ' -f1)
   [ -n "$pin" ] && [ "$pin" != none ] || die "no green main build to run the nightly legs on"
-  cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+  GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
 }
 
-# Whether the nightly run is due: GATE_NIGHTLY not 0, the local hour is GATE_NIGHTLY_HOUR (default 3), and none has
-# started today (a marker per local date, written when one starts, so a long or failed run is not started twice).
+# The nightly window, local hours: from GATE_NIGHTLY_HOUR (default 3) until GATE_NIGHTLY_UNTIL (default 6). A window,
+# not one hour, so a gate running through its start, or a busy or unstable Mac then, delays the nightly run rather
+# than losing the day. The day's marker (nightly-<YYYYMMDD>) is written once a run holds the run lock, or when the
+# window passes with no run.
+nightly_marker() { echo "$GATE_HOME/nightly-$(date +%Y%m%d)"; }
+nightly_hour() { echo $((10#$(date +%H))); }
+# Whether the nightly run is due: GATE_NIGHTLY not 0, inside the window, and none started today.
 nightly_due() {
   [ "${GATE_NIGHTLY:-1}" != 0 ] || return 1
-  [ "$(date +%H)" = "$(printf %02d "${GATE_NIGHTLY_HOUR:-3}")" ] || return 1
-  [ ! -f "$GATE_HOME/nightly-$(date +%Y%m%d)" ]
+  local h; h=$(nightly_hour)
+  [ "$h" -ge "${GATE_NIGHTLY_HOUR:-3}" ] && [ "$h" -lt "${GATE_NIGHTLY_UNTIL:-6}" ] || return 1
+  [ ! -f "$(nightly_marker)" ]
+}
+# Whether today's window has passed with no nightly run (said once in the log, then marked).
+nightly_missed() {
+  [ "${GATE_NIGHTLY:-1}" != 0 ] || return 1
+  [ "$(nightly_hour)" -ge "${GATE_NIGHTLY_UNTIL:-6}" ] && [ ! -f "$(nightly_marker)" ]
 }
 
 # One gate at a time on this Mac, whoever started it. The lock is a directory holding the owner's pid. The pid is
@@ -364,7 +377,7 @@ cmd_watch_main() {
   # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
   trap stop_forward TERM INT HUP
   local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same started
-  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO; the nightly legs ($LEGS_NIGHTLY) at $(printf %02d "${GATE_NIGHTLY_HOUR:-3}"):00"
+  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO; the nightly legs ($LEGS_NIGHTLY) from ${GATE_NIGHTLY_HOUR:-3}:00 to ${GATE_NIGHTLY_UNTIL:-6}:00"
   while :; do
     started=0; sha=
     pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
@@ -405,9 +418,11 @@ cmd_watch_main() {
     # A new main build waits for the next cycle's gate first, so the gate is never behind a nightly run.
     if [ "$started" = 0 ] && [ -n "$sha" ] && nightly_due && ! paused \
       && ! { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } && ! mac_busy && mac_stable && watch_checkout_ready; then
-      touch "$GATE_HOME/nightly-$(date +%Y%m%d)"
       say "nightly: $LEGS_NIGHTLY on main build ${sha:0:8}"
-      ( cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
+      ( GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
+    elif nightly_missed; then
+      echo "missed $(stamp)Z: the window passed with no run" > "$(nightly_marker)"
+      say "nightly: the ${GATE_NIGHTLY_HOUR:-3}:00-${GATE_NIGHTLY_UNTIL:-6}:00 window passed with no run today (a gate, a busy or unstable Mac, a pause, or no green main build)"
     fi
     sleep "$interval" & wait $!
   done

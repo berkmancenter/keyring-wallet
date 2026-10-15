@@ -23,9 +23,8 @@ const bash = (script, env = {}) => {
   }
 };
 
-test('gate.sh has leg_wanted and nightly_due to test', () => {
-  assert.ok(fn('leg_wanted'), 'leg_wanted() { … } not found in gate.sh');
-  assert.ok(fn('nightly_due'), 'nightly_due() { … } not found in gate.sh');
+test('gate.sh has leg_wanted and the nightly window functions to test', () => {
+  for (const name of ['leg_wanted', 'nightly_marker', 'nightly_hour', 'nightly_due', 'nightly_missed']) assert.ok(fn(name), `${name}() { … } not found in gate.sh`);
 });
 
 test('"all" leaves the nightly-only legs out; naming one still runs it', () => {
@@ -48,35 +47,54 @@ test('every nightly leg has a leg file and a platform list that places it', () =
   for (const leg of list('LEGS_NIGHTLY_ONLY')) assert.ok(list('LEGS_NIGHTLY').includes(leg), `${leg} is nightly only but not a nightly leg`);
 });
 
-test('nightly_due: at its hour, once a day, unless turned off', () => {
+test('nightly_due: inside the window, once a day, unless turned off; nightly_missed after it, unmarked', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'nightly-'));
   try {
     const now = new Date();
-    const hour = String(now.getHours());
-    const other = String((now.getHours() + 12) % 24);
+    const h = now.getHours();
     const day = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const due = (env) => bash(`${fn('nightly_due')}\nnightly_due`, { GATE_HOME: home, ...env });
-    assert.equal(due({ GATE_NIGHTLY_HOUR: hour }), true, 'its hour, none yet today');
-    assert.equal(due({ GATE_NIGHTLY_HOUR: other }), false, 'not its hour');
-    assert.equal(due({ GATE_NIGHTLY_HOUR: hour, GATE_NIGHTLY: '0' }), false, 'turned off');
+    const fns = ['nightly_marker', 'nightly_hour', 'nightly_due', 'nightly_missed'].map(fn).join('\n');
+    const due = (env) => bash(`${fns}\nnightly_due`, { GATE_HOME: home, ...env });
+    const missed = (env) => bash(`${fns}\nnightly_missed`, { GATE_HOME: home, ...env });
+    // A window that holds this hour, one that ended before it, and one that starts after it.
+    const inside = { GATE_NIGHTLY_HOUR: String(h), GATE_NIGHTLY_UNTIL: String(h + 1) };
+    const passed = h > 0 ? { GATE_NIGHTLY_HOUR: '0', GATE_NIGHTLY_UNTIL: String(h) } : null;
+    const ahead = h < 23 ? { GATE_NIGHTLY_HOUR: String(h + 1), GATE_NIGHTLY_UNTIL: '24' } : null;
+    assert.equal(due(inside), true, 'inside the window, none yet today');
+    assert.equal(missed(inside), false, 'not missed while the window is open');
+    if (passed) {
+      assert.equal(due(passed), false, 'outside the window: it has passed');
+      assert.equal(missed(passed), true, 'the window passed with no run: missed');
+    }
+    if (ahead) {
+      assert.equal(due(ahead), false, 'outside the window: not yet');
+      assert.equal(missed(ahead), false, 'a window still to come is not missed');
+    }
+    assert.equal(due({ ...inside, GATE_NIGHTLY: '0' }), false, 'turned off');
+    if (passed) assert.equal(missed({ ...passed, GATE_NIGHTLY: '0' }), false, 'turned off: nothing missed');
     writeFileSync(path.join(home, `nightly-${day}`), '');
-    assert.equal(due({ GATE_NIGHTLY_HOUR: hour }), false, 'already started today');
+    assert.equal(due(inside), false, 'already started today');
+    if (passed) assert.equal(missed(passed), false, 'marked: said only once');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('the watcher starts the nightly legs only when nothing else started, and marks the day first', () => {
+// Structural, not behavioural: the loop runs for ever against GitHub and the Mac, so this reads cmd_watch_main's and
+// cmd_run's source for the rules (review on #487); nightly_due and nightly_missed above are run for real.
+test('the watcher starts the nightly legs only when nothing else started, and the run marks its day once it holds the lock', () => {
   const watch = fn('cmd_watch_main');
   assert.ok(watch, 'cmd_watch_main() not found');
   const at = watch.indexOf('nightly_due');
   assert.ok(at > 0, 'the watcher never asks nightly_due');
-  const block = watch.slice(watch.lastIndexOf('if ', at), watch.indexOf('fi', at));
+  const block = watch.slice(watch.lastIndexOf('if ', at), watch.indexOf('\n    fi', at));
   assert.match(block, /"\$started" = 0/, 'a gate started this cycle comes first');
   assert.match(block, /! paused/);
   assert.match(block, /mac_busy/);
-  assert.ok(block.indexOf('touch "$GATE_HOME/nightly-') < block.indexOf('cmd_run'), 'the day is marked before the run starts');
-  assert.match(block, /--kind nightly/);
+  assert.match(block, /GATE_NIGHTLY_MARK=\$\(nightly_marker\) cmd_run --pin "\$sha" --kind nightly/);
+  assert.match(block, /elif nightly_missed; then[\s\S]*nightly_marker[\s\S]*say "nightly: the/, 'a missed window is said and marked');
+  const run = fn('cmd_run');
+  assert.ok(run.indexOf('GATE_NIGHTLY_MARK') > run.indexOf('run_lock'), 'the day is marked only once the run holds the lock');
 });
 
 test("lostreq runs its offline-ask driver only in a nightly run, or when a rerun names the row", () => {
