@@ -92,6 +92,34 @@ describe('learning where a request stands, from "Your agent"', () => {
   })
 })
 
+// agents' R5 (gate efficiency item 12), as a component test: a refusal reaches the card's own line, whether the card
+// learned it by asking on its own or through "Check now", and once turned down there is nothing left to check.
+describe('a request turned down, on "Your agent"', () => {
+  const rejected = { kind: 'rejected', submission: { ...pending.submission, status: 'rejected' } }
+  const status = (tree: Awaited<ReturnType<typeof show>>) =>
+    tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))
+
+  it('learned by asking on its own: the card says so, with no "Check now"', async () => {
+    ;(vtiAgent as unknown as Setter).set({ did: ME })
+    mockReadJoinState.mockResolvedValue(rejected)
+    const tree = await show()
+    expect(status(tree)).toHaveTextContent(/Join\.StandingRejected/)
+    expect(tree.queryByTestId(testIdWithKey(`AgentCommunityCheck_${key}`))).toBeNull()
+  })
+
+  it('learned through "Check now": the line changes from waiting to turned down, and the check goes', async () => {
+    ;(vtiAgent as unknown as Setter).set({ did: 'did:webvh:card-check:someone-else' })
+    const tree = await show()
+    expect(status(tree)).toHaveTextContent(/Join\.StandingPending/)
+    mockReadJoinState.mockResolvedValue(rejected)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey(`AgentCommunityCheck_${key}`)))
+    })
+    expect(status(tree)).toHaveTextContent(/Join\.StandingRejected/)
+    expect(tree.queryByTestId(testIdWithKey(`AgentCommunityCheck_${key}`))).toBeNull()
+  })
+})
+
 // IN-120: an admin saw a persona DID the person had never been shown.
 describe('the code the community sees for this identity', () => {
   it('is behind "Show the code they see", with who sees it, and can be copied', async () => {
