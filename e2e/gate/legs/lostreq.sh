@@ -48,10 +48,17 @@ done
 adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
 # A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
 CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
+# A build that logs its card-status reads (bifold #410) lets the driver prove the cut held; without it, as before.
+CS_LOGS=; build_has cardStatusLogLine "$APK" && CS_LOGS=1
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
-  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
+  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} CARD_STATUS_LOGS=$CS_LOGS galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
 grep -E '^\[e2e\] [0-9]|^(PROBE|ISSUED) ' "$LEG_DIR/card.out" | cut -c1-260
 take_rows "$LEG_DIR/card.out"
+grep -E '^(CUT-CHECK|CUT-NOT-HELD|NO-STATUS-READ) ' "$LEG_DIR/card.out" | cut -c1-260
+# The cut did not hold, or the app never read a status during it: no verdict on IN-258 either way (the harness).
+if grep -qE '^(CUT-NOT-HELD|NO-STATUS-READ) ' "$LEG_DIR/card.out"; then
+  broken "card-status-unreachable-notice not reached: $(grep -m1 -E '^(CUT-NOT-HELD|NO-STATUS-READ) ' "$LEG_DIR/card.out" | cut -c1-200)"
+fi
 # A driver that never printed its row (killed by its alarm, a crash): FAIL on a build with #386, tracked before it.
 if ! grep -qE "^ROW card-status-unreachable-notice " "$LEG_DIR/card.out"; then
   why="the driver stopped (rc=$crc): $(grep -aE 'error: |Error:' "$LEG_DIR/card.out" | grep -v webdriver | tail -1 | cut -c1-140)"

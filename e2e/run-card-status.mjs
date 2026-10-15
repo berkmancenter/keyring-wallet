@@ -80,6 +80,21 @@ export function noticeIn(source) {
 }
 
 /**
+ * Whether the cut held, from the phone's own log (bifold #410: "[VTI] card status: MembershipCredential … outcome=…"):
+ * "read" when a membership card's status list was read during the cut (the cut did not hold: no verdict),
+ * "blocked" when its read came back unknown (what the check needs), "none" when no membership card's status was
+ * checked at all (the relaunched app never got to it: no verdict either).
+ */
+export function cutHeld(logText) {
+  const lines = logText.split("\n").filter((l) => /\[VTI\] card status: MembershipCredential/.test(l));
+  const read = lines.find((l) => /outcome=ok \(status list read/.test(l));
+  if (read) return { state: "read", line: read.slice(read.indexOf("[VTI]")).trim() };
+  const blocked = lines.find((l) => /outcome=unknown/.test(l));
+  if (blocked) return { state: "blocked", line: blocked.slice(blocked.indexOf("[VTI]")).trim() };
+  return { state: "none", line: "" };
+}
+
+/**
  * How the row ends: PASS on the notice, else SKIP as tracked (FAIL when strict). Strict is a build with bifold #386
  * (IN-258's fix, CardStatusNotice): there the row is a real check, so a setup that never reached it is a FAIL too,
  * saying so, rather than a SKIP that reads like a known gap (1014-0451, 1014-1857: it never ran on 241).
@@ -242,6 +257,16 @@ async function main() {
     }
     log(`${host} cut ${cut}`);
     probe("during the cut");
+    // The server-name rule refuses only a NEW connection's TLS handshake: a connection the app opened before the cut
+    // carried its status read straight through (1015-0249: "status list read, not withdrawn" 3 s into the cut). So
+    // the app starts again now, with no connection from before the cut, and its log from here on is the card's.
+    try { adb("logcat", "-c"); } catch { /* a log that cannot be cleared still carries the lines */ }
+    await d.terminateApp(BID).catch(() => undefined);
+    await d.activateApp(BID);
+    await unlockToHome(d).catch(async (e) => {
+      if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
+    });
+    log("app restarted inside the cut: no connection from before it survives");
     // Named before the approval, so a timeout after it is still cleaned up (lostreq's fin removes the member).
     console.log(`JOIN_MEMBER ${req.applicantDid}`);
     const said = admin("join-decide", req.id, "approved");
@@ -303,6 +328,16 @@ async function main() {
     }
     await screenshot(d, "card-status-unreachable").catch(() => undefined);
     const observed = `card status "${status || "(none)"}"${joinSaid ? `, Join "${joinSaid}"` : ""} for ${Math.round((Date.now() - t0) / 1000)} s with ${host} cut ${cut}${mismatch}`;
+    // On a build that logs its status reads (#410, CARD_STATUS_LOGS=1 from the leg), the row is a verdict only when the
+    // cut demonstrably held: otherwise the leg is BROKEN (the harness), never a pass or a fail about the app.
+    if (process.env.CARD_STATUS_LOGS === "1") {
+      let text = "";
+      try { text = adb("logcat", "-d", "-s", "ReactNativeJS:I"); } catch (e) { text = String(e.stdout ?? ""); }
+      const held = cutHeld(text);
+      console.log(`CUT-CHECK ${held.state}${held.line ? `: ${held.line.slice(0, 200)}` : ""}`);
+      if (held.state === "read") { console.log(`CUT-NOT-HELD the phone read the membership card's status list during the cut: ${held.line.slice(0, 200)}`); return rows.exitCode(); }
+      if (held.state === "none") { console.log("NO-STATUS-READ the relaunched app checked no membership card's status during the cut"); return rows.exitCode(); }
+    }
     await end(cardStatusOutcome({ notice: notice ? `${notice} (${where})` : "", observed, strict }));
   } catch (e) {
     log(`error: ${String(e.message).split("\n")[0]}`);

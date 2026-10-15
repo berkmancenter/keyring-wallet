@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { fakeDriver } from "./pages/testing/fakeDriver.mjs";
 import { pinCount, readPinField, wrongPinFor } from "../run-wrong-pin.mjs";
 import { fromOf, labelForm, readsAsDid, signInLink, triggerId } from "../run-signin-unjoined.mjs";
-import { cardStatusOutcome, noticeIn, statusHostOf, statusListHostIn, TRACKED } from "../run-card-status.mjs";
+import { cardStatusOutcome, cutHeld, noticeIn, statusHostOf, statusListHostIn, TRACKED } from "../run-card-status.mjs";
 
 // ------------------------------------------------------------------ IN-257
 
@@ -156,4 +156,17 @@ test("the row is tracked: SKIP without the notice, PASS with it, FAIL only when 
   const strictSetup = cardStatusOutcome({ setup: "no new pending request", strict: true });
   assert.equal(strictSetup.status, "FAIL");
   assert.match(strictSetup.detail, /^setup did not reach the check \(the harness, not a verdict on the app\): no new pending request$/);
+});
+
+test("cutHeld reads the phone's own card-status lines (bifold #410): read, blocked or none", () => {
+  const at = "10-14 20:57:19.836  5804  5837 I ReactNativeJS: ";
+  const read = `${at}[VTI] card status: MembershipCredential urn:uuid:4601 credentialStatus=vtc.example outcome=ok (status list read, not withdrawn)`;
+  const role = `${at}[VTI] card status: AuthorityCredential urn:uuid:48a2 credentialStatus=none outcome=ok (no status list to read)`;
+  const blocked = `${at}[VTI] card status: MembershipCredential urn:uuid:4601 credentialStatus=vtc.example outcome=unknown (fetch failed)`;
+  assert.deepEqual(cutHeld([role, read].join("\n")), { state: "read", line: read.slice(read.indexOf("[VTI]")) });
+  assert.equal(cutHeld([role, blocked].join("\n")).state, "blocked");
+  assert.equal(cutHeld(role).state, "none", "only the role card's read: the membership card was never checked");
+  assert.equal(cutHeld("").state, "none");
+  // A read that got through wins over a blocked one: the cut did not hold for every connection.
+  assert.equal(cutHeld([blocked, read].join("\n")).state, "read");
 });
