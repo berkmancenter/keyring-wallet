@@ -469,19 +469,5 @@ describe('forgetting an application', () => {
   })
 })
 
-describe('the seam', () => {
-  afterEach(() => registerHiddenVetting())
-
-  it('serves the real round by default', () => {
-    expect(hiddenVetting().start).toBe(startHiddenApplication)
-  })
-
-  it('replaces only what is given, and restores on a bare call', () => {
-    const fake = jest.fn()
-    registerHiddenVetting({ start: fake as never })
-    expect(hiddenVetting().start).toBe(fake)
-    expect(hiddenVetting().forget).toBe(forgetHiddenApplication)
-    registerHiddenVetting()
-    expect(hiddenVetting().start).toBe(startHiddenApplication)
-  })
-})
+// The seam's own tests live in hiddenVettingAdapter.test.ts: the contract is
+// screens/hiddenVettingSeam.ts's, and this module no longer declares one.

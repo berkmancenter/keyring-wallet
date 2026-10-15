@@ -94,9 +94,20 @@ export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
 export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
 export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'
 export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry } from './module/VtaClient'
+// The seam itself lives in screens/, which owns the contract; importing the
+// adapter is what registers the module, so it is re-exported for its side
+// effect as much as its symbol.
+export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
+export type {
+  HiddenVettingSeam,
+  HiddenVettingCheck,
+  HiddenVettingRefusal,
+  HiddenVettingProgress,
+  HiddenVettingVerdict,
+} from './screens/hiddenVettingSeam'
+export { hiddenVettingSeamImplementation } from './module/hiddenVettingAdapter'
+
 export {
-  hiddenVetting,
-  registerHiddenVetting,
   hiddenVettingUsable,
   hiddenProgress,
   startHiddenApplication,
@@ -109,8 +120,7 @@ export {
   HIDDEN_VETTING_SUITE,
 } from './module/hiddenVetting'
 export type {
-  HiddenVettingSeam,
-  HiddenVettingRecord,
+  HiddenVettingRecord as StoredHiddenVettingRecord,
   HiddenProgress,
   HiddenVettingBlock,
   HiddenVettingUsable,

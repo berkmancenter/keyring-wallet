@@ -424,9 +424,13 @@ export async function hiddenSubmissionExtensions(
  * expires on its side. A delete that fails is logged, not thrown: a join that
  * has already been decided must not be left undismissable by a network error.
  */
-export async function forgetHiddenApplication(agent: Agent, client: VtaClient, community: string): Promise<void> {
+export async function forgetHiddenApplication(
+  agent: Agent,
+  client: VtaClient | undefined,
+  community: string
+): Promise<void> {
   const record = await loadHiddenVettingRecord(agent, community)
-  if (record) {
+  if (record && client) {
     try {
       await client.deletePcsApplication(record.applicationId)
     } catch (error) {
@@ -442,47 +446,13 @@ export async function forgetHiddenApplication(agent: Agent, client: VtaClient, c
   })
 }
 
-/**
- * The applicant's round, as a screen uses it.
- *
- * A seam rather than a direct import so that the vetting screen can be driven
- * by a fake in tests and by a demo profile, without this module reaching
- * towards the screen or the screen constructing a client. It is a plain
- * module-level registration, **not** a DI token: `modules/trust-tasks` has no
- * DI wiring today, and the subtask plan's D6 recommends a token only once a
- * second consumer exists, which it does not.
+/*
+ * There is deliberately no seam here. `screens/hiddenVettingSeam.ts` owns that
+ * contract — the screens define what they need and the module satisfies it, in
+ * `hiddenVettingAdapter.ts`. An earlier version of this file declared a second
+ * `registerHiddenVetting`, which would have collided on export and left two
+ * answers to "which seam is registered".
  */
-export interface HiddenVettingSeam {
-  usable: typeof hiddenVettingUsable
-  start: typeof startHiddenApplication
-  refresh: typeof refreshHiddenApplication
-  take: typeof takeHiddenAttestation
-  submissionExtensions: typeof hiddenSubmissionExtensions
-  forget: typeof forgetHiddenApplication
-  progress: typeof hiddenProgress
-}
-
-const theRealThing: HiddenVettingSeam = {
-  usable: hiddenVettingUsable,
-  start: startHiddenApplication,
-  refresh: refreshHiddenApplication,
-  take: takeHiddenAttestation,
-  submissionExtensions: hiddenSubmissionExtensions,
-  forget: forgetHiddenApplication,
-  progress: hiddenProgress,
-}
-
-let installed: HiddenVettingSeam = theRealThing
-
-/** Replace some or all of the round. Called with nothing, it restores the real one. */
-export function registerHiddenVetting(seam?: Partial<HiddenVettingSeam>): void {
-  installed = seam ? { ...theRealThing, ...seam } : theRealThing
-}
-
-/** The round as currently installed. */
-export function hiddenVetting(): HiddenVettingSeam {
-  return installed
-}
 
 /** Re-exported so a caller need not import the payload module to name the suite. */
 export { HIDDEN_VETTING_SUITE }
