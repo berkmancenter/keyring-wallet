@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "7592b966d2a8391cfdeb8e14f492d04d7f3f76d3",
+  "generatedFrom": "11208adeb5a5e70f92cced51dcf22f257c264ea3",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -273,6 +273,7 @@
     "CommunityRemoveHereConfirm": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityUseHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
+    "CommunityVouchPrivately": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "ConfigureMediator": ["src/screens/Settings.tsx"],
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -437,6 +438,25 @@
       "src/screens/OnboardingPages.tsx",
       "src/screens/ProofRequest.tsx"
     ],
+    "HiddenVetter": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterClaims": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterConfirm": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterDecline": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterDone": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterDraw": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterEnrol": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterError": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterLapses": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterLive": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterMethod": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterNextDraw": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterNoRequests": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterNotAvailable": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterRelationship": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterRequest": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterStanding": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterTokens": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterVouch": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetting": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingAskVetter": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingAsked": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
@@ -1776,6 +1796,57 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.scroll"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.vouchPrivately"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.draw"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.enrol"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.lapses"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.nextDraw"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.noRequests"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.notAvailable"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.screen"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.standing"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.tokens"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "`${HiddenVetterIds.confirm}_${r.id}`"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "`${HiddenVetterIds.decline}_${r.id}`"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "`${HiddenVetterIds.done}_${r.id}`"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "`${HiddenVetterIds.request}_${r.id}`"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "`${HiddenVetterIds.vouch}_${r.id}`"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "testID"
     },
     {
       "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.askVetter"
