@@ -12,6 +12,7 @@ import {
   NavContainer,
   NetworkProvider,
   openAppLink,
+  registerHiddenVettingModules,
   StoreProvider,
   Stacks,
   ThemeProvider,
@@ -58,6 +59,14 @@ messaging().setBackgroundMessageHandler(async (message) =>
   onPushWake('background', message, (m, d) => BCLogger.info(m, d))
 )
 messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
+
+// Before anything renders. The hidden-vetting modules register their seams on
+// evaluation, and a bundler has no reason to evaluate a module whose exports
+// nobody reads — Metro's inlineRequires left them bundled and never run, which
+// is why private vetting was invisible on 254. A call at startup is the one
+// form that does not depend on how the bundle is built; see
+// bifold trust-tasks/hiddenVettingModules.
+registerHiddenVettingModules()
 
 const App = () => {
   const { t } = useTranslation()
