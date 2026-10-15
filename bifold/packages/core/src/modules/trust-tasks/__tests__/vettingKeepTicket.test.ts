@@ -40,7 +40,9 @@ function memoryStore() {
   return { store, held: () => application }
 }
 
-const applicantWith = (store: VtiVettingStore) => new VtiApplicant({} as never, PERSONA as never, store, {} as never)
+// No hidden-vetting application is held: asking a vetter looks for one.
+const AGENT = { genericRecords: { findAllByQuery: async () => [] } }
+const applicantWith = (store: VtiVettingStore) => new VtiApplicant(AGENT as never, PERSONA as never, store, {} as never)
 
 describe("a vetter's ticket outlives the vetting screen", () => {
   it('"Start my application" keeps the ticket in hand with the application', async () => {

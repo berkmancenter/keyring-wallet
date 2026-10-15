@@ -118,6 +118,8 @@ function didKeySigner() {
   const verificationMethodId = document.verificationMethod?.[0]?.id as string
   const agent = {
     config: { logger: { info: () => undefined, warn: () => undefined, debug: () => undefined } },
+    // No hidden-vetting application is held: asking a vetter looks for one.
+    genericRecords: { findAllByQuery: async () => [] },
     dids: {
       resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument,
       getCreatedDids: async () => [],
@@ -812,6 +814,7 @@ describe('the vetting task addresses Keyring uses', () => {
   it('are the published ones', () => {
     expect(VETTING).toEqual({
       request: 'https://trusttasks.org/spec/vetting/request/0.1',
+      attestation: 'https://trusttasks.org/spec/vetting/attestation/0.1',
       session: 'https://trusttasks.org/spec/vetting/session/0.1',
       decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
       revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',

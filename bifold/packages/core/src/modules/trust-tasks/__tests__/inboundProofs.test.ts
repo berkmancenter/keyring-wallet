@@ -57,6 +57,8 @@ function didKeySigner() {
   const verificationMethodId = DidKey.fromDid(did).didDocument.verificationMethod?.[0]?.id as string
   const agent = {
     config: { logger },
+    // No hidden-vetting application is held: asking a vetter looks for one.
+    genericRecords: { findAllByQuery: async () => [] },
     dids: { resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument },
     dependencyManager: {
       resolve: () => ({

@@ -56,6 +56,10 @@ import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
 import { emitCommunityChanged } from './communityChanged'
+import { loadHiddenVettingRecord, takeHiddenAttestation } from './hiddenVetting'
+import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
+import { vtaAgent } from './vtaAgent'
+import type { VtaClient } from './VtaClient'
 import {
   VETTER_ROLE,
   buildEligibilityPresentation,
@@ -69,6 +73,13 @@ import { releaseWarn } from './releaseLog'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
+  /**
+   * `vetting/attestation/0.1`: a vetter gives the applicant a hidden-vetting
+   * attestation that names nobody (openvtc-core `wire::hidden_attestation`).
+   * Sent by the vetter's agent as a plain DIDComm message whose body is the
+   * attestation, threaded on the vetting session; not a peer document.
+   */
+  attestation: 'https://trusttasks.org/spec/vetting/attestation/0.1',
   session: 'https://trusttasks.org/spec/vetting/session/0.1',
   decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
   revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
@@ -110,6 +121,8 @@ export interface VettingTicket {
   methods?: VettingMethod[]
   createdAt: string
 }
+/** The `ext` namespace a hidden-vetting request carries the applicant's identifier under (openvtc `hidden::REQUEST_EXT_MEMBER`). */
+export const HIDDEN_VETTING_NS = 'org.openvtc.hidden-vetting'
 
 /** One request on the vetter's desk. */
 export interface VettingDeskRequest {
@@ -1637,6 +1650,9 @@ export class VtiApplicant {
 
   private async inbound(m: DidCommV2PlaintextMessage): Promise<void> {
     const type = typeOf(m)
+    // A hidden-vetting attestation belongs to the hidden application, which is
+    // kept apart from the named one (hiddenVetting.ts), so it is routed first.
+    if (type === VETTING.attestation) return this.receiveAttestation(m)
     // With no application there is nothing for these to change, and never
     // will be: taken and dropped, rather than failed and redelivered forever
     // (a failure withholds the mediator's ack, vtiAgent.onInbound).
@@ -1661,6 +1677,66 @@ export class VtiApplicant {
     if (type.startsWith(TASK_ERROR)) return this.refused(m)
     if (type === VETTING.session) return this.sessionOpened(m)
     return this.declined(m)
+  }
+
+  /**
+   * A vetter's hidden attestation (`vetting/attestation/0.1`), handed to this
+   * persona's agent as it came (`vta/pcs/verify-attestation`, through
+   * `takeHiddenAttestation`). The agent verifies and keeps it; this phone stores
+   * no attestation.
+   *
+   * Taken plain, as openvtc's applicant takes it (`inbound.rs` `attestation()`
+   * reads `message.body`): it is not a peer document, and it is not
+   * self-proving to the client. The engine is what verifies it, so opening it
+   * here would add a check upstream does not make and refuse valid ones.
+   *
+   * The sender is authenticated by the envelope and deliberately **not** kept
+   * or logged beside the attestation: that would rebuild, in the applicant's
+   * own records, the link the exchange exists to remove (openvtc design §18).
+   * One hidden application per community, so the persona's community says
+   * which application it is for.
+   *
+   * Unverified against a real delivery: no attestation has reached a phone yet,
+   * so the body is read as `vetting/attestation/0.1` and openvtc's sender
+   * define it, and a first real run is where that shape is confirmed.
+   *
+   * A refusal by the agent (an old vetter, another community, a closed token
+   * label) is logged and the delivery taken: the same bytes would be refused
+   * again. Anything else (the agent unreachable, say) is thrown, so the
+   * mediator keeps it for redelivery.
+   */
+  private async receiveAttestation(m: DidCommV2PlaintextMessage): Promise<void> {
+    const community = this.persona.communityDid
+    const logger = this.agent.config?.logger
+    const attestation = readHiddenAttestation(m.body)
+    if (!attestation) {
+      logger?.warn?.(`[hidden-vetting] an attestation for ${community} was not in the published shape; dropped`)
+      return
+    }
+    if (!(await loadHiddenVettingRecord(this.agent, community))) {
+      logger?.warn?.(
+        `[hidden-vetting] an attestation arrived for ${community}, which has no hidden application; dropped`
+      )
+      return
+    }
+    try {
+      const record = await takeHiddenAttestation(this.agent, await this.pcsClient(), community, attestation)
+      logger?.info?.(`[hidden-vetting] attestation taken by the agent for ${community}; it reports ${record.held} held`)
+    } catch (error) {
+      const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
+      if (!code) throw error
+      logger?.warn?.(`[hidden-vetting] the agent refused an attestation for ${community} (${code}); dropped`)
+      return
+    }
+    this.onChange?.()
+  }
+
+  /** The linked agent's client, with its session open: where `vta/pcs/*` goes. */
+  private async pcsClient(): Promise<VtaClient> {
+    const vtaDid = vtaAgent.agentAddress()
+    if (!vtaDid) throw new Error('vtiVetting: no agent is linked to take a hidden attestation')
+    await vtaAgent.connect(this.agent, vtaDid)
+    return vtaAgent.client(this.agent, vtaDid)
   }
 
   /**
@@ -1717,6 +1793,7 @@ export class VtiApplicant {
       preferredMethod: input.method ?? 'inPerson',
       languages: ['en'],
       ...(input.message ? { message: input.message } : {}),
+      ...(await this.hiddenRequestExt(application)),
     })
     await vtiAgent.send(vetterDid, VETTING.request, doc)
     const request: VettingApplicationRequest = {
@@ -1732,6 +1809,28 @@ export class VtiApplicant {
     await this.store.saveApplication(application)
     this.onChange?.()
     return request
+  }
+
+  /**
+   * Under a hidden criterion the vetter needs the identifier it will attest to,
+   * and the join DID is not that name. It travels in the request's framework
+   * extension point, as openvtc sends it (`hidden::request_ext`), so a
+   * community or vetter that does not run hidden vetting sees a request it
+   * already understands. Nothing is added for a named application.
+   *
+   * A hidden application whose identifier is not known yet cannot be vetted:
+   * the request is refused here rather than sent to a vetter who could only
+   * answer with a statement that names them.
+   */
+  private async hiddenRequestExt(application: VettingApplication): Promise<{ ext?: Record<string, unknown> }> {
+    const hidden = await loadHiddenVettingRecord(this.agent, application.communityDid)
+    if (!hidden || hidden.joinDid !== application.joinDid) return {}
+    if (!hidden.id) {
+      throw new Error(
+        'vtiVetting: the hidden-vetting application has no identifier yet; refresh it before asking a vetter'
+      )
+    }
+    return { ext: { [HIDDEN_VETTING_NS]: { suite: HIDDEN_VETTING_SUITE, id: hidden.id } } }
   }
 
   /** This person says the codes match: kept, so a relaunch keeps the step. */
@@ -2402,4 +2501,23 @@ export class VtiApplicant {
       unchecked,
     }
   }
+}
+
+/**
+ * A `vetting/attestation/0.1` body, as the agent needs it, or undefined.
+ *
+ * Only the shape is read: whether the attestation is valid is the engine's
+ * question (`vta/pcs/verify-attestation`). Undefined for a body that could
+ * not be one, so nothing malformed reaches the agent.
+ */
+export function readHiddenAttestation(body: unknown): HiddenAttestation | undefined {
+  if (!body || typeof body !== 'object') return undefined
+  const b = body as Record<string, unknown>
+  const token = b.token as Record<string, unknown> | undefined
+  if (typeof b.suite !== 'string' || typeof b.attestation !== 'string') return undefined
+  if (!b.meta || typeof b.meta !== 'object') return undefined
+  if (!token || typeof token !== 'object') return undefined
+  if (typeof token.label !== 'string' || typeof token.serial !== 'string' || typeof token.shown !== 'string')
+    return undefined
+  return body as HiddenAttestation
 }
