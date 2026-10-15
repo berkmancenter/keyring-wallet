@@ -327,15 +327,21 @@ keys_since() {
   # Side by side, every leg's phone grant looks alike (the runner's admin made it, label keyring-admin or keyring-phone): one
   # leg's cleanup would take another's live key. gate.sh then cleans each runner once, after both platforms.
   if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then echo "  $slug keys: deferred to the run's end"; echo "$slug" >> "$RUN_DIR/defer-keys"; return; fi
-  local list; list=$(for i in 1 2 3 4; do pnm "$slug" acl list --json | python3 -c "
-import sys,json
-t=sys.stdin.read()
-if '[' not in t: sys.exit(1)
-new=[e for e in json.loads(t[t.index('['):]) if str(e.get('createdAt',''))>='$t0']
+  # pnm's own lines come first in its output (its wrapper merges stderr), some in colour: an ANSI escape's "[" was taken
+  # for the list's, so the parse failed (JSONDecodeError at char 3), nothing was deleted and the leg said nothing (CI run
+  # 38512195471; local runs 10-06/07). The list is read from the first line that is "[" once escapes are stripped,
+  # and four unreadable lists are said, loudly, on a CLEANUP-FAILED line that gate.sh report shows.
+  local list="" got=0 out
+  for i in 1 2 3 4; do
+    out=$(pnm "$slug" acl list --json | python3 -c "
+import sys,json,re
+lines=re.sub(r'\x1b\[[0-9;?]*[ -/]*[@-~]','',sys.stdin.read()).split('\n')
+at=next((n for n,l in enumerate(lines) if l.strip().startswith('[')),None)
+if at is None: sys.exit(1)
+new=[e for e in json.loads('\n'.join(lines[at:])) if str(e.get('createdAt',''))>='$t0']
 mine={e['subject'] for e in new if e.get('label') in ('keyring-admin','keyring-phone')}
-# The key the phone rotates onto is labelled with the device's name, created by the grant it replaced: the link
-# driver keeps it for the next step, and nothing else took it, so every CI leg left one. Follow createdBy from
-# this leg's grants, within the keys made since the leg began.
+# The phone's grant and the key it rotates onto are both labelled keyring-admin (the runner's admin creates them). As a
+# defence, a key created during the leg by one of these is this leg's too: follow createdBy within the leg's keys.
 grew=True
 while grew:
     grew=False
@@ -343,7 +349,10 @@ while grew:
         if e['subject'] not in mine and e.get('createdBy') in mine: mine.add(e['subject']); grew=True
 for e in new:
     if e['subject'] in mine: print(e['subject'])
-" && break; sleep 15; done)
+") && { list=$out; got=1; break; }
+    sleep 15
+  done
+  [ "$got" = 1 ] || { echo "CLEANUP-FAILED $slug keys: the ACL list could not be read in 4 tries, so this leg's phone keys are still on $slug"; return 1; }
   for k in $list; do
     for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -q deleted && break; sleep 15; done
     echo "  $slug key ${k:0:28}…: $(echo "$r" | cut -c1-40)"; sleep 3

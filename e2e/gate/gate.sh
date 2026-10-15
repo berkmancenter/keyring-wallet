@@ -413,6 +413,8 @@ cmd_report() {
     [ "$rc" = 4 ] && { printf '%-14s not run (paused)\n' "$leg"; continue; }
     printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
     grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
+    # A cleanup that could not run: the rows stand, but keys were left on a runner (lib.sh keys_since).
+    grep -E '^CLEANUP-FAILED ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^/    !! /'
     leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
   done < "$rd/legs.tsv"
   echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"
