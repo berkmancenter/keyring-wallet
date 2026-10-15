@@ -1,17 +1,105 @@
-# Hidden-vetting on the phone — the Keyring implementation
+# Hidden vetting on the phone — the Keyring implementation
 
-**Owner:** this plan's §4.1 (Track Z1). **Status:** **K0–K3 built, K4 part
-built**, on `feat/hidden-vetting-mode` in the `bifold` submodule (worktree
-`~/Documents/keyring-hidden-vetting`, six signed commits, **unpushed**, and
-nothing in `app/` calls any of it). §7 records what each commit did and what is
-left. **Not releasable:** the vendored `[patch.crates-io]` in the native package
-cannot ship (§5 B7).
-**Parent:** [`../zero-knowledge-plan.md`](../zero-knowledge-plan.md) — §3.1 and D4
-decided on 2026-10-11 that the applicant proves on the phone; this document is
-how that is built in this repository.
+**Owner:** this plan's §4.1 (Track Z1).
+**Parent:** [`../zero-knowledge-plan.md`](../zero-knowledge-plan.md) — §3.1 and
+D4: the applicant's proof is built by the user's VTA, and Keyring carries
+messages. This document is how that is built in this repository.
+**Reasoning:** [`2026-10-15-al.md`](./2026-10-15-al.md) — the live proof that
+an agent serves `vta/pcs/*`, and why the client asks discovery rather than
+reading a refusal. Before it, [`2026-10-14-al.md`](./2026-10-14-al.md) — why proving moved to
+the VTA, what the branch keeps, and the probe that must not raise a prompt.
+
+**Status.** `feat/hidden-vetting-mode` in the `bifold` submodule (worktree
+`~/Documents/keyring-hidden-vetting`, 20 signed commits, **unpushed**, and
+nothing in `app/` calls any of it). Of what is built, §0 says what survives the
+move to VTA-built proofs and what is parked. §7 records what each commit did.
+
 **Evidence it rests on:** the rung ladder `tsp-reference/ref-24-pcs-host` …
-`ref-32-pcs-android` (parent §6.0). Nothing here is speculative about the
-cryptography: it is measured, on both phone platforms.
+`ref-32-pcs-android` (parent §6.0) measured PCS proving on both phone
+platforms, 7.8 ms on an iPhone 16 and 87.2 ms on a Galaxy A03s. That evidence
+is why §0's parked path is parked rather than abandoned as unworkable.
+
+## 0. Current design: the VTA builds the proof, the app carries messages
+
+Upstream's applicant flow ([[PCS-KEYRING-GUIDE]], and the parent's D4) is eight
+steps. Keyring's part of each, and what makes it done:
+
+| # | Step | Where it lives | Done when |
+|---|---|---|---|
+| 1 | Spot a hidden criterion; stop on an unsupported critical namespace | `joinManifest.ts` — built | A criterion naming an extension we do not implement is unusable, and one naming `org.openvtc.hidden-vetting` with suite `ps-ddh-bls12381` is usable only when the agent can serve it (§0.1) |
+| 2 | `vta/pcs/applications/create` | `VtaClient.ts` — to write | The VTA returns `applicationId` and the applicant's PCS `id`; both are kept, the key never is |
+| 3 | `vetting/request` carrying `ext["org.openvtc.hidden-vetting"]` with that `id` | `vtiVetting.ts` — built | A vetter answers with an attestation rather than a named statement |
+| 4 | `vta/pcs/verify-attestation` per attestation | `VtaClient.ts` — to write | The VTA accepts it and returns the application's attestation list; **nothing is stored as a credential on the device** |
+| 5 | `vtc/vetting/pcs-challenge/0.1` | `pcsChallenge.ts` — built | A single-use challenge with an expiry, fetched immediately before proving |
+| 6 | `vta/pcs/prove` | `VtaClient.ts` — to write, replacing the native call in `hiddenVetting.ts` | The VTA returns the `hiddenVetting` object; the call allows 90 s, against 30 s for the others |
+| 7 | Join submission carrying it in `extensions.hiddenVetting`, with no vetting statements | `vtiVetting.ts` — to change | The community admits on the proof; a hidden criterion refuses named statements |
+| 8 | `vta/pcs/applications/delete` once decided | `VtaClient.ts` — to write | The VTA drops the application's key path and attestations, either way the join went |
+
+`vta/pcs/applications/show` is the recovery path: the VTA is the source of
+truth, so local state lost is re-read rather than rebuilt.
+
+**No Rust.** `VtaClient.ts` already builds and signs `vta/*` Trust Tasks in
+TypeScript, so these five are five more task types, not a `vta-mobile-core`
+dependency and a cross-compile.
+
+**And no framework bump.** The registry does generate TypeScript payload types
+for all twelve PCS tasks, and the app already imports generated types of that
+kind (`witnessCeremony.ts` takes `@openvtc/trust-tasks/witness/session/0.1/payload`)
+— but they are published in `@openvtc/trust-tasks` 0.26.1 and this repository is
+pinned at 0.9.0 behind a deliberate tripwire: *"the Cypress lock; any bump past
+0.9.x = post-Cypress framework movement"* (`scripts/openvtc/PINS.json`). 0.9.0
+carries no `vta/pcs` types, so there is no partial path.
+
+So the five applicant payloads are **mirrored by hand in TypeScript**, and their
+tests validate those shapes against the registry's own
+`specs/vta/pcs/*/0.1/payload.schema.json`, read out of `external/` — upstream's
+source of truth checks us while the dependency stays where it is. The 0.9 → 0.26
+bump is queued as its own item with its own testing pass, after this work; it is
+not smuggled in under hidden vetting (decided with the coordinator, 2026-10-14).
+
+**Errors** arrive as `trust-task-error` documents, so `payload.code` is read
+from the raw JSON. `prove:noUsableAttestation` means not enough valid
+attestations yet and is a progress state, not a failure.
+
+### 0.1 Why a hidden criterion may still be unusable, and when the user is told
+
+A hidden criterion is usable only when the suite is `ps-ddh-bls12381`, the
+user's agent serves `vta/pcs/*` (vta-service 0.60+), and the app's identity at
+that agent holds `pcs-applicant`. Otherwise the join fails closed with a reason:
+`suiteUnsupported`, `agentTooOld` or `phoneNotAllowed`. Precedence is suite,
+then version, then capability, because `pcs-applicant` cannot exist on a
+pre-0.60 agent, so "update your agent" is the step that unblocks. The strings
+are UI/UX's.
+
+**Nothing is asked of the user's agent until the user taps to join.** The join
+card names the criterion as private vetting and carries no reason; the reason is
+resolved after the tap, from the suite (local, free), then
+`vta/pcs/applications/show` with an unknown id (`unsupportedType` ⇒
+`agentTooOld`), then `VtaClient.listAcl()` (no `pcs-applicant` ⇒
+`phoneNotAllowed`).
+
+The reason it cannot be resolved while the card renders: every dispatched Trust
+Task passes the agent's policy gate, reads included, so a rule may answer
+`requireConsent` — and a gated task does not merely fail. The VTA pushes a
+signed `task-consent/request` to each approver through the mediator, with the
+caller-relayed annex only as a fallback for when it has no route
+(`trust_tasks/consent_request.rs`, `trust_tasks/helpers.rs`, read at
+`vta-service-v0.60.0`). Probing to decorate a list would therefore wake an
+approver — who may not be the user — because a screen rendered. A probe after
+the tap is a different thing: the user has just asked to join, so a prompt
+belongs to an action they took.
+
+A regression test asserts that rendering the join ways dispatches no Trust Task
+to the user's agent.
+
+### 0.2 What is parked
+
+Sections 2 and 3 below describe a phone-side prover: the native module, the
+PCS secret's storage and its biometric gate. That path is parked, not deleted.
+It is ruled out by the verifier rather than by cost — the community side and
+`vta/pcs/verify-attestation` are built around the VTA holding the key — and the
+measured rungs are kept as evidence that it works, in case upstream later
+accepts a device-built proof (parent §3.6's method-neutral contract).
 
 ## 1. The protocol is specified, and the plan was wrong to say it was not
 
