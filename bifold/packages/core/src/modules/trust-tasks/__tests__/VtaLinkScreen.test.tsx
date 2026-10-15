@@ -22,9 +22,11 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { openScanner } from '../screens/openScanner'
 import VtaLink, { PHONE_GRANT_POLL_EVERY_MS, PHONE_GRANT_POLL_WINDOW_MS } from '../screens/VtaLink'
+import Config from 'react-native-config'
 import { shareableKey } from '../screens/shareableKey'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('react-native-config', () => ({ __esModule: true, default: {} }))
 
 type Setter = { set(next: Record<string, unknown>): void }
 
@@ -215,6 +217,30 @@ describe('the key the admin has to add', () => {
         expect(tree.getByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeTruthy()
         expect(tree.getByTestId(testIdWithKey('VtaLinkCheckAgain'))).toBeTruthy()
       } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    // Gate efficiency item 3: a test build with E2E_CLOCKS=short waits 60 s, not 10 minutes.
+    test('in a test build with E2E_CLOCKS=short, the wait runs out after 60 s', () => {
+      jest.useFakeTimers()
+      ;(Config as Record<string, string | undefined>).E2E_CLOCKS = 'short'
+      try {
+        jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+        showKey({ via: 'scan', did: 'did:key:z6MkNewPhone', noAnswer: true })
+        const tree = show()
+        act(() => {
+          jest.advanceTimersByTime(50_000)
+        })
+        expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+        expect(tree.queryByTestId(testIdWithKey('VtaLinkCheckAgain'))).toBeNull()
+        act(() => {
+          jest.advanceTimersByTime(10_000 + PHONE_GRANT_POLL_EVERY_MS * 2)
+        })
+        expect(tree.getByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeTruthy()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkCheckAgain'))).toBeTruthy()
+      } finally {
+        delete (Config as Record<string, string | undefined>).E2E_CLOCKS
         jest.useRealTimers()
       }
     })

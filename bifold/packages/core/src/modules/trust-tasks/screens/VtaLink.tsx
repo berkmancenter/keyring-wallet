@@ -36,7 +36,9 @@ import QRRenderer from '../../../components/misc/QRRenderer'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
+import { effectiveGrantPollWindowMs } from '../../../utils/e2eClocks'
 import { testIdWithKey } from '../../../utils/testable'
+import { PHONE_GRANT_POLL_WINDOW_MS } from '../clocks'
 import { vtaAgent } from '../module/vtaAgent'
 import { resumableFailure, type VtaLinkFailure } from '../module/vtaLinkMachine'
 
@@ -70,8 +72,7 @@ export const useSafeHeaderHeight = (): number => {
 
 /** How often a phone showing its code to another phone asks whether it has been added (#30). */
 export const PHONE_GRANT_POLL_EVERY_MS = 5000
-/** How long it keeps asking by itself; after that, "Check again". */
-export const PHONE_GRANT_POLL_WINDOW_MS = 10 * 60 * 1000
+export { PHONE_GRANT_POLL_WINDOW_MS }
 
 const VtaLink: React.FC = () => {
   const headerHeight = useSafeHeaderHeight()
@@ -104,7 +105,7 @@ const VtaLink: React.FC = () => {
       setPhonePollUntil(undefined)
       setPhonePollExpired(false)
     } else if (phonePollUntil === undefined && !phonePollExpired) {
-      setPhonePollUntil(Date.now() + PHONE_GRANT_POLL_WINDOW_MS)
+      setPhonePollUntil(Date.now() + effectiveGrantPollWindowMs(PHONE_GRANT_POLL_WINDOW_MS))
     }
   }, [forOtherPhone, phonePollUntil, phonePollExpired])
   useEffect(() => {

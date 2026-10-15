@@ -4,12 +4,16 @@ import { View, Pressable, Switch, StyleSheet, ScrollView, Alert, ActivityIndicat
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAgent } from '@bifold/react-hooks'
 
+import { defaultAutoLockTime } from '../constants'
+import { TOKENS, useContainer } from '../container-api'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
 import { seedTestContacts, clearTestContacts } from '../utils/seedTestCredentials'
+import { effectiveDefaultAutoLockMinutes, effectiveGrantPollWindowMs, shortClocks } from '../utils/e2eClocks'
+import { GRANT_POLL_WINDOW_MS, PHONE_GRANT_POLL_WINDOW_MS } from '../modules/trust-tasks/clocks'
 
 const Developer: React.FC = () => {
   const [store, dispatch] = useStore()
@@ -27,6 +31,30 @@ const Developer: React.FC = () => {
   const [preventAutoLock, setPreventAutoLock] = useState(!!store.preferences.preventAutoLock)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
+  // The clocks in force in this build, for the e2e rows to read (gate efficiency
+  // item 3). The lock is the same fallback contexts/activity uses.
+  const customAutoLockTimes = useContainer()?.resolve(TOKENS.CONFIG)?.customAutoLockTimes
+  const clocks = [
+    { testID: testIdWithKey('E2EClocksMode'), label: 'Clocks', value: shortClocks() ? 'short' : 'real' },
+    {
+      testID: testIdWithKey('E2EGrantWindowSeconds'),
+      label: 'Grant window (s)',
+      value: String(effectiveGrantPollWindowMs(GRANT_POLL_WINDOW_MS) / 1000),
+    },
+    {
+      testID: testIdWithKey('E2EPhoneGrantWindowSeconds'),
+      label: 'Phone grant window (s)',
+      value: String(effectiveGrantPollWindowMs(PHONE_GRANT_POLL_WINDOW_MS) / 1000),
+    },
+    {
+      testID: testIdWithKey('E2EAutoLockMinutes'),
+      label: 'Auto-lock (min)',
+      value: String(
+        store.preferences.autoLockTime ??
+          effectiveDefaultAutoLockMinutes(customAutoLockTimes?.default?.time ?? defaultAutoLockTime)
+      ),
+    },
+  ]
 
   const styles = StyleSheet.create({
     container: {
@@ -384,6 +412,14 @@ const Developer: React.FC = () => {
             />
           </Pressable>
         </View>
+        {clocks.map(({ testID, label, value }) => (
+          <View key={testID} style={styles.settingContainer}>
+            <ThemedText variant="bold" style={styles.settingLabelText}>
+              {label}
+            </ThemedText>
+            <ThemedText testID={testID}>{value}</ThemedText>
+          </View>
+        ))}
       </ScrollView>
     </SafeAreaView>
   )
