@@ -65,6 +65,7 @@ node e2e/gate/ledger.mjs [--days 14] [--json]          # each row's pass rate ov
 GATE_RERUN_SKIP="p2" e2e/gate/gate.sh rerun <run-id> --only-failed        # …leaving these legs out (a known cause a rerun cannot change; rerun-skipped= in the meta)
 GATE_LOGCAT=1 e2e/gate/gate.sh rerun <run-id> --only-failed               # every Android leg saves its emulator's whole log (emulator-NNNN.logcat)
 e2e/gate/gate.sh dry --golden                      # these drivers against the shipped build, before a candidate
+e2e/gate/gate.sh nightly [--pin <sha>]             # the nightly legs (LEGS_NIGHTLY) on main's newest green build
 e2e/gate/gate.sh watch --pr <n>                    # start `run` when that pin PR merges and its builds finish
 e2e/gate/gate.sh watch --main                      # continuous gating: a run for every new green push build of main
 e2e/gate/gate.sh report <run-id>                   # the run's rows, per leg, with wall-clock
@@ -226,6 +227,22 @@ configuration is the `GATE_CI_ENV` secret, and `ci/ci-env-check.sh` refuses any 
 allows only that slug and the commands the legs use. `FARM_VERSIONS` in the same file names the lane's runner
 version, which `farm-drift.mjs` checks against CI's pnm (`pnm-linux.yml`). The Mac's `farm.env` stays the Mac lane's:
 its runners, its versions.
+
+## The nightly run
+
+Rows whose Jest twin runs on every pull request leave the per-release gate and run once a night instead (gate
+efficiency §6, item 9). `LEGS_NIGHTLY` in `gate.sh` names the legs: `p2`, which runs only there (`LEGS_NIGHTLY_ONLY`,
+so `run` and `all` leave it out; `--legs p2` still names it), and `lostreq`, whose offline-ask row
+`lost-ask-offline-error` runs only in a nightly run (its twin is bifold's `joinLostRequest.test.tsx`, #414). In a
+gate the row is a SKIP that says so; a rerun that names it runs it. Every leg gets its run's kind as `GATE_KIND`.
+
+`watch --main` starts the nightly legs once a day, in a window of local hours from `GATE_NIGHTLY_HOUR` (default 3)
+until `GATE_NIGHTLY_UNTIL` (default 6), on the newest green main build, only in a cycle where no gate started and
+under the same busy and stability rules as a gate. `nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day: written once
+the run holds the run lock (so a long or failed run is not started twice, and one that never started is tried again
+in the window), or when the window passes with no run, which the watcher's log says. `GATE_NIGHTLY=0` turns it off.
+A nightly run is `<id>-nightly`, never counted as a gate of its commit. A running `watch --main` keeps the `gate.sh`
+it started with: after a change here, restart it (the LaunchAgent's bootout and bootstrap) between gates.
 
 ## Continuous gating on main
 

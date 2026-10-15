@@ -38,13 +38,20 @@ cd "$E2E"
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
   LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
   galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
-# Block only the community's messaging host (needs root: google_apis image).
-if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: $(adb -s $E shell id -u)"; fi
-E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
-  galarm 900 node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
-grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
-take_rows "$LEG_DIR/lost.out"
-driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
+# The offline ask (lost-ask-offline-error) runs in the nightly run only (gate efficiency item 9): its Jest twin, in
+# bifold's joinLostRequest.test.tsx (#414), runs on every pull request. Named on its own (a rerun's E2E_ONLY_ROWS) it
+# runs in any run.
+if [ "${GATE_KIND:-}" = nightly ] || [[ ",${E2E_ONLY_ROWS:-}," == *",lost-ask-offline-error,"* ]]; then
+  # Block only the community's messaging host (needs root: google_apis image).
+  if [ -n "${C_MEDIATOR_HOST:-}" ]; then adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: $(adb -s $E shell id -u)"; fi
+  E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 BLOCK_HOST=${C_MEDIATOR_HOST:-} C_DID=$C_DID C_NAME=$C_NAME C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" \
+    galarm 900 node run-join-lost.mjs > "$LEG_DIR/lost.out" 2>&1; drc=$?
+  grep -E '^\[e2e\] [0-9]' "$LEG_DIR/lost.out" | cut -c1-220
+  take_rows "$LEG_DIR/lost.out"
+  driver_rc lostreq-driver "$drc" "$LEG_DIR/lost.out"
+else
+  row lost-ask-offline-error SKIP "nightly only: its Jest twin (bifold joinLostRequest.test.tsx, #414) runs on every pull request"
+fi
 # IN-258 (fixed by bifold #386): the same phone, not a member and with no open request, asks to join C and is approved
 # while only the status-list host is cut; the card must say its status could not be checked (run-card-status.mjs, row
 # card-status-unreachable-notice; tracked only on a build without #386's CardStatusNotice). iptables needs root.
