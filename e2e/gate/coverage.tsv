@@ -43,11 +43,11 @@ linkfail	swap-no-answer	agent
 linkfail	swap-refused	agent
 linkfail	swap-refused-no-try-again	agent
 linkfail	swap-refused-rescan	agent
-linkresume	link-address-resume	agent
-linkresume	link-address-resume-later	agent
 linkwait	create-wait-no-lock	agent
 linkwait	create-window-paused	agent
 linkwait	create-window-paused-short	agent
+linkwait	link-address-resume	agent
+linkwait	link-address-resume-later	agent
 linkwait	link-no-answer	agent
 lostreq	card-status-unreachable-notice	join
 lostreq	lost-ask-offline-error	join
