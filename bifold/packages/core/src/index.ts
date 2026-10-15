@@ -263,6 +263,7 @@ export {
   GenericRecordsCommunityStore,
   GenericRecordsVettingStore,
   hiddenApplicantIdOf,
+  registerHiddenVettingModules,
   VtiVetterDesk,
   VtiApplicant,
   isVtiInvitationLink,

@@ -7,6 +7,8 @@
  * @module trust-tasks
  */
 
+import { registerHiddenVettingModules } from './hiddenVettingModules'
+
 export {
   TrustTaskMessage,
   TRUST_TASK_ATTACHMENT_ID,
@@ -97,6 +99,7 @@ export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry 
 // The seam itself lives in screens/, which owns the contract; importing the
 // adapter is what registers the module, so it is re-exported for its side
 // effect as much as its symbol.
+export { registerHiddenVettingModules } from './hiddenVettingModules'
 export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
 export type {
   HiddenVettingSeam,
@@ -105,13 +108,6 @@ export type {
   HiddenVettingProgress,
   HiddenVettingVerdict,
 } from './screens/hiddenVettingSeam'
-export { hiddenVettingSeamImplementation } from './module/hiddenVettingAdapter'
-
-// The vetter's half. Both seams must be re-exported here and not only from
-// the screens: a seam registers itself when its module is first imported, so
-// an adapter nothing imports registers nothing and its screens never appear.
-// The screens import the seam by path, which loads the contract but not the
-// implementation — so this line is what puts the vetter side in a build.
 export {
   registerHiddenVetter,
   hiddenVetterSeam,
@@ -126,7 +122,6 @@ export type {
   DeclaredRelationship,
   VouchMethod,
 } from './screens/hiddenVetterSeam'
-export { hiddenVetterSeamImplementation } from './module/hiddenVetterAdapter'
 // 32's community half, exported here because index.ts has one owner.
 export {
   PCS_CHALLENGE_TYPE,
@@ -238,3 +233,8 @@ export {
   type TspPeerRevisionStore,
   type TspSessionIdentity,
 } from './module/vtiTsp'
+
+// Registered here for any consumer that does evaluate this index, and from
+// the app's startup as well, because the package root defers this module
+// wholly. `hiddenVettingModules` explains why it must be a call.
+registerHiddenVettingModules()

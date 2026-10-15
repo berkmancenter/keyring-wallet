@@ -51,6 +51,25 @@ describe('the entry points that put the hidden-vetting modules in a build', () =
   })
 })
 
+describe('the explicit initializer the app calls at startup', () => {
+  it('registers both sides and says which', () => {
+    jest.isolateModules(() => {
+      const { registerHiddenVettingModules } =
+        require('../hiddenVettingModules') as typeof import('../hiddenVettingModules')
+      expect(registerHiddenVettingModules()).toEqual({ applicant: true, vetter: true })
+    })
+  })
+
+  it('can be called again without complaint, since the index calls it too', () => {
+    jest.isolateModules(() => {
+      const { registerHiddenVettingModules } =
+        require('../hiddenVettingModules') as typeof import('../hiddenVettingModules')
+      registerHiddenVettingModules()
+      expect(registerHiddenVettingModules()).toEqual({ applicant: true, vetter: true })
+    })
+  })
+})
+
 describe('the vetter seam, once registered', () => {
   it('offers every method the vetter screens call', () => {
     jest.isolateModules(() => {
