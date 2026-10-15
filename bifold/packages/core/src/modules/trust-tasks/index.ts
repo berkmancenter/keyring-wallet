@@ -114,6 +114,7 @@ export {
   pcsChallengeRequest,
 } from './module/pcsChallenge'
 export type { PcsChallenge } from './module/pcsChallenge'
+export { readHiddenAttestation, HIDDEN_VETTING_NS } from './module/vtiVetting'
 
 export {
   hiddenVettingUsable,

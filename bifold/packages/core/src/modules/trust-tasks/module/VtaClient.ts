@@ -63,7 +63,7 @@ import {
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona } from './VtiIdentityStore'
-import { VtiRefusal } from './vtiAgent'
+import { VtiRefusal, isHiddenVettingType } from './vtiAgent'
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
 import { isDigestMultibase } from './vettingShape'
 import { TaskVersions } from './taskVersions'
@@ -435,6 +435,21 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
 export function parseAclEntries(raw: unknown): VtaAclEntry[] {
   const entries = Array.isArray(raw) ? raw : []
   return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
+}
+
+/**
+ * How a log line names this phone's agent beside a task type: not at all, for
+ * hidden vetting.
+ *
+ * The vtiAgent side of this redaction keeps a vetter's DID out of the log
+ * (`isHiddenVettingType`). These lines name no vetter — the agent is the
+ * person's own — but `<agent DID> … vta/pcs/applications/create` still says
+ * *this person applied with private vetting*, and the phone's log leaves the
+ * device in remote logs and testers' problem reports. Half a privacy fix is
+ * not one.
+ */
+function agentNamedFor(type: string, vtaDid: string): string {
+  return isHiddenVettingType(type) ? 'its agent' : vtaDid
 }
 
 /** The `{entry}` wrapper that `acl/grant` and `acl/revoke` answer with. */
@@ -831,7 +846,9 @@ export class VtaClient {
   private grantWaiters = new Map<string, () => void>()
   /** Which version of each family this agent was found to serve (taskVersions.ts). */
   private readonly versions = new TaskVersions((family, from, to) =>
-    this.agent.config.logger.info(`${LOG_PREFIX} ${this.vtaDid} does not serve ${from}; asking ${to} (${family})`)
+    this.agent.config.logger.info(
+      `${LOG_PREFIX} ${agentNamedFor(from, this.vtaDid)} does not serve ${from}; asking ${to} (${family})`
+    )
   )
 
   constructor(
@@ -1148,7 +1165,9 @@ export class VtaClient {
         }
         const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document)
         await session.sendTspFrame(packed.bytes)
-        this.agent.config.logger.info(`${LOG_PREFIX} asked ${this.vtaDid} ${type} over ${packed.revision}`)
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} asked ${agentNamedFor(type, this.vtaDid)} ${type} over ${packed.revision}`
+        )
       } else
         await session.sendTo(this.vtaDid, {
           id: envelopeId,
@@ -1217,7 +1236,9 @@ export class VtaClient {
         if (!logger) return
         if (verdict.kind === 'verified') logger.info(`${LOG_PREFIX} reply verified: ${type}`)
         else if (verdict.kind === 'wrongSigner')
-          logger.warn(`${LOG_PREFIX} reply signed by ${verdict.signer}, not ${this.vtaDid}: ${type}`)
+          logger.warn(
+            `${LOG_PREFIX} reply signed by ${isHiddenVettingType(type) ? 'another party' : verdict.signer}, not ${agentNamedFor(type, this.vtaDid)}: ${type}`
+          )
         else if (verdict.kind === 'unsigned') logger.warn(`${LOG_PREFIX} reply unsigned: ${type}`)
         else if (verdict.kind === 'invalid')
           logger.warn(`${LOG_PREFIX} reply proof does not verify (${verdict.detail}): ${type}`)
