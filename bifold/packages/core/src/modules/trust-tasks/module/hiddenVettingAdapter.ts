@@ -38,29 +38,17 @@ import {
   hiddenVettingUsable,
   loadHiddenVettingRecord,
   refreshHiddenApplication,
-  startHiddenApplication,
+  beginHiddenApplication,
+  hiddenParametersOf,
   type HiddenVettingRecord as StoredRecord,
 } from './hiddenVetting'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
-import type { VtiCriterion } from './joinManifest'
-import { HIDDEN_VETTING_EXT } from './joinManifest'
 import { vtaAgent } from './vtaAgent'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
 import { vtiAgent } from './vtiAgent'
 
 /** The criterion's published hidden-vetting parameters, raw: a typed parse would drop members. */
-function publishedOf(criterion: VtiCriterion): unknown {
-  const vetting = (criterion as { vetting?: { ext?: Record<string, unknown> } }).vetting
-  return vetting?.ext?.[HIDDEN_VETTING_EXT]
-}
-
-/** The criterion's threshold, when it carries one. */
-function minimumOf(criterion: VtiCriterion): number {
-  const vetting = (criterion as { vetting?: { minStatements?: unknown } }).vetting
-  return typeof vetting?.minStatements === 'number' ? vetting.minStatements : 1
-}
-
 /**
  * A connected client for this phone's agent, or the refusal a screen words.
  *
@@ -101,7 +89,7 @@ const seam: HiddenVettingSeam = {
   async check(agent, criterion) {
     const found = await connected(agent)
     if ('refusal' in found) return found.refusal
-    const answer = await hiddenVettingUsable(found.client, publishedOf(criterion))
+    const answer = await hiddenVettingUsable(found.client, hiddenParametersOf(criterion))
     if (answer.usable) return { ok: true }
     return { ok: false, reason: answer.because }
   },
@@ -119,22 +107,9 @@ const seam: HiddenVettingSeam = {
         code: `keyring/hidden-vetting/createApplication:${reason}`,
       })
     }
-    const parameters = publishedOf(criterion)
-    const usable = await hiddenVettingUsable(found.client, parameters)
-    if (!usable.usable) throw new Error(`this agent cannot apply: ${usable.because}`)
-    const contextId = (await found.client.listContexts().catch(() => []))[0]?.id ?? 'vta'
-    const joinDid = found.client.managerDid
-    if (!joinDid) throw new Error('the phone has no identity at its agent')
-    const stored = await startHiddenApplication(agent, found.client, {
-      contextId,
-      community: communityDid,
-      joinDid,
-      // The digest the proof binds to, as the community published it — never
-      // recomputed here: a proof must bind to what the applicant was shown.
-      requirementsDigest: criterion.requirementsDigest ?? '',
-      parameters: usable.parameters,
-      minimum: minimumOf(criterion),
-    })
+    // One implementation, shared with `VtiApplicant.start`, so the application
+    // the named flow creates and the one this route creates cannot drift.
+    const stored = await beginHiddenApplication(agent, found.client, communityDid, criterion)
     return toSeamRecord(stored, criterion.id)
   },
 

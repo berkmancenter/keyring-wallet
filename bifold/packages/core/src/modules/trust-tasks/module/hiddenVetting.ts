@@ -27,6 +27,7 @@
  */
 import type { Agent } from '@credo-ts/core'
 
+import { HIDDEN_VETTING_EXT, type VtiCriterion } from './joinManifest'
 import type { VtaClient } from './VtaClient'
 import { getKeyed, putKeyed, withKeyLock } from './keyedRecords'
 import {
@@ -375,6 +376,58 @@ export async function takeHiddenAttestation(
   const updated = { ...record, id: application?.id ?? record.id, held: heldOf(application) }
   await saveHiddenVettingRecord(agent, updated)
   return updated
+}
+
+/** The hidden-vetting parameters a criterion publishes, if it publishes any. */
+export function hiddenParametersOf(criterion: VtiCriterion): unknown {
+  const vetting = (criterion as { vetting?: { ext?: Record<string, unknown> } }).vetting
+  return vetting?.ext?.[HIDDEN_VETTING_EXT]
+}
+
+/** The criterion's threshold — how many vouches it asks for. One unless it says. */
+export function hiddenMinimumOf(criterion: VtiCriterion): number {
+  const vetting = (criterion as { vetting?: { minStatements?: unknown } }).vetting
+  return typeof vetting?.minStatements === 'number' ? vetting.minStatements : 1
+}
+
+/**
+ * Create the agent-side application for a hidden criterion: the suite check,
+ * the agent's own answer about this phone, and `applications/create`.
+ *
+ * One place, because two callers need it and they must agree. The applicant's
+ * `start` calls it so one tap creates both the named application and this one
+ * (Alberto, 2026-10-15: the same flow, with the zero-knowledge part on the
+ * agent), and the screens' seam calls it for the route that still opens the
+ * private screen directly.
+ *
+ * `joinDid` is the phone's identity **at its agent** (`managerDid`), not the
+ * community persona: the agent mints the application key against the identity
+ * it knows, and a vetter attests to the PCS id rather than to the join DID.
+ */
+export async function beginHiddenApplication(
+  agent: Agent,
+  client: VtaClient,
+  communityDid: string,
+  criterion: VtiCriterion
+): Promise<HiddenVettingRecord> {
+  const usable = await hiddenVettingUsable(client, hiddenParametersOf(criterion))
+  if (!usable.usable) {
+    throw Object.assign(new Error(`this agent cannot apply privately: ${usable.because}`), {
+      code: `keyring/hidden-vetting/createApplication:${usable.because}`,
+    })
+  }
+  const joinDid = client.managerDid
+  if (!joinDid) throw new Error('the phone has no identity at its agent')
+  return startHiddenApplication(agent, client, {
+    contextId: (await client.listContexts().catch(() => []))[0]?.id ?? 'vta',
+    community: communityDid,
+    joinDid,
+    // The digest the proof binds to, as the community published it — never
+    // recomputed here: a proof must bind to what the applicant was shown.
+    requirementsDigest: criterion.requirementsDigest ?? '',
+    parameters: usable.parameters,
+    minimum: hiddenMinimumOf(criterion),
+  })
 }
 
 /** What `hiddenSubmissionExtensions` says when the agent has too little to prove from. */

@@ -56,7 +56,15 @@ import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
 import { emitCommunityChanged } from './communityChanged'
-import { loadHiddenVettingRecord, takeHiddenAttestation } from './hiddenVetting'
+import {
+  beginHiddenApplication,
+  hiddenParametersOf,
+  hiddenSubmissionExtensions,
+  loadHiddenVettingRecord,
+  NOT_ENOUGH_YET,
+  takeHiddenAttestation,
+  type HiddenVettingRecord,
+} from './hiddenVetting'
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
 import { vtaAgent } from './vtaAgent'
 import type { VtaClient } from './VtaClient'
@@ -1707,6 +1715,25 @@ export class VtiApplicant {
     application.claims = { ...application.claims, ...claims }
     if (options.ticket?.trim()) application.pendingTicket = options.ticket.trim()
     await this.store.saveApplication(application)
+
+    // One tap, two applications. A private way in needs an application at the
+    // agent as well — it holds the key and builds the proof — and asking the
+    // person to start a second time on a second screen is the repeated step
+    // Alberto asked us to remove. The named application is saved first and
+    // kept whatever happens here: a phone whose agent cannot carry private
+    // vetting has still started applying, and the refusal belongs where the
+    // person acts, not at the start of a flow they were offered.
+    const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
+    if (privateCriterion && (!digest || privateCriterion.requirementsDigest === digest)) {
+      try {
+        await beginHiddenApplication(this.agent, await this.pcsClient(), this.persona.communityDid, privateCriterion)
+      } catch (error) {
+        this.agent.config?.logger?.info?.(
+          `[hidden-vetting] no agent-side application for ${privateCriterion.id}: ${String(error)}`
+        )
+      }
+    }
+
     this.onChange?.()
     return application
   }
@@ -1815,6 +1842,24 @@ export class VtiApplicant {
       return
     }
     this.onChange?.()
+  }
+
+  /**
+   * The hidden application this community's way in is gathering for, if the
+   * way in is private.
+   *
+   * Private mode is read from **state**, not from a flag a screen passes:
+   * `start` creates this record when the criterion publishes hidden-vetting
+   * parameters this build can carry, so its presence is what "this is a
+   * private application" means (Alberto, 2026-10-15 — the same flow, with the
+   * zero-knowledge part on the agent, detected from state).
+   *
+   * Note its `joinDid` is the phone's identity at its **agent**, not this
+   * persona: the agent mints the application key against the identity it
+   * knows. So it is never compared with `persona.did`.
+   */
+  private hiddenApplication(): Promise<HiddenVettingRecord | undefined> {
+    return loadHiddenVettingRecord(this.agent, this.persona.communityDid)
   }
 
   /** The linked agent's client, with its session open: where `vta/pcs/*` goes. */
@@ -2342,6 +2387,15 @@ export class VtiApplicant {
       // Withdrawn: what follows is a fresh application, sent and recorded as one.
       application = await this.app()
     }
+    // A private application proves instead of showing statements. The steps
+    // are the same submit the person already pressed: read the community's
+    // challenge, have the agent prove against it, and send the join request
+    // with the proof in `extensions.hiddenVetting` and no statements — a
+    // submission carrying both would name the vetters the proof keeps hidden,
+    // and the community refuses a hidden criterion that carries no proof.
+    const hidden = await this.hiddenApplication()
+    if (hidden) return this.submitPrivately(manifest, requirementsDigest, registryConsent)
+
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
     let verdict: VtiVerdict
     if (open) {
@@ -2440,9 +2494,61 @@ export class VtiApplicant {
    * before the send, answered after — so a lost answer still reads "Sent —
    * waiting for the community".
    */
+  /**
+   * Submit a private application: challenge, prove, send.
+   *
+   * The challenge is fetched **immediately** before proving and never reused:
+   * a community holds at most one open challenge per applicant and replaces it
+   * when asked again, so a proof built on an earlier one is already spent.
+   *
+   * `noUsableAttestation` comes back as a coded error rather than a thrown
+   * failure, because it is a progress state — "keep going", not "something
+   * went wrong" — and `hiddenSubmissionExtensions` now decides it locally
+   * below the threshold rather than spending the agent's ninety-second call.
+   */
+  private async submitPrivately(
+    manifest: VtiManifest,
+    requirementsDigest?: string,
+    registryConsent?: boolean
+  ): Promise<VtiVerdict> {
+    const communityDid = this.persona.communityDid
+    const criterionId = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)?.id
+    const answered = await vtiAgent.fetchChallenge(communityDid, criterionId ? { criterionId } : {})
+    const extensions = await hiddenSubmissionExtensions(
+      this.agent,
+      await this.pcsClient(),
+      communityDid,
+      answered.challenge
+    )
+    if (extensions === NOT_ENOUGH_YET) {
+      throw Object.assign(new Error('not enough attestations yet'), {
+        code: 'vta/pcs/prove:noUsableAttestation',
+      })
+    }
+    const verdict = await this.applyRecorded(manifest, {
+      credentials: [],
+      requirementsDigest,
+      registryConsent,
+      hiddenVetting: extensions.hiddenVetting,
+    })
+    await this.recordSubmission({
+      requestId: verdict.requestId,
+      state: openStateOf(verdict.effect) ?? 'decided',
+      effect: verdict.effect,
+      needs: verdict.needs,
+      at: new Date().toISOString(),
+    })
+    return verdict
+  }
+
   private async applyRecorded(
     manifest: VtiManifest,
-    options: { credentials: unknown[]; requirementsDigest?: string; registryConsent?: boolean }
+    options: {
+      credentials: unknown[]
+      requirementsDigest?: string
+      registryConsent?: boolean
+      hiddenVetting?: Record<string, unknown>
+    }
   ): Promise<VtiVerdict> {
     const communityDid = this.persona.communityDid
     await recordSent(this.communityStore, {
@@ -2526,8 +2632,43 @@ export class VtiApplicant {
     unreadableMaxAge?: string
     /** Vetters whose grant status could not be reached, and why. */
     unchecked: { vetterDid: string; reason: string }[]
+    /**
+     * Set when this application's way in is private. Absent for named
+     * vetting, so every existing reader is unaffected — the shape is the same
+     * one either way, deliberately, so the screens do not branch.
+     */
+    mode?: 'private'
   }> {
     const application = await this.app()
+
+    // A private application counts vouches it cannot show. The agent holds the
+    // attestations and says how many it accepted, so the numbers come from it
+    // and the rows are empty: statements invented from attestations would
+    // claim more than we know, and naming anyone would undo the privacy the
+    // exchange exists for.
+    const hidden = await this.hiddenApplication()
+    if (hidden) {
+      const needed = hidden.minimum
+      const counted = hidden.held
+      return {
+        held: counted,
+        needed,
+        meets: counted >= needed,
+        statements: [],
+        counted,
+        // The agent refuses an attestation it cannot verify at the moment it
+        // arrives, so nothing discountable is held by the time we are asked.
+        discounted: 0,
+        needs: counted >= needed ? [] : [{ kind: 'statements' as const, n: needed - counted }],
+        // A community that cannot see who vouched cannot apply a
+        // declared-relationship cap. That is a property of hidden vetting, not
+        // a check this client is skipping.
+        independenceOk: true,
+        exceededCaps: [],
+        unchecked: [],
+        mode: 'private',
+      }
+    }
     // Only statements about THIS application count. A phone that was vetted
     // before holds statements naming an older join DID, and the mediator can
     // redeliver one at any time; counting those reads as "2 of 1" and would

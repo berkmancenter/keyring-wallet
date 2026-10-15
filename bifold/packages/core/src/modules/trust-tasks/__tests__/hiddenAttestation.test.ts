@@ -28,6 +28,10 @@ import { VETTING_SCHEMA_DIR, vendoredValidatorIn } from './fixtures/vtcJoinSchem
 const mockSend = jest.fn(async (..._args: unknown[]) => undefined)
 const mockTake = jest.fn()
 const mockLoadRecord = jest.fn()
+const mockFetchChallenge = jest.fn(async () => ({ challenge: 'z2Challenge', expiresAt: '2026-10-16T00:00:00Z' }))
+const mockApply = jest.fn(async () => ({ effect: 'joined', requestId: 'req-9' }))
+const mockExtensions = jest.fn(async () => ({ hiddenVetting: { proof: 'z2proof' } }))
+const mockBegin = jest.fn(async () => HIDDEN_RECORD)
 const mockConnect = jest.fn(async () => undefined)
 const CLIENT = { name: 'the agent client' }
 
@@ -39,12 +43,19 @@ jest.mock('@bifold/trust-tasks', () => ({
 }))
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
-  vtiAgent: { send: (...a: unknown[]) => mockSend(...a), onInbound: () => () => undefined },
+  vtiAgent: {
+    send: (...a: unknown[]) => mockSend(...a),
+    onInbound: () => () => undefined,
+    fetchChallenge: (...a: unknown[]) => mockFetchChallenge(...a),
+    apply: (...a: unknown[]) => mockApply(...a),
+  },
 }))
 jest.mock('../module/hiddenVetting', () => ({
   ...jest.requireActual('../module/hiddenVetting'),
   loadHiddenVettingRecord: (...a: unknown[]) => mockLoadRecord(...a),
   takeHiddenAttestation: (...a: unknown[]) => mockTake(...a),
+  hiddenSubmissionExtensions: (...a: unknown[]) => mockExtensions(...a),
+  beginHiddenApplication: (...a: unknown[]) => mockBegin(...a),
 }))
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
@@ -144,6 +155,10 @@ beforeEach(() => {
   mockTake.mockReset()
   mockLoadRecord.mockReset()
   mockConnect.mockClear()
+  mockFetchChallenge.mockClear()
+  mockApply.mockClear()
+  mockExtensions.mockClear()
+  mockBegin.mockClear()
 })
 
 describe('the published shapes', () => {
@@ -275,5 +290,111 @@ describe('the vendored schemas still match the registry', () => {
       'framework-0.2.schema.json': 'specs/_framework/0.2/framework.schema.json',
       'framework-0.3.schema.json': 'specs/_framework/0.3/framework.schema.json',
     })
+  })
+})
+
+// Alberto, 2026-10-15: the same flow as named vetting, with the
+// zero-knowledge part on the agent and detected from state. So these exercise
+// the ordinary members a screen already calls — `start`, `checklist`,
+// `submit` — on an application whose way in is private, and assert they behave
+// privately without anyone passing a mode in.
+describe('the named flow, applied to a private way in', () => {
+  const manifest = {
+    wire: '0.3',
+    criteria: [
+      {
+        id: 'Vetted-Member',
+        requirementsDigest: 'zQmDigest',
+        // test-vtc's own `Vetted-Member` requirement, so the shape is one a
+        // community really publishes and passes `checkVettingRequirements`.
+        vetting: {
+          version: '0.1',
+          statementType: 'https://registry.trustoverip.org/dtg/vsc/vetted/1',
+          minStatements: 1,
+          acceptedMethods: ['inPerson', 'video'],
+          requiredClaims: ['name.legal'],
+          maxStatementAge: 'P120D',
+          eligibleVetters: { role: 'vetter' },
+          independence: { requireConsistentIdentityCommitment: true },
+          invitation: 'none',
+          ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } },
+        },
+      },
+    ],
+  } as never
+
+  it('creates the agent-side application in the same tap as the named one', async () => {
+    mockLoadRecord.mockResolvedValue(undefined)
+    const store = memoryStore()
+    await applicantWith(store).start(manifest, { 'name.legal': 'A Person' })
+    // The private criterion is found from the manifest, and the shared
+    // `beginHiddenApplication` is what creates it, so the two routes into a
+    // private application cannot drift.
+    expect(mockBegin).toHaveBeenCalledTimes(1)
+    expect(mockBegin.mock.calls[0]?.[3]).toMatchObject({ id: 'Vetted-Member' })
+  })
+
+  it('still starts the named application when the agent cannot carry the private one', async () => {
+    // A phone whose agent cannot do this has still started applying, and the
+    // refusal belongs where the person acts, not at the start of a flow they
+    // were offered.
+    mockLoadRecord.mockResolvedValue(undefined)
+    mockBegin.mockRejectedValueOnce(new Error('agentTooOld'))
+    const store = memoryStore()
+    await expect(applicantWith(store).start(manifest, { 'name.legal': 'A Person' })).resolves.toMatchObject({
+      communityDid: COMMUNITY,
+    })
+  })
+
+  it('counts vouches it cannot show, in the same shape the named checklist uses', async () => {
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    const list = await applicantWith(memoryStore({})).checklist()
+    expect(list).toMatchObject({
+      mode: 'private',
+      held: 1,
+      counted: 1,
+      needed: 1,
+      meets: true,
+      statements: [],
+      discounted: 0,
+      needs: [],
+      // A community that cannot see who vouched cannot apply a relationship
+      // cap, so this is true by the nature of the exchange, not by skipping it.
+      independenceOk: true,
+      exceededCaps: [],
+    })
+  })
+
+  it('says what is still missing, and does not claim it meets the threshold', async () => {
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 0, minimum: 2 })
+    const list = await applicantWith(memoryStore({})).checklist()
+    expect(list).toMatchObject({ mode: 'private', meets: false, needs: [{ kind: 'statements', n: 2 }] })
+  })
+
+  it('proves at submit, and sends the proof with no statements', async () => {
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    const verdict = await applicantWith(memoryStore({})).submit(manifest, [], 'zQmDigest')
+    expect(verdict).toMatchObject({ effect: 'joined' })
+    // The challenge is read immediately before proving: a community replaces
+    // any it had open, so one fetched earlier is already spent.
+    expect(mockFetchChallenge).toHaveBeenCalledWith(COMMUNITY, { criterionId: 'Vetted-Member' })
+    expect(mockExtensions.mock.calls[0]?.[3]).toBe('z2Challenge')
+    // No statements: a submission carrying both would name the vetters the
+    // proof keeps hidden.
+    expect(mockApply.mock.calls[0]?.[2]).toMatchObject({
+      credentials: [],
+      hiddenVetting: { proof: 'z2proof' },
+    })
+  })
+
+  it('reads too few vouches as progress at submit, and sends nothing', async () => {
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 0, minimum: 1 })
+    mockExtensions.mockResolvedValueOnce('notEnoughYet' as never)
+    const code = await applicantWith(memoryStore({}))
+      .submit(manifest, [], 'zQmDigest')
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('vta/pcs/prove:noUsableAttestation')
+    expect(mockApply).not.toHaveBeenCalled()
   })
 })
