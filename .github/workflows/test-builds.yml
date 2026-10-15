@@ -11,7 +11,11 @@ name: Test builds
 # With `push: on` a build also names the push gateway, and its artifact name
 # ends in -push-on, so it cannot be taken for the testers' configuration.
 # What each build carries, like the staging build: MEDIATOR_URL and nothing else
-# baked in (no VTI_* value: testers link their own agent and community).
+# baked in (no VTI_* value: testers link their own agent and community), except
+# E2E_CLOCKS=short: the grant windows wait 60 s and the auto-lock defaults to
+# 1 minute, so the release checks wait a minute instead of ten (gate efficiency
+# item 3). Only this workflow sets it; quality.yml fails if another does, and
+# staging refuses a store build that carries it.
 #
 #   gh workflow run test-builds.yml -R berkmancenter/keyring-wallet --ref <branch>
 #   gh run download <run-id> -R berkmancenter/keyring-wallet
@@ -172,6 +176,8 @@ jobs:
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # The test build's short clocks (see the top of this file).
+          echo "E2E_CLOCKS=short" >> .env
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # The same lines the staging workflow writes for an iOS push build.
@@ -305,6 +311,8 @@ jobs:
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # The test build's short clocks (see the top of this file).
+          echo "E2E_CLOCKS=short" >> .env
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # As in the staging workflow: Android gets the gateway only when the
