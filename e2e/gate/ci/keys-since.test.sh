@@ -18,6 +18,7 @@ i = a.index('acl')
 cmd = a[i + 1]
 if cmd == 'list':
     sys.stderr.write('\x1b[38;5;214mWARN\x1b[0m session cache is old\n'); sys.stderr.flush()
+    if os.environ.get('FAKE_BRACKET'): print('[warn] a bracketed log line ahead of the list')
     print('{"broken": [' if os.environ.get('FAKE_GARBLE') else json.dumps(acl, indent=2))
 elif cmd == 'create':
     o = dict(zip(a[i + 2::2], a[i + 3::2]))
@@ -62,4 +63,14 @@ out2=$(FAKE_GARBLE=1 bash -c '
 ' 2>&1)
 echo "$out2" | grep -q '^CLEANUP-FAILED runner-main keys: the ACL list could not be read in 4 tries' && echo "$out2" | grep -q '^rc=1' && ok "an unreadable list is said on a CLEANUP-FAILED line, and keys_since fails" || bad "unreadable list: $out2"
 ! grep -q 'acl delete' "$T/acl.json.calls" && ok "nothing deleted from an unreadable list" || bad "deleted from an unreadable list"
+# A bracketed log line ahead of the list: the next "[" line is tried, and the list is still read.
+echo '[{"subject":"did:key:zOld","label":"keyring-admin","createdBy":"did:key:zRunnerAdmin","createdAt":"2026-01-01T00:00:00+00:00"}]' > "$T/acl.json"; : > "$T/acl.json.calls"
+out3=$(FAKE_BRACKET=1 bash -c '
+  . "'"$here"'/../lib.sh"
+  sleep() { :; }
+  T0=$(stamp)
+  "$PNM_BIN" --vta runner-main acl create --did did:key:zPhoneC --role admin --label keyring-admin --expires 1h >/dev/null
+  keys_since runner-main "$T0"; echo "rc=$?"
+' 2>&1)
+grep -q 'acl delete did:key:zPhoneC' "$T/acl.json.calls" && echo "$out3" | grep -q '^rc=0' && ok "a bracketed log line ahead of the list: the list is still read, the leg's key deleted" || bad "bracketed line: $out3"
 exit $fails

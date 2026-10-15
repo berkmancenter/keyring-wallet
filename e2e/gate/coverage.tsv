@@ -2,7 +2,7 @@ leg	row	anchor
 agents	IN-114 no "key not found" with several agents	agent
 agents	R1 add + keep	agent
 agents	R1 switch to B	agent
-agents	R2 Join on B goes ahead with B	agent
+agents	R2 Join on B goes ahead with B	join
 agents	R4 unlink B	agent
 agents	R4 unlink the last	agent
 agents	R5 refusal on the card by itself	agent
@@ -18,7 +18,7 @@ agents	add-fail-return-tab	agent
 agents	agents-link-a	agent
 agents	persona-in-own-context	agent
 agents	swap-held-add-returns	agent
-agents	wallet-both-cards	agent
+agents	wallet-both-cards	join
 agents	wallet-hidden-unlinked	agent
 devices	community-agent-refused	agent
 devices	devices ACL label is the name	agent
@@ -154,4 +154,4 @@ waiting	member-scan-other-ticket	join
 waiting	member-vmc-sent	join
 waiting	outside-join-meet-vetter	join
 waiting	outside-join-vetting-not-supported	join
-waiting	relink-wiped-app	join
+waiting	relink-wiped-app	agent

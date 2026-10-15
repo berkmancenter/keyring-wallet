@@ -4,6 +4,8 @@
 // proves; a change that removes a row or adds a leg changes it in the same diff.
 //   node e2e/gate/coverage.mjs <run dir>            write e2e/gate/coverage.tsv from that run (a full gate)
 //   node e2e/gate/coverage.mjs <run dir> --check    exit 1 and print the difference when the run and the file differ
+// The committed file comes from the 241 full gate (1014-1857), which ran without p2 and push2: the first full gate that
+// runs them shows their rows as "+" in --check, which is expected; regenerate the file from that run then.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

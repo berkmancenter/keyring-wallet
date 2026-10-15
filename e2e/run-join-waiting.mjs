@@ -62,6 +62,27 @@ const rows = createRows({
   },
 });
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
+/**
+ * The Wallet's cards from `issuer`, as distinct "issuer|card name" pairs read from the page over the whole list
+ * (scrolled down until it stops moving, then back to the top). Android.
+ */
+async function walletCardsFrom(d, issuer) {
+  const seen = new Set();
+  const read = async () => {
+    const src = await d.getPageSource().catch(() => "");
+    const texts = [...src.matchAll(/text="([^"]*)"[^>]*resource-id="com\.ariesbifold:id\/(CredentialIssuer|CredentialName)"/g)];
+    for (let i = 0; i + 1 < texts.length; i++)
+      if (texts[i][2] === "CredentialIssuer" && texts[i + 1][2] === "CredentialName" && texts[i][1].includes(issuer)) seen.add(`${texts[i][1]}|${texts[i + 1][1]}`);
+  };
+  const scroll = (direction) =>
+    d.execute("mobile: scrollGesture", { left: 100, top: 500, width: 800, height: 1200, direction, percent: 0.8 }).catch(() => false);
+  await read();
+  for (let i = 0; i < 8 && (await scroll("down")); i++) await read();
+  await read();
+  for (let i = 0; i < 8 && (await scroll("up")); i++);
+  return seen.size;
+}
+
 /** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
 async function statusOf(d, tries) {
   let status = "";
@@ -282,9 +303,10 @@ async function approvedFlow(d, me) {
       await tapTestId(d, "Wallet", 10000).catch(() => undefined);
       await sleep(2000);
       for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-      // C's cards in the Wallet: by their issuer line. The default "member" role has no card of its own, so one.
-      const fromC = await d.$$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialIssuer").textContains("${C_NAME}")`).catch(() => []);
-      const walletCards = fromC.length;
+      // C's cards in the Wallet, by issuer and card name, collected over the whole list: d.$$ alone sees only the cards
+      // on screen, and a second card from C below the fold would read as one (review on #467). The default "member"
+      // role has no card of its own, so one.
+      const walletCards = await walletCardsFrom(d, C_NAME);
       const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
       const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
       const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
