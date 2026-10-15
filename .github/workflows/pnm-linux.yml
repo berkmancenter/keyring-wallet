@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       vti-ref:
-        description: "verifiable-trust-infrastructure commit (default: the Farm's vta-service v0.56.0)"
+        description: "verifiable-trust-infrastructure commit (default: the Farm's vta-service v0.60.0)"
         type: string
         default: ""
   workflow_call:
@@ -35,12 +35,12 @@ permissions:
   contents: read
 
 env:
-  # The Farm's VTA: vta-service v0.56.0 (FARM_VERSIONS in the gate's farm.env, checked 2026-10-11). Move this with
+  # The Farm's VTA: vta-service v0.60.0 (FARM_VERSIONS in the gate's farm.env, set when the Farm moved). Move this with
   # the Farm, never ahead of it.
-  FARM_VTI_REF: 39c801ed091cdd0aaa8247b8c7aa8e564903d4d6
+  FARM_VTI_REF: 7adda796f4b57543b346229f0516c2cf9ad3c611
   # The release FARM_VTI_REF is: the commit must be this tag's (checked below). The gate compares this version with the
   # Farm's recorded one on every run (e2e/gate/farm-drift.mjs, farm-drift= in the run's meta).
-  FARM_VTI_VERSION: "0.56.0"
+  FARM_VTI_VERSION: "0.60.0"
   RUST_VERSION: "1.95.0"
   FEATURES: config-session,tsp
   # Upstream's explicit switch to the file session store, first in its priority order: a job that runs pnm sets it
