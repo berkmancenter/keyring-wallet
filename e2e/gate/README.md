@@ -136,6 +136,15 @@ The iOS legs (K↔K, iOS smoke) use simulators. The Android legs (P1 + approvals
 smoke, device rows) use the emulator. With enough free disk (about 15 GB), the two groups run side by side,
 each with its own `E2E_RUN_DIR` and Appium port. Below that, they run one after another.
 
+## A stale emulator
+
+The gate's AVD keeps its userdata across boots (every boot is cold, `-no-snapshot`, but the data partition stays).
+Google Play services' state can go stale there: on 10-14 a leftover `.pushtest` registration swallowed every FCM
+message, so ANDROID-NOTIF-CHANNEL saw no wake in three runs while the gateway reported each one delivered. One
+`scripts/emu.sh start Pixel_6_API_33 --port 5570 -- -wipe-data` boot (then `emu.sh stop`) fixed it; the next run's
+wake arrived one second after the hold. When a push row sees `pushCapable true` but no FCM line in the phone's log,
+wipe the AVD before suspecting the app or the push path.
+
 ## Cleanup
 
 Every leg records when it started. On exit it removes the phone keys it made on each runner since then, the
