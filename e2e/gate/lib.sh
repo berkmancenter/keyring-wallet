@@ -241,7 +241,8 @@ emu_start() {
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
-  out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
+  # EMU_EXTRA: extra emulator arguments for one leg's boot (lostreq: -writable-system on its own AVD).
+  out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim ${EMU_EXTRA:-} 2>&1); rc=$?
   echo "$out" | tail -1
   step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"
   [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
@@ -265,6 +266,28 @@ leg_logcat() {
   ) >> "$LEG_DIR/$1.logcat" 2>&1 &
   LEG_LOGCAT_PIDS="${LEG_LOGCAT_PIDS:-} $!"
   echo "logcat: $1 → $1.logcat"
+}
+# avd_writable <name> <port>: an AVD of the gate's image whose system partition can be written (its hosts file: lostreq's
+# IN-258 cut), made once and kept apart from the AVD every other leg boots: -writable-system and disabled verity are
+# its own (coordinator 10-15). The first boot disables verity and reboots; a marker file says it is done.
+avd_writable() {
+  local name=$1 port=$2 dir=$HOME/.android/avd/$1.avd am
+  am=$(ls "${ANDROID_HOME:-$HOME/Library/Android/sdk}"/cmdline-tools/*/bin/avdmanager 2>/dev/null | head -1)
+  if [ ! -d "$dir" ]; then
+    [ -n "$am" ] || { echo "avd_writable: no avdmanager"; return 1; }
+    echo no | "$am" create avd -n "$name" -k "system-images;android-33;google_apis;arm64-v8a" -d pixel_6 >/dev/null 2>&1 || { echo "avd_writable: create $name failed"; return 1; }
+    echo "avd_writable: created $name"
+  fi
+  [ -f "$dir/keyring-verity-off" ] && return 0
+  local s=emulator-$port
+  AVD=$name EMU_EXTRA=-writable-system emu_start "$port" || return 1
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
+  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb -s "$s" wait-for-device
+  local i; for i in $(seq 1 60); do [ "$(adb -s "$s" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 5; done
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
+  adb -s "$s" remount 2>&1 | tail -1
+  emu_stop
+  touch "$dir/keyring-verity-off"; echo "avd_writable: $name ready (verity off)"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { local t0 rc; t0=$(date +%s); xcrun simctl boot "$1" 2>/dev/null; GALARM_STEPS=0 galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; rc=$?; step_rec sim_boot "$t0" "$(( $(date +%s) - t0 ))"; return $rc; }

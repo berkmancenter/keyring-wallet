@@ -172,7 +172,30 @@ async function main() {
     const didHost = decodeURIComponent(String(C_DID || "").split(":")[3] ?? "");
     return [process.env.C_MEDIATOR_HOST, didHost].filter((h) => h && h.includes(host));
   };
+  // CARD_STATUS_CUT=hosts (lostreq.sh, on its own writable AVD): the status host's name alone resolves to nowhere, by
+  // lines in the phone's hosts file. The server-name rule below never held: the host offers ECH, and it shares its
+  // Cloudflare addresses with C's messaging host, so neither SNI nor an address can cut it alone (1015-0312 diagnostic).
+  const HOSTS = "/system/etc/hosts";
+  const MARK = "# keyring-gate-cut";
+  const hostsMode = process.env.CARD_STATUS_CUT === "hosts";
+  const hostsSum = () => { try { return adb(`md5sum ${HOSTS}`).split(/\s+/)[0]; } catch { return "?"; } };
+  let sumBefore = "";
   const block = () => {
+    if (hostsMode) {
+      tried = true;
+      console.log(`STATUS_BLOCK_HOST ${host}`);
+      sumBefore = hostsSum();
+      adb(`printf '0.0.0.0 ${host} ${MARK}\\n:: ${host} ${MARK}\\n' >> ${HOSTS}`);
+      // Proof before the approval that the name now resolves to nowhere (the phone's own resolver, via ping).
+      let resolved = "";
+      try { resolved = adb(`ping -c1 -W1 ${host}`); } catch (e) { resolved = String(e.stdout ?? "") + String(e.stderr ?? ""); }
+      const to = (resolved.match(/\(([0-9a-f.:]+)\)/) || [])[1] ?? "unresolved";
+      console.log(`CUT-CHECK hosts ${host} resolves to ${to} (hosts ${HOSTS} md5 before ${sumBefore})`);
+      // 0.0.0.0 is reported as the loopback it reaches (127.0.0.1, seen on the Lostreq_API_33 proof run): any of these
+      // means the name no longer reaches the host; a public address means the entry did not take.
+      if (!["0.0.0.0", "127.0.0.1", "::", "::1", "unresolved"].includes(to)) throw new Error(`the hosts entry did not take: ${host} still resolves to ${to}`);
+      return "by hosts file";
+    }
     const shared = overlaps();
     if (shared.length) throw new Error(`${host} is part of ${shared.join(" and ")}: cutting it would cut C's messaging or DID too`);
     tried = true;
@@ -200,6 +223,13 @@ async function main() {
     return `by address (${ip || "?"})`;
   };
   const unblock = () => {
+    if (hostsMode) {
+      try { adb(`sed -i '/${MARK}$/d' ${HOSTS}`); } catch (e) { log(`hosts line not removed: ${String(e.message).split("\n")[0]}`); }
+      const after = hostsSum();
+      console.log(`CUT-CHECK hosts restored: md5 before ${sumBefore || "?"}, after ${after}${sumBefore && after !== sumBefore ? " — DIFFERENT" : ""}`);
+      log(`${host} put back`);
+      return;
+    }
     for (const t of ["iptables", "ip6tables"])
       for (const r of [sniRule, ipRule])
         for (let i = 0; i < 3; i++) {

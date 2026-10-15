@@ -12,6 +12,10 @@ T0=$(stamp); E=emulator-5572
 fin() {
   adb -s $E shell cmd connectivity airplane-mode disable >/dev/null 2>&1
   [ -n "${C_MEDIATOR_HOST:-}" ] && for t in iptables ip6tables; do adb -s $E shell $t -D OUTPUT -d "$C_MEDIATOR_HOST" -j REJECT >/dev/null 2>&1; done
+  # IN-258's hosts-file cut (run-card-status.mjs removes its lines itself; this is for a driver that was killed, or a
+  # stopped leg: fin runs on exit and on TERM/INT, leg_begin's traps). Then its earlier server-name rules, as before.
+  adb -s $E shell "sed -i '/# keyring-gate-cut\$/d' /system/etc/hosts" >/dev/null 2>&1
+  echo "  hosts after cleanup: $(adb -s $E shell md5sum /system/etc/hosts 2>/dev/null | awk '{print $1}') · keyring-gate-cut lines left: $(adb -s $E shell grep -c keyring-gate-cut /system/etc/hosts 2>/dev/null | tr -d '\r')"
   # IN-258's cut of the status-list host (run-card-status.mjs puts it back itself; this is for a driver that was killed).
   local h; for h in $(grep -oE '^STATUS_BLOCK_HOST [^ ]+' "$LEG_DIR/card.out" 2>/dev/null | awk '{print $2}' | sort -u); do for t in iptables ip6tables; do
     adb -s $E shell $t -D OUTPUT -p tcp -m string --string "$h" --algo bm -j REJECT --reject-with tcp-reset >/dev/null 2>&1; adb -s $E shell $t -D OUTPUT -d "$h" -j REJECT >/dev/null 2>&1; done; done
@@ -24,7 +28,11 @@ fin() {
   done
 }
 LEG_CLEANUP=fin
-emu_start 5572
+# This leg boots its own AVD, with a writable system partition for IN-258's hosts-file cut; every other leg's AVD stays
+# as it is (coordinator 10-15). Nothing else differs: a fresh install and onboarding, as on the shared one.
+AVD=${LOSTREQ_AVD:-Lostreq_API_33}
+avd_writable "$AVD" 5572 || broken "the lostreq AVD ($AVD) could not be made writable"
+EMU_EXTRA=-writable-system emu_start 5572
 for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; done
 cd "$E2E"
 E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
@@ -46,12 +54,14 @@ for r in $(grep -oE '^ARRIVED_REQ [^ ]+' "$LEG_DIR/lost.out" 2>/dev/null | awk '
   echo "  decline $r (before card-status): $(JOIN_DECIDE_REASON='gate: an offline-ask test that reached C anyway, declined before the next ask' c_admin join-decide "$r" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
 done
 adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device
+# The hosts file is writable only after a remount (this AVD's verity is off; avd_writable).
+adb -s $E remount 2>&1 | tail -1
 # A build with bifold #386's notice (CardStatusNotice) must show it: no notice is a FAIL there, tracked only before.
 CS_STRICT=; build_has CardStatusNotice "$APK" && CS_STRICT=1
 # A build that logs its card-status reads (bifold #410) lets the driver prove the cut held; without it, as before.
 CS_LOGS=; build_has cardStatusLogLine "$APK" && CS_LOGS=1
 E2E_APP_ID=$BID UDID=$E APPIUM_PORT=4762 C_DID=$C_DID C_NAME=$C_NAME C_REST=$C_REST C_ADMIN="$C_REST $C_DID $C_ADMIN_CRED" C_MEDIATOR_HOST=${C_MEDIATOR_HOST:-} \
-  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} CARD_STATUS_LOGS=$CS_LOGS galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
+  STATUS_LIST_HOST=${STATUS_LIST_HOST:-} CARD_STATUS_STRICT=${CARD_STATUS_STRICT:-$CS_STRICT} CARD_STATUS_LOGS=$CS_LOGS CARD_STATUS_CUT=hosts galarm 1200 node run-card-status.mjs > "$LEG_DIR/card.out" 2>&1; crc=$?
 grep -E '^\[e2e\] [0-9]|^(PROBE|ISSUED) ' "$LEG_DIR/card.out" | cut -c1-260
 take_rows "$LEG_DIR/card.out"
 grep -E '^(CUT-CHECK|CUT-NOT-HELD|NO-STATUS-READ) ' "$LEG_DIR/card.out" | cut -c1-260
