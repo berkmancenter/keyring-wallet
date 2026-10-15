@@ -201,12 +201,28 @@ export interface WitnessServerConfig {
   localityVenueClaim?: string
 
   /**
+   * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): which VWC wire
+   * shape this witness emits.
+   *   wd02 — the legacy, pre-migration WitnessCredential shape.
+   *   vsc  — the WD 0.4.0 dtg:witnessed StatementCredential shape (D1-D8,
+   *          plan §3). DEFAULT as of plan §9 Q1: pre-production, no fleet to
+   *          migrate (VWCs expire after 7 days), no real community depends
+   *          on the legacy shape yet — only the ecosystem's unmodified
+   *          default personhood.rego (checking the literal "WitnessCredential"
+   *          type string) is a caveat, and only for a deployment serving a
+   *          community running that unmodified default.
+   * An operator sets WITNESS_CREDENTIAL_SHAPE=wd02 to opt a specific
+   * deployment back to the legacy shape.
+   */
+  credentialShape: 'wd02' | 'vsc'
+
+  /**
    * Whether to retain basic message records in the wallet after processing.
    * When false (default), messages are deleted after being processed to preserve user privacy.
    * When true, all messages are retained in the wallet for debugging/audit purposes.
-   * 
+   *
    * Note: This only affects the witness's storage - users' devices retain their own message history.
-   * 
+   *
    * Default: false (messages are deleted after processing)
    */
   retainMessages: boolean
@@ -397,6 +413,17 @@ export function loadConfig(): WitnessServerConfig {
     rawLocalityPolicy === 'off' || rawLocalityPolicy === 'required' ? rawLocalityPolicy : 'offered'
   const localityVenueClaim = process.env.WITNESS_LOCALITY_VENUE_CLAIM
 
+  // VSC migration (plan §6 V4, Q1) — wd02 | vsc, default vsc. Flipped from the
+  // original wd02 default once pre-production made the flip low-risk (no
+  // fleet to migrate — every VWC expires after 7 days — and no real
+  // community's personhood policy depends on the legacy shape yet, only
+  // demo/test witness deployments). An explicit 'wd02' still opts a specific
+  // deployment back to the legacy shape, e.g. for a community known to run
+  // the ecosystem's unmodified default personhood.rego (which checks the
+  // literal "WitnessCredential" type string, not present on a vsc VWC).
+  const rawCredentialShape = process.env.WITNESS_CREDENTIAL_SHAPE
+  const credentialShape: WitnessServerConfig['credentialShape'] = rawCredentialShape === 'wd02' ? 'wd02' : 'vsc'
+
   // Message Retention Configuration
   const retainMessages = process.env.WITNESS_RETAIN_MESSAGES === 'true' // Default: false (delete after processing)
 
@@ -406,7 +433,9 @@ export function loadConfig(): WitnessServerConfig {
 
   // Validate that start is before end when both are provided
   if (eventStartTime && eventEndTime && eventStartTime >= eventEndTime) {
-    console.warn('[config] Warning: WITNESS_EVENT_START is not before WITNESS_EVENT_END — time window will always reject requests')
+    console.warn(
+      '[config] Warning: WITNESS_EVENT_START is not before WITNESS_EVENT_END — time window will always reject requests'
+    )
   }
 
   // LLM Configuration
@@ -427,8 +456,12 @@ export function loadConfig(): WitnessServerConfig {
   const anthropicApiKey = process.env.WITNESS_LLM_API_KEY || process.env.WITNESS_ANTHROPIC_API_KEY || undefined
   const anthropicBaseUrl = process.env.WITNESS_LLM_BASE_URL || process.env.WITNESS_ANTHROPIC_BASE_URL || undefined
   const anthropicModel = process.env.WITNESS_LLM_MODEL || process.env.WITNESS_ANTHROPIC_MODEL || undefined
-  const anthropicMaxTokens = process.env.WITNESS_ANTHROPIC_MAX_TOKENS ? parseInt(process.env.WITNESS_ANTHROPIC_MAX_TOKENS, 10) : undefined
-  const anthropicTemperature = process.env.WITNESS_ANTHROPIC_TEMPERATURE ? parseFloat(process.env.WITNESS_ANTHROPIC_TEMPERATURE) : undefined
+  const anthropicMaxTokens = process.env.WITNESS_ANTHROPIC_MAX_TOKENS
+    ? parseInt(process.env.WITNESS_ANTHROPIC_MAX_TOKENS, 10)
+    : undefined
+  const anthropicTemperature = process.env.WITNESS_ANTHROPIC_TEMPERATURE
+    ? parseFloat(process.env.WITNESS_ANTHROPIC_TEMPERATURE)
+    : undefined
   const llmContextOrganization = process.env.WITNESS_CONTEXT_ORGANIZATION || undefined
   const llmContextEvent = process.env.WITNESS_CONTEXT_EVENT || undefined
   const llmContextCapabilities = process.env.WITNESS_CONTEXT_CAPABILITIES || undefined
@@ -474,6 +507,7 @@ export function loadConfig(): WitnessServerConfig {
     reportingEnabled,
     localityVerificationRequired,
     localityPolicy,
+    credentialShape,
     localityVenueClaim,
     retainMessages,
     llmEnabled,
@@ -526,6 +560,7 @@ export const defaultConfig: WitnessServerConfig = {
   localityVerificationRequired: true,
   localityPolicy: 'offered',
   localityVenueClaim: undefined,
+  credentialShape: 'vsc',
   retainMessages: false,
   llmEnabled: false,
   llmProvider: 'anthropic',

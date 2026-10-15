@@ -73,6 +73,57 @@ import { loadTrustTaskRuntime } from './runtime'
 /** Which carriage a request arrived on — a reply always goes back the same way. */
 type Carriage = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
 
+/**
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V4, D4): where
+ * `taskContext` goes on the credential being issued. `vsc` shape moves it to
+ * the top level, sibling of `credentialSubject`. `wd02` shape keeps its
+ * current (nested-in-credentialSubject) placement unchanged — that
+ * placement is itself a standing WD02-conformance bug (Alberto's 2026-09-17
+ * review, finding A5), but fixing wd02's OWN emission is out of scope for
+ * this migration; only the read sites got the dual-read fix.
+ *
+ * Extracted as a pure function specifically so it has direct unit test
+ * coverage — `WitnessTaskSessions` as a whole has none (it needs a live
+ * Credo agent to exercise meaningfully), so this is the coverage available
+ * at this boundary for the one piece of new logic V4 adds here.
+ */
+export function placeTaskContext(
+  vwcJson: Record<string, unknown>,
+  subject: Record<string, unknown>,
+  sessionId: string,
+  credentialShape: 'wd02' | 'vsc' | undefined
+): void {
+  if (credentialShape === 'vsc') {
+    vwcJson.taskContext = sessionId
+  } else {
+    subject.taskContext = sessionId
+  }
+}
+
+/**
+ * Where `taskDigestMultibase` goes — the same placement rule as
+ * `placeTaskContext`, and for the same reason: cred-spec's Base Structure
+ * lists `taskDigestMultibase` as a top-level member, sibling of
+ * `credentialSubject` (not nested inside it), REQUIRED wherever `taskContext`
+ * is REQUIRED (dtgwg-cred-spec pin 94af2d8, §Base Structure /
+ * §The taskDigestMultibase Property). `vsc` shape follows the real spec;
+ * `wd02` keeps its pre-migration nested placement, the same standing
+ * WD02-conformance bug `placeTaskContext` already documents — not fixed here
+ * for the same reason (byte-compat freeze, out of scope for this migration).
+ */
+export function placeTaskDigestMultibase(
+  vwcJson: Record<string, unknown>,
+  subject: Record<string, unknown>,
+  digest: string,
+  credentialShape: 'wd02' | 'vsc' | undefined
+): void {
+  if (credentialShape === 'vsc') {
+    vwcJson.taskDigestMultibase = digest
+  } else {
+    subject.taskDigestMultibase = digest
+  }
+}
+
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
 const DISCOVERY_TYPE = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
@@ -114,6 +165,16 @@ export interface WitnessTaskHost {
   /** The witness's claim about itself — plan §7.1's `localityVenue`, unverified in v1 (§11-Q4). */
   venueClaim?: string
   localityProvider?: TaskLocalityProvider
+  /**
+   * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): which VWC wire
+   * shape `buildVwcJson` produces. Defaults to `'wd02'` if omitted. Needed
+   * here (not only inside `buildVwcJson`) because D4 moves `taskContext` to
+   * the credential's top level, sibling of `credentialSubject`, in `vsc`
+   * shape — a placement decision this class makes when it attaches
+   * `taskContext` after `buildVwcJson` returns, not something `buildVwcJson`
+   * itself controls.
+   */
+  credentialShape?: 'wd02' | 'vsc'
   getIssuer(): Promise<{ did: string; verificationMethodId: string }>
   buildVwcJson(
     presentation: Record<string, unknown>,
@@ -487,9 +548,7 @@ export class WitnessTaskSessions {
           vpFailure = `threw: ${(error as Error).message}`
         }
         if (!vpValid) {
-          console.warn(
-            `[${this.host.name}] Task session ${sessionId}: presentation rejected — ${vpFailure}`
-          )
+          console.warn(`[${this.host.name}] Task session ${sessionId}: presentation rejected — ${vpFailure}`)
           return notBound(rawDoc as never, 'presentation not bound to this session')
         }
 
@@ -589,8 +648,8 @@ export class WitnessTaskSessions {
         const vwcJson = this.host.buildVwcJson(vpJson, session.sessionId, localityAssertion)
         const subject = (vwcJson.credentialSubject ?? {}) as Record<string, unknown>
         subject.parties = session.parties
-        subject.taskContext = session.sessionId
-        subject.taskDigestMultibase = taskDigestMultibase(session.sessionDoc)
+        placeTaskDigestMultibase(vwcJson, subject, taskDigestMultibase(session.sessionDoc), this.host.credentialShape)
+        placeTaskContext(vwcJson, subject, session.sessionId, this.host.credentialShape)
         vwcJson.credentialSubject = subject
 
         // Sign it, mirroring the observed VRC's proof family.

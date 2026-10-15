@@ -595,6 +595,81 @@ index 0000000000000000000000000000000000000000..2082da489996ca1d7a44331c132bb9af
 +export { DcqlService };
 +//# sourceMappingURL=DcqlService.mjs.map
 \ No newline at end of file
+diff --git a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+index 8666aae8f74ea09b74d0f7d109b05ebd6b85d054..450c12a71361cea8783b6dccf0a8151a30336c03 100644
+--- a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
++++ b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+@@ -21,6 +21,7 @@ import { W3cCredentialRepository } from "../vc/repository/W3cCredentialRepositor
+ import { purposes } from "../vc/linked-data-proofs/adapters/jsonld-signatures-adapter.mjs";
+ import { SignatureSuiteRegistry } from "../vc/linked-data-proofs/SignatureSuiteRegistry.mjs";
+ import { W3cCredentialService } from "../vc/W3cCredentialService.mjs";
++import { CREDENTIALS_CONTEXT_V2_URL } from "../vc/constants.mjs";
+ import "../vc/index.mjs";
+ import { MdocDeviceResponse } from "../mdoc/MdocDeviceResponse.mjs";
+ import { MdocApi } from "../mdoc/MdocApi.mjs";
+@@ -125,13 +126,15 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 					typeSupportsSelectiveDisclosure: true,
+ 					type: `DataIntegrityProof.${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`
+ 				} : {};
++				const basePresentationPayload = this.getVc2BasePresentationPayload(presentationToCreate);
+ 				const verifiablePresentationResult = await this.pex.verifiablePresentationFrom(presentationDefinitionForSubject, credentialsForPresentation, this.getPresentationSignCallback(agentContext, presentationToCreate), {
+ 					proofOptions: {
+ 						challenge,
+ 						domain,
+ 						...extraProofOptions
+ 					},
+-					presentationSubmissionLocation
++					presentationSubmissionLocation,
++					...basePresentationPayload
+ 				});
+ 				verifiablePresentationResultsWithFormat.push({
+ 					verifiablePresentationResult,
+@@ -233,6 +236,14 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 		});
+ 		return validDescriptorFormat && credentialsAreSignedWithAnonCredsW3c;
+ 	}
++	getVc2BasePresentationPayload(presentationToCreate) {
++		if (presentationToCreate.claimFormat !== ClaimFormat.LdpVp) return void 0;
++		const allV2 = presentationToCreate.verifiableCredentials.every(({ credential }) => {
++			const firstCredential = credential.firstCredential;
++			return firstCredential.claimFormat === ClaimFormat.LdpVc && firstCredential.contexts?.[0] === CREDENTIALS_CONTEXT_V2_URL;
++		});
++		return allV2 ? { basePresentationPayload: { "@context": [CREDENTIALS_CONTEXT_V2_URL] } } : void 0;
++	}
+ 	getPresentationSignCallback(agentContext, presentationToCreate) {
+ 		return async (callBackParams) => {
+ 			const { presentation: presentationInput, options, presentationDefinition, presentationSubmission } = callBackParams;
+diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
+--- a/build/modules/vc/W3cCredentialServiceOptions.d.mts
++++ b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+@@ -159,6 +159,13 @@ interface W3cJwtVerifyPresentationOptions extends W3cVerifyPresentationOptionsBa
+ interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentationOptionsBase {
+   presentation: W3cJsonLdVerifiablePresentation;
+   purpose?: ProofPurpose;
++  /**
++   * keyring: whether the presentation's holder proof must authenticate the
++   * credentialSubject of every included credential (upstream default: true).
++   * Keyring's VRC presenter is the credential's ISSUER, not its subject, so the
++   * witness ceremony verifies party membership itself and passes false.
++   */
++  verifyCredentialSubjectAuthentication?: boolean;
+ }
+ type W3cStoreCredentialOptions = {
+   record: W3cCredentialRecord;
+diff --git a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+index f3bc5c1c1ac97b732e9160397a564fb15a752721..c3b3078ef81ae614541983598dff5b1e9c8b9c86 100644
+--- a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
++++ b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+@@ -187,7 +187,7 @@ let W3cJsonLdCredentialService = class W3cJsonLdCredentialService {
+ 			const holderVerificationMethods = asArray(options.presentation.proof).filter((proof) => proof.proofPurpose === holderProofPurpose).map((proof) => proof.verificationMethod);
+ 			const credentialValidations = credentials.map((credential) => {
+ 				const credentialSubjectIds = credential.credentialSubjectIds;
+-				const credentialSubjectAuthentication = credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
++				const credentialSubjectAuthentication = options.verifyCredentialSubjectAuthentication === false || credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
+ 					isValid: false,
+ 					error: new CredoError("Presentation does not authenticate the credentialSubject of one or more included credentials")
+ 				};
 diff --git a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
 index 3b5714feb609a171e24f3720a364e162aba19ef5..22a1c2a7dc7ef2bfd72901e45b9521313df13084 100644
 --- a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
@@ -823,34 +898,3 @@ index 0000000000000000000000000000000000000000..426119e976ffe2f31744cc0ceba83f49
 +export { IsCredentialJsonLdContext, IsCredentialType, IsVerifiablePresentationType, validateVc2ContextBaseline, validateVc2CredentialStatus, validateVc2CredentialValidityPeriod };
 +//# sourceMappingURL=validators.mjs.map
 \ No newline at end of file
-diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
-index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
---- a/build/modules/vc/W3cCredentialServiceOptions.d.mts
-+++ b/build/modules/vc/W3cCredentialServiceOptions.d.mts
-@@ -159,6 +159,13 @@ interface W3cJwtVerifyPresentationOptions extends W3cVerifyPresentationOptionsBa
- interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentationOptionsBase {
-   presentation: W3cJsonLdVerifiablePresentation;
-   purpose?: ProofPurpose;
-+  /**
-+   * keyring: whether the presentation's holder proof must authenticate the
-+   * credentialSubject of every included credential (upstream default: true).
-+   * Keyring's VRC presenter is the credential's ISSUER, not its subject, so the
-+   * witness ceremony verifies party membership itself and passes false.
-+   */
-+  verifyCredentialSubjectAuthentication?: boolean;
- }
- type W3cStoreCredentialOptions = {
-   record: W3cCredentialRecord;
-diff --git a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-index f3bc5c1c1ac97b732e9160397a564fb15a752721..c3b3078ef81ae614541983598dff5b1e9c8b9c86 100644
---- a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-+++ b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
-@@ -187,7 +187,7 @@ let W3cJsonLdCredentialService = class W3cJsonLdCredentialService {
- 			const holderVerificationMethods = asArray(options.presentation.proof).filter((proof) => proof.proofPurpose === holderProofPurpose).map((proof) => proof.verificationMethod);
- 			const credentialValidations = credentials.map((credential) => {
- 				const credentialSubjectIds = credential.credentialSubjectIds;
--				const credentialSubjectAuthentication = credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
-+				const credentialSubjectAuthentication = options.verifyCredentialSubjectAuthentication === false || credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
- 					isValid: false,
- 					error: new CredoError("Presentation does not authenticate the credentialSubject of one or more included credentials")
- 				};

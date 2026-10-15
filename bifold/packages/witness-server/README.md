@@ -37,12 +37,12 @@ By default, the witness **does not retain any message history** from user intera
 
 The witness only stores data that is explicitly required for its attestation function:
 
-| Data | Purpose | Location |
-|------|---------|----------|
-| Issuer DID & keys | Signing VWCs | Wallet database |
-| Connection records | DIDComm routing | Wallet database |
-| Credential registry | VWC verification | In-memory (cleared on restart) |
-| Reporting graph | Opt-in activity (requires explicit user consent) | `.reporting/` folder |
+| Data                | Purpose                                          | Location                       |
+| ------------------- | ------------------------------------------------ | ------------------------------ |
+| Issuer DID & keys   | Signing VWCs                                     | Wallet database                |
+| Connection records  | DIDComm routing                                  | Wallet database                |
+| Credential registry | VWC verification                                 | In-memory (cleared on restart) |
+| Reporting graph     | Opt-in activity (requires explicit user consent) | `.reporting/` folder           |
 
 ### Opt-in Activity Reporting
 
@@ -149,11 +149,13 @@ yarn start:fresh
 ```
 
 **What gets deleted:**
+
 - Wallet database (`~/.askar/witness-server-wallet/`)
 - Invitation file (`.oob-invitation.json`)
 - Seed file (`.witness-seed.json`)
 
 **When to use `yarn fresh`:**
+
 - Testing with fresh identities
 - QR code needs to change (new DID required)
 - Wallet corruption or out-of-sync state
@@ -165,19 +167,19 @@ yarn start:fresh
 
 Copy `.env.sample` to `.env` and customize. All options can be set via environment variables.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WITNESS_PORT` | `9002` | Port for DIDComm HTTP transport |
-| `WITNESS_WEB_PORT` | `9003` | Port for web interface and API |
-| `WITNESS_NAME` | `witness-server` | Name/label for the witness agent |
-| `WITNESS_PUBLIC_URL` | `http://localhost:{PORT}` | Public URL for DIDComm endpoint |
-| `WITNESS_SESSION_EXPIRATION` | `30` | Session expiration time in minutes |
-| `WITNESS_EVENT_NAME` | _(optional)_ | Event name included in VWC (e.g., "EthDenver 2024") |
-| `WITNESS_VERIFICATION_METHOD` | `session-based-challenge` | Verification method in VWC |
-| `WITNESS_VERBOSE` | `false` | Enable verbose logging |
-| `WITNESS_DIDCOMM_VERSIONS` | `v1` | `v1,v2` serves DIDComm v2 beside v1: the witness publishes a second, out-of-band/2.0 invitation (`Invitation URL (v2)` in the log, `invitationV2Url` in the persisted invitation file) and accepts the Trust Task envelope on v2 connections. v1 is always served. |
-| `WITNESS_INVITATION_FILE` | `.oob-invitation.json` | File to persist invitation URL for stability |
-| `MEDIATOR_INVITATION_URL` | _(optional)_ | Mediator OOB invitation URL (enables mediation) |
+| Variable                      | Default                   | Description                                                                                                                                                                                                                                                        |
+| ----------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WITNESS_PORT`                | `9002`                    | Port for DIDComm HTTP transport                                                                                                                                                                                                                                    |
+| `WITNESS_WEB_PORT`            | `9003`                    | Port for web interface and API                                                                                                                                                                                                                                     |
+| `WITNESS_NAME`                | `witness-server`          | Name/label for the witness agent                                                                                                                                                                                                                                   |
+| `WITNESS_PUBLIC_URL`          | `http://localhost:{PORT}` | Public URL for DIDComm endpoint                                                                                                                                                                                                                                    |
+| `WITNESS_SESSION_EXPIRATION`  | `30`                      | Session expiration time in minutes                                                                                                                                                                                                                                 |
+| `WITNESS_EVENT_NAME`          | _(optional)_              | Event name included in VWC (e.g., "EthDenver 2024")                                                                                                                                                                                                                |
+| `WITNESS_VERIFICATION_METHOD` | `session-based-challenge` | Verification method in VWC                                                                                                                                                                                                                                         |
+| `WITNESS_VERBOSE`             | `false`                   | Enable verbose logging                                                                                                                                                                                                                                             |
+| `WITNESS_DIDCOMM_VERSIONS`    | `v1`                      | `v1,v2` serves DIDComm v2 beside v1: the witness publishes a second, out-of-band/2.0 invitation (`Invitation URL (v2)` in the log, `invitationV2Url` in the persisted invitation file) and accepts the Trust Task envelope on v2 connections. v1 is always served. |
+| `WITNESS_INVITATION_FILE`     | `.oob-invitation.json`    | File to persist invitation URL for stability                                                                                                                                                                                                                       |
+| `MEDIATOR_INVITATION_URL`     | _(optional)_              | Mediator OOB invitation URL (enables mediation)                                                                                                                                                                                                                    |
 
 #### Stable Invitation URLs (QR Codes)
 
@@ -210,8 +212,8 @@ WITNESS_INVITATION_FILE="" yarn start
 
 The witness server can operate behind a DIDComm mediator, eliminating the need for a publicly accessible port or HTTPS configuration. **This is required for mobile app compatibility** due to platform security restrictions against cleartext HTTP.
 
-| Variable | Description |
-|----------|-------------|
+| Variable                  | Description                                                     |
+| ------------------------- | --------------------------------------------------------------- |
 | `MEDIATOR_INVITATION_URL` | Mediator out-of-band invitation URL. If set, enables mediation. |
 
 **How it works:**
@@ -225,6 +227,7 @@ The witness server can operate behind a DIDComm mediator, eliminating the need f
 **Why this matters for mobile apps:**
 
 Mobile platforms prevent apps from making cleartext HTTP connections for security. Without a mediator:
+
 - iOS apps require `NSAppTransportSecurity` exceptions (rejected by App Store review)
 - Android apps require `android:usesCleartextTraffic="true"` (security anti-pattern)
 - Both platforms flag these as dangerous permissions
@@ -273,11 +276,11 @@ Proximity is verified via a pluggable `LocalityProvider` interface. A `NullLocal
 4. **Proof recording**: The signed challenge is passed back via the BLE transport callback
 5. **Evidence in VWC**: Locality proofs (`did` + `sig`) are included in issued credentials
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WITNESS_LOCALITY_ENABLED` | `true` | Set to `false` to disable |
-| `WITNESS_LOCALITY_PROOF_LIFETIME_MINUTES` | `30` | How long locality proofs remain valid |
-| `WITNESS_LOCALITY_CHALLENGE_ROTATION_MINUTES` | `5` | How often the challenge rotates |
+| Variable                                      | Default | Description                           |
+| --------------------------------------------- | ------- | ------------------------------------- |
+| `WITNESS_LOCALITY_ENABLED`                    | `true`  | Set to `false` to disable             |
+| `WITNESS_LOCALITY_PROOF_LIFETIME_MINUTES`     | `30`    | How long locality proofs remain valid |
+| `WITNESS_LOCALITY_CHALLENGE_ROTATION_MINUTES` | `5`     | How often the challenge rotates       |
 
 **Enable locality verification:**
 
@@ -339,10 +342,18 @@ class BluetoothLocalityProvider implements LocalityProvider {
   readonly name = 'bluetooth-ble'
   private callback?: ProofCallback
 
-  async start(): Promise<void> { /* start BLE advertising */ }
-  async stop(): Promise<void>  { /* stop BLE */ }
-  setChallenge(challenge: string): void { /* update BLE advertisement */ }
-  onProofReceived(cb: ProofCallback): void { this.callback = cb }
+  async start(): Promise<void> {
+    /* start BLE advertising */
+  }
+  async stop(): Promise<void> {
+    /* stop BLE */
+  }
+  setChallenge(challenge: string): void {
+    /* update BLE advertisement */
+  }
+  onProofReceived(cb: ProofCallback): void {
+    this.callback = cb
+  }
 }
 
 const service = new LocalityService(config, new BluetoothLocalityProvider())
@@ -350,11 +361,11 @@ const service = new LocalityService(config, new BluetoothLocalityProvider())
 
 #### DID Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `WITNESS_ISSUER_DID` | Pre-configured DID (did:key, did:web, did:peer) |
-| `WITNESS_ISSUER_SEED` | 32-byte seed in hex (64 chars) for key derivation |
-| `WITNESS_ISSUER_KEY_FILE` | Path to JSON key file (alternative to seed) |
+| Variable                  | Description                                       |
+| ------------------------- | ------------------------------------------------- |
+| `WITNESS_ISSUER_DID`      | Pre-configured DID (did:key, did:web, did:peer)   |
+| `WITNESS_ISSUER_SEED`     | 32-byte seed in hex (64 chars) for key derivation |
+| `WITNESS_ISSUER_KEY_FILE` | Path to JSON key file (alternative to seed)       |
 
 **DID Resolution Priority:**
 
@@ -550,7 +561,7 @@ Submit a Verifiable Presentation containing the participant's VRC, signed with t
     ],
     "proof": {
       "challenge": "<session challenge>",
-      "domain": "<session domain>",
+      "domain": "<session domain>"
       /* ... signature */
     }
   }
@@ -564,7 +575,9 @@ Request verification that a VWC was issued by this witness server.
 ```json
 {
   "type": "verify-credential",
-  "credential": { /* full VWC JSON */ }
+  "credential": {
+    /* full VWC JSON */
+  }
 }
 ```
 
@@ -636,10 +649,7 @@ The Witness issues credentials that attest to having observed the VRC exchange:
 
 ```json
 {
-  "@context": [
-    "https://www.w3.org/2018/credentials/v1",
-    "https://trustoverip.org/credentials/witnessed-exchange/v1"
-  ],
+  "@context": ["https://www.w3.org/2018/credentials/v1", "https://trustoverip.org/credentials/witnessed-exchange/v1"],
   "type": ["VerifiableCredential", "DTGCredential", "WitnessCredential"],
   "issuer": "<witness DID>",
   "issuanceDate": "2024-01-15T10:30:00Z",
@@ -650,12 +660,34 @@ The Witness issues credentials that attest to having observed the VRC exchange:
       "sessionId": "<session ID>",
       "method": "session-based-challenge",
       "event": "EthDenver 2024"
-    }
+    },
+    "witnessName": "<witness display name>"
   }
 }
 ```
 
 **Note:** `event` is only included if `WITNESS_EVENT_NAME` is configured.
+`witnessName` (`credentialSubject.witnessName`, a distinct term from any
+`name` used elsewhere) restores the witness's display name, sanctioned as an
+additional `credentialSubject` member by cred-spec's §Predicate Profiles
+point 5 — the pre-migration `issuer: {id, name}` form was a real spec
+divergence (ref-07e Act 4), and `issuer` is now a bare string in both shapes.
+
+**This is the `wd02` shape.** As of the VSC migration
+(`docs/plans/vsc-migration-plan.md`), `buildWitnessCredentialJson` can also
+emit a `dtg:witnessed` VSC shape — `type: ["VerifiableCredential",
+"DTGCredential", "StatementCredential"]`, the digest moved and recomputed as
+`credentialSubject.object.digestMultibase` (a different digest, not just a
+re-encoding — it excludes the referenced VRC's own `proof`), `taskContext` at
+the top level rather than nested in `credentialSubject`, and the extension
+members (`hardwareAttestationIncluded`, `locality*`, `parties`) hoisted to be
+siblings of `witnessContext` rather than nested inside it. Selected by the
+`WITNESS_CREDENTIAL_SHAPE=wd02|vsc` config value, **defaulting to `vsc`** as
+of plan §9 Q1 (pre-production: no fleet to migrate, VWCs expire after 7
+days) — pass `WITNESS_CREDENTIAL_SHAPE=wd02` to opt a specific deployment
+back to the legacy shape. See `WitnessService.ts`'s shape branch,
+`@bifold/dtg-vocab` (the predicate accept-list), and `@bifold/vrc-contexts`
+(the new JSON-LD terms) for the implementation.
 
 ## Verification Checks
 
@@ -708,10 +740,10 @@ WITNESS_MAX_RECORDS=             # Optional, unlimited by default for Redis
 
 **Storage Limit Differences:**
 
-| Storage | Default Limit | Reason |
-|---------|---------------|--------|
-| In-Memory | 1000 records | Memory protection |
-| Redis | Unlimited | Redis handles large datasets; use TTL for cleanup |
+| Storage   | Default Limit | Reason                                            |
+| --------- | ------------- | ------------------------------------------------- |
+| In-Memory | 1000 records  | Memory protection                                 |
+| Redis     | Unlimited     | Redis handles large datasets; use TTL for cleanup |
 
 **Note:** When using in-memory storage, the registry will be cleared on server restart.
 

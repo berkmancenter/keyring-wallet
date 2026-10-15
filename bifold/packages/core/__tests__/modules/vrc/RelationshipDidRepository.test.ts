@@ -1,9 +1,9 @@
 /**
  * Tests for RelationshipDidRepository
- * 
+ *
  * This repository manages the storage and retrieval of relationship DID mappings
  * for VRC bidirectional exchange. Each record maps:
- * - counterpartyConnectionDid: The connection's theirDid (did:peer:1z...) 
+ * - counterpartyConnectionDid: The connection's theirDid (did:peer:1z...)
  * - myRelationshipDid: My relationship DID for this counterparty (did:peer:0z6Mk...)
  * - counterpartyRelationshipDid: Counterparty's relationship DID (did:peer:0z6Mk...)
  */
@@ -15,6 +15,7 @@ const createMockRecord = (props: {
   myRelationshipDid: string
   counterpartyRelationshipDid?: string
   connectionId?: string
+  counterpartyRceVersion?: number
   sharedProfileId?: string
   sharedProfileLabel?: string
 }) => ({
@@ -23,6 +24,7 @@ const createMockRecord = (props: {
   myRelationshipDid: props.myRelationshipDid,
   counterpartyRelationshipDid: props.counterpartyRelationshipDid,
   connectionId: props.connectionId,
+  counterpartyRceVersion: props.counterpartyRceVersion,
   sharedProfileId: props.sharedProfileId,
   sharedProfileLabel: props.sharedProfileLabel,
   createdAt: new Date(),
@@ -58,23 +60,23 @@ jest.mock('@credo-ts/core', () => {
     Repository: class MockRepository {
       protected storageService: any
       protected eventEmitter: any
-      
+
       constructor() {
         // No-op
       }
-      
+
       async save(_context: any, record: any) {
         mockSave(record)
       }
-      
+
       async update(_context: any, record: any) {
         mockUpdate(record)
       }
-      
+
       async delete(_context: any, record: any) {
         mockDelete(record)
       }
-      
+
       async findByQuery(_context: any, query: any) {
         return mockFindByQuery(query)
       }
@@ -113,24 +115,16 @@ describe('RelationshipDidRepository', () => {
 
       mockFindByQuery.mockResolvedValue([existingRecord])
 
-      const result = await repository.findByConnectionDid(
-        mockAgentContext,
-        testDids.counterpartyConnectionDid
-      )
+      const result = await repository.findByConnectionDid(mockAgentContext, testDids.counterpartyConnectionDid)
 
       expect(result).toBe(existingRecord)
-      expect(mockFindByQuery).toHaveBeenCalledWith(
-        { counterpartyConnectionDid: testDids.counterpartyConnectionDid }
-      )
+      expect(mockFindByQuery).toHaveBeenCalledWith({ counterpartyConnectionDid: testDids.counterpartyConnectionDid })
     })
 
     it('should return null when no record found', async () => {
       mockFindByQuery.mockResolvedValue([])
 
-      const result = await repository.findByConnectionDid(
-        mockAgentContext,
-        'did:peer:1zNonExistent'
-      )
+      const result = await repository.findByConnectionDid(mockAgentContext, 'did:peer:1zNonExistent')
 
       expect(result).toBeNull()
     })
@@ -147,10 +141,7 @@ describe('RelationshipDidRepository', () => {
 
       mockFindByQuery.mockResolvedValue([record1, record2])
 
-      const result = await repository.findByConnectionDid(
-        mockAgentContext,
-        testDids.counterpartyConnectionDid
-      )
+      const result = await repository.findByConnectionDid(mockAgentContext, testDids.counterpartyConnectionDid)
 
       // Should return first match
       expect(result).toBe(record1)
@@ -174,9 +165,9 @@ describe('RelationshipDidRepository', () => {
       )
 
       expect(result).toBe(existingRecord)
-      expect(mockFindByQuery).toHaveBeenCalledWith(
-        { counterpartyRelationshipDid: testDids.counterpartyRelationshipDid }
-      )
+      expect(mockFindByQuery).toHaveBeenCalledWith({
+        counterpartyRelationshipDid: testDids.counterpartyRelationshipDid,
+      })
     })
 
     it('should return record via manual fallback for legacy records', async () => {
@@ -205,10 +196,7 @@ describe('RelationshipDidRepository', () => {
     it('should return null when not found in tag query or manual search', async () => {
       mockFindByQuery.mockResolvedValue([])
 
-      const result = await repository.findByCounterpartyRelationshipDid(
-        mockAgentContext,
-        'did:peer:0z6MkNonExistent'
-      )
+      const result = await repository.findByCounterpartyRelationshipDid(mockAgentContext, 'did:peer:0z6MkNonExistent')
 
       expect(result).toBeNull()
     })
@@ -273,6 +261,59 @@ describe('RelationshipDidRepository', () => {
       expect(result).not.toBeNull()
       expect(result?.counterpartyRelationshipDid).toBe(testDids.counterpartyRelationshipDid)
       expect(mockUpdate).toHaveBeenCalled()
+    })
+
+    it('never lowers an announced RCE version (Trust Task floor of 4 must not downgrade a v5 peer)', async () => {
+      const existingRecord = createMockRecord({
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+        counterpartyRceVersion: 5,
+      })
+      mockFindByQuery.mockResolvedValue([existingRecord])
+
+      const result = await repository.updateCounterpartyRelationshipDid(
+        mockAgentContext,
+        testDids.counterpartyConnectionDid,
+        testDids.counterpartyRelationshipDid,
+        4
+      )
+
+      expect(result?.counterpartyRceVersion).toBe(5)
+    })
+
+    it('raises a stored RCE version and sets one when none is stored', async () => {
+      const low = createMockRecord({
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+        counterpartyRceVersion: 3,
+      })
+      mockFindByQuery.mockResolvedValue([low])
+      expect(
+        (
+          await repository.updateCounterpartyRelationshipDid(
+            mockAgentContext,
+            testDids.counterpartyConnectionDid,
+            testDids.counterpartyRelationshipDid,
+            5
+          )
+        )?.counterpartyRceVersion
+      ).toBe(5)
+
+      const none = createMockRecord({
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+      })
+      mockFindByQuery.mockResolvedValue([none])
+      expect(
+        (
+          await repository.updateCounterpartyRelationshipDid(
+            mockAgentContext,
+            testDids.counterpartyConnectionDid,
+            testDids.counterpartyRelationshipDid,
+            4
+          )
+        )?.counterpartyRceVersion
+      ).toBe(4)
     })
 
     it('should return null when record not found', async () => {
@@ -365,10 +406,7 @@ describe('RelationshipDidRepository', () => {
 
       mockFindByQuery.mockResolvedValue([existingRecord])
 
-      await repository.deleteByConnectionDid(
-        mockAgentContext,
-        testDids.counterpartyConnectionDid
-      )
+      await repository.deleteByConnectionDid(mockAgentContext, testDids.counterpartyConnectionDid)
 
       expect(mockDelete).toHaveBeenCalledWith(existingRecord)
     })
@@ -376,10 +414,7 @@ describe('RelationshipDidRepository', () => {
     it('should do nothing when record not found', async () => {
       mockFindByQuery.mockResolvedValue([])
 
-      await repository.deleteByConnectionDid(
-        mockAgentContext,
-        'did:peer:1zNonExistent'
-      )
+      await repository.deleteByConnectionDid(mockAgentContext, 'did:peer:1zNonExistent')
 
       expect(mockDelete).not.toHaveBeenCalled()
     })
@@ -434,7 +469,7 @@ describe('RelationshipDidRepository', () => {
       // Verify the DIDs are stored correctly
       expect(result.counterpartyConnectionDid).toBe(connectionDid)
       expect(result.myRelationshipDid).toBe(relationshipDid)
-      
+
       // Verify format distinction
       expect(result.counterpartyConnectionDid).toMatch(/^did:peer:1/)
       expect(result.myRelationshipDid).toMatch(/^did:peer:0/)

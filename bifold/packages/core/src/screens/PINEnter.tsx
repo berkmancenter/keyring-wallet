@@ -21,6 +21,7 @@ import PopupModal from '../components/modals/PopupModal'
 import { ThemedText } from '../components/texts/ThemedText'
 import ScreenWrapper from '../components/views/ScreenWrapper'
 import { EventTypes, attemptLockoutConfig, defaultAutoLockTime, minPINLength } from '../constants'
+import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { TOKENS, useServices } from '../container-api'
 import { useAnimatedComponents } from '../contexts/animated-components'
 import { useAuth } from '../contexts/auth'
@@ -76,7 +77,9 @@ const PINEnter: React.FC<PINEnterProps> = ({ setAuthenticated }) => {
   }
   const { incrementDeveloperMenuCounter } = useDeveloperMode(onDevModeTriggered)
   const isContinueDisabled = inlineMessages.enabled ? !continueEnabled : !continueEnabled || PIN.length < minPINLength
-  const defaultAutoLockoutTime = customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  const defaultAutoLockoutTime = effectiveDefaultAutoLockMinutes(
+    customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  )
   usePreventScreenCapture(preventScreenCapture)
 
   // listen for biometrics error event

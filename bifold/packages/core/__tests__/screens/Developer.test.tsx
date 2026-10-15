@@ -1,8 +1,11 @@
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import Config from 'react-native-config'
 
 import Developer from '../../src/screens/Developer'
 import { testIdWithKey } from '../../src/utils/testable'
+
+jest.mock('react-native-config', () => ({ __esModule: true, default: {} }))
 
 describe('Developer Screen', () => {
   beforeEach(() => {
@@ -21,6 +24,31 @@ describe('Developer Screen', () => {
     const tree = render(<Developer />)
 
     expect(tree).toMatchSnapshot()
+  })
+
+  // Gate efficiency item 3: the e2e rows read the clocks in force from here.
+  test('shows the real clocks in force, under testIDs', () => {
+    const { getByTestId } = render(<Developer />)
+
+    expect(getByTestId(testIdWithKey('E2EClocksMode'))).toHaveTextContent('real')
+    expect(getByTestId(testIdWithKey('E2EGrantWindowSeconds'))).toHaveTextContent('600')
+    expect(getByTestId(testIdWithKey('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('600')
+    expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('5')
+  })
+
+  test('in a test build with E2E_CLOCKS=short, shows the short clocks', () => {
+    const config = Config as Record<string, string | undefined>
+    config.E2E_CLOCKS = 'short'
+    try {
+      const { getByTestId } = render(<Developer />)
+
+      expect(getByTestId(testIdWithKey('E2EClocksMode'))).toHaveTextContent('short')
+      expect(getByTestId(testIdWithKey('E2EGrantWindowSeconds'))).toHaveTextContent('60')
+      expect(getByTestId(testIdWithKey('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('60')
+      expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('1')
+    } finally {
+      delete config.E2E_CLOCKS
+    }
   })
 
   test('pressables exist', async () => {

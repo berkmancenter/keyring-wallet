@@ -3,6 +3,20 @@
  *
  * These functions help identify, filter, and extract information from
  * WitnessCredentials in the credential store.
+ *
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V3, §7): every function
+ * here that classifies a credential (`hasWitnessCredentialType`,
+ * `getWitnessCredentialsForSubject`) reads BOTH shapes through
+ * `credentialTypes.ts`'s `isWitnessCredential` — the legacy WD02 type-string
+ * form, and the new VSC/`dtg:witnessed` predicate form.
+ *
+ * TODO(vsc-migration): this dual-read is a DATED deletion, not a permanent
+ * tolerance (plan §7) — delete it one release after V4 ships to the last
+ * channel. Date not yet known; V4 hasn't shipped. Fill in the actual date
+ * here once it does, and remove the legacy-shape handling in
+ * `extractWitnessInfo` below (the nested `witnessContext.localityVerification`
+ * / flat `locality*`-inside-`witnessContext` reads — V4 moves these to be
+ * siblings of `witnessContext` instead, per plan §3.5).
  */
 
 import { W3cCredentialRecord } from '@credo-ts/core'
@@ -280,18 +294,21 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
 
     // Extract issuer (witness DID)
     let witnessDid: string
-    let witnessName: string | undefined
+    // Legacy fallback only: pre-VSC-migration VWCs carried `issuer: { id, name }`
+    // before the spec required a bare string (ref-07e Act 4). Superseded by
+    // credentialSubject.witnessName below, which is the spec-conforming home
+    // for the display name (§Predicate Profiles point 5's ignorable-extras
+    // clause) — kept here only for any VWC signed before that change existed.
+    let issuerObjectName: string | undefined
 
     if ('issuer' in rawCredential) {
       const issuerValue = rawCredential.issuer
 
       if (typeof issuerValue === 'string') {
         witnessDid = issuerValue
-        // Fallback: derive a short name from the DID for display
-        witnessName = 'Witness'
       } else if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
         witnessDid = issuerValue.id
-        witnessName = issuerValue.name || 'Witness'
+        issuerObjectName = issuerValue.name
       } else {
         return null
       }
@@ -306,6 +323,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
     let localityVerification: LocalityVerification | undefined
     let locality: LocalityStatus | undefined
     let hardwareAttestationIncluded: boolean | undefined
+    let witnessNameFromSubject: string | undefined
 
     if ('credentialSubject' in rawCredential) {
       let credentialSubject = rawCredential.credentialSubject
@@ -316,9 +334,42 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       }
 
       if (credentialSubject && typeof credentialSubject === 'object') {
+        // Spec-conforming home for the witness's display name (added as a
+        // credentialSubject sibling of witnessContext, same pattern as
+        // hardwareAttestationIncluded/locality* — see WitnessService.ts).
+        if ('witnessName' in credentialSubject && typeof (credentialSubject as any).witnessName === 'string') {
+          witnessNameFromSubject = (credentialSubject as any).witnessName
+        }
+
         // Check for hardwareAttestationIncluded directly in credentialSubject first
         if ('hardwareAttestationIncluded' in credentialSubject) {
           hardwareAttestationIncluded = credentialSubject.hardwareAttestationIncluded === true
+        }
+
+        // VSC migration (plan §6 V4): locality* and localityVerification are
+        // siblings of witnessContext in credentialSubject (plan §3.5), not
+        // nested inside it — check there FIRST, same pattern as
+        // hardwareAttestationIncluded above. The witnessContext-nested checks
+        // below remain as the legacy (wd02) fallback.
+        if ('localityConfirmed' in credentialSubject) {
+          locality = {
+            outcome: (credentialSubject as any).localityConfirmed === true ? 'confirmed' : 'declined',
+            method: (credentialSubject as any).localityMethod,
+            reason: (credentialSubject as any).localityReason,
+            venue: (credentialSubject as any).localityVenue,
+            observedAt: (credentialSubject as any).localityObservedAt,
+          }
+        } else if (
+          'localityVerification' in credentialSubject &&
+          (credentialSubject as any).localityVerification &&
+          typeof (credentialSubject as any).localityVerification === 'object'
+        ) {
+          localityVerification = {
+            type: (credentialSubject as any).localityVerification.type,
+            confirmed: (credentialSubject as any).localityVerification.confirmed,
+            details: (credentialSubject as any).localityVerification.details,
+          }
+          locality = { outcome: localityVerification.confirmed ? 'confirmed' : 'declined' }
         }
 
         // Try to find witnessContext - check both direct and nested under claims
@@ -354,11 +405,21 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
           // Locality (locality-plan.md §7.1) — three states, read in this
           // order so the check for "not offered" is never inferred from a
           // false/empty value, only from total absence:
-          //   1. the flat `locality*` members (current shape)
-          //   2. the old nested `witnessContext.localityVerification` (VWCs
-          //      issued before this shape existed) — kept for those only
-          //   3. neither present → 'not-offered'
-          if ('localityConfirmed' in witnessContext) {
+          //   1. the flat `locality*` members as credentialSubject siblings
+          //      (vsc shape, plan §3.5 — checked above, before witnessContext
+          //      was even located)
+          //   2. the flat `locality*` members nested in witnessContext
+          //      (wd02 shape, current)
+          //   3. the old nested `witnessContext.localityVerification` (VWCs
+          //      issued before the flat shape existed) — kept for those only
+          //   4. none present → 'not-offered'
+          // `locality` may already be set from the credentialSubject-level
+          // check above — don't let this block's "not-offered" default
+          // clobber a real finding just because THIS VWC's locality data
+          // lives at the other nesting level.
+          if (locality) {
+            // already found as a credentialSubject sibling — nothing to do
+          } else if ('localityConfirmed' in witnessContext) {
             locality = {
               outcome: witnessContext.localityConfirmed === true ? 'confirmed' : 'declined',
               method: witnessContext.localityMethod,
@@ -376,8 +437,9 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
           } else {
             locality = { outcome: 'not-offered' }
           }
-        } else {
-          // No witnessContext at all on this VWC — no locality claim exists.
+        } else if (!locality) {
+          // No witnessContext at all on this VWC, and nothing found as a
+          // credentialSubject sibling either — no locality claim exists.
           locality = { outcome: 'not-offered' }
         }
       }
@@ -396,7 +458,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       method,
       sessionId,
       witnessDid,
-      witnessName,
+      witnessName: witnessNameFromSubject || issuerObjectName || 'Witness',
       issuanceDate,
       credentialId: vwc.id,
       localityVerification,

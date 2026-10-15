@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/prove/0.1",
+  "title": "VTA PCS — Prove — payload",
+  "description": "A client asks its VTA for the zero-knowledge proof a hidden-vetting join submission carries, bound to the community's single-use challenge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "applicationId",
+    "parameters",
+    "requirementsDigest",
+    "challenge"
+  ],
+  "properties": {
+    "applicationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "parameters": {
+      "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/CommunityParameters",
+      "description": "The community's published hidden-vetting parameters, copied verbatim from its join manifest."
+    },
+    "requirementsDigest": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The requirements digest of the criterion the applicant applies under, as the manifest publishes it."
+    },
+    "challenge": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's single-use challenge."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Prove — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hiddenVetting"
+      ],
+      "properties": {
+        "hiddenVetting": {
+          "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/HiddenVettingSubmission"
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

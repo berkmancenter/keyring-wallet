@@ -26,6 +26,7 @@ import {
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
+import { withKeyLock } from './keyedRecords'
 import { isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
 import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
 
@@ -214,6 +215,8 @@ export async function receiveIssue(
     acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
     /** Told of each credential not kept, and why — for the log. */
     onRefused?: (item: VtiReceivedCredential, refusal: VtiCredentialRefusal) => void
+    /** Told of each card once it is filed (a membership, a role card or a held credential) — for the log. */
+    onFiled?: (item: VtiReceivedCredential) => void
     /**
      * Checks a card before it is kept (`deliveredCardCheck(agent)`). Required,
      * so no caller can keep a card unchecked. It may throw to leave the
@@ -265,30 +268,14 @@ export async function receiveIssue(
       if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
     }
     kept.push(item)
-    if (item.kind === 'membership') {
-      const found = await store.getMembership(item.communityDid, personaDid)
-      // Joining again after a removal starts afresh: the ended membership's
-      // role, role card and way in are not this one's.
-      const existing = found && isCurrentMembership(found) ? found : undefined
-      await store.saveMembership({
-        communityDid: item.communityDid,
-        personaDid,
-        role: existing?.role ?? 'member',
-        vmc: item.credential,
-        roleVec: existing?.roleVec,
-        grantedAt:
-          typeof item.credential.validFrom === 'string'
-            ? (item.credential.validFrom as string)
-            : new Date().toISOString(),
-        validUntil: typeof item.credential.validUntil === 'string' ? (item.credential.validUntil as string) : undefined,
-        via: existing?.via ?? options.via ?? 'unknown',
-      })
-      if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
-    } else if (item.kind === 'role') {
-      const existing = await store.getMembership(item.communityDid, personaDid)
-      const role = String(roleNameOf(item.credential) ?? 'member')
-      if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
-      else await store.saveHeldCredential({ ...item, kind: 'role' })
+    if (item.kind === 'membership' || item.kind === 'role') {
+      // A community issues the membership card and the role card in two
+      // messages a few milliseconds apart, and each is kept as it arrives:
+      // one at a time per membership, or one overwrote the other's work and
+      // the role card was lost (241 gate, run 1014-2239).
+      await withKeyLock(`keyring/vti-membership:${item.communityDid}:${personaDid}`, () =>
+        keepMembershipCard(store, personaDid, item, options.via)
+      )
     } else {
       const news =
         item.kind === 'vetter-grant' &&
@@ -298,6 +285,57 @@ export async function receiveIssue(
       await store.saveHeldCredential({ ...item, kind: item.kind })
       if (news) DeviceEventEmitter.emit(VTI_VETTER_GRANTED_EVENT, { communityDid: item.communityDid })
     }
+    options.onFiled?.(item)
   }
   return kept
+}
+
+/** The role card this persona holds for a community without a membership to keep it on, if any. */
+async function heldRoleCard(
+  store: VtiCommunityStore,
+  communityDid: string,
+  personaDid: string
+): Promise<Record<string, unknown> | undefined> {
+  const held = (await store.listHeldCredentials?.('role', communityDid).catch(() => [])) ?? []
+  return held.filter((h) => !h.subjectDid || h.subjectDid === personaDid).slice(-1)[0]?.credential
+}
+
+/** Keep a membership card or a role card on the membership it belongs to. */
+async function keepMembershipCard(
+  store: VtiCommunityStore,
+  personaDid: string,
+  item: VtiReceivedCredential,
+  via: VtiMembership['via'] | undefined
+): Promise<void> {
+  {
+    if (item.kind === 'membership') {
+      const found = await store.getMembership(item.communityDid, personaDid)
+      // Joining again after a removal starts afresh: the ended membership's
+      // role, role card and way in are not this one's.
+      const existing = found && isCurrentMembership(found) ? found : undefined
+      // A role card that came first, with no membership yet to keep it on,
+      // was held on its own: it goes with this membership now.
+      const roleVec =
+        existing?.roleVec ?? (existing ? undefined : await heldRoleCard(store, item.communityDid, personaDid))
+      await store.saveMembership({
+        communityDid: item.communityDid,
+        personaDid,
+        role: existing?.role ?? (roleVec ? String(roleNameOf(roleVec) ?? 'member') : 'member'),
+        vmc: item.credential,
+        roleVec,
+        grantedAt:
+          typeof item.credential.validFrom === 'string'
+            ? (item.credential.validFrom as string)
+            : new Date().toISOString(),
+        validUntil: typeof item.credential.validUntil === 'string' ? (item.credential.validUntil as string) : undefined,
+        via: existing?.via ?? via ?? 'unknown',
+      })
+      if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
+    } else {
+      const existing = await store.getMembership(item.communityDid, personaDid)
+      const role = String(roleNameOf(item.credential) ?? 'member')
+      if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
+      else await store.saveHeldCredential({ ...item, kind: 'role' })
+    }
+  }
 }

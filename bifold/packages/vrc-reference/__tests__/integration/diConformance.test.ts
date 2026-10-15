@@ -40,7 +40,12 @@ import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies } from '@credo-ts/node'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { DataIntegritySuiteModule, demoDocumentLoader, deleteWallet, walletExists } from '@bifold/vrc-shared'
-import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
+import {
+  CREDENTIALS_V2_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
+} from '@bifold/vrc-contexts'
 
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
 import { WITNESSED_EXCHANGE_CONTEXT_URL } from '../../src/witnessedExchangeContext'
@@ -149,7 +154,12 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       credential: JsonTransformer.fromJSON(
         {
           ...buildVrcJson('urn:uuid:di-conformance-2018'),
-          '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+          '@context': [
+            CREDENTIALS_V2_CONTEXT_URL,
+            DTG_CONTEXT_URL,
+            RELATIONSHIP_CONTEXT_URL,
+            ED25519_2018_SUITE_CONTEXT_URL,
+          ],
         },
         W3cCredential,
         { validate: false }
@@ -201,6 +211,13 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       presentation: signedVp,
       challenge,
       domain,
+      // VRCs are issuer->subject directional credentials: the presenting
+      // party here is the VRC's issuer, not its credentialSubject, so
+      // credo's default holder-binding check (the VP's authentication key
+      // must match a credentialSubject id) does not apply — same opt-out
+      // already used at every real call site (witness-server's
+      // WitnessTaskSessions/WitnessService, core's outcomeEvidence.ts).
+      verifyCredentialSubjectAuthentication: false,
     })
     expect(verifyResult.isValid).toBe(true)
   }, 30000)
@@ -214,7 +231,12 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       credential: JsonTransformer.fromJSON(
         {
           ...buildVrcJson('urn:uuid:di-conformance-witnessed-2018'),
-          '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+          '@context': [
+            CREDENTIALS_V2_CONTEXT_URL,
+            DTG_CONTEXT_URL,
+            RELATIONSHIP_CONTEXT_URL,
+            ED25519_2018_SUITE_CONTEXT_URL,
+          ],
         },
         W3cCredential,
         { validate: false }
@@ -249,6 +271,8 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       presentation: signedVp,
       challenge,
       domain,
+      // Same holder-binding opt-out as the mixed-case test above.
+      verifyCredentialSubjectAuthentication: false,
     })
     expect(verifyResult.isValid).toBe(true)
   }, 30000)
@@ -283,4 +307,175 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
     const verifyResult = await agent.w3cCredentials.verifyCredential({ credential: signed })
     expect(verifyResult.isValid).toBe(true)
   }, 30000)
+
+  describe('VRC carrying a hardware-attestation evidence block', () => {
+    const evidence = () => ({
+      id: 'urn:uuid:1b2c3d4e-0000-4000-8000-0000000000e1',
+      type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+      created: '2026-09-29T10:00:00Z',
+      authenticationMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
+      biometricMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
+      hardwareBinding: {
+        keyStorage: 'SecureEnclave',
+        platform: 'ios',
+        keyType: 'EC-P256',
+        algorithm: 'ECDSA-SHA256',
+        publicKey: 'BAAA',
+      },
+      attestation: { format: 'apple-appattest-v1', certificateChain: ['leaf', 'intermediate', 'root'] },
+      signature: { value: 'MEUC', algorithm: 'ECDSA-SHA256', signedContentHash: 'abc' },
+    })
+    const withEvidence = (id: string, context: string[]) => ({
+      ...buildVrcJson(id),
+      '@context': context,
+      evidence: [evidence()],
+    })
+
+    test('new context: DI sign + verify, context untouched, tampering with evidence or chain order is detected', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL]
+      const signed = await signDi(withEvidence('urn:uuid:di-evidence-new', context))
+      const json = JsonTransformer.toJSON(signed) as Record<string, any>
+      expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
+      expect(json['@context']).toEqual(context)
+      expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+
+      const tamper = async (mutate: (j: Record<string, any>) => void) => {
+        const copy = JSON.parse(JSON.stringify(json))
+        mutate(copy)
+        const c = JsonTransformer.fromJSON(copy, W3cJsonLdVerifiableCredential, { validate: false })
+        return (await agent.w3cCredentials.verifyCredential({ credential: c })).isValid
+      }
+      expect(await tamper((j) => (j.evidence[0].hardwareBinding.publicKey = 'BBBB'))).toBe(false)
+      expect(await tamper((j) => j.evidence[0].attestation.certificateChain.reverse())).toBe(false)
+    }, 30000)
+
+    test('new context: a misspelled evidence member refuses to sign', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL]
+      const bad = withEvidence('urn:uuid:di-evidence-typo', context) as Record<string, any>
+      bad.evidence[0].hardwareBindng = { x: 1 }
+      await expect(signDi(bad)).rejects.toThrow()
+    }, 30000)
+
+    test('dual-read: a VRC on the legacy DTG_CONTEXT_URL (older peers) still signs and verifies', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL]
+      const signed = await signDi(withEvidence('urn:uuid:di-evidence-legacy', context))
+      expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+    }, 30000)
+  })
+  describe('VRC exactly as the wallet emits it (G32: issuerScope pairwise, registry + evidence contexts, DI)', () => {
+    const emitted = (id: string, withEvidence: boolean) => ({
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL],
+      id,
+      type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+      issuer: issuerDid,
+      issuerScope: 'pairwise',
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      credentialSubject: { id: 'did:example:counterparty' },
+      ...(withEvidence
+        ? {
+            evidence: [
+              {
+                id: 'urn:uuid:1b2c3d4e-0000-4000-8000-0000000000e2',
+                type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+                created: '2026-09-30T10:00:00Z',
+                authenticationMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
+                hardwareBinding: {
+                  keyStorage: 'SecureEnclave',
+                  platform: 'ios',
+                  keyType: 'EC-P256',
+                  algorithm: 'ECDSA-SHA256',
+                  publicKey: 'BAAA',
+                },
+                attestation: { format: 'apple-appattest-v1', certificateChain: ['leaf', 'root'] },
+                signature: { value: 'MEUC', algorithm: 'ECDSA-SHA256', signedContentHash: 'abc' },
+              },
+            ],
+          }
+        : {}),
+    })
+
+    test.each([false, true])(
+      'DI sign + verify round trip (evidence: %s); proof is DataIntegrityProof/eddsa-rdfc-2022',
+      async (ev) => {
+        const signed = await signDi(emitted(`urn:uuid:di-emitted-${ev}`, ev))
+        const json = JsonTransformer.toJSON(signed) as Record<string, any>
+        expect(json.issuerScope).toBe('pairwise')
+        expect(json.proof.type).toBe('DataIntegrityProof')
+        expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
+        expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+      },
+      30000
+    )
+
+    test('issuerScope is covered by the proof: altering it invalidates the signature', async () => {
+      const signed = await signDi(emitted('urn:uuid:di-emitted-tamper', true))
+      const json = JSON.parse(JSON.stringify(JsonTransformer.toJSON(signed)))
+      json.issuerScope = 'public'
+      const tampered = JsonTransformer.fromJSON(json, W3cJsonLdVerifiableCredential, { validate: false })
+      expect((await agent.w3cCredentials.verifyCredential({ credential: tampered })).isValid).toBe(false)
+    }, 30000)
+
+    test('an issuerScope without the registry context refuses to sign (safe mode: no silent drop)', async () => {
+      const bad = {
+        ...emitted('urn:uuid:di-emitted-noreg', false),
+        '@context': [CREDENTIALS_V2_CONTEXT_URL],
+      }
+      await expect(signDi(bad)).rejects.toThrow()
+    }, 30000)
+
+    test('the witness Identity Check accepts it: 2018-signed challenge-bound VP wrapping the emitted DI VRC', async () => {
+      const signedVrc = await signDi(emitted('urn:uuid:di-emitted-vp', true))
+      const vpUnsigned = JsonTransformer.fromJSON(
+        {
+          '@context': [CREDENTIALS_V2_CONTEXT_URL],
+          type: ['VerifiablePresentation'],
+          holder: issuerDid,
+          verifiableCredential: [JsonTransformer.toJSON(signedVrc)],
+        },
+        W3cPresentation,
+        { validate: false }
+      )
+      const challenge = 'di-emitted-challenge'
+      const domain = 'witness.example.org'
+      const signedVp = await agent.w3cCredentials.signPresentation({
+        format: ClaimFormat.LdpVp,
+        presentation: vpUnsigned,
+        verificationMethod: verificationMethodId,
+        proofType: 'Ed25519Signature2018',
+        challenge,
+        domain,
+      })
+      const result = await agent.w3cCredentials.verifyPresentation({
+        presentation: signedVp,
+        challenge,
+        domain,
+        verifyCredentialSubjectAuthentication: false,
+      })
+      expect(result.isValid).toBe(true)
+    }, 30000)
+
+    test('dual-read: a previously issued Ed25519Signature2018 VRC without issuerScope still verifies', async () => {
+      const old = await agent.w3cCredentials.signCredential({
+        format: ClaimFormat.LdpVc,
+        credential: JsonTransformer.fromJSON(
+          {
+            ...buildVrcJson('urn:uuid:di-emitted-old-2018'),
+            '@context': [
+              CREDENTIALS_V2_CONTEXT_URL,
+              DTG_CONTEXT_URL,
+              RELATIONSHIP_CONTEXT_URL,
+              ED25519_2018_SUITE_CONTEXT_URL,
+            ],
+          },
+          W3cCredential,
+          { validate: false }
+        ),
+        proofType: 'Ed25519Signature2018',
+        verificationMethod: verificationMethodId,
+      })
+      expect((JsonTransformer.toJSON(old) as Record<string, any>).proof.type).toBe('Ed25519Signature2018')
+      expect((await agent.w3cCredentials.verifyCredential({ credential: old })).isValid).toBe(true)
+    }, 30000)
+  })
 })
