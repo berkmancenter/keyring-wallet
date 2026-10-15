@@ -189,6 +189,15 @@ rows run on the shipped build), about 90 minutes when a native build is
 needed (45 for the build). Measured parts: the CI smoke leg is 15 minutes;
 `changed` has no record yet and is measured in phase 0.
 
+The VRC suites (`e2e:vrc` and its witnessed and device variants) run on local
+debug builds, never on the CI test builds. Their drivers read the relationship
+invitation from an element only a debug build renders (`InvitationUrl`, under
+`__DEV__` in bifold's `QRScanner.tsx`), and the test builds are release builds.
+A release pin's VRC run is therefore a debug build of the pinned commit, with
+Metro from the same checkout, on a lane machine with room for it (about 16 GB of
+build output). It is scheduled with the release pin, not taken from the pin's
+CI artifacts.
+
 ### 7. Moving checks down the pyramid
 
 Google's guidance is 70/20/10 (unit, integration, end to end) or 80/15/5,
@@ -356,3 +365,5 @@ testers receive.
 
 - `2026-10-14-al.md`: the measurements, the coverage map, the week's rerun
   classification, the sources, and the positions this plan rejected.
+- `2026-10-15-al.md`: the VRC suites need debug builds (found on the 241
+  re-pin, run 249).
