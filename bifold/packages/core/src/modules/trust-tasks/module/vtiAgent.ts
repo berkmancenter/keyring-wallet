@@ -61,6 +61,7 @@ import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
+import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
 import {
   JOIN_MANIFEST_TYPES,
   joinTaskType,
@@ -1484,6 +1485,40 @@ class VtiAgentController {
       needs: payload?.verdict?.with?.needs ?? [],
       with: payload?.verdict?.with,
     }
+  }
+
+  /**
+   * Ask the community for the challenge a hidden-vetting proof must bind
+   * (`vtc/vetting/pcs-challenge/0.1`), the same path as the join submit.
+   *
+   * Mutating: the community replaces any challenge it had open for this
+   * applicant, so a proof built on an earlier one is no longer accepted. Ask
+   * immediately before proving, and never send it twice for one proof — the
+   * task is not in `VTI_READ_TASKS`, so `ask` never re-sends it, and an
+   * identical request still in flight is waited on rather than sent again.
+   *
+   * A challenge is never taken from the answer hold, though: an answered one
+   * may already have been spent by a submit, and the community refuses a spent
+   * challenge (`challengeAlreadyUsed`). Every call that is not joining a
+   * request in flight asks the community anew.
+   *
+   * Throws the community's refusal as a `VtiRefusal` (`notHiddenVetting` when
+   * it publishes no hidden-vetting criterion), `VtiSentNoAnswer` on silence,
+   * and an `Error` naming what was wrong with an answer it cannot use.
+   */
+  async fetchChallenge(communityDid: string, options: { criterionId?: string } = {}): Promise<PcsChallenge> {
+    const did = this.state.did
+    for (const [id, entry] of this.asks) {
+      if (entry.did === did && entry.communityDid === communityDid && entry.type === PCS_CHALLENGE_TYPE && entry.answer)
+        this.asks.delete(id)
+    }
+    const answer = await this.ask(communityDid, PCS_CHALLENGE_TYPE, pcsChallengeRequest(options.criterionId))
+    if (!answer) throw this.sentNoAnswer(communityDid, PCS_CHALLENGE_TYPE)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const read = readPcsChallenge((answer.body as { payload?: unknown } | undefined)?.payload)
+    if ('problem' in read) throw new Error(`vtiAgent: ${communityDid}'s challenge cannot be used: ${read.detail}`)
+    return read.challenge
   }
 
   private presentation(credentials?: unknown[]) {
