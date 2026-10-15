@@ -23,7 +23,9 @@
 #                  whatever it started are killed and this exits 124 with a line saying so. The lock wait is not
 #                  counted: a call queued behind another is not a hung one. The gate's legs set it (lib.sh pnm), so
 #                  a call on a dying transport fails in minutes instead of holding a leg until its job's limit
-#                  (54's ci1 linkfail, 2026-10-15: a pnm call hung on a dropping TSP socket until the 90-minute cancel).
+#                  (the CI lane's linkfail rerun, 38806968457, 2026-10-15: a pnm call hung on a dropping TSP socket until
+#                  the job's 90-minute cancel). Stopping pnm-locked (TERM, INT, HUP) stops pnm's group too, so a stopped
+#                  leg never leaves a hung pnm holding the slug's lock.
 set -uo pipefail
 PNM="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"
 if [ "${1:-}" != --vta ] || [ -z "${2:-}" ]; then
@@ -60,10 +62,15 @@ exec perl -MFcntl=:flock -e '
   # inherited descriptor, until both have exited); past the cap the whole group is killed.
   my $p = fork; die "pnm-locked: fork: $!\n" unless defined $p;
   if (!$p) { setpgrp(0, 0); exec { $cmd[0] } @cmd or die "pnm-locked: cannot run $cmd[0]: $!\n" }
+  # pnm is in its own group, so nothing reaches it when this process is stopped (a trap in the leg, the group kill of
+  # galarm, a bootout): forward the stop, or a hung pnm would outlive us holding the slug lock with no alarm left.
+  my $stop = sub { my ($code) = @_; kill "TERM", -$p; select(undef, undef, undef, 2); kill "KILL", -$p; waitpid($p, 0); exit $code };
+  local $SIG{TERM} = sub { $stop->(143) };
+  local $SIG{INT} = sub { $stop->(130) };
+  local $SIG{HUP} = sub { $stop->(129) };
   local $SIG{ALRM} = sub {
-    kill "TERM", -$p; select(undef, undef, undef, 2); kill "KILL", -$p; waitpid($p, 0);
     print STDERR "pnm-locked: pnm on $slug did not finish within ${cap}s (PNM_CALL_TIMEOUT); killed\n";
-    exit 124;
+    $stop->(124);
   };
   alarm $cap; waitpid($p, 0); alarm 0;
   exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
