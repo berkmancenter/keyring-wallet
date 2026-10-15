@@ -88,12 +88,12 @@ describe('Join: a private way', () => {
     expect(joinCard(offer([privateWay]))).toMatchObject({ vettingNotSupported: 'private', noneUsable: true })
   })
 
-  it('in a build that carries it: offered with its own button, nothing said unsupported', () => {
+  it('in a build that carries it: an ordinary vetting way ("Meet a vetter"), marked private', () => {
     const card = joinCard(offer([privateWay]), {}, { privateVettingAvailable: true })
     if (card.mode !== 'ways') throw new Error('expected ways')
     expect(card.vettingNotSupported).toBeUndefined()
-    expect(card.rows[0]).toMatchObject({ privateVetting: true, cannotUse: false, canStartVetting: false })
-    expect(card.button).toBe('none')
+    expect(card.rows[0]).toMatchObject({ privateVetting: true, cannotUse: false, canStartVetting: true })
+    expect(card.button).toBe('start')
   })
 
   it('a suite agents cannot run still fails closed, with no tap', () => {

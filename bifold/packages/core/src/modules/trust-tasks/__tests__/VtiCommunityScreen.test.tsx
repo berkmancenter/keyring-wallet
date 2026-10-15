@@ -221,41 +221,40 @@ describe('the community screen, for a member', () => {
     expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
   })
 
-  // 243: a vetter in a community with a private way may vouch privately, in a
-  // build that carries it; nothing is asked of the agent until they open it.
-  it('a vetter where a way runs private vetting: "Vouch privately", only in a build that carries it', async () => {
+  // One flow (Alberto, 2026-10-15): a vetter vouches privately from the
+  // ordinary desk, so there is no separate "Vouch privately" entry here.
+  it('a vetter where a way runs private vetting: only the ordinary desk, no separate entry', async () => {
     mockJourney = {
       join: { kind: 'member', membership },
       vetterGrant: { state: 'active', statusChecked: true },
     }
     const { vtiAgent: mocked } = jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }
-    const privateWay = {
-      id: 'vetted-member',
-      vetting: { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } },
-    }
-    mocked.fetchManifest.mockResolvedValue({ criteria: [privateWay] })
+    mocked.fetchManifest.mockResolvedValue({
+      criteria: [
+        { id: 'vetted-member', vetting: { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } } },
+      ],
+    })
+    registerHiddenVetter({ standing: jest.fn() } as unknown as HiddenVetterSeam)
     try {
-      const without = show()
-      await act(async () => undefined)
-      expect(without.queryByTestId(testIdWithKey('CommunityVouchPrivately'))).toBeNull()
-      without.unmount()
-
-      const standing = jest.fn()
-      registerHiddenVetter({ standing } as unknown as HiddenVetterSeam)
       const tree = show()
       await act(async () => undefined)
-      expect(standing).not.toHaveBeenCalled()
-      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
-      navigation.navigate.mockClear()
-      fireEvent.press(tree.getByTestId(testIdWithKey('CommunityVouchPrivately')))
-      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetter, {
-        communityDid: expect.any(String),
-        criterionId: 'vetted-member',
-      })
+      expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('CommunityVouchPrivately'))).toBeNull()
     } finally {
       registerHiddenVetter(undefined)
       mocked.fetchManifest.mockResolvedValue({ criteria: [] })
     }
+  })
+
+  // The result is marked as the steps were.
+  it('a membership won by private vetting says so', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership: { ...membership, privateVetting: true } },
+      vetterGrant: { state: 'none' },
+    }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('CommunityJoinedPrivately'))).toHaveTextContent(/Vetting\.Private\.Joined/)
   })
 
   it('someone not yet a member still sees what is asked, and Apply', async () => {

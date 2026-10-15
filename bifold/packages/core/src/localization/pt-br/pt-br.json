@@ -1698,6 +1698,11 @@
   },
   "Vetting": {
     "YourIdentity": "Sua identidade nesta comunidade",
+    "Private": {
+      "Badge": "Verificação privada",
+      "Explain": "Seus verificadores ficam anônimos: {{community}} fica sabendo que membros suficientes garantiram você, não quem.",
+      "Joined": "Entrou com verificação privada"
+    },
     "Vouch": {
       "Title": "Garantir alguém em privado para {{community}}",
       "Open": "Garantir em privado",
@@ -1941,6 +1946,7 @@
     "SendCard": "Enviar meu cartão",
     "Checklist": "Sua lista",
     "ChecklistLine": "{{held}} de {{needed}} declarações",
+    "ChecklistVouched": "{{held}} de {{needed}} garantiram",
     "Meets": "atende aos requisitos publicados",
     "Member": "Você é membro de {{community}}.",
     "GoToMyAgent": "Ir para Meu agente",
