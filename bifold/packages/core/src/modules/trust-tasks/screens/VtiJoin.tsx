@@ -48,7 +48,8 @@ import { readJoinHolds } from './joinHolds'
 import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
 import { JoinWaysCard } from './JoinWaysCard'
 import { hiddenVettingSeam } from './hiddenVettingSeam'
-import { PrivateVettingStart } from './PrivateVettingStart'
+import { REFUSAL_KEY } from './PrivateVettingStart'
+import type { HiddenVettingRefusal } from './hiddenVettingSeam'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -238,7 +239,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setAgain(false)
     setChanged(false)
     setPlainRequest(false)
-    setHiddenWay(undefined)
+    setPrivateRefusal(undefined)
   }, [communityDid])
 
   // What the card shows at 0.3: each way, the one this phone meets, the button.
@@ -258,13 +259,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // invitation (those go through "I was invited"). Chosen by the button the
   // person pressed, since a card can offer vetting and asking side by side.
   const [plainRequest, setPlainRequest] = useState(false)
-  // A private (hidden) vetting way the person chose: the identity is made as
-  // for any vetting, then its own screen, which carries it through the agent.
-  const [hiddenWay, setHiddenWay] = useState<string>()
-  /** What the identity step leads to: a plain request, named vetting, or one private way. */
-  const chooseNext = useCallback((plain: boolean, privateWay?: string) => {
+  // A private way's agent check, asked on the "Meet a vetter" tap, and why it said no.
+  const [privateRefusal, setPrivateRefusal] = useState<HiddenVettingRefusal>()
+  const [privateChecking, setPrivateChecking] = useState(false)
+  /** What the identity step leads to: a plain request, or vetting (named or private, one flow). */
+  const chooseNext = useCallback((plain: boolean) => {
     setPlainRequest(plain)
-    setHiddenWay(privateWay)
   }, [])
 
   // Read each time the screen comes into view, not only when it first mounts:
@@ -372,13 +372,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
       if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
+      // Private or named, the same vetting screen: the module decides from
+      // the way in which it is (Alberto, 2026-10-15).
       const stack = navigation as unknown as { navigate: (name: string) => void }
-      if (hiddenWay) {
-        ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-          Screens.VtiHiddenVetting,
-          { communityDid, criterionId: hiddenWay }
-        )
-      } else stack.navigate(Screens.VtiVetting)
+      stack.navigate(Screens.VtiVetting)
     } catch (e) {
       if (joinRequestRefusal(e) === 'criterionUnknown') {
         // The community changed what it asks while the request went: read it
@@ -401,19 +398,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [
-    agent,
-    vtaDid,
-    communityDid,
-    name,
-    navigation,
-    t,
-    joinAs.selected,
-    again,
-    plainRequest,
-    hiddenWay,
-    config?.mediatorDid,
-  ])
+  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again, plainRequest, config?.mediatorDid])
 
   if (!vtaDid) {
     return (
@@ -664,10 +649,40 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                       : t('Join.Start')
               }
               buttonType={ButtonType.Primary}
+              disabled={privateChecking}
               onPress={() => {
                 if (ways.button === 'start') {
-                  chooseNext(false)
-                  setStep('as')
+                  const privateRow = ways.rows.find((r) => r.canStartVetting && r.privateVetting)
+                  if (!privateRow) {
+                    chooseNext(false)
+                    setStep('as')
+                    return
+                  }
+                  // Whether this person's agent can carry it: asked on this tap,
+                  // never while the card draws (it may push a consent request).
+                  void (async () => {
+                    const seam = hiddenVettingSeam()
+                    const criterion = manifest?.criteria.find((c) => c.id === privateRow.id)
+                    if (!seam || !agent || !criterion) {
+                      setPrivateRefusal('cannotTell')
+                      return
+                    }
+                    setPrivateChecking(true)
+                    setPrivateRefusal(undefined)
+                    try {
+                      const checked = await seam.check(agent, criterion)
+                      if (!checked.ok) {
+                        setPrivateRefusal(checked.reason)
+                        return
+                      }
+                      chooseNext(false)
+                      setStep('as')
+                    } catch {
+                      setPrivateRefusal('cannotTell')
+                    } finally {
+                      setPrivateChecking(false)
+                    }
+                  })()
                 } else if (suggestedWay?.requires.invitation) {
                   // An invitation the phone holds is presented from "I was invited", where it is.
                   toInvited()
@@ -729,31 +744,24 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               // buttons below, and a removed member pressed "Meet a vetter"
               // under the old identity without "Join again" (IN-104, path B).
               rowAction={(row) =>
-                // A private way has its own button: whether this person's agent
-                // can do it is asked only when they tap it.
-                row.privateVetting ? (
-                  standingShown ? null : (
-                    <PrivateVettingStart
-                      criterion={manifest?.criteria.find((c) => c.id === row.id)}
-                      community={name}
-                      rowId={row.id}
-                      onReady={() => {
-                        chooseNext(false, row.id)
-                        setStep('as')
-                      }}
-                    />
-                  )
-                ) : !buttonsInRows ? null : ways.alsoAsk ? (
-                  row.id === vettingRow ? (
-                    mainButton
-                  ) : row.suggested ? (
-                    askButton
-                  ) : null
-                ) : row.id === mainRow ? (
-                  mainButton
-                ) : null
+                !buttonsInRows
+                  ? null
+                  : ways.alsoAsk
+                    ? row.id === vettingRow
+                      ? mainButton
+                      : row.suggested
+                        ? askButton
+                        : null
+                    : row.id === mainRow
+                      ? mainButton
+                      : null
               }
             />
+            {privateRefusal ? (
+              <ThemedText testID={testIdWithKey(VtiJoinIds.privateRefused)}>
+                {t(REFUSAL_KEY[privateRefusal], named)}
+              </ThemedText>
+            ) : null}
             {noVetting ? (
               <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.noVetting)}>
                 {t('Join.Ways.NoVetting', named)}

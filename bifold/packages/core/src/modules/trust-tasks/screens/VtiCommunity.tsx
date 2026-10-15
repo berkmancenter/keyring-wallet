@@ -30,7 +30,6 @@ import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 import { communityTarget } from '../module/vtiCommunityLink'
-import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
 import { useCommunityJourney } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
@@ -40,7 +39,7 @@ import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
 import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
-import { hiddenVetterSeam } from './hiddenVetterSeam'
+import { PrivateVettingBadge } from './PrivateVettingBadge'
 import { VtiCommunityIds } from './VtiCommunity.ids'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
@@ -76,9 +75,6 @@ const VtiCommunity: React.FC = () => {
   const heldElsewhere = holding.onlyOthers ? holding.holders.find(Boolean) : undefined
   const membership = !heldElsewhere && journey?.join.kind === 'member' ? journey.join.membership : undefined
   const vetsHere = !heldElsewhere && journey?.vetterGrant.state === 'active'
-  // A way in that runs private vetting, in the suite agents run: a vetter here
-  // may vouch privately, in a build that carries it (hiddenVetterSeam).
-  const privateWay = manifest?.criteria.find((c) => hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE)
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -272,6 +268,10 @@ const VtiCommunity: React.FC = () => {
             <Text style={styles.label} testID={testIdWithKey(VtiCommunityIds.memberSince)}>
               {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
             </Text>
+            {/* The result of private vetting, marked as the steps were. */}
+            {(membership as { privateVetting?: boolean }).privateVetting ? (
+              <PrivateVettingBadge label={t('Vetting.Private.Joined')} testIdStem="CommunityJoinedPrivately" />
+            ) : null}
             {vetsHere ? (
               <Pressable
                 style={styles.button}
@@ -283,21 +283,6 @@ const VtiCommunity: React.FC = () => {
                 }}
               >
                 <Text style={styles.buttonText}>{t('Vetting.OpenDesk')}</Text>
-              </Pressable>
-            ) : null}
-            {vetsHere && privateWay?.id && hiddenVetterSeam() ? (
-              <Pressable
-                style={styles.button}
-                testID={testIdWithKey(VtiCommunityIds.vouchPrivately)}
-                accessibilityRole="button"
-                onPress={() =>
-                  (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-                    Screens.VtiHiddenVetter,
-                    { communityDid, criterionId: privateWay.id }
-                  )
-                }
-              >
-                <Text style={styles.buttonText}>{t('Vetting.Vouch.Open')}</Text>
               </Pressable>
             ) : null}
           </View>

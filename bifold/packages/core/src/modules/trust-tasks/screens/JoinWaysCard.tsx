@@ -23,6 +23,7 @@ import {
   type JoinNeed,
   type JoinWayRow,
 } from './joinWays'
+import { PrivateVettingBadge } from './PrivateVettingBadge'
 
 type WaysCard = Extract<JoinCard, { mode: 'ways' }>
 
@@ -134,6 +135,10 @@ export const JoinWaysCard: React.FC<{
   const others = card.rows.filter(notYet)
   const wayView = (row: JoinWayRow, withAction: boolean) => (
     <View key={row.id} style={styles.way} testID={testIdWithKey(`JoinWay_${row.id}`)}>
+      {/* The one mark for private vetting, with what it means said once, here. */}
+      {row.privateVetting ? (
+        <PrivateVettingBadge community={community} explain testIdStem={`JoinWayPrivate_${row.id}`} />
+      ) : null}
       {(row.privateVetting
         ? [
             t('Join.Ways.PrivateVettingWay', {

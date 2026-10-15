@@ -1792,6 +1792,11 @@
   },
   "Vetting": {
     "YourIdentity": "Votre identité dans cette communauté",
+    "Private": {
+      "Badge": "Vérification privée",
+      "Explain": "Vos vérificateurs restent anonymes : {{community}} apprend que suffisamment de membres se sont portés garants, pas lesquels.",
+      "Joined": "Rejoint avec une vérification privée"
+    },
     "Vouch": {
       "Title": "Se porter garant en privé pour {{community}}",
       "Open": "Se porter garant en privé",
@@ -2035,6 +2040,7 @@
     "SendCard": "Envoyer ma carte",
     "Checklist": "Votre liste",
     "ChecklistLine": "{{held}} déclaration(s) sur {{needed}}",
+    "ChecklistVouched": "{{held}} sur {{needed}} garants",
     "Meets": "répond aux exigences publiées",
     "Member": "Vous êtes membre de {{community}}.",
     "GoToMyAgent": "Aller à Mon agent",

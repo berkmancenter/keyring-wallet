@@ -19,6 +19,7 @@ export const VtiJoinIds = {
   versionUnsupported: 'JoinVersionUnsupported',
   notAccepting: 'JoinNotAccepting',
   vettingNotSupported: 'JoinVettingNotSupported',
+  privateRefused: 'JoinPrivateVettingRefused',
   goInvited: 'JoinGoInvited',
   start: 'JoinStart',
   ask: 'JoinAsk',

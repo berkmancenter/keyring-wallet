@@ -192,7 +192,11 @@ export function joinCard(
   const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
   // Ways Keyring can read that this phone does not meet yet.
   // A credential way is left out: Keyring cannot present one, so no step of the person's opens it.
-  const open = offer.ways.filter((way) => way.usable && way.meets !== 'yes' && !way.requires.credentials)
+  // A private way this build carries is an ordinary vetting way to the
+  // person: "Meet a vetter", the same steps (Alberto, 2026-10-15).
+  const open = offer.ways.filter(
+    (way) => (way.usable || offersPrivately(way, available)) && way.meets !== 'yes' && !way.requires.credentials
+  )
   // Vetting the person can go and do now: nothing else of that way is lacking.
   const startable = (way: JoinWay) => open.includes(way) && Boolean(way.requires.vetting) && !lacksInvitation(way)
   const vettingToDo = offer.ways.some(startable)

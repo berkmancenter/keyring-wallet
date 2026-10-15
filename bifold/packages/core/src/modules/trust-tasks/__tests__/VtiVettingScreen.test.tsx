@@ -420,7 +420,10 @@ describe('Vetting — one filled button per step', () => {
   // Alberto pasted the ticket and landed on the named flow ("Your face") under
   // the #405 refusal. Both are wrong once the module is here: the refusal must
   // narrow, and the ticket belongs to the private flow.
-  test('the same community, with the module registered: the ticket opens private vetting instead', async () => {
+  // Alberto, 2026-10-15: one flow. With the module registered, the same
+  // paste asks the vetter in these same steps (the module makes it private),
+  // marked "Private vetting", with no handover and no refusal.
+  test('the same community, with the module registered: the ticket asks the vetter here, marked private', async () => {
     const [hiddenExample] = specExamples.filter((e) => e.title.startsWith('A criterion whose vetting parameters'))
     jest
       .spyOn(vtiAgent, 'fetchManifest')
@@ -442,17 +445,10 @@ describe('Vetting — one filled button per step', () => {
         fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
         jest.advanceTimersByTime(10)
       })
-      // The ticket goes with them: the private screen seeds its field from it,
-      // so nobody pastes the same ticket twice.
-      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
-        communityDid,
-        criterionId: 'kernel-developer-private',
-        ticket,
-      })
-      // Neither the named ask nor the refusal: the person is on the screen
-      // that can use their ticket, and nothing told them Keyring cannot.
-      expect(ask).not.toHaveBeenCalled()
+      expect(ask).toHaveBeenCalledWith({ link: ticket })
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
       expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('VettingPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
     } finally {
       registerHiddenVetting(undefined)
       ask.mockRestore()
@@ -701,6 +697,69 @@ describe('Vetting — the desk', () => {
     expect(filled(tree)).toEqual(['VettingNewTicketButton'])
   })
 
+  // One flow (Alberto, 2026-10-15): a private request comes to the same desk,
+  // marked "Private vetting", and the same Attest sends the private
+  // attestation. It asks how the vetter knows the person, with no default.
+  test('a private request: marked, asks the relationship with no default, and attests with it', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        hidden: true,
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const attest = jest.spyOn(VtiVetterDesk.prototype, 'attest').mockImplementation(async () => {
+      records[2].content.status = 'attested'
+      return undefined as never
+    })
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.getByTestId(testIdWithKey('VettingDeskPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).toBeDisabled()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingRelationship_closeFriend')))
+    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
+    })
+    expect(attest).toHaveBeenCalledWith('r1', expect.objectContaining({ declaredRelationship: 'closeFriend' }))
+  })
+
+  test('a named request: no mark, no relationship question, attests as before', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskPrivate'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
+  })
+
   test('attested here: "Statement issued", then Vet someone else goes back to a new ticket', async () => {
     const records = [
       persona,
@@ -751,9 +810,8 @@ describe('Vetting — the desk', () => {
   })
 })
 
-// 254: an applicant who arrives with a pasted ticket for a community whose way
-// in is private is handed over as soon as the seat is known, with the ticket,
-// not shown "Getting vetted" until they try a named step.
+// One flow (Alberto, 2026-10-15): an applicant in a community whose way in is
+// private stays on this screen, in these steps, with the one mark that says so.
 describe('Vetting — opened with a ticket for a community that runs private vetting', () => {
   const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
   beforeEach(() => {
@@ -777,31 +835,19 @@ describe('Vetting — opened with a ticket for a community that runs private vet
     return tree
   }
 
-  test('with the module: handed over on opening, with the pasted ticket, and no refusal', async () => {
+  test('with the module: no handover; the same steps, marked "Private vetting", with what it means', async () => {
     registerHiddenVetting({} as never)
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }
     navigation.navigate.mockClear()
-    const ticket = encodeTicketUri({
-      community: communityDid,
-      vetter: 'did:webvh:example:vetter',
-      presentation: { code: { code: 'ABCD-EFGH' } },
-    } as never)
-    await act(async () => {
-      await routeKeyringAgentLink(ticket, {} as never, jest.fn())
-    })
     const tree = await openAsApplicant()
-    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
-      communityDid,
-      criterionId: 'Vetted-Member',
-      ticket,
-    })
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+    expect(tree.getByTestId(testIdWithKey('VettingPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+    expect(tree.getByTestId(testIdWithKey('VettingPrivateExplain'))).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
   })
 
-  test('without it: no handover, as #405 left it', async () => {
-    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
-    navigation.navigate.mockClear()
-    await openAsApplicant()
-    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+  test('without it: no mark, as #405 left it', async () => {
+    const tree = await openAsApplicant()
+    expect(tree.queryByTestId(testIdWithKey('VettingPrivate'))).toBeNull()
   })
 })

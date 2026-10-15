@@ -41,6 +41,8 @@ import { testIdWithKey } from '../../../utils/testable'
 import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
+import type { VettingDeskRequestPrivacy } from '../module/privateVettingContract'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { deliveredCardCheck } from '../module/vtiDeliveredCheck'
@@ -73,8 +75,12 @@ import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
-import { VETTING_NOT_SUPPORTED_KEY, privateWayFor, vettingNotSupportedFor } from './joinWays'
-import { hiddenVettingSeam } from './hiddenVettingSeam'
+import { hiddenVettingSeam, pcsErrorCode } from './hiddenVettingSeam'
+import { PrivateVettingBadge } from './PrivateVettingBadge'
+import { DECLARED_RELATIONSHIPS, type DeclaredRelationship } from './hiddenVetterSeam'
+import { hiddenVetterErrorKey } from './VtiHiddenVetter'
+import { hiddenVettingErrorKey } from './VtiHiddenVetting'
+import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
@@ -135,13 +141,19 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
 }
 
 /**
- * Thrown when a named step turns out to belong to the private flow: the person
- * has been navigated there, so the step stops without being an error.
+ * Words for a private-vetting refusal the agent or the module gave a step of
+ * this flow, by its code; undefined for anything else, which is said as any
+ * failure is.
  */
-class HandedOver extends Error {
-  constructor() {
-    super('handed to private vetting')
-  }
+/** A desk request that came with the hidden-vetting ext (the module derives `hidden`). */
+const isPrivateRequest = (request: VettingDeskRequest) => Boolean((request as VettingDeskRequestPrivacy).hidden)
+
+function privateVettingWords(e: unknown): string | undefined {
+  const code = pcsErrorCode(e)
+  if (!code) return undefined
+  const vetterSide = /hidden-vetter|vta\/pcs\/(attest|root-request|root-accept|tokens|vetter)/.test(code)
+  const key = vetterSide ? hiddenVetterErrorKey(code) : hiddenVettingErrorKey(code)
+  return key.endsWith('ErrorGeneric') ? undefined : key
 }
 
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
@@ -172,6 +184,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // applicant's put a seated vetter on "Getting vetted" for seconds on a cold
   // start (vetterDeskRelaunch, 255).
   const [seatRead, setSeatRead] = useState(false)
+  // How the vetter knows the person, per private request: asked, never assumed.
+  const [relationship, setRelationship] = useState<Record<string, DeclaredRelationship>>({})
   /**
    * Whether this phone is a vetter *now*, not merely whether it holds a grant.
    * The desk used to seat anyone with a grant and say nothing about its
@@ -280,6 +294,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     exceededCaps: { relationship: string; limit: number; seen: number }[]
     unreadableMaxAge?: string
     unchecked: { vetterDid: string; reason: string }[]
+    /** Private (hidden) vetting: the same steps; `counted` is the vouches the agent accepted. */
+    mode?: 'private'
   }>()
   const [membershipRole, setMembershipRole] = useState<string>()
   // The membership lands here the moment it is stored (the apply's own wait,
@@ -589,16 +605,25 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       try {
         await fn()
       } catch (e) {
-        // Not a failure: the step was handed to the private flow and the
-        // person is already on that screen. An error here would contradict it.
-        if (e instanceof HandedOver) return
-        setError(e instanceof VettingTicketError ? { words: ticketWords(e) } : sayFailure(e))
+        const privately = privateVettingWords(e)
+        setError(
+          e instanceof VettingTicketError
+            ? { words: ticketWords(e) }
+            : privately
+              ? {
+                  words: t(privately, {
+                    community: communityLabelOf(communityDid ?? '', t),
+                    interpolation: { escapeValue: false },
+                  }) as string,
+                }
+              : sayFailure(e)
+        )
       } finally {
         setBusy(undefined)
         bump()
       }
     },
-    [bump, ticketWords]
+    [bump, ticketWords, communityDid, t]
   )
 
   // Vetting this version cannot do (private vetting, an unsupported critical
@@ -617,21 +642,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       if (!communityDid) throw new Error('no community to apply to')
       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
       if (!manifest) setManifest(m)
-      // Every named step — starting, pasting a ticket, asking a vetter,
-      // sending — comes through here, so this is the one place that can
-      // guarantee none of them begins on a hidden criterion. Narrowing #405's
-      // refusal (below) without redirecting here would be worse than the bug
-      // it fixes: the refusal is currently the only thing stopping the named
-      // flow, so removing it alone would let a build that carries the module
-      // gather named statements the community then rejects.
-      const privately = privateWayFor(m, digest, { privateVettingAvailable: carriesPrivate })
-      if (privately) {
-        ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-          Screens.VtiHiddenVetting,
-          { communityDid, criterionId: privately.id, ...(ticketLink.trim() ? { ticket: ticketLink.trim() } : {}) }
-        )
-        throw new HandedOver()
-      }
+      // A private way this build carries goes on through these same steps:
+      // the module makes them private (Alberto, 2026-10-15: one flow). Only
+      // what this build cannot do is refused.
       const notSupported = vettingNotSupportedFor(m, digest, { privateVettingAvailable: carriesPrivate })
       if (notSupported) {
         throw new InWords(
@@ -643,7 +656,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       }
       return m
     },
-    [manifest, communityDid, t, carriesPrivate, navigation, ticketLink]
+    [manifest, communityDid, t, carriesPrivate]
   )
 
   useEffect(() => {
@@ -664,24 +677,29 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const side: 'vetter' | 'applicant' | undefined =
     persona && !seatRead ? undefined : grant ? 'vetter' : persona ? 'applicant' : undefined
 
-  // An applicant in a community whose way in is private is handed over as
-  // soon as the seat is known, with any ticket brought here, rather than
-  // shown "Getting vetted" until a named step is tried (254). Through the
-  // same chokepoint as every named step, so the rule is one.
-  const handedOver = useRef(false)
+  // Whether this application is private (hidden) vetting: the same steps, with
+  // the one mark that says so. From the way in the application named, so it
+  // shows before any vouch has come in; the checklist confirms it after.
+  const privateCriterion = manifest?.criteria.find(
+    (c) =>
+      hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE &&
+      (!application?.requirementsDigest || c.requirementsDigest === application.requirementsDigest)
+  )
+  const privateHere = carriesPrivate && (checklist?.mode === 'private' || Boolean(privateCriterion))
+  // The manifest, read once on the applicant's side in a build that carries
+  // private vetting, so the mark is there from the first step.
   useEffect(() => {
-    if (side !== 'applicant' || !carriesPrivate || handedOver.current) return
+    if (side !== 'applicant' || !carriesPrivate || manifest || !communityDid) return
     let live = true
-    void vettingManifest(application?.requirementsDigest).then(
-      () => undefined,
-      (e: unknown) => {
-        if (live && e instanceof HandedOver) handedOver.current = true
-      }
-    )
+    vtiAgent
+      .fetchManifest(communityDid)
+      .then((m) => live && setManifest(m))
+      .catch(() => undefined)
     return () => {
       live = false
     }
-  }, [side, carriesPrivate, application?.requirementsDigest, vettingManifest])
+  }, [side, carriesPrivate, manifest, communityDid])
+
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t(
@@ -1043,6 +1061,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.deskStatus)}>
                   {t(`Vetting.Status.${request.status}`)}
                 </Text>
+                {/* The same mark as the applicant sees: this request is private. */}
+                {isPrivateRequest(request) ? (
+                  <PrivateVettingBadge
+                    community={communityLabelOf(request.communityDid, t)}
+                    explain
+                    testIdStem="VettingDeskPrivate"
+                  />
+                ) : null}
                 <RefusalNote kind="Card" refusal={request.cardRefusal} style={styles.label} errorStyle={styles.error} />
                 <EnvelopeRefusalNote
                   refusal={request.envelopeRefusal}
@@ -1134,11 +1160,36 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         testIdStem="VettingCheckApplicant"
                       />
                     </View>
+                    {isPrivateRequest(request) ? (
+                      <View style={{ gap: 4 }} testID={testIdWithKey(VtiVettingIds.relationship)}>
+                        <Text style={styles.label}>{t('Vetting.Vouch.HowKnow')}</Text>
+                        {DECLARED_RELATIONSHIPS.map((rel) => {
+                          const chosen = relationship[request.requestId] === rel
+                          return (
+                            <Pressable
+                              key={rel}
+                              style={[styles.row, { minHeight: 44 }]}
+                              onPress={() => setRelationship((was) => ({ ...was, [request.requestId]: rel }))}
+                              accessibilityRole="radio"
+                              accessibilityState={{ checked: chosen }}
+                              testID={testIdWithKey(`${VtiVettingIds.relationship}_${rel}`)}
+                            >
+                              <Icon
+                                name={chosen ? 'radiobox-marked' : 'radiobox-blank'}
+                                size={22}
+                                color={ColorPalette.brand.primary}
+                              />
+                              <Text style={styles.value}>{t(`Vetting.Vouch.Relationship.${rel}`)}</Text>
+                            </Pressable>
+                          )
+                        })}
+                      </View>
+                    ) : null}
                     <Pressable
                       style={look(VtiVettingIds.attestButton, deskPrimaryId).button}
                       testID={testIdWithKey(VtiVettingIds.attestButton)}
                       accessibilityRole="button"
-                      disabled={!!busy}
+                      disabled={!!busy || (isPrivateRequest(request) && !relationship[request.requestId])}
                       onPress={() =>
                         run('attest', async () => {
                           if (!(await confirmWithBiometrics('', 'Attest'))) return
@@ -1146,6 +1197,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                             documentClasses: ['passport'],
                             claimsVerified: ['name.legal'],
                             livenessConfirmed: true,
+                            // A private attestation carries how the vetter knows the
+                            // person, as they declared it: never filled in for them.
+                            ...(isPrivateRequest(request)
+                              ? { declaredRelationship: relationship[request.requestId] }
+                              : {}),
                           })
                           // Straight to "Statement issued", not on the next read.
                           setDesk(
@@ -1510,6 +1566,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       >
         <KeyboardAwareScrollView {...keyboardAware}>
           {applicantStep === 'member' ? null : seatBanner('applicant', applicantStep === 'match')}
+          {privateHere && applicantStep !== 'member' ? (
+            <PrivateVettingBadge
+              community={communityLabelOf(communityDid ?? '', t)}
+              explain
+              testIdStem="VettingPrivate"
+            />
+          ) : null}
 
           {applicantStep === 'member' ? (
             <View style={styles.card} testID={testIdWithKey(VtiVettingIds.memberDone)}>
@@ -1734,10 +1797,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               {stepHeader(applicantNumber, 5, t('Vetting.Checklist'))}
               <View style={styles.card}>
                 <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.checklist)}>
-                  {tp('Vetting.ChecklistLine', {
-                    held: checklist?.held ?? 0,
-                    needed: checklist?.needed ?? application.minStatements,
-                  })}
+                  {checklist?.mode === 'private'
+                    ? tp('Vetting.ChecklistVouched', {
+                        held: checklist.counted,
+                        needed: checklist.needed,
+                      })
+                    : tp('Vetting.ChecklistLine', {
+                        held: checklist?.held ?? 0,
+                        needed: checklist?.needed ?? application.minStatements,
+                      })}
                   {checklist?.meets ? ` · ${t('Vetting.Meets')}` : ''}
                 </Text>
                 {checklist?.discounted ? (

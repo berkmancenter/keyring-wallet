@@ -1853,6 +1853,11 @@
   },
   "Vetting": {
     "YourIdentity": "Your identity in this community",
+    "Private": {
+      "Badge": "Private vetting",
+      "Explain": "Your vetters stay private: {{community}} learns that enough members vouched, not who.",
+      "Joined": "Joined with private vetting"
+    },
     "Vouch": {
       "Title": "Vouch privately for {{community}}",
       "Open": "Vouch privately",
@@ -2101,6 +2106,7 @@
     "SendCard": "Send my card",
     "Checklist": "Your checklist",
     "ChecklistLine": "{{held}} of {{needed}} statements",
+    "ChecklistVouched": "{{held}} of {{needed}} vouched",
     "Meets": "meets the published requirements",
     "Member": "You're a member of {{community}}.",
     "GoToMyAgent": "Go to My Agent",
