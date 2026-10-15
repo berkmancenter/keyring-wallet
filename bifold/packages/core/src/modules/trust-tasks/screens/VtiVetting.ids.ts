@@ -7,6 +7,7 @@ export const VtiVettingIds = {
   seatBanner: 'VettingSeatBanner',
   roleBadge: 'VettingRoleBadge',
   seatHint: 'VettingSeatHint',
+  seatLoading: 'VettingSeatLoading',
   needsAgent: 'VettingNeedsAgent',
   needsCommunity: 'VettingNeedsCommunity',
   linkAgent: 'VettingLinkAgent',
