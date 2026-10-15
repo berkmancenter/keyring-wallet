@@ -56,7 +56,7 @@ test("linkWaitTiming: the real clocks give exactly the waits the cases always us
 test("linkWaitTiming: a 60 s window with a 30 s lock reads the no-lock wait before 50 s, past the lock", () => {
   const t = linkWaitTiming(parseClocks(screen({ mode: "short", grantWindowS: "60", phoneGrantWindowS: "60", autoLockMin: "0.5" })));
   assert.equal(t.noLock.readBeforeS, 50);
-  assert.ok(t.noLock.idleMs > 30_000 && t.noLock.idleMs < 50_000, `idle ${t.noLock.idleMs} ms: past the lock, before the read limit`);
+  assert.equal(t.noLock.idleMs, 35_000, "past the 30 s lock, 15 s before the read limit (review on #485)");
   assert.equal(t.noAnswer.lookUntilMs, 180_000);
   assert.equal(t.noAnswer.tooSoonS, 50);
   assert.ok(t.noAnswer.touchEveryMs < 30_000, "touched inside the lock");
@@ -70,7 +70,7 @@ test("linkWaitTiming: every wait holds its rules over a range of clocks", () => 
     const t = linkWaitTiming({ ...REAL_CLOCKS, mode: "short", grantWindowS: windowS, phoneGrantWindowS: windowS, autoLockS: lockS });
     const at = `window ${windowS} s, lock ${lockS} s`;
     assert.ok(t.noLock.idleMs / 1000 > lockS, `${at}: idle past the lock`);
-    assert.ok(t.noLock.idleMs / 1000 < t.noLock.readBeforeS, `${at}: read inside the window`);
+    assert.ok(t.noLock.idleMs / 1000 <= t.noLock.readBeforeS - 15, `${at}: 15 s left for the reads before the limit`);
     assert.ok(t.noAnswer.lookUntilMs / 1000 > windowS + 6, `${at}: looks past the window's last check`);
     assert.ok(t.noAnswer.touchEveryMs / 1000 < lockS, `${at}: touched inside the lock`);
     assert.ok(t.paused.shortAwayMs / 1000 < lockS, `${at}: the short absence stays under the lock`);
