@@ -126,8 +126,9 @@ export function fromGrant(entries, grant) {
 /**
  * The entry a grant of `did` made, read after the grant against `before` (the ACL just before it). By subject while
  * the phone has not rotated; once it has (a live app's poll can rotate within a second of the grant), the entry new
- * since `before` labelled like the grant, the newest if several are (`ambiguous` then says so: another leg granted on
- * the same runner in the same moment). Pure.
+ * since `before` labelled like the grant. Several such entries mean another leg granted on the same runner in the same
+ * moment: the oldest is taken (ours was made first, right after `before`) and `ambiguous` says the read is not to be
+ * trusted for a pass. Pure.
  */
 export function grantAfter(before, after, did, label = "keyring-admin") {
   const bySubject = after.find((e) => e.subject === did);
@@ -135,7 +136,7 @@ export function grantAfter(before, after, did, label = "keyring-admin") {
   const seen = new Set(before.map((e) => e.subject));
   const fresh = after
     .filter((e) => !seen.has(e.subject) && e.label === label)
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   return { entry: fresh[0], ambiguous: fresh.length > 1 };
 }
 

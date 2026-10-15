@@ -44,9 +44,9 @@ test("grantAfter: rotated already (a live app's poll), the one new keyring-admin
   assert.equal(r.ambiguous, false);
 });
 
-test("grantAfter: rotated and another leg granted in the same moment, the newest, flagged ambiguous", () => {
+test("grantAfter: rotated and another leg granted in the same moment, the oldest, flagged ambiguous", () => {
   const r = grantAfter(BEFORE, after, grant.subject);
-  assert.equal(r.entry.subject, "did:peer:2.zLongKk");
+  assert.equal(r.entry.subject, "did:peer:2.zLongCase");
   assert.equal(r.ambiguous, true);
 });
 

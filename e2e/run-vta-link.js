@@ -547,7 +547,8 @@ async function linkCase(driver, which, timing) {
     const ownOf = (g) => {
       const own = fromGrant(aclList() || [], g);
       const how = own.length === 1 ? (own[0].subject === did ? " (not rotated yet)" : " (rotated)") : "";
-      return { ok: own.length === 1, text: `own entries ${own.length}${how}${ambiguous ? " (grant read among several new entries: another leg granted at the same moment)" : ""}` };
+      // An ambiguous read is never a pass: the entry taken may be the other leg's.
+      return { ok: own.length === 1 && !ambiguous, text: `own entries ${own.length}${how}${ambiguous ? " · NOT JUDGED: the grant was read among several new keyring-admin entries (another leg granted on this runner at the same moment)" : ""}` };
     };
     if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grantNow(); }
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
