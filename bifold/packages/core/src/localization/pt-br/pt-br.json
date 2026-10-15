@@ -1724,7 +1724,8 @@
       "NotEnoughYet": "Ainda não há verificadores suficientes garantindo você. Peça a outro verificador e tente de novo.",
       "ApplicationGone": "Esta solicitação não está mais no seu agente. Comece uma nova.",
       "AttestationRefused": "Seu agente não conseguiu verificar a atestação de um verificador. Peça para ele verificar você de novo, ou peça a outro verificador.",
-      "ErrorGeneric": "Algo deu errado. Tente de novo em um instante."
+      "ErrorGeneric": "Algo deu errado. Tente de novo em um instante.",
+      "NotInThisBuild": "Esta etapa ainda não está nesta versão do Keyring."
     },
     "YourIdentityHint": "Seu verificador e os administradores da comunidade veem este código para você. Não é um segredo.",
     "TheirIdentity": "A identidade dessa pessoa nesta comunidade",

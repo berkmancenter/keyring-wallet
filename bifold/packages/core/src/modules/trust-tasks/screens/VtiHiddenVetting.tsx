@@ -68,6 +68,8 @@ export type SendStep = 'challenge' | 'prove' | 'submit'
 export function hiddenVettingErrorKey(code: string | undefined): string {
   if (!code) return 'Vetting.Hidden.ErrorGeneric'
   if (code.endsWith(':noUsableAttestation')) return 'Vetting.Hidden.NotEnoughYet'
+  // A step this build does not carry yet (an interim build, for testing).
+  if (code.endsWith(':notImplemented')) return 'Vetting.Hidden.NotInThisBuild'
   if (code.endsWith(':notFound')) return 'Vetting.Hidden.ApplicationGone'
   if (code.endsWith(':attestationInvalid')) return 'Vetting.Hidden.AttestationRefused'
   // The community runs a suite agents cannot: what Join says of it.
