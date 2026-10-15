@@ -61,3 +61,29 @@ export function registerHiddenVettingModules(): { applicant: boolean; vetter: bo
   }
   return registered
 }
+
+/** The agents the line has been logged through, so each says it once. */
+const toldThrough = new WeakSet<object>()
+
+/**
+ * Say the same line at Info through `agent`'s logger, once per agent.
+ *
+ * The line `registerHiddenVettingModules` logs runs at module scope through
+ * `releaseWarn`, before the app's log buffer exists: Android's logcat keeps
+ * it, but on iOS it reached neither the system log nor the in-app report, so
+ * neither of a tester's iPhone reports could say whether private vetting was
+ * in the build. Once an agent exists its logger feeds the report, so the app
+ * calls this when it has one (TabStack), and again for the agent an unlock
+ * builds anew. The early `releaseWarn` stays: it costs nothing, and Android
+ * reads it.
+ */
+export function logHiddenVettingSeams(
+  agent: { config?: { logger?: { info?: (m: string) => void } } } | undefined
+): void {
+  if (!agent || toldThrough.has(agent)) return
+  toldThrough.add(agent)
+  const registered = registerHiddenVettingModules()
+  agent.config?.logger?.info?.(
+    `[hidden-vetting] seams: applicant=${registered.applicant ? 'yes' : 'no'} vetter=${registered.vetter ? 'yes' : 'no'}`
+  )
+}

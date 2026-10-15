@@ -36,6 +36,7 @@ import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { PersonaAgentUnreachable, useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
+import { logHiddenVettingSeams } from '../modules/trust-tasks/hiddenVettingModules'
 import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdentityListeners'
 import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
@@ -263,6 +264,10 @@ const TabStack: React.FC = () => {
   // A linked phone reconnects to its agent from start-up, and again whenever
   // the app returns to the foreground (plan §4.2) — not only when a screen
   // that needs the agent happens to be open.
+  // Whether private vetting is in this build, said where an iPhone's report
+  // can see it: through the agent's logger, once there is an agent.
+  useEffect(() => logHiddenVettingSeams(agent), [agent])
+
   useEffect(() => {
     if (!agent || !store.authentication.didAuthenticate) return
     void vtaAgent.restore(agent)
