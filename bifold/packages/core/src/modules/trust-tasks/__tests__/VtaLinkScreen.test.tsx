@@ -816,6 +816,23 @@ describe('picking a link back up', () => {
     expect(resume).toHaveBeenCalledWith(expect.anything(), 'did:webvh:example:vta')
   })
 
+  // linkfail's swap-held-try-again / swap-refused-no-try-again (gate efficiency item 12).
+  test.each([
+    ['held for an approval', 'held', true],
+    ['refused', 'refused', false],
+  ])('a key swap the agent %s: Try again shown %s', async (_what, swap, shown) => {
+    jest.spyOn(vtaAgent, 'pendingLinkKey').mockResolvedValue({ vtaDid: 'did:webvh:example:vta', did: 'did:key:z6Mk' })
+    ;(vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'notLinked',
+        lastError: { reason: 'failed', swap, vtaDid: 'did:webvh:example:vta', label: 'alice' },
+      },
+    })
+    const tree = render_()
+    await act(async () => undefined)
+    expect(Boolean(tree.queryByTestId(testIdWithKey('VtaLinkTryAgain')))).toBe(shown)
+  })
+
   test('a dead host code, or a refusal, offers no Try again: it says to make a new code', async () => {
     const pending = jest
       .spyOn(vtaAgent, 'pendingLinkKey')
