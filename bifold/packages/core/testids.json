@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "3dd639fee2239aebcf121892046ccd24abeaed6d",
+  "generatedFrom": "34976796e98ce01088e3f3dec047dfd840800b57",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -466,6 +466,7 @@
     "HiddenVettingNeedMore": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingNotAvailable": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingProgress": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
+    "HiddenVettingRefused": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingResult": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingSend": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
     "HiddenVettingStart": ["src/modules/trust-tasks/screens/VtiHiddenVetting.tsx"],
@@ -1869,6 +1870,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.progress"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.refused"
     },
     {
       "src/modules/trust-tasks/screens/VtiHiddenVetting.tsx": "HiddenVettingIds.result"

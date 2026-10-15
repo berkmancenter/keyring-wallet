@@ -37,10 +37,12 @@ import {
   hiddenVettingSeam,
   pcsErrorCode,
   type HiddenVettingProgress,
+  type HiddenVettingRefusal,
   type HiddenVettingRecord,
   type HiddenVettingVerdict,
 } from './hiddenVettingSeam'
 import { localDate } from './localTime'
+import { REFUSAL_KEY } from './PrivateVettingStart'
 
 export const HiddenVettingIds = {
   screen: 'HiddenVetting',
@@ -59,6 +61,7 @@ export const HiddenVettingIds = {
   startAgain: 'HiddenVettingStartAgain',
   changed: 'HiddenVettingChanged',
   withdraw: 'HiddenVettingWithdraw',
+  refused: 'HiddenVettingRefused',
 } as const
 
 /** The step under way while sending. */
@@ -141,6 +144,7 @@ const VtiHiddenVetting: React.FC = () => {
   const [busy, setBusy] = useState<string>()
   const [step, setStep] = useState<SendStep>()
   const [error, setError] = useState<string>()
+  const [refusal, setRefusal] = useState<HiddenVettingRefusal>()
   const [verdict, setVerdict] = useState<HiddenVettingVerdict>()
 
   const styles = StyleSheet.create({
@@ -222,6 +226,14 @@ const VtiHiddenVetting: React.FC = () => {
   const start = () =>
     run('start', async () => {
       if (!agent || !criterion) throw new Error('no way in to apply under')
+      // Asked on this tap, as Join's button asks: a ticket handed over from
+      // the vetting screen brings the person here without that button.
+      setRefusal(undefined)
+      const checked = await seam.check(agent, criterion)
+      if (!checked.ok) {
+        setRefusal(checked.reason)
+        return
+      }
       const created = await seam.createApplication(agent, communityDid, criterion)
       setRecord(created)
       await refresh(created)
@@ -323,6 +335,10 @@ const VtiHiddenVetting: React.FC = () => {
             onPress={start}
             testID={testIdWithKey(HiddenVettingIds.start)}
           />
+        ) : null}
+
+        {refusal ? (
+          <ThemedText testID={testIdWithKey(HiddenVettingIds.refused)}>{t(REFUSAL_KEY[refusal], named)}</ThemedText>
         ) : null}
 
         {record && changed && !verdict ? (
