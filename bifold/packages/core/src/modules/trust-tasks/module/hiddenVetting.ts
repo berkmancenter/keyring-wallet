@@ -216,6 +216,8 @@ export interface HiddenVettingRecord {
   requirementsDigest: string
   /** The community's published parameters, as sent to the agent. */
   parameters: PublishedConfig
+  /** When the application was made, so a screen shows its age and not the clock. */
+  createdAt?: string
   /** Attestations the agent reports holding. Not what will be counted. */
   held: number
   /** The minimum the community published for this criterion. */
@@ -310,6 +312,7 @@ export async function startHiddenApplication(
     id: application.id,
     requirementsDigest: what.requirementsDigest,
     parameters: what.parameters,
+    createdAt: new Date().toISOString(),
     held: heldOf(application),
     minimum: what.minimum,
   }

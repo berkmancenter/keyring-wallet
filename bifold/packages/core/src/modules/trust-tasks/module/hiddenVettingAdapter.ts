@@ -41,9 +41,12 @@ import {
   startHiddenApplication,
   type HiddenVettingRecord as StoredRecord,
 } from './hiddenVetting'
+import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import type { VtiCriterion } from './joinManifest'
 import { HIDDEN_VETTING_EXT } from './joinManifest'
 import { vtaAgent } from './vtaAgent'
+import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
 import { vtiAgent } from './vtiAgent'
 
 /** The criterion's published hidden-vetting parameters, raw: a typed parse would drop members. */
@@ -88,22 +91,10 @@ function toSeamRecord(stored: StoredRecord, criterionId?: string): SeamRecord {
     ...(stored.id ? { pcsId: stored.id } : {}),
     ...(criterionId ? { criterionId } : {}),
     ...(stored.requirementsDigest ? { requirementsDigest: stored.requirementsDigest } : {}),
-    createdAt: new Date().toISOString(),
+    // The application's own time, not the clock: a fabricated `createdAt`
+    // would have shown every application as made just now.
+    createdAt: stored.createdAt ?? new Date(0).toISOString(),
   }
-}
-
-/**
- * A step this build does not carry yet.
- *
- * The code matters: the screens word a `:notImplemented` code as "this step
- * isn't in this build of Keyring yet", where a bare Error reads as "something
- * went wrong, try again in a moment" — and the person then retries something
- * that cannot work. 03 added the wording in #409 (ed02ae68).
- */
-function notImplemented(step: string): Error {
-  return Object.assign(new Error(`${step} is not in this build yet`), {
-    code: `keyring/hidden-vetting/${step}:notImplemented`,
-  })
 }
 
 const seam: HiddenVettingSeam = {
@@ -160,8 +151,31 @@ const seam: HiddenVettingSeam = {
     return { needed, verified: refreshed.held }
   },
 
-  async requestVetting() {
-    throw notImplemented('requestVetting')
+  async requestVetting(agent, record, request) {
+    // The hidden-vetting ext is added inside `VtiApplicant.requestVetter`
+    // itself (it reads the stored record and names the applicant's PCS id), so
+    // the whole of this method is getting an applicant for the right persona
+    // and handing the request over unchanged. A screen cannot pass its own
+    // applicant through this seam, so one is built here from the same stores
+    // the screen uses.
+    const persona = await new GenericRecordsIdentityStore(agent).getPersona(record.communityDid)
+    if (!persona) {
+      throw Object.assign(new Error('no persona for this community'), {
+        code: 'keyring/hidden-vetting/requestVetting:noPersona',
+      })
+    }
+    const applicant = new VtiApplicant(
+      agent,
+      persona,
+      new GenericRecordsVettingStore(agent),
+      new GenericRecordsCommunityStore(agent)
+    )
+    await applicant.requestVetter({
+      link: request.link,
+      vetterDid: request.vetterDid,
+      code: request.code,
+      method: request.method as never,
+    })
   },
 
   async fetchChallenge(_agent, record, criterion) {

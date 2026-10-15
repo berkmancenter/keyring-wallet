@@ -72,20 +72,29 @@ describe('what it says when there is no agent to ask', () => {
   })
 })
 
-describe('the step this build does not carry yet', () => {
-  // A bare Error reads as "something went wrong, try again in a moment", and
-  // the person retries something that cannot work. The screens word a
-  // `:notImplemented` code as "this step isn't in this build yet".
-  it('requestVetting throws a code the screens can word', async () => {
-    const seam = hiddenVettingSeam()
-    const thrown = await (seam as never as Record<string, () => Promise<unknown>>)
-      .requestVetting()
-      .catch((error: unknown) => error)
-    expect(pcsErrorCode(thrown)).toBe('keyring/hidden-vetting/requestVetting:notImplemented')
+describe('nothing in the seam is a stub any more', () => {
+  it('no method answers :notImplemented', async () => {
+    // The seam had three stubs; all three are wired. This asserts the state
+    // rather than trusting it, because a half-wired seam is what nearly
+    // reached a tester's phone: the plumbing was complete underneath and the
+    // seam still refused.
+    const seam = hiddenVettingSeam() as never as Record<string, (...a: unknown[]) => Promise<unknown>>
+    const codes = await Promise.all(
+      ['requestVetting', 'fetchChallenge', 'submitJoin'].map((name) =>
+        seam[name]({}, { communityDid: 'did:webvh:QmC:example:x', applicationId: 'a' }, { id: 'c' }, 'x')
+          .then(() => undefined)
+          .catch((error: unknown) => pcsErrorCode(error))
+      )
+    )
+    expect(codes.filter((code) => code?.endsWith(':notImplemented'))).toEqual([])
   })
 })
 
 describe('the community half, now that it exists', () => {
+  // Each case asserts on its own call: the suite above also drives these
+  // methods, so a shared mock's call list would otherwise carry its calls.
+  beforeEach(() => jest.clearAllMocks())
+
   const record = { applicationId: 'app-1', communityDid: 'did:webvh:QmC:example:test-vtc', createdAt: 'now' }
   const criterion = { id: 'Vetted-Member', requirementsDigest: 'zQmPublished' } as never
 
