@@ -45,7 +45,7 @@ describe('Developer Screen', () => {
       expect(getByTestId(testIdWithKey('E2EClocksMode'))).toHaveTextContent('short')
       expect(getByTestId(testIdWithKey('E2EGrantWindowSeconds'))).toHaveTextContent('60')
       expect(getByTestId(testIdWithKey('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('60')
-      expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('1')
+      expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('0.5')
     } finally {
       delete config.E2E_CLOCKS
     }
