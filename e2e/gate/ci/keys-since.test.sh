@@ -24,7 +24,10 @@ elif cmd == 'create':
     o = dict(zip(a[i + 2::2], a[i + 3::2]))
     acl.append({'subject': o['--did'], 'role': o['--role'], 'label': o['--label'], 'createdBy': 'did:key:zRunnerAdmin', 'createdAt': now()}); print('created')
 elif cmd == 'delete':
-    acl = [e for e in acl if e['subject'] != a[i + 2]]; print('ACL entry deleted: ' + a[i + 2])
+    if a[i + 2] in os.environ.get('FAKE_NOTFOUND', '').split():
+        print('\u2717 Not found: task failed: not found')
+    else:
+        acl = [e for e in acl if e['subject'] != a[i + 2]]; print('ACL entry deleted: ' + a[i + 2])
 json.dump(acl, open(store, 'w'))
 with open(store + '.calls', 'a') as f: f.write(' '.join(a[i:]) + '\n')
 PY
@@ -73,4 +76,16 @@ out3=$(FAKE_BRACKET=1 bash -c '
   keys_since runner-main "$T0"; echo "rc=$?"
 ' 2>&1)
 grep -q 'acl delete did:key:zPhoneC' "$T/acl.json.calls" && echo "$out3" | grep -q '^rc=0' && ok "a bracketed log line ahead of the list: the list is still read, the leg's key deleted" || bad "bracketed line: $out3"
+# An entry already gone when its delete runs (the phone's rotation took it with its grant): "Not found" counts as
+# deleted, so the delete is asked once, not retried four times 15 s apart.
+echo '[{"subject":"did:key:zOld","label":"keyring-admin","createdBy":"did:key:zRunnerAdmin","createdAt":"2026-01-01T00:00:00+00:00"}]' > "$T/acl.json"; : > "$T/acl.json.calls"
+out4=$(FAKE_NOTFOUND=did:key:zPhoneD bash -c '
+  . "'"$here"'/../lib.sh"
+  sleep() { :; }
+  T0=$(stamp)
+  "$PNM_BIN" --vta runner-main acl create --did did:key:zPhoneD --role admin --label keyring-admin --expires 1h >/dev/null
+  keys_since runner-main "$T0"; echo "rc=$?"
+' 2>&1)
+n=$(grep -c 'acl delete did:key:zPhoneD' "$T/acl.json.calls")
+[ "$n" = 1 ] && echo "$out4" | grep -q '^rc=0' && ok "a key already gone (Not found) is asked to delete once, not retried, and the cleanup passes" || bad "Not found: $n delete call(s); $out4"
 exit $fails

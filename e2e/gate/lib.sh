@@ -412,7 +412,9 @@ for e in new:
   done
   [ "$got" = 1 ] || { echo "CLEANUP-FAILED $slug keys: the ACL list could not be read in 4 tries, so this leg's phone keys are still on $slug"; return 1; }
   for k in $list; do
-    for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -q deleted && break; sleep 15; done
+    # "Not found" is gone already, not a failure to retry: a phone's rotation can take the entry away with its grant
+    # (ci1 run 38782354344: four retries 15 s apart, 82 s of an 852 s leg, for an entry that was not there).
+    for i in 1 2 3 4; do r=$(pnm "$slug" acl delete "$k" | tail -1); echo "$r" | grep -qiE 'deleted|not found' && break; sleep 15; done
     echo "  $slug key ${k:0:28}…: $(echo "$r" | cut -c1-40)"; sleep 3
   done
 }
