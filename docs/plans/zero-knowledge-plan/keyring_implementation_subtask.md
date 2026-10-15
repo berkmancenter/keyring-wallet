@@ -4,7 +4,9 @@
 **Parent:** [`../zero-knowledge-plan.md`](../zero-knowledge-plan.md) — §3.1 and
 D4: the applicant's proof is built by the user's VTA, and Keyring carries
 messages. This document is how that is built in this repository.
-**Reasoning:** [`2026-10-14-al.md`](./2026-10-14-al.md) — why proving moved to
+**Reasoning:** [`2026-10-15-al.md`](./2026-10-15-al.md) — the live proof that
+an agent serves `vta/pcs/*`, and why the client asks discovery rather than
+reading a refusal. Before it, [`2026-10-14-al.md`](./2026-10-14-al.md) — why proving moved to
 the VTA, what the branch keeps, and the probe that must not raise a prompt.
 
 **Status.** `feat/hidden-vetting-mode` in the `bifold` submodule (worktree

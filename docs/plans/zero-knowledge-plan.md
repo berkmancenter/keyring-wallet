@@ -597,6 +597,7 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 |---|---|---|
 | 2026-09-22 | [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) | Opening research: where proving belongs ([[VTI-CRED-ARCH]], [[AGENT-STATE]]), the 2026-08-05 position it supersedes, what the work in flight decides, and the public-sources pass of 09-23 |
 | 2026-10-14 | [`2026-10-14-al.md`](./zero-knowledge-plan/2026-10-14-al.md) | IN-264: upstream's hidden-vetting inputs arrive and the applicant's proving moves to the VTA, superseding D4; what the branch keeps; no Rust needed; the probe that must not raise a consent prompt |
+| 2026-10-15 | [`2026-10-15-al.md`](./zero-knowledge-plan/2026-10-15-al.md) | The live proof that an agent serves `vta/pcs/*`, with heads; why the question moved from reading a refusal to asking discovery (a pre-0.60 agent can answer `permissionDenied` for a task it does not implement); four defects found in our own reading of an ACL entry; where the granted identity lives |
 
 ## 10. Sources
 
