@@ -215,6 +215,54 @@ describe('a join request lost on the way (#347)', () => {
     expect(tree.queryByTestId(id('JoinError'))).toBeNull()
   })
 
+  // lostreq's lost-ask-offline-error, the gate's device row, as a component test (gate efficiency item 8): the
+  // community's messaging host cut once the ask is in view, before it is tapped. On a device the mediator's login
+  // step then times out twice (VtiMediatorTransport LOGIN_STEP_TIMEOUT_MS, 15 s), and every gate run since 238 saw
+  // the same: after about 30 s, "didn't answer" (Errors.NoAnswer), C's pending list unchanged, never "Request sent".
+  it('lost-ask-offline-error: the host cut before the tap times out into words, sends nothing, and nothing later', async () => {
+    let cut = true
+    const timedOut = '[TrustTasks:VtiMediatorTransport] challenge did not answer within 15000 ms'
+    connect.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          if (cut) setTimeout(() => reject(new Error(timedOut)), 30_000)
+          else resolve(undefined)
+        })
+    )
+    const tree = await openJoin()
+    await ask(tree)
+
+    // While the phone waits on the cut host: neither an error yet nor "Request sent".
+    await act(async () => {
+      jest.advanceTimersByTime(29_000)
+    })
+    expect(tree.queryByTestId(id('JoinRequestSent'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinError'))).toBeNull()
+
+    // Then the error line, in the person's words; the transport's own text only behind Details.
+    await act(async () => {
+      jest.advanceTimersByTime(120_000)
+    })
+    expect(tree.getByTestId(id('JoinError'))).toHaveTextContent('Errors.NoAnswer')
+    expect(tree.getByTestId(id('JoinError'))).not.toHaveTextContent(/did not answer within|TrustTasks/)
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinErrorDetailsToggle'))))
+    expect(tree.getByTestId(id('JoinErrorDetail'))).toHaveTextContent(/did not answer within 15000 ms/)
+    // Nothing reached the community, and nothing is recorded as asked: C's pending list cannot have changed.
+    expect(apply).not.toHaveBeenCalled()
+    expect(phone.submissions()).toEqual([])
+    expect(tree.queryByTestId(id('JoinRequestSent'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinRequestLost'))).toBeNull()
+
+    // The host back: the app does not send the failed ask by itself (the row's 30 s look afterwards).
+    cut = false
+    await act(async () => {
+      jest.advanceTimersByTime(60_000)
+    })
+    expect(apply).not.toHaveBeenCalled()
+    expect(phone.submissions()).toEqual([])
+    expect(tree.queryByTestId(id('JoinRequestSent'))).toBeNull()
+  })
+
   // What the device gate sees with the community's mediator blocked before the tap.
   it.each([
     ['the mediator cannot be reached (no session)', 'connect'],
