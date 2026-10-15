@@ -121,7 +121,11 @@ const VtiHiddenVetting: React.FC = () => {
   const { ColorPalette } = useTheme()
   const { agent } = useAgent()
   const navigation = useNavigation()
-  const { communityDid, criterionId } = (useRoute().params ?? {}) as { communityDid: string; criterionId: string }
+  const {
+    communityDid,
+    criterionId,
+    ticket: handedTicket,
+  } = (useRoute().params ?? {}) as { communityDid: string; criterionId: string; ticket?: string }
   const seam = hiddenVettingSeam()
   const community = communityLabelOf(communityDid, t)
   const named = { community, interpolation: { escapeValue: false } }
@@ -130,7 +134,9 @@ const VtiHiddenVetting: React.FC = () => {
   const [record, setRecord] = useState<HiddenVettingRecord>()
   const [loaded, setLoaded] = useState(false)
   const [progress, setProgress] = useState<HiddenVettingProgress>()
-  const [ticket, setTicket] = useState('')
+  // A ticket handed over by the named screen starts in the field, so the
+  // person does not paste the same ticket a second time.
+  const [ticket, setTicket] = useState(handedTicket ?? '')
   const [asked, setAsked] = useState(false)
   const [busy, setBusy] = useState<string>()
   const [step, setStep] = useState<SendStep>()

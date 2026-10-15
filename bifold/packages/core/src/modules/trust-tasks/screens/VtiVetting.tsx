@@ -628,7 +628,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       if (privately) {
         ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
           Screens.VtiHiddenVetting,
-          { communityDid, criterionId: privately.id }
+          { communityDid, criterionId: privately.id, ...(ticketLink.trim() ? { ticket: ticketLink.trim() } : {}) }
         )
         throw new HandedOver()
       }
@@ -643,7 +643,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       }
       return m
     },
-    [manifest, communityDid, t, carriesPrivate, navigation]
+    [manifest, communityDid, t, carriesPrivate, navigation, ticketLink]
   )
 
   useEffect(() => {

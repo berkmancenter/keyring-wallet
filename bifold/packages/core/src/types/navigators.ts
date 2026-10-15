@@ -152,7 +152,12 @@ export type MyAgentStackParams = {
   [Screens.MyAgent]: undefined
   [Screens.VtiCommunity]: { communityDid: string }
   [Screens.VtiVetting]: undefined
-  [Screens.VtiHiddenVetting]: { communityDid: string; criterionId: string }
+  /**
+   * `ticket`: a vetting ticket the person already pasted somewhere else — the
+   * named vetting screen hands one over when the criterion turns out to be
+   * hidden, and dropping it there would make them paste it twice.
+   */
+  [Screens.VtiHiddenVetting]: { communityDid: string; criterionId: string; ticket?: string }
   [Screens.VtiHiddenVetter]: { communityDid: string; criterionId: string }
   [Screens.VtaLink]: undefined
   // `highlightCommunity`: a community just joined, picked out on its card for a moment (238).

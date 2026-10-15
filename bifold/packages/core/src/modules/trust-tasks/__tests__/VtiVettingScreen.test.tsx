@@ -441,9 +441,12 @@ describe('Vetting — one filled button per step', () => {
         fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
         jest.advanceTimersByTime(10)
       })
+      // The ticket goes with them: the private screen seeds its field from it,
+      // so nobody pastes the same ticket twice.
       expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
         communityDid,
         criterionId: 'kernel-developer-private',
+        ticket,
       })
       // Neither the named ask nor the refusal: the person is on the screen
       // that can use their ticket, and nothing told them Keyring cannot.
