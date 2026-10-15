@@ -106,6 +106,27 @@ export type {
   HiddenVettingVerdict,
 } from './screens/hiddenVettingSeam'
 export { hiddenVettingSeamImplementation } from './module/hiddenVettingAdapter'
+
+// The vetter's half. Both seams must be re-exported here and not only from
+// the screens: a seam registers itself when its module is first imported, so
+// an adapter nothing imports registers nothing and its screens never appear.
+// The screens import the seam by path, which loads the contract but not the
+// implementation — so this line is what puts the vetter side in a build.
+export {
+  registerHiddenVetter,
+  hiddenVetterSeam,
+  DECLARED_RELATIONSHIPS,
+  VOUCH_METHODS,
+} from './screens/hiddenVetterSeam'
+export type {
+  HiddenVetterSeam,
+  HiddenVetterStanding,
+  HiddenVetterRequest,
+  HiddenVetterStatement,
+  DeclaredRelationship,
+  VouchMethod,
+} from './screens/hiddenVetterSeam'
+export { hiddenVetterSeamImplementation } from './module/hiddenVetterAdapter'
 // 32's community half, exported here because index.ts has one owner.
 export {
   PCS_CHALLENGE_TYPE,
