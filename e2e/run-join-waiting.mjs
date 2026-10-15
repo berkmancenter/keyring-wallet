@@ -11,8 +11,8 @@
  *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
  *   join-approved-listed     (c) the community lists that identity as a member
  *   join-approved-wallet     (d) the Wallet shows C's membership card
- *   join-approved-role-card  (e) the default "member" role (decide/0.1 names none) gets no card of its own, on Your
- *                                agent or in the Wallet, and the membership card's details say "Role: member"
+ *   join-approved-role-card  (e) the default "member" role (decide/0.1 names none) gets no Wallet card of its own (one
+ *                                card from C), and the membership card's details say "Role: member"
  *                                (CommunityCardRole, bifold #399, UI/UX 10-14). A build without that line keeps the
  *                                earlier check, tracked: the role card beside the membership on Your agent
  *   cards-kept-on-agent      (f) the runner agent's vault holds both cards C issued this identity, within 90 s
@@ -67,6 +67,10 @@ async function statusOf(d, tries) {
   let status = "";
   for (let i = 0; i < tries && !status; i++) {
     await sleep(1500);
+    // The status line sits above the card's kept-card lines and identity: a screen left scrolled down (by a foot check,
+    // or since 249's role line made the card taller) has it off screen, and an off-screen element reads "" (249 run
+    // 1015-0047: "not a member … status ''" over a card that said "You're a member"). Scroll it into view first.
+    await scrollToTestId(d, `AgentCommunityStatus_${key}`, 6, { direction: "up" }).catch(() => undefined);
     status = (await textOf(d, `AgentCommunityStatus_${key}`).catch(() => "")).replace(/\s+/g, " ").trim();
     if (!status) {
       for (const id of [`AgentCommunityOpen_${key}`, "AgentMembershipRow"]) {
@@ -278,6 +282,9 @@ async function approvedFlow(d, me) {
       await tapTestId(d, "Wallet", 10000).catch(() => undefined);
       await sleep(2000);
       for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      // C's cards in the Wallet: by their issuer line. The default "member" role has no card of its own, so one.
+      const fromC = await d.$$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialIssuer").textContains("${C_NAME}")`).catch(() => []);
+      const walletCards = fromC.length;
       const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${C_NAME}")`);
       const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
       const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
@@ -285,8 +292,11 @@ async function approvedFlow(d, me) {
       await screenshot(d, "join-approved-role-card").catch(() => undefined);
       if (opened) await d.back().catch(() => undefined);
       return {
-        ok: membership && !roleCard && /\bmember\b/i.test(said),
-        detail: `Your agent: AgentCard_membership ${membership} · AgentCard_role ${roleCard} (want none for "member") · Wallet card details ${opened ? `CommunityCardRole "${said || "absent"}"` : `not opened (no card naming ${C_NAME})`}`,
+        // UI/UX's decision (10-14) is about the Wallet: one card from C, its details naming the role. Your agent's
+        // "Your role card — Kept by your agent" line (AgentCard_role) says the agent keeps it, and stays (249: #408
+        // keeps the role with its membership); it is reported, not judged.
+        ok: membership && walletCards === 1 && /\bmember\b/i.test(said),
+        detail: `Wallet: ${walletCards} card(s) from ${C_NAME} (want 1: no card of its own for "member") · details CommunityCardRole ${opened ? `"${said || "absent"}"` : `not read (no card naming ${C_NAME})`} · Your agent: membership line ${membership}, role kept-line ${roleCard}`,
       };
     });
   } else {
