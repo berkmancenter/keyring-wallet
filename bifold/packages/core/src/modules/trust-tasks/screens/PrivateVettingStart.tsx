@@ -22,12 +22,12 @@ import type { VtiCriterion } from '../module/joinManifest'
 import { hiddenVettingSeam, type HiddenVettingRefusal } from './hiddenVettingSeam'
 
 /** What each refusal says: what is wrong, and the step that fixes it. */
-export const REFUSAL_KEY: Record<HiddenVettingRefusal | 'checkFailed', string> = {
+export const REFUSAL_KEY: Record<HiddenVettingRefusal, string> = {
   suiteUnsupported: 'Join.Ways.PrivateVetting',
   noAgent: 'Join.Ways.PrivateVettingNoAgent',
   agentTooOld: 'Join.Ways.PrivateVettingAgentTooOld',
   phoneNotAllowed: 'Join.Ways.PrivateVettingPhoneNotAllowed',
-  checkFailed: 'Join.Ways.PrivateVettingCheckFailed',
+  cannotTell: 'Join.Ways.PrivateVettingCannotTell',
 }
 
 export const PrivateVettingStart: React.FC<{
@@ -40,14 +40,14 @@ export const PrivateVettingStart: React.FC<{
   const { ColorPalette } = useTheme()
   const { agent } = useAgent()
   const [checking, setChecking] = useState(false)
-  const [refusal, setRefusal] = useState<HiddenVettingRefusal | 'checkFailed'>()
+  const [refusal, setRefusal] = useState<HiddenVettingRefusal>()
   const named = { community, interpolation: { escapeValue: false } }
 
   const onPress = async () => {
     const seam = hiddenVettingSeam()
     // Nothing to ask with (no module, no agent session, the way not read yet): not a cause, just not asked.
     if (!seam || !agent || !criterion) {
-      setRefusal('checkFailed')
+      setRefusal('cannotTell')
       return
     }
     setChecking(true)
@@ -58,7 +58,7 @@ export const PrivateVettingStart: React.FC<{
       else setRefusal(checked.reason)
     } catch {
       // Not asked at all (offline, no answer): said as that, never guessed as a cause.
-      setRefusal('checkFailed')
+      setRefusal('cannotTell')
     } finally {
       setChecking(false)
     }

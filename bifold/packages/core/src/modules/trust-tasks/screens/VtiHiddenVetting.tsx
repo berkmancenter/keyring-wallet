@@ -337,7 +337,7 @@ const VtiHiddenVetting: React.FC = () => {
                 {t('Vetting.Hidden.Progress', { verified: progress.verified, needed: progress.needed })}
               </ThemedText>
               <ThemedText style={styles.muted}>{t('Vetting.Hidden.NoNames', named)}</ThemedText>
-              {progress.attestations.map((a, i) => (
+              {(progress.attestations ?? []).map((a, i) => (
                 <ThemedText
                   key={`${a.tokenLabel ?? ''}-${a.validFrom ?? i}`}
                   style={styles.muted}

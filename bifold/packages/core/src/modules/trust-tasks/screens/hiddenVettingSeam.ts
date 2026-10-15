@@ -18,8 +18,10 @@ import type { VtiCriterion } from '../module/joinManifest'
  * the first that holds is said. `noAgent`: no agent is linked at all, which
  * is not a matter of permissions. `agentTooOld` before `phoneNotAllowed`: an
  * agent before vta-service 0.60 cannot grant it, so updating is the step.
+ * `cannotTell`: the agent could not be asked, or its answer settled nothing;
+ * never said as a cause.
  */
-export type HiddenVettingRefusal = 'suiteUnsupported' | 'noAgent' | 'agentTooOld' | 'phoneNotAllowed'
+export type HiddenVettingRefusal = 'suiteUnsupported' | 'noAgent' | 'agentTooOld' | 'phoneNotAllowed' | 'cannotTell'
 
 export type HiddenVettingCheck = { ok: true } | { ok: false; reason: HiddenVettingRefusal; detail?: string }
 
@@ -28,10 +30,10 @@ export interface HiddenVettingRecord {
   applicationId: string
   pcsId?: string
   communityDid: string
-  criterionId: string
+  criterionId?: string
   /** The way in's digest when the application was made: the proof is bound to it, so a changed way needs a new application. */
   requirementsDigest?: string
-  createdAt: string
+  createdAt?: string
 }
 
 /** How far it has got. No vetter identity: that is what hidden vetting keeps from the community, and from this screen. */
@@ -40,7 +42,8 @@ export interface HiddenVettingProgress {
   needed: number
   /** Attestations the agent verified and keeps. A refused one never enters the list. */
   verified: number
-  attestations: { tokenLabel?: string; validFrom?: string; validUntil?: string }[]
+  /** Each one, when the agent lists them; a count alone is enough. */
+  attestations?: { tokenLabel?: string; validFrom?: string; validUntil?: string }[]
 }
 
 /** What the community decided, as the join submission answers it (the same as a named application). */
@@ -93,8 +96,15 @@ export function hiddenVettingSeam(): HiddenVettingSeam | undefined {
   return registered
 }
 
-/** A trust-task error's `code` (`vta/pcs/prove:noUsableAttestation`, …), however the module carries it. */
+/**
+ * A trust-task error's `code` (`vta/pcs/prove:noUsableAttestation`, …), however
+ * the module carries it: on the error itself, or inside the trust-task-error
+ * document it wraps (`payload.code`, or `document.payload.code`).
+ */
 export function pcsErrorCode(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | undefined)?.code
+  const e = error as
+    | { code?: unknown; payload?: { code?: unknown }; document?: { payload?: { code?: unknown } } }
+    | undefined
+  const code = e?.code ?? e?.payload?.code ?? e?.document?.payload?.code
   return typeof code === 'string' ? code : undefined
 }

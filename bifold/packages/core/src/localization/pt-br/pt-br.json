@@ -1543,7 +1543,7 @@
       "PrivateVettingNoAgent": "A verificação privada passa pelo seu agente. Vincule seu agente primeiro e tente de novo.",
       "PrivateVettingAgentTooOld": "Seu agente ainda não consegue fazer verificação privada. Atualizar seu agente costuma resolver isso.",
       "PrivateVettingPhoneNotAllowed": "O acesso deste telefone ao seu agente não permite verificação privada. Peça a quem gerencia seu agente para dar mais acesso a este telefone.",
-      "PrivateVettingCheckFailed": "O Keyring não conseguiu consultar seu agente. Tente de novo em um instante.",
+      "PrivateVettingCannotTell": "O Keyring não conseguiu saber se seu agente consegue fazer verificação privada. Confira se seu agente está online e tente de novo.",
       "ButtonJoin": "Entrar em {{community}}",
       "ButtonAsk": "Pedir para entrar",
       "NoVetting": "Nenhuma destas formas pede a um verificador que confirme quem você é.",

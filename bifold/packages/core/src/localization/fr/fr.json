@@ -1637,7 +1637,7 @@
       "PrivateVettingNoAgent": "La vérification privée passe par votre agent. Liez d'abord votre agent, puis réessayez.",
       "PrivateVettingAgentTooOld": "Votre agent ne peut pas encore faire de vérification privée. Mettre à jour votre agent règle généralement le problème.",
       "PrivateVettingPhoneNotAllowed": "L'accès de ce téléphone à votre agent ne permet pas la vérification privée. Demandez à la personne qui gère votre agent de donner plus d'accès à ce téléphone.",
-      "PrivateVettingCheckFailed": "Keyring n'a pas pu interroger votre agent. Réessayez dans un instant.",
+      "PrivateVettingCannotTell": "Keyring n'a pas pu savoir si votre agent peut faire une vérification privée. Vérifiez que votre agent est en ligne, puis réessayez.",
       "ButtonJoin": "Rejoindre {{community}}",
       "ButtonAsk": "Demander à rejoindre",
       "NoVetting": "Aucune de ces façons ne demande à un vérificateur de confirmer qui vous êtes.",

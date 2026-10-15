@@ -14,7 +14,12 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { HIDDEN_VETTING_EXT, type JoinAsks, type JoinWay, type VtiCriterion } from '../module/joinManifest'
 import { vtiAgent } from '../module/vtiAgent'
-import { registerHiddenVetting, type HiddenVettingRecord, type HiddenVettingSeam } from '../screens/hiddenVettingSeam'
+import {
+  pcsErrorCode,
+  registerHiddenVetting,
+  type HiddenVettingRecord,
+  type HiddenVettingSeam,
+} from '../screens/hiddenVettingSeam'
 import { joinCard } from '../screens/joinWays'
 import { PrivateVettingStart } from '../screens/PrivateVettingStart'
 import VtiHiddenVetting, { hiddenVettingErrorKey } from '../screens/VtiHiddenVetting'
@@ -129,6 +134,7 @@ describe('Join: asking the agent, only on the tap', () => {
     ['agentTooOld', 'Join.Ways.PrivateVettingAgentTooOld'],
     ['phoneNotAllowed', 'Join.Ways.PrivateVettingPhoneNotAllowed'],
     ['suiteUnsupported', 'Join.Ways.PrivateVetting'],
+    ['cannotTell', 'Join.Ways.PrivateVettingCannotTell'],
   ] as const)('%s: says so, and does not go on', async (reason, words) => {
     registerHiddenVetting(fakeSeam({ check: jest.fn(async () => ({ ok: false as const, reason })) }))
     const onReady = jest.fn()
@@ -149,7 +155,7 @@ describe('Join: asking the agent, only on the tap', () => {
     const tree = show()
     await act(async () => fireEvent.press(tree.getByTestId(id('JoinPrivateVettingStart_hidden-member'))))
     expect(tree.getByTestId(id('JoinPrivateVettingRefused_hidden-member'))).toHaveTextContent(
-      'Join.Ways.PrivateVettingCheckFailed'
+      'Join.Ways.PrivateVettingCannotTell'
     )
   })
 })
@@ -289,5 +295,28 @@ describe('error codes, in words', () => {
     [undefined, 'Vetting.Hidden.ErrorGeneric'],
   ])('%s → %s', (code, key) => {
     expect(hiddenVettingErrorKey(code)).toBe(key)
+  })
+})
+
+describe('reading the code, wherever the module carries it', () => {
+  it.each([
+    [{ code: 'vta/pcs/prove:notFound' }],
+    [{ payload: { code: 'vta/pcs/prove:notFound' } }],
+    [{ document: { payload: { code: 'vta/pcs/prove:notFound' } } }],
+  ])('%j', (error) => {
+    expect(pcsErrorCode(error)).toBe('vta/pcs/prove:notFound')
+  })
+
+  it('a count alone is progress enough: no list, no crash', async () => {
+    registerHiddenVetting(fakeSeam({ progress: jest.fn(async () => ({ needed: 2, verified: 1 })) }))
+    ;(useRoute as jest.Mock).mockReturnValue({ params: { communityDid: COMMUNITY, criterionId: 'hidden-member' } })
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [criterion] } as never)
+    const tree = render(
+      <BasicAppContext>
+        <VtiHiddenVetting />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect(tree.getByTestId(id('HiddenVettingProgress'))).toBeTruthy()
   })
 })
