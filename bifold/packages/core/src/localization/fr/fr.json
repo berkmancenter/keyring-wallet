@@ -1801,6 +1801,7 @@
       "Tokens_one": "Vous pouvez encore vous porter garant d'1 personne maintenant.",
       "Tokens_other": "Vous pouvez encore vous porter garant de {{count}} personnes maintenant.",
       "NextDraw": "D'autres pourront être tirés le {{date}}.",
+      "LapsesOn": "Tirez avant le {{date}}, sinon les jetons de cette période sont perdus.",
       "KeepOpening": "Keyring les tire tant qu'il est ouvert : ouvrez-le au moins tous les quelques jours pour continuer à vous porter garant.",
       "Draw": "Tirer maintenant",
       "RequestsTitle": "Personnes qui vous demandent de vous porter garant",

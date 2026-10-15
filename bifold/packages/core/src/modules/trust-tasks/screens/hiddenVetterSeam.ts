@@ -22,12 +22,15 @@ export interface HiddenVetterStanding {
   period?: string
   /** When this period's enrolment ends. */
   enrolledUntil?: string
-  /** Unspent tokens for the current token label: how many people they can still vouch for now. */
+  /** Free tokens for the current token label (the agent's tokensFree): how many people they can still vouch for now. */
   tokens: number
   tokenLabel?: string
+  /** When this phone last drew. Kept by the phone, not the agent: unknown on a new or restored phone. */
   lastDrawAt?: string
-  /** When the next draw is due (the community's tick, every 3 days by default). */
+  /** When the next draw is due (last draw plus the community's tick). Unknown without a last draw. */
   nextDrawAt?: string
+  /** When the current tick ends: a tick not drawn by then is lost. */
+  lapsesAt?: string
 }
 
 /** A private vetting request waiting for this vetter. They meet the person, so they know who it is. */
@@ -89,9 +92,12 @@ export function hiddenVetterSeam(): HiddenVetterSeam | undefined {
   return registered
 }
 
-/** Whether a draw is due now: never drawn, or the next draw time has come. */
+/**
+ * Whether a draw is due now: only when the next draw time is known and has
+ * come. Unknown (a new or restored phone has no last draw) is not "due": the
+ * screen offers a draw when no tokens are left, and says nothing else.
+ */
 export function drawDue(standing: HiddenVetterStanding | undefined, now: number): boolean {
-  if (!standing?.enrolled) return false
-  if (!standing.lastDrawAt) return true
-  return Boolean(standing.nextDrawAt) && Date.parse(standing.nextDrawAt as string) <= now
+  if (!standing?.enrolled || !standing.nextDrawAt) return false
+  return Date.parse(standing.nextDrawAt) <= now
 }

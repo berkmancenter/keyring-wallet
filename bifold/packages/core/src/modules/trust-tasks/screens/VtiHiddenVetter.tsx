@@ -46,6 +46,7 @@ export const HiddenVetterIds = {
   standing: 'HiddenVetterStanding',
   tokens: 'HiddenVetterTokens',
   nextDraw: 'HiddenVetterNextDraw',
+  lapses: 'HiddenVetterLapses',
   draw: 'HiddenVetterDraw',
   noRequests: 'HiddenVetterNoRequests',
   request: 'HiddenVetterRequest',
@@ -178,11 +179,9 @@ const VtiHiddenVetter: React.FC = () => {
     run('enrol', async () => {
       if (!agent || !criterion) return
       await seam.enrol(agent, communityDid, criterion)
-      const s = await reread(criterion)
-      if (drawDue(s, Date.now())) {
-        await seam.drawTokens(agent, communityDid, criterion)
-        await reread(criterion)
-      }
+      // Just enrolled: draw this tick's tokens now.
+      await seam.drawTokens(agent, communityDid, criterion)
+      await reread(criterion)
     })
 
   const draw = () =>
@@ -283,6 +282,11 @@ const VtiHiddenVetter: React.FC = () => {
             {standing.nextDrawAt ? (
               <ThemedText style={styles.muted} testID={testIdWithKey(HiddenVetterIds.nextDraw)}>
                 {t('Vetting.Vouch.NextDraw', { date: localDate(standing.nextDrawAt) })}
+              </ThemedText>
+            ) : null}
+            {standing.lapsesAt && drawDue(standing, Date.now()) ? (
+              <ThemedText testID={testIdWithKey(HiddenVetterIds.lapses)}>
+                {t('Vetting.Vouch.LapsesOn', { date: localDate(standing.lapsesAt) })}
               </ThemedText>
             ) : null}
             {/* Tokens are drawn on a schedule, and only while Keyring is open. */}

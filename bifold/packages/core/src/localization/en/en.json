@@ -1862,6 +1862,7 @@
       "Tokens_one": "You can vouch for 1 more person now.",
       "Tokens_other": "You can vouch for {{count}} more people now.",
       "NextDraw": "More can be drawn on {{date}}.",
+      "LapsesOn": "Draw before {{date}}, or this round's tokens are lost.",
       "KeepOpening": "Keyring draws them while it's open, so open it at least every few days to keep vouching.",
       "Draw": "Draw now",
       "RequestsTitle": "People asking you to vouch",

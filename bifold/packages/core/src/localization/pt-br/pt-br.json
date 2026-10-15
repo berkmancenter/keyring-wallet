@@ -1707,6 +1707,7 @@
       "Tokens_one": "Você pode garantir mais 1 pessoa agora.",
       "Tokens_other": "Você pode garantir mais {{count}} pessoas agora.",
       "NextDraw": "Mais poderão ser sorteados em {{date}}.",
+      "LapsesOn": "Sorteie antes de {{date}}, ou os tokens desta rodada se perdem.",
       "KeepOpening": "O Keyring os sorteia enquanto está aberto, então abra-o pelo menos a cada poucos dias para continuar garantindo.",
       "Draw": "Sortear agora",
       "RequestsTitle": "Pessoas pedindo sua garantia",

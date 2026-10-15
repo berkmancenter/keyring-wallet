@@ -123,6 +123,15 @@ describe('vouching privately', () => {
     expect(seam.drawTokens).not.toHaveBeenCalled()
   })
 
+  it('a new or restored phone (next draw unknown): nothing drawn on its own, and no next-draw date', async () => {
+    const seam = fakeSeam({ standing: jest.fn(async () => ({ enrolled: true, tokens: 0 })) })
+    const tree = await open(seam)
+    expect(seam.drawTokens).not.toHaveBeenCalled()
+    expect(tree.queryByTestId(id('HiddenVetterNextDraw'))).toBeNull()
+    // None left: the person may draw.
+    expect(tree.getByTestId(id('HiddenVetterDraw'))).toBeTruthy()
+  })
+
   it('a draw that is due is made when the screen opens', async () => {
     const seam = fakeSeam({ standing: jest.fn(async () => ({ ...enrolled, nextDrawAt: later(-1000) })) })
     await open(seam)
@@ -193,7 +202,8 @@ describe('vouching privately', () => {
 describe('when a draw is due', () => {
   it.each([
     [{ enrolled: false, tokens: 0 }, false],
-    [{ enrolled: true, tokens: 0 }, true],
+    // A new or restored phone: no last draw, so the next is unknown, not due.
+    [{ enrolled: true, tokens: 0 }, false],
     [{ enrolled: true, tokens: 1, lastDrawAt: later(-1000), nextDrawAt: later(60000) }, false],
     [{ enrolled: true, tokens: 1, lastDrawAt: later(-1000), nextDrawAt: later(-1000) }, true],
   ])('%j → %s', (standing, due) => {

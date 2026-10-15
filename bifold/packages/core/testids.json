@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "ba551ff20a3912052dab8d1f0d74c7b0fcefe2af",
+  "generatedFrom": "11208adeb5a5e70f92cced51dcf22f257c264ea3",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -446,6 +446,7 @@
     "HiddenVetterDraw": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetterEnrol": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetterError": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
+    "HiddenVetterLapses": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetterLive": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetterMethod": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
     "HiddenVetterNextDraw": ["src/modules/trust-tasks/screens/VtiHiddenVetter.tsx"],
@@ -1807,6 +1808,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.error"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.lapses"
     },
     {
       "src/modules/trust-tasks/screens/VtiHiddenVetter.tsx": "HiddenVetterIds.nextDraw"
