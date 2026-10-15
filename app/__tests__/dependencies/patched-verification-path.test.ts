@@ -47,6 +47,19 @@ const witnessedCredential = {
 
 const holder = witnessedCredential.credentialSubject.id
 
+/**
+ * pex types its credential parameter as `OriginalVerifiableCredential`, a union
+ * that its entry point does not re-export (it lives in
+ * `dist/main/lib/types/PexCredentialMapper`). Deep-importing a dist path to
+ * borrow the type would couple this test to the package's internal layout —
+ * the thing most likely to move under a patch. The cast is named here once, and
+ * it is honest about what it is: the literal above is a real VSC-shaped VC 2.0
+ * credential, and these tests are about the presentation context rule, not
+ * about whether a credential literal satisfies that union.
+ */
+const asPexCredential = (credential: typeof witnessedCredential) =>
+  credential as unknown as Exclude<Parameters<PEX['constructPresentations']>[0], unknown[]>
+
 describe('@animo-id/pex keeps a VC 2.0 presentation context unmixed', () => {
   // `constructPresentations` is where the patched line lives, and
   // `presentationFrom` — the path a presentation request takes — calls it. It
@@ -55,7 +68,7 @@ describe('@animo-id/pex keeps a VC 2.0 presentation context unmixed', () => {
   const pex = new PEX()
 
   it('does not append the VC 1.1 context to a caller-supplied VC 2.0 one', () => {
-    const [presentation] = pex.constructPresentations([witnessedCredential], {
+    const [presentation] = pex.constructPresentations([asPexCredential(witnessedCredential)], {
       holderDID: holder,
       basePresentationPayload: { '@context': [VC_2_0_CONTEXT] },
     }) as Array<{ '@context': string[] }>
@@ -71,7 +84,9 @@ describe('@animo-id/pex keeps a VC 2.0 presentation context unmixed', () => {
   it('still defaults to the VC 1.1 context when the caller supplied none', () => {
     // The patch narrowed the default; it did not remove it. A VC 1.1 holder
     // that passes no base context must keep working.
-    const [presentation] = pex.constructPresentations([witnessedCredential], { holderDID: holder }) as Array<{
+    const [presentation] = pex.constructPresentations([asPexCredential(witnessedCredential)], {
+      holderDID: holder,
+    }) as Array<{
       '@context': string[]
     }>
     expect(presentation['@context']).toEqual([VC_1_1_CONTEXT])
@@ -121,6 +136,9 @@ describe("@credo-ts/core's DCQL query finds JSON-LD credentials at all", () => {
     ])
     const agentContext = {
       dependencyManager: { resolve: (token: unknown) => byToken.get(token) ?? stub('other') },
+      // getCredentialsForRequest logs; the rest of the context is untouched by
+      // the query path these tests drive.
+      config: { logger: { debug() {}, info() {}, warn() {}, error() {}, trace() {} } },
     }
     return { agentContext, asked }
   }
@@ -133,7 +151,11 @@ describe("@credo-ts/core's DCQL query finds JSON-LD credentials at all", () => {
     const { agentContext, asked } = fakeAgentContext()
     const types = ['VerifiableCredential', 'StatementCredential']
 
-    await new DcqlService().queryCredentialsForDcqlQuery(
+    // `queryCredentialsForDcqlQuery`, where the patch is, is private;
+    // `getCredentialsForRequest` is its only public caller and drives the same
+    // branch, so this goes through the public surface rather than reaching past
+    // it with a cast.
+    await new DcqlService().getCredentialsForRequest(
       agentContext as never,
       {
         credentials: [{ id: 'vsc', format: 'ldp_vc', meta: { type_values: [types] } }],
@@ -150,7 +172,7 @@ describe("@credo-ts/core's DCQL query finds JSON-LD credentials at all", () => {
     const { agentContext, asked } = fakeAgentContext()
     const types = ['VerifiableCredential', 'StatementCredential']
 
-    await new DcqlService().queryCredentialsForDcqlQuery(
+    await new DcqlService().getCredentialsForRequest(
       agentContext as never,
       {
         credentials: [{ id: 'jwt', format: 'jwt_vc_json', meta: { type_values: [types] } }],
