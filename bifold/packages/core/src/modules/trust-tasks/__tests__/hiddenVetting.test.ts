@@ -296,7 +296,10 @@ describe('whether the round can be run at all', () => {
 describe('the record this phone keeps', () => {
   it('keeps what is needed to find the application again, and no secret', async () => {
     const { agent } = fakeAgent()
+    const before = Date.now()
     const record = await start(agent, fakeClient())
+    // Still an exact match, so a member added without thought fails here: the
+    // record is what a screen reads and what survives a restart.
     expect(record).toEqual({
       community: COMMUNITY,
       joinDid: JOIN_DID,
@@ -304,9 +307,13 @@ describe('the record this phone keeps', () => {
       id: 'pcs-id-1',
       requirementsDigest: 'zQmRequirements',
       parameters,
+      createdAt: record.createdAt,
       held: 0,
       minimum: 2,
     })
+    // And the time is the application's own, not a placeholder: the screens
+    // show how long this has been gathering.
+    expect(Date.parse(record.createdAt ?? '')).toBeGreaterThanOrEqual(before)
     expect(await loadHiddenVettingRecord(agent, COMMUNITY)).toEqual(record)
     // Nothing in the stored record is an attestation, a key or a proof.
     const stored = JSON.stringify(await loadHiddenVettingRecord(agent, COMMUNITY))
