@@ -112,6 +112,18 @@ export function ownedBy(entries, tempDid, heirs = []) {
 }
 
 /**
+ * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
+ * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
+ * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy
+ * and label, and no other grant shares all three. A manual grant breaks the createdBy chain (`ownedBy`), and another
+ * leg's phone linking to the same runner meanwhile looks the same by label; this tells them apart. Pure.
+ */
+export function fromGrant(entries, grant) {
+  if (!grant?.createdAt) return [];
+  return entries.filter((e) => e.createdAt === grant.createdAt && e.createdBy === grant.createdBy && e.label === grant.label);
+}
+
+/**
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
