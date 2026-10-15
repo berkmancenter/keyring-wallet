@@ -5,7 +5,7 @@
  * "Compare the codes", because "the codes match" lived only on the screen.
  * A fresh render reads only what was stored, which is what a relaunch sees.
  */
-import { render } from '@testing-library/react-native'
+import { act, render } from '@testing-library/react-native'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 
@@ -15,6 +15,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import VtiVetting from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
+import * as grantState from '../module/vtiGrantState'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -83,6 +84,51 @@ const agentWith = (records: Rec[]) => ({
     dids: { resolveDidDocument: async () => Promise.reject(new Error('offline')) },
     config: { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
   },
+})
+
+// 255: on a cold start the identity is read from the phone at once, but the
+// vetter grant only after its status is checked over the network. The screen
+// took the applicant's seat meanwhile: a seated vetter saw "Getting vetted"
+// and its first step for seconds, and could start an application.
+describe('a vetter is never seated as an applicant while the grant is still being read', () => {
+  beforeEach(() => {
+    const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:example:linked-vta',
+        label: 'alice',
+        linkedAt: '2026-09-22T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test('a slow status check: neither seat until it answers, then the desk', async () => {
+    const real = grantState.pickOwnVetterGrant
+    let answer: () => void = () => undefined
+    const answered = new Promise<void>((resolve) => (answer = resolve))
+    jest.spyOn(grantState, 'pickOwnVetterGrant').mockImplementation(async (...args) => {
+      await answered
+      return real(...args)
+    })
+    mockUseAgent.mockReturnValue(agentWith([...seatedVetter, cardIn()]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={config} />
+      </BasicAppContext>
+    )
+    expect(await tree.findByTestId(testIdWithKey('VettingSeatLoading'))).toBeTruthy()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(tree.queryByTestId(testIdWithKey('VettingApplicantStep_name'))).toBeNull()
+    expect(tree.queryByText(/Vetting\.SeatApplicant/)).toBeNull()
+    await act(async () => answer())
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_match'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('VettingApplicantStep_name'))).toBeNull()
+  })
 })
 
 describe('a vetter keeps their place across a relaunch', () => {

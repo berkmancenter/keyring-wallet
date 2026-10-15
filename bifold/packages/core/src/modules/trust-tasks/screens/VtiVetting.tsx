@@ -155,6 +155,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
   const [persona, setPersona] = useState<VtiPersona>()
   const [grant, setGrant] = useState<VtiHeldCredential>()
+  // Whether the seat has been read for this identity yet. The identity is
+  // read from this phone at once; the vetter grant only after its status is
+  // checked over the network. Until then the seat is not known: guessing the
+  // applicant's put a seated vetter on "Getting vetted" for seconds on a cold
+  // start (vetterDeskRelaunch, 255).
+  const [seatRead, setSeatRead] = useState(false)
   /**
    * Whether this phone is a vetter *now*, not merely whether it holds a grant.
    * The desk used to seat anyone with a grant and say nothing about its
@@ -438,6 +444,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
+  // Another identity (a different community, Join again): its seat is read afresh.
+  const personaDid = persona?.did
+  useEffect(() => {
+    setSeatRead(false)
+  }, [personaDid])
+
   // Load what the phone holds, and connect the persona's session with an inbox.
   useEffect(() => {
     if (!agent || !stores || !communityDid) return
@@ -508,6 +520,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       if (cancelled) return
       setGrant(picked.held)
       setStanding(picked.state)
+      setSeatRead(true)
       const m = await stores.community.getMembership(persona.communityDid)
       if (cancelled) return
       // A membership the community removed gives no role here (#166).
@@ -612,7 +625,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // Whose side this is, in the header: the vetter's desk has its own title and
   // the theme's gradient with one end changed; the applicant keeps the usual
   // header. The two read alike otherwise (Alberto, 10-06).
-  const side: 'vetter' | 'applicant' | undefined = grant ? 'vetter' : persona ? 'applicant' : undefined
+  const side: 'vetter' | 'applicant' | undefined =
+    persona && !seatRead ? undefined : grant ? 'vetter' : persona ? 'applicant' : undefined
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t(
@@ -780,6 +794,19 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   }
 
   // ---------------------------------------------------------------- the desk
+  // The seat is not known yet: neither the desk nor the applicant's steps.
+  if (persona && !seatRead) {
+    return (
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(VtiVettingIds.seatLoading)}
+      >
+        <ActivityIndicator color={ColorPalette.brand.primary} style={{ marginTop: 40 }} />
+      </SafeAreaView>
+    )
+  }
+
   if (grant) {
     // The desk lists requests newest first; the one in progress is the step.
     const current = desk.find((r) => r.status !== 'attested' && r.status !== 'declined')
