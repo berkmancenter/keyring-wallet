@@ -18,6 +18,8 @@ export const REAL_CLOCKS = Object.freeze({
 
 /** Seconds kept clear of a clock's edge, as the real-clock cases always did (read before 590 s of a 600 s window). */
 export const EDGE_S = 10;
+/** Seconds left between the end of create-wait-no-lock's idle and its read limit, for the reads themselves. */
+export const READ_MARGIN_S = 15;
 
 const number = (raw, what) => {
   const n = Number(String(raw ?? "").trim());
@@ -66,12 +68,18 @@ export function linkWaitTiming(c) {
   if (lockS + EDGE_S > windowS - EDGE_S) {
     throw new Error(`driver: a ${lockS} s lock leaves no time inside a ${windowS} s window to show the hold keeps it off (${clocksSaid(c)})`);
   }
-  const noLockIdleS = lockS + Math.round((windowS - lockS) / 3);
+  // Capped 15 s short of the read limit: the reads after the idle take seconds, and a short window leaves little
+  // room (60/30: idle 35 s, read before 50). The real clocks are untouched by the cap (400 s, limit 575).
+  const readBeforeS = windowS - EDGE_S;
+  const noLockIdleS = Math.min(lockS + Math.round((windowS - lockS) / 3), readBeforeS - READ_MARGIN_S);
+  if (noLockIdleS <= lockS) {
+    throw new Error(`driver: a ${lockS} s lock leaves no idle past it before ${readBeforeS - READ_MARGIN_S} s of a ${windowS} s window (${clocksSaid(c)})`);
+  }
   // link-no-answer: "didn't answer" is due once the window has ended (checks every 6 s); look 120 s past it. A touch
   // now and then, well inside the lock (110 s of 300 s), as a person waiting would; the loop polls at half that.
   const touchEveryS = Math.max(5, Math.round(lockS * 0.37));
   return {
-    noLock: { idleMs: noLockIdleS * 1000, readBeforeS: windowS - EDGE_S },
+    noLock: { idleMs: noLockIdleS * 1000, readBeforeS },
     noAnswer: {
       windowS,
       lookUntilMs: (windowS + 120) * 1000,

@@ -842,7 +842,11 @@ export async function readClocks(driver, { buildHasRows } = {}) {
   await openDeveloperScreen(driver, { keepAutoLock: true });
   const read = async (key) => {
     const el = await scrollToTestId(driver, key, 8).catch(() => undefined);
-    if (!el) throw new Error(`driver: ${key} not found on the Developer screen`);
+    if (!el) {
+      // buildHasRows undefined: no build file was known to tell an old build (real clocks) from a read that broke.
+      const why = buildHasRows === undefined ? " (no build file known, so an old build without clock rows cannot be told from a broken read)" : "";
+      throw new Error(`driver: ${key} not found on the Developer screen${why}`);
+    }
     return ((await el.getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "").trim();
   };
   const raw = {
