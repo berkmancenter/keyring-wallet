@@ -3,9 +3,11 @@ import {
   initialLinkState,
   reconnectDelayMs,
   reduceLink,
+  resumableFailure,
   showsOfflineBanner,
   STARTUP_GRACE_MS,
   type VtaLinkEvent,
+  type VtaLinkFailure,
   type VtaLinkState,
 } from '../module/vtaLinkMachine'
 
@@ -146,6 +148,23 @@ describe('helpers', () => {
     // Every other state is shown as it is.
     const online = { kind: 'online' } as const
     expect(connectionShown(online, late)).toBe(online)
+  })
+})
+
+// linkfail's swap rows (gate efficiency item 12): a swap the agent holds for an approval may be tried again, but only
+// by the person (Try again names the agent); the app's own pick-up, at start and back in the foreground, leaves it.
+// A swap the agent refused is never tried again; one it did not answer always may be.
+describe('which failed links may be picked up again', () => {
+  const VTA = 'did:webvh:example:vta'
+  const failed = (swap?: string): VtaLinkFailure =>
+    ({ reason: 'failed', vtaDid: VTA, label: 'alice', swap }) as VtaLinkFailure
+  it.each([
+    ['held for an approval', 'held', undefined, VTA],
+    ['refused', 'refused', undefined, undefined],
+    ['not answered', 'noAnswer', VTA, VTA],
+  ])('a swap %s: the app on its own %s, the person %s', (_what, swap, byItself, byPerson) => {
+    expect(resumableFailure(failed(swap))).toBe(byItself)
+    expect(resumableFailure(failed(swap), { manual: true })).toBe(byPerson)
   })
 })
 
