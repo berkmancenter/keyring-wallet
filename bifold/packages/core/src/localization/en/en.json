@@ -1621,7 +1621,10 @@
     "Unlink": "Unlink this agent",
     "UnlinkTitle": "Unlink {{agent}}?",
     "UnlinkBody": "This phone will no longer work with your agent.\n\nYour community identities and memberships stay with the agent. Link it again to use them on this phone.\n\nThe agent may still list this phone until its admin removes it, but that entry can't be used: this phone forgets its key.",
-    "UnlinkConfirm": "Unlink"
+    "UnlinkConfirm": "Unlink",
+    "PersonaAgentUnreachableTitle": "Reconnect your agent",
+    "PersonaAgentUnreachableBody": "Your agent didn't answer, so this community can't connect yet. Open My Agent to reconnect it.",
+    "PersonaAgentNotLinkedBody": "The agent that holds this community's identity is no longer connected to this phone. Open My Agent to connect it again."
   },
   "Invited": {
     "Withdraw": "Withdraw my request",

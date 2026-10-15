@@ -39,12 +39,16 @@ jest.mock('@credo-ts/askar', () => ({
     }
     public async fetchAskarKey(ctx: unknown, keyId: string) {
       return this.withSession
-        ? this.withSession(ctx, async (s) => (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId }))
+        ? this.withSession(ctx, async (s) =>
+            (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId })
+          )
         : null
     }
     public async getPublicKey(ctx: unknown, keyId: string) {
       return this.withSession!(ctx, async (s) =>
-        (await (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId })) ? { kid: keyId } : null
+        (await (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId }))
+          ? { kid: keyId }
+          : null
       )
     }
     /** Credo's Askar KMS fails a key it does not hold, naming the backend (TestFlight 239's message). */
@@ -79,7 +83,11 @@ jest.mock('@credo-ts/askar', () => ({
   },
 }))
 
-import { EphemeralKeyManagementService, FETCH_RETRY_MS } from '../module/EphemeralKeyManagementService'
+import {
+  EphemeralKeyManagementService,
+  FETCH_RETRY_MS,
+  KeyCopyUnavailable,
+} from '../module/EphemeralKeyManagementService'
 
 const ctx = {} as never
 
@@ -193,15 +201,22 @@ describe('a copy not held when it is used is fetched first (TestFlight 239)', ()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('a fetch that fails lets the use fail as before, and is not asked again at once', async () => {
+  it('a fetch that fails makes the use fail saying why (#422), and is not asked again at once', async () => {
     const kms = new EphemeralKeyManagementService()
     const fetch = jest.fn(async () => {
-      throw new Error('the agent is not reachable')
+      throw new Error('did:webvh:agent did not come online within 20 s')
     })
     kms.setMissingKeyFetcher(fetch)
-    await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found in backend 'ephemeral'/)
-    await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found/)
+    // Not the bare "not found in backend 'ephemeral'", which said the same for
+    // every cause: the fetcher's own reason, in a typed error.
+    const failure = await kms.sign(ctx, { keyId: KEY } as never).catch((e) => e)
+    expect(failure).toBeInstanceOf(KeyCopyUnavailable)
+    expect(failure.keyId).toBe(KEY)
+    expect(failure.reason).toMatch(/did not come online/)
+    await expect(kms.decrypt(ctx, { keyAgreement: { keyId: KEY } } as never)).rejects.toThrow(/did not come online/)
     expect(fetch).toHaveBeenCalledTimes(1)
+    // Routing still asks every backend for a key: getPublicKey answers null, never throws.
+    await expect(kms.getPublicKey(ctx, KEY)).resolves.toBeNull()
   })
 
   it('a key whose fetch failed is asked for again after the pause, within the inbox look', async () => {
@@ -213,7 +228,7 @@ describe('a copy not held when it is used is fetched first (TestFlight 239)', ()
     })
     kms.setMissingKeyFetcher(fetch)
     const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
-    await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/not found/)
+    await expect(kms.sign(ctx, { keyId: KEY } as never)).rejects.toThrow(/could not be fetched/)
     fail = false
     now.mockReturnValue(1_000_000 + FETCH_RETRY_MS)
     await expect(kms.sign(ctx, { keyId: KEY } as never)).resolves.toBeTruthy()

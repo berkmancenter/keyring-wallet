@@ -1560,7 +1560,10 @@
     "Unlink": "Délier cet agent",
     "UnlinkTitle": "Délier {{agent}} ?",
     "UnlinkBody": "Ce téléphone ne fonctionnera plus avec votre agent.\n\nVos identités et adhésions aux communautés restent auprès de l'agent. Reliez-le à nouveau pour les utiliser sur ce téléphone.\n\nL'agent peut encore lister ce téléphone jusqu'à ce que son admin le retire, mais cette entrée ne peut pas servir : ce téléphone oublie sa clé.",
-    "UnlinkConfirm": "Délier"
+    "UnlinkConfirm": "Délier",
+    "PersonaAgentUnreachableTitle": "Reconnectez votre agent",
+    "PersonaAgentUnreachableBody": "Votre agent n'a pas répondu, cette communauté ne peut donc pas encore se connecter. Ouvrez Mon agent pour le reconnecter.",
+    "PersonaAgentNotLinkedBody": "L'agent qui détient l'identité de cette communauté n'est plus connecté à ce téléphone. Ouvrez Mon agent pour le reconnecter."
   },
   "Invited": {
     "Withdraw": "Retirer ma demande",

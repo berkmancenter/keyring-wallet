@@ -41,6 +41,13 @@ jest.mock('../module/vtiAgent', () => ({
     }),
   },
 }))
+const mockRefetch = jest.fn(async (..._a: unknown[]) => undefined)
+jest.mock('../module/vtaAgent', () => ({
+  vtaAgent: {
+    installKeyFetcher: jest.fn(() => void mockOrder.push('installKeyFetcher')),
+    refetchPersonaKeys: (...a: unknown[]) => mockRefetch(...a),
+  },
+}))
 /** What listPersonas returns, when a test sets it: every agent's identities on this phone. */
 let mockPersonas: Array<typeof mockPersona> | undefined
 const mockPersona = {
@@ -80,7 +87,13 @@ jest.mock('../module/vtiCommunityNotices', () => ({
 }))
 
 import { setCurrentAgentDid } from '../module/currentAgent'
-import { startPersonaInbox as start, VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
+import {
+  PersonaAgentUnreachable,
+  VTI_PERSONA_AGENT_STATE_EVENT,
+  personaAgentState,
+  startPersonaInbox as start,
+  VTI_PERSONA_DELIVERIES_EVENT,
+} from '../module/vtiPersonaInbox'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { vtiAgent } from '../module/vtiAgent'
 
@@ -94,6 +107,90 @@ const startPersonaInbox = (...a: Parameters<typeof start>) => {
   return stop
 }
 afterEach(() => running.splice(0).forEach((stop) => stop()))
+
+// #422: after an install or a key swap the persona's borrowed key is not in
+// memory, and only the VTA controller's fetcher can borrow it again. The inbox
+// signed in before that fetcher was installed, and a recoverable miss read as
+// a failed sign-in, with nothing said to the person.
+describe('a persona whose borrowed key is not in memory (#422)', () => {
+  const connect = vtiAgent.connect as jest.Mock
+  const MISSING = () =>
+    new Error(`Key with key id 'vta-copy:did:webvh:a:${mockPersona.did}#key-1' not found in backend 'ephemeral'`)
+  beforeEach(() => {
+    mockOrder.length = 0
+    mockAgentState.isConnected = false
+    mockAgentState.status = 'disconnected'
+    connect.mockClear()
+    mockRefetch.mockReset().mockResolvedValue(undefined)
+    mockAgentListeners.clear()
+  })
+
+  it('the key fetcher is installed before the first sign-in, at start-up', async () => {
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+    await flush()
+    expect(mockOrder.indexOf('installKeyFetcher')).toBeGreaterThanOrEqual(0)
+    expect(mockOrder.indexOf('installKeyFetcher')).toBeLessThan(mockOrder.indexOf('connect'))
+  })
+
+  it('borrows the key again and signs in once more, in the same look', async () => {
+    connect.mockRejectedValueOnce(MISSING()).mockImplementationOnce(async () => {
+      mockAgentState.isConnected = true
+    })
+    const onError = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
+    await flush()
+    expect(mockRefetch).toHaveBeenCalledWith(agent, mockPersona)
+    expect(connect).toHaveBeenCalledTimes(2)
+    expect(mockAgentState.isConnected).toBe(true)
+    expect(onError).not.toHaveBeenCalled()
+    expect(personaAgentState(mockPersona.communityDid)).toBeUndefined()
+  })
+
+  it('when the agent cannot be reached, says so as its own state, and does not sign in blindly again', async () => {
+    connect.mockRejectedValueOnce(MISSING())
+    mockRefetch.mockRejectedValueOnce(new Error('did:webvh:agent did not come online within 20 s'))
+    const said: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_AGENT_STATE_EVENT, (e) => said.push(e))
+    const onError = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
+    await flush()
+    sub.remove()
+    expect(connect).toHaveBeenCalledTimes(1)
+    const error = onError.mock.calls[0][0]
+    expect(error).toBeInstanceOf(PersonaAgentUnreachable)
+    expect(error.kind).toBe('unreachable')
+    expect(error.message).toMatch(/did not come online/)
+    expect(personaAgentState(mockPersona.communityDid)?.kind).toBe('unreachable')
+    expect(said).toEqual([{ communityDid: mockPersona.communityDid, unreachable: 'unreachable' }])
+
+    // The agent is back: the next look borrows, signs in, and the state clears.
+    connect.mockRejectedValueOnce(MISSING()).mockImplementationOnce(async () => {
+      mockAgentState.isConnected = true
+    })
+    DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: mockPersona.did })
+    await flush()
+    expect(mockAgentState.isConnected).toBe(true)
+    expect(personaAgentState(mockPersona.communityDid)).toBeUndefined()
+  })
+
+  it('tells an agent that is no longer linked apart from one that did not answer', async () => {
+    connect.mockRejectedValueOnce(MISSING())
+    mockRefetch.mockRejectedValueOnce(new Error(`${mockPersona.did}'s agent is no longer linked`))
+    const onError = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
+    await flush()
+    expect(onError.mock.calls[0][0].kind).toBe('notLinked')
+  })
+
+  it('any other sign-in failure is not taken for a missing key', async () => {
+    connect.mockRejectedValueOnce(new Error('the mediator refused the connection'))
+    const onError = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
+    await flush()
+    expect(mockRefetch).not.toHaveBeenCalled()
+    expect(onError.mock.calls[0][0]).not.toBeInstanceOf(PersonaAgentUnreachable)
+  })
+})
 
 describe('startPersonaInbox', () => {
   // 227 gate, Android lock probe: after an unlock the inbox asked the mediator
@@ -199,7 +296,7 @@ describe('startPersonaInbox', () => {
   it('listens before it connects, as the persona', async () => {
     const stop = startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
     await flush()
-    expect(mockOrder).toEqual(['listen', 'connect'])
+    expect(mockOrder).toEqual(['installKeyFetcher', 'listen', 'connect'])
     expect((vtiAgent.connect as jest.Mock).mock.calls[0][2].persona.did).toBe(mockPersona.did)
     stop()
   })

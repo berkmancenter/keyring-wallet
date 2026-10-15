@@ -1466,7 +1466,10 @@
     "Unlink": "Desvincular este agente",
     "UnlinkTitle": "Desvincular {{agent}}?",
     "UnlinkBody": "Este telefone não vai mais funcionar com seu agente.\n\nSuas identidades e participações em comunidades ficam com o agente. Vincule-o de novo para usá-las neste telefone.\n\nO agente ainda pode listar este telefone até que o admin dele o remova, mas essa entrada não pode ser usada: este telefone esquece a chave.",
-    "UnlinkConfirm": "Desvincular"
+    "UnlinkConfirm": "Desvincular",
+    "PersonaAgentUnreachableTitle": "Reconecte seu agente",
+    "PersonaAgentUnreachableBody": "Seu agente não respondeu, então esta comunidade ainda não pode se conectar. Abra Meu agente para reconectá-lo.",
+    "PersonaAgentNotLinkedBody": "O agente que guarda a identidade desta comunidade não está mais conectado a este telefone. Abra Meu agente para conectá-lo novamente."
   },
   "Invited": {
     "Withdraw": "Retirar meu pedido",

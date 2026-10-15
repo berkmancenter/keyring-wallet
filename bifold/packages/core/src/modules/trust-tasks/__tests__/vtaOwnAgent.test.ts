@@ -1154,6 +1154,65 @@ describe("an identity's key copy used before any session fetched it (TestFlight 
     expect(keyClient).not.toHaveBeenCalled()
   })
 
+  it('installed before the link is read (#422, a sign-in at start-up): the fetch waits for it, and asks the current agent on its own session', async () => {
+    const mine = persona(VTA, 'mine')
+    const held = jest.spyOn(VtaClient.prototype, 'holdPersonaKeys').mockResolvedValue(true)
+    const p = phone({
+      manager: linkedManager,
+      link: { vtaDid: VTA, label: 'farm.example', linkedAt: 'x', owner: true },
+    })
+    const links = { ...p.links, list: async () => [{ vtaDid: VTA, label: 'farm.example', linkedAt: 'x' }] }
+    const identities = { ...p.identities, listPersonas: jest.fn(async () => [mine]) }
+    let fetcher: ((keyId: string) => Promise<void>) | undefined
+    const backend = { backend: 'ephemeral', setMissingKeyFetcher: (f: typeof fetcher) => (fetcher = f) }
+    const kmsAgent = {
+      ...(agent as object),
+      dependencyManager: { resolve: () => ({ backends: [{ backend: 'askar' }, backend] }) },
+    } as never
+    const keyClient = jest.fn(() => ({
+      holdPersonaKeys: jest.fn(async () => true),
+      disconnect: jest.fn(async () => undefined),
+    }))
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ linkStore: () => links as never, identityStore: () => identities as never, keyClient } as never)
+
+    // The persona inbox's order on a fresh install: the fetcher first, the restore after.
+    vta.installKeyFetcher(kmsAgent)
+    expect(fetcher).toBeDefined()
+    const fetching = (fetcher as NonNullable<typeof fetcher>)(mine.kmsKeyIds?.keyAgreement as string)
+    await vta.restore(kmsAgent)
+    await fetching
+    // The current agent, on the session the restore opens; never taken for
+    // "another linked agent" and asked on a second session as the same key.
+    expect(keyClient).not.toHaveBeenCalled()
+    expect(held).toHaveBeenCalledWith(mine)
+    held.mockRestore()
+  })
+
+  it('installing the fetcher again for the same agent changes nothing; refetchPersonaKeys asks for the persona key now', async () => {
+    const mine = persona(VTA, 'mine')
+    const held = jest.spyOn(VtaClient.prototype, 'holdPersonaKeys').mockResolvedValue(true)
+    const { vta } = await restartedPhone([mine])
+    vta.installKeyFetcher(agent as never)
+    await vta.refetchPersonaKeys(agent as never, mine)
+    expect(held).toHaveBeenCalledWith(mine)
+    held.mockRestore()
+  })
+
+  it('a fetch asked for when the link is never read says so, rather than guessing the agent', async () => {
+    const vta = new VtaAgentController()
+    alive.push(vta)
+    vta.configure({ keyFetchWaitMs: 300 } as never)
+    let fetcher: ((keyId: string) => Promise<void>) | undefined
+    const backend = { backend: 'ephemeral', setMissingKeyFetcher: (f: typeof fetcher) => (fetcher = f) }
+    vta.installKeyFetcher({
+      ...(agent as object),
+      dependencyManager: { resolve: () => ({ backends: [backend] }) },
+    } as never)
+    await expect((fetcher as NonNullable<typeof fetcher>)('vta-copy:x:y#key-1')).rejects.toThrow(/was not read within/)
+  })
+
   it('a key no identity on this phone names is refused, not guessed at', async () => {
     const { fetch, keyClient } = await restartedPhone([persona(OTHER, 'tiger-silver')])
     await expect(fetch('vta-copy:did:webvh:nobody:did:webvh:x#key-1')).rejects.toThrow(
