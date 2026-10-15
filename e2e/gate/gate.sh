@@ -4,6 +4,7 @@
 #   gate.sh run --pin <wallet-sha> [--legs a,b] [--serial]   every leg (or some), on that commit's CI builds
 #   gate.sh rerun <run-id> --only-failed                      the rows that failed or never ran, same builds
 #   gate.sh dry --golden [--legs a,b]                         the drivers on the shipped build ($GATE_HOME/golden)
+#   gate.sh nightly [--pin <wallet-sha>]                      the nightly legs ($LEGS_NIGHTLY), on main's newest green build
 #   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
 #   gate.sh watch --main                                      a gate for every new green push build of main, for ever
 #   gate.sh report <run-id>                                   rows per leg, with wall-clock
@@ -32,8 +33,14 @@ LEGS_IOS_ALONE="kk p2 smoke-ios"
 # Mostly waiting (IN-135's slow cases, about 35 min) on the emulator, so it runs beside the iOS-alone legs, where the
 # emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
 LEGS_BESIDE_IOS_ALONE="linkwait"
+# The nightly run (gate efficiency §6, item 9): what moved out of the per-release gate because a Jest twin runs on every
+# pull request. The watcher runs it once a night (GATE_NIGHTLY_HOUR, local) on main's newest green build; `gate.sh
+# nightly` runs it by hand. p2 runs only there, so `all` leaves it out (LEGS_NIGHTLY_ONLY; --legs p2 still names it).
+# lostreq runs in both: its offline-ask row (lost-ask-offline-error, twin bifold #414) only in the nightly run.
+LEGS_NIGHTLY="p2 lostreq"
+LEGS_NIGHTLY_ONLY="p2"
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- one leg ----
 
@@ -66,7 +73,9 @@ run_leg() {
   s=$(date +%s)
   # In the background with wait (not a foreground child), so a stop reaches this shell at once: stop_forward then
   # passes it on and waits for the leg's cleanup.
-  E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
+  # GATE_KIND (gate, nightly, dry, changed): a leg with a row that runs in one kind of run only reads it (lostreq).
+  GATE_KIND=$(sed -n 's/^kind=//p' "$rd/meta" 2>/dev/null | head -1) \
+    E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
   wait $!; rc=$?; e=$(date +%s)
   printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
   # A sleep inside the leg (pmset's log) makes its rows no verdict on the app (1009-1608: a 682 s clamshell sleep
@@ -79,12 +88,18 @@ run_leg() {
 # run_group <run-dir> <legs...> one after another (one platform's devices).
 run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; done; }
 
+# Whether leg $1 is among the wanted legs $2 ("all", or a comma list). "all" is every leg but the nightly-only ones.
+leg_wanted() {
+  [[ ",$2," == *",$1,"* ]] && return 0
+  [ "$2" = all ] && [[ " $LEGS_NIGHTLY_ONLY " != *" $1 "* ]]
+}
+
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
 run_legs() {
   local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l return_solo=0
-  for l in $LEGS_SOLO; do [[ ",$want," == *",$l,"* || $want == all ]] && solo+=("$l"); done
-  for l in $LEGS_IOS; do [[ ",$want," == *",$l,"* || $want == all ]] && ios+=("$l"); done
-  for l in $LEGS_ANDROID; do [[ ",$want," == *",$l,"* || $want == all ]] && android+=("$l"); done
+  for l in $LEGS_SOLO; do leg_wanted "$l" "$want" && solo+=("$l"); done
+  for l in $LEGS_IOS; do leg_wanted "$l" "$want" && ios+=("$l"); done
+  for l in $LEGS_ANDROID; do leg_wanted "$l" "$want" && android+=("$l"); done
   local free; free=$(disk_free_gb)
   if [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
     local alone=() rest=() l2
@@ -249,6 +264,23 @@ cmd_dry() {
   cmd_run --pin "$golden" --kind dry "$@"
 }
 
+# The nightly legs on main's newest green build (or --pin). A nightly run never counts as a gate of its commit.
+cmd_nightly() {
+  local pin=""
+  [ "${1:-}" = --pin ] && pin=${2:-}
+  [ -n "$pin" ] || pin=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null | cut -d' ' -f1)
+  [ -n "$pin" ] && [ "$pin" != none ] || die "no green main build to run the nightly legs on"
+  cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+}
+
+# Whether the nightly run is due: GATE_NIGHTLY not 0, the local hour is GATE_NIGHTLY_HOUR (default 3), and none has
+# started today (a marker per local date, written when one starts, so a long or failed run is not started twice).
+nightly_due() {
+  [ "${GATE_NIGHTLY:-1}" != 0 ] || return 1
+  [ "$(date +%H)" = "$(printf %02d "${GATE_NIGHTLY_HOUR:-3}")" ] || return 1
+  [ ! -f "$GATE_HOME/nightly-$(date +%Y%m%d)" ]
+}
+
 # One gate at a time on this Mac, whoever started it. The lock is a directory holding the owner's pid. The pid is
 # the shell that runs the gate (sh -c 'echo $PPID': in a subshell, $$ is still the parent's, and bash 3.2 has no
 # BASHPID), so a run killed hard leaves a dead owner, and a lock with a dead owner is taken over. The takeover is
@@ -331,9 +363,10 @@ cmd_watch_main() {
   gate_env
   # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
   trap stop_forward TERM INT HUP
-  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same
-  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO"
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same started
+  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO; the nightly legs ($LEGS_NIGHTLY) at $(printf %02d "${GATE_NIGHTLY_HOUR:-3}"):00"
   while :; do
+    started=0; sha=
     pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
     if [ -n "$pair" ] && [ "$pair" != none ]; then
       sha=${pair%% *}; run=${pair##* }
@@ -364,8 +397,17 @@ cmd_watch_main() {
           fi
           for i in $(seq 1 60); do [ "$(GATE_PUSH_ON_SHA=$on_sha build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60 & wait $!; done
         fi
+        started=1
         ( GATE_PUSH_ON_SHA=$on_sha cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
       fi
+    fi
+    # The nightly legs, on the build just gated (or the newest already gated), when nothing else started this cycle.
+    # A new main build waits for the next cycle's gate first, so the gate is never behind a nightly run.
+    if [ "$started" = 0 ] && [ -n "$sha" ] && nightly_due && ! paused \
+      && ! { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } && ! mac_busy && mac_stable && watch_checkout_ready; then
+      touch "$GATE_HOME/nightly-$(date +%Y%m%d)"
+      say "nightly: $LEGS_NIGHTLY on main build ${sha:0:8}"
+      ( cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
     fi
     sleep "$interval" & wait $!
   done
@@ -426,6 +468,7 @@ case ${1:-} in
   run) shift; cmd_run "$@" ;;
   rerun) shift; cmd_rerun "$@" ;;
   dry) shift; cmd_dry "$@" ;;
+  nightly) shift; gate_env; cmd_nightly "$@" ;;
   watch) shift; cmd_watch "$@" ;;
   report) shift; cmd_report "$@" ;;
   summary) shift; gate_env; cmd_summary "$@" ;;

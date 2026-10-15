@@ -65,6 +65,7 @@ node e2e/gate/ledger.mjs [--days 14] [--json]          # each row's pass rate ov
 GATE_RERUN_SKIP="p2" e2e/gate/gate.sh rerun <run-id> --only-failed        # …leaving these legs out (a known cause a rerun cannot change; rerun-skipped= in the meta)
 GATE_LOGCAT=1 e2e/gate/gate.sh rerun <run-id> --only-failed               # every Android leg saves its emulator's whole log (emulator-NNNN.logcat)
 e2e/gate/gate.sh dry --golden                      # these drivers against the shipped build, before a candidate
+e2e/gate/gate.sh nightly [--pin <sha>]             # the nightly legs (LEGS_NIGHTLY) on main's newest green build
 e2e/gate/gate.sh watch --pr <n>                    # start `run` when that pin PR merges and its builds finish
 e2e/gate/gate.sh watch --main                      # continuous gating: a run for every new green push build of main
 e2e/gate/gate.sh report <run-id>                   # the run's rows, per leg, with wall-clock
@@ -214,6 +215,19 @@ It also runs by itself after every green push test build of main (a push-on buil
 only a `-push-on` artifact and does not start it). What does not move to a hosted runner: the
 physical-phone legs, the terminal-app fixture, and anything that links a Farm runner (stage B would need the
 runner personas provisioned for CI).
+
+## The nightly run
+
+Rows whose Jest twin runs on every pull request leave the per-release gate and run once a night instead (gate
+efficiency §6, item 9). `LEGS_NIGHTLY` in `gate.sh` names the legs: `p2`, which runs only there (`LEGS_NIGHTLY_ONLY`,
+so `run` and `all` leave it out; `--legs p2` still names it), and `lostreq`, whose offline-ask row
+`lost-ask-offline-error` runs only in a nightly run (its twin is bifold's `joinLostRequest.test.tsx`, #414). In a
+gate the row is a SKIP that says so; a rerun that names it runs it. Every leg gets its run's kind as `GATE_KIND`.
+
+`watch --main` starts the nightly legs once a day, at `GATE_NIGHTLY_HOUR` (local, default 3), on the newest green
+main build, only in a cycle where no gate started and under the same busy and stability rules as a gate;
+`nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day as started, so a long or failed run is not started twice.
+`GATE_NIGHTLY=0` turns it off. A nightly run is `<id>-nightly`, never counted as a gate of its commit.
 
 ## Continuous gating on main
 
