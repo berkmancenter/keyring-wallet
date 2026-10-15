@@ -83,7 +83,13 @@ function fakeClient(over: Record<string, unknown> = {}) {
   return {
     managerDid: 'did:peer:2.Ephone',
     servesPcs: async () => true,
-    listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'member', scopes: ['pcs-applicant'] }],
+    // As the wire has it: `scopes` is the CONTEXT list and the capability
+    // narrowing rides ext["org.openvtc.capabilities"], which VtaClient surfaces
+    // as `capabilities`. The earlier fake put the capability in `scopes`, which
+    // is what let the broken check pass.
+    listAcl: async () => [
+      { subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
+    ],
     createPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: [] }),
     showPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(2) }),
     verifyPcsAttestation: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(1) }),
@@ -142,20 +148,58 @@ describe('whether the round can be run at all', () => {
 
   it('refuses when no entry covers this phone', async () => {
     const client = fakeClient({
-      listAcl: async () => [{ subject: 'did:peer:2.Esomebodyelse', role: 'member', scopes: ['pcs-applicant'] }],
+      listAcl: async () => [
+        { subject: 'did:peer:2.Esomebodyelse', role: 'initiator', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
+      ],
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
 
-  it('refuses when this phone has scopes but not that one', async () => {
+  it('refuses a role that does not derive the capability, however it is narrowed', async () => {
+    // At 0.60 only admin and initiator derive pcs-applicant, and the capability
+    // is not additive — so an `application` entry naming it would have been
+    // refused at the ACL surface, and an entry claiming it cannot be trusted
+    // into usability here either.
     const client = fakeClient({
-      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'member', scopes: ['vetting'] }],
+      listAcl: async () => [
+        { subject: 'did:peer:2.Ephone', role: 'application', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
+      ],
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
 
-  it('accepts an entry naming no scopes, which is unrestricted', async () => {
-    const client = fakeClient({ listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'admin' }] })
+  it('refuses a narrowing that does not name the capability', async () => {
+    const client = fakeClient({
+      listAcl: async () => [
+        { subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'], capabilities: ['vault-read'] },
+      ],
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('accepts an un-narrowed entry whose role derives the capability', async () => {
+    // No `capabilities` means the entry holds everything its role implies —
+    // which is not the same as an empty array, and upstream omits the member
+    // rather than sending one.
+    const client = fakeClient({
+      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'] }],
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
+  })
+
+  it('refuses a non-admin entry with no contexts, which can reach nothing', async () => {
+    // The dangerous case, and the one the first version got backwards: an empty
+    // context list is unrestricted only for an admin. For any other role it is
+    // no access at all, so reporting it usable would send the person into a
+    // flow that cannot start.
+    const client = fakeClient({
+      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: [] }],
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('accepts an admin entry with no contexts, which is unrestricted', async () => {
+    const client = fakeClient({ listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'admin', scopes: [] }] })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
   })
 

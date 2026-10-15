@@ -42,8 +42,28 @@ import {
 const RECORD_TYPE = 'keyring/hidden-vetting'
 const KIND = 'application'
 
-/** The scope an identity needs at the agent to run the applicant's round. */
-const APPLICANT_SCOPE = 'pcs-applicant'
+/** The capability an identity needs at the agent to run the applicant's round. */
+const APPLICANT_CAPABILITY = 'pcs-applicant'
+
+/**
+ * The roles that derive `pcs-applicant` at vta-service 0.60.
+ *
+ * Read from the source at `vta-service-v0.60.0` (7adda796):
+ * `vti-common/src/acl/mod.rs`'s default role map gives `PcsApplicant` to
+ * `Admin` and `Initiator` only, and the test
+ * `pcs_capabilities_are_the_principals_and_not_sign` asserts
+ * `!role_has_capability(&Role::Application, …)`. The capability is **not**
+ * additive either — `ADDITIVE_CAPABILITIES` is `[PersonaHolder]` alone — so an
+ * `application` entry cannot be narrowed *into* it: a grant naming a capability
+ * the role does not carry is refused at the ACL surface, not quietly dropped.
+ *
+ * So an `application` phone cannot apply, whatever its narrowing says. That is
+ * a product decision rather than something this module can work around.
+ * Upstream's `docs/02-vta/pcs-engine.md` says `application` may be "granted the
+ * capability by name", which the code contradicts; the code and its test are
+ * what run.
+ */
+const APPLICANT_ROLES = ['admin', 'initiator']
 
 /**
  * Why a hidden criterion cannot be used, when it cannot.
@@ -92,14 +112,37 @@ export async function hiddenVettingUsable(client: VtaClient, published: unknown)
   try {
     entries = await client.listAcl()
   } catch {
+    // `acl/list` requires manage authority at the agent
+    // (`vta-service/src/trust_tasks/acl.rs` calls `auth.require_manage()`), so
+    // a least-privileged phone is refused the read. A phone that cannot see the
+    // list has learnt nothing about itself and must not conclude it is
+    // disallowed — that would word a missing permission as a refused one.
     return { usable: false, because: 'cannotTell' }
   }
-  // An entry naming no scopes is unrestricted (the same reading `grantAdmin`
-  // documents); otherwise the scope has to be there by name.
-  const allowed = entries.some(
-    (entry) => entry.subject === mine && (entry.scopes === undefined || entry.scopes.includes(APPLICANT_SCOPE))
-  )
-  return allowed ? { usable: true, parameters } : { usable: false, because: 'phoneNotAllowed' }
+  const mineEntry = entries.find((entry) => entry.subject === mine)
+  if (!mineEntry) return { usable: false, because: 'phoneNotAllowed' }
+
+  // The role must derive the capability: narrowing can only narrow, never add.
+  if (!APPLICANT_ROLES.includes(mineEntry.role)) return { usable: false, because: 'phoneNotAllowed' }
+
+  // A narrowing, where there is one, must still name it. Absent means the entry
+  // holds everything its role implies, which the role check above established
+  // includes this capability.
+  if (mineEntry.capabilities && !mineEntry.capabilities.includes(APPLICANT_CAPABILITY)) {
+    return { usable: false, because: 'phoneNotAllowed' }
+  }
+
+  // `scopes` is the entry's **context** list, not its capabilities. An empty one
+  // is unrestricted only for an admin; for every other role it means no access
+  // at all, which is the reading `acl create --contexts` documents. Treating
+  // empty as unrestricted for any role — as this did — reports a phone that can
+  // do nothing as ready to apply.
+  const contexts = mineEntry.scopes
+  if (mineEntry.role !== 'admin' && (!contexts || contexts.length === 0)) {
+    return { usable: false, because: 'phoneNotAllowed' }
+  }
+
+  return { usable: true, parameters }
 }
 
 /**

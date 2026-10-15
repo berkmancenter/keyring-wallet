@@ -278,10 +278,36 @@ export interface VtaAclEntry {
   expiresAt?: string
   createdAt?: string
   createdBy?: string
+  /**
+   * The entry's capability narrowing, from `ext["org.openvtc.capabilities"]`.
+   *
+   * **Absent is not empty.** Absent means the entry holds everything its role
+   * implies; an empty array would mean narrowed to nothing, which is why
+   * upstream omits the member rather than sending `[]`
+   * (`vta-sdk/.../acl_management/entry.rs` `capabilities_into_ext`). The
+   * narrowing rides `ext` because the published `acl/*` schemas are
+   * `additionalProperties: false` and the concept is ecosystem-local.
+   */
+  capabilities?: string[]
 }
+
+/** Where an entry's capability narrowing travels, the VTA's own extension member. */
+export const CAPABILITIES_EXT_MEMBER = 'org.openvtc.capabilities'
 
 /** The schema's bound on an entry's label (acl-entry.schema.json `label.maxLength`). */
 const ACL_LABEL_MAX = 256
+
+/**
+ * The capability narrowing out of an entry's `ext`, or nothing when the entry
+ * is not narrowed. An empty array on the wire is kept as an empty array: it
+ * would mean "narrowed to nothing", which is not the same as unnarrowed.
+ */
+function capabilitiesFrom(ext: unknown): { capabilities?: string[] } {
+  if (!ext || typeof ext !== 'object') return {}
+  const value = (ext as Record<string, unknown>)[CAPABILITIES_EXT_MEMBER]
+  if (!Array.isArray(value)) return {}
+  return { capabilities: value.filter((c): c is string => typeof c === 'string') }
+}
 
 /** Read an `AclEntry` off the wire, keeping only the members Keyring uses; undefined if it is not one. */
 function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
@@ -292,7 +318,11 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
   return {
     subject: raw.subject,
     role: raw.role,
+    // `scopes` is the entry's **context** list (the wire form of
+    // `allowed_contexts`), not its capabilities — reading it as capabilities is
+    // how this first went wrong.
     ...(Array.isArray(raw.scopes) ? { scopes: raw.scopes.filter((s): s is string => typeof s === 'string') } : {}),
+    ...capabilitiesFrom(raw.ext),
     ...text('label'),
     ...text('expiresAt'),
     ...text('createdAt'),
