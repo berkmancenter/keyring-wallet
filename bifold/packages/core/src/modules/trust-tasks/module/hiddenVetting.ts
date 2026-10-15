@@ -401,8 +401,22 @@ export async function hiddenSubmissionExtensions(
   community: string,
   challenge: string
 ): Promise<{ hiddenVetting: Record<string, unknown> } | typeof NOT_ENOUGH_YET> {
-  const record = await loadHiddenVettingRecord(agent, community)
-  if (!record) throw new Error(`no hidden-vetting application is held for ${community}`)
+  const held = await loadHiddenVettingRecord(agent, community)
+  if (!held) throw new Error(`no hidden-vetting application is held for ${community}`)
+
+  // Ask nobody to prove what cannot be proved yet. `prove` is the one call
+  // that can take the agent ninety seconds, because it builds a zero-knowledge
+  // proof, and `noUsableAttestation` is the answer it would give below the
+  // threshold. On 2026-10-15 a submit at 0 of 1 asked anyway and sat waiting on
+  // it, which read to the person as the app having stalled.
+  //
+  // The local count can lag the agent's, so a record that looks short is
+  // refreshed before being believed (`applications/show`, well under a
+  // second) rather than taken as the answer.
+  const record = (held.held < held.minimum ? await refreshHiddenApplication(agent, client, community) : held) ?? held
+  if (record === 'gone') throw new Error(`the agent no longer holds an application for ${community}`)
+  if (record.held < record.minimum) return NOT_ENOUGH_YET
+
   try {
     const hiddenVetting = await client.provePcs({
       applicationId: record.applicationId,

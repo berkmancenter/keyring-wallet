@@ -676,6 +676,25 @@ export class VtaTaskDropped extends Error {
   }
 }
 
+/**
+ * The task was sent and nothing answered it inside its own timeout.
+ *
+ * It was a bare `Error` with no code and, off TSP, **no log line at all**.
+ * That is why we could not say why `vta/pcs/prove` did not answer on
+ * 2026-10-15: a 90-second wait that ends in silence left nothing behind in the
+ * report to read. A caller can now word it, and the line below records it.
+ */
+export class VtaNoAnswer extends Error {
+  readonly code = 'vta:noAnswer'
+  constructor(
+    readonly taskType: string,
+    readonly waitedMs: number
+  ) {
+    super(`${LOG_PREFIX} the VTA did not answer ${taskType} within ${Math.round(waitedMs / 1000)} s`)
+    this.name = 'VtaNoAnswer'
+  }
+}
+
 /** TSP no-answers in a row that open the breaker (vta-sdk `REPLY_TIMEOUT_BREAKER`). */
 export const REPLY_TIMEOUT_BREAKER = 2
 /**
@@ -1229,7 +1248,17 @@ export class VtaClient {
               `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
             )
         }
-        throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
+        // Said on every carriage, not only TSP, and at Info so a release build
+        // keeps it: on iOS this is the only place such a silence is recorded,
+        // and an unanswered task that leaves no trace cannot be diagnosed from
+        // a tester's report — which is exactly what happened with
+        // `vta/pcs/prove` on 2026-10-15.
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} no answer to ${type} after ${Math.round(timeoutMs / 1000)} s over ${
+            overTsp ? 'TSP' : 'DIDComm'
+          } — the ask is not resent, since a repeat could run it twice`
+        )
+        throw new VtaNoAnswer(type, timeoutMs)
       }
 
       // An auth/ACL refusal never reaches the task handler: the VTA answers

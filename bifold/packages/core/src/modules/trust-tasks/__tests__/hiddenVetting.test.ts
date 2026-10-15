@@ -433,6 +433,48 @@ describe('proving, at submission', () => {
     ).rejects.toThrow('parametersInvalid')
   })
 
+  // 2026-10-15: his submit at 0 of 1 asked the agent to prove and sat waiting
+  // on a ninety-second call. `prove` is the one expensive ask in the flow.
+  it('asks nobody to prove below the threshold, and spends no call on it', async () => {
+    const { agent } = fakeAgent()
+    let proved = false
+    const short = {
+      showPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(0) }),
+      provePcs: async () => {
+        proved = true
+        return { proof: 'z2proof' }
+      },
+    }
+    await start(agent, fakeClient(short) as never)
+    expect(await hiddenSubmission(agent, short)).toBe(NOT_ENOUGH_YET)
+    expect(proved).toBe(false)
+  })
+
+  // The local count lags the agent's: the record is written when the
+  // application is created, with no attestations, and attestations arrive
+  // afterwards. Believing a short record on its own would refuse a submit that
+  // the agent would have proved.
+  it('refreshes a record that looks short before believing it', async () => {
+    const { agent } = fakeAgent()
+    let asked = 0
+    const client = fakeClient({
+      showPcsApplication: async () => {
+        asked += 1
+        return { applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(2) }
+      },
+    })
+    await start(agent, client)
+    // The record is at 0 of 2 after `start`; only the agent knows there are two.
+    expect(
+      await hiddenSubmission(agent, {
+        showPcsApplication: (client as never as { showPcsApplication: unknown }).showPcsApplication,
+      })
+    ).toEqual({
+      hiddenVetting: { proof: 'z2proof' },
+    })
+    expect(asked).toBeGreaterThan(0)
+  })
+
   it('refuses to prove without an application, rather than inventing one', async () => {
     const { agent } = fakeAgent()
     await expect(hiddenSubmission(agent)).rejects.toThrow(/no hidden-vetting application/)
