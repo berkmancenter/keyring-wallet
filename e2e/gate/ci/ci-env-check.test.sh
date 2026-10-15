@@ -41,6 +41,10 @@ good; echo 'C_ADMIN_CRED="{\"fake\":true}"' >> "$T/good.env"
 out=$(check "$T/good.env" smoke-android); rc=$?
 [ "$rc" = 1 ] && echo "$out" | grep -q 'C_ADMIN_CRED' && ! echo "$out" | grep -q 'fake' && ok "the community admin credential is refused, its value unprinted" || bad "C_ADMIN_CRED: rc=$rc out=$out"
 
+good; echo 'AVD=Pixel_6_API_33' >> "$T/good.env"
+out=$(check "$T/good.env" smoke-android); rc=$?
+[ "$rc" = 1 ] && echo "$out" | grep -q '^ENV GATE_CI_ENV names AVD' && ok "an AVD in the configuration is refused (CI reads it from the emulator)" || bad "AVD: rc=$rc out=$out"
+
 good; sed -i.bak '/^RUNNER_A_DID=/d' "$T/good.env"
 out=$(check "$T/good.env" smoke-android linkfail); rc=$?
 [ "$rc" = 1 ] && echo "$out" | grep -q '^ENV linkfail needs RUNNER_A_DID' && ok "linkfail without an approver DID is refused" || bad "linkfail no A DID: rc=$rc out=$out"
