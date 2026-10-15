@@ -23,6 +23,7 @@ import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, stopA
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { buildLacks } from "./lib/buildHas.js";
 import { createRows } from "./lib/rows.js";
+import { ruledAbove } from "./lib/sectionRules.js";
 
 const PLATFORM = process.env.PLATFORM ?? "android";
 const rows = createRows({ label: "agent-header" });
@@ -117,13 +118,11 @@ try {
     for (const id of ["AgentActivity", "AgentDetailsToggle", "AgentUnlink"]) {
       const el = await scrollToTestId(d, id, 6, { from: 0.6 }).catch(() => undefined);
       if (!el) { found.push(`${id} absent`); continue; }
-      const y = Math.round((await el.getLocation()).y);
-      let ruled = false;
-      for (const r of await d.$$(PLATFORM === "ios" ? '//*[@name="com.ariesbifold:id/AgentSectionRule"]' : '//*[@resource-id="com.ariesbifold:id/AgentSectionRule"]')) {
-        const ry = Math.round((await r.getLocation().catch(() => ({ y: -1 }))).y);
-        if (ry >= 0 && ry < y && y - ry <= 160) ruled = true;
-      }
-      found.push(`${id} ${ruled ? "ruled" : "NO RULE above"}`);
+      // The section and the rules from ONE page source, once the scroll has settled (sectionRules.js): read one call
+      // at a time, the positions straddled the scroll and a ruled section read as unruled (2026-10-15, both platforms).
+      await new Promise((r) => setTimeout(r, 700));
+      const ruled = ruledAbove(await d.getPageSource(), id);
+      found.push(`${id} ${ruled === undefined ? "absent" : ruled ? "ruled" : "NO RULE above"}`);
     }
     await screenshot(d, `agent-settings-sections-${PLATFORM}`).catch(() => undefined);
     await row("settings-section-rules", found.every((f) => f.endsWith("ruled")), found.join(" · "), { skip: buildLacks("AgentSectionRule", BUILD) });
