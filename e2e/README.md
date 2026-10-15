@@ -131,6 +131,50 @@ content changing. Fix: `(cd bifold && yarn install)` then
 `yarn workspace @bifold/core run build`. Do **not** run bifold's root
 `yarn build` (see the root `CLAUDE.md`).
 
+## Keeping an AVD's state across a restart
+
+An emulator booted with `-no-snapshot-save` **discards that session's disk
+writes when it exits**, including app installs and anything the app stored.
+The next boot loads the previous snapshot, so the device comes back as it was
+*before* the session — an app you installed is simply gone, and a wallet you
+onboarded is at the welcome screen again. `scripts/emu.sh stop` and a bare
+`adb emu kill` both end the session, so neither saves you from this.
+
+That flag is a reasonable choice for a throwaway run, and a trap whenever the
+state matters — a build you want to keep installed, an onboarded wallet, any
+identity the app minted and stored. Save the snapshot explicitly before
+shutting down:
+
+```sh
+adb emu avd snapshot save default_boot   # ~2 GB, takes a few seconds
+adb emu kill
+```
+
+Check it landed before you trust it — the snapshot directory's mtime should be
+the moment you saved, not the AVD's creation time:
+
+```sh
+ls -la ~/.android/avd/<AVD>.avd/snapshots/default_boot/
+```
+
+**Appium clears app data too, at session start**, whenever `appium:noReset` is
+false (the default): a run that reuses an install has to pass
+`'appium:noReset': true` and skip onboarding, or it will wipe exactly the state
+it meant to reuse.
+
+**Copying an AVD** (to keep state off a shared one, say) is a directory copy
+plus two edits, with the emulator shut down:
+
+```sh
+cp -R ~/.android/avd/<SRC>.avd ~/.android/avd/<DST>.avd
+cp    ~/.android/avd/<SRC>.ini ~/.android/avd/<DST>.ini
+# in <DST>.ini:        path= and path.rel=  -> the new .avd directory
+# in <DST>.avd/config.ini:  AvdId=  and  avd.ini.displayname=
+```
+
+Boot the copy once and confirm it carries what you expected before deleting or
+wiping the original.
+
 ## Emulator recovery: `io.appium.settings` will not start
 
 Symptom, on any Android suite, before a single test step runs:
