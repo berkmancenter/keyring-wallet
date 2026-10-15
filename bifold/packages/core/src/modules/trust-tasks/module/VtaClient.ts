@@ -289,10 +289,48 @@ export interface VtaAclEntry {
    * `additionalProperties: false` and the concept is ecosystem-local.
    */
   capabilities?: string[]
+  /**
+   * What the entry may act on, as stated (0.2) or as implied by the shape
+   * (0.1). Prefer this over {@link scopes} for any decision: `scopes` is the
+   * 0.1 wire member and cannot distinguish "everywhere" from "nowhere".
+   */
+  act?: AclAuthority
+  /**
+   * The capability narrowing, as stated. `ceiling` means everything the role
+   * implies; `listed` names capabilities; `none` holds nothing. Absent means
+   * the agent answered 0.1 with no narrowing in `ext`, which also means
+   * everything the role implies.
+   */
+  capabilityScope?: { stated: 'ceiling' } | { stated: 'none' } | { stated: 'listed'; capabilities: string[] }
 }
 
-/** Where an entry's capability narrowing travels, the VTA's own extension member. */
+/** Where an entry's capability narrowing travels in the 0.1 shape, the VTA's own extension member. */
 export const CAPABILITIES_EXT_MEMBER = 'org.openvtc.capabilities'
+
+/**
+ * An entry's authority over contexts and capabilities, read from whichever
+ * `acl/_shared` shape the agent answered in.
+ *
+ * **0.1 states authority by shape, 0.2 states it outright**, and the registry
+ * says why it changed: 0.1's `scopes` was "a list whose emptiness meant
+ * `everywhere` for one role and `nowhere` for another, depending on a
+ * maintainer convention the wire could not carry"
+ * (`specs/acl/_shared/0.2/acl-entry.schema.json`). 0.2 replaces it with an
+ * explicit `act` scope — `all`, `none`, or a non-empty context list — and
+ * makes `capabilities` a declared member with the same three shapes
+ * (`ceiling`, `none`, `listed`), rather than an extension.
+ *
+ * vta-service 0.60 serves `acl/list/0.1` only (its discovery list names no
+ * 0.2), so 0.1 is what agents answer today. This client asks for both, so the
+ * 0.2 shape is read rather than silently seen as an entry with no contexts and
+ * no narrowing — which would refuse a phone that is in fact allowed.
+ */
+export type AclAuthority =
+  | { stated: 'all' }
+  | { stated: 'none' }
+  | { stated: 'contexts'; contexts: string[] }
+  /** 0.1 only: the shape is all the wire carried, so the role decides what empty means. */
+  | { stated: 'byShape'; contexts: string[] }
 
 /** The schema's bound on an entry's label (acl-entry.schema.json `label.maxLength`). */
 const ACL_LABEL_MAX = 256
@@ -309,6 +347,55 @@ function capabilitiesFrom(ext: unknown): { capabilities?: string[] } {
   return { capabilities: value.filter((c): c is string => typeof c === 'string') }
 }
 
+/** One of 0.2's three-shape scopes, when the member is one. */
+function statedScope(value: unknown): { scope: string; contexts?: unknown; grants?: unknown } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const scope = (value as { scope?: unknown }).scope
+  return typeof scope === 'string' ? (value as { scope: string }) : undefined
+}
+
+const stringsOf = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+
+/** What the entry may act on: 0.2's stated `act`, else what 0.1's `scopes` shape carries. */
+function actFrom(raw: Record<string, unknown>): { act?: AclAuthority } {
+  const stated = statedScope(raw.act)
+  if (stated) {
+    if (stated.scope === 'all') return { act: { stated: 'all' } }
+    if (stated.scope === 'none') return { act: { stated: 'none' } }
+    if (stated.scope === 'contexts') return { act: { stated: 'contexts', contexts: stringsOf(stated.contexts) } }
+    return {}
+  }
+  // 0.1: the list is all there is, and an empty one means different things for
+  // different roles — so it is marked as read-by-shape rather than resolved
+  // here, and the caller applies its maintainer's convention knowingly.
+  if (Array.isArray(raw.scopes)) return { act: { stated: 'byShape', contexts: stringsOf(raw.scopes) } }
+  return {}
+}
+
+/** The capability narrowing: 0.2's stated `capabilities`, else 0.1's `ext` member. */
+function capabilityScopeFrom(raw: Record<string, unknown>): {
+  capabilityScope?: { stated: 'ceiling' } | { stated: 'none' } | { stated: 'listed'; capabilities: string[] }
+} {
+  const stated = statedScope(raw.capabilities)
+  if (stated) {
+    if (stated.scope === 'ceiling') return { capabilityScope: { stated: 'ceiling' } }
+    if (stated.scope === 'none') return { capabilityScope: { stated: 'none' } }
+    if (stated.scope === 'listed') {
+      // Each grant names its capability; a resource qualifier may narrow it
+      // further, which nothing here reads yet.
+      const grants = Array.isArray(stated.grants) ? stated.grants : []
+      const capabilities = grants
+        .map((g) => (g && typeof g === 'object' ? (g as { capability?: unknown }).capability : undefined))
+        .filter((c): c is string => typeof c === 'string')
+      return { capabilityScope: { stated: 'listed', capabilities } }
+    }
+    return {}
+  }
+  const fromExt = capabilitiesFrom(raw.ext).capabilities
+  return fromExt ? { capabilityScope: { stated: 'listed', capabilities: fromExt } } : {}
+}
+
 /** Read an `AclEntry` off the wire, keeping only the members Keyring uses; undefined if it is not one. */
 function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -323,11 +410,29 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
     // how this first went wrong.
     ...(Array.isArray(raw.scopes) ? { scopes: raw.scopes.filter((s): s is string => typeof s === 'string') } : {}),
     ...capabilitiesFrom(raw.ext),
+    ...actFrom(raw),
+    ...capabilityScopeFrom(raw),
     ...text('label'),
     ...text('expiresAt'),
     ...text('createdAt'),
     ...text('createdBy'),
   }
+}
+
+/**
+ * The entries in an `acl/list` answer, as this client reads them.
+ *
+ * Exported so a test can put a **wire** document through the real parser
+ * rather than hand-building what it imagines the parser returns. That
+ * distinction is not academic: the hidden-vetting tests once faked the parsed
+ * shape with the capability in the wrong member, agreeing with a parser bug
+ * and passing over it. `__tests__/hiddenVettingAcl.test.ts` validates the
+ * documents it passes here against the registry's own `acl/_shared` schemas,
+ * so wire shape and parse are each checked by something that is not the other.
+ */
+export function parseAclEntries(raw: unknown): VtaAclEntry[] {
+  const entries = Array.isArray(raw) ? raw : []
+  return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
 }
 
 /** The `{entry}` wrapper that `acl/grant` and `acl/revoke` answer with. */
@@ -1445,8 +1550,7 @@ export class VtaClient {
         `${LOG_PREFIX} ${this.vtaDid} answered a partial access list; showing the first page`
       )
     }
-    const entries = Array.isArray(answer?.entries) ? answer.entries : []
-    return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
+    return parseAclEntries(answer?.entries)
   }
 
   /**

@@ -15,6 +15,30 @@ Required by the licence (see below), and useful on its own terms.
 | **Source**        | https://github.com/trustoverip/dtgwg-trust-tasks-tf                                                |
 | **Commit**        | `15b91d1f5ce15ead321636ab27e6e433c9d45796` (also in `PROVENANCE.sha`)                              |
 | **Copied**        | 2026-10-14                                                                                         |
+| **Pin status**    | **Off-pin by design** — see below                                                                  |
+
+## These are off the shared pin, deliberately
+
+`scripts/openvtc/PINS.json` pins `dtgwg-trust-tasks-tf` at **`7b6bb488`**
+(2026-10-07), and **the `vta/pcs/*` specs do not exist at that commit** — they
+first appear at `15b91d1f` (2026-10-14). So this work cannot be graded against
+the shared pin: the specifications it implements are not there.
+
+The shared pin was deliberately **not** moved for this, because it also feeds
+spec-watch and conformance for everything else (decided with the coordinator,
+2026-10-15, Alberto to overrule if he wants). These fixtures are therefore a
+separate, named provenance — think of it as `dtgwg-trust-tasks-tf-pcs` at
+`15b91d1f` — and they stay off-pin by design until the shared pin passes that
+commit, at which point this note and `PROVENANCE.sha` should be squared up.
+
+Honesty about what the first version of this claimed: it said these were "the
+commit they came from" in a way that read as the pinned registry, and the drift
+test alongside could not have caught the difference — it resolved `external/`
+relative to this package (where it never exists) and skipped per-file on
+anything absent upstream, so it had never run and would have passed vacuously.
+Both are fixed in `../registryDrift.ts`, which compares against the commit a
+fixture's own `PROVENANCE.sha` names and **fails** on a file that commit does
+not have.
 
 | File here                                         | Path in the registry                                        |
 | ------------------------------------------------- | ----------------------------------------------------------- |

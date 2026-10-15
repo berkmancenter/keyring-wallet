@@ -125,21 +125,38 @@ export async function hiddenVettingUsable(client: VtaClient, published: unknown)
   // The role must derive the capability: narrowing can only narrow, never add.
   if (!APPLICANT_ROLES.includes(mineEntry.role)) return { usable: false, because: 'phoneNotAllowed' }
 
-  // A narrowing, where there is one, must still name it. Absent means the entry
-  // holds everything its role implies, which the role check above established
-  // includes this capability.
-  if (mineEntry.capabilities && !mineEntry.capabilities.includes(APPLICANT_CAPABILITY)) {
+  // The capability narrowing, as the entry states it. `ceiling` is everything
+  // the role implies — which the role check above established includes this
+  // capability — while `listed` must name it and `none` holds nothing.
+  const narrowing = mineEntry.capabilityScope
+  if (narrowing?.stated === 'none') return { usable: false, because: 'phoneNotAllowed' }
+  if (narrowing?.stated === 'listed' && !narrowing.capabilities.includes(APPLICANT_CAPABILITY)) {
     return { usable: false, because: 'phoneNotAllowed' }
   }
 
-  // `scopes` is the entry's **context** list, not its capabilities. An empty one
-  // is unrestricted only for an admin; for every other role it means no access
-  // at all, which is the reading `acl create --contexts` documents. Treating
-  // empty as unrestricted for any role — as this did — reports a phone that can
-  // do nothing as ready to apply.
-  const contexts = mineEntry.scopes
-  if (mineEntry.role !== 'admin' && (!contexts || contexts.length === 0)) {
-    return { usable: false, because: 'phoneNotAllowed' }
+  // What the entry may act on. 0.2 states this outright; 0.1 carries only a
+  // list whose emptiness means "everywhere" for an admin and "nowhere" for
+  // every other role — which is exactly why 0.2 replaced it, and why the 0.1
+  // reading is applied knowingly here rather than inferred as a default.
+  const act = mineEntry.act
+  switch (act?.stated) {
+    case 'all':
+      break
+    case 'none':
+      return { usable: false, because: 'phoneNotAllowed' }
+    case 'contexts':
+      if (act.contexts.length === 0) return { usable: false, because: 'phoneNotAllowed' }
+      break
+    case 'byShape':
+      if (mineEntry.role !== 'admin' && act.contexts.length === 0) {
+        return { usable: false, because: 'phoneNotAllowed' }
+      }
+      break
+    default:
+      // An entry that states no authority at all is not something to read a
+      // permission out of: an agent answering a shape this build does not know
+      // is a reason to say so, not to assume either way.
+      return { usable: false, because: 'cannotTell' }
   }
 
   return { usable: true, parameters }

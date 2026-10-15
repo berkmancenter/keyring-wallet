@@ -11,13 +11,15 @@
  * absent.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 // The registry's schemas declare draft 2020-12; ajv's default export is
 // draft-07 and refuses them with "no schema with key or ref
 // https://json-schema.org/draft/2020-12/schema".
 import Ajv from 'ajv/dist/2020'
+
+import { expectNoDrift, registryPath } from './fixtures/registryDrift'
 
 import {
   ApplicationsCreatePayload,
@@ -204,14 +206,15 @@ describe('a refusal is read from the error document', () => {
 })
 
 describe('the vendored schemas still match the registry', () => {
-  // Only meaningful where the registry is checked out: this repository does not
-  // depend on it, and CI has no copy.
-  const registry = join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'external', 'dtgwg-trust-tasks-tf')
-  const have = existsSync(registry)
-  const maybe = have ? it : it.skip
+  // Only meaningful where a clone is present: CI has none, and a standalone
+  // bifold checkout has no wallet sibling carrying `external/`. Absent is the
+  // one case that skips — a missing *file* at the named commit is a failure,
+  // which is how this check earns its keep.
+  const registry = registryPath()
+  const maybe = registry ? it : it.skip
 
-  maybe('the vendored copies are byte-identical to the pinned registry files', () => {
-    const map: Record<string, string> = {
+  maybe('the vendored copies are byte-identical to the commit PROVENANCE names', () => {
+    expectNoDrift(SCHEMA_DIR, {
       'vta-pcs-applications-create.payload.schema.json': 'specs/vta/pcs/applications/create/0.1/payload.schema.json',
       'vta-pcs-applications-show.payload.schema.json': 'specs/vta/pcs/applications/show/0.1/payload.schema.json',
       'vta-pcs-applications-delete.payload.schema.json': 'specs/vta/pcs/applications/delete/0.1/payload.schema.json',
@@ -219,13 +222,7 @@ describe('the vendored schemas still match the registry', () => {
       'vta-pcs-prove.payload.schema.json': 'specs/vta/pcs/prove/0.1/payload.schema.json',
       'vta-shared-pcs-engine.schema.json': 'specs/vta/_shared/0.4/pcs-engine.schema.json',
       'vetting-shared-hidden-vetting.schema.json': 'specs/vetting/_shared/0.1/hidden-vetting.schema.json',
-    }
-    for (const [vendored, source] of Object.entries(map)) {
-      const live = join(registry, source)
-      if (!existsSync(live)) continue
-      expect({ [vendored]: readFileSync(join(SCHEMA_DIR, vendored), 'utf8') }).toEqual({
-        [vendored]: readFileSync(live, 'utf8'),
-      })
-    }
+      'framework-0.2.schema.json': 'specs/_framework/0.2/framework.schema.json',
+    })
   })
 })

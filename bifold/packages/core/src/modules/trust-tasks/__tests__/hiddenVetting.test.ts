@@ -20,6 +20,7 @@ import {
   startHiddenApplication,
   takeHiddenAttestation,
 } from '../module/hiddenVetting'
+import { parseAclEntries } from '../module/VtaClient'
 import { HIDDEN_VETTING_SUITE, type HiddenAttestation, type PublishedConfig } from '../module/pcsVtaPayloads'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -83,13 +84,22 @@ function fakeClient(over: Record<string, unknown> = {}) {
   return {
     managerDid: 'did:peer:2.Ephone',
     servesPcs: async () => true,
-    // As the wire has it: `scopes` is the CONTEXT list and the capability
-    // narrowing rides ext["org.openvtc.capabilities"], which VtaClient surfaces
-    // as `capabilities`. The earlier fake put the capability in `scopes`, which
-    // is what let the broken check pass.
-    listAcl: async () => [
-      { subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
-    ],
+    // The 0.1 shape, which is what vta-service 0.60 sends: `scopes` is the
+    // CONTEXT list and the capability narrowing rides
+    // ext["org.openvtc.capabilities"]. An earlier fake put the capability in
+    // `scopes` — the same error the parser made — which is how a broken check
+    // passed 25 tests. These shapes are graded against the registry's own
+    // acl/_shared schemas in hiddenVettingAcl.test.ts, so the two cannot drift
+    // into agreement again.
+    listAcl: async () =>
+      parseAclEntries([
+        {
+          subject: 'did:peer:2.Ephone',
+          role: 'initiator',
+          scopes: ['vta'],
+          ext: { 'org.openvtc.capabilities': ['pcs-applicant'] },
+        },
+      ]),
     createPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: [] }),
     showPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(2) }),
     verifyPcsAttestation: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(1) }),
@@ -128,7 +138,7 @@ describe('whether the round can be run at all', () => {
     // Precedence matters for what the person is told to do: `pcs-applicant`
     // cannot exist on a pre-0.60 agent, so "update your agent" is the step that
     // unblocks, and "this phone is not allowed" would send them nowhere.
-    const client = fakeClient({ servesPcs: async () => false, listAcl: async () => [] })
+    const client = fakeClient({ servesPcs: async () => false, listAcl: async () => parseAclEntries([]) })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'agentTooOld' })
   })
 
@@ -148,9 +158,15 @@ describe('whether the round can be run at all', () => {
 
   it('refuses when no entry covers this phone', async () => {
     const client = fakeClient({
-      listAcl: async () => [
-        { subject: 'did:peer:2.Esomebodyelse', role: 'initiator', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
-      ],
+      listAcl: async () =>
+        parseAclEntries([
+          {
+            subject: 'did:peer:2.Esomebodyelse',
+            role: 'initiator',
+            scopes: ['vta'],
+            ext: { 'org.openvtc.capabilities': ['pcs-applicant'] },
+          },
+        ]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
@@ -161,18 +177,30 @@ describe('whether the round can be run at all', () => {
     // refused at the ACL surface, and an entry claiming it cannot be trusted
     // into usability here either.
     const client = fakeClient({
-      listAcl: async () => [
-        { subject: 'did:peer:2.Ephone', role: 'application', scopes: ['ctx-1'], capabilities: ['pcs-applicant'] },
-      ],
+      listAcl: async () =>
+        parseAclEntries([
+          {
+            subject: 'did:peer:2.Ephone',
+            role: 'application',
+            scopes: ['vta'],
+            ext: { 'org.openvtc.capabilities': ['pcs-applicant'] },
+          },
+        ]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
 
   it('refuses a narrowing that does not name the capability', async () => {
     const client = fakeClient({
-      listAcl: async () => [
-        { subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'], capabilities: ['vault-read'] },
-      ],
+      listAcl: async () =>
+        parseAclEntries([
+          {
+            subject: 'did:peer:2.Ephone',
+            role: 'initiator',
+            scopes: ['vta'],
+            ext: { 'org.openvtc.capabilities': ['vault-read'] },
+          },
+        ]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
@@ -182,7 +210,7 @@ describe('whether the round can be run at all', () => {
     // which is not the same as an empty array, and upstream omits the member
     // rather than sending one.
     const client = fakeClient({
-      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['ctx-1'] }],
+      listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: ['vta'] }]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
   })
@@ -193,13 +221,15 @@ describe('whether the round can be run at all', () => {
     // no access at all, so reporting it usable would send the person into a
     // flow that cannot start.
     const client = fakeClient({
-      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: [] }],
+      listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'initiator', scopes: [] }]),
     })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
   })
 
   it('accepts an admin entry with no contexts, which is unrestricted', async () => {
-    const client = fakeClient({ listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'admin', scopes: [] }] })
+    const client = fakeClient({
+      listAcl: async () => parseAclEntries([{ subject: 'did:peer:2.Ephone', role: 'admin', scopes: [] }]),
+    })
     expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
   })
 

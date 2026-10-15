@@ -8,3 +8,4 @@ generate-app-package-json.js
 # registry (see the README beside them). Reformatting them would break the
 # drift test and make the OWFa attribution false.
 packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-schemas/*.json
+packages/core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas/*.json
