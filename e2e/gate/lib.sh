@@ -236,8 +236,9 @@ emu_start() {
   local port=$1 out rc why t0; t0=$(date +%s)
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
-    galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
-      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { echo "emulator-$port up (CI)"; return 0; }
+    # The wait is this leg's emulator_start step, not an "adb" step of its own (steps.tsv).
+    GALARM_STEPS=0 galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
+      && [ "$(adb -s "emulator-$port" get-state 2>/dev/null)" = device ] && { step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"; echo "emulator-$port up (CI)"; return 0; }
     broken "no emulator on port $port (CI): the workflow's emulator step must use -port $port"
   fi
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
@@ -373,9 +374,17 @@ keys_since_run() {
     out=$(pnm "$slug" acl list --json | python3 -c "
 import sys,json,re
 lines=re.sub(r'\x1b\[[0-9;?]*[ -/]*[@-~]','',sys.stdin.read()).split('\n')
-at=next((n for n,l in enumerate(lines) if l.strip().startswith('[')),None)
-if at is None: sys.exit(1)
-new=[e for e in json.loads('\n'.join(lines[at:])) if str(e.get('createdAt',''))>='$t0']
+acl=None
+# Each line that opens with "[" in turn, decoded as a prefix (raw_decode), so a bracketed log line or trailing output
+# can never make every try fail.
+for n,l in enumerate(lines):
+    if not l.strip().startswith('['): continue
+    try: acl=json.JSONDecoder().raw_decode('\n'.join(lines[n:]).lstrip())[0]
+    except ValueError: continue
+    if isinstance(acl,list) and all(isinstance(e,dict) for e in acl): break
+    acl=None
+if acl is None: sys.exit(1)
+new=[e for e in acl if str(e.get('createdAt',''))>='$t0']
 mine={e['subject'] for e in new if e.get('label') in ('keyring-admin','keyring-phone')}
 # The phone's grant and the key it rotates onto are both labelled keyring-admin (the runner's admin creates them). As a
 # defence, a key created during the leg by one of these is this leg's too: follow createdBy within the leg's keys.
