@@ -94,6 +94,28 @@ export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
 export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
 export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'
 export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry } from './module/VtaClient'
+export {
+  hiddenVetting,
+  registerHiddenVetting,
+  hiddenVettingUsable,
+  hiddenProgress,
+  startHiddenApplication,
+  refreshHiddenApplication,
+  takeHiddenAttestation,
+  hiddenSubmissionExtensions,
+  forgetHiddenApplication,
+  loadHiddenVettingRecord,
+  NOT_ENOUGH_YET,
+  HIDDEN_VETTING_SUITE,
+} from './module/hiddenVetting'
+export type {
+  HiddenVettingSeam,
+  HiddenVettingRecord,
+  HiddenProgress,
+  HiddenVettingBlock,
+  HiddenVettingUsable,
+} from './module/hiddenVetting'
+export type { PublishedConfig, HiddenAttestation, PcsApplication } from './module/pcsVtaPayloads'
 export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
 export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
 export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'

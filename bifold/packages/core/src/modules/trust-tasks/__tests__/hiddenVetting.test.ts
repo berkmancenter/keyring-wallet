@@ -1,0 +1,360 @@
+/**
+ * The applicant's round, driven against a fake agent and a fake VTA.
+ *
+ * What these tests are for is mostly *restraint*: the hard parts of hidden
+ * vetting are the things the phone must not say (a count it cannot know), must
+ * not do (probe before a tap), and must not swallow (an attestation the agent
+ * refused). The payload shapes are graded elsewhere, by the registry's own
+ * schemas in `pcsVtaPayloads.test.ts`.
+ */
+import {
+  NOT_ENOUGH_YET,
+  forgetHiddenApplication,
+  hiddenProgress,
+  hiddenSubmissionExtensions,
+  hiddenVetting,
+  hiddenVettingUsable,
+  loadHiddenVettingRecord,
+  refreshHiddenApplication,
+  registerHiddenVetting,
+  startHiddenApplication,
+  takeHiddenAttestation,
+} from '../module/hiddenVetting'
+import { HIDDEN_VETTING_SUITE, type HiddenAttestation, type PublishedConfig } from '../module/pcsVtaPayloads'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+type Rec = {
+  id: string
+  content: Record<string, unknown>
+  tags: Record<string, string>
+  createdAt: Date
+  updatedAt?: Date
+}
+
+function fakeAgent(seed: Rec[] = []) {
+  const records: Rec[] = [...seed]
+  let clock = 1_000
+  let next = seed.length
+  const warnings: string[] = []
+  const agent = {
+    config: { logger: { warn: (message: string) => warnings.push(message) } },
+    genericRecords: {
+      findAllByQuery: async (query: Record<string, string>) =>
+        records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)),
+      save: async ({ content, tags }: { content: Record<string, unknown>; tags: Record<string, string> }) => {
+        records.push({ id: `r${next++}`, content, tags, createdAt: new Date(clock++) })
+      },
+      update: async (record: Rec) => {
+        const at = records.findIndex((r) => r.id === record.id)
+        if (at >= 0) records[at] = { ...record, updatedAt: new Date(clock++) }
+      },
+      delete: async (record: Rec) => {
+        const at = records.findIndex((r) => r.id === record.id)
+        if (at >= 0) records.splice(at, 1)
+      },
+    },
+  }
+  return { agent: agent as never, records, warnings }
+}
+
+const COMMUNITY = 'did:webvh:QmCommunity:dids.example:hidden-vtc'
+const JOIN_DID = 'did:peer:2.Ejoin'
+
+const parameters: PublishedConfig = {
+  suite: HIDDEN_VETTING_SUITE,
+  helperKey: 'z6MkhelperKey',
+  tokenKey: 'z6MktokenKey',
+  vetterLabels: ['vetter/2026-10'],
+  tokenLabels: ['token/2026-10'],
+  dripPerTick: 3,
+  tickLength: 'P3D',
+  events: [],
+}
+
+/** A `trust-task-error` as the client surfaces one: the document hangs off the error. */
+function refusal(code: string) {
+  return Object.assign(new Error(code), { document: { payload: { code } } })
+}
+
+const attestations = (n: number) => Array.from({ length: n }, () => ({ meta: {} }))
+
+function fakeClient(over: Record<string, unknown> = {}) {
+  return {
+    managerDid: 'did:peer:2.Ephone',
+    servesPcs: async () => true,
+    listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'member', scopes: ['pcs-applicant'] }],
+    createPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: [] }),
+    showPcsApplication: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(2) }),
+    verifyPcsAttestation: async () => ({ applicationId: 'app-1', id: 'pcs-id-1', attestations: attestations(1) }),
+    provePcs: async () => ({ proof: 'z2proof' }),
+    deletePcsApplication: async () => undefined,
+    ...over,
+  } as never
+}
+
+const start = (agent: never, client: never, minimum = 2) =>
+  startHiddenApplication(agent, client, {
+    contextId: 'ctx-1',
+    community: COMMUNITY,
+    joinDid: JOIN_DID,
+    requirementsDigest: 'zQmRequirements',
+    parameters,
+    minimum,
+  })
+
+describe('whether the round can be run at all', () => {
+  it('refuses a suite this build does not implement, without asking the agent', async () => {
+    let asked = false
+    const client = fakeClient({
+      servesPcs: async () => {
+        asked = true
+        return true
+      },
+    })
+    const answer = await hiddenVettingUsable(client, { ...parameters, suite: 'ps-other-suite' })
+    expect(answer).toEqual({ usable: false, because: 'suiteUnsupported' })
+    // The point of checking the suite first: it costs the agent nothing.
+    expect(asked).toBe(false)
+  })
+
+  it('says the agent is too old before it says the phone is not allowed', async () => {
+    // Precedence matters for what the person is told to do: `pcs-applicant`
+    // cannot exist on a pre-0.60 agent, so "update your agent" is the step that
+    // unblocks, and "this phone is not allowed" would send them nowhere.
+    const client = fakeClient({ servesPcs: async () => false, listAcl: async () => [] })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'agentTooOld' })
+  })
+
+  it('reports that it could not tell, rather than guessing, when the probe is inconclusive', async () => {
+    const client = fakeClient({ servesPcs: async () => undefined })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'cannotTell' })
+  })
+
+  it('reports that it could not tell when the access list cannot be read', async () => {
+    const client = fakeClient({
+      listAcl: async () => {
+        throw new Error('unreachable')
+      },
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'cannotTell' })
+  })
+
+  it('refuses when no entry covers this phone', async () => {
+    const client = fakeClient({
+      listAcl: async () => [{ subject: 'did:peer:2.Esomebodyelse', role: 'member', scopes: ['pcs-applicant'] }],
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('refuses when this phone has scopes but not that one', async () => {
+    const client = fakeClient({
+      listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'member', scopes: ['vetting'] }],
+    })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: false, because: 'phoneNotAllowed' })
+  })
+
+  it('accepts an entry naming no scopes, which is unrestricted', async () => {
+    const client = fakeClient({ listAcl: async () => [{ subject: 'did:peer:2.Ephone', role: 'admin' }] })
+    expect(await hiddenVettingUsable(client, parameters)).toEqual({ usable: true, parameters })
+  })
+
+  it('completes what the community left out, and hands back what was sent', async () => {
+    const { tickLength: _t, ...sparse } = parameters
+    const answer = await hiddenVettingUsable(fakeClient(), sparse)
+    expect(answer).toEqual({ usable: true, parameters: { ...parameters, tickLength: 'P3D' } })
+  })
+})
+
+describe('the record this phone keeps', () => {
+  it('keeps what is needed to find the application again, and no secret', async () => {
+    const { agent } = fakeAgent()
+    const record = await start(agent, fakeClient())
+    expect(record).toEqual({
+      community: COMMUNITY,
+      joinDid: JOIN_DID,
+      applicationId: 'app-1',
+      id: 'pcs-id-1',
+      requirementsDigest: 'zQmRequirements',
+      parameters,
+      held: 0,
+      minimum: 2,
+    })
+    expect(await loadHiddenVettingRecord(agent, COMMUNITY)).toEqual(record)
+    // Nothing in the stored record is an attestation, a key or a proof.
+    const stored = JSON.stringify(await loadHiddenVettingRecord(agent, COMMUNITY))
+    for (const forbidden of ['attestation', 'proof', 'secret', 'privateKey']) {
+      expect(stored.toLowerCase()).not.toContain(forbidden.toLowerCase())
+    }
+  })
+
+  it('re-reads the agent rather than trusting its own count', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    const refreshed = await refreshHiddenApplication(agent, fakeClient(), COMMUNITY)
+    expect(refreshed).toMatchObject({ held: 2 })
+    expect(await loadHiddenVettingRecord(agent, COMMUNITY)).toMatchObject({ held: 2 })
+  })
+
+  it('says an application is gone rather than silently starting another', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    const client = fakeClient({
+      showPcsApplication: async () => {
+        throw refusal('vta/pcs/applications/show:notFound')
+      },
+    })
+    expect(await refreshHiddenApplication(agent, client, COMMUNITY)).toBe('gone')
+  })
+
+  it('is undefined when this phone holds nothing for the community', async () => {
+    const { agent } = fakeAgent()
+    expect(await refreshHiddenApplication(agent, fakeClient(), COMMUNITY)).toBeUndefined()
+  })
+
+  it('counts what the agent reports after an attestation is verified', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    const attestation: HiddenAttestation = {
+      suite: HIDDEN_VETTING_SUITE,
+      attestation: 'z2attestationBytes',
+      meta: {},
+      token: { label: 'token/2026-10', serial: 'z2TokenSer', shown: 'z2Shown' },
+    }
+    expect(await takeHiddenAttestation(agent, fakeClient(), COMMUNITY, attestation)).toMatchObject({ held: 1 })
+  })
+
+  it('lets a refused attestation reach the caller, rather than swallowing it', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    const client = fakeClient({
+      verifyPcsAttestation: async () => {
+        throw refusal('vta/pcs/verify-attestation:attestationInvalid')
+      },
+    })
+    await expect(
+      takeHiddenAttestation(agent, client, COMMUNITY, {
+        suite: HIDDEN_VETTING_SUITE,
+        attestation: 'z2bad',
+        meta: {},
+        token: { label: 'token/2026-10', serial: 'z2TokenSer', shown: 'z2Shown' },
+      })
+    ).rejects.toThrow('attestationInvalid')
+  })
+})
+
+describe('what a screen may say about progress', () => {
+  it('leaves what only the community knows absent, not zero', () => {
+    const progress = hiddenProgress({ held: 3, minimum: 2 })
+    expect(progress).toEqual({ mode: 'hidden', held: 3, minimum: 2, worthSubmitting: true })
+    // A zero renders as "none counted", which this phone cannot claim: the
+    // engine accepts a duplicate attestation and the community counts it once.
+    expect('counted' in progress).toBe(false)
+    expect('stillNeeds' in progress).toBe(false)
+  })
+
+  it('is optimistic only, and only once the minimum is held', () => {
+    expect(hiddenProgress({ held: 1, minimum: 2 }).worthSubmitting).toBe(false)
+    expect(hiddenProgress({ held: 2, minimum: 2 }).worthSubmitting).toBe(true)
+  })
+
+  it('takes counted and stillNeeds from the community alone', () => {
+    expect(hiddenProgress({ held: 3, minimum: 2 }, { counted: 2, stillNeeds: 0 })).toMatchObject({
+      counted: 2,
+      stillNeeds: 0,
+    })
+  })
+})
+
+describe('proving, at submission', () => {
+  const hiddenSubmission = (agent: never, over: Record<string, unknown> = {}) =>
+    hiddenSubmissionExtensions(agent, fakeClient(over), COMMUNITY, 'challenge-from-the-community')
+
+  it('returns the extensions object the join submission carries', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    expect(await hiddenSubmission(agent)).toEqual({ hiddenVetting: { proof: 'z2proof' } })
+  })
+
+  it('reads too few attestations as progress, not as a failure', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    const answer = await hiddenSubmission(agent, {
+      provePcs: async () => {
+        throw refusal('vta/pcs/prove:noUsableAttestation')
+      },
+    })
+    expect(answer).toBe(NOT_ENOUGH_YET)
+  })
+
+  it('does not disguise a real refusal as progress', async () => {
+    const { agent } = fakeAgent()
+    await start(agent, fakeClient())
+    await expect(
+      hiddenSubmission(agent, {
+        provePcs: async () => {
+          throw refusal('parametersInvalid')
+        },
+      })
+    ).rejects.toThrow('parametersInvalid')
+  })
+
+  it('refuses to prove without an application, rather than inventing one', async () => {
+    const { agent } = fakeAgent()
+    await expect(hiddenSubmission(agent)).rejects.toThrow(/no hidden-vetting application/)
+  })
+})
+
+describe('forgetting an application', () => {
+  it('tells the agent and drops the record', async () => {
+    const { agent, records } = fakeAgent()
+    await start(agent, fakeClient())
+    let deleted: string | undefined
+    await forgetHiddenApplication(
+      agent,
+      fakeClient({
+        deletePcsApplication: async (id: string) => {
+          deleted = id
+        },
+      }),
+      COMMUNITY
+    )
+    expect(deleted).toBe('app-1')
+    expect(records).toHaveLength(0)
+  })
+
+  it('drops the record even when the agent cannot be told', async () => {
+    // Otherwise a decided join offers a "resume" that cannot work, because a
+    // network error happened once.
+    const { agent, records, warnings } = fakeAgent()
+    await start(agent, fakeClient())
+    await forgetHiddenApplication(
+      agent,
+      fakeClient({
+        deletePcsApplication: async () => {
+          throw new Error('unreachable')
+        },
+      }),
+      COMMUNITY
+    )
+    expect(records).toHaveLength(0)
+    expect(warnings.join(' ')).toContain('app-1')
+  })
+})
+
+describe('the seam', () => {
+  afterEach(() => registerHiddenVetting())
+
+  it('serves the real round by default', () => {
+    expect(hiddenVetting().start).toBe(startHiddenApplication)
+  })
+
+  it('replaces only what is given, and restores on a bare call', () => {
+    const fake = jest.fn()
+    registerHiddenVetting({ start: fake as never })
+    expect(hiddenVetting().start).toBe(fake)
+    expect(hiddenVetting().forget).toBe(forgetHiddenApplication)
+    registerHiddenVetting()
+    expect(hiddenVetting().start).toBe(startHiddenApplication)
+  })
+})
