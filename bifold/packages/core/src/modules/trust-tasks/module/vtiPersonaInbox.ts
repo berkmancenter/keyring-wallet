@@ -26,7 +26,7 @@ import { currentAgentDid } from './currentAgent'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { holdForStatusCheck } from './vtiCardStatusRetry'
-import { deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
+import { cardRef, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCommunityNotices'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { REQUEST_VMC } from './vtiMemberVmc'
@@ -120,9 +120,12 @@ export async function keepForPersona(
     agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
       from: String(message.from ?? ''),
     })
+  const onFiled = (item: VtiReceivedCredential) =>
+    agent.config?.logger?.info?.(`[VTI] card filed: ${cardRef(item.credential)} as ${item.kind}`)
   return receiveIssue(community, target.did, message, {
     acceptStatement,
     onRefused,
+    onFiled,
     checkCard: deliveredCardCheck(agent),
   }).then(
     (got: VtiReceivedCredential[]) => {
