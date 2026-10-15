@@ -358,7 +358,7 @@ for n,l in enumerate(lines):
     if not l.strip().startswith('['): continue
     try: acl=json.JSONDecoder().raw_decode('\n'.join(lines[n:]).lstrip())[0]
     except ValueError: continue
-    if isinstance(acl,list): break
+    if isinstance(acl,list) and all(isinstance(e,dict) for e in acl): break
     acl=None
 if acl is None: sys.exit(1)
 new=[e for e in acl if str(e.get('createdAt',''))>='$t0']

@@ -18,7 +18,7 @@ i = a.index('acl')
 cmd = a[i + 1]
 if cmd == 'list':
     sys.stderr.write('\x1b[38;5;214mWARN\x1b[0m session cache is old\n'); sys.stderr.flush()
-    if os.environ.get('FAKE_BRACKET'): print('[warn] a bracketed log line ahead of the list')
+    if os.environ.get('FAKE_BRACKET'): print('[warn] a bracketed log line ahead of the list'); print('[1, 2]')
     print('{"broken": [' if os.environ.get('FAKE_GARBLE') else json.dumps(acl, indent=2))
 elif cmd == 'create':
     o = dict(zip(a[i + 2::2], a[i + 3::2]))
