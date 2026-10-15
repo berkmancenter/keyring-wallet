@@ -1,0 +1,15 @@
+{
+  "_why": "Which of the five things the gate is for each row covers (gate_efficiency_subtask.md, 'What the gate is for'): the first rule whose pattern matches the row name wins; a leg rule applies when no row rule did. 'other' rows are kept by cost (a boundary a Jest test cannot cross), not by an anchor.",
+  "anchors": ["vetting", "join", "agent", "mediator", "signin", "other"],
+  "rows": [
+    ["^(kk-|foot-kk|id305$|desk-finished|p1-tui|p2-)", "vetting"],
+    ["sign-?in", "signin"],
+    ["mediator|round-?trip", "mediator"],
+    ["^(join|outside-join|choose-how|member-|left-scan|cards-|card-status|lost-|relink-wiped|waiting-)", "join"],
+    ["^(link|swap|pnmqr|scan|create-|R[0-9]|wallet-hidden|in124|devices|community-agent|update-agents|update-prev|update-persona|update-community|relaunch|agent-intro|approvals|317 |card in plain|card technical|card says|push stays|push2|android-onboarding|ios-onboarding|p1-link)", "agent"]
+  ],
+  "legs": {
+    "kk": "vetting", "p2": "vetting", "waiting": "join", "lostreq": "join", "linkwait": "agent", "linkresume": "agent",
+    "linkfail": "agent", "pnmlink": "agent", "devices": "agent", "agents": "agent", "testreq": "agent"
+  }
+}
