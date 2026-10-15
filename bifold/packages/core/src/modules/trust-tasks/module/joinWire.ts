@@ -78,12 +78,26 @@ export function wireAfterRefusal(
  * community read the digest from `extensions.requirementsDigest`, which 0.3 no
  * longer reads for that (vtc-service join/criteria.rs `govern`: the cited
  * digest is `criterion` alone).
+ *
+ * `extensions` is the schema's "opaque applicant-supplied extension bag" at
+ * both versions. A hidden-vetting submission carries its proof there, as
+ * `extensions.hiddenVetting` (the `vta/pcs/prove` answer, verbatim). At 0.3 the
+ * bag is sent only when it has something in it, so an ordinary submission is
+ * unchanged; at 0.2 it is always sent, with the digest beside whatever it holds.
  */
 export function submitPayload(
   wire: JoinWire,
-  submission: { vp: unknown; registryConsent: boolean; criterion?: string }
+  submission: { vp: unknown; registryConsent: boolean; criterion?: string; extensions?: Record<string, unknown> }
 ): Record<string, unknown> {
   const { vp, registryConsent, criterion } = submission
-  if (wire === '0.3') return { vp, registryConsent, ...(criterion ? { criterion } : {}) }
-  return { vp, registryConsent, extensions: criterion ? { requirementsDigest: criterion } : {} }
+  const extensions = submission.extensions ?? {}
+  if (wire === '0.3') {
+    return {
+      vp,
+      registryConsent,
+      ...(criterion ? { criterion } : {}),
+      ...(Object.keys(extensions).length ? { extensions } : {}),
+    }
+  }
+  return { vp, registryConsent, extensions: { ...extensions, ...(criterion ? { requirementsDigest: criterion } : {}) } }
 }

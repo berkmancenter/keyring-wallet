@@ -61,6 +61,7 @@ import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
+import { classifyCredential } from './vtiInbox'
 import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
 import {
   JOIN_MANIFEST_TYPES,
@@ -1674,7 +1675,20 @@ class VtiAgentController {
   async apply(
     communityDid: string,
     manifest: VtiManifest,
-    options: { credentials?: unknown[]; requirementsDigest?: string; registryConsent?: boolean } = {}
+    options: {
+      credentials?: unknown[]
+      requirementsDigest?: string
+      registryConsent?: boolean
+      /**
+       * A hidden-vetting submission: the `vta/pcs/prove` answer, sent verbatim
+       * as `extensions.hiddenVetting`. The presentation then carries **no**
+       * vetting statements — the community counts the proof instead of named
+       * statements, and refuses a hidden-criterion submission that carries no
+       * proof rather than counting statements (vtc-service vetting/pcs.rs), so
+       * a submission with both would name the vetters the proof keeps hidden.
+       */
+      hiddenVetting?: Record<string, unknown>
+    } = {}
   ): Promise<VtiVerdict> {
     let current = manifest
     const refused: JoinWire[] = []
@@ -1692,6 +1706,15 @@ class VtiAgentController {
       // as openvtc does (#412): the community then decides it under the first
       // criterion, in its published order, that the submission meets.
       const criterion = options.requirementsDigest ?? (wire === '0.2' ? current.requirementsDigest : undefined)
+      const hidden = options.hiddenVetting
+      const credentials = hidden ? withoutVettingStatements(options.credentials) : options.credentials
+      if (hidden && credentials?.length !== options.credentials?.length) {
+        this.agent?.config.logger.info(
+          `vtiAgent: hidden-vetting submit to ${communityDid}: ${
+            (options.credentials?.length ?? 0) - (credentials?.length ?? 0)
+          } vetting statement(s) left out of the presentation; the proof stands for them`
+        )
+      }
       // The presentation is unsigned: the community takes the holder from the
       // sealed envelope's sender (VTI-9), so what matters is that the
       // credentials inside name that same DID as their subject.
@@ -1699,9 +1722,10 @@ class VtiAgentController {
         communityDid,
         type,
         submitPayload(wire, {
-          vp: this.presentation(options.credentials),
+          vp: this.presentation(credentials),
           registryConsent: options.registryConsent === true,
           criterion,
+          ...(hidden ? { extensions: { hiddenVetting: hidden } } : {}),
         }),
         this.submitAnswerTimeoutMs
       )
@@ -1732,6 +1756,14 @@ class VtiAgentController {
 }
 
 export const vtiAgent = new VtiAgentController()
+
+/** The credentials, less any vetter's vetting statement (a community's own identity check stays). */
+function withoutVettingStatements(credentials?: unknown[]): unknown[] | undefined {
+  return credentials?.filter(
+    (c) =>
+      !(c && typeof c === 'object' && classifyCredential(c as Record<string, unknown>).kind === 'vetting-statement')
+  )
+}
 
 /** Keep a community's published name for the next launch; a failure only costs the name. */
 function rememberCommunityName(agent: Agent | undefined, communityDid: string, name?: string): void {
