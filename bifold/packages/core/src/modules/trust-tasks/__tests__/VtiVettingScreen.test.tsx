@@ -27,6 +27,8 @@ import { readManifest, type VtiManifest } from '../module/joinManifest'
 
 import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
 
+import { registerHiddenVetting } from '../screens/hiddenVettingSeam'
+
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The desk's attest asks for a face or fingerprint first; here it is given.
 jest.mock('../../vrc/vrc-biometric', () => ({
@@ -411,6 +413,46 @@ describe('Vetting — one filled button per step', () => {
     })
     expect(await tree.findByTestId(testIdWithKey('VettingError'))).toHaveTextContent('Join.Ways.PrivateVetting')
     expect(ask).not.toHaveBeenCalled()
+  })
+
+  // 254: the same community, on a build that DOES carry the applicant module.
+  // Alberto pasted the ticket and landed on the named flow ("Your face") under
+  // the #405 refusal. Both are wrong once the module is here: the refusal must
+  // narrow, and the ticket belongs to the private flow.
+  test('the same community, with the module registered: the ticket opens private vetting instead', async () => {
+    const [hiddenExample] = specExamples.filter((e) => e.title.startsWith('A criterion whose vetting parameters'))
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue(readManifest(hiddenExample.document.payload as Partial<VtiManifest>, '0.3'))
+    const ask = jest.spyOn(VtiApplicant.prototype, 'requestVetter').mockResolvedValue({} as never)
+    registerHiddenVetting({} as never)
+    try {
+      const tree = await renderWith([persona, application])
+      await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+      const ticket = encodeTicketUri({
+        community: communityDid,
+        vetter: 'did:webvh:example:vetter',
+        presentation: { code: { code: 'ABCD-EFGH' } },
+      } as never)
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('VettingRequestButton')))
+        jest.advanceTimersByTime(10)
+      })
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
+        communityDid,
+        criterionId: 'kernel-developer-private',
+      })
+      // Neither the named ask nor the refusal: the person is on the screen
+      // that can use their ticket, and nothing told them Keyring cannot.
+      expect(ask).not.toHaveBeenCalled()
+      expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+    } finally {
+      registerHiddenVetting(undefined)
+      ask.mockRestore()
+    }
   })
 
   test('a link for another community does not become the step', async () => {

@@ -250,13 +250,54 @@ export function joinCard(
  * since any of them may be the one it is decided by. Undefined when named
  * vetting is what is asked, or the community asks for no vetting at all.
  */
-export function vettingNotSupportedFor(manifest: VtiManifest, digest?: string): JoinVettingNotSupported | undefined {
-  const vettingWays = joinAsks(manifest).ways.filter((way) => way.requires.vetting)
+export function vettingNotSupportedFor(
+  manifest: VtiManifest,
+  digest?: string,
+  options: {
+    /**
+     * This build carries hidden vetting (the applicant module is registered).
+     * Without it every private way is refused, as #405 intended. With it, a
+     * private way in the suite agents run is **not** unsupported — refusing it
+     * anyway is what put Alberto on the named flow under a refusal on 254.
+     */
+    privateVettingAvailable?: boolean
+  } = {}
+): JoinVettingNotSupported | undefined {
+  const asks = joinAsks(manifest)
+  const available = Boolean(options.privateVettingAvailable) && asks.wire === '0.3'
+  const vettingWays = asks.ways.filter((way) => way.requires.vetting)
   const named = digest ? vettingWays.filter((way) => way.digest === digest) : []
   const ways = named.length ? named : vettingWays
   if (!ways.length) return undefined
-  const notSupported = (way: JoinWay) =>
-    way.unusableBecause === 'vettingPrivate' || way.unusableBecause === 'vettingExtUnsupported'
+  const privateAndRefused = (way: JoinWay) =>
+    way.unusableBecause === 'vettingPrivate' && !offersPrivately(way, available)
+  const notSupported = (way: JoinWay) => privateAndRefused(way) || way.unusableBecause === 'vettingExtUnsupported'
   if (!ways.every(notSupported)) return undefined
-  return ways.some((way) => way.unusableBecause === 'vettingPrivate') ? 'private' : 'other'
+  return ways.some(privateAndRefused) ? 'private' : 'other'
+}
+
+/**
+ * The private way this build can carry, for the criterion an application named
+ * (or any of them when it named none — the ways that ask for vetting are the
+ * ones it may be decided by).
+ *
+ * The named vetting screen uses it to hand a ticket to the private flow instead
+ * of starting the named one: a ticket for a hidden criterion gathers statements
+ * the community will reject, so the screen that can actually use it is
+ * `VtiHiddenVetting`. Returns the criterion's id, which is what that screen
+ * takes.
+ */
+export function privateWayFor(
+  manifest: VtiManifest,
+  digest?: string,
+  options: { privateVettingAvailable?: boolean } = {}
+): { id: string; digest?: string } | undefined {
+  const asks = joinAsks(manifest)
+  const available = Boolean(options.privateVettingAvailable) && asks.wire === '0.3'
+  if (!available) return undefined
+  const vettingWays = asks.ways.filter((way) => way.requires.vetting)
+  const named = digest ? vettingWays.filter((way) => way.digest === digest) : []
+  const ways = named.length ? named : vettingWays
+  const found = ways.find((way) => offersPrivately(way, available))
+  return found?.id ? { id: found.id, ...(found.digest ? { digest: found.digest } : {}) } : undefined
 }

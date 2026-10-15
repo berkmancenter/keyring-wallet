@@ -73,7 +73,8 @@ import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
-import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
+import { VETTING_NOT_SUPPORTED_KEY, privateWayFor, vettingNotSupportedFor } from './joinWays'
+import { hiddenVettingSeam } from './hiddenVettingSeam'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
@@ -131,6 +132,16 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
   return at.toDateString() === now.toDateString()
     ? time
     : `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+}
+
+/**
+ * Thrown when a named step turns out to belong to the private flow: the person
+ * has been navigated there, so the step stops without being an error.
+ */
+class HandedOver extends Error {
+  constructor() {
+    super('handed to private vetting')
+  }
 }
 
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
@@ -578,6 +589,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       try {
         await fn()
       } catch (e) {
+        // Not a failure: the step was handed to the private flow and the
+        // person is already on that screen. An error here would contradict it.
+        if (e instanceof HandedOver) return
         setError(e instanceof VettingTicketError ? { words: ticketWords(e) } : sayFailure(e))
       } finally {
         setBusy(undefined)
@@ -591,12 +605,34 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // extension) is never started, asked of a vetter, or sent: the community
   // would refuse the named statements. Said as Join says it (IN-264). The
   // manifest, read once.
+  // Whether this build carries private vetting at all, which is what #405's
+  // refusal is really about. The seam is registered by the applicant module, so
+  // this is the same question VtiJoin asks (`privateVettingAvailable`) — and
+  // asking it differently in the two places is what let a build that carries
+  // the module still refuse on this screen (254).
+  const carriesPrivate = Boolean(hiddenVettingSeam())
+
   const vettingManifest = useCallback(
     async (digest?: string): Promise<VtiManifest> => {
       if (!communityDid) throw new Error('no community to apply to')
       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
       if (!manifest) setManifest(m)
-      const notSupported = vettingNotSupportedFor(m, digest)
+      // Every named step — starting, pasting a ticket, asking a vetter,
+      // sending — comes through here, so this is the one place that can
+      // guarantee none of them begins on a hidden criterion. Narrowing #405's
+      // refusal (below) without redirecting here would be worse than the bug
+      // it fixes: the refusal is currently the only thing stopping the named
+      // flow, so removing it alone would let a build that carries the module
+      // gather named statements the community then rejects.
+      const privately = privateWayFor(m, digest, { privateVettingAvailable: carriesPrivate })
+      if (privately) {
+        ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
+          Screens.VtiHiddenVetting,
+          { communityDid, criterionId: privately.id }
+        )
+        throw new HandedOver()
+      }
+      const notSupported = vettingNotSupportedFor(m, digest, { privateVettingAvailable: carriesPrivate })
       if (notSupported) {
         throw new InWords(
           t(VETTING_NOT_SUPPORTED_KEY[notSupported], {
@@ -607,7 +643,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       }
       return m
     },
-    [manifest, communityDid, t]
+    [manifest, communityDid, t, carriesPrivate, navigation]
   )
 
   useEffect(() => {

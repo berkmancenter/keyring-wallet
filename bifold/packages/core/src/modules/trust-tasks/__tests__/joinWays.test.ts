@@ -8,9 +8,16 @@
 import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
-import { joinAsks, readManifest, type JoinAsks, type JoinWay, type VtiManifest } from '../module/joinManifest'
+import {
+  HIDDEN_VETTING_SUITE,
+  joinAsks,
+  readManifest,
+  type JoinAsks,
+  type JoinWay,
+  type VtiManifest,
+} from '../module/joinManifest'
 import * as manifestModule from '../module/joinManifest'
-import { joinCard, vettingNotSupportedFor } from '../screens/joinWays'
+import { joinCard, privateWayFor, vettingNotSupportedFor } from '../screens/joinWays'
 
 import vtc1907 from './fixtures/join-0.3/vtc-789ab4c2-answers.json'
 import vettingCommunity from './fixtures/join-0.3/vetting-community-manifest.json'
@@ -557,6 +564,44 @@ describe('whether an application may gather named vetting', () => {
 
   it('no vetting asked at all: nothing to refuse', () => {
     expect(vettingNotSupportedFor(mockAsks([review]))).toBeUndefined()
+  })
+
+  // 254: a build that carries the applicant module still refused here, so a
+  // ticket for a hidden criterion opened the NAMED flow under a refusal.
+  // The question must be asked the same way the Join screen asks it.
+  const carriable = way({
+    id: 'hidden',
+    digest: 'zHidden',
+    requires: { invitation: false, vetting: { statements: 2, claims: [], methods: [] } },
+    usable: false,
+    unusableBecause: 'vettingPrivate',
+    hiddenVetting: { suite: HIDDEN_VETTING_SUITE },
+  })
+
+  it('a private way this build carries is not unsupported', () => {
+    const m = mockAsks([carriable, review])
+    expect(vettingNotSupportedFor(m, 'zHidden')).toBe('private')
+    expect(vettingNotSupportedFor(m, 'zHidden', { privateVettingAvailable: true })).toBeUndefined()
+  })
+
+  it('still refuses a private way in a suite this build does not run', () => {
+    // The module being present says nothing about another suite: #405 holds.
+    const otherSuite = way({ ...carriable, hiddenVetting: { suite: 'ps-something-else' } })
+    const m = mockAsks([otherSuite, review])
+    expect(vettingNotSupportedFor(m, 'zHidden', { privateVettingAvailable: true })).toBe('private')
+    expect(privateWayFor(m, 'zHidden', { privateVettingAvailable: true })).toBeUndefined()
+  })
+
+  it('names the criterion the private flow should open', () => {
+    const m = mockAsks([carriable, namedWay])
+    expect(privateWayFor(m, 'zHidden', { privateVettingAvailable: true })).toEqual({
+      id: 'hidden',
+      digest: 'zHidden',
+    })
+    // The application named the named way: nothing to hand over.
+    expect(privateWayFor(m, 'zNamed', { privateVettingAvailable: true })).toBeUndefined()
+    // A build without the module hands nothing over, so #405 still refuses.
+    expect(privateWayFor(m, 'zHidden')).toBeUndefined()
   })
 
   it('an unsupported critical extension: refused as other', () => {
