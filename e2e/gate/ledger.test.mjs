@@ -23,8 +23,8 @@ function home(runs) {
 
 test('meta keeps the first value of a key; ROW lines keep the last status per row', () => {
   assert.deepEqual(parseMeta('pin=abc\nkind=gate\nnote=x=y\nnote=second\n'), { pin: 'abc', kind: 'gate', note: 'x=y' });
-  assert.deepEqual(parseRows('HEADS x\nROW r1 FAIL — no\nROW r2 SKIP — n/a\nROW r1 PASS — yes\nLEG k DONE 0\n'), [
-    { row: 'r1', status: 'PASS' }, { row: 'r2', status: 'SKIP' },
+  assert.deepEqual(parseRows('HEADS x\nROW r1 FAIL — no\nROW r2 SKIP — n/a\nROW r1 PASS — yes\nROW r3 SKIP — tracked (IN-1 pending): it failed\nLEG k DONE 0\n'), [
+    { row: 'r1', status: 'PASS' }, { row: 'r2', status: 'SKIP' }, { row: 'r3', status: 'TRACKED' },
   ]);
 });
 
@@ -56,6 +56,19 @@ test('no runs folder is an empty ledger, not an error', () => {
   const h = mkdtempSync(path.join(tmpdir(), 'ledger-'));
   try {
     assert.deepEqual(readRuns(h, { now: NOW }), []);
+  } finally {
+    rmSync(h, { recursive: true, force: true });
+  }
+});
+
+test('a tracked row that failed counts as a fail with its tracked count, and can be flaky', () => {
+  const h = home([
+    ['1014-0001-aaaa-gate', { pin: 'aaaaaaaa11', harness: 'h1h1h1h', kind: 'gate', started: '2026-10-14T00:01:00Z' }, { waiting: 'ROW role SKIP — tracked (UI pending): AgentCard_role false\n' }],
+    ['1014-0101-aaaa-rerun', { pin: 'aaaaaaaa11', harness: 'h1h1h1h', kind: 'rerun', started: '2026-10-14T01:01:00Z' }, { waiting: 'ROW role PASS — ok\n' }],
+  ]);
+  try {
+    const [r] = ledger(readRuns(h, { days: 14, now: NOW }));
+    assert.deepEqual([r.row, r.pass, r.fail, r.tracked, r.flakyOn], ['role', 1, 1, 1, ['aaaaaaaa@h1h1h1h']]);
   } finally {
     rmSync(h, { recursive: true, force: true });
   }

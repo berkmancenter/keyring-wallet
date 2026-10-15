@@ -19,10 +19,13 @@ export function parseMeta(text) {
   return m;
 }
 
-/** A leg log's ROW lines as [{ row, status }] (the last line per row wins, as the report counts). */
+/**
+ * A leg log's ROW lines as [{ row, status }] (the last line per row wins, as the report counts). A tracked row that failed
+ * prints "SKIP — tracked (…)" (rows.js): that is TRACKED, a failure for the record, not a skip.
+ */
 export function parseRows(text) {
   const by = new Map();
-  for (const m of text.matchAll(/^ROW (.+?) (PASS|FAIL|SKIP) — /gm)) by.set(m[1], m[2]);
+  for (const m of text.matchAll(/^ROW (.+?) (PASS|FAIL|SKIP) — (tracked \()?/gm)) by.set(m[1], m[2] === 'SKIP' && m[3] ? 'TRACKED' : m[2]);
   return [...by].map(([row, status]) => ({ row, status }));
 }
 
@@ -48,7 +51,8 @@ export function readRuns(home, { days = 14, now = Date.now() } = {}) {
   return runs;
 }
 
-/** Per leg and row: runs, passes, fails, pass rate, and the pin@harness pairs it both passed and failed on. Worst first. */
+/** Per leg and row: runs, passes, fails (TRACKED counts as a fail), pass rate, tracked fails, and the pin@harness pairs it both
+ * passed and failed on. Worst first. */
 export function ledger(runs) {
   const by = new Map();
   for (const r of runs)
@@ -56,11 +60,12 @@ export function ledger(runs) {
       for (const { row, status } of l.rows) {
         if (status === 'SKIP') continue;
         const key = `${l.leg}\t${row}`;
-        const e = by.get(key) ?? { leg: l.leg, row, pass: 0, fail: 0, pins: new Map() };
+        const e = by.get(key) ?? { leg: l.leg, row, pass: 0, fail: 0, tracked: 0, pins: new Map() };
         e[status === 'PASS' ? 'pass' : 'fail']++;
+        if (status === 'TRACKED') e.tracked++;
         const at = `${r.pin.slice(0, 8)}@${String(r.harness).slice(0, 7)}`;
         const p = e.pins.get(at) ?? new Set();
-        p.add(status);
+        p.add(status === 'PASS' ? 'PASS' : 'FAIL');
         e.pins.set(at, p);
         by.set(key, e);
       }
@@ -71,6 +76,7 @@ export function ledger(runs) {
       runs: e.pass + e.fail,
       pass: e.pass,
       fail: e.fail,
+      tracked: e.tracked,
       rate: e.pass / (e.pass + e.fail),
       flakyOn: [...e.pins].filter(([, s]) => s.size > 1).map(([at]) => at),
     }))
@@ -81,13 +87,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
   const home = arg('--home', process.env.GATE_HOME || path.join(os.homedir(), '.keyring-fleet', 'gate'));
   const days = Number(arg('--days', 14));
+  if (!(days > 0)) { console.error('usage: ledger.mjs [--days N (a positive number)] [--home dir] [--json]'); process.exit(2); }
   const runs = readRuns(home, { days });
   const rows = ledger(runs);
   if (process.argv.includes('--json')) console.log(JSON.stringify({ days, runs: runs.length, rows }, null, 2));
   else {
     console.log(`ledger: ${runs.length} run(s) in ${days} days, ${rows.length} row(s); worst first`);
     for (const r of rows.filter((x) => x.fail > 0))
-      console.log(`${(r.rate * 100).toFixed(0).padStart(3)}%  ${String(r.pass).padStart(3)}/${String(r.runs).padEnd(3)} ${r.leg.padEnd(16)} ${r.row}${r.flakyOn.length ? `  FLAKY on ${r.flakyOn.join(', ')}` : ''}`);
+      console.log(`${(r.rate * 100).toFixed(0).padStart(3)}%  ${String(r.pass).padStart(3)}/${String(r.runs).padEnd(3)} ${r.leg.padEnd(16)} ${r.row}${r.tracked ? `  (${r.tracked} tracked)` : ''}${r.flakyOn.length ? `  FLAKY on ${r.flakyOn.join(', ')}` : ''}`);
     console.log(`${rows.filter((x) => x.fail === 0).length} row(s) never failed in the window`);
   }
 }
