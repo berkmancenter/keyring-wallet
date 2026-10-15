@@ -4,7 +4,13 @@
  * host sets the agent up, then signs in and rotates like every link, and tells
  * the host it connected. Every step moves the one state the screens read.
  */
-import { VtaAgentController } from '../module/vtaAgent'
+import {
+  GRANT_CONNECT_DEADLINE_MS,
+  HOST_SIGN_IN_RETRY_MS,
+  HOST_SIGN_IN_TRIES,
+  VtaAgentController,
+} from '../module/vtaAgent'
+import { resumableFailure } from '../module/vtaLinkMachine'
 import { VtaClient } from '../module/VtaClient'
 import { AGENT_HOST_QR_LIFETIME_MS, type AgentHostOffer } from '../module/agentHostConnection'
 
@@ -403,5 +409,56 @@ describe('an agent host’s automatic connection', () => {
       exp: 2e9,
     })
     expect(vta.getState().link).not.toHaveProperty('via')
+  })
+})
+
+// link-try-again (gate efficiency item 13), on the real clocks with fake timers: an agent the host set up that never
+// answers this phone. Each sign-in try waits out its connect deadline, then pauses; after every try the link ends
+// "not linked" with a failure Try again can pick up. On a device that is about 14 minutes (the gate row polls up to
+// 18); here it is seconds.
+describe('an agent that never answers after the host set it up', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('keeps trying for every try, then ends not linked with Try again possible', async () => {
+    mockClient.connect.mockImplementation(() => new Promise<undefined>(() => undefined))
+    const host = mockHost({
+      [CALLBACK]: [{ status: 202, body: accepted }],
+      [PROGRESS]: [at('awaiting_mobile')],
+      [COMPLETE]: [at('connected')],
+    })
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      fetch: host.fetch,
+      linkStore: () => ({ get: async () => undefined, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined }) as never,
+      deviceCanOwn: async () => true,
+    })
+    const stages: string[] = []
+    const off = vta.subscribe(() => {
+      const link = vta.getState().link
+      if (link.kind !== 'awaitingGrant' || !link.stage) return
+      const named = link.stage.attempt ? `${link.stage.step} ${link.stage.attempt}/${link.stage.of}` : link.stage.step
+      if (stages.at(-1) !== named) stages.push(named)
+    })
+    vta.scanHostOffer(hostOffer)
+    const done = vta.confirmOffer({} as never)
+
+    const everyTryMs = HOST_SIGN_IN_TRIES * (GRANT_CONNECT_DEADLINE_MS + HOST_SIGN_IN_RETRY_MS)
+    expect(everyTryMs).toBe(14 * 60 * 1000)
+    // A minute short of every try: still trying, not given up.
+    await jest.advanceTimersByTimeAsync(everyTryMs - 60_000)
+    expect(vta.getState().link.kind).toBe('awaitingGrant')
+    // Past the last try (and the host's own first look): given up.
+    await jest.advanceTimersByTimeAsync(2 * 60_000)
+    await done
+    off?.()
+    expect(stages).toContain(`signingIn ${HOST_SIGN_IN_TRIES}/${HOST_SIGN_IN_TRIES}`)
+    expect(mockClient.connect).toHaveBeenCalledTimes(HOST_SIGN_IN_TRIES)
+    const link = vta.getState().link
+    expect(link).toMatchObject({ kind: 'notLinked', lastError: { vtaDid: VTA } })
+    // What VtaLink offers Try again for: the person's own retry may pick it up.
+    expect(resumableFailure(link.kind === 'notLinked' ? link.lastError : undefined, { manual: true })).toBe(VTA)
   })
 })
