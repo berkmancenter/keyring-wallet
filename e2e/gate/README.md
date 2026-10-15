@@ -239,9 +239,11 @@ gate the row is a SKIP that says so; a rerun that names it runs it. Every leg ge
 `linkwait` runs in both too: in a gate on the short-clock test build (`E2E_CLOCKS=short`), and at night on a
 real-clocks build (`test-builds.yml` dispatched with `clocks: real`; `APK_REAL`), so the clocks the store build has
 are proven as well. The watcher finds that build for the nightly commit, or for main's HEAD when nothing between them
-changes the app (as for a push-on build), asks for one once if there is none (`watch-requested-real-<sha8>`) and
-waits up to an hour; without one, the nightly linkwait is a SKIP that says so. `gate.sh nightly` by hand uses one only
-if it exists. The run's meta names it (`real-clocks=`).
+changes the app (as for a push-on build). It asks for one once (`watch-requested-real-<sha8>`) when a main build's
+gate ends, so it is built before the window opens, and again at night if there is still none; the nightly run then
+waits up to an hour, less once nothing of that commit is building any more (a red build is not asked for again: the
+log names its run). Without one, the nightly linkwait is a SKIP that says so. `gate.sh nightly` by hand uses one that
+exists, HEAD's standing in included. The run's meta names it (`real-clocks=`).
 
 `watch --main` starts the nightly legs once a day, in a window of local hours from `GATE_NIGHTLY_HOUR` (default 3)
 until `GATE_NIGHTLY_UNTIL` (default 6), on the newest green main build, only in a cycle where no gate started and
