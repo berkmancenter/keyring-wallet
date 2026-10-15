@@ -137,7 +137,7 @@ describe("@credo-ts/core's DCQL query finds JSON-LD credentials at all", () => {
       agentContext as never,
       {
         credentials: [{ id: 'vsc', format: 'ldp_vc', meta: { type_values: [types] } }],
-      } as never,
+      } as never
     )
 
     const ldp = asked.find((call) => call.name === 'w3c')
@@ -154,7 +154,7 @@ describe("@credo-ts/core's DCQL query finds JSON-LD credentials at all", () => {
       agentContext as never,
       {
         credentials: [{ id: 'jwt', format: 'jwt_vc_json', meta: { type_values: [types] } }],
-      } as never,
+      } as never
     )
 
     expect(asked.find((call) => call.name === 'w3c')?.query).toEqual({
