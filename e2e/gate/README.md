@@ -216,6 +216,18 @@ only a `-push-on` artifact and does not start it). What does not move to a hoste
 physical-phone legs, the terminal-app fixture, and anything that links a Farm runner (stage B would need the
 runner personas provisioned for CI).
 
+## On a hosted runner: the Farm legs (gate-ci.yml)
+
+`.github/workflows/gate-ci.yml` runs the Android Farm legs (`CI_LEGS` there: the smoke, testreq, the link cases,
+linkfail, pnmlink) one at a time, as the **CI lane**: one machine (a hosted runner), one identity (`keyring-ci-gate`,
+a 30-day runner admin a person renews from the Mac), one runner VTA of its own on the Farm. A lane never shares a
+runner with another lane: two identities on one runner collide on its ACL and its rate limit. The lane's
+configuration is the `GATE_CI_ENV` secret, and `ci/ci-env-check.sh` refuses any shape but one runner slug (plus
+`RUNNER_A_DID`, the DID linkfail puts in its approver set, which names no agent pnm reaches); `ci/pnm-ci.sh` then
+allows only that slug and the commands the legs use. `FARM_VERSIONS` in the same file names the lane's runner
+version, which `farm-drift.mjs` checks against CI's pnm (`pnm-linux.yml`). The Mac's `farm.env` stays the Mac lane's:
+its runners, its versions.
+
 ## The nightly run
 
 Rows whose Jest twin runs on every pull request leave the per-release gate and run once a night instead (gate

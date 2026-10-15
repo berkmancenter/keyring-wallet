@@ -19,6 +19,7 @@ const RUNS = {
   relAndroid: { push: [], dispatch: ['66'] }, // an Android-only push-off dispatch: not a full gate's build
   main1: { push: ['33'], dispatch: ['44'] },
   head2: { push: [], dispatch: ['55'] },
+  relReal: { push: [], dispatch: ['77', '88', '99', '12'] }, // real-clocks builds newest, then the usual two
 };
 const ART = {
   9: ['!keyring-ios-sim-rel241-bfX', '!keyring-android-rel241-bfX'], // "!" = expired
@@ -27,9 +28,13 @@ const ART = {
   22: ['keyring-android-rel240-bfX-push-on'],
   44: ['keyring-android-main1-bfX-push-on'],
   55: ['keyring-android-head2-bfX-push-on'],
+  77: ['keyring-ios-sim-relReal-bfX-real-clocks', 'keyring-android-relReal-bfX-real-clocks'],
+  88: ['keyring-android-relReal-bfX-push-on-real-clocks'],
+  99: ['keyring-ios-sim-relReal-bfX', 'keyring-android-relReal-bfX'],
+  12: ['keyring-android-relReal-bfX-push-on'],
 };
 
-function buildRuns(sha, { pushOnSha = '', override = '' } = {}) {
+function buildRuns(sha, { pushOnSha = '', override = '', call = '' } = {}) {
   const home = mkdtempSync(path.join(tmpdir(), 'builds-'));
   try {
     if (override) writeFileSync(path.join(home, `build-override-${sha.slice(0, 8)}`), `${override}\n`);
@@ -48,7 +53,7 @@ function buildRuns(sha, { pushOnSha = '', override = '' } = {}) {
       GH_REPO=x/y GATE_HOME=${JSON.stringify(home)}
       ${fn('dispatch_build')}
       ${fn('build_runs')}
-      ${pushOnSha ? `GATE_PUSH_ON_SHA=${pushOnSha} ` : ''}build_runs ${sha}
+      ${call || `${pushOnSha ? `GATE_PUSH_ON_SHA=${pushOnSha} ` : ''}build_runs ${sha}`}
     `;
     return execFileSync('bash', ['-c', script], { encoding: 'utf8' }).trim();
   } finally {
@@ -80,4 +85,13 @@ test('an expired newer build is passed over; an Android-only push-off dispatch i
 test('an override file still wins, and a commit with no builds says so', () => {
   assert.equal(buildRuns('rel240', { override: '7 8' }), '7 8');
   assert.equal(buildRuns('nothing'), '- -');
+});
+
+test('a real-clocks build (clocks=real) is never taken for the push-off or the push-on build', () => {
+  assert.equal(buildRuns('relReal'), '99 12');
+});
+
+test("dispatch_build real: the newest real-clocks push-off build, never a push-on one", () => {
+  assert.equal(buildRuns('relReal', { call: 'dispatch_build relReal real' }), '77');
+  assert.equal(buildRuns('rel240', { call: 'dispatch_build rel240 real' }), '');
 });
