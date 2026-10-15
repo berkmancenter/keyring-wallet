@@ -15,20 +15,25 @@
  *
  * @module trust-tasks/module/privateVettingContract
  */
-import type { VtiCriterion } from './joinManifest'
-
 /**
- * Whether the criterion an application is gathering for is a private way this
- * build can carry: it publishes `org.openvtc.hidden-vetting`, in the suite
- * agents implement, and the ext is not critical in a way this build cannot
- * honour. Decided from the criterion alone — no agent round trip, because this
- * is asked on every render.
+ * There is deliberately **no** `privateMode(criterion)` for a screen to call.
  *
- * It does **not** ask whether this phone may use it; that is the agent's
- * answer (`hiddenVettingUsable`) and costs a call, so it is asked when the
- * person acts, not when a screen draws.
+ * An earlier draft of this contract declared one. Implementing it showed the
+ * screen should not be asking: private mode is state, not a question about a
+ * criterion. `VtiApplicant.start` creates the agent-side application when the
+ * criterion publishes parameters this build can carry, and the presence of
+ * that record is what private means from then on. A screen that re-derived it
+ * from the criterion could disagree with the module about an application
+ * already under way — exactly the kind of split Alberto's one-flow
+ * instruction is meant to remove.
+ *
+ * A screen that needs to know reads `checklist().mode`, which comes from the
+ * same state the module acts on.
+ *
+ * `hiddenParametersOf(criterion)` (module/hiddenVetting.ts) is still there for
+ * the Join card, which genuinely has only a criterion and no application yet.
  */
-export declare function privateMode(criterion: VtiCriterion | undefined): boolean
+export type PrivateModeIsState = never
 
 /**
  * `checklist()` keeps the named shape exactly, and grows one member.
