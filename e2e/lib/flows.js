@@ -19,6 +19,7 @@ import {
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { REAL_CLOCKS, parseClocks } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -781,11 +782,13 @@ async function findRowEitherDirection(driver, testId) {
 /**
  * Settings → Developer screen (Auto-lock off on the way), whether developer
  * mode is already on or has to be tripped by tapping the Version footer.
+ * `keepAutoLock` leaves the auto-lock as it is: for a run that times the lock
+ * itself (readClocks), where "Never" would leave it nothing to time.
  */
-export async function openDeveloperScreen(driver) {
+export async function openDeveloperScreen(driver, { keepAutoLock = false } = {}) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
-  await setAutoLockNever(driver);
+  if (!keepAutoLock) await setAutoLockNever(driver);
 
   if (await findDeveloperOptionsRow(driver)) {
     // Developer mode was already enabled in a prior session (persisted store).
@@ -822,6 +825,36 @@ export async function openDeveloperScreen(driver) {
       await waitForTestId(driver, "ToggleDeveloper", 5000);
     }
   }
+}
+
+/**
+ * The clocks in force on this build (lib/clocks.js), as the Developer screen
+ * shows them under E2EClocksMode, E2EGrantWindowSeconds,
+ * E2EPhoneGrantWindowSeconds and E2EAutoLockMinutes (bifold #411). A build
+ * without those rows (`buildHasRows` false: from before #411) has the real
+ * clocks, said as such. The Developer screen is opened with the auto-lock left
+ * as it is, since the lock is one of the clocks, and the run returns to
+ * Contacts. A row not found or not readable is the driver's failure
+ * ("driver: …"), never a guess.
+ */
+export async function readClocks(driver, { buildHasRows } = {}) {
+  if (buildHasRows === false) return { ...REAL_CLOCKS, source: "real clocks: this build has no clock rows (before bifold #411)" };
+  await openDeveloperScreen(driver, { keepAutoLock: true });
+  const read = async (key) => {
+    const el = await scrollToTestId(driver, key, 8).catch(() => undefined);
+    if (!el) throw new Error(`driver: ${key} not found on the Developer screen`);
+    return ((await el.getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "").trim();
+  };
+  const raw = {
+    mode: await read("E2EClocksMode"),
+    grantWindowS: await read("E2EGrantWindowSeconds"),
+    phoneGrantWindowS: await read("E2EPhoneGrantWindowSeconds"),
+    autoLockMin: await read("E2EAutoLockMinutes"),
+  };
+  await returnToContacts(driver);
+  const clocks = parseClocks(raw);
+  console.log(`[e2e] ${deviceTag(driver)}: the Developer screen's clocks: ${JSON.stringify(raw)}`);
+  return clocks;
 }
 
 /** The QR exchange bottom sheet is open if any of its content is visible. */

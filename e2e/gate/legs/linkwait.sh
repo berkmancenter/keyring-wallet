@@ -1,5 +1,10 @@
 #!/bin/bash
-# IN-135 (bifold #351-#355, 239): the slow ones: a host code that lapsed on the confirm screen (5.5 min), a code window paused in the background (15 min), Try again after every sign-in failed (about 14 min).
+# IN-135 (bifold #351-#355, 239): a link that survives the phone going away, and the cases that wait on the app's own
+# clocks: a code window paused in the background, "didn't answer" once the grant window ends, the wait holding the
+# auto-lock off (#396). The clock cases read the clocks in force from the Developer screen (lib/clocks.js, bifold #411)
+# and time themselves by them: a short-clock test build (E2E_CLOCKS=short) waits about a minute where the shipped
+# build waits ten. linkresume's two cases (force-stop before and after the grant) run here too, on the same emulator
+# (gate efficiency item 4).
 # One fresh install and link per case (run-vta-link.js LINK_CASE=…), each printing its own row. Android emulator,
 # rooted for the mediator block (RUNNER_MEDIATOR_HOST); the cleanup lifts every rule and removes the phone keys.
 # A build without VtaLinkResumed (bifold #353) skips the leg.
@@ -22,7 +27,7 @@ cd "$E2E"
 # The host-code cases (link-host-sleep, link-host-lock-after-grant, host-code-lapsed, link-try-again) need an https
 # callback on ic3.dev or firstperson.dev (agentHostConnection.ts, AGENT_HOST_SITES): the gate's local http page cannot
 # serve one, so for 239 they are unit-only (vtaAgentHostLink) plus manual. LINK_CASES overrides.
-for c in ${LINK_CASES:-create-window-paused link-no-answer create-wait-no-lock}; do
+for c in ${LINK_CASES:-link-address-resume link-address-resume-later create-window-paused link-no-answer create-wait-no-lock}; do
   selected "$c" || continue
   adb -s $E uninstall $BID >/dev/null 2>&1
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \

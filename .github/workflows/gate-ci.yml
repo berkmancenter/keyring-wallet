@@ -33,7 +33,7 @@ on:
       legs:
         description: "Legs to run, space-separated (Android, one emulator, one build)"
         type: string
-        default: "smoke-android testreq linkwait linkresume linkfail pnmlink"
+        default: "smoke-android testreq linkwait linkfail pnmlink"
       run-id:
         description: "test-builds run whose push-off APK to test (default: the newest green push build of main)"
         type: string
@@ -54,7 +54,7 @@ env:
   # Not on CI yet: devices (several emulators), relaunch-android and update-android (two builds), the push legs (a
   # push-on build and the gateway), p1 (the openvtc TUI, a macOS build), the iOS legs (a macOS runner) and p2 (iOS and
   # Android together).
-  CI_LEGS: "smoke-android testreq linkwait linkresume linkfail pnmlink"
+  CI_LEGS: "smoke-android testreq linkwait linkfail pnmlink"
   # Mac-only by the owner's decision (D-8, 10-12): they need the community VTC's ADMIN credential (C_ADMIN_CRED,
   # lib.sh c_admin), which stays out of CI for now; revisit after the CI gate has run a while.
   MAC_ONLY_LEGS: "agents waiting lostreq"

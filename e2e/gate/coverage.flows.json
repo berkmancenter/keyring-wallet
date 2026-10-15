@@ -40,7 +40,6 @@
     "waiting": "join",
     "lostreq": "join",
     "linkwait": "agent",
-    "linkresume": "agent",
     "linkfail": "agent",
     "pnmlink": "agent",
     "devices": "agent",

@@ -58,7 +58,8 @@ import os from "node:os";
 import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { deleteAcl, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
@@ -424,8 +425,11 @@ async function afterRefusal(driver, said, temporaryDid) {
  *   link-again-rescan          IN-251 (bifold #383): linked, the agent removes this phone, RemovedPhone shows; Link
  *                              again, the same agent scanned: a link starts (not "already has that agent") and links
  */
-async function linkCase(driver, which) {
+async function linkCase(driver, which, timing) {
   const udid = driver.e2eUdid;
+  // The waits of the cases that time the app's clocks (CLOCK_CASES), from the clocks the build has (lib/clocks.js);
+  // the real ones when the caller read none.
+  const t = timing ?? { clocks: REAL_CLOCKS, ...linkWaitTiming(REAL_CLOCKS) };
   const sh = (...a) => execFileSync("adb", ["-s", udid, "shell", ...a], { encoding: "utf8" });
   const PAUSE_S = Number(process.env.PAUSE_S || 150);
   const lockFor = async (s) => {
@@ -558,21 +562,22 @@ async function linkCase(driver, which) {
   if (which === "create-wait-no-lock") {
     // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5
     // min, half-way through the 10-min window (the 1013-1633 rerun found it). Copy starts the window; then no touch
-    // at all for 400 s (idle only polls), past the 5-min lock: still waiting, no PIN screen. No grant is made, so the
-    // window has nothing to find and keeps waiting.
+    // at all past the lock (idle only polls; 400 s on real clocks, past the 5-min lock): still waiting, no PIN screen.
+    // No grant is made, so the window has nothing to find and keeps waiting.
     await addressCode();
     const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
     if (!copy) throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
     await copy.click();
     if (!(await existsTestId(driver, "AgentCreateWaiting", 15000))) return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s");
     const copied = Date.now();
-    await idle(400000);
+    await idle(t.noLock.idleMs);
     const locked = await existsTestId(driver, "EnterPIN", 2000);
     const still = await existsTestId(driver, "AgentCreateWaiting", 2000);
-    // Read inside the 600 s window, or "still waiting" would say nothing about the lock (review on #426).
+    // Read inside the window, or "still waiting" would say nothing about the lock (review on #426).
     const at = Math.round((Date.now() - copied) / 1000);
+    const inside = at < t.noLock.readBeforeS;
     await screenshot(driver, which);
-    return row(!locked && still && at < 590, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before the 600 s window ends: ${at < 590})`);
+    return row(!locked && still && inside, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before ${t.noLock.readBeforeS} s of the ${t.clocks.grantWindowS} s window: ${inside}) · ${clocksSaid(t.clocks)}`);
   }
   if (which === "link-no-answer") {
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
@@ -605,7 +610,8 @@ async function linkCase(driver, which) {
     }
     let failedEarly = false;
     let waited = 0;
-    // The window is 600 s; past 606 s of it, AgentCreateError is due. Look until 720 s.
+    // The window is 600 s on real clocks (60 s on a short-clock test build); AgentCreateError is due once it has ended
+    // and the next 6 s check has run. Look 120 s past it (720 s on real clocks).
     // A person waiting on Create touches the screen now and then; a test that only polls does not, and the wallet's
     // 5-min inactivity lock (contexts/activity.tsx: any touch resets it, through the root PanResponder) signed the
     // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap inert text every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
@@ -614,11 +620,11 @@ async function linkCase(driver, which) {
     // into its place when the window ends, so a tap there could restart the checks (review on #415).
     const inert = (await existsTestId(driver, "AgentCreateOwnerBody", 1000)) ? "AgentCreateOwnerBody" : "AgentCreateAsDevice";
     let touched = Date.now();
-    for (const until = mark + 720000; Date.now() < until; ) {
+    for (const until = mark + t.noAnswer.lookUntilMs; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
       const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
       if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
-      if (waiting && Date.now() - touched > 110000) {
+      if (waiting && Date.now() - touched > t.noAnswer.touchEveryMs) {
         // The case scrolled down to Copy, which can leave the body text above the view: bring it back first (the
         // swipe is a touch too), so the tap lands on screen where the root PanResponder sees it.
         await scrollToTestId(driver, inert, 3, { direction: "up" }).catch(() => undefined);
@@ -626,11 +632,11 @@ async function linkCase(driver, which) {
         touched = Date.now();
       }
       waited = Math.round((Date.now() - mark) / 1000);
-      await idle(20000);
+      await idle(t.noAnswer.stepMs);
     }
     waited = Math.round((Date.now() - mark) / 1000);
     // "didn't answer" before the window ran out would be a failure too: the checks must not end it early.
-    const tooSoon = waited < 590;
+    const tooSoon = waited < t.noAnswer.tooSoonS;
     failedEarly = failedEarly || tooSoon;
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
@@ -665,10 +671,11 @@ async function linkCase(driver, which) {
     const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
     const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
     return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past 600) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"}`);
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "create-window-paused") {
-    // UI/UX (10-08, from 59feae2f): two cases in one install.
+    // UI/UX (10-08, from 59feae2f): two cases in one install. The absences are the real-clock ones (3 and 15 min)
+    // scaled to the build's clocks (t.paused): the first under the lock, the second past both the window and the lock.
     // (1) create-window-paused-short: away 3 min, under the wallet's 5-min inactivity lock: Create is still waiting
     //     (AgentCreateWaiting), its window paused while in the background rather than counting it.
     // (2) create-window-paused: away 15 min: the lock signs the person out and the navigator restarts on the first tab,
@@ -677,19 +684,21 @@ async function linkCase(driver, which) {
     //     restarted). Fails on Check again, an error, Try again, or a different key.
     const did = await addressCode();
     await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
-    console.log("[e2e] the app in the background 180 s");
+    const shortS = t.paused.shortAwayMs / 1000;
+    const longS = t.paused.longAwayMs / 1000;
+    console.log(`[e2e] the app in the background ${shortS} s (${clocksSaid(t.clocks)})`);
     sh("input", "keyevent", "3");
-    await idle(180000);
+    await idle(t.paused.shortAwayMs);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
     const shortWaiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
     const shortCheck = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     const shortLocked = await existsTestId(driver, "EnterPIN", 1000);
     await screenshot(driver, `${which}-short`);
-    await rows.row("create-window-paused-short", async () => ({ ok: shortWaiting && !shortCheck && !shortLocked, detail: `after 3 min in the background: AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}` }));
-    console.log("[e2e] the app in the background 900 s");
+    await rows.row("create-window-paused-short", async () => ({ ok: shortWaiting && !shortCheck && !shortLocked, detail: `after ${shortS} s in the background (under the ${t.clocks.autoLockS} s lock): AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}` }));
+    console.log(`[e2e] the app in the background ${longS} s`);
     sh("input", "keyevent", "3");
-    await idle(900000);
+    await idle(t.paused.longAwayMs);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
     await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
@@ -705,7 +714,7 @@ async function linkCase(driver, which) {
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     const failed = (await existsTestId(driver, "AgentCreateError", 500)) || (await existsTestId(driver, "VtaLinkError", 500));
     await screenshot(driver, which);
-    return row(cont && same && !tryAgain && !checkAgain && !failed, `after 15 min away (the wallet's lock signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed}`);
+    return row(cont && same && !tryAgain && !checkAgain && !failed, `after ${longS} s away (past the ${t.clocks.grantWindowS} s window and the ${t.clocks.autoLockS} s lock, which signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "link-try-again") {
     const view = await hostLink({ afterGrant: async () => block(true) });
@@ -1552,6 +1561,8 @@ let page;
 let link;
 /** The LINK_CASE rows (rows.js): one per case, printed as the legs read them. */
 let rows;
+/** The cases that wait on the app's clocks (the grant window, the auto-lock): timed from readClocks. */
+const CLOCK_CASES = new Set(["create-wait-no-lock", "link-no-answer", "create-window-paused"]);
 // The keys this run adds to the runner VTA, removed again in `finally`: the
 // ACL as it was, and the phone's temporary key, whose chain is ours.
 let aclBefore;
@@ -1605,9 +1616,18 @@ try {
 
   if (process.env.LINK_CASE) {
     // IN-135 (239): one link case, its row through rows.js (a throw is that row's FAIL); 3 when a row failed.
-    const run = () => linkCase(driver, process.env.LINK_CASE);
     // A case for a fix the build under test does not carry is a SKIP that says so, never a red against an old build.
     const skip = { "create-wait-no-lock": () => buildLacks("holdLock", { platform: driver.e2ePlatform }) }[process.env.LINK_CASE]?.();
+    // The clocks a case times, read from the Developer screen before it starts (gate efficiency item 4): a short-clock
+    // test build waits about a minute, the shipped build ten. Read outside the row: a clock the driver cannot read, or
+    // clocks that leave the case nothing to prove, break the leg ("driver: …"); they say nothing about the app.
+    let timing;
+    if (CLOCK_CASES.has(process.env.LINK_CASE) && !skip) {
+      const clocks = await readClocks(driver, { buildHasRows: buildHas("E2EClocksMode", { platform: driver.e2ePlatform }) });
+      timing = { clocks, ...linkWaitTiming(clocks) };
+      console.log(`[e2e] ${process.env.LINK_CASE} timed against ${clocksSaid(clocks)}`);
+    }
+    const run = () => linkCase(driver, process.env.LINK_CASE, timing);
     if (TRACKED[process.env.LINK_CASE]) await trackedRow(process.env.LINK_CASE, run);
     else await rows.row(process.env.LINK_CASE, run, { skip: skip ? `${skip} (bifold #396)` : undefined });
     rows.summary();
