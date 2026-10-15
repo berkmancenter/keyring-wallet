@@ -1947,6 +1947,27 @@ export class VtiApplicant {
     return loadHiddenVettingRecord(this.agent, this.persona.communityDid)
   }
 
+  /**
+   * The same record, for a reader that must not fail because of it.
+   *
+   * `checklist` is called on every render of a vetting screen, including for
+   * communities with no private way in at all, so a record that cannot be read
+   * must leave the named numbers intact rather than turn a working screen into
+   * an error. **`submit` deliberately does not use this**: there, a read that
+   * failed would fall through to the named path and send statements for a
+   * hidden criterion — the downgrade #405 exists to prevent — so it is better
+   * for a submit to fail loudly than to quietly name the vetters a proof was
+   * meant to hide.
+   */
+  private async hiddenApplicationForDisplay(): Promise<HiddenVettingRecord | undefined> {
+    try {
+      return await this.hiddenApplication()
+    } catch (error) {
+      this.agent.config?.logger?.debug?.(`[hidden-vetting] the private application could not be read: ${String(error)}`)
+      return undefined
+    }
+  }
+
   /** The linked agent's client, with its session open: where `vta/pcs/*` goes. */
   private async pcsClient(): Promise<VtaClient> {
     const vtaDid = vtaAgent.agentAddress()
@@ -2478,8 +2499,29 @@ export class VtiApplicant {
     // with the proof in `extensions.hiddenVetting` and no statements — a
     // submission carrying both would name the vetters the proof keeps hidden,
     // and the community refuses a hidden criterion that carries no proof.
-    const hidden = await this.hiddenApplication()
-    if (hidden) return this.submitPrivately(manifest, requirementsDigest, registryConsent)
+    // Whether this submission is for a private way in is decided from the
+    // manifest, not by reading the record first: a named community must not
+    // pay a store read, or be broken by one, for a question that does not
+    // apply to it.
+    const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
+    const forPrivateWay =
+      privateCriterion !== undefined &&
+      (!requirementsDigest || privateCriterion.requirementsDigest === requirementsDigest)
+    if (forPrivateWay) {
+      // Read strictly here, and refuse if there is nothing to prove from. A
+      // private criterion with no agent-side application means `start` could
+      // not create one — an unreachable agent, most likely — and falling
+      // through to the named path would send statements for a hidden
+      // criterion, naming the vetters a proof exists to hide. That is the
+      // downgrade #405 prevents, so it is said rather than done.
+      const hidden = await this.hiddenApplication()
+      if (!hidden) {
+        throw Object.assign(new Error('this way in is vetted privately, and this phone holds no private application'), {
+          code: 'keyring/hidden-vetting/submit:noApplication',
+        })
+      }
+      return this.submitPrivately(manifest, requirementsDigest, registryConsent)
+    }
 
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
     let verdict: VtiVerdict
@@ -2742,7 +2784,7 @@ export class VtiApplicant {
     // and the rows are empty: statements invented from attestations would
     // claim more than we know, and naming anyone would undo the privacy the
     // exchange exists for.
-    const hidden = await this.hiddenApplication()
+    const hidden = await this.hiddenApplicationForDisplay()
     if (hidden) {
       const needed = hidden.minimum
       const counted = hidden.held

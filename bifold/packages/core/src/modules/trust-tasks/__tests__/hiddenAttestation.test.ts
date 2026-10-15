@@ -402,6 +402,33 @@ describe('the named flow, applied to a private way in', () => {
     expect(saved.at(0)).toMatchObject({ via: 'vetting', privateVetting: true })
   })
 
+  it('refuses to submit a private way in with no private application, rather than naming vetters', async () => {
+    // `start` could not create the agent-side application — an unreachable
+    // agent, most likely. Falling through to the named path would send
+    // statements for a hidden criterion and name the vetters a proof exists
+    // to hide, which is the downgrade #405 prevents.
+    mockLoadRecord.mockResolvedValue(undefined)
+    const code = await applicantWith(memoryStore({}))
+      .submit(manifest, [], 'zQmDigest')
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetting/submit:noApplication')
+    expect(mockApply).not.toHaveBeenCalled()
+  })
+
+  it('leaves a named community alone, without reading the private record at all', async () => {
+    // A named submit must not pay a store read, or be broken by one, for a
+    // question that does not apply to it (three suites failed this way).
+    mockLoadRecord.mockRejectedValue(new Error('no generic records here'))
+    const named = {
+      wire: '0.3',
+      criteria: [{ id: 'Named', requirementsDigest: 'zQmNamed', vetting: { version: '0.1', minStatements: 1 } }],
+    } as never
+    await applicantWith(memoryStore({})).submit(named, [], 'zQmNamed')
+    expect(mockApply).toHaveBeenCalledTimes(1)
+    expect(mockApply.mock.calls[0]?.[2]).not.toMatchObject({ hiddenVetting: expect.anything() })
+  })
+
   it('reads too few vouches as progress at submit, and sends nothing', async () => {
     mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 0, minimum: 1 })
     mockExtensions.mockResolvedValueOnce('notEnoughYet' as never)
