@@ -94,6 +94,9 @@ jobs:
           # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
           # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate.
           node e2e/scripts/check-testids.mjs || fail=1
+          # The leg cleanup (lib.sh keys_since) finds and deletes this leg's phone keys through the CI guard, and says
+          # so loudly when the runner's ACL cannot be read (a fake VTA; no secrets, no network).
+          bash e2e/gate/ci/keys-since.test.sh || { echo "::error file=e2e/gate/ci/keys-since.test.sh::the leg cleanup test failed"; fail=1; }
           exit $fail
 
   test:

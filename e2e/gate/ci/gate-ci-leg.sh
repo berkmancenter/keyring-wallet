@@ -52,14 +52,21 @@ uid=$(adb -s "$serial" shell id -u 2>/dev/null | tr -d '\r')
 rc=0
 bash "$HERE/../legs/$leg.sh" > "$LEG_DIR/leg.log" 2>&1 || rc=$?
 cat "$LEG_DIR/leg.log"
+# The cleanup could not read a runner's ACL, so this leg's phone keys (admin keys) are still on a shared runner: the
+# rows keep their verdict, but the job must not pass quietly (exit 5, "cleanup failed"; a failed leg keeps its own code).
+if grep -q '^CLEANUP-FAILED ' "$LEG_DIR/leg.log"; then
+  grep '^CLEANUP-FAILED ' "$LEG_DIR/leg.log" | sed 's/^CLEANUP-FAILED /::warning title=Leg cleanup failed::/'
+  [ "$rc" = 0 ] && rc=5
+fi
 echo "leg $leg rc=$rc"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   # The summary is built from leg.log before the scrub step runs, and is not an artifact: every configuration value is
   # replaced here, whatever Actions' masking does or does not cover in a job summary.
   sum=$(mktemp)
-  case $rc in 0) v="**pass**" ;; 2) v="**env** — not a verdict on the app" ;; 3) v="**app**: a row failed" ;; *) v="**broken** (exit $rc): setup, not a verdict on the app" ;; esac
+  case $rc in 0) v="**pass**" ;; 2) v="**env** — not a verdict on the app" ;; 3) v="**app**: a row failed" ;; 5) v="**cleanup failed**: the rows passed, but this leg's phone keys are still on a runner (CLEANUP-FAILED below)" ;; *) v="**broken** (exit $rc): setup, not a verdict on the app" ;; esac
   { echo "### Gate leg $leg (CI): $v"; echo; echo "| Status | Row | Detail |"; echo "|---|---|---|"
     grep '^ROW ' "$LEG_DIR/leg.log" | sed 's/|/\\|/g' | sed -E 's/^ROW ([^ ]+) ([A-Z]+) — (.*)$/| \2 | \1 | \3 |/' | cut -c1-400
+    grep '^CLEANUP-FAILED ' "$LEG_DIR/leg.log" | sed 's/^/\n> **/; s/$/**/'
     echo; grep -m1 -E '^LEG ' "$LEG_DIR/leg.log" | sed 's/^/`/; s/$/`/'; } > "$sum"
   while IFS= read -r l; do
     case "$l" in ''|'#'*) continue ;; esac
