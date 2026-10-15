@@ -44,6 +44,7 @@ import {
 import type { VtiCriterion } from './joinManifest'
 import { HIDDEN_VETTING_EXT } from './joinManifest'
 import { vtaAgent } from './vtaAgent'
+import { vtiAgent } from './vtiAgent'
 
 /** The criterion's published hidden-vetting parameters, raw: a typed parse would drop members. */
 function publishedOf(criterion: VtiCriterion): unknown {
@@ -163,8 +164,14 @@ const seam: HiddenVettingSeam = {
     throw notImplemented('requestVetting')
   },
 
-  async fetchChallenge() {
-    throw notImplemented('fetchChallenge')
+  async fetchChallenge(_agent, record, criterion) {
+    // The community issues it, and **replaces** any it had open for this
+    // applicant — so it is fetched immediately before proving and never
+    // reused across attempts. `vtiAgent.fetchChallenge` also drops its own
+    // answered hold for this task first, so a second call cannot be served a
+    // challenge an earlier submit already spent.
+    const answer = await vtiAgent.fetchChallenge(record.communityDid, { criterionId: criterion.id })
+    return { challenge: answer.challenge, expiresAt: answer.expiresAt }
   },
 
   async prove(agent, record, _criterion, challenge) {
@@ -186,8 +193,20 @@ const seam: HiddenVettingSeam = {
     return answer.hiddenVetting
   },
 
-  async submitJoin(): Promise<HiddenVettingVerdict> {
-    throw notImplemented('submitJoin')
+  async submitJoin(agent, record, criterion, proof): Promise<HiddenVettingVerdict> {
+    // The manifest is read again rather than remembered: a submission names
+    // the criterion by the digest the community is serving now, and the join
+    // wire version can move between gathering and submitting.
+    const manifest = await vtiAgent.fetchManifest(record.communityDid, agent)
+    const verdict = await vtiAgent.apply(record.communityDid, manifest, {
+      requirementsDigest: criterion.requirementsDigest ?? record.requirementsDigest,
+      // Verbatim: the agent built it, and the community verifies exactly what
+      // the agent signed. The presentation carries no vetting statements —
+      // `apply` strips them for a hidden submission, because naming vetters
+      // beside a proof that hides them would defeat the point.
+      hiddenVetting: proof as Record<string, unknown>,
+    })
+    return verdict as unknown as HiddenVettingVerdict
   },
 
   async deleteApplication(agent, record) {

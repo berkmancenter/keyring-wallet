@@ -106,6 +106,14 @@ export type {
   HiddenVettingVerdict,
 } from './screens/hiddenVettingSeam'
 export { hiddenVettingSeamImplementation } from './module/hiddenVettingAdapter'
+// 32's community half, exported here because index.ts has one owner.
+export {
+  PCS_CHALLENGE_TYPE,
+  PCS_CHALLENGE_NOT_HIDDEN,
+  readPcsChallenge,
+  pcsChallengeRequest,
+} from './module/pcsChallenge'
+export type { PcsChallenge } from './module/pcsChallenge'
 
 export {
   hiddenVettingUsable,

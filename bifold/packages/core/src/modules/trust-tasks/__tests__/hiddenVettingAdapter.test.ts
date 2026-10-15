@@ -8,11 +8,19 @@
  * this guards.
  */
 import { hiddenVettingSeam, pcsErrorCode } from '../screens/hiddenVettingSeam'
+import { vtiAgent } from '../module/vtiAgent'
 
 // The adapter resolves a client from the linked agent; these tests are about
 // what it answers when there is none, so the controller is faked.
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: { agentAddress: () => undefined, client: () => ({}) },
+}))
+jest.mock('../module/vtiAgent', () => ({
+  vtiAgent: {
+    fetchChallenge: jest.fn(async () => ({ challenge: 'c-from-the-community', expiresAt: '2026-10-15T12:00:00Z' })),
+    fetchManifest: jest.fn(async () => ({ wire: '0.3', criteria: [] })),
+    apply: jest.fn(async () => ({ effect: 'admitted' })),
+  },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -64,17 +72,36 @@ describe('what it says when there is no agent to ask', () => {
   })
 })
 
-describe('the steps this build does not carry yet', () => {
+describe('the step this build does not carry yet', () => {
   // A bare Error reads as "something went wrong, try again in a moment", and
   // the person retries something that cannot work. The screens word a
   // `:notImplemented` code as "this step isn't in this build yet".
-  const steps = ['requestVetting', 'fetchChallenge', 'submitJoin'] as const
-
-  it.each(steps)('%s throws a code the screens can word', async (step) => {
+  it('requestVetting throws a code the screens can word', async () => {
     const seam = hiddenVettingSeam()
     const thrown = await (seam as never as Record<string, () => Promise<unknown>>)
-      [step]()
+      .requestVetting()
       .catch((error: unknown) => error)
-    expect(pcsErrorCode(thrown)).toBe(`keyring/hidden-vetting/${step}:notImplemented`)
+    expect(pcsErrorCode(thrown)).toBe('keyring/hidden-vetting/requestVetting:notImplemented')
+  })
+})
+
+describe('the community half, now that it exists', () => {
+  const record = { applicationId: 'app-1', communityDid: 'did:webvh:QmC:example:test-vtc', createdAt: 'now' }
+  const criterion = { id: 'Vetted-Member', requirementsDigest: 'zQmPublished' } as never
+
+  it('asks the community for a challenge, naming the criterion', async () => {
+    const answer = await hiddenVettingSeam()?.fetchChallenge({} as never, record as never, criterion)
+    expect(answer).toEqual({ challenge: 'c-from-the-community', expiresAt: '2026-10-15T12:00:00Z' })
+    expect(vtiAgent.fetchChallenge).toHaveBeenCalledWith(record.communityDid, { criterionId: 'Vetted-Member' })
+  })
+
+  it('submits the proof verbatim, under the digest the community published', async () => {
+    const proof = { suite: 'ps-ddh-bls12381', proof: 'z2opaque' }
+    const verdict = await hiddenVettingSeam()?.submitJoin({} as never, record as never, criterion, proof)
+    expect(verdict).toEqual({ effect: 'admitted' })
+    const [, , options] = (vtiAgent.apply as jest.Mock).mock.calls[0]
+    // Verbatim, and under the published digest: the agent built the proof and
+    // the community verifies exactly what the agent signed.
+    expect(options).toMatchObject({ hiddenVetting: proof, requirementsDigest: 'zQmPublished' })
   })
 })
