@@ -236,6 +236,13 @@ so `run` and `all` leave it out; `--legs p2` still names it), and `lostreq`, who
 `lost-ask-offline-error` runs only in a nightly run (its twin is bifold's `joinLostRequest.test.tsx`, #414). In a
 gate the row is a SKIP that says so; a rerun that names it runs it. Every leg gets its run's kind as `GATE_KIND`.
 
+`linkwait` runs in both too: in a gate on the short-clock test build (`E2E_CLOCKS=short`), and at night on a
+real-clocks build (`test-builds.yml` dispatched with `clocks: real`; `APK_REAL`), so the clocks the store build has
+are proven as well. The watcher finds that build for the nightly commit, or for main's HEAD when nothing between them
+changes the app (as for a push-on build), asks for one once if there is none (`watch-requested-real-<sha8>`) and
+waits up to an hour; without one, the nightly linkwait is a SKIP that says so. `gate.sh nightly` by hand uses one only
+if it exists. The run's meta names it (`real-clocks=`).
+
 `watch --main` starts the nightly legs once a day, in a window of local hours from `GATE_NIGHTLY_HOUR` (default 3)
 until `GATE_NIGHTLY_UNTIL` (default 6), on the newest green main build, only in a cycle where no gate started and
 under the same busy and stability rules as a gate. `nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day: written once

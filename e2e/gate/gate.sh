@@ -37,7 +37,9 @@ LEGS_BESIDE_IOS_ALONE="linkwait"
 # pull request. The watcher runs it once a night (GATE_NIGHTLY_HOUR, local) on main's newest green build; `gate.sh
 # nightly` runs it by hand. p2 runs only there, so `all` leaves it out (LEGS_NIGHTLY_ONLY; --legs p2 still names it).
 # lostreq runs in both: its offline-ask row (lost-ask-offline-error, twin bifold #414) only in the nightly run.
-LEGS_NIGHTLY="p2 lostreq"
+# linkwait runs in both: on the short-clock test build in a gate, and on a real-clocks build (test-builds.yml
+# clocks=real, APK_REAL) at night, so the clocks the store build has are proven too (gate efficiency §3).
+LEGS_NIGHTLY="p2 lostreq linkwait"
 LEGS_NIGHTLY_ONLY="p2"
 
 usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
@@ -165,6 +167,7 @@ cmd_run() {
   { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
+  [ -z "${REAL_NOTE:-}" ] || echo "real-clocks=$REAL_NOTE" >> "$rd/meta"
   say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"
@@ -272,7 +275,29 @@ cmd_nightly() {
   [ "${1:-}" = --pin ] && pin=${2:-}
   [ -n "$pin" ] || pin=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null | cut -d' ' -f1)
   [ -n "$pin" ] && [ "$pin" != none ] || die "no green main build to run the nightly legs on"
-  GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+  # By hand, a real-clocks build of this commit only if one exists already (the watcher asks for one).
+  GATE_REAL_SHA=$pin GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+}
+
+# The real-clocks Android build the nightly linkwait runs on (test-builds.yml clocks=real): of <sha>, or of main's
+# HEAD when nothing between them changes the app (samebuild.mjs), as a push-on build is chosen. Asked for once per
+# commit (watch-requested-real-<sha8>) and waited for up to an hour. Prints the commit whose build stands for <sha>,
+# or nothing: linkwait's nightly run then skips, saying so. Its own lines go to stderr (stdout is the answer).
+nightly_real_build() {
+  local sha=$1 head on req i
+  head=$(git -C "$REPO" rev-parse origin/main 2>/dev/null); on=$sha
+  if [ -n "$head" ] && [ "$head" != "$sha" ]; then
+    if [ "$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)" = same ]; then on=$head
+    else say "nightly: main moved past ${sha:0:8} with an app change: no real-clocks build of it can be made" >&2; return; fi
+  fi
+  [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }
+  req=$GATE_HOME/watch-requested-real-${on:0:8}
+  if [ ! -f "$req" ]; then
+    if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f clocks=real >/dev/null 2>&1; then touch "$req"
+    else say "nightly: real-clocks build not requested" >&2; return; fi
+  fi
+  for i in $(seq 1 60); do [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }; sleep 60 & wait $!; done
+  say "nightly: no real-clocks build of ${on:0:8} within an hour" >&2
 }
 
 # The nightly window, local hours: from GATE_NIGHTLY_HOUR (default 3) until GATE_NIGHTLY_UNTIL (default 6). A window,
@@ -376,7 +401,7 @@ cmd_watch_main() {
   gate_env
   # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
   trap stop_forward TERM INT HUP
-  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same started
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same started real_sha
   say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO; the nightly legs ($LEGS_NIGHTLY) from ${GATE_NIGHTLY_HOUR:-3}:00 to ${GATE_NIGHTLY_UNTIL:-6}:00"
   while :; do
     started=0; sha=
@@ -419,7 +444,8 @@ cmd_watch_main() {
     if [ "$started" = 0 ] && [ -n "$sha" ] && nightly_due && ! paused \
       && ! { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } && ! mac_busy && mac_stable && watch_checkout_ready; then
       say "nightly: $LEGS_NIGHTLY on main build ${sha:0:8}"
-      ( GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
+      real_sha=$(nightly_real_build "$sha")
+      ( GATE_REAL_SHA=$real_sha GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
     elif nightly_missed; then
       echo "missed $(stamp)Z: the window passed with no run" > "$(nightly_marker)"
       say "nightly: the ${GATE_NIGHTLY_HOUR:-3}:00-${GATE_NIGHTLY_UNTIL:-6}:00 window passed with no run today (a gate, a busy or unstable Mac, a pause, or no green main build)"

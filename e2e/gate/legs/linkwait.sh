@@ -11,6 +11,14 @@
 . "$(dirname "$0")/../lib.sh"; gate_env
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN RUNNER_MEDIATOR_HOST
 APK=$APK_OFF
+# A nightly run times the cases on the store build's clocks: the real-clocks build (gate.sh nightly_real_build). With
+# none, the run says so rather than repeat the short-clock gate.
+if [ "${GATE_KIND:-}" = nightly ]; then
+  if [ -z "${APK_REAL:-}" ] || [ ! -f "$APK_REAL" ]; then
+    leg_begin linkwait - ""; row linkwait SKIP "nightly: no real-clocks build (test-builds.yml clocks=real) of this commit"; exit 0
+  fi
+  APK=$APK_REAL; echo "nightly: real-clocks build ${REAL_NOTE:-?}"
+fi
 leg_begin linkwait "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 if ! unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -q VtaLinkResumed; then
   row linkwait SKIP "this build has no VtaLinkResumed (bifold #353)"; exit 0
