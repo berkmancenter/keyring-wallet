@@ -275,28 +275,48 @@ cmd_nightly() {
   [ "${1:-}" = --pin ] && pin=${2:-}
   [ -n "$pin" ] || pin=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null | cut -d' ' -f1)
   [ -n "$pin" ] && [ "$pin" != none ] || die "no green main build to run the nightly legs on"
-  # By hand, a real-clocks build of this commit only if one exists already (the watcher asks for one).
-  GATE_REAL_SHA=$pin GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+  # By hand, a real-clocks build that exists already: of this commit, or HEAD's standing in (the watcher asks for one).
+  GATE_REAL_SHA=$(real_build_commit "$pin") GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
 }
 
-# The real-clocks Android build the nightly linkwait runs on (test-builds.yml clocks=real): of <sha>, or of main's
-# HEAD when nothing between them changes the app (samebuild.mjs), as a push-on build is chosen. Asked for once per
-# commit (watch-requested-real-<sha8>) and waited for up to an hour. Prints the commit whose build stands for <sha>,
-# or nothing: linkwait's nightly run then skips, saying so. Its own lines go to stderr (stdout is the answer).
+# The real-clocks Android build the nightly linkwait runs on (test-builds.yml clocks=real). Chosen as a push-on build
+# is: of <sha>, or of main's HEAD when nothing between them changes the app (samebuild.mjs). real_build_commit prints
+# that commit, or nothing when main moved on with an app change.
+real_build_commit() {
+  local sha=$1 head
+  head=$(git -C "$REPO" rev-parse origin/main 2>/dev/null)
+  if [ -z "$head" ] || [ "$head" = "$sha" ]; then echo "$sha"; return; fi
+  [ "$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)" = same ] && echo "$head"
+}
+# Ask once for a real-clocks Android build of main (which is <on>), unless a green one exists or one was asked for
+# (watch-requested-real-<sha8>). The watcher asks when a main build's gate ends, so it is there before the window.
+request_real_build() {
+  local on=$1 req=$GATE_HOME/watch-requested-real-${1:0:8}
+  if [ -n "$(dispatch_build "$on" real)" ] || [ -f "$req" ]; then return 0; fi
+  if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f clocks=real >/dev/null 2>&1; then touch "$req"
+  else say "real-clocks build of ${on:0:8} not requested" >&2; return 1; fi
+}
+# For the nightly run: the commit whose real-clocks build stands for <sha>, asked for if need be and waited for up to
+# an hour, or nothing (linkwait's nightly run then skips, saying so). The wait ends early once nothing of that commit
+# is building any more (a red build is not asked for again), naming its dispatched runs so the SKIP can be explained.
+# Its own lines go to stderr (stdout is the answer).
 nightly_real_build() {
-  local sha=$1 head on req i
-  head=$(git -C "$REPO" rev-parse origin/main 2>/dev/null); on=$sha
-  if [ -n "$head" ] && [ "$head" != "$sha" ]; then
-    if [ "$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)" = same ]; then on=$head
-    else say "nightly: main moved past ${sha:0:8} with an app change: no real-clocks build of it can be made" >&2; return; fi
-  fi
+  local sha=$1 on i runs
+  on=$(real_build_commit "$sha")
+  [ -n "$on" ] || { say "nightly: main moved past ${sha:0:8} with an app change: no real-clocks build of it can be made" >&2; return; }
   [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }
-  req=$GATE_HOME/watch-requested-real-${on:0:8}
-  if [ ! -f "$req" ]; then
-    if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f clocks=real >/dev/null 2>&1; then touch "$req"
-    else say "nightly: real-clocks build not requested" >&2; return; fi
-  fi
-  for i in $(seq 1 60); do [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }; sleep 60 & wait $!; done
+  request_real_build "$on" || return
+  for i in $(seq 1 60); do
+    [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }
+    runs=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$on" --event workflow_dispatch --json databaseId,status,conclusion \
+      --jq '.[]|"\(.databaseId) \(.status) \(.conclusion)"' 2>/dev/null)
+    # Five minutes for a fresh request to show up, then: nothing queued or running means nothing is coming.
+    if [ "$i" -gt 5 ] && ! grep -qv ' completed ' <<<"${runs:- completed }"; then
+      say "nightly: no green real-clocks build of ${on:0:8}, and none building; its dispatched runs: $(awk '$3 != "success" {printf "%s %s; ", $1, $3}' <<<"$runs")" >&2
+      return
+    fi
+    sleep 60 & wait $!
+  done
   say "nightly: no real-clocks build of ${on:0:8} within an hour" >&2
 }
 
@@ -437,6 +457,8 @@ cmd_watch_main() {
         fi
         started=1
         ( GATE_PUSH_ON_SHA=$on_sha cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
+        # Its real-clocks build for the night's linkwait, asked for now so it is built before the window opens.
+        if [ "${GATE_NIGHTLY:-1}" != 0 ]; then real_sha=$(real_build_commit "$sha"); [ -z "$real_sha" ] || request_real_build "$real_sha"; fi
       fi
     fi
     # The nightly legs, on the build just gated (or the newest already gated), when nothing else started this cycle.

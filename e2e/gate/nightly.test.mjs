@@ -24,7 +24,7 @@ const bash = (script, env = {}) => {
 };
 
 test('gate.sh has leg_wanted and the nightly window functions to test', () => {
-  for (const name of ['leg_wanted', 'nightly_marker', 'nightly_hour', 'nightly_due', 'nightly_missed']) assert.ok(fn(name), `${name}() { … } not found in gate.sh`);
+  for (const name of ['leg_wanted', 'nightly_marker', 'nightly_hour', 'nightly_due', 'nightly_missed', 'real_build_commit', 'request_real_build', 'nightly_real_build']) assert.ok(fn(name), `${name}() { … } not found in gate.sh`);
 });
 
 test('"all" leaves the nightly-only legs out; naming one still runs it', () => {
@@ -109,42 +109,77 @@ test("lostreq runs its offline-ask driver only in a nightly run, or when a rerun
 });
 
 // The real-clocks build behind the nightly linkwait: gh, git, samebuild and the wait are stubbed; the choice is run.
+function realBuild({ head, same = 'same', builds = {}, appearsAfterWait = '', runs = '', marked = false }) {
+  const home = mkdtempSync(path.join(tmpdir(), 'real-'));
+  try {
+    if (marked) writeFileSync(path.join(home, 'watch-requested-real-sha1'), '');
+    const script = `
+      say() { echo "say: $*"; }
+      git() { echo "${head}"; }
+      node() { echo "${same}"; }
+      sleep() { echo x >> "$GATE_HOME/waited"; }
+      gh() {
+        if [ "$1" = workflow ]; then echo "$*" >> "$GATE_HOME/gh"; else printf '%b' "${runs}"; fi
+      }
+      dispatch_build() {
+        case "$1" in ${Object.entries(builds).map(([k, v]) => `${k}) echo ${v}; return ;;`).join(' ')} esac
+        [ -n "${appearsAfterWait}" ] && [ -f "$GATE_HOME/waited" ] && [ "$1" = "${appearsAfterWait}" ] && echo 999
+      }
+      REPO=. GATE_SRC=. GH_REPO=x/y
+      ${fn('real_build_commit')}
+      ${fn('request_real_build')}
+      ${fn('nightly_real_build')}
+      nightly_real_build sha1
+    `;
+    const r = execFileSync('bash', ['-c', `{\n${script}\n} 2> "$GATE_HOME/err"`], { env: { ...process.env, GATE_HOME: home }, encoding: 'utf8' }).trim();
+    const read = (f) => (existsSync(path.join(home, f)) ? readFileSync(path.join(home, f), 'utf8').trim() : '');
+    return {
+      out: r,
+      gh: read('gh') ? read('gh').split('\n') : [],
+      marked: existsSync(path.join(home, 'watch-requested-real-sha1')) || existsSync(path.join(home, 'watch-requested-real-head2')),
+      waits: read('waited') ? read('waited').split('\n').length : 0,
+      said: read('err'),
+    };
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
 test('nightly_real_build: an existing build, HEAD standing in, an app change, and one request then a wait', () => {
-  const run = ({ head, same = 'same', builds = {}, appearsAfterWait = '' }) => {
-    const home = mkdtempSync(path.join(tmpdir(), 'real-'));
-    try {
-      const script = `
-        say() { echo "say: $*"; }
-        git() { echo "${head}"; }
-        node() { echo "${same}"; }
-        sleep() { touch "$GATE_HOME/waited"; }
-        gh() { echo "$*" >> "$GATE_HOME/gh"; }
-        dispatch_build() {
-          case "$1" in ${Object.entries(builds).map(([k, v]) => `${k}) echo ${v}; return ;;`).join(' ')} esac
-          [ -n "${appearsAfterWait}" ] && [ -f "$GATE_HOME/waited" ] && [ "$1" = "${appearsAfterWait}" ] && echo 999
-        }
-        REPO=. GATE_SRC=. GH_REPO=x/y
-        ${fn('nightly_real_build')}
-        nightly_real_build sha1
-      `;
-      const out = execFileSync('bash', ['-c', script], { env: { ...process.env, GATE_HOME: home }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
-      const gh = existsSync(path.join(home, 'gh')) ? readFileSync(path.join(home, 'gh'), 'utf8').trim().split('\n') : [];
-      return { out, gh, marked: existsSync(path.join(home, 'watch-requested-real-sha1')) || existsSync(path.join(home, 'watch-requested-real-head2')) };
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
-  };
+  const pick = ({ out, gh, marked }) => ({ out, gh, marked });
   // Of this very commit, already built: no request.
-  assert.deepEqual(run({ head: 'sha1', builds: { sha1: '77' } }), { out: 'sha1', gh: [], marked: false });
+  assert.deepEqual(pick(realBuild({ head: 'sha1', builds: { sha1: '77' } })), { out: 'sha1', gh: [], marked: false });
   // Main moved on with no app change: HEAD's build stands for this commit.
-  assert.deepEqual(run({ head: 'head2', builds: { head2: '88' } }), { out: 'head2', gh: [], marked: false });
+  assert.deepEqual(pick(realBuild({ head: 'head2', builds: { head2: '88' } })), { out: 'head2', gh: [], marked: false });
   // Main moved on with an app change: none can be made, and nothing is asked for.
-  assert.deepEqual(run({ head: 'head2', same: 'differs: app/src', builds: { head2: '88' } }), { out: '', gh: [], marked: false });
+  assert.deepEqual(pick(realBuild({ head: 'head2', same: 'differs: app/src', builds: { head2: '88' } })), { out: '', gh: [], marked: false });
   // None yet: asked for once (Android, real clocks, on main), then found after a wait.
-  const asked = run({ head: 'sha1', appearsAfterWait: 'sha1' });
+  const asked = realBuild({ head: 'sha1', appearsAfterWait: 'sha1', runs: '1 in_progress null\\n' });
   assert.equal(asked.out, 'sha1');
   assert.deepEqual(asked.gh, ['workflow run test-builds.yml -R x/y --ref main -f platform=android -f clocks=real']);
   assert.equal(asked.marked, true);
+});
+
+test('nightly_real_build: a red real-clocks build, asked for before, ends the wait early and is named', () => {
+  const red = realBuild({ head: 'sha1', marked: true, runs: '4242 completed failure\\n4141 completed success\\n' });
+  assert.equal(red.out, '');
+  assert.deepEqual(red.gh, [], 'not asked for again');
+  assert.ok(red.waits <= 5, `waited ${red.waits} minutes for nothing building`);
+  assert.match(red.said, /no green real-clocks build of sha1, and none building; its dispatched runs: 4242 failure;/);
+  assert.doesNotMatch(red.said, /4141/);
+  // Still building: the wait goes on (here, the full hour of stubbed minutes).
+  const building = realBuild({ head: 'sha1', marked: true, runs: '4343 in_progress null\\n' });
+  assert.equal(building.out, '');
+  assert.equal(building.waits, 60);
+  assert.match(building.said, /within an hour/);
+});
+
+test('by hand, gate.sh nightly uses HEAD standing in; the watcher asks for the real-clocks build when a gate ends', () => {
+  assert.match(fn('cmd_nightly'), /GATE_REAL_SHA=\$\(real_build_commit "\$pin"\)/);
+  const watch = fn('cmd_watch_main');
+  const gateRun = watch.indexOf('GATE_PUSH_ON_SHA=$on_sha cmd_run --pin "$sha"');
+  const ask = watch.indexOf('request_real_build "$real_sha"');
+  assert.ok(gateRun > 0 && ask > gateRun && ask < watch.indexOf('nightly_due'), 'asked for right after the gate, before the nightly block');
 });
 
 test('linkwait in a nightly run takes the real-clocks build, and skips saying why without one', () => {
