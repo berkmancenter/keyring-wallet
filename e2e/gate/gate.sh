@@ -414,6 +414,8 @@ cmd_report() {
     printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
     grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
     leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
+    # Where the leg's time went (steps.tsv, gate-efficiency phase 0): the longest steps by name.
+    node "$GATE_SRC/steps.mjs" "$rd/$leg/steps.tsv" 2>/dev/null | sed 's/^/    /'
   done < "$rd/legs.tsv"
   echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"
 }

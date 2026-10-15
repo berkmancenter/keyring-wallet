@@ -39,7 +39,19 @@ ios_log_app_lines() { local n; n=$(grep -cE ' KeyRing\[|com\.facebook\.react\.lo
 # whose wrapper was killed with the leg (a SIGKILL of the leg's whole group) is still found: leg_end reaps its own
 # leg's, and gate_sweep, at the start of every run, all of them (galarm_reap).
 GALARM_GROUPS=$GATE_HOME/galarm-groups
+# Step times (gate-efficiency phase 0): one line per timed step in the leg's steps.tsv, "<name>\t<start epoch>\t<seconds>",
+# as smoke-ci writes it. Every driver and wait runs through galarm, which records itself under the script's name
+# (step_name); emu_start, sim_boot and the key cleanup record theirs. `gate.sh report` sums them (steps.mjs). A leg that
+# times its own phases (smoke-ci) sets GALARM_STEPS=0, so nothing is counted twice.
+step_rec() { [ -n "${LEG_DIR:-}" ] || return 0; printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$LEG_DIR/steps.tsv" 2>/dev/null || true; }
+step_name() { local a; for a in "$@"; do case $a in *.js|*.mjs|*.cjs|*.sh|*.py) echo "${a##*/}"; return ;; esac; done; echo "${1##*/}"; }
 galarm() {
+  local t0 rc; t0=$(date +%s)
+  galarm_run "$@"; rc=$?
+  [ "${GALARM_STEPS:-1}" = 0 ] || step_rec "$(step_name "${@:2}")" "$t0" "$(( $(date +%s) - t0 ))"
+  return $rc
+}
+galarm_run() {
   local t=$1; shift
   GALARM_LEG=${LEG_NAME:-gate} GALARM_GROUPS=$GALARM_GROUPS perl -e '
     use POSIX ":sys_wait_h";
@@ -221,7 +233,7 @@ use_build() {
 # (1010-2354: smoke-android sat 17 min in adb wait-for-device after "swap used 9 GB > 8 GB"). Now the leg breaks at
 # once, with emu.sh's own reason: setup, not a verdict on the app, and --only-failed reruns the whole leg.
 emu_start() {
-  local port=$1 out rc why
+  local port=$1 out rc why t0; t0=$(date +%s)
   if is_ci; then
     # The workflow's emulator step boots one emulator on this leg's port (read from the leg's E=emulator-NNNN).
     galarm 120 adb -s "emulator-$port" wait-for-device 2>/dev/null \
@@ -231,6 +243,7 @@ emu_start() {
   "$EMU_SH" status >/dev/null || die "emu.sh status not ok"
   out=$("$EMU_SH" start "$AVD" --port "$port" -- -no-audio -no-boot-anim 2>&1); rc=$?
   echo "$out" | tail -1
+  step_rec "emu_start $port" "$t0" "$(( $(date +%s) - t0 ))"
   [ "$rc" = 0 ] && { leg_logcat "emulator-$port"; return 0; }
   why=$(echo "$out" | grep -E '^emu\.sh: |not booted' | tail -1 | sed 's/^emu\.sh: //')
   broken "no emulator on port $port: ${why:-emu.sh start exited $rc}"
@@ -254,7 +267,7 @@ leg_logcat() {
   echo "logcat: $1 → $1.logcat"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
-sim_boot() { xcrun simctl boot "$1" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; }
+sim_boot() { local t0 rc; t0=$(date +%s); xcrun simctl boot "$1" 2>/dev/null; GALARM_STEPS=0 galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; rc=$?; step_rec sim_boot "$t0" "$(( $(date +%s) - t0 ))"; return $rc; }
 sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 
 # gate_sweep: before any leg, take off every runner what a gate leg creates and may have left there, and nothing
@@ -319,7 +332,8 @@ farm_drift() {
   echo "$line"
 }
 
-keys_since() {
+keys_since() { local s0 rc; s0=$(date +%s); keys_since_run "$@"; rc=$?; step_rec "cleanup keys $1" "$s0" "$(( $(date +%s) - s0 ))"; return $rc; }
+keys_since_run() {
   local slug=$1 t0=$2 k r i
   # t0 is compared as a string with each entry's ISO createdAt: anything else (epoch seconds, empty) sorts below
   # every date and would take every phone key on the runner (a seated vetter's, on 237's gate).
