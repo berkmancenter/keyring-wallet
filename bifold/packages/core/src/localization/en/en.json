@@ -1886,6 +1886,7 @@
       "NoTokens": "You have nothing left to vouch with until the next draw.",
       "NoTokensUntil": "You have nothing left to vouch with until {{date}}.",
       "NoTokensError": "You have nothing left to vouch with right now. Draw again, then try once more.",
+      "RequirementsChanged": "{{community}} has changed what it asks of new members since this person applied, so vouching now wouldn't count. Ask them to apply again.",
       "NotEnrolledError": "You're not enrolled for this period. Enrol, then try again.",
       "PeriodClosed": "This vetting period has ended. Enrol for the new one, then try again.",
       "ErrorGeneric": "Something went wrong. Try again in a moment.",

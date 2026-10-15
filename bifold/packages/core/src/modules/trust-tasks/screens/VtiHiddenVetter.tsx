@@ -71,6 +71,9 @@ export function hiddenVetterErrorKey(code: string | undefined): string {
   // A draw already running, accepted twice, or more than one tick allows.
   if (code.endsWith(':alreadyInFlight') || code.endsWith(':noDrawInFlight') || code.endsWith(':countExceedsDrip'))
     return 'Vetting.Vouch.DrawBusy'
+  // The criterion moved under an application: the module refuses rather than
+  // spend a scarce token on a proof that can no longer verify.
+  if (code.endsWith(':requirementsChanged')) return 'Vetting.Vouch.RequirementsChanged'
   if (code.endsWith(':notImplemented')) return 'Vetting.Hidden.NotInThisBuild'
   return 'Vetting.Vouch.ErrorGeneric'
 }

@@ -1,11 +1,12 @@
 /**
  * The vetter module as the vetter screens see it.
  *
- * Three of the six methods are live and three are stated gaps. The last test
- * names exactly which, so the set cannot drift quietly in either direction —
- * a half-wired seam reaching a tester's phone is a mistake this workstream has
- * already made once.
+ * All six methods are live. The last test asserts that none of them still
+ * answers `:notImplemented`, so a half-wired seam cannot reach a tester's
+ * phone unnoticed — a mistake this workstream has already made once.
  */
+const COMMUNITY_DID = 'did:webvh:QmC:example:hv'
+
 import { hiddenVetterSeam } from '../screens/hiddenVetterSeam'
 import { pcsErrorCode } from '../screens/hiddenVettingSeam'
 
@@ -20,6 +21,7 @@ const mockPcsRootRequest = jest.fn(async () => ({ id: 'z4Fvpxt', request: { blin
 const mockPcsRootAccept = jest.fn(async () => undefined)
 const mockPcsTokensRequest = jest.fn(async () => ({ requests: [{ r: 1 }, { r: 2 }, { r: 3 }] }))
 const mockPcsTokensAccept = jest.fn(async () => undefined)
+const mockPcsAttest = jest.fn(async () => ({ '@type': 'vtc/vetting/attestation/0.3', proof: { blinded: 'z2Att' } }))
 
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
@@ -33,6 +35,7 @@ jest.mock('../module/vtaAgent', () => ({
       pcsRootAccept: mockPcsRootAccept,
       pcsTokensRequest: mockPcsTokensRequest,
       pcsTokensAccept: mockPcsTokensAccept,
+      pcsAttest: mockPcsAttest,
     }),
   },
 }))
@@ -44,13 +47,57 @@ const mockAsk = jest.fn(async (_did: string, type: string) => ({
       : { label: 'token/2026-10', tick: 1, preCredentials: ['z2TokenAaa', 'z2TokenBbb', 'z2TokenCcc'] },
   },
 }))
-jest.mock('../module/vtiAgent', () => ({ vtiAgent: { ask: (...a: unknown[]) => mockAsk(...(a as [string, string])) } }))
+const mockFetchManifest = jest.fn(async () => ({ criteria: [publishedCriterion] }))
+jest.mock('../module/vtiAgent', () => ({
+  vtiAgent: {
+    ask: (...a: unknown[]) => mockAsk(...(a as [string, string])),
+    fetchManifest: (...a: unknown[]) => mockFetchManifest(...(a as [])),
+  },
+}))
+
+// The desk is 32's; this stands in for it so the adapter's own wiring is what
+// the test exercises — which request it looks up, what it hands the agent, and
+// what it refuses to spend a token on.
+const DESK_REQUEST = {
+  requestId: 'req-1',
+  applicantDid: 'did:peer:2.Eapplicant',
+  communityDid: 'did:webvh:QmC:example:hv',
+  receivedAt: '2026-10-15T09:00:00.000Z',
+  preferredMethod: 'in-person' as const,
+  hiddenApplicantId: 'z6MkApplicantId',
+  requirementsDigest: 'zQmPublished',
+  status: 'cardReceived' as const,
+}
+const mockListDesk = jest.fn(async () => [DESK_REQUEST])
+const mockHiddenRequests = jest.fn(async () => [DESK_REQUEST])
+const mockDecline = jest.fn(async () => undefined)
+let attestMeta = { community: COMMUNITY_DID, requirementsDigest: 'zQmPublished' }
+const mockAttestHidden = jest.fn(
+  async (_id: string, _statement: unknown, build: (i: { applicantId: string; meta: unknown }) => Promise<unknown>) =>
+    build({ applicantId: DESK_REQUEST.hiddenApplicantId, meta: attestMeta })
+)
+jest.mock('../module/vtiVetting', () => ({
+  GenericRecordsVettingStore: class {
+    listDesk = mockListDesk
+  },
+  VtiVetterDesk: class {
+    hiddenRequests = mockHiddenRequests
+    attestHidden = mockAttestHidden
+    decline = mockDecline
+  },
+}))
+jest.mock('../module/VtiIdentityStore', () => ({
+  GenericRecordsIdentityStore: class {
+    getPersona = async () => ({ communityDid: COMMUNITY_DID, did: 'did:peer:2.Epersona' })
+  },
+}))
+jest.mock('../module/VtiCommunityStore', () => ({ GenericRecordsCommunityStore: class {} }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 import '../module/hiddenVetterAdapter'
 
 const COMMUNITY = 'did:webvh:QmC:example:hv'
-const criterion = {
+const publishedCriterion = {
   id: 'Vetted-Member',
   requirementsDigest: 'zQmPublished',
   vetting: {
@@ -69,6 +116,7 @@ const criterion = {
     },
   },
 } as never
+const criterion = publishedCriterion
 
 /** Generic records in memory, enough for the vetter's own small record. */
 function fakeAgent() {
@@ -137,10 +185,73 @@ describe('drawing tokens', () => {
   })
 })
 
-describe('what this build does not carry yet', () => {
-  it('names exactly the three gaps, and no others', async () => {
+describe("the vetter's own queue", () => {
+  it("is the desk's hidden queue, carrying no name for anyone", async () => {
+    const open = await hiddenVetterSeam()?.requests(fakeAgent(), COMMUNITY)
+    expect(mockHiddenRequests).toHaveBeenCalledWith(COMMUNITY)
+    expect(open).toEqual([
+      {
+        id: 'req-1',
+        applicantDid: 'did:peer:2.Eapplicant',
+        receivedAt: '2026-10-15T09:00:00.000Z',
+        method: 'in-person',
+      },
+    ])
+    expect(JSON.stringify(open)).not.toContain('applicantName')
+  })
+})
+
+const statement = {
+  method: 'inPerson' as const,
+  claimsVerified: ['LegalName'],
+  livenessConfirmed: true,
+  declaredRelationship: 'closeFriend' as const,
+}
+
+describe('attesting', () => {
+  it('has the agent build the attestation for the id the desk holds', async () => {
+    attestMeta = { community: COMMUNITY, requirementsDigest: 'zQmPublished' }
+    await hiddenVetterSeam()?.attest(fakeAgent(), 'req-1', statement)
+    expect(mockAttestHidden).toHaveBeenCalledWith('req-1', statement, expect.any(Function))
+    expect(mockPcsAttest).toHaveBeenCalledWith(
+      expect.objectContaining({ community: COMMUNITY, applicantId: 'z6MkApplicantId', meta: attestMeta })
+    )
+  })
+
+  it('spends no token when the community changed what it asks', async () => {
+    // The applicant's proof binds to the digest their application gathered
+    // for. If the criterion has moved since, that proof cannot verify, so
+    // attesting would burn one of this vetter's scarce tokens on a dead
+    // application.
+    attestMeta = { community: COMMUNITY, requirementsDigest: 'zQmSomethingElse' }
+    const code = await hiddenVetterSeam()
+      ?.attest(fakeAgent(), 'req-1', statement)
+      .then(() => undefined)
+      .catch((error: unknown) => pcsErrorCode(error))
+    expect(code).toBe('keyring/hidden-vetter/attest:requirementsChanged')
+    expect(mockPcsAttest).not.toHaveBeenCalled()
+  })
+})
+
+describe('declining', () => {
+  it('declines through the desk, and says which request it could not find', async () => {
+    await hiddenVetterSeam()?.decline(fakeAgent(), 'req-1')
+    expect(mockDecline).toHaveBeenCalledWith('req-1')
+
+    mockListDesk.mockResolvedValueOnce([])
+    const code = await hiddenVetterSeam()
+      ?.decline(fakeAgent(), 'req-gone')
+      .then(() => undefined)
+      .catch((error: unknown) => pcsErrorCode(error))
+    expect(code).toBe('keyring/hidden-vetter:noSuchRequest')
+  })
+})
+
+describe('what this build carries', () => {
+  it('leaves no method answering notImplemented', async () => {
+    attestMeta = { community: COMMUNITY, requirementsDigest: 'zQmPublished' }
     const seam = hiddenVetterSeam() as never as Record<string, (...a: unknown[]) => Promise<unknown>>
-    const codes = await Promise.all(
+    const stillAGap = await Promise.all(
       ['standing', 'enrol', 'drawTokens', 'requests', 'attest', 'decline'].map(async (name) => {
         const code = await seam[name](fakeAgent(), COMMUNITY, criterion)
           .then(() => undefined)
@@ -148,13 +259,6 @@ describe('what this build does not carry yet', () => {
         return [name, code?.endsWith(':notImplemented') ?? false] as const
       })
     )
-    expect(Object.fromEntries(codes)).toEqual({
-      standing: false,
-      enrol: false,
-      drawTokens: false,
-      requests: true,
-      attest: true,
-      decline: true,
-    })
+    expect(stillAGap.filter(([, gap]) => gap).map(([name]) => name)).toEqual([])
   })
 })

@@ -34,12 +34,15 @@ import type {
 import { registerHiddenVetter } from '../screens/hiddenVetterSeam'
 
 import type { VtaClient } from './VtaClient'
+import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { getKeyed, putKeyed } from './keyedRecords'
 import { PCS_VETTER_ERROR, PCS_VETTER_TASK, VTC_VETTER_TASK, type PublishedConfig } from './pcsVetterTasks'
 import { HIDDEN_VETTING_EXT, type VtiCriterion } from './joinManifest'
 import { parametersToSend } from './pcsVtaPayloads'
 import { vtaAgent } from './vtaAgent'
 import { vtiAgent } from './vtiAgent'
+import { GenericRecordsVettingStore, VtiVetterDesk } from './vtiVetting'
 
 /**
  * One clock for everything here.
@@ -135,6 +138,51 @@ function currentTick(parameters: PublishedConfig, record: VetterRecord | undefin
   // answer must be the tick already drawn — forcing it forward made the
   // double-draw guard useless, which is what the test caught.
   return record.lastTick + Math.floor((nowMs() - last) / tick)
+}
+
+/**
+ * Which community a request belongs to, from the desk's own store.
+ *
+ * The seam names a request by id alone, so the community has to be looked up
+ * rather than passed — and the lookup is the store's, not a guess.
+ */
+async function communityOfRequest(agent: Agent, requestId: string): Promise<string> {
+  const desk = await new GenericRecordsVettingStore(agent).listDesk()
+  const found = desk.find((r) => r.requestId === requestId)
+  if (!found) {
+    throw Object.assign(new Error(`no request ${requestId} on this phone`), {
+      code: 'keyring/hidden-vetter:noSuchRequest',
+    })
+  }
+  return found.communityDid
+}
+
+/** The community's hidden criterion as it serves it now, for the parameters and the current digest. */
+async function hiddenCriterionOf(agent: Agent, communityDid: string): Promise<VtiCriterion> {
+  const manifest = await vtiAgent.fetchManifest(communityDid, agent)
+  const criterion = manifest.criteria.find((c) => publishedOf(c) !== undefined)
+  if (!criterion) {
+    throw Object.assign(new Error('this community publishes no hidden criterion'), {
+      code: 'keyring/hidden-vetter:notHiddenCommunity',
+    })
+  }
+  return criterion
+}
+
+/** A desk for this community's persona, built from the stores the screens use. */
+async function deskFor(agent: Agent, communityDid: string): Promise<VtiVetterDesk> {
+  const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
+  if (!persona) {
+    throw Object.assign(new Error('no persona for this community'), {
+      code: 'keyring/hidden-vetter:noPersona',
+    })
+  }
+  return new VtiVetterDesk(
+    agent,
+    persona,
+    new GenericRecordsVettingStore(agent),
+    new GenericRecordsCommunityStore(agent)
+  )
 }
 
 const seam: HiddenVetterSeam = {
@@ -237,32 +285,55 @@ const seam: HiddenVetterSeam = {
     return { drawn: answer.preCredentials?.length ?? 0 }
   },
 
-  async requests(_agent, _communityDid): Promise<HiddenVetterRequest[]> {
-    // Deliberately not "filter the desk by community and hope". The desk's
-    // stored request carries no hidden marker yet — that arrives with the
-    // inbound half — so a filter on community alone would hand a vetter their
-    // NAMED queue presented as private vouching, which is worse than showing
-    // nothing. It stays a stated gap until the desk records which requests
-    // carry the hidden-vetting ext.
-    throw Object.assign(new Error('the private request queue is not in this build yet'), {
-      code: 'keyring/hidden-vetter/requests:notImplemented',
+  async requests(agent, communityDid): Promise<HiddenVetterRequest[]> {
+    // The desk marks a request private when it arrives carrying the
+    // hidden-vetting ext, so the queue is its own and never a filter over the
+    // named one.
+    const desk = await deskFor(agent, communityDid)
+    const open = await desk.hiddenRequests(communityDid)
+    return open.map((r) => ({
+      id: r.requestId,
+      applicantDid: r.applicantDid,
+      receivedAt: r.receivedAt,
+      ...(r.preferredMethod ? { method: r.preferredMethod } : {}),
+      // No applicantName: the desk holds none, and inventing one from a DID
+      // would be worse than the screen saying nothing.
+    }))
+  },
+
+  async attest(agent, requestId, statement: HiddenVetterStatement) {
+    const communityDid = await communityOfRequest(agent, requestId)
+    const desk = await deskFor(agent, communityDid)
+    const criterion = await hiddenCriterionOf(agent, communityDid)
+    const parameters = publishedOf(criterion)
+    if (!parameters) {
+      throw Object.assign(new Error('this community no longer publishes hidden vetting'), {
+        code: 'keyring/hidden-vetter/attest:noParameters',
+      })
+    }
+
+    const client = await connected(agent)
+    const contextId = await contextOf(client)
+
+    await desk.attestHidden(requestId, statement, async ({ applicantId, meta }) => {
+      // The digest the applicant's proof will bind to is the one their
+      // application gathered for, which is what the desk puts in `meta`. If
+      // the community has since changed the criterion, that proof cannot
+      // verify — so attesting would spend one of this vetter's scarce tokens
+      // on an application that is already dead. Refuse instead, and say which.
+      const current = criterion.requirementsDigest
+      if (current && meta.requirementsDigest && current !== meta.requirementsDigest) {
+        throw Object.assign(new Error('the community changed what it asks since this application was made'), {
+          code: 'keyring/hidden-vetter/attest:requirementsChanged',
+        })
+      }
+      return client.pcsAttest({ contextId, community: communityDid, parameters, applicantId, meta })
     })
   },
 
-  async attest(_agent, _requestId, _statement: HiddenVetterStatement) {
-    // The agent half is ready (`VtaClient.pcsAttest`); what remains is the
-    // desk's: gathering the meta from the stored request and delivering the
-    // built attestation to the applicant as `vetting/attestation/0.1`. That
-    // lives in vtiVetting.ts, which 32 owns, and is in flight.
-    throw Object.assign(new Error('attest is not in this build yet'), {
-      code: 'keyring/hidden-vetter/attest:notImplemented',
-    })
-  },
-
-  async decline(_agent, _requestId) {
-    throw Object.assign(new Error('decline is not in this build yet'), {
-      code: 'keyring/hidden-vetter/decline:notImplemented',
-    })
+  async decline(agent, requestId) {
+    const desk = await deskFor(agent, await communityOfRequest(agent, requestId))
+    await desk.decline(requestId)
   },
 }
 
