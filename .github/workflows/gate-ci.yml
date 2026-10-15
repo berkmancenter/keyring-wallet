@@ -23,7 +23,8 @@ name: Gate (CI runners)
 # CI cannot renew itself. What keeps it to the legs' needs is ci/pnm-ci.sh's command
 # allowlist (CI_COMMANDS), not the VTA.
 # Guards (the gate review's conditions for the identity): only the configuration's runners, never a person's agent
-# (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
+# (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through, and which puts the leg's own calls on the runner's REST
+# service rather than the mediator socket, which dropped every frame of run 38806968457); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
 # outside every uploaded path, removed in an always() step; CI's pnm must match the Farm (farm-drift.mjs) or the leg
 # stops as ENV. Every configuration value is masked in the logs; before upload, the leg's folder is scrubbed
 # (ci/scrub-artifacts.sh): a credential anywhere fails the job and nothing is uploaded, identifiers are redacted.

@@ -59,5 +59,14 @@ if [ "$cmd:$sub" = acl:create ]; then
   set -- --vta "$slug" acl create --did "$did" --role admin --label "$label" --expires "$exp"
 fi
 # No verbose output through the environment either.
+# The leg's own calls go over the runner's REST service, never the mediator socket. On 15 October every TSP call of
+# the linkfail rerun (38806968457) answered "Error receiving frame: RecvError" for 90 minutes: the rules the leg set and
+# removed were unreadable, a case ran without its policy, and the leg hung to the job's limit before its cleanup. REST
+# is the harness's control path, not what the legs test (the phone's link, DIDComm and TSP are untouched), so it is a
+# fair fallback, and pnm's REST recovery path exists for exactly an unreachable mediator. The wrapper sets it, so a
+# caller's own --transport is refused. The flag goes last: it belongs to the leaf command (`acl list`, `did-mgmt dids
+# get`), not to pnm itself.
+for a in "$@"; do case "$a" in --transport|--transport=*) echo "pnm-ci: refused: $a (the wrapper sets the transport: REST, see above)" >&2; exit 2 ;; esac; done
+set -- "$@" --transport rest
 unset RUST_LOG RUST_BACKTRACE PNM_VTA
 PNM_HOME=$CI_PNM_HOME VTI_SECURE_STORE=file RUST_LOG=warn exec "$PNM_REAL" "$@"
