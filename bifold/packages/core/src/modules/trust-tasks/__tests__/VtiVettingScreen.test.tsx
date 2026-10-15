@@ -26,6 +26,7 @@ import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { readManifest, type VtiManifest } from '../module/joinManifest'
 
 import specExamples from './fixtures/join-0.3/manifest-response-examples.json'
+import testVtcCapture from './fixtures/join-0.3/test-vtc-hidden-vetting-2026-10-15.json'
 
 import { registerHiddenVetting } from '../screens/hiddenVettingSeam'
 
@@ -747,5 +748,60 @@ describe('Vetting — the desk', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('VettingVetSomeoneElse')))
     expect(tree.getByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toBeTruthy()
+  })
+})
+
+// 254: an applicant who arrives with a pasted ticket for a community whose way
+// in is private is handed over as soon as the seat is known, with the ticket,
+// not shown "Getting vetted" until they try a named step.
+describe('Vetting — opened with a ticket for a community that runs private vetting', () => {
+  const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+  beforeEach(() => {
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+  })
+  afterEach(() => {
+    registerHiddenVetting(undefined)
+    jest.restoreAllMocks()
+  })
+
+  const openAsApplicant = async () => {
+    mockUseAgent.mockReturnValue(withRecords([persona]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    for (let i = 0; i < 5; i++) await act(async () => undefined)
+    return tree
+  }
+
+  test('with the module: handed over on opening, with the pasted ticket, and no refusal', async () => {
+    registerHiddenVetting({} as never)
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    await act(async () => {
+      await routeKeyringAgentLink(ticket, {} as never, jest.fn())
+    })
+    const tree = await openAsApplicant()
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiHiddenVetting, {
+      communityDid,
+      criterionId: 'Vetted-Member',
+      ticket,
+    })
+    expect(tree.queryByTestId(testIdWithKey('VettingError'))).toBeNull()
+  })
+
+  test('without it: no handover, as #405 left it', async () => {
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    await openAsApplicant()
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
   })
 })

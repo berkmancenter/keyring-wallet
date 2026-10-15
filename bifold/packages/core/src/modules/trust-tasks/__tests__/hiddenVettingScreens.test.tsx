@@ -189,6 +189,20 @@ describe('the private vetting screen', () => {
     expect(tree.getByTestId(id('HiddenVettingProgress'))).toBeTruthy()
   })
 
+  // 254: a ticket handed over from the vetting screen brings the person here
+  // without Join's button, so Start asks the agent first.
+  it('Start asks the agent first; a refusal is said and nothing is made', async () => {
+    const seam = fakeSeam({
+      record: jest.fn(async () => undefined),
+      check: jest.fn(async () => ({ ok: false as const, reason: 'phoneNotAllowed' as const })),
+    })
+    const tree = await open(seam)
+    await press(tree, 'HiddenVettingStart')
+    expect(seam.check).toHaveBeenCalledWith(expect.anything(), criterion)
+    expect(seam.createApplication).not.toHaveBeenCalled()
+    expect(tree.getByTestId(id('HiddenVettingRefused'))).toHaveTextContent('Join.Ways.PrivateVettingPhoneNotAllowed')
+  })
+
   it('progress counts attestations against the threshold, and names no vetter', async () => {
     const seam = fakeSeam({
       progress: jest.fn(async () => ({

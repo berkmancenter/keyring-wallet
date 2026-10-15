@@ -663,6 +663,25 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // header. The two read alike otherwise (Alberto, 10-06).
   const side: 'vetter' | 'applicant' | undefined =
     persona && !seatRead ? undefined : grant ? 'vetter' : persona ? 'applicant' : undefined
+
+  // An applicant in a community whose way in is private is handed over as
+  // soon as the seat is known, with any ticket brought here, rather than
+  // shown "Getting vetted" until a named step is tried (254). Through the
+  // same chokepoint as every named step, so the rule is one.
+  const handedOver = useRef(false)
+  useEffect(() => {
+    if (side !== 'applicant' || !carriesPrivate || handedOver.current) return
+    let live = true
+    void vettingManifest(application?.requirementsDigest).then(
+      () => undefined,
+      (e: unknown) => {
+        if (live && e instanceof HandedOver) handedOver.current = true
+      }
+    )
+    return () => {
+      live = false
+    }
+  }, [side, carriesPrivate, application?.requirementsDigest, vettingManifest])
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t(
