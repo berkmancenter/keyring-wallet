@@ -39,7 +39,7 @@ test('"all" leaves the nightly-only legs out; naming one still runs it', () => {
 
 test('every nightly leg has a leg file and a platform list that places it', () => {
   const placed = new Set([...list('LEGS_IOS'), ...list('LEGS_ANDROID'), ...list('LEGS_SOLO')]);
-  assert.deepEqual(list('LEGS_NIGHTLY'), ['p2', 'lostreq']);
+  assert.deepEqual(list('LEGS_NIGHTLY'), ['p2', 'lostreq', 'linkwait']);
   for (const leg of list('LEGS_NIGHTLY')) {
     assert.ok(placed.has(leg), `${leg} is in no platform list, so run_legs would never run it`);
     assert.ok(existsSync(path.join(here, 'legs', `${leg}.sh`)), `no legs/${leg}.sh`);
@@ -106,4 +106,53 @@ test("lostreq runs its offline-ask driver only in a nightly run, or when a rerun
   assert.ok(driver > guard && skip > driver, 'run-join-lost.mjs must sit inside the guard, with the SKIP row in its else');
   // gate.sh hands every leg its run's kind.
   assert.match(fn('run_leg'), /GATE_KIND=\$\(sed -n 's\/\^kind=\/\/p' "\$rd\/meta"/);
+});
+
+// The real-clocks build behind the nightly linkwait: gh, git, samebuild and the wait are stubbed; the choice is run.
+test('nightly_real_build: an existing build, HEAD standing in, an app change, and one request then a wait', () => {
+  const run = ({ head, same = 'same', builds = {}, appearsAfterWait = '' }) => {
+    const home = mkdtempSync(path.join(tmpdir(), 'real-'));
+    try {
+      const script = `
+        say() { echo "say: $*"; }
+        git() { echo "${head}"; }
+        node() { echo "${same}"; }
+        sleep() { touch "$GATE_HOME/waited"; }
+        gh() { echo "$*" >> "$GATE_HOME/gh"; }
+        dispatch_build() {
+          case "$1" in ${Object.entries(builds).map(([k, v]) => `${k}) echo ${v}; return ;;`).join(' ')} esac
+          [ -n "${appearsAfterWait}" ] && [ -f "$GATE_HOME/waited" ] && [ "$1" = "${appearsAfterWait}" ] && echo 999
+        }
+        REPO=. GATE_SRC=. GH_REPO=x/y
+        ${fn('nightly_real_build')}
+        nightly_real_build sha1
+      `;
+      const out = execFileSync('bash', ['-c', script], { env: { ...process.env, GATE_HOME: home }, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      const gh = existsSync(path.join(home, 'gh')) ? readFileSync(path.join(home, 'gh'), 'utf8').trim().split('\n') : [];
+      return { out, gh, marked: existsSync(path.join(home, 'watch-requested-real-sha1')) || existsSync(path.join(home, 'watch-requested-real-head2')) };
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  };
+  // Of this very commit, already built: no request.
+  assert.deepEqual(run({ head: 'sha1', builds: { sha1: '77' } }), { out: 'sha1', gh: [], marked: false });
+  // Main moved on with no app change: HEAD's build stands for this commit.
+  assert.deepEqual(run({ head: 'head2', builds: { head2: '88' } }), { out: 'head2', gh: [], marked: false });
+  // Main moved on with an app change: none can be made, and nothing is asked for.
+  assert.deepEqual(run({ head: 'head2', same: 'differs: app/src', builds: { head2: '88' } }), { out: '', gh: [], marked: false });
+  // None yet: asked for once (Android, real clocks, on main), then found after a wait.
+  const asked = run({ head: 'sha1', appearsAfterWait: 'sha1' });
+  assert.equal(asked.out, 'sha1');
+  assert.deepEqual(asked.gh, ['workflow run test-builds.yml -R x/y --ref main -f platform=android -f clocks=real']);
+  assert.equal(asked.marked, true);
+});
+
+test('linkwait in a nightly run takes the real-clocks build, and skips saying why without one', () => {
+  const leg = readFileSync(path.join(here, 'legs', 'linkwait.sh'), 'utf8');
+  const nightly = leg.indexOf('if [ "${GATE_KIND:-}" = nightly ]; then');
+  assert.ok(nightly > 0 && nightly < leg.indexOf('leg_begin linkwait "$(shasum'), 'the nightly choice comes before the leg starts on a build');
+  assert.match(leg, /row linkwait SKIP "nightly: no real-clocks build/);
+  assert.match(leg, /APK=\$APK_REAL/);
+  // The watcher hands the run the commit whose real-clocks build stands for the nightly one.
+  assert.match(fn('cmd_watch_main'), /real_sha=\$\(nightly_real_build "\$sha"\)[\s\S]*GATE_REAL_SHA=\$real_sha [^\n]*--kind nightly/);
 });
