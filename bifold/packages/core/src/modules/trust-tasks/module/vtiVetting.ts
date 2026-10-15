@@ -158,6 +158,14 @@ export interface VettingDeskRequest {
   card?: Record<string, unknown>
   statementId?: string
   /**
+   * The applicant's PCS identifier, when the request asked to be vetted
+   * privately: its `ext["org.openvtc.hidden-vetting"].id` (openvtc
+   * `hidden::read_request_ext`). Present marks a hidden-vetting request, which
+   * is answered with an attestation that names nobody (`attestHidden`), never
+   * with a signed statement; absent is the named path.
+   */
+  hiddenApplicantId?: string
+  /**
    * When this vetter compared the match codes and said they match. Kept on the
    * record, not only on screen: a relaunch after the card had arrived sent the
    * desk back to "Compare the codes" (225 gate).
@@ -1153,6 +1161,7 @@ export class VtiVetterDesk {
       requirementsDigest: typeof p.requirementsDigest === 'string' ? p.requirementsDigest : undefined,
       preferredMethod: p.preferredMethod as VettingMethod | undefined,
       message: typeof p.message === 'string' ? p.message : undefined,
+      ...(hiddenApplicantIdOf(p.ext) ? { hiddenApplicantId: hiddenApplicantIdOf(p.ext) } : {}),
       status: 'accepted',
       receivedAt: new Date().toISOString(),
     }
@@ -1514,6 +1523,84 @@ export class VtiVetterDesk {
     })
     this.writing = write.catch(() => undefined)
     return write
+  }
+
+  /**
+   * The open requests that asked to be vetted privately, for this community:
+   * only those carrying the applicant's PCS identifier. Never the desk filtered
+   * by community alone, which would show the named queue as private vouching.
+   */
+  async hiddenRequests(communityDid: string): Promise<VettingDeskRequest[]> {
+    return (await this.store.listDesk()).filter(
+      (r) =>
+        r.communityDid === communityDid && !!r.hiddenApplicantId && r.status !== 'attested' && r.status !== 'declined'
+    )
+  }
+
+  /**
+   * Vouch privately for a hidden-vetting request: the same checks as `attest`,
+   * then the ten `meta` members the agent binds into the attestation, then the
+   * attestation itself to the applicant as `vetting/attestation/0.1`.
+   *
+   * `build` is the agent's half (`vta/pcs/attest`, which holds the key and
+   * spends a token); the caller supplies it with the community's parameters
+   * and its context. What it returns goes to the applicant as it came, as a
+   * plain message whose body is the attestation, threaded on the session —
+   * openvtc's `wire::hidden_attestation`, and what `VtiApplicant` reads.
+   *
+   * Nothing names this vetter to the community: the attestation carries no
+   * issuer, and the desk keeps no statement id for it.
+   *
+   * `validFrom` and `validUntil` are DATES (`hidden-vetting.schema.json`
+   * `StatementMeta`: an exact time would let a community line an attestation
+   * up with a vetter's activity), both from one reading of `now`.
+   */
+  async attestHidden(
+    requestId: string,
+    statement: {
+      method: HiddenAttestMeta['method']
+      claimsVerified: string[]
+      livenessConfirmed: boolean
+      declaredRelationship: HiddenAttestMeta['declaredRelationship']
+      validDays?: number
+    },
+    build: (input: { applicantId: string; meta: HiddenAttestMeta }) => Promise<Record<string, unknown>>,
+    now: number = Date.now()
+  ): Promise<VettingDeskRequest> {
+    const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
+    if (!desk) throw new Error('vtiVetting: no such request')
+    if (!desk.hiddenApplicantId) throw new Error('vtiVetting: this request did not ask to be vetted privately')
+    if (desk.status === 'attested' || desk.status === 'declined')
+      throw new Error(`vtiVetting: this request is already ${desk.status}`)
+    if (!desk.card || !desk.session) throw new Error('vtiVetting: no card to attest')
+    if (!statement.livenessConfirmed)
+      throw new Error('vtiVetting: confirm the match code with the person present first')
+    if (!desk.requirementsDigest)
+      throw new Error('vtiVetting: the request named no criterion, so an attestation could not be bound to one')
+    if (statement.claimsVerified.length === 0) throw new Error('vtiVetting: name at least one claim verified')
+    const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
+    for (const c of statement.claimsVerified)
+      if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
+    for (const c of desk.session.requiredClaims)
+      if (!statement.claimsVerified.includes(c)) throw new Error(`vtiVetting: ${c} was not verified`)
+
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+    const meta: HiddenAttestMeta = {
+      community: desk.communityDid,
+      requirementsDigest: desk.requirementsDigest,
+      method: statement.method,
+      claimsVerified: statement.claimsVerified,
+      livenessConfirmed: true,
+      declaredRelationship: statement.declaredRelationship,
+      identityCommitment: String(desk.card.identityCommitment ?? ''),
+      cardDigestMultibase: cardDigestMultibase(desk.card),
+      validFrom: day(now),
+      validUntil: day(now + (statement.validDays ?? 120) * 86400000),
+    }
+    const attestation = await build({ applicantId: desk.hiddenApplicantId, meta })
+    await vtiAgent.send(desk.applicantDid, VETTING.attestation, attestation, { thid: desk.session.documentId })
+    await this.patchDesk(requestId, () => ({ status: 'attested' }))
+    return { ...desk, status: 'attested' }
   }
 
   async decline(requestId: string, message?: string): Promise<void> {
@@ -2518,5 +2605,40 @@ export function readHiddenAttestation(body: unknown): HiddenAttestation | undefi
   if (!token || typeof token !== 'object') return undefined
   if (typeof token.label !== 'string' || typeof token.serial !== 'string' || typeof token.shown !== 'string')
     return undefined
-  return body as HiddenAttestation
+  // The published members only. Over a TSP peer leg the body is packed as a
+  // document with its `type` beside them, and the agent's schema
+  // (`additionalProperties: false`) would refuse that.
+  return {
+    suite: b.suite,
+    attestation: b.attestation,
+    meta: b.meta as Record<string, unknown>,
+    token: { label: token.label, serial: token.serial, shown: token.shown },
+    ...(b.ext && typeof b.ext === 'object' ? { ext: b.ext as Record<string, unknown> } : {}),
+  } as HiddenAttestation
+}
+
+/** The ten members of a hidden attestation's `meta` (`vta/pcs/attest/0.1`, `StatementMeta`), all required. */
+export interface HiddenAttestMeta {
+  community: string
+  requirementsDigest: string
+  method: 'inPerson' | 'video' | 'priorAcquaintance'
+  claimsVerified: string[]
+  livenessConfirmed: boolean
+  declaredRelationship: 'none' | 'family' | 'sameEmployer' | 'closeFriend' | 'other'
+  identityCommitment: string
+  cardDigestMultibase: string
+  validFrom: string
+  validUntil: string
+}
+
+/**
+ * The applicant's PCS identifier from a vetting request's `ext`, or undefined.
+ * Undefined, too, for a suite this build does not implement: openvtc refuses
+ * to attest under rules it cannot honour (`hidden::read_request_ext`), and so
+ * such a request stays on the named path here.
+ */
+export function hiddenApplicantIdOf(ext: unknown): string | undefined {
+  const ours = (ext as Record<string, unknown> | undefined)?.[HIDDEN_VETTING_NS] as Record<string, unknown> | undefined
+  if (!ours || ours.suite !== HIDDEN_VETTING_SUITE) return undefined
+  return typeof ours.id === 'string' && ours.id ? ours.id : undefined
 }

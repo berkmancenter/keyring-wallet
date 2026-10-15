@@ -149,7 +149,11 @@ beforeEach(() => {
 describe('the published shapes', () => {
   it('the specification example is an attestation the schema accepts, and the reader takes', () => {
     expect(vendoredValidatorIn(VETTING_SCHEMA_DIR, 'vetting-attestation.payload.schema.json')(ATTESTATION)).toBe(true)
-    expect(readHiddenAttestation(ATTESTATION)).toBe(ATTESTATION)
+    expect(readHiddenAttestation(ATTESTATION)).toEqual(ATTESTATION)
+    // A TSP peer leg packs the body with its `type`; only the published members go on.
+    expect(
+      readHiddenAttestation({ ...ATTESTATION, type: 'https://trusttasks.org/spec/vetting/attestation/0.1' })
+    ).toEqual(ATTESTATION)
   })
 
   it.each([
@@ -213,7 +217,7 @@ describe("a vetter's attestation arriving", () => {
     const [, client, community, attestation] = mockTake.mock.calls[0]
     expect(client).toBe(CLIENT)
     expect(community).toBe(COMMUNITY)
-    expect(attestation).toBe(ATTESTATION)
+    expect(attestation).toEqual(ATTESTATION)
     expect(onChange).toHaveBeenCalled()
   })
 
