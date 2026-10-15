@@ -7,7 +7,7 @@ ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
 # Dev dependencies stay: the hot-updater CLI creates and migrates the schema at start.
-RUN npm ci --no-audit --no-fund && npm cache clean --force
+RUN npm ci --include=dev --no-audit --no-fund && npm cache clean --force
 
 COPY src ./src
 
