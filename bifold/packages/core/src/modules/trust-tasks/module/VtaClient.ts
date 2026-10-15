@@ -68,6 +68,8 @@ import {
   type AttestPayload,
   type RootAcceptPayload,
   type RootRequestPayload,
+  type RootRequestWire,
+  type TokenDrawWire,
   type TokensAbandonPayload,
   type TokensAcceptPayload,
   type TokensRequestPayload,
@@ -2225,27 +2227,32 @@ export class VtaClient {
     return answer?.vetter
   }
 
-  /** `vta/pcs/root-request/0.1`. The blinded enrolment request, for the phone to carry. */
-  async pcsRootRequest(payload: RootRequestPayload): Promise<{ id: string; request: unknown }> {
-    const answer = await this.task<{ id?: string; request?: unknown }>(
+  /**
+   * `vta/pcs/root-request/0.1`. The blinded enrolment request, for the phone
+   * to carry: the community's `pcs-root` payload, which the agent answers
+   * inside a `request` member.
+   */
+  async pcsRootRequest(payload: RootRequestPayload): Promise<RootRequestWire> {
+    const answer = await this.task<{ request?: Partial<RootRequestWire> }>(
       PCS_VETTER_TASK.rootRequest,
       payload as unknown as Record<string, unknown>
     )
-    if (!answer?.request) throw new Error('vta/pcs/root-request returned no request')
-    // Never invent the id. `String(answer.id ?? '')` sent an empty string when
-    // the agent named that member something else, and the community then
-    // refused the request this builds — `id` must match
-    // `^z[1-9A-HJ-NP-Za-km-z]+$` — in a way that read as an encoding problem
-    // rather than as a missing field (test-vtc, 2026-10-15). A missing id is
-    // an answer we cannot use, so it is said here.
-    const id = typeof answer.id === 'string' ? answer.id : ''
+    // The answer is `{ request: { label, id, request } }` — the community's
+    // payload, nested — not `{ id, request }`. Reading `id` one level up gave
+    // `''`, which test-vtc refused against `^z[1-9A-HJ-NP-Za-km-z]+$` in a way
+    // that read as an encoding problem rather than a missing field
+    // (2026-10-15). Never invent the id: a missing or non-base58 one is an
+    // answer we cannot use, so it is said here, before the community sees it.
+    const request = answer?.request
+    if (!request?.request || !request.label) throw new Error('vta/pcs/root-request returned no request')
+    const id = typeof request.id === 'string' ? request.id : ''
     if (!MULTIBASE_BASE58.test(id)) {
       throw Object.assign(
         new Error(`vta/pcs/root-request returned no usable identifier (${id === '' ? 'absent' : 'not base58btc'})`),
         { code: 'vta/pcs/root-request:noIdentifier' }
       )
     }
-    return { id, request: answer.request }
+    return request as RootRequestWire
   }
 
   /** `vta/pcs/root-accept/0.1`. The community's answer, for the agent to unblind and keep. */
@@ -2253,14 +2260,19 @@ export class VtaClient {
     await this.task(PCS_VETTER_TASK.rootAccept, payload as unknown as Record<string, unknown>)
   }
 
-  /** `vta/pcs/tokens/request/0.1`. One blinded request per token of this tick's drip. */
-  async pcsTokensRequest(payload: TokensRequestPayload): Promise<{ requests: unknown[] }> {
-    const answer = await this.task<{ requests?: unknown[] }>(
+  /**
+   * `vta/pcs/tokens/request/0.1`. One blinded request per token of this tick's
+   * drip: the community's `pcs-tokens` payload, inside a `request` member.
+   */
+  async pcsTokensRequest(payload: TokensRequestPayload): Promise<TokenDrawWire> {
+    const answer = await this.task<{ request?: Partial<TokenDrawWire> }>(
       PCS_VETTER_TASK.tokensRequest,
       payload as unknown as Record<string, unknown>
     )
-    if (!Array.isArray(answer?.requests)) throw new Error('vta/pcs/tokens/request returned no requests')
-    return { requests: answer.requests }
+    const request = answer?.request
+    if (!Array.isArray(request?.requests) || !request.label || typeof request.tick !== 'number')
+      throw new Error('vta/pcs/tokens/request returned no requests')
+    return request as TokenDrawWire
   }
 
   /** `vta/pcs/tokens/accept/0.1`. The drawn tokens, for the agent to unblind and keep. */

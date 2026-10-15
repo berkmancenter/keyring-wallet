@@ -85,6 +85,24 @@ export interface RootRequestPayload {
 }
 
 /**
+ * What `vta/pcs/root-request/0.1` answers, inside its `request` member: the
+ * `vtc/vetting/vetters/pcs-root/0.1` payload, built whole by the agent, for
+ * the phone to carry to the community unchanged.
+ *
+ * Read from that `request` member, not from the answer's top level: the
+ * answer is `{ request: { label, id, request } }`, and reading `id` one level
+ * up sent the community an empty id, which test-vtc refused as
+ * `malformedRequest` (build 256).
+ */
+export interface RootRequestWire {
+  label: string
+  /** The vetter's PCS identifier, multibase base58btc. */
+  id: string
+  /** The blinded request, as the suite serialises it. */
+  request: Record<string, unknown>
+}
+
+/**
  * `vta/pcs/root-accept/0.1`. The community's enrolment answer, handed back.
  *
  * **Not an opaque blob**, though it is tempting to treat it as one: the schema
@@ -116,6 +134,17 @@ export interface TokensRequestPayload {
   tick: number
   /** Never more than the published `dripPerTick`; the agent refuses `countExceedsDrip`. */
   count: number
+}
+
+/**
+ * What `vta/pcs/tokens/request/0.1` answers, inside its `request` member: the
+ * `vtc/vetting/vetters/pcs-tokens/0.1` payload, for the phone to carry
+ * unchanged. Same nesting as {@link RootRequestWire}.
+ */
+export interface TokenDrawWire {
+  label: string
+  tick: number
+  requests: { commitment: string; openingProof: string }[]
 }
 
 /**

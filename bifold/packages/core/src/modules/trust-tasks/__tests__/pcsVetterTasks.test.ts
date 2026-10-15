@@ -273,6 +273,9 @@ describe('the vendored vetter schemas still match the registry', () => {
       'vta-pcs-tokens-accept.payload.schema.json': 'specs/vta/pcs/tokens/accept/0.1/payload.schema.json',
       'vta-pcs-tokens-abandon.payload.schema.json': 'specs/vta/pcs/tokens/abandon/0.1/payload.schema.json',
       'vta-shared-pcs-engine.schema.json': 'specs/vta/_shared/0.4/pcs-engine.schema.json',
+      'vtc-vetting-vetters-pcs-root.payload.schema.json': 'specs/vtc/vetting/vetters/pcs-root/0.1/payload.schema.json',
+      'vtc-vetting-vetters-pcs-tokens.payload.schema.json':
+        'specs/vtc/vetting/vetters/pcs-tokens/0.1/payload.schema.json',
       'framework-0.2.schema.json': 'specs/_framework/0.2/framework.schema.json',
       'vetting-shared-hidden-vetting.schema.json': 'specs/vetting/_shared/0.1/hidden-vetting.schema.json',
     })

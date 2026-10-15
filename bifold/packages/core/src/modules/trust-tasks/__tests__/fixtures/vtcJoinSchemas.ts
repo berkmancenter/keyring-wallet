@@ -6,6 +6,8 @@
  *
  * - `vtc-join-schemas/`: `vtc/vetting/pcs-challenge/0.1`, `vtc/join-requests/submit/0.3`.
  * - `vetting-schemas/`: `vetting/attestation/0.1`, `vetting/request/0.1`.
+ * - `pcs-vetter-schemas/`: the vetter's `vta/pcs/*`, and the community's
+ *   `vtc/vetting/vetters/pcs-root/0.1` and `pcs-tokens/0.1`.
  *
  * @module trust-tasks/__tests__/fixtures/vtcJoinSchemas
  */
@@ -16,6 +18,7 @@ import Ajv from 'ajv/dist/2020'
 
 export const VTC_JOIN_SCHEMA_DIR = join(__dirname, 'vtc-join-schemas')
 export const VETTING_SCHEMA_DIR = join(__dirname, 'vetting-schemas')
+export const PCS_VETTER_SCHEMA_DIR = join(__dirname, 'pcs-vetter-schemas')
 
 /**
  * The URLs the payload schemas' relative `$ref`s actually resolve to, which
@@ -28,9 +31,13 @@ const REGISTER_AS: Record<string, string[]> = {
   'framework-0.3.schema.json': ['https://trusttasks.org/_framework/0.3/framework.schema.json'],
   'vtc-shared-ceremony.schema.json': ['https://trusttasks.org/spec/vtc/_shared/0.1/ceremony.schema.json'],
   // From `vetting/attestation/0.1`: `../../../vetting/_shared/0.1/hidden-vetting.schema.json`.
+  // From `vta/_shared/0.4/pcs-engine`: `../../../vetting/_shared/0.1/…`, which lands under `spec/`.
   'vetting-shared-hidden-vetting.schema.json': [
     'https://trusttasks.org/vetting/_shared/0.1/hidden-vetting.schema.json',
+    'https://trusttasks.org/spec/vetting/_shared/0.1/hidden-vetting.schema.json',
   ],
+  // From `vta/pcs/*`: `../../../_shared/0.4/pcs-engine.schema.json`.
+  'vta-shared-pcs-engine.schema.json': ['https://trusttasks.org/spec/_shared/0.4/pcs-engine.schema.json'],
   // From `vetting/request/0.1`: `../../_shared/0.1/vetting.schema.json`.
   'vetting-shared-vetting.schema.json': ['https://trusttasks.org/spec/_shared/0.1/vetting.schema.json'],
 }

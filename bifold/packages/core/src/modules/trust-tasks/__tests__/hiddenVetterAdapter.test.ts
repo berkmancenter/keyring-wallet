@@ -19,14 +19,20 @@ const mockShowPcsVetter = jest.fn(async () => ({
 }))
 // The shape the community really takes: `$defs/RootRequest` requires `proof`
 // and allows only `encoding` and `t0` beside it, each base58btc. An earlier
-// fake here said `blinded`, which the schema forbids — so this suite passed
-// while the shape we send a community was never checked against it.
+// fake here said `blinded`, which the schema forbids. And it is the inner
+// `request` of the agent's answer, whole, label included — what the client
+// hands on (graded end to end in hiddenVetterRoundsWire.test.ts).
 const mockPcsRootRequest = jest.fn(async () => ({
+  label: 'vetter/2026-10',
   id: 'z4FvpxtVbqEuVvYVCsPCWxpLJvJ9nnyLpAVfyFiM3Cxyz',
   request: { proof: 'z2AaBbCcDdEeFfGgHhJjKkMmNnPpQqRrSsTtUuVvWwXxYyZz' },
 }))
 const mockPcsRootAccept = jest.fn(async () => undefined)
-const mockPcsTokensRequest = jest.fn(async () => ({ requests: [{ r: 1 }, { r: 2 }, { r: 3 }] }))
+const mockPcsTokensRequest = jest.fn(async () => ({
+  label: 'token/2026-10',
+  tick: 1,
+  requests: [1, 2, 3].map((n) => ({ commitment: `z${n}Cm`, openingProof: `z${n}Op` })),
+}))
 const mockPcsTokensAccept = jest.fn(async () => undefined)
 const mockPcsAttest = jest.fn(async () => ({ '@type': 'vtc/vetting/attestation/0.3', proof: { blinded: 'z2Att' } }))
 
@@ -42,6 +48,7 @@ jest.mock('../module/vtaAgent', () => ({
       pcsRootAccept: mockPcsRootAccept,
       pcsTokensRequest: mockPcsTokensRequest,
       pcsTokensAccept: mockPcsTokensAccept,
+      pcsTokensAbandon: async () => undefined,
       pcsAttest: mockPcsAttest,
     }),
   },

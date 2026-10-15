@@ -113,6 +113,7 @@ const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
  */
 async function askCommunity<T>(communityDid: string, type: string, payload: Record<string, unknown>): Promise<T> {
   const answer = await vtiAgent.ask(communityDid, type, payload)
+  if (!answer) throw Object.assign(new Error(`${type} went unanswered`), { code: 'keyring/hidden-vetter:noAnswer' })
   const body = answer?.body as { type?: unknown; payload?: unknown } | undefined
   const answered = String(body?.type ?? answer?.type ?? '')
   if (answered.startsWith(TASK_ERROR) || answered.includes('trust-task-error')) {
@@ -170,11 +171,13 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
   if (!memberDid)
     throw Object.assign(new Error('no identity at the agent'), { code: 'keyring/hidden-vetter:noIdentity' })
 
-  // 1 — the agent blinds a request. Only it can: it holds the key.
+  // 1 — the agent blinds a request. Only it can: it holds the key. What it
+  // answers is the community's payload, whole.
   const request = await client.pcsRootRequest({ contextId, community: communityDid, memberDid, parameters, label })
-  // 2 — the phone carries it to the community, which signs a pre-credential.
+  // 2 — the phone carries it to the community, unchanged, and the community
+  // signs a pre-credential. A refusal stops the round here.
   const answer = await askCommunity<{ label: string; preCredential: string }>(communityDid, VTC_VETTER_TASK.pcsRoot, {
-    label,
+    label: request.label,
     id: request.id,
     request: request.request,
   })
@@ -215,11 +218,22 @@ export async function drawVetterTokens(
     // and asking for more than a community allows is not the phone's call.
     count: parameters.dripPerTick,
   })
-  const answer = await askCommunity<{ label: string; tick: number; preCredentials: string[] }>(
-    communityDid,
-    VTC_VETTER_TASK.pcsTokens,
-    { label, tick, requests: request.requests }
-  )
+  // Carried as the agent built it. A refusal stops the round, and the draw
+  // the agent holds open for it is given up, or the next tick's draw would be
+  // refused as one already in flight.
+  let answer: { label: string; tick: number; preCredentials: string[] }
+  try {
+    answer = await askCommunity(communityDid, VTC_VETTER_TASK.pcsTokens, {
+      label: request.label,
+      tick: request.tick,
+      requests: request.requests,
+    })
+  } catch (refused) {
+    await client
+      .pcsTokensAbandon({ contextId, community: communityDid, draw: { label: request.label, tick: request.tick } })
+      .catch(() => undefined)
+    throw refused
+  }
   await client.pcsTokensAccept({
     contextId,
     community: communityDid,
