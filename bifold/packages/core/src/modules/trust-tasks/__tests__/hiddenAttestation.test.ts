@@ -229,6 +229,8 @@ describe("a vetter's attestation arriving", () => {
       log.error.mock.calls,
     ])
     expect(everything).not.toContain(VETTER)
+    // Nor which community: the log leaves the device.
+    expect(everything).not.toContain(COMMUNITY)
     expect(JSON.stringify(mockTake.mock.calls)).not.toContain(VETTER)
   })
 

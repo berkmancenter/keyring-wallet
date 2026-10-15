@@ -1691,7 +1691,8 @@ export class VtiApplicant {
    * here would add a check upstream does not make and refuse valid ones.
    *
    * The sender is authenticated by the envelope and deliberately **not** kept
-   * or logged beside the attestation: that would rebuild, in the applicant's
+   * or logged beside the attestation (nor is the community: the log leaves the
+   * device, `isHiddenVettingType` in vtiAgent): that would rebuild, in the applicant's
    * own records, the link the exchange exists to remove (openvtc design §18).
    * One hidden application per community, so the persona's community says
    * which application it is for.
@@ -1710,22 +1711,20 @@ export class VtiApplicant {
     const logger = this.agent.config?.logger
     const attestation = readHiddenAttestation(m.body)
     if (!attestation) {
-      logger?.warn?.(`[hidden-vetting] an attestation for ${community} was not in the published shape; dropped`)
+      logger?.warn?.('[hidden-vetting] an attestation was not in the published shape; dropped')
       return
     }
     if (!(await loadHiddenVettingRecord(this.agent, community))) {
-      logger?.warn?.(
-        `[hidden-vetting] an attestation arrived for ${community}, which has no hidden application; dropped`
-      )
+      logger?.warn?.('[hidden-vetting] an attestation arrived for a community with no hidden application; dropped')
       return
     }
     try {
       const record = await takeHiddenAttestation(this.agent, await this.pcsClient(), community, attestation)
-      logger?.info?.(`[hidden-vetting] attestation taken by the agent for ${community}; it reports ${record.held} held`)
+      logger?.info?.(`[hidden-vetting] attestation taken by the agent; it reports ${record.held} held`)
     } catch (error) {
       const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
       if (!code) throw error
-      logger?.warn?.(`[hidden-vetting] the agent refused an attestation for ${community} (${code}); dropped`)
+      logger?.warn?.(`[hidden-vetting] the agent refused an attestation (${code}); dropped`)
       return
     }
     this.onChange?.()
