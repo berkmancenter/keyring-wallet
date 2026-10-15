@@ -23,6 +23,10 @@ for k in RUNNER_A_SLUG RUNNER_B_SLUG; do
   set_at_all "$k" && say "GATE_CI_ENV names $k: the CI identity is admin on one runner only (item 11), so a second slug would point it at another lane's runner"
 done
 set_at_all C_ADMIN_CRED && say "GATE_CI_ENV holds C_ADMIN_CRED: the community admin credential is not part of the CI identity (D-8)"
+# CI's emulator is the workflow's, and gate-ci-leg.sh reads its AVD name from the device; a leg then sources this file
+# (lib.sh gate_env), so an AVD here would override that name with the Mac's (run 38778236477: the link driver looked
+# for Pixel_6_API_33 while the runner's AVD was "test").
+set_at_all AVD && say "GATE_CI_ENV names AVD: on CI the AVD is read from the runner's emulator, never from the configuration"
 case "$legs" in *" linkfail "*) has RUNNER_A_DID || say "linkfail needs RUNNER_A_DID (a DID for its approver set, no slug), which GATE_CI_ENV lacks" ;; esac
 has FARM_VERSIONS || say "GATE_CI_ENV names no FARM_VERSIONS: the drift guard has nothing to compare"
 exit $bad
