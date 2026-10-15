@@ -15,9 +15,21 @@ module.exports = {
     )
       ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
       : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+    // Same reason, same fix as witness-server/jest.config.js: @openvtc/vti-tsp-js's
+    // exports map has only an `import` condition, which jest's CJS resolver cannot
+    // satisfy. Needed here because the vsc-capture test (captureWitnessedEdgeVsc.test.ts)
+    // imports witness-server's real buildWitnessCredentialJson, which pulls in
+    // @bifold/trust-tasks (taskDigestMultibase) — without this mapping, that import
+    // fails at "Cannot find module" the same way it did for witness-server's own suite.
+    '^@openvtc/vti-tsp-js$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/index.js',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(@credo-ts|@openwallet-foundation|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
+    // @openvtc added alongside the moduleNameMapper entry above: the mapped-to
+    // file (@openvtc/vti-tsp-js/dist/index.js) is itself ESM (`export * as`)
+    // under a `"type": "module"` package, and still needs babel-jest to
+    // transpile it to CJS even once module resolution finds it — same
+    // reasoning as witness-server/jest.config.js's identical allowlist entry.
+    'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
   ],
   // NOTE: integration suites MUST run one jest process per test file (see
   // scripts/run-integration.mjs / `yarn test:integration`). askar-nodejs's

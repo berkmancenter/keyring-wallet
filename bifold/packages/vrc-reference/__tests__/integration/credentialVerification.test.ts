@@ -25,7 +25,9 @@ describe('Credential Verification Integration', () => {
     const getNewestCredential = async (agent: typeof alice.agent) => {
       const records = await agent.w3cCredentials.getAll()
       const sorted = records
-        .filter((r) => r.credential !== null)
+        // W3cCredentialRecord.credential is write-only (a setter, for legacy
+        // assignment); the read accessor is credentialInstances/firstCredential.
+        .filter((r) => r.credentialInstances && r.credentialInstances.length > 0)
         .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
       return sorted[0]
     }
@@ -35,7 +37,7 @@ describe('Credential Verification Integration', () => {
 
       // Explicitly verify the credential signature
       const verificationResult = await alice.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
 
       // Log verification result for debugging
@@ -52,7 +54,7 @@ describe('Credential Verification Integration', () => {
 
       // Bob (issuer) should also be able to verify the credential
       const verificationResult = await bob.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
 
       expect(verificationResult.isValid).toBe(true)
@@ -63,13 +65,13 @@ describe('Credential Verification Integration', () => {
 
       // First verify the original is valid
       const originalVerification = await alice.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
       expect(originalVerification.isValid).toBe(true)
 
       // Create a deep copy of the credential and tamper with the subject
       const { JsonTransformer, W3cJsonLdVerifiableCredential } = await import('@credo-ts/core')
-      const credentialJson = JsonTransformer.toJSON(storedCredential!.credential)
+      const credentialJson = JsonTransformer.toJSON(storedCredential!.firstCredential)
       const tamperedJson = JSON.parse(JSON.stringify(credentialJson))
 
       // Modify the subject ID to simulate tampering
@@ -94,13 +96,13 @@ describe('Credential Verification Integration', () => {
 
       // Verify the credential is valid when unmodified
       const originalVerification = await alice.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
       expect(originalVerification.isValid).toBe(true)
 
       // Create a deep copy of the credential and tamper with the issuance date
       const { JsonTransformer, W3cJsonLdVerifiableCredential } = await import('@credo-ts/core')
-      const credentialJson = JsonTransformer.toJSON(storedCredential!.credential)
+      const credentialJson = JsonTransformer.toJSON(storedCredential!.firstCredential)
       const tamperedJson = JSON.parse(JSON.stringify(credentialJson))
 
       // Modify the issuance date to simulate tampering
@@ -118,7 +120,7 @@ describe('Credential Verification Integration', () => {
 
     it('should verify credential has valid proof signature', async () => {
       const storedCredential = await getNewestCredential(alice.agent)
-      const credential = storedCredential?.credential as any
+      const credential = storedCredential?.firstCredential as any
 
       // Get proof and issuer - handle both plain object and W3cCredential structure
       const proof = credential.proof || credential.proofs?.[0]
@@ -131,7 +133,7 @@ describe('Credential Verification Integration', () => {
 
       // Verify the credential cryptographically
       const verificationResult = await alice.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
 
       expect(verificationResult.isValid).toBe(true)

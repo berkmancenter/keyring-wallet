@@ -43,7 +43,9 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useActivity } from '../../../contexts/activity'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
+import { effectiveGrantPollWindowMs } from '../../../utils/e2eClocks'
 import { testIdWithKey } from '../../../utils/testable'
+import { GRANT_POLL_WINDOW_MS } from '../clocks'
 import QRRenderer from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import type { AgentLabel } from '../module/agentLabel'
@@ -83,7 +85,7 @@ const QR_RENDERER_MARGIN = 20
 const QR_MIN_SIZE = 160
 
 export const GRANT_POLL_EVERY_MS = 6000
-export const GRANT_POLL_WINDOW_MS = 10 * 60 * 1000
+export { GRANT_POLL_WINDOW_MS }
 
 type LocalStep = 'intro' | 'address' | 'backupAddress' | 'backupCode' | 'ready'
 
@@ -334,7 +336,7 @@ const VtaCreateAgent: React.FC = () => {
 
   const startWaiting = () => {
     setPollExpired(false)
-    setPollUntil(Date.now() + GRANT_POLL_WINDOW_MS)
+    setPollUntil(Date.now() + effectiveGrantPollWindowMs(GRANT_POLL_WINDOW_MS))
   }
 
   /** Copy and Share hand the owner code out: an owner act, so it asks first, then the phone waits for the agent. */

@@ -35,7 +35,7 @@ import { askar } from '@openwallet-foundation/askar-nodejs'
 import { demoDocumentLoader, deleteWallet, walletExists } from '@bifold/vrc-shared'
 import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
 
-import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
+import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL } from '../../src/relationshipContext'
 
 const CREDENTIALS_V1_CONTEXT_URL = 'https://www.w3.org/2018/credentials/v1'
 const WALLET_ID = `vc20-conformance-${process.env.JEST_WORKER_ID ?? '0'}`
@@ -101,7 +101,8 @@ describe('VCDM 2.0 sign/verify conformance (Ed25519Signature2018)', () => {
       throw new Error('Failed to create issuer DID')
     }
     issuerDid = result.didState.did
-    const assertionOrAuth = result.didState.didDocument.assertionMethod?.[0] ?? result.didState.didDocument.authentication?.[0]
+    const assertionOrAuth =
+      result.didState.didDocument.assertionMethod?.[0] ?? result.didState.didDocument.authentication?.[0]
     verificationMethodId = typeof assertionOrAuth === 'string' ? assertionOrAuth : (assertionOrAuth?.id as string)
   }, 30000)
 
@@ -132,7 +133,12 @@ describe('VCDM 2.0 sign/verify conformance (Ed25519Signature2018)', () => {
     // suite context is included at build time so signing doesn't append it —
     // otherwise the signed credential's @context wouldn't equal the offer's and
     // credo's DIDComm holder-side equality check would reject the credential.
-    const inputContext = [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL]
+    const inputContext = [
+      CREDENTIALS_V2_CONTEXT_URL,
+      DTG_CONTEXT_URL,
+      RELATIONSHIP_CONTEXT_URL,
+      ED25519_2018_SUITE_CONTEXT_URL,
+    ]
     const { vcJson, isValid } = await signAndVerify({
       '@context': inputContext,
       type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
@@ -144,6 +150,26 @@ describe('VCDM 2.0 sign/verify conformance (Ed25519Signature2018)', () => {
 
     expect(isValid).toBe(true)
     // @context untouched by signing — required for the DIDComm offer/credential match
+    expect(vcJson['@context']).toEqual(inputContext)
+    expect(vcJson.issuanceDate).toBeUndefined()
+    expect(vcJson.proof?.type ?? vcJson.proof?.[0]?.type).toBe('Ed25519Signature2018')
+  }, 30000)
+
+  test('signs and verifies a VCDM 2.0 VRC on the real DTG registry context (new-issuance shape)', async () => {
+    // Same context switch buildVrcCredential now makes for new VC 2.0
+    // issuance (vrc-manager.ts): the single real registry IRI, not the
+    // legacy self-hosted DTG_CONTEXT_URL/RELATIONSHIP_CONTEXT_URL pair.
+    const inputContext = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL]
+    const { vcJson, isValid } = await signAndVerify({
+      '@context': inputContext,
+      type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+      issuer: issuerDid,
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 365 * 24 * 3600_000).toISOString(),
+      credentialSubject: { id: 'did:peer:2.Ez6LScounterparty0000' },
+    })
+
+    expect(isValid).toBe(true)
     expect(vcJson['@context']).toEqual(inputContext)
     expect(vcJson.issuanceDate).toBeUndefined()
     expect(vcJson.proof?.type ?? vcJson.proof?.[0]?.type).toBe('Ed25519Signature2018')

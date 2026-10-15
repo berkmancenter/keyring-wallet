@@ -83,6 +83,26 @@ describe('a delivered card is kept only when it holds up', () => {
     expect(stored).toHaveLength(1)
   })
 
+  it('says which card was filed, and only once it is', async () => {
+    const { store, message } = world()
+    const filed: string[] = []
+    await receiveIssue(
+      store as never,
+      PERSONA,
+      message as never,
+      { onFiled: (item: { kind: string }) => void filed.push(item.kind), checkCard: async () => undefined } as never
+    )
+    expect(filed).toEqual(['membership'])
+    filed.length = 0
+    await receiveIssue(
+      store as never,
+      PERSONA,
+      message as never,
+      { onFiled: (item: { kind: string }) => void filed.push(item.kind), checkCard: async () => 'revoked' } as never
+    )
+    expect(filed).toEqual([])
+  })
+
   it('is left for redelivery when its check cannot finish now', async () => {
     const { store, stored, message } = world()
     await expect(

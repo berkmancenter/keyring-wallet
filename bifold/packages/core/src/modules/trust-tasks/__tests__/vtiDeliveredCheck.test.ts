@@ -5,7 +5,7 @@
 import i18n from 'i18next'
 
 import en from '../../../localization/en/en.json'
-import { checkDeliveredCard, VtiCardStatusUnreadable } from '../module/vtiDeliveredCheck'
+import { cardRef, cardStatusLogLine, checkDeliveredCard, VtiCardStatusUnreadable } from '../module/vtiDeliveredCheck'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { refusedCardWords } from '../screens/refusedCardNotice'
 
@@ -16,7 +16,10 @@ jest.mock('@bifold/trust-tasks', () => ({
   ...jest.requireActual('@bifold/trust-tasks'),
   verifyDocumentProof: (...a: unknown[]) => mockVerify(...a),
 }))
-jest.mock('../module/vtiStatusList', () => ({ checkCredentialStatus: (...a: unknown[]) => mockStatus(...a) }))
+jest.mock('../module/vtiStatusList', () => ({
+  ...jest.requireActual('../module/vtiStatusList'),
+  checkCredentialStatus: (...a: unknown[]) => mockStatus(...a),
+}))
 
 const COMMUNITY = 'did:webvh:QmCommunity:vtc.example:keyring-test-vtc'
 const NOW = new Date('2026-09-27T09:00:00Z')
@@ -99,5 +102,75 @@ describe('the words a person reads', () => {
     expect(refusedCardWords('revoked', COMMUNITY, t)).toBe(
       "A card from keyring-test-vtc (no name published yet) was withdrawn, so Keyring didn't keep it."
     )
+  })
+})
+
+// IN-258: a report must say which card was checked, whether it named a status
+// list and where, and what the check came to, in one line.
+describe('the log line a delivered card check writes', () => {
+  const STATUS = {
+    type: 'BitstringStatusListEntry',
+    statusPurpose: 'revocation',
+    statusListCredential: 'https://status.vtc.example/lists/7f3a9c?k=secret',
+    statusListIndex: '42',
+  }
+  const withStatus = card({ id: 'urn:uuid:5b1d8f0e-7c2a-4a8e-9d31-0f6c2e4b7a19', credentialStatus: STATUS })
+  const info = jest.fn()
+  const logging = { config: { logger: { info } } } as never
+
+  beforeEach(() => {
+    info.mockReset()
+    mockVerify.mockReset().mockResolvedValue(true)
+  })
+
+  it('names the card by its type and id, or a short hash of its proof when it has no id', () => {
+    expect(cardRef(withStatus)).toBe('MembershipCredential urn:uuid:5b1d8f0e-7c2a-4a8e-9d31-0f6c2e4b7a19')
+    expect(cardRef(card())).toMatch(/^MembershipCredential #[0-9a-f]{8}$/)
+    expect(cardRef(card())).toBe(cardRef(card()))
+  })
+
+  it('says the status list host, never its path, query, subject or claims', () => {
+    const line = cardStatusLogLine(withStatus, 'ok')
+    expect(line).toBe(
+      '[VTI] card status: MembershipCredential urn:uuid:5b1d8f0e-7c2a-4a8e-9d31-0f6c2e4b7a19 credentialStatus=status.vtc.example outcome=ok (status list read, not withdrawn)'
+    )
+    expect(line).not.toContain('/lists/')
+    expect(line).not.toContain('secret')
+    expect(line).not.toContain('QmPersona')
+  })
+
+  it('tells apart no status list, an unreadable entry, a withdrawn card, a refusal and an unread list', () => {
+    expect(cardStatusLogLine(card(), 'none')).toContain('credentialStatus=none outcome=ok (no status list to read)')
+    expect(
+      cardStatusLogLine(card({ credentialStatus: { statusListIndex: 'x' } }), {
+        unknown: 'credentialStatus is present but unreadable',
+      })
+    ).toContain('credentialStatus=malformed outcome=unknown (credentialStatus is present but unreadable)')
+    expect(cardStatusLogLine(withStatus, 'revoked')).toContain('outcome=revoked')
+    expect(cardStatusLogLine(withStatus, 'proof')).toContain('outcome=refused before the status list (proof)')
+    expect(cardStatusLogLine(withStatus, { unknown: 'fetch failed' })).toContain(
+      'credentialStatus=status.vtc.example outcome=unknown (fetch failed)'
+    )
+  })
+
+  it('is written once per check, whatever the outcome', async () => {
+    mockStatus.mockResolvedValue({ state: 'ok', checkedAt: NOW.toISOString(), index: 42, purpose: 'revocation' })
+    await checkDeliveredCard(logging, withStatus, COMMUNITY, { now: NOW })
+    mockStatus.mockResolvedValue({
+      state: 'unknown',
+      checkedAt: NOW.toISOString(),
+      reason: 'fetch failed',
+      host: 'status.vtc.example',
+    })
+    await expect(checkDeliveredCard(logging, withStatus, COMMUNITY, { now: NOW })).rejects.toBeInstanceOf(
+      VtiCardStatusUnreadable
+    )
+    mockVerify.mockResolvedValue(false)
+    await checkDeliveredCard(logging, withStatus, COMMUNITY, { now: NOW })
+    expect(info.mock.calls.map(([l]) => String(l).replace(/^.*outcome=/, ''))).toEqual([
+      'ok (status list read, not withdrawn)',
+      'unknown (fetch failed)',
+      'refused before the status list (proof)',
+    ])
   })
 })

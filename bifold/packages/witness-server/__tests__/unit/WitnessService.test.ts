@@ -28,18 +28,20 @@ import {
   computeVrcDigest,
   buildWitnessCredentialJson,
   WitnessCredentialBuildContext,
+  extractVrcHardwareAttestationPublicKey,
 } from '../../src/WitnessService'
 import { LocalityEvidence } from '../../src/LocalityService'
 import {
   CREDENTIALS_V2_CONTEXT_URL,
   ED25519_2018_SUITE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_URL,
 } from '@bifold/vrc-contexts'
 import { defaultConfig, isMediatorEnabled, WitnessServerConfig } from '../../src/config'
-import {
-  assertSupportedMediatorPickupStrategy,
-  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
-} from '@bifold/vrc-shared'
+import { assertSupportedMediatorPickupStrategy, SUPPORTED_MEDIATOR_PICKUP_STRATEGY } from '@bifold/vrc-shared'
+import { taskDigestMultibase, digestMultibase, digestBytesEqual } from '@bifold/trust-tasks'
+import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 
 describe('WitnessService - SessionData', () => {
   /**
@@ -333,6 +335,29 @@ describe('WitnessService - VWC Building', () => {
     proof: diProof,
   }
 
+  /**
+   * VRC as a v5 wallet now emits it (G32): VC 2.0, registry v1 context + the
+   * dedicated hardware-evidence context, top-level issuerScope 'pairwise',
+   * a hardware-evidence block, DataIntegrityProof.
+   */
+  const v5Vrc = {
+    '@context': [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL],
+    type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+    issuer: vrcIssuer,
+    issuerScope: 'pairwise',
+    validFrom: '2026-01-01T12:00:00Z',
+    validUntil: '2026-01-08T12:00:00Z',
+    credentialSubject: { id: 'did:peer:0zbob' },
+    evidence: [
+      {
+        id: 'urn:uuid:e1',
+        type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+        hardwareBinding: { publicKey: 'z6Mk-v5-pubkey' },
+      },
+    ],
+    proof: diProof,
+  }
+
   function buildVwc(vrcJson: any, overrides: Partial<WitnessCredentialBuildContext> = {}) {
     return buildWitnessCredentialJson(
       { type: ['VerifiablePresentation'], verifiableCredential: [vrcJson] },
@@ -355,14 +380,20 @@ describe('WitnessService - VWC Building', () => {
       expect(vwc.type).toContain('WitnessCredential')
     })
 
-    it('should have the witness as issuer, as an { id, name } object (not a bare string)', () => {
+    it('should have the witness as issuer, as a bare string (VSC migration plan §6 V4: both WD02 and WD 0.4.0 require a string; {id, name} was a real divergence, ref-07e Act 4)', () => {
       const vwc = buildVwc(legacyVrc)
 
-      expect(vwc.issuer).toEqual({ id: witnessIssuerDid, name: witnessName })
+      expect(vwc.issuer).toEqual(witnessIssuerDid)
     })
 
     it('should reference VRC issuer in credentialSubject.id', () => {
       expect(buildVwc(legacyVrc).credentialSubject.id).toBe(vrcIssuer)
+    })
+
+    it('restores the witness display name as credentialSubject.witnessName, in both wd02 forms and vsc (§Predicate Profiles point 5)', () => {
+      expect(buildVwc(legacyVrc).credentialSubject.witnessName).toBe(witnessName)
+      expect(buildVwc(vc20Vrc).credentialSubject.witnessName).toBe(witnessName)
+      expect(buildVwc(vc20DiVrc, { shape: 'vsc' }).credentialSubject.witnessName).toBe(witnessName)
     })
 
     it('should unwrap an issuer object on the VRC to its id', () => {
@@ -428,6 +459,33 @@ describe('WitnessService - VWC Building', () => {
       const tampered = { ...legacyVrc, credentialSubject: { id: 'did:peer:0zmallory' } }
 
       expect(computeVrcDigest(tampered)).not.toBe(computeVrcDigest(legacyVrc))
+    })
+  })
+
+  describe('v5 peer VRC shape (issuerScope, evidence context, DI proof)', () => {
+    it('builds a VWC for it: VC 2.0, DI mirrored, witnessed-exchange context, subject is the VRC issuer', () => {
+      const vwc = buildVwc(v5Vrc)
+
+      expect(vwc['@context'][0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
+      expect(vwc['@context']).toContain(WITNESSED_EXCHANGE_CONTEXT_URL)
+      expect(vwc.credentialSubject.id).toBe(vrcIssuer)
+      expect(vwc.credentialSubject.digest).toBe(computeVrcDigest(v5Vrc))
+    })
+
+    it('freshness still reads validFrom on it', () => {
+      expect(checkVrcFreshness(v5Vrc, new Date('2026-01-01T12:01:00Z')).fresh).toBe(true)
+    })
+
+    it('the digest covers issuerScope and is key-order invariant (JCS)', () => {
+      const reordered = Object.fromEntries(Object.entries(v5Vrc).reverse())
+      expect(computeVrcDigest(reordered)).toBe(computeVrcDigest(v5Vrc))
+      expect(computeVrcDigest({ ...v5Vrc, issuerScope: 'public' })).not.toBe(computeVrcDigest(v5Vrc))
+    })
+
+    it('extracts the hardware attestation key from its evidence block', () => {
+      expect(
+        extractVrcHardwareAttestationPublicKey({ type: ['VerifiablePresentation'], verifiableCredential: [v5Vrc] })
+      ).toBe('z6Mk-v5-pubkey')
     })
   })
 
@@ -529,6 +587,142 @@ describe('WitnessService - VWC Building', () => {
       const bobSender = 'conn-bob'
       const bobRecipient = participants.find((id) => id !== bobSender)
       expect(bobRecipient).toBe('conn-alice')
+    })
+  })
+
+  describe('VSC shape (docs/plans/vsc-migration-plan.md §6 V4)', () => {
+    it('defaults to wd02 shape when `shape` is omitted — no behavior change for existing callers', () => {
+      const withoutShape = buildVwc(vc20DiVrc)
+      const explicitWd02 = buildVwc(vc20DiVrc, { shape: 'wd02' })
+
+      // id is a fresh urn:uuid per call — exclude it, compare everything else.
+      const { id: _id1, ...withoutShapeRest } = withoutShape
+      const { id: _id2, ...explicitWd02Rest } = explicitWd02
+      expect(withoutShapeRest).toEqual(explicitWd02Rest)
+      expect(withoutShape.type).toContain('WitnessCredential')
+    })
+
+    it('emits StatementCredential as the only concrete DTGCredential subtype (D1)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    })
+
+    it('emits credentialSubject.predicate as the real dtg:witnessed IRI (D2)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.credentialSubject.predicate).toBe(DTG_PREDICATE_WITNESSED)
+    })
+
+    it('always emits VC 2.0 form, even for a legacy 1.1 VRC — VSC has no legacy-1.1 shape', () => {
+      const vwc = buildVwc(legacyVrc, { shape: 'vsc' })
+
+      expect(vwc['@context'][0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
+      expect(vwc.validFrom).toBeDefined()
+      expect(vwc.issuanceDate).toBeUndefined()
+    })
+
+    it('emits issuer as a bare string, same as wd02 (the fix is unconditional, not shape-gated)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.issuer).toBe(witnessIssuerDid)
+    })
+
+    describe('object.digestMultibase (D3 — three breaks, not a re-encoding)', () => {
+      it('is computed via taskDigestMultibase, over the VRC EXCLUDING its own top-level proof', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.object.digestMultibase).toBe(taskDigestMultibase(vc20DiVrc))
+      })
+
+      it('differs from a digest computed over the PROOFED VRC — the coverage change a naive transcoder would miss', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+        const proofedDigest = digestMultibase(vc20DiVrc) // includes proof — the wrong document per D3's third break
+
+        expect(vwc.credentialSubject.object.digestMultibase).not.toBe(proofedDigest)
+      })
+
+      it('does not carry the legacy sha256:hex `digest` member at all', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.digest).toBeUndefined()
+      })
+    })
+
+    describe('witnessContext keeps only the profile-defined three members (§3.5)', () => {
+      it('carries event/sessionId/method and nothing else, even with hardware attestation and locality present', () => {
+        const localityAssertion = {
+          localityConfirmed: true,
+          localityMethod: 'ble-gatt' as const,
+          localityVenue: 'EthDenver',
+        }
+        const vwc = buildVwc(
+          { ...vc20DiVrc, evidence: [{ type: ['HardwareAttestation'] }] },
+          { shape: 'vsc', eventName: 'EthDenver 2026', localityAssertion }
+        )
+
+        expect(Object.keys(vwc.credentialSubject.witnessContext).sort()).toEqual(['event', 'method', 'sessionId'])
+      })
+    })
+
+    describe('extension members hoisted to credentialSubject, siblings of witnessContext (§3.5)', () => {
+      it('places hardwareAttestationIncluded as a credentialSubject sibling, not nested in witnessContext', () => {
+        const vwc = buildVwc({ ...vc20DiVrc, evidence: [{ type: ['HardwareAttestation'] }] }, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.hardwareAttestationIncluded).toBe(true)
+        expect(vwc.credentialSubject.witnessContext.hardwareAttestationIncluded).toBeUndefined()
+      })
+
+      it('places the flat locality* members (Trust Task ceremony) as credentialSubject siblings', () => {
+        const localityAssertion = {
+          localityConfirmed: true,
+          localityMethod: 'ble-gatt' as const,
+          localityVenue: 'EthDenver',
+        }
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc', localityAssertion })
+
+        expect(vwc.credentialSubject.localityConfirmed).toBe(true)
+        expect(vwc.credentialSubject.localityVenue).toBe('EthDenver')
+        expect(vwc.credentialSubject.witnessContext.localityConfirmed).toBeUndefined()
+      })
+
+      it('places the legacy nested localityVerification as a credentialSubject sibling too', () => {
+        const localityEvidence = { type: 'ble', confirmed: true } as unknown as LocalityEvidence
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc', localityEvidence })
+
+        expect(vwc.credentialSubject.localityVerification).toEqual(localityEvidence)
+        expect(vwc.credentialSubject.witnessContext.localityVerification).toBeUndefined()
+      })
+    })
+
+    describe('D6 subject binding, checked against real minted output', () => {
+      // These re-derive the same primitives witnessCeremony.ts's checkSubjectBinding
+      // (plan §6 V3, @bifold/core) uses — @bifold/trust-tasks, which this package
+      // already depends on — rather than importing @bifold/core, which pulls in
+      // React Native and is the wrong direction for a Node service to depend on.
+      // This is the round-trip check available at this architectural boundary:
+      // real minted output, checked with the real shared primitives, just not a
+      // call into core's own function.
+      it('the minted VSC satisfies D6 against the real VRC it references', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.id).toBe(vc20DiVrc.issuer)
+        expect(digestBytesEqual(vwc.credentialSubject.object.digestMultibase, taskDigestMultibase(vc20DiVrc))).toBe(
+          true
+        )
+      })
+
+      it('a VSC whose subject is NOT the referenced VRC issuer fails D6 — the case D6 exists to catch', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+        const tampered = { ...vwc, credentialSubject: { ...vwc.credentialSubject, id: 'did:peer:0zmallory' } }
+
+        expect(tampered.credentialSubject.id).not.toBe(vc20DiVrc.issuer)
+        // The digest half still reproduces — D6 is two independent checks,
+        // and a subject swap alone must still be caught.
+        expect(
+          digestBytesEqual(tampered.credentialSubject.object.digestMultibase, taskDigestMultibase(vc20DiVrc))
+        ).toBe(true)
+      })
     })
   })
 })
@@ -675,22 +869,16 @@ describe('WitnessService - Transport Configuration', () => {
     it.each(['Implicit', 'PickUpV2LiveMode', 'None'])(
       'rejects %s with an explanation, rather than failing silently at runtime',
       (strategy) => {
-        expect(() => assertSupportedMediatorPickupStrategy(strategy, 'test')).toThrow(
-          /cannot receive messages/
-        )
+        expect(() => assertSupportedMediatorPickupStrategy(strategy, 'test')).toThrow(/cannot receive messages/)
       }
     )
 
     it('rejects an unset strategy, since credo would fall back to persisted wallet state', () => {
-      expect(() => assertSupportedMediatorPickupStrategy(undefined, 'test')).toThrow(
-        /no mediator pickup strategy set/
-      )
+      expect(() => assertSupportedMediatorPickupStrategy(undefined, 'test')).toThrow(/no mediator pickup strategy set/)
     })
 
     it('accepts the supported strategy', () => {
-      expect(() =>
-        assertSupportedMediatorPickupStrategy(SUPPORTED_MEDIATOR_PICKUP_STRATEGY, 'test')
-      ).not.toThrow()
+      expect(() => assertSupportedMediatorPickupStrategy(SUPPORTED_MEDIATOR_PICKUP_STRATEGY, 'test')).not.toThrow()
     })
   })
 
@@ -1484,10 +1672,7 @@ describe('WitnessService - Opt-in Reporting', () => {
      * We test the gate logic directly (no agent spin-up needed).
      */
 
-    function simulateRegistrationHandling(
-      reportingEnabled: boolean,
-      reportingDid: string
-    ): { registered: boolean } {
+    function simulateRegistrationHandling(reportingEnabled: boolean, reportingDid: string): { registered: boolean } {
       // Mirrors the gate in WitnessService.registerMessageHandlers
       if (!reportingEnabled) return { registered: false }
       const isValid = typeof reportingDid === 'string' && reportingDid.startsWith('did:')
@@ -1780,12 +1965,14 @@ describe('WitnessService - Witness Request Preference', () => {
   /**
    * Helper to create a mock SessionData object with witnessRequested map
    */
-  function createMockSessionWithWitnessRequest(overrides: Partial<{
-    sessionId: string
-    participants: Set<string>
-    receivedPresentations: Map<string, any>
-    witnessRequested: Map<string, boolean>
-  }> = {}): {
+  function createMockSessionWithWitnessRequest(
+    overrides: Partial<{
+      sessionId: string
+      participants: Set<string>
+      receivedPresentations: Map<string, any>
+      witnessRequested: Map<string, boolean>
+    }> = {}
+  ): {
     sessionId: string
     participants: Set<string>
     receivedPresentations: Map<string, any>
@@ -1804,14 +1991,9 @@ describe('WitnessService - Witness Request Preference', () => {
    * Mirrors the logic in issueWitnessCredentials() for determining
    * whether to issue VWCs based on witness preferences.
    */
-  function shouldIssueVWCs(session: {
-    participants: Set<string>
-    witnessRequested: Map<string, boolean>
-  }): boolean {
+  function shouldIssueVWCs(session: { participants: Set<string>; witnessRequested: Map<string, boolean> }): boolean {
     const participantIds = Array.from(session.participants)
-    const bothWantWitness = participantIds.every(
-      (connId) => session.witnessRequested.get(connId) !== false
-    )
+    const bothWantWitness = participantIds.every((connId) => session.witnessRequested.get(connId) !== false)
     return bothWantWitness
   }
 
@@ -1946,11 +2128,9 @@ describe('WitnessService - Witness Request Preference', () => {
     /**
      * Mirrors the parsing logic in handleSessionRequest()
      */
-    function parseSessionRequest(message: {
-      myRelationshipDid: string
-      counterpartyDid: string
-      witness?: boolean
-    }): { witness: boolean } {
+    function parseSessionRequest(message: { myRelationshipDid: string; counterpartyDid: string; witness?: boolean }): {
+      witness: boolean
+    } {
       const witness = message.witness ?? true
       return { witness }
     }
@@ -2040,7 +2220,7 @@ describe('WitnessService - Witness Request Preference', () => {
      * Tests that verify the network UI will render non-witnessed edges correctly.
      * The network UI uses edgeScore(witnessed, attestationCount) to determine
      * the visual representation of edges.
-     * 
+     *
      * Non-witnessed edges now factor in attestationCount:
      * - 0 attestations: score 0, 10% thickness, 10% brightness
      * - 1 attestation: score 0.33, 16% thickness, 16% brightness
@@ -2053,8 +2233,8 @@ describe('WitnessService - Witness Request Preference', () => {
     it('should have score 0 for non-witnessed edges with no attestations', () => {
       const result = edgeScore(false, 0)
       expect(result.score).toBeCloseTo(0, 2)
-      expect(result.thicknessMultiplier).toBeCloseTo(0.10, 2)
-      expect(result.brightness).toBeCloseTo(0.10, 2)
+      expect(result.thicknessMultiplier).toBeCloseTo(0.1, 2)
+      expect(result.brightness).toBeCloseTo(0.1, 2)
     })
 
     it('should have score 0.33 for non-witnessed edges with 1 attestation', () => {
@@ -2129,9 +2309,7 @@ describe('WitnessService - Witness Request Preference', () => {
     /**
      * Simulates retrieving stored witness preference from pending request
      */
-    function getInitiatorWitnessPreference(
-      pendingRequest: PendingSessionRequest | undefined
-    ): boolean {
+    function getInitiatorWitnessPreference(pendingRequest: PendingSessionRequest | undefined): boolean {
       return pendingRequest?.initiatorWitnessPreference ?? true
     }
 
@@ -2158,12 +2336,7 @@ describe('WitnessService - Witness Request Preference', () => {
     })
 
     it('should retrieve initiator preference from pending request', () => {
-      const request = createPendingRequest(
-        'conn-alice',
-        'did:peer:alice-rel',
-        'did:peer:bob-rel',
-        false
-      )
+      const request = createPendingRequest('conn-alice', 'did:peer:alice-rel', 'did:peer:bob-rel', false)
 
       const preference = getInitiatorWitnessPreference(request)
       expect(preference).toBe(false)
@@ -2236,12 +2409,7 @@ describe('WitnessService - Witness Request Preference', () => {
     })
 
     it('should store false for both when neither wants witness', () => {
-      const session = createWitnessedSession(
-        'conn-alice',
-        'conn-bob',
-        false,
-        false
-      )
+      const session = createWitnessedSession('conn-alice', 'conn-bob', false, false)
 
       expect(session.witnessRequested.get('conn-alice')).toBe(false)
       expect(session.witnessRequested.get('conn-bob')).toBe(false)
@@ -2260,7 +2428,7 @@ describe('WitnessService - Witness Request Preference', () => {
         'conn-alice',
         'conn-bob',
         false, // Alice doesn't want witness
-        true   // Bob wants witness
+        true // Bob wants witness
       )
 
       expect(session.witnessRequested.get('conn-alice')).toBe(false)
@@ -2310,9 +2478,7 @@ describe('WitnessService - Witness Request Preference', () => {
 
       // Step 4: VWC issuance decision
       const participantIds = Array.from(session.participants)
-      const bothWantWitness = participantIds.every(
-        (connId) => session.witnessRequested.get(connId) !== false
-      )
+      const bothWantWitness = participantIds.every((connId) => session.witnessRequested.get(connId) !== false)
 
       return { shouldIssueVWC: bothWantWitness }
     }
@@ -2343,9 +2509,7 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
   /**
    * Helper to create a mock SessionData object with reporting DIDs
    */
-  function createMockSessionWithReportingDids(
-    receivedReportingDids: Map<string, string>
-  ): SessionData {
+  function createMockSessionWithReportingDids(receivedReportingDids: Map<string, string>): SessionData {
     return {
       sessionId: 'test-session-123',
       challenge: 'test-challenge-abc',
@@ -2415,9 +2579,7 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
     })
 
     it('should NOT record edge when only ONE party includes reportingDid', () => {
-      const session = createMockSessionWithReportingDids(
-        new Map([['conn-alice', 'did:peer:alice']])
-      )
+      const session = createMockSessionWithReportingDids(new Map([['conn-alice', 'did:peer:alice']]))
 
       const result = simulateOnSessionCompletedCallback(session)
 
@@ -2490,5 +2652,52 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
       expect(result3.edgeRecorded).toBe(false)
       expect(result3.reportingDidsUsed).toBeUndefined()
     })
+  })
+})
+
+describe('extractVrcHardwareAttestationPublicKey (locality §7.3 step-6 key-match input)', () => {
+  it('returns the public key from the VRC evidence entry that carries one', () => {
+    const presentation = {
+      verifiableCredential: [
+        {
+          evidence: [{ type: ['HardwareAttestation'], hardwareBinding: { publicKey: 'z6Mk-example-pubkey' } }],
+        },
+      ],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBe('z6Mk-example-pubkey')
+  })
+
+  it('returns undefined when the VRC carries no evidence array', () => {
+    const presentation = { verifiableCredential: [{}] }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBeUndefined()
+  })
+
+  it('returns undefined when an evidence entry has no hardwareBinding.publicKey', () => {
+    const presentation = {
+      verifiableCredential: [{ evidence: [{ type: ['HardwareAttestation'] }] }],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBeUndefined()
+  })
+
+  it('returns undefined when the presentation carries no verifiableCredential at all', () => {
+    expect(extractVrcHardwareAttestationPublicKey({})).toBeUndefined()
+  })
+
+  it('skips a non-string/empty publicKey and returns the first valid one found across multiple evidence entries', () => {
+    const presentation = {
+      verifiableCredential: [
+        {
+          evidence: [
+            { type: ['HardwareAttestation'], hardwareBinding: { publicKey: '' } },
+            { type: ['HardwareAttestation'], hardwareBinding: { publicKey: 'z6Mk-second-real-key' } },
+          ],
+        },
+      ],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBe('z6Mk-second-real-key')
   })
 })

@@ -55,6 +55,7 @@ import {
 } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
+import { logIssuedVrcJson } from '../vrc/vrc-credential-log'
 import { credentialExchangeStore } from './credentialExchangeStore'
 
 import type { CarriageDocumentHandler } from '@bifold/trust-tasks'
@@ -946,6 +947,10 @@ async function deliverVrcViaTrustTaskForExchangeInner(
         myRelationshipDid: record.myRelationshipDid,
         buildPresentation: (challenge, domain) =>
           buildChallengeBoundVp(agent, signedVc, verificationMethodId, challenge, domain),
+        // VSC migration plan §6 V3, D6: the VRC this session witnesses, so
+        // the returned VWC's subject binding is checked against a specific,
+        // identified edge rather than left as an opaque hash.
+        referencedVrc: signedVc,
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
         // locality-plan.md §8.1/§10.3 item 10: offer per the user's own
@@ -1016,6 +1021,8 @@ async function deliverVrcViaTrustTaskForExchangeInner(
 
   await service.retain(agent.context, signed, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, signed)
+  // Diagnostic only (e2e checker): the VRC this party just issued, as sent.
+  logIssuedVrcJson('ISSUER', exchangeId, '-', signedVc)
   vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
   logger.info(`${LOG_PREFIX} issue sent (exchange ${exchangeId}) on connection ${connectionId}`)
 }
@@ -1126,11 +1133,12 @@ async function handleInboundIssue(
         }
       })
       if (!alreadyStored) {
-        await agent.w3cCredentials.store({
-          record: new W3cCredentialRecord({
-            credentialInstances: [{ credential: vc as never }],
-          }),
+        const storedRecord = new W3cCredentialRecord({
+          credentialInstances: [{ credential: vc as never }],
         })
+        await agent.w3cCredentials.store({ record: storedRecord })
+        // Diagnostic only (e2e checker): the VRC this party received and stored.
+        logIssuedVrcJson('RECEIVER', String(doc.threadId ?? doc.id), storedRecord.id, vc)
         agent.config.logger.info(`${LOG_PREFIX} issue stored — VRC in wallet (exchange ${doc.threadId ?? doc.id})`)
       } else {
         agent.config.logger.info(`${LOG_PREFIX} issue already stored — receipting (exchange ${doc.threadId ?? doc.id})`)

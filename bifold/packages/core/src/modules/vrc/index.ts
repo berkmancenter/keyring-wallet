@@ -20,6 +20,11 @@ export {
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_DOCUMENT,
   RCARD_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_NAMESPACE,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
 export { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
 
@@ -82,6 +87,8 @@ export {
   RELATIONSHIP_CONTEXT,
   WITNESSED_EXCHANGE_CONTEXT,
   RCARD_CONTEXT,
+  REGISTRY_DTG_CONTEXT,
+  HARDWARE_EVIDENCE_CONTEXT,
   CUSTOM_CONTEXTS,
 } from './jsonLdDocumentLoader'
 
@@ -200,8 +207,5 @@ export { EvidenceBuilder, createEvidenceBuilder } from './services/EvidenceBuild
 export type { BuildEvidenceResult } from './services/EvidenceBuilder'
 
 // Export verification services
-export {
-  HardwareSignatureVerifier,
-  verifyVrcHardwareEvidence,
-} from './services/BiometricSignatureVerifier'
+export { HardwareSignatureVerifier, verifyVrcHardwareEvidence } from './services/BiometricSignatureVerifier'
 export type { SignatureVerificationResult, VerificationLevel } from './services/BiometricSignatureVerifier'

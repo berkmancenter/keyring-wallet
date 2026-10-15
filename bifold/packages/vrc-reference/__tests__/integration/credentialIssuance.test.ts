@@ -38,17 +38,19 @@ describe('Credential Issuance Integration', () => {
 
       // Wait for credential to be issued and stored
       // This can take longer due to cryptographic signing and storage operations
+      // W3cCredentialRecord.credential is write-only (a setter, for legacy
+      // assignment); the read accessor is credentialInstances/firstCredential.
       await waitForCondition(async () => {
         const records = await alice.agent.w3cCredentials.getAll()
-        return records.some((r) => r.credential !== null)
+        return records.some((r) => r.credentialInstances && r.credentialInstances.length > 0)
       }, 15000)
 
       // Verify credential is stored
       const storedCredentials = await alice.agent.w3cCredentials.getAll()
-      const storedCredential = storedCredentials.find((r) => r.credential !== null)
+      const storedCredential = storedCredentials.find((r) => r.credentialInstances && r.credentialInstances.length > 0)
 
       expect(storedCredential).toBeDefined()
-      expect(storedCredential?.credential).toBeDefined()
+      expect(storedCredential?.firstCredential).toBeDefined()
     }, 30000)
   })
 
@@ -67,7 +69,9 @@ describe('Credential Issuance Integration', () => {
       expect(offerRecord).toBeDefined()
 
       // Alice declines the credential offer
-      await alice.agent.modules.didcomm.credentials.declineOffer(offerRecord!.id)
+      // declineOffer takes an options object, not a bare id (see
+      // src/ParticipantInquirer.ts's correct usage for the same call).
+      await alice.agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: offerRecord!.id })
 
       // Verify the offer was declined (state should change to 'abandoned' or record deleted)
       const updatedRecords = await alice.agent.modules.didcomm.credentials.getAll()
