@@ -66,6 +66,7 @@ import {
   type HiddenVettingRecord,
 } from './hiddenVetting'
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
+import { currentHiddenCriterion, drawVetterTokens, enrolVetter, isEnrolled, nowMs } from './hiddenVetterRounds'
 import { vtaAgent } from './vtaAgent'
 import type { VtaClient } from './VtaClient'
 import {
@@ -1027,7 +1028,88 @@ export class VtiVetterDesk {
     // Returned: what the message changes is stored before the mediator is
     // told it was taken, and a failure leaves it for redelivery.
     this.stop = vtiAgent.onInbound((m) => this.inbound(m))
+    void this.keepHiddenVetterReady('listen')
     return this.stop
+  }
+
+  /** When this desk last ran its hidden-vetting round, on the one clock (`nowMs`). */
+  private hiddenReadyAt?: number
+  /** The round running now, so a second trigger joins it rather than starting another. */
+  private hiddenReadying?: Promise<void>
+
+  /**
+   * Keep this vetter ready to vouch privately, without anyone asking: when the
+   * community publishes a hidden criterion this build carries and the phone
+   * holds a live vetter grant for it, enrol for the current period if not
+   * enrolled, then draw this tick's tokens (`hiddenVetterRounds`, the same
+   * rounds the vetter screens run).
+   *
+   * A vetter that held a live grant all evening made no `vta/pcs/*` call at
+   * all, because enrolment sat behind a screen they never opened — so the
+   * desk does it. Quietly: nothing is put on screen, a failure is logged and
+   * the ordinary desk works as before. No DID is logged: the log leaves the
+   * device (`isHiddenVettingType`).
+   *
+   * Run when the desk starts listening (at most once per
+   * `HIDDEN_VETTER_READY_INTERVAL_MS`: the Vetting screen calls `listen` every
+   * few seconds) and at once when a hidden request arrives, so a vetter
+   * enrolled but holding no free token gets one before they try to vouch.
+   */
+  keepHiddenVetterReady(trigger: 'listen' | 'request'): Promise<void> {
+    if (this.hiddenReadying) return this.hiddenReadying
+    const now = nowMs()
+    if (
+      trigger === 'listen' &&
+      this.hiddenReadyAt !== undefined &&
+      now - this.hiddenReadyAt < HIDDEN_VETTER_READY_INTERVAL_MS
+    )
+      return Promise.resolve()
+    this.hiddenReadyAt = now
+    const logger = this.agent.config?.logger
+    this.hiddenReadying = this.readyHiddenVetter(trigger)
+      .catch((e: unknown) => {
+        const code = (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e)
+        logger?.warn?.(
+          `[hidden-vetting] vetter round (${trigger}) did not finish${code ? ` (${String(code)})` : ''}: ${
+            e instanceof Error ? e.message : String(e)
+          }`
+        )
+      })
+      .finally(() => {
+        this.hiddenReadying = undefined
+      })
+    return this.hiddenReadying
+  }
+
+  private async readyHiddenVetter(trigger: 'listen' | 'request'): Promise<void> {
+    const community = this.persona.communityDid
+    const logger = this.agent.config?.logger
+    // Most communities publish no hidden criterion: nothing to do, and nothing said.
+    const criterion = await currentHiddenCriterion(this.agent, community)
+    if (!criterion) return
+    const standing = (await this.grantWithState()).state
+    if (standing.state !== 'active') {
+      logger?.info?.(
+        `[hidden-vetting] vetter round (${trigger}): no live vetter grant (${standing.state}); not enrolling`
+      )
+      return
+    }
+    // A status list that cannot be read now reads as active, unchecked:
+    // enrolling then is right (a vetter must be able to work offline), and
+    // saying which it was explains a later refusal from the community.
+    logger?.info?.(
+      `[hidden-vetting] vetter round (${trigger}): grant active, status ${
+        standing.statusChecked ? 'checked' : `not checked${standing.reason ? ` (${standing.reason})` : ''}`
+      }`
+    )
+    if (!(await isEnrolled(this.agent, community, criterion))) {
+      await enrolVetter(this.agent, community, criterion)
+      logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
+    }
+    const { drawn } = await drawVetterTokens(this.agent, community, criterion)
+    logger?.info?.(
+      `[hidden-vetting] vetter round (${trigger}): ${drawn ? `drew ${drawn} token(s)` : 'no draw due this tick'}`
+    )
   }
 
   /** Stop what `listen` started. A desk left listening answers every request a second time. */
@@ -1174,6 +1256,9 @@ export class VtiVetterDesk {
       receivedAt: new Date().toISOString(),
     }
     await this.store.saveDesk(request)
+    // A private request: make sure this vetter is enrolled and holds a token
+    // before they come to vouch (`keepHiddenVetterReady`), without waiting on it.
+    if (request.hiddenApplicantId) void this.keepHiddenVetterReady('request')
     const grant = await this.grant()
     const eligibilityVp = grant
       ? await this.eligibilityPresentation(grant.credential, { nonce: requestDocumentId, domain: joinDid })
@@ -2783,3 +2868,11 @@ export function hiddenApplicantIdOf(ext: unknown): string | undefined {
   if (!ours || ours.suite !== HIDDEN_VETTING_SUITE) return undefined
   return typeof ours.id === 'string' && ours.id ? ours.id : undefined
 }
+
+/**
+ * The least time between two of a desk's hidden-vetting rounds started by
+ * `listen` (a hidden request starts one at once). Enrolment lasts a period and
+ * a draw is guarded per tick, so this only spares the agent and the community
+ * a check every few seconds while the Vetting screen is open.
+ */
+export const HIDDEN_VETTER_READY_INTERVAL_MS = 10 * 60 * 1000

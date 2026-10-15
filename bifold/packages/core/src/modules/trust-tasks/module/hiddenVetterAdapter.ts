@@ -33,112 +33,22 @@ import type {
 } from '../screens/hiddenVetterSeam'
 import { registerHiddenVetter } from '../screens/hiddenVetterSeam'
 
-import type { VtaClient } from './VtaClient'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
-import { getKeyed, putKeyed } from './keyedRecords'
-import { PCS_VETTER_ERROR, PCS_VETTER_TASK, VTC_VETTER_TASK, type PublishedConfig } from './pcsVetterTasks'
-import { HIDDEN_VETTING_EXT, type VtiCriterion } from './joinManifest'
-import { parametersToSend } from './pcsVtaPayloads'
-import { vtaAgent } from './vtaAgent'
-import { vtiAgent } from './vtiAgent'
+import {
+  connectedVetterClient as connected,
+  currentHiddenCriterion,
+  drawVetterTokens,
+  enrolVetter,
+  loadVetterRecord as loadRecord,
+  publishedOf,
+  tickMillis,
+  vetterContextOf as contextOf,
+} from './hiddenVetterRounds'
+import type { VtiCriterion } from './joinManifest'
 import { GenericRecordsVettingStore, VtiVetterDesk } from './vtiVetting'
 
-/**
- * One clock for everything here.
- *
- * The draw guard compares a stored timestamp with the present, so both must
- * come from the same source. Writing with `new Date()` and comparing with
- * `Date.now()` is fragile in principle and provably wrong under a test
- * environment that fakes one and not the other — which this one does, and
- * which turned the double-draw guard into a no-op until it was found.
- */
-const nowMs = () => Date.now()
-const nowIso = () => new Date(nowMs()).toISOString()
-
-const RECORD_TYPE = 'keyring/hidden-vetter'
-const KIND = 'standing'
-
-/**
- * What the phone keeps about its own vetting, which is only what the agent
- * cannot tell it.
- *
- * The agent reports labels and token counts but **no clock**: no last draw, no
- * tick boundary, no enrolment expiry. So the draw time is kept here, and a
- * phone that has never drawn — a new or restored one — simply does not know,
- * which the screens show as no date rather than as "draw now".
- */
-interface VetterRecord {
-  community: string
-  lastDrawAt?: string
-  /** The tick last drawn for, so a second draw in one tick is not attempted. */
-  lastTick?: number
-}
-
-const loadRecord = (agent: Agent, community: string) => getKeyed<VetterRecord>(agent, RECORD_TYPE, KIND, community)
-
-const saveRecord = (agent: Agent, record: VetterRecord) =>
-  putKeyed(agent, RECORD_TYPE, KIND, record.community, record as unknown as Record<string, unknown>)
-
-/** The criterion's published hidden-vetting parameters, read raw. */
-function publishedOf(criterion: VtiCriterion): PublishedConfig | undefined {
-  const vetting = (criterion as { vetting?: { ext?: Record<string, unknown> } }).vetting
-  return parametersToSend(vetting?.ext?.[HIDDEN_VETTING_EXT])
-}
-
-/** A connected client for this phone's own agent, or a coded refusal. */
-async function connected(agent: Agent): Promise<VtaClient> {
-  const vtaDid = vtaAgent.agentAddress()
-  if (!vtaDid) throw Object.assign(new Error('no agent linked'), { code: 'keyring/hidden-vetter:noAgent' })
-  const client = vtaAgent.client(agent, vtaDid)
-  await client.connect()
-  return client
-}
-
-/** The context the vetter acts in; the agent's first, as the applicant side does. */
-async function contextOf(client: VtaClient): Promise<string> {
-  return (await client.listContexts().catch(() => []))[0]?.id ?? 'vta'
-}
-
-/** ISO duration `P3D` → milliseconds. Only the forms a community publishes for a tick. */
-export function tickMillis(tickLength: string | undefined): number | undefined {
-  const match = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(tickLength ?? '')
-  if (!match) return undefined
-  const [, d, h, m] = match
-  const ms = (Number(d ?? 0) * 86400 + Number(h ?? 0) * 3600 + Number(m ?? 0) * 60) * 1000
-  return ms > 0 ? ms : undefined
-}
-
-/**
- * Ask the community one of its vetter tasks and read the answer's payload.
- *
- * `vtiAgent.ask` is the same path the join submission and the challenge take;
- * nothing new is needed for the community hop.
- */
-async function askCommunity<T>(communityDid: string, type: string, payload: Record<string, unknown>): Promise<T> {
-  const answer = await vtiAgent.ask(communityDid, type, payload)
-  const body = (answer?.body as { payload?: unknown } | undefined)?.payload
-  if (!body || typeof body !== 'object') throw new Error(`${type} returned no payload`)
-  return body as T
-}
-
-/**
- * Which tick a draw is for.
- *
- * Ticks are counted from the community's own epoch, which it does not publish
- * — so this counts from the phone's first draw and is only ever used to avoid
- * drawing twice in one tick. A community refuses a draw that is ahead of its
- * own tick, which is the authority that matters.
- */
-function currentTick(parameters: PublishedConfig, record: VetterRecord | undefined): number {
-  const tick = tickMillis(parameters.tickLength)
-  const last = record?.lastDrawAt ? Date.parse(record.lastDrawAt) : undefined
-  if (!tick || !last || !record?.lastTick) return record?.lastTick ? record.lastTick + 1 : 1
-  // No `Math.max(1, …)` here: within the same tick no time has elapsed, so the
-  // answer must be the tick already drawn — forcing it forward made the
-  // double-draw guard useless, which is what the test caught.
-  return record.lastTick + Math.floor((nowMs() - last) / tick)
-}
+export { tickMillis }
 
 /**
  * Which community a request belongs to, from the desk's own store.
@@ -159,8 +69,7 @@ async function communityOfRequest(agent: Agent, requestId: string): Promise<stri
 
 /** The community's hidden criterion as it serves it now, for the parameters and the current digest. */
 async function hiddenCriterionOf(agent: Agent, communityDid: string): Promise<VtiCriterion> {
-  const manifest = await vtiAgent.fetchManifest(communityDid, agent)
-  const criterion = manifest.criteria.find((c) => publishedOf(c) !== undefined)
+  const criterion = await currentHiddenCriterion(agent, communityDid)
   if (!criterion) {
     throw Object.assign(new Error('this community publishes no hidden criterion'), {
       code: 'keyring/hidden-vetter:notHiddenCommunity',
@@ -218,71 +127,11 @@ const seam: HiddenVetterSeam = {
   },
 
   async enrol(agent, communityDid, criterion) {
-    const parameters = publishedOf(criterion)
-    if (!parameters)
-      throw Object.assign(new Error('not a hidden criterion'), { code: 'keyring/hidden-vetter:noParameters' })
-    const label = parameters.vetterLabels[0]
-    if (!label) throw Object.assign(new Error('no vetter label published'), { code: PCS_VETTER_ERROR.rootLabelNotLive })
-
-    const client = await connected(agent)
-    const contextId = await contextOf(client)
-    const memberDid = client.managerDid
-    if (!memberDid)
-      throw Object.assign(new Error('no identity at the agent'), { code: 'keyring/hidden-vetter:noIdentity' })
-
-    // 1 — the agent blinds a request. Only it can: it holds the key.
-    const request = await client.pcsRootRequest({ contextId, community: communityDid, memberDid, parameters, label })
-    // 2 — the phone carries it to the community, which signs a pre-credential.
-    const answer = await askCommunity<{ label: string; preCredential: string }>(communityDid, VTC_VETTER_TASK.pcsRoot, {
-      label,
-      id: request.id,
-      request: request.request,
-    })
-    // 3 — back to the agent, which unblinds and keeps it. The phone never sees
-    // the credential, only the blinded halves.
-    await client.pcsRootAccept({
-      contextId,
-      community: communityDid,
-      parameters,
-      response: { label: answer.label, preCredential: answer.preCredential },
-    })
+    await enrolVetter(agent, communityDid, criterion)
   },
 
   async drawTokens(agent, communityDid, criterion) {
-    const parameters = publishedOf(criterion)
-    if (!parameters)
-      throw Object.assign(new Error('not a hidden criterion'), { code: 'keyring/hidden-vetter:noParameters' })
-    const label = parameters.tokenLabels[0]
-    const client = await connected(agent)
-    const contextId = await contextOf(client)
-
-    const record = await loadRecord(agent, communityDid)
-    const tick = currentTick(parameters, record)
-    if (record?.lastTick === tick) return { drawn: 0 }
-
-    const request = await client.pcsTokensRequest({
-      contextId,
-      community: communityDid,
-      parameters,
-      label,
-      tick,
-      // Never more than the published drip: the agent refuses countExceedsDrip,
-      // and asking for more than a community allows is not the phone's call.
-      count: parameters.dripPerTick,
-    })
-    const answer = await askCommunity<{ label: string; tick: number; preCredentials: string[] }>(
-      communityDid,
-      VTC_VETTER_TASK.pcsTokens,
-      { label, tick, requests: request.requests }
-    )
-    await client.pcsTokensAccept({
-      contextId,
-      community: communityDid,
-      parameters,
-      response: { label: answer.label, tick: answer.tick, preCredentials: answer.preCredentials },
-    })
-    await saveRecord(agent, { community: communityDid, lastDrawAt: nowIso(), lastTick: tick })
-    return { drawn: answer.preCredentials?.length ?? 0 }
+    return drawVetterTokens(agent, communityDid, criterion)
   },
 
   async requests(agent, communityDid): Promise<HiddenVetterRequest[]> {
