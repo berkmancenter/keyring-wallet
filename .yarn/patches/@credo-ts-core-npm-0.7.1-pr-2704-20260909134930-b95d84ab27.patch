@@ -638,6 +638,50 @@ index cd489f8100e902595bc798cedabba35b64678444..5a055369da591f2d892986793f6e855e
  			let serviceClass = serviceTypes[serviceJson.type] ?? DidDocumentService;
  			if (serviceJson.type === DidCommV2Service.type && "serviceEndpoint" in serviceJson && typeof serviceJson.serviceEndpoint === "string") serviceClass = LegacyDidCommV2Service;
  			return JsonTransformer.fromJSON(serviceJson, serviceClass);
+diff --git a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+index 8666aae8f74ea09b74d0f7d109b05ebd6b85d054..450c12a71361cea8783b6dccf0a8151a30336c03 100644
+--- a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
++++ b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+@@ -21,6 +21,7 @@ import { W3cCredentialRepository } from "../vc/repository/W3cCredentialRepositor
+ import { purposes } from "../vc/linked-data-proofs/adapters/jsonld-signatures-adapter.mjs";
+ import { SignatureSuiteRegistry } from "../vc/linked-data-proofs/SignatureSuiteRegistry.mjs";
+ import { W3cCredentialService } from "../vc/W3cCredentialService.mjs";
++import { CREDENTIALS_CONTEXT_V2_URL } from "../vc/constants.mjs";
+ import "../vc/index.mjs";
+ import { MdocDeviceResponse } from "../mdoc/MdocDeviceResponse.mjs";
+ import { MdocApi } from "../mdoc/MdocApi.mjs";
+@@ -125,13 +126,15 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 					typeSupportsSelectiveDisclosure: true,
+ 					type: `DataIntegrityProof.${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`
+ 				} : {};
++				const basePresentationPayload = this.getVc2BasePresentationPayload(presentationToCreate);
+ 				const verifiablePresentationResult = await this.pex.verifiablePresentationFrom(presentationDefinitionForSubject, credentialsForPresentation, this.getPresentationSignCallback(agentContext, presentationToCreate), {
+ 					proofOptions: {
+ 						challenge,
+ 						domain,
+ 						...extraProofOptions
+ 					},
+-					presentationSubmissionLocation
++					presentationSubmissionLocation,
++					...basePresentationPayload
+ 				});
+ 				verifiablePresentationResultsWithFormat.push({
+ 					verifiablePresentationResult,
+@@ -233,6 +236,14 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 		});
+ 		return validDescriptorFormat && credentialsAreSignedWithAnonCredsW3c;
+ 	}
++	getVc2BasePresentationPayload(presentationToCreate) {
++		if (presentationToCreate.claimFormat !== ClaimFormat.LdpVp) return void 0;
++		const allV2 = presentationToCreate.verifiableCredentials.every(({ credential }) => {
++			const firstCredential = credential.firstCredential;
++			return firstCredential.claimFormat === ClaimFormat.LdpVc && firstCredential.contexts?.[0] === CREDENTIALS_CONTEXT_V2_URL;
++		});
++		return allV2 ? { basePresentationPayload: { "@context": [CREDENTIALS_CONTEXT_V2_URL] } } : void 0;
++	}
+ 	getPresentationSignCallback(agentContext, presentationToCreate) {
+ 		return async (callBackParams) => {
+ 			const { presentation: presentationInput, options, presentationDefinition, presentationSubmission } = callBackParams;
 diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
 index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
 --- a/build/modules/vc/W3cCredentialServiceOptions.d.mts

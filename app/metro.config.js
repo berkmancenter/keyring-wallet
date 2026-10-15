@@ -15,6 +15,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/dtg-vocab')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
   // @bifold/trust-tasks: platform-neutral trust-task plumbing shared with the
@@ -29,6 +30,7 @@ const packageDirs = [
 const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/core',
   '@bifold/verifier',
+  '@bifold/dtg-vocab',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
   '@bifold/react-native-locality-peripheral',
