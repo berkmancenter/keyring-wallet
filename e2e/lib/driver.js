@@ -45,7 +45,26 @@ function portInUse(port) {
  * before wasting a full install+onboarding cycle on it.
  */
 async function checkMetroIsThisWorktree() {
-  if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
+  if (!(await portInUse(METRO_PORT))) {
+    // Metro's absence was assumed here to be "a self-evident failure later".
+    // It is not: a debug build with no packager installs, launches and renders
+    // nothing, and the run dies five minutes on with "onboarding did not
+    // finish within 5min (last action: )", which names neither Metro nor the
+    // bundle. `yarn android` makes this easy to hit, because it starts Metro as
+    // a child of the build and takes it down when the build command exits,
+    // leaving the `adb reverse` tunnel pointing at a dead port.
+    //
+    // A warning rather than a throw: a real-device build made with
+    // FORCE_BUNDLING=1 carries its JS and needs no packager, so an empty port
+    // is legitimate there.
+    console.warn(
+      `[e2e] nothing is listening on :${METRO_PORT}. A DEBUG build loads its JS ` +
+        `from Metro and will render nothing without it — run 'yarn start' in ` +
+        `this worktree's app/. Ignore this if the binary under test has its JS ` +
+        `bundled in (FORCE_BUNDLING=1, release builds).`
+    );
+    return;
+  }
   // The process listening on THIS port — not the first Metro in `ps`, which on
   // a shared machine can be another worktree's Metro on another port.
   let metroAppDir;
