@@ -61,7 +61,7 @@ import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/confi
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { deleteAcl, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, fromGrant, grantAfter, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -534,7 +534,23 @@ async function linkCase(driver, which, timing) {
     const later = which === "link-address-resume-later";
     const did = await addressCode();
     sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
-    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grant(did); }
+    // The case's own entry is found by its grant (fromGrant), not by the ACL's size: another leg linking a phone to the
+    // same runner meanwhile grew the ACL by two (1015-1852: kk's key landed mid-case, "ACL entries 2 → 4").
+    // The grant's entry, against the ACL just before it: by subject, or, when a live app's poll has rotated the key
+    // already, the entry new since then (grantAfter; `ambiguous` when another leg granted in the same moment).
+    let granted, ambiguous = false;
+    const grantNow = () => {
+      const pre = aclList() || [];
+      grant(did);
+      ({ entry: granted, ambiguous } = grantAfter(pre, aclList() || [], did));
+    };
+    const ownOf = (g) => {
+      const own = fromGrant(aclList() || [], g);
+      const how = own.length === 1 ? (own[0].subject === did ? " (not rotated yet)" : " (rotated)") : "";
+      // An ambiguous read is never a pass: the entry taken may be the other leg's.
+      return { ok: own.length === 1 && !ambiguous, text: `own entries ${own.length}${how}${ambiguous ? " · NOT JUDGED: the grant was read among several new keyring-admin entries (another leg granted on this runner at the same moment)" : ""}` };
+    };
+    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grantNow(); }
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
     await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
@@ -543,8 +559,9 @@ async function linkCase(driver, which, timing) {
     if (!later) {
       const intro = await existsTestId(driver, "AgentIntro", 60000);
       const after = aclSize();
+      const own = ownOf(granted);
       await screenshot(driver, which);
-      return row(intro && after === before + 1, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ACL entries ${before} → ${after}`);
+      return row(intro && own.ok, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ${own.text} · ACL entries ${before} → ${after}`);
     }
     const { continueLink: cont, resumed } = (await link.resume({ waitMs: 30000, required: false })).value;
     // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
@@ -552,12 +569,13 @@ async function linkCase(driver, which, timing) {
     const shown = await linkKey();
     const same = shown === did;
     console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
-    grant(did);
+    grantNow();
     if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await link.pressCheckGrant();
     const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
     const after = aclSize();
+    const own = ownOf(granted);
     await screenshot(driver, which);
-    return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
+    return row(cont && resumed && same && linked && own.ok, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ${own.text} · ACL entries ${before} → ${after}`);
   }
   if (which === "create-wait-no-lock") {
     // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5

@@ -112,6 +112,35 @@ export function ownedBy(entries, tempDid, heirs = []) {
 }
 
 /**
+ * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
+ * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
+ * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy
+ * and label, and no other grant shares all three. A manual grant breaks the createdBy chain (`ownedBy`), and another
+ * leg's phone linking to the same runner meanwhile looks the same by label; this tells them apart. Pure.
+ */
+export function fromGrant(entries, grant) {
+  if (!grant?.createdAt) return [];
+  return entries.filter((e) => e.createdAt === grant.createdAt && e.createdBy === grant.createdBy && e.label === grant.label);
+}
+
+/**
+ * The entry a grant of `did` made, read after the grant against `before` (the ACL just before it). By subject while
+ * the phone has not rotated; once it has (a live app's poll can rotate within a second of the grant), the entry new
+ * since `before` labelled like the grant. Several such entries mean another leg granted on the same runner in the same
+ * moment: the oldest is taken (ours was made first, right after `before`) and `ambiguous` says the read is not to be
+ * trusted for a pass. Pure.
+ */
+export function grantAfter(before, after, did, label = "keyring-admin") {
+  const bySubject = after.find((e) => e.subject === did);
+  if (bySubject) return { entry: bySubject, ambiguous: false };
+  const seen = new Set(before.map((e) => e.subject));
+  const fresh = after
+    .filter((e) => !seen.has(e.subject) && e.label === label)
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return { entry: fresh[0], ambiguous: fresh.length > 1 };
+}
+
+/**
  * Remove this run's entries. Never throws: a cleanup that fails is logged, and
  * must not turn a passing run red or hide the real failure of a failing one.
  */
