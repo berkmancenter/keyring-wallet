@@ -157,6 +157,51 @@ describe('every vetter payload validates against the registry schema it is built
     expect(validate(payload) || validate.errors).toBe(true)
   })
 
+  // The payloads above are what we send the AGENT. The object the phone carries
+  // to the COMMUNITY is a `$def` inside the same file, and nothing graded it —
+  // which is how a fake saying `blinded` (a member the schema forbids) sat in
+  // the adapter's suite while test-vtc refused the real thing on 2026-10-15
+  // with `doesn't match pattern "^z[1-9A-HJ-NP-Za-km-z]+$"`.
+  describe('the RootRequest the phone carries to the community', () => {
+    const rootRequestValidator = () => {
+      const ajv = new Ajv({ strict: false, allErrors: true, logger: false })
+      const schema = JSON.parse(readFileSync(join(SCHEMA_DIR, 'vta-pcs-root-request.payload.schema.json'), 'utf8')) as {
+        $defs: Record<string, unknown>
+      }
+      return ajv.compile(schema.$defs.RootRequest as object)
+    }
+
+    const wellFormed = {
+      label: 'vetter/2026-10',
+      id: 'z4FvpxtVbqEuVvYVCsPCWxpLJvJ9nnyLpAVfyFiM3Cxyz',
+      request: { proof: 'z2AaBbCcDdEeFfGgHhJjKkMmNnPpQqRrSsTtUuVvWwXxYyZz' },
+    }
+
+    it('accepts the shape we build', () => {
+      const validate = rootRequestValidator()
+      expect(validate(wellFormed) || validate.errors).toBe(true)
+    })
+
+    it('refuses an absent identifier, which is what we used to send', () => {
+      // `String(answer.id ?? '')` produced '' when the agent named that member
+      // something else, and '' fails the pattern — a missing field that read
+      // as an encoding fault. The client now refuses to send it at all.
+      const validate = rootRequestValidator()
+      expect(validate({ ...wellFormed, id: '' })).toBe(false)
+    })
+
+    it('refuses `blinded`, so the old fake could not pass again', () => {
+      const validate = rootRequestValidator()
+      expect(validate({ ...wellFormed, request: { blinded: wellFormed.request.proof } })).toBe(false)
+    })
+
+    it('refuses a proof that is not base58btc', () => {
+      const validate = rootRequestValidator()
+      // 0, O, I and l are not in the alphabet.
+      expect(validate({ ...wellFormed, request: { proof: 'z0OIl' } })).toBe(false)
+    })
+  })
+
   it('a payload missing a required member is refused, so these tests can fail', () => {
     const validate = validatorFor('vta-pcs-root-request.payload.schema.json')
     expect(validate({ contextId: CONTEXT, community: COMMUNITY, parameters })).toBe(false)

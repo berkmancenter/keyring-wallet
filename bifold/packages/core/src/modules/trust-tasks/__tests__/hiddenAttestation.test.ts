@@ -387,6 +387,21 @@ describe('the named flow, applied to a private way in', () => {
     })
   })
 
+  it('records that the admission came through a proof, for the membership that follows', async () => {
+    // The membership is filed later, by the inbox, and the credential says
+    // nothing about how the community decided — so the submission carries it.
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    const store = memoryStore({})
+    const saved: Record<string, unknown>[] = []
+    const community = { saveSubmission: async (x: Record<string, unknown>) => void saved.push(x) } as never
+    await new VtiApplicant({ config: { logger: logger() } } as never, PERSONA as never, store, community).submit(
+      manifest,
+      [],
+      'zQmDigest'
+    )
+    expect(saved.at(0)).toMatchObject({ via: 'vetting', privateVetting: true })
+  })
+
   it('reads too few vouches as progress at submit, and sends nothing', async () => {
     mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 0, minimum: 1 })
     mockExtensions.mockResolvedValueOnce('notEnoughYet' as never)

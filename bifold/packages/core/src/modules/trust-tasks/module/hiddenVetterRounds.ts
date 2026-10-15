@@ -26,7 +26,7 @@ import { PCS_VETTER_ERROR, VTC_VETTER_TASK, type PublishedConfig } from './pcsVe
 import { HIDDEN_VETTING_EXT, type VtiCriterion } from './joinManifest'
 import { parametersToSend } from './pcsVtaPayloads'
 import { vtaAgent } from './vtaAgent'
-import { vtiAgent } from './vtiAgent'
+import { VtiRefusal, vtiAgent } from './vtiAgent'
 
 /**
  * One clock for everything here.
@@ -94,17 +94,38 @@ export function tickMillis(tickLength: string | undefined): number | undefined {
   return ms > 0 ? ms : undefined
 }
 
+/** The framework's error family: a refusal arrives as a task of this type. */
+const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+
 /**
  * Ask the community one of its vetter tasks and read the answer's payload.
  *
  * `vtiAgent.ask` is the same path the join submission and the challenge take;
  * nothing new is needed for the community hop.
+ *
+ * A refusal, though, is a **task** rather than an absence: its body carries a
+ * payload too, so reading `payload` without looking at the type returns the
+ * refusal's own `{code, message, details}` as though it were the answer. On
+ * 2026-10-15 test-vtc refused a root request over an encoding, this returned
+ * the refusal as the response, and the next step handed the agent
+ * `label: undefined, preCredential: undefined` — which is why root-accept ran
+ * after the community had already said no. A refused step stops here.
  */
 async function askCommunity<T>(communityDid: string, type: string, payload: Record<string, unknown>): Promise<T> {
   const answer = await vtiAgent.ask(communityDid, type, payload)
-  const body = (answer?.body as { payload?: unknown } | undefined)?.payload
-  if (!body || typeof body !== 'object') throw new Error(`${type} returned no payload`)
-  return body as T
+  const body = answer?.body as { type?: unknown; payload?: unknown } | undefined
+  const answered = String(body?.type ?? answer?.type ?? '')
+  if (answered.startsWith(TASK_ERROR) || answered.includes('trust-task-error')) {
+    const refusal = (body?.payload ?? {}) as { code?: unknown; message?: unknown; details?: unknown }
+    throw new VtiRefusal(
+      String(refusal.code ?? 'refused'),
+      String(refusal.message ?? `${type} was refused`),
+      refusal.details
+    )
+  }
+  const got = body?.payload
+  if (!got || typeof got !== 'object') throw new Error(`${type} returned no payload`)
+  return got as T
 }
 
 /**

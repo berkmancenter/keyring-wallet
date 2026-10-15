@@ -329,6 +329,13 @@ async function keepMembershipCard(
             : new Date().toISOString(),
         validUntil: typeof item.credential.validUntil === 'string' ? (item.credential.validUntil as string) : undefined,
         via: existing?.via ?? via ?? 'unknown',
+        // How the community decided, from the submission that earned this
+        // card: a hidden-vetting proof counts vouches without naming anyone,
+        // and the credential says nothing about it (03's "Joined with private
+        // vetting" line).
+        ...((existing?.privateVetting ?? (await store.getSubmission?.(item.communityDid))?.privateVetting)
+          ? { privateVetting: true }
+          : {}),
       })
       if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
     } else {

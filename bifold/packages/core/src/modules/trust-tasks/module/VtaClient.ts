@@ -107,6 +107,12 @@ export const MINT_TIMEOUT_MS = 120_000
 /** How many keyed requests `VtaClient` remembers the attempts of. */
 const MAX_KEYED_REQUESTS_REMEMBERED = 32
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+
+/**
+ * multibase base58btc, as every PCS identifier and blinded half is published:
+ * `z` then the base58 alphabet, which excludes 0, O, I and l.
+ */
+const MULTIBASE_BASE58 = /^z[1-9A-HJ-NP-Za-km-z]+$/
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 
 /** The tasks this client speaks, by the URIs `vta-sdk` registers. */
@@ -2226,7 +2232,20 @@ export class VtaClient {
       payload as unknown as Record<string, unknown>
     )
     if (!answer?.request) throw new Error('vta/pcs/root-request returned no request')
-    return { id: String(answer.id ?? ''), request: answer.request }
+    // Never invent the id. `String(answer.id ?? '')` sent an empty string when
+    // the agent named that member something else, and the community then
+    // refused the request this builds — `id` must match
+    // `^z[1-9A-HJ-NP-Za-km-z]+$` — in a way that read as an encoding problem
+    // rather than as a missing field (test-vtc, 2026-10-15). A missing id is
+    // an answer we cannot use, so it is said here.
+    const id = typeof answer.id === 'string' ? answer.id : ''
+    if (!MULTIBASE_BASE58.test(id)) {
+      throw Object.assign(
+        new Error(`vta/pcs/root-request returned no usable identifier (${id === '' ? 'absent' : 'not base58btc'})`),
+        { code: 'vta/pcs/root-request:noIdentifier' }
+      )
+    }
+    return { id, request: answer.request }
   }
 
   /** `vta/pcs/root-accept/0.1`. The community's answer, for the agent to unblind and keep. */

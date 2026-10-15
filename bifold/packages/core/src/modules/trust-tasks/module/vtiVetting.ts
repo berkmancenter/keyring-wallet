@@ -2610,6 +2610,17 @@ export class VtiApplicant {
         code: 'vta/pcs/prove:noUsableAttestation',
       })
     }
+    // Say how this was decided, durably: the membership arrives later through
+    // the inbox and the credential itself does not record that the community
+    // counted a proof rather than named statements.
+    await recordSent(this.communityStore, {
+      communityDid,
+      personaDid: this.persona.did,
+      withInvitation: false,
+      via: 'vetting',
+      privateVetting: true,
+    }).catch(() => undefined)
+
     const verdict = await this.applyRecorded(manifest, {
       credentials: [],
       requirementsDigest,

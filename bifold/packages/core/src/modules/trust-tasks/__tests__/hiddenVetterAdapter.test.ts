@@ -17,7 +17,14 @@ const mockShowPcsVetter = jest.fn(async () => ({
   tokensFree: 2,
   tokensHeld: 3,
 }))
-const mockPcsRootRequest = jest.fn(async () => ({ id: 'z4Fvpxt', request: { blinded: 'z2Aaa' } }))
+// The shape the community really takes: `$defs/RootRequest` requires `proof`
+// and allows only `encoding` and `t0` beside it, each base58btc. An earlier
+// fake here said `blinded`, which the schema forbids — so this suite passed
+// while the shape we send a community was never checked against it.
+const mockPcsRootRequest = jest.fn(async () => ({
+  id: 'z4FvpxtVbqEuVvYVCsPCWxpLJvJ9nnyLpAVfyFiM3Cxyz',
+  request: { proof: 'z2AaBbCcDdEeFfGgHhJjKkMmNnPpQqRrSsTtUuVvWwXxYyZz' },
+}))
 const mockPcsRootAccept = jest.fn(async () => undefined)
 const mockPcsTokensRequest = jest.fn(async () => ({ requests: [{ r: 1 }, { r: 2 }, { r: 3 }] }))
 const mockPcsTokensAccept = jest.fn(async () => undefined)
