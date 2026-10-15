@@ -140,7 +140,9 @@ pnm() {
     case " $CI_REFUSED_SLUGS " in *" $slug "*) echo "pnm: refused on CI: $slug is a person's agent, never the CI identity's" >&2; return 2 ;; esac
     case " ${CI_ALLOWED_SLUGS:-} " in *" $slug "*) ;; *) echo "pnm: refused on CI: $slug is not one of the CI configuration's agents" >&2; return 2 ;; esac
   fi
-  PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" </dev/null 2>&1
+  # Each call is capped once it holds the slug's lock (pnm-locked PNM_CALL_TIMEOUT; the lock wait is not counted), so a
+  # call on a dying transport ends in minutes and the leg's cleanup still runs.
+  PNM_CALL_TIMEOUT=${GATE_PNM_CALL_TIMEOUT:-90} PNM_BIN=$PNM_BIN "$REPO/scripts/openvtc/pnm-locked" --vta "$slug" "$@" </dev/null 2>&1
 }
 
 # The community's admin calls (decide join requests, list and remove members).
