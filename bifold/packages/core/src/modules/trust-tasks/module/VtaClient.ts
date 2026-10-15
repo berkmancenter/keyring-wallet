@@ -63,6 +63,17 @@ import {
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona } from './VtiIdentityStore'
+import {
+  PCS_VETTER_TASK,
+  type AttestPayload,
+  type RootAcceptPayload,
+  type RootRequestPayload,
+  type TokensAbandonPayload,
+  type TokensAcceptPayload,
+  type TokensRequestPayload,
+  type VetterShowPayload,
+  type VetterStanding,
+} from './pcsVetterTasks'
 import { VtiRefusal, isHiddenVettingType } from './vtiAgent'
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
 import { isDigestMultibase } from './vettingShape'
@@ -2159,6 +2170,74 @@ export class VtaClient {
     const hiddenVetting = answer?.hiddenVetting
     if (!hiddenVetting) throw new Error('vta/pcs/prove returned no hiddenVetting object')
     return hiddenVetting
+  }
+
+  /**
+   * The vetter's seven, in the order a vetter meets them.
+   *
+   * Enrolling and drawing are each three steps across two parties — the agent
+   * blinds, the community signs, the agent unblinds — because the agent holds
+   * the key and the community holds the authority. The phone never sees an
+   * unblinded credential.
+   */
+
+  /** `vta/pcs/vetter/show/0.1`. A read: labels, token counts, draws in flight. */
+  async showPcsVetter(payload: VetterShowPayload): Promise<VetterStanding | undefined> {
+    const answer = await this.task<{ vetter?: VetterStanding }>(
+      PCS_VETTER_TASK.vetterShow,
+      payload as unknown as Record<string, unknown>
+    )
+    return answer?.vetter
+  }
+
+  /** `vta/pcs/root-request/0.1`. The blinded enrolment request, for the phone to carry. */
+  async pcsRootRequest(payload: RootRequestPayload): Promise<{ id: string; request: unknown }> {
+    const answer = await this.task<{ id?: string; request?: unknown }>(
+      PCS_VETTER_TASK.rootRequest,
+      payload as unknown as Record<string, unknown>
+    )
+    if (!answer?.request) throw new Error('vta/pcs/root-request returned no request')
+    return { id: String(answer.id ?? ''), request: answer.request }
+  }
+
+  /** `vta/pcs/root-accept/0.1`. The community's answer, for the agent to unblind and keep. */
+  async pcsRootAccept(payload: RootAcceptPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.rootAccept, payload as unknown as Record<string, unknown>)
+  }
+
+  /** `vta/pcs/tokens/request/0.1`. One blinded request per token of this tick's drip. */
+  async pcsTokensRequest(payload: TokensRequestPayload): Promise<{ requests: unknown[] }> {
+    const answer = await this.task<{ requests?: unknown[] }>(
+      PCS_VETTER_TASK.tokensRequest,
+      payload as unknown as Record<string, unknown>
+    )
+    if (!Array.isArray(answer?.requests)) throw new Error('vta/pcs/tokens/request returned no requests')
+    return { requests: answer.requests }
+  }
+
+  /** `vta/pcs/tokens/accept/0.1`. The drawn tokens, for the agent to unblind and keep. */
+  async pcsTokensAccept(payload: TokensAcceptPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.tokensAccept, payload as unknown as Record<string, unknown>)
+  }
+
+  /** `vta/pcs/tokens/abandon/0.1`. Give up a draw, so the next is not refused as already in flight. */
+  async pcsTokensAbandon(payload: TokensAbandonPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.tokensAbandon, payload as unknown as Record<string, unknown>)
+  }
+
+  /**
+   * `vta/pcs/attest/0.1`. The agent spends one token and builds the
+   * attestation, which names no vetter — the point of the construction.
+   * Ninety seconds, as `prove` has: it is the same arithmetic.
+   */
+  async pcsAttest(payload: AttestPayload): Promise<Record<string, unknown>> {
+    const answer = await this.task<{ attestation?: Record<string, unknown> }>(
+      PCS_VETTER_TASK.attest,
+      payload as unknown as Record<string, unknown>,
+      90000
+    )
+    if (!answer?.attestation) throw new Error('vta/pcs/attest returned no attestation')
+    return answer.attestation
   }
 
   /**
