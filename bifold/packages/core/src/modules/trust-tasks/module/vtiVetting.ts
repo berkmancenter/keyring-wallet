@@ -1715,6 +1715,15 @@ export class VtiVetterDesk {
         code: 'vtiVetting/attest:notHiddenCommunity',
       })
     }
+    // What stopped the last round, said in its own words rather than as
+    // whatever the attest then fails with. A vetter whose engine is bound to
+    // the wrong DID cannot draw, so telling them "draw tokens first" would
+    // send them to a desk that cannot help and round in a circle (32).
+    const blocked = this.hiddenVetterBlockedBy
+    if (blocked) {
+      throw Object.assign(new Error(`vtiVetting: the private vetting round is blocked (${blocked})`), { code: blocked })
+    }
+
     const client = await connectedVetterClient(this.agent)
     const contextId = await vetterContextOf(client)
 
