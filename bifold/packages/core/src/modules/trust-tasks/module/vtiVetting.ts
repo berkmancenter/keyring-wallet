@@ -1662,14 +1662,20 @@ export class VtiVetterDesk {
    * Answer a private request: a PCS attestation built by the agent, spending
    * one of this vetter's tokens and naming nobody.
    *
-   * Nothing here is invented. `method` is the session's own — the ceremony
-   * this vetter actually ran, agreed when the session opened — and not the
-   * applicant's `preferredMethod`, which is optional and merely what they
-   * asked for (his 2026-10-15 request carried none at all, so keying on it
-   * would have refused the attestation outright). The declared relationship
-   * is the vetter's own answer and has no default: a request without one is
-   * refused rather than attested on a guess, because it is a member of the
-   * attestation the community verifies.
+   * Nothing here is invented, and `method` comes from the **session** rather
+   * than the applicant's `preferredMethod` for a reason worth stating: the
+   * meta says what the vetter *did*, and the community verifies it as such.
+   * `preferredMethod` is only what the applicant asked for, so an attestation
+   * reading `inPerson` for a session the vetter actually ran over video would
+   * be a false statement made under that vetter's token (32's argument, which
+   * is better than the one this comment first gave — that the session was
+   * merely the more reliable source). It is also optional, and his 2026-10-15
+   * request carried none, so keying on it refused every attestation until a
+   * test caught it.
+   *
+   * The declared relationship is the vetter's own answer and has no default: a
+   * request without one is refused rather than attested on a guess, because it
+   * too is a member of the attestation the community verifies.
    */
   private async attestPrivately(
     // `attest` has already refused a request with no card or session, so the
