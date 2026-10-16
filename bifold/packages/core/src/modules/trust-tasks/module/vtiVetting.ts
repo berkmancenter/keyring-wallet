@@ -1659,24 +1659,6 @@ export class VtiVetterDesk {
   }
 
   /**
-   * Vouch privately for a hidden-vetting request: the same checks as `attest`,
-   * then the ten `meta` members the agent binds into the attestation, then the
-   * attestation itself to the applicant as `vetting/attestation/0.1`.
-   *
-   * `build` is the agent's half (`vta/pcs/attest`, which holds the key and
-   * spends a token); the caller supplies it with the community's parameters
-   * and its context. What it returns goes to the applicant as it came, as a
-   * plain message whose body is the attestation, threaded on the session —
-   * openvtc's `wire::hidden_attestation`, and what `VtiApplicant` reads.
-   *
-   * Nothing names this vetter to the community: the attestation carries no
-   * issuer, and the desk keeps no statement id for it.
-   *
-   * `validFrom` and `validUntil` are DATES (`hidden-vetting.schema.json`
-   * `StatementMeta`: an exact time would let a community line an attestation
-   * up with a vetter's activity), both from one reading of `now`.
-   */
-  /**
    * Answer a private request: a PCS attestation built by the agent, spending
    * one of this vetter's tokens and naming nobody.
    *
@@ -1728,6 +1710,24 @@ export class VtiVetterDesk {
     )
   }
 
+  /**
+   * Vouch privately for a hidden-vetting request: the same checks as `attest`,
+   * then the ten `meta` members the agent binds into the attestation, then the
+   * attestation itself to the applicant as `vetting/attestation/0.1`.
+   *
+   * `build` is the agent's half (`vta/pcs/attest`, which holds the key and
+   * spends a token); the caller supplies it with the community's parameters
+   * and its context. What it returns goes to the applicant as it came, as a
+   * plain message whose body is the attestation, threaded on the session —
+   * openvtc's `wire::hidden_attestation`, and what `VtiApplicant` reads.
+   *
+   * Nothing names this vetter to the community: the attestation carries no
+   * issuer, and the desk keeps no statement id for it.
+   *
+   * `validFrom` and `validUntil` are DATES (`hidden-vetting.schema.json`
+   * `StatementMeta`: an exact time would let a community line an attestation
+   * up with a vetter's activity), both from one reading of `now`.
+   */
   async attestHidden(
     requestId: string,
     statement: {
