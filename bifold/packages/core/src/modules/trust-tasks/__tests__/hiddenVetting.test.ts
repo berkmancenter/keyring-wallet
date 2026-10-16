@@ -12,11 +12,9 @@ import {
   forgetHiddenApplication,
   hiddenProgress,
   hiddenSubmissionExtensions,
-  hiddenVetting,
   hiddenVettingUsable,
   loadHiddenVettingRecord,
   refreshHiddenApplication,
-  registerHiddenVetting,
   startHiddenApplication,
   takeHiddenAttestation,
 } from '../module/hiddenVetting'

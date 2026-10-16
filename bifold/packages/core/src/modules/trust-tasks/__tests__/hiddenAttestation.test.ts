@@ -323,6 +323,41 @@ describe('the named flow, applied to a private way in', () => {
     ],
   } as never
 
+  // His 2026-10-15 run: the vetter was on an older build, sent a NAMED
+  // statement for a private application, and the applicant's screen sat
+  // unchanged. The statement passed every named check (its subject IS the join
+  // DID), so it was accepted and counted for nothing.
+  it('refuses a named statement in words, rather than keeping one that cannot count', async () => {
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 0, minimum: 1 })
+    const store = memoryStore({ requests: [{ vetterDid: VETTER, status: 'session', sentAt: 't' }] } as never)
+    const applicant = applicantWith(store)
+    await deliver(applicant, {
+      id: 'm-2',
+      type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1',
+      from: VETTER,
+      to: [PERSONA.did],
+      thid: 'session-1',
+      body: {
+        credential_response: {
+          credential: {
+            id: 'urn:uuid:statement-1',
+            type: ['VerifiableCredential', 'StatementCredential'],
+            issuer: VETTER,
+            credentialSubject: {
+              id: PERSONA.did,
+              predicate: 'https://registry.trustoverip.org/dtg/vsc/vetted/1',
+              object: { value: { method: 'inPerson', claimsVerified: ['name.legal'] } },
+            },
+          },
+        },
+      },
+    })
+    const kept = await store.getApplication(COMMUNITY)
+    expect(kept?.requests?.[0]).toMatchObject({ status: 'statementRefused', statementRefusal: 'namedForPrivate' })
+    // And the agent is never asked to verify a named statement.
+    expect(mockTake).not.toHaveBeenCalled()
+  })
+
   it('creates the agent-side application in the same tap as the named one', async () => {
     mockLoadRecord.mockResolvedValue(undefined)
     const store = memoryStore()

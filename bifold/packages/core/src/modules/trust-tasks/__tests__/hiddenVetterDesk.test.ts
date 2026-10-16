@@ -26,6 +26,40 @@ jest.mock('../module/vtiAgent', () => ({
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// What `attest` reaches for when it dispatches a private request: the vetter's
+// client and the community's current hidden criterion.
+const mockPcsAttest = jest.fn(async () => ({
+  suite: 'ps-ddh-bls12381',
+  attestation: 'zAtt',
+  meta: {},
+  token: { label: 'l', serial: 'z1', shown: 'z2' },
+}))
+jest.mock('../module/hiddenVetterRounds', () => ({
+  ...jest.requireActual('../module/hiddenVetterRounds'),
+  connectedVetterClient: async () => ({ pcsAttest: mockPcsAttest }),
+  vetterContextOf: async () => 'ctx-1',
+  // A complete published config: `parametersToSend` refuses a partial one, so
+  // a thin fixture here would pass for the wrong reason.
+  currentHiddenCriterion: async () => ({
+    id: 'Vetted-Member',
+    requirementsDigest: 'zQmDigest',
+    vetting: {
+      minStatements: 1,
+      ext: {
+        'org.openvtc.hidden-vetting': {
+          suite: 'ps-ddh-bls12381',
+          helperKey: 'z6MkhelperKey',
+          tokenKey: 'z6MktokenKey',
+          vetterLabels: ['vetter/2026-10'],
+          tokenLabels: ['token/2026-10'],
+          dripPerTick: 3,
+          tickLength: 'P3D',
+          events: [],
+        },
+      },
+    },
+  }),
+}))
 jest.mock('@bifold/trust-tasks', () => {
   const actual = jest.requireActual('@bifold/trust-tasks')
   return { ...actual, signDocumentProof: jest.fn(async (_a: unknown, doc: unknown) => doc) }
@@ -224,6 +258,51 @@ describe('vouching privately', () => {
       '/$defs/StatementMeta'
     )
     expect(statementMeta({ ...meta, tokenLabel: 'token/2026-10', tokenSerial: 'zBKHjA2kQWBpQPgw' })).toBe(true)
+  })
+
+  // Build 258's defect, and the only test that would have caught it: the
+  // screens call ONE method for both kinds of request, and on 258 that method
+  // had no dispatch, so a private request was answered with a named statement.
+  // 03's tests proved the screen calls `attest`; 32's proved `attestHidden`
+  // works; nothing proved the call arrived there.
+  describe('the one method the screens call', () => {
+    const named = { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
+    beforeEach(() => mockPcsAttest.mockClear())
+
+    it('sends a private request down the private path, never the named one', async () => {
+      const shape = jest.spyOn(VtiVetterDesk.prototype as never, 'statementShapeFor' as never)
+      const { desk: d, rows } = desk([row({})])
+      await d.attest('r-1', { ...named, declaredRelationship: 'none' })
+      // The agent built a PCS attestation...
+      expect(mockPcsAttest).toHaveBeenCalledTimes(1)
+      expect(mockPcsAttest.mock.calls[0]?.[0]).toMatchObject({
+        community: COMMUNITY,
+        applicantId: PCS_ID,
+        contextId: 'ctx-1',
+      })
+      // ...and the named writer was never reached.
+      expect(shape).not.toHaveBeenCalled()
+      expect(rows().find((r) => r.requestId === 'r-1')?.status).toBe('attested')
+      shape.mockRestore()
+    })
+
+    it('refuses rather than guess how the vetter knows the person', async () => {
+      // `declaredRelationship` is a human judgement and a member of the
+      // attestation the community verifies, so a missing one is refused.
+      const { desk: d } = desk([row({})])
+      const code = await d
+        .attest('r-1', named)
+        .then(() => undefined)
+        .catch((e: unknown) => (e as { code?: string }).code)
+      expect(code).toBe('vtiVetting/attest:noDeclaredRelationship')
+      expect(mockPcsAttest).not.toHaveBeenCalled()
+    })
+
+    it('leaves a named request on the named path', async () => {
+      const { desk: d } = desk([row({ hiddenApplicantId: undefined })])
+      await d.attest('r-1', named).catch(() => undefined)
+      expect(mockPcsAttest).not.toHaveBeenCalled()
+    })
   })
 
   it('takes both dates from one clock, as dates and never as times', async () => {

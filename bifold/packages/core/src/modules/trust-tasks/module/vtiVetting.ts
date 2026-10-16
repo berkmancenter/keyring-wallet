@@ -66,7 +66,16 @@ import {
   type HiddenVettingRecord,
 } from './hiddenVetting'
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
-import { currentHiddenCriterion, drawVetterTokens, enrolVetter, isEnrolled, nowMs } from './hiddenVetterRounds'
+import {
+  connectedVetterClient,
+  currentHiddenCriterion,
+  drawVetterTokens,
+  enrolVetter,
+  isEnrolled,
+  nowMs,
+  publishedOf as vetterPublishedOf,
+  vetterContextOf,
+} from './hiddenVetterRounds'
 import { vtaAgent } from './vtaAgent'
 import type { VtaClient } from './VtaClient'
 import {
@@ -271,6 +280,14 @@ export interface VettingApplicationRequest {
     | 'commitment'
     /** No card was sent on the session it names: openvtc `on_statement` (applicant.rs:1104-1106). */
     | 'noCard'
+    /**
+     * A **named** statement arrived for an application being vetted privately:
+     * the vetter's Keyring is too old to vouch privately. The community counts
+     * a proof for a hidden criterion and never statements, so this one can
+     * never count — and saying nothing left the person watching a screen that
+     * would not change (his 2026-10-15 run, where the vetter was on 256).
+     */
+    | 'namedForPrivate'
     /**
      * In the shape from before DTG Credentials v1, received after
      * LEGACY_DTG_SHAPE_UNTIL: no longer read (228).
@@ -1493,6 +1510,17 @@ export class VtiVetterDesk {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk?.card || !desk.session) throw new Error('vtiVetting: no card to attest')
     if (!decision.livenessConfirmed) throw new Error('vtiVetting: confirm the match code with the person present first')
+
+    // A request that asked to be vetted privately never takes the named path.
+    //
+    // The dispatch belongs here and nowhere else: the screens call this one
+    // method for both kinds, so a check in a screen would have to be repeated
+    // in every screen that ever attests. Build 258 shipped without it, and a
+    // vetter answering a private request wrote a named statement — which the
+    // community discards (it counts a proof for a hidden criterion, never
+    // statements), so the vouch silently did not count, and the statement
+    // named the vetter to the applicant in the process.
+    if (desk.hiddenApplicantId) return this.attestPrivately({ ...desk, session: desk.session }, decision)
     const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
     for (const c of decision.claimsVerified)
       if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
@@ -1648,6 +1676,58 @@ export class VtiVetterDesk {
    * `StatementMeta`: an exact time would let a community line an attestation
    * up with a vetter's activity), both from one reading of `now`.
    */
+  /**
+   * Answer a private request: a PCS attestation built by the agent, spending
+   * one of this vetter's tokens and naming nobody.
+   *
+   * Nothing here is invented. `method` is the session's own — the ceremony
+   * this vetter actually ran, agreed when the session opened — and not the
+   * applicant's `preferredMethod`, which is optional and merely what they
+   * asked for (his 2026-10-15 request carried none at all, so keying on it
+   * would have refused the attestation outright). The declared relationship
+   * is the vetter's own answer and has no default: a request without one is
+   * refused rather than attested on a guess, because it is a member of the
+   * attestation the community verifies.
+   */
+  private async attestPrivately(
+    // `attest` has already refused a request with no card or session, so the
+    // session is present by the time this is reached.
+    desk: VettingDeskRequest & { session: NonNullable<VettingDeskRequest['session']> },
+    decision: {
+      claimsVerified: string[]
+      livenessConfirmed: boolean
+      declaredRelationship?: string
+      validDays?: number
+    }
+  ): Promise<VettingDeskRequest> {
+    if (!decision.declaredRelationship) {
+      throw Object.assign(new Error('vtiVetting: a private attestation needs how the vetter knows this person'), {
+        code: 'vtiVetting/attest:noDeclaredRelationship',
+      })
+    }
+    const criterion = await currentHiddenCriterion(this.agent, desk.communityDid)
+    const parameters = criterion && vetterPublishedOf(criterion)
+    if (!parameters) {
+      throw Object.assign(new Error('vtiVetting: this community publishes no private vetting to attest under'), {
+        code: 'vtiVetting/attest:notHiddenCommunity',
+      })
+    }
+    const client = await connectedVetterClient(this.agent)
+    const contextId = await vetterContextOf(client)
+    return this.attestHidden(
+      desk.requestId,
+      {
+        method: desk.session.method,
+        claimsVerified: decision.claimsVerified,
+        livenessConfirmed: decision.livenessConfirmed,
+        declaredRelationship: decision.declaredRelationship as HiddenAttestMeta['declaredRelationship'],
+        ...(decision.validDays !== undefined ? { validDays: decision.validDays } : {}),
+      },
+      async ({ applicantId, meta }) =>
+        client.pcsAttest({ contextId, community: desk.communityDid, parameters, applicantId, meta })
+    )
+  }
+
   async attestHidden(
     requestId: string,
     statement: {
@@ -2358,6 +2438,20 @@ export class VtiApplicant {
     const request = application.requests.find((r) => r.vetterDid === sender)
     if (!request) return
 
+    // This application is being vetted privately, so a named statement cannot
+    // count for it however well formed it is: the community counts the agent's
+    // proof and discards statements for a hidden criterion. Refused with a
+    // reason the screen can word, instead of being kept where only the named
+    // checklist would ever look at it.
+    if (await this.hiddenApplicationForDisplay()) {
+      this.agent.config?.logger?.info?.(
+        `[hidden-vetting] a named statement arrived for a private application; refused as namedForPrivate`
+      )
+      await this.update(sender, { status: 'statementRefused', statementRefusal: 'namedForPrivate' })
+      this.onChange?.()
+      return
+    }
+
     const refuse = async (statementRefusal: NonNullable<VettingApplicationRequest['statementRefusal']>) => {
       // One already kept is never replaced by a refusal of a copy.
       if (request.status !== 'attested') await this.update(sender, { status: 'statementRefused', statementRefusal })
@@ -2503,10 +2597,17 @@ export class VtiApplicant {
     // manifest, not by reading the record first: a named community must not
     // pay a store read, or be broken by one, for a question that does not
     // apply to it.
+    // "Is there a private way in for this application", not "does its digest
+    // still match". A community that rotates its criterion mid-flow changes
+    // the digest, and keying on the match meant a rotation silently returned
+    // this to the named path — sending the statements it had gathered, with
+    // the vetters' names, to a community whose way in is private. The digest
+    // still matters, but it is the proof's business, not the routing's: the
+    // agent binds to the digest the application gathered for and the community
+    // refuses a proof bound to a stale one, which is a refusal in words rather
+    // than a disclosure.
     const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
-    const forPrivateWay =
-      privateCriterion !== undefined &&
-      (!requirementsDigest || privateCriterion.requirementsDigest === requirementsDigest)
+    const forPrivateWay = privateCriterion !== undefined
     if (forPrivateWay) {
       // Read strictly here, and refuse if there is nothing to prove from. A
       // private criterion with no agent-side application means `start` could
