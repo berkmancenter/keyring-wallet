@@ -109,7 +109,15 @@ const seam: HiddenVettingSeam = {
     }
     // One implementation, shared with `VtiApplicant.start`, so the application
     // the named flow creates and the one this route creates cannot drift.
-    const stored = await beginHiddenApplication(agent, found.client, communityDid, criterion)
+    // The persona this phone joins as, which is what the proof binds to — not
+    // the phone's identity at its own agent.
+    const persona = await new GenericRecordsIdentityStore(agent).getPersona(communityDid)
+    if (!persona) {
+      throw Object.assign(new Error('no persona for this community'), {
+        code: 'keyring/hidden-vetting/createApplication:noPersona',
+      })
+    }
+    const stored = await beginHiddenApplication(agent, found.client, communityDid, criterion, persona.did)
     return toSeamRecord(stored, criterion.id)
   },
 

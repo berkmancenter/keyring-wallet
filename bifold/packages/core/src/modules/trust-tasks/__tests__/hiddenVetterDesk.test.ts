@@ -286,6 +286,19 @@ describe('vouching privately', () => {
       shape.mockRestore()
     })
 
+    it('says what blocked the round, rather than sending them to a desk that cannot help', async () => {
+      // A vetter whose engine is bound to the wrong DID cannot draw. Telling
+      // them "draw tokens first" would send them round in a circle (32).
+      const { desk: d } = desk([row({})])
+      ;(d as unknown as { hiddenRoundFailure?: string }).hiddenRoundFailure = 'keyring/hidden-vetter:memberMismatch'
+      const code = await d
+        .attest('r-1', { ...named, declaredRelationship: 'none' })
+        .then(() => undefined)
+        .catch((e: unknown) => (e as { code?: string }).code)
+      expect(code).toBe('keyring/hidden-vetter:memberMismatch')
+      expect(mockPcsAttest).not.toHaveBeenCalled()
+    })
+
     it('refuses rather than guess how the vetter knows the person', async () => {
       // `declaredRelationship` is a human judgement and a member of the
       // attestation the community verifies, so a missing one is refused.

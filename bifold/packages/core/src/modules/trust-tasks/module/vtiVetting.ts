@@ -1053,6 +1053,8 @@ export class VtiVetterDesk {
   private hiddenReadyAt?: number
   /** The round running now, so a second trigger joins it rather than starting another. */
   private hiddenReadying?: Promise<void>
+  /** The last round's failure code; see `hiddenVetterBlockedBy`. */
+  private hiddenRoundFailure?: string
 
   /**
    * Keep this vetter ready to vouch privately, without anyone asking: when the
@@ -1086,6 +1088,7 @@ export class VtiVetterDesk {
     this.hiddenReadying = this.readyHiddenVetter(trigger)
       .catch((e: unknown) => {
         const code = (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e)
+        this.hiddenRoundFailure = code ? String(code) : 'keyring/hidden-vetter:roundFailed'
         logger?.warn?.(
           `[hidden-vetting] vetter round (${trigger}) did not finish${code ? ` (${String(code)})` : ''}: ${
             e instanceof Error ? e.message : String(e)
@@ -1096,6 +1099,17 @@ export class VtiVetterDesk {
         this.hiddenReadying = undefined
       })
     return this.hiddenReadying
+  }
+
+  /**
+   * Why the last round could not make this vetter ready, as a code, or
+   * undefined after a round that finished. The round runs unseen, so a screen
+   * that cannot answer a private request reads this to say the real reason —
+   * an engine bound to the wrong DID (`memberMismatch`) is not "draw tokens
+   * first", and saying so would send the person round in a circle.
+   */
+  get hiddenVetterBlockedBy(): string | undefined {
+    return this.hiddenRoundFailure
   }
 
   private async readyHiddenVetter(trigger: 'listen' | 'request'): Promise<void> {
@@ -1124,6 +1138,7 @@ export class VtiVetterDesk {
       logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
     }
     const { drawn } = await drawVetterTokens(this.agent, community, criterion)
+    this.hiddenRoundFailure = undefined
     logger?.info?.(
       `[hidden-vetting] vetter round (${trigger}): ${drawn ? `drew ${drawn} token(s)` : 'no draw due this tick'}`
     )
@@ -1700,8 +1715,24 @@ export class VtiVetterDesk {
         code: 'vtiVetting/attest:notHiddenCommunity',
       })
     }
+    // What stopped the last round, said in its own words rather than as
+    // whatever the attest then fails with. A vetter whose engine is bound to
+    // the wrong DID cannot draw, so telling them "draw tokens first" would
+    // send them to a desk that cannot help and round in a circle (32).
+    const blocked = this.hiddenVetterBlockedBy
+    if (blocked) {
+      throw Object.assign(new Error(`vtiVetting: the private vetting round is blocked (${blocked})`), { code: blocked })
+    }
+
     const client = await connectedVetterClient(this.agent)
     const contextId = await vetterContextOf(client)
+
+    // Every way out of here is a refusal in words. A private request must
+    // never be answered with a named statement because something private was
+    // unavailable — no token, no enrolment, an agent that cannot be reached —
+    // since that names this vetter for a vouch the community will discard
+    // anyway. `pcsAttest` refuses with `attest:noToken` when there is nothing
+    // to spend, and that reaches the screen as itself (27, after 259).
     return this.attestHidden(
       desk.requestId,
       {
@@ -1897,7 +1928,14 @@ export class VtiApplicant {
     const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
     if (privateCriterion && (!digest || privateCriterion.requirementsDigest === digest)) {
       try {
-        await beginHiddenApplication(this.agent, await this.pcsClient(), this.persona.communityDid, privateCriterion)
+        await beginHiddenApplication(
+          this.agent,
+          await this.pcsClient(),
+          this.persona.communityDid,
+          privateCriterion,
+          // The persona: what this phone joins as, and what the proof binds to.
+          this.persona.did
+        )
       } catch (error) {
         this.agent.config?.logger?.info?.(
           `[hidden-vetting] no agent-side application for ${privateCriterion.id}: ${String(error)}`

@@ -35,13 +35,17 @@ jest.mock('../module/vtaAgent', () => {
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
   vtiAgent: {
+    // The persona the community requests are signed as — deliberately not the
+    // phone's identity at its VTA (`did:peer:2.Ephone` above), which is the
+    // confusion build 259 shipped.
+    did: 'did:webvh:QmPersonaScid:vta.example:prsn-wq42',
     ask: (...a: unknown[]) => mockAsk(...a),
     fetchManifest: (...a: unknown[]) => mockFetchManifest(...a),
   },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
-import { enrolVetter, drawVetterTokens } from '../module/hiddenVetterRounds'
+import { enrolVetter, drawVetterTokens, isEnrolled } from '../module/hiddenVetterRounds'
 import { PCS_VETTER_TASK, VTC_VETTER_TASK } from '../module/pcsVetterTasks'
 import { VtiRefusal } from '../module/vtiAgent'
 
@@ -63,6 +67,8 @@ const TOKENS_ACCEPT = graded('vta-pcs-tokens-accept.payload.schema.json')
 const TOKENS_ABANDON = graded('vta-pcs-tokens-abandon.payload.schema.json')
 
 const COMMUNITY = 'did:webvh:QmCommScid:vtc.example:tvtc-wq41'
+const SIGNER = 'did:webvh:QmPersonaScid:vta.example:prsn-wq42'
+const MANAGER = 'did:peer:2.Ephone'
 const criterion = {
   id: 'Vetted-Member',
   requirementsDigest: 'zQmPublished',
@@ -146,6 +152,14 @@ describe('the stubbed agent answers as the registry says an agent does', () => {
   })
 })
 
+/** The agent answers `root-request` with `answer`, and everything else as before. */
+const rootRequestAnswers = (answer: unknown) => {
+  const before = mockTask.getMockImplementation()
+  mockTask.mockImplementation(async (type: string, ...rest: unknown[]) =>
+    type === PCS_VETTER_TASK.rootRequest ? answer : before?.(type, ...rest)
+  )
+}
+
 describe('enrolling', () => {
   beforeEach(() =>
     mockAsk.mockResolvedValue(
@@ -188,13 +202,13 @@ describe('enrolling', () => {
   })
 
   it('sends the community nothing when the agent’s answer carries no request', async () => {
-    mockTask.mockResolvedValueOnce({ id: 'z3VetterPcsKey' })
+    rootRequestAnswers({ id: 'z3VetterPcsKey' })
     await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toThrow('returned no request')
     expect(mockAsk).not.toHaveBeenCalled()
   })
 
   it('sends the community nothing when the agent’s id is not base58btc, and says so on the phone', async () => {
-    mockTask.mockResolvedValueOnce({ request: { ...rootRequestAnswer.request, id: 'z0lIO' } })
+    rootRequestAnswers({ request: { ...rootRequestAnswer.request, id: 'z0lIO' } })
     await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
       code: 'vta/pcs/root-request:noIdentifier',
     })
@@ -232,5 +246,95 @@ describe('drawing', () => {
       answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 1, preCredentials: ['zCPre', 'zDPre'] })
     )
     await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
+  })
+})
+
+describe('the member DID the agent binds is the DID that signs to the community', () => {
+  /** `vta/pcs/vetter/show` answering with an engine bound to `memberDid`. */
+  const engineBoundTo = (memberDid: string, extra: Record<string, unknown> = {}) => ({
+    vetter: {
+      contextId: 'vta',
+      community: COMMUNITY,
+      memberDid,
+      suite: 'ps-ddh-bls12381',
+      id: rootRequestAnswer.request.id,
+      enrolledLabels: ['vetter/2026-10'],
+      pendingLabels: [],
+      tokensFree: 0,
+      tokensHeld: 0,
+      drawsInFlight: [],
+      attested: 0,
+      ...extra,
+    },
+  })
+  const answering = (show: unknown, rootRequest: unknown = rootRequestAnswer) =>
+    mockTask.mockImplementation(async (type: string) => {
+      if (type === PCS_VETTER_TASK.vetterShow) return typeof show === 'function' ? show() : show
+      if (type === PCS_VETTER_TASK.rootRequest) return rootRequest
+      if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestAnswer
+      return {}
+    })
+
+  it('enrol binds the persona that signs pcs-root and pcs-tokens, never the phone’s identity at its VTA', async () => {
+    mockAsk.mockResolvedValue(
+      answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+    )
+    await enrolVetter(agent(), COMMUNITY, criterion)
+    expect(sentToAgent(PCS_VETTER_TASK.rootRequest).memberDid).toBe(SIGNER)
+    expect(sentToAgent(PCS_VETTER_TASK.rootRequest).memberDid).not.toBe(MANAGER)
+  })
+
+  it('an engine bound to another DID is not enrolled, so the desk re-enrols it', async () => {
+    answering(engineBoundTo(MANAGER))
+    await expect(isEnrolled(agent(), COMMUNITY, criterion)).resolves.toBe(false)
+    answering(engineBoundTo(SIGNER))
+    await expect(isEnrolled(agent(), COMMUNITY, criterion)).resolves.toBe(true)
+  })
+
+  it('never draws from an engine bound to another DID: no tokens/request, and a code a screen can word', async () => {
+    answering(engineBoundTo(MANAGER))
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
+      code: 'keyring/hidden-vetter:memberMismatch',
+    })
+    expect(sentToAgent(PCS_VETTER_TASK.tokensRequest)).toBeUndefined()
+    expect(mockAsk).not.toHaveBeenCalled()
+  })
+
+  it('a re-enrolment that would carry a new PCS identifier is not sent (the community refuses identifierRebound)', async () => {
+    answering(engineBoundTo(MANAGER, { id: 'z9AnotherKey' }))
+    await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
+      code: 'keyring/hidden-vetter:memberMismatch',
+    })
+    expect(mockAsk).not.toHaveBeenCalled()
+  })
+
+  it('an engine that keeps the old DID after re-enrolling is said once, then not re-enrolled again', async () => {
+    const community = 'did:webvh:QmCommScid:vtc.example:tvtc-wq49'
+    answering(engineBoundTo(MANAGER))
+    mockAsk.mockResolvedValue(
+      answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+    )
+    await expect(enrolVetter(agent(), community, criterion)).rejects.toMatchObject({
+      code: 'keyring/hidden-vetter:memberMismatch',
+    })
+    expect(mockAsk).toHaveBeenCalledTimes(1)
+    // Trying again would spend one of the community's re-issues for nothing.
+    await expect(enrolVetter(agent(), community, criterion)).rejects.toMatchObject({
+      code: 'keyring/hidden-vetter:memberMismatch',
+    })
+    expect(mockAsk).toHaveBeenCalledTimes(1)
+  })
+
+  it('an engine the re-enrolment re-binds is fine, and draws', async () => {
+    let shows = 0
+    answering(() => engineBoundTo(++shows === 1 ? MANAGER : SIGNER))
+    mockAsk.mockResolvedValue(
+      answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+    )
+    await expect(enrolVetter(agent(), COMMUNITY, criterion)).resolves.toBeUndefined()
+    mockAsk.mockResolvedValue(
+      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 1, preCredentials: ['zCPre', 'zDPre'] })
+    )
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
   })
 })

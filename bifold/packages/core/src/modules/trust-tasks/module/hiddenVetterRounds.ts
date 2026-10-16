@@ -147,13 +147,56 @@ export function currentTick(parameters: PublishedConfig, record: VetterRecord | 
   return record.lastTick + Math.floor((nowMs() - last) / tick)
 }
 
-/** Whether the agent holds a vetter credential for the period `criterion` publishes now. */
+/**
+ * The DID the community's vetter tasks are signed with, which is the DID the
+ * agent must bind into its token openings.
+ *
+ * The community checks every opening proof against the DID that signed the
+ * `pcs-tokens` request (openvtc's `vetter_start`: a snapshot "built under any
+ * other name draws tokens the community refuses, and the refusal says nothing
+ * about why"). `askCommunity` sends through `vtiAgent`, so that session's DID
+ * is the signer, and reading the binding from it makes the two one DID by
+ * construction. Build 259 passed the phone's identity at its own VTA
+ * (`client.managerDid`) instead: enrolment, which does not check the binding,
+ * went through, and every draw was refused `badOpeningProof`.
+ */
+function signerDid(): string {
+  const did = vtiAgent.did
+  if (!did)
+    throw Object.assign(new Error('not signed in to the community'), { code: 'keyring/hidden-vetter:noIdentity' })
+  return did
+}
+
+/**
+ * Engines confirmed bound to a DID other than the signer's even after a fresh
+ * root request, keyed by community, signer and the engine's member DID.
+ * Re-enrolling such an engine only spends one of the community's re-issues
+ * for nothing, so it is tried once per process and then refused in words.
+ */
+const confirmedMismatch = new Set<string>()
+const mismatchKey = (community: string, signer: string, bound: string) => `${community}\u0000${signer}\u0000${bound}`
+
+const memberMismatch = (bound: string) =>
+  Object.assign(
+    new Error(
+      'the agent draws tokens for another DID than the one this phone signs with, so the community would refuse every draw'
+    ),
+    { code: 'keyring/hidden-vetter:memberMismatch', bound }
+  )
+
+/**
+ * Whether the agent holds a vetter credential for the period `criterion`
+ * publishes now, **as the DID this phone signs with**. An engine bound to
+ * another DID is not enrolled for this purpose: it can enrol, but every draw
+ * it makes is refused.
+ */
 export async function isEnrolled(agent: Agent, communityDid: string, criterion: VtiCriterion): Promise<boolean> {
   const period = publishedOf(criterion)?.vetterLabels?.[0]
   if (!period) return false
   const client = await connectedVetterClient(agent)
   const contextId = await vetterContextOf(client)
   const vetter = await client.showPcsVetter({ contextId, community: communityDid })
+  if (vetter?.memberDid && vetter.memberDid !== signerDid()) return false
   return Boolean(vetter?.enrolledLabels?.includes(period))
 }
 
@@ -167,13 +210,24 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
 
   const client = await connectedVetterClient(agent)
   const contextId = await vetterContextOf(client)
-  const memberDid = client.managerDid
-  if (!memberDid)
-    throw Object.assign(new Error('no identity at the agent'), { code: 'keyring/hidden-vetter:noIdentity' })
+  const memberDid = signerDid()
+  const before = await client.showPcsVetter({ contextId, community: communityDid })
+  if (
+    before?.memberDid &&
+    before.memberDid !== memberDid &&
+    confirmedMismatch.has(mismatchKey(communityDid, memberDid, before.memberDid))
+  )
+    throw memberMismatch(before.memberDid)
 
   // 1 — the agent blinds a request. Only it can: it holds the key. What it
   // answers is the community's payload, whole.
   const request = await client.pcsRootRequest({ contextId, community: communityDid, memberDid, parameters, label })
+  // A community binds a member to the PCS identifier of their first enrolment
+  // and refuses any other (`pcs-root:identifierRebound`); the same identifier
+  // under the same label is re-issued. So a re-enrolment that would carry a
+  // new identifier is not sent: it cannot succeed, and it is the agent's
+  // engine, not the community, that needs resetting.
+  if (before?.id && request.id !== before.id) throw memberMismatch(before.memberDid ?? memberDid)
   // 2 — the phone carries it to the community, unchanged, and the community
   // signs a pre-credential. A refusal stops the round here.
   const answer = await askCommunity<{ label: string; preCredential: string }>(communityDid, VTC_VETTER_TASK.pcsRoot, {
@@ -189,6 +243,16 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
     parameters,
     response: { label: answer.label, preCredential: answer.preCredential },
   })
+  // An engine the agent created under another DID may keep it whatever the
+  // root request says; then this enrolment cannot be drawn from, and it is
+  // said now rather than as a refused draw.
+  if (before?.memberDid && before.memberDid !== memberDid) {
+    const after = await client.showPcsVetter({ contextId, community: communityDid })
+    if (after?.memberDid && after.memberDid !== memberDid) {
+      confirmedMismatch.add(mismatchKey(communityDid, memberDid, after.memberDid))
+      throw memberMismatch(after.memberDid)
+    }
+  }
 }
 
 /** Draw this tick's tokens, once per tick: agent blinds, community signs, agent unblinds. */
@@ -207,6 +271,11 @@ export async function drawVetterTokens(
   const record = await loadVetterRecord(agent, communityDid)
   const tick = currentTick(parameters, record)
   if (record?.lastTick === tick) return { drawn: 0 }
+
+  // Never draw from an engine bound to another DID: the community refuses
+  // every opening it makes, and the draw it held open must then be given up.
+  const vetter = await client.showPcsVetter({ contextId, community: communityDid })
+  if (vetter?.memberDid && vetter.memberDid !== signerDid()) throw memberMismatch(vetter.memberDid)
 
   const request = await client.pcsTokensRequest({
     contextId,

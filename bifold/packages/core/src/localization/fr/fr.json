@@ -1832,10 +1832,11 @@
       "Done": "C'est fait. Votre agent le lui a envoyé ; {{community}} ne saura pas que c'était vous.",
       "NoTokens": "Il ne vous reste rien pour vous porter garant avant le prochain tirage.",
       "NoTokensUntil": "Il ne vous reste rien pour vous porter garant avant le {{date}}.",
-      "NoTokensError": "Il ne vous reste rien pour vous porter garant pour le moment. Tirez à nouveau, puis réessayez.",
+      "NoTokensError": "Vous n'avez aucun jeton pour vous porter garant en ce moment. Keyring les tire pour vous à l'ouverture de votre bureau de parrainage — ouvrez-le, patientez un instant, puis réessayez.",
       "RequirementsChanged": "{{community}} a changé ce qu'elle demande aux nouveaux membres depuis la candidature de cette personne, donc se porter garant maintenant ne compterait pas. Demandez-lui de recommencer sa candidature.",
       "NotEnrolledError": "Vous n'êtes pas inscrit pour cette période. Inscrivez-vous, puis réessayez.",
       "PeriodClosed": "Cette période de vérification est terminée. Inscrivez-vous pour la nouvelle, puis réessayez.",
+      "MemberMismatch": "Votre inscription de vérificateur doit être réinitialisée sur votre agent. Elle a été créée pour une autre identité que celle avec laquelle vous vérifiez dans cette communauté, qui refuserait donc chaque jeton de garantie tiré. Réinitialisez la vérification privée pour cette communauté sur votre agent, puis rouvrez le bureau.",
       "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant.",
       "DrawBusy": "Un tirage est déjà en cours. Réessayez dans un instant.",
       "Method": {

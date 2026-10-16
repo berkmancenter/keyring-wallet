@@ -100,6 +100,10 @@ const ATTESTATION = {
 }
 const HIDDEN_RECORD = {
   community: COMMUNITY,
+  // The persona: "the DID the applicant joins the community as", which is what
+  // the proof binds to. It was the phone's manager DID until 260, which made
+  // `hiddenRequestExt`'s guard always false and sent private requests with no
+  // hidden ext at all.
   joinDid: PERSONA.did,
   applicationId: 'app-1',
   id: 'zApplicantPcsIdentifier',
@@ -207,7 +211,11 @@ describe('asking a vetter', () => {
   })
 
   it('ignores a hidden application made for another join DID', async () => {
-    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, joinDid: 'did:webvh:Qm:vta.example:someone-else' })
+    // The wrong value this really took: the phone's identity at its own agent.
+    // Until 260 that was what `beginHiddenApplication` stored, so this guard
+    // fired on every normal application and the ext was dropped — a private
+    // request answered with a named statement (258, 259).
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, joinDid: 'did:peer:2.Ephone' })
     await applicantWith(memoryStore({})).requestVetter({ link: ticket })
     expect(sentPayload()).not.toHaveProperty('ext')
   })
@@ -356,6 +364,18 @@ describe('the named flow, applied to a private way in', () => {
     expect(kept?.requests?.[0]).toMatchObject({ status: 'statementRefused', statementRefusal: 'namedForPrivate' })
     // And the agent is never asked to verify a named statement.
     expect(mockTake).not.toHaveBeenCalled()
+  })
+
+  it('binds the agent-side application to the persona, not the phone at its agent', async () => {
+    // 258 and 259 bound `client.managerDid`. The registry says this member is
+    // "the DID the applicant joins the community as. Bound into the proof, so
+    // the proof cannot be carried to another join" — the persona. Binding the
+    // other one broke the ext silently and would have broken the proof too.
+    mockLoadRecord.mockResolvedValue(undefined)
+    await applicantWith(memoryStore()).start(manifest, { 'name.legal': 'A Person' })
+    expect(mockBegin).toHaveBeenCalledTimes(1)
+    expect(mockBegin.mock.calls[0]?.[4]).toBe(PERSONA.did)
+    expect(mockBegin.mock.calls[0]?.[4]).not.toBe('did:peer:2.Ephone')
   })
 
   it('creates the agent-side application in the same tap as the named one', async () => {

@@ -1893,10 +1893,11 @@
       "Done": "Vouched. Your agent sent it to them; {{community}} won't learn it was you.",
       "NoTokens": "You have nothing left to vouch with until the next draw.",
       "NoTokensUntil": "You have nothing left to vouch with until {{date}}.",
-      "NoTokensError": "You have nothing left to vouch with right now. Draw again, then try once more.",
+      "NoTokensError": "You have no vouching tokens right now. Keyring draws them for you when you open your vetting desk — open it, give it a moment, and try again.",
       "RequirementsChanged": "{{community}} has changed what it asks of new members since this person applied, so vouching now wouldn't count. Ask them to apply again.",
       "NotEnrolledError": "You're not enrolled for this period. Enrol, then try again.",
       "PeriodClosed": "This vetting period has ended. Enrol for the new one, then try again.",
+      "MemberMismatch": "Your vetter enrolment needs resetting at your agent. It was set up for a different identity from the one you vet with in this community, so the community would refuse every vouching token it draws. Reset private vetting for this community at your agent, then open the desk again.",
       "ErrorGeneric": "Something went wrong. Try again in a moment.",
       "DrawBusy": "A draw is already under way. Try again in a moment.",
       "Method": {
