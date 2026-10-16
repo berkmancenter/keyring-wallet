@@ -39,6 +39,7 @@ import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
 import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
+import { PrivateVettingBadge } from './PrivateVettingBadge'
 import { VtiCommunityIds } from './VtiCommunity.ids'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
@@ -267,6 +268,10 @@ const VtiCommunity: React.FC = () => {
             <Text style={styles.label} testID={testIdWithKey(VtiCommunityIds.memberSince)}>
               {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
             </Text>
+            {/* The result of private vetting, marked as the steps were. */}
+            {(membership as { privateVetting?: boolean }).privateVetting ? (
+              <PrivateVettingBadge label={t('Vetting.Private.Joined')} testIdStem="CommunityJoinedPrivately" />
+            ) : null}
             {vetsHere ? (
               <Pressable
                 style={styles.button}

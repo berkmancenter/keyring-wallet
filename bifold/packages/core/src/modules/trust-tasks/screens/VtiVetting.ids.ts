@@ -36,6 +36,8 @@ export const VtiVettingIds = {
   openSessionButton: 'VettingOpenSessionButton',
   cardClaim: 'VettingCardClaim',
   attestButton: 'VettingAttestButton',
+  relationship: 'VettingRelationship',
+  vouchTokens: 'VettingVouchTokens',
   endSession: 'VettingEndSession',
   statementIssued: 'VettingStatementIssued',
   vetSomeoneElse: 'VettingVetSomeoneElse',

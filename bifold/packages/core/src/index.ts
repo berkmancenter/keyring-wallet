@@ -262,6 +262,8 @@ export {
   createVtiClientDid,
   GenericRecordsCommunityStore,
   GenericRecordsVettingStore,
+  hiddenApplicantIdOf,
+  registerHiddenVettingModules,
   VtiVetterDesk,
   VtiApplicant,
   isVtiInvitationLink,
@@ -303,6 +305,7 @@ export type {
   VtaAgentState,
   VtiApproval,
   VtaConsentRequest,
+  HiddenAttestMeta,
 } from './modules/trust-tasks'
 export type {
   ITrustTaskDisplayHandler,

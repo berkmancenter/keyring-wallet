@@ -53,6 +53,13 @@ export interface VtiMembership {
   /** How the membership was earned — what the card says under the name. */
   via: 'invitation' | 'vetting' | 'approval' | 'unknown'
   /**
+   * The admission came through a hidden-vetting proof rather than named
+   * statements, so the community counted vouches without learning whose. Set
+   * when the membership is filed, from the submission that earned it, because
+   * nothing in the credential itself says how it was decided.
+   */
+  privateVetting?: boolean
+  /**
    * The community removed this member, as its signed removal notice says
    * (vtc/members/removal-notice/0.1, `vtiCommunityNotices`). Kept with the
    * membership, as openvtc keeps it, so the phone can say who decided, when
@@ -108,6 +115,12 @@ export interface JoinSubmission {
   /** Whether an invitation went with the request. */
   withInvitation: boolean
   via: 'join' | 'vetting'
+  /**
+   * The request carried a hidden-vetting proof instead of statements. Kept
+   * here because the membership arrives later, through the inbox, and the
+   * credential does not say how the community decided.
+   */
+  privateVetting?: boolean
   /** The request's state as the community last stated it. */
   status?: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn'
   /** What the community still needs, verbatim, while `deferred`. */

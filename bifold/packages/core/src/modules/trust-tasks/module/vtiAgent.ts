@@ -61,6 +61,8 @@ import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
+import { classifyCredential } from './vtiInbox'
+import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
 import {
   JOIN_MANIFEST_TYPES,
   joinTaskType,
@@ -394,6 +396,38 @@ const hostOf = (endpoint?: string) => {
   return match?.[1]
 }
 
+/**
+ * The Trust Task families whose messages say something about hidden vetting:
+ * a vetter's attestation, the agent's `vta/pcs/*` engine, and the community's
+ * challenge and hidden-vetting configuration.
+ */
+const HIDDEN_VETTING_TYPE_PREFIXES = [
+  'https://trusttasks.org/spec/vetting/attestation/',
+  'https://trusttasks.org/spec/vta/pcs/',
+  'https://trusttasks.org/spec/vtc/vetting/pcs-challenge/',
+  'https://trusttasks.org/spec/vtc/vetting/hidden/',
+] as const
+
+/**
+ * Whether a message type belongs to hidden vetting, and so is logged by its
+ * type alone, with no DID at all.
+ *
+ * The phone's log leaves the device (remote logs, testers' problem reports).
+ * A line pairing `vetting/attestation` with the DID that sent it names the
+ * applicant's vetter, which is the one thing hidden vetting keeps from
+ * everyone but the applicant; the applicant's own DID beside a `vta/pcs` type
+ * says who applied that way. Answers and refusals (`#response`) are covered by
+ * the same prefixes.
+ */
+export function isHiddenVettingType(type: string): boolean {
+  return HIDDEN_VETTING_TYPE_PREFIXES.some((prefix) => type.startsWith(prefix))
+}
+
+/** How a log line names `did` beside `type`: not at all for hidden vetting (`isHiddenVettingType`). */
+function named(type: string, did: string | undefined, instead: string): string {
+  return isHiddenVettingType(type) ? instead : String(did ?? '')
+}
+
 class VtiAgentController {
   private state: VtiAgentState = { status: 'disconnected' }
   private listeners = new Set<Listener>()
@@ -541,20 +575,27 @@ class VtiAgentController {
 
   private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
     const plaintext = unwrapBindingEnvelope(received)
-    // The type and DID prefixes only: this line reaches testers' problem
-    // reports, so never a body, a card or a whole identifier.
-    this.agent?.config?.logger?.info?.(
-      `vtiAgent: inbound ${String(plaintext.type ?? '')} from ${didPrefix(plaintext.from)} (session ${didPrefix(this.state.did)})`
-    )
+    const type = String(plaintext.type ?? '')
     this.dropExpiredHolds()
     const entry = this.askAnswered(plaintext)
+    // The type and DID prefixes only: this line reaches testers' problem
+    // reports, so never a body, a card or a whole identifier. A hidden-vetting
+    // message, or a refusal answering a hidden-vetting ask, is said by its type
+    // alone (`isHiddenVettingType`).
+    const hidden = isHiddenVettingType(type) || (entry !== undefined && isHiddenVettingType(entry.type))
+    this.agent?.config?.logger?.info?.(
+      hidden
+        ? `vtiAgent: inbound ${type}`
+        : `vtiAgent: inbound ${type} from ${didPrefix(plaintext.from)} (session ${didPrefix(this.state.did)})`
+    )
     // A community's refusal, said in the log with its code and words and what
     // it answers: four refusals of a join reached a tester's report as bare
     // "inbound trust-task-error" lines (IN-127, 10-06), and nothing said why.
     if (String(plaintext.type ?? '').startsWith(TASK_ERROR)) {
       const refusal = refusalWordsOf(plaintext)
+      const who = hidden ? 'the community' : didPrefix(plaintext.from)
       this.agent?.config?.logger?.warn?.(
-        `vtiAgent: ${didPrefix(plaintext.from)} refused ${entry ? taskName(entry.type) : 'a task'}: ${refusal.code}${
+        `vtiAgent: ${who} refused ${entry ? taskName(entry.type) : 'a task'}: ${refusal.code}${
           refusal.message ? ` — ${refusal.message}` : ''
         }`
       )
@@ -639,7 +680,7 @@ class VtiAgentController {
     }
     entry.answer = answer
     this.agent?.config.logger.info(
-      `vtiAgent: ${entry.communityDid} answered ${taskName(entry.type)} after its clock ran out — kept for the next caller`
+      `vtiAgent: ${named(entry.type, entry.communityDid, 'the community')} answered ${taskName(entry.type)} after its clock ran out — kept for the next caller`
     )
     this.listeners.forEach((listener) => listener())
     // Where a join request stands, answered late: whoever shows it asks again.
@@ -1007,8 +1048,11 @@ class VtiAgentController {
     const record = await this.peerRevisionStore
       ?.observe(unpacked.sender, unpacked.revision, peeked.minor)
       .catch(() => undefined)
+    // A hidden-vetting message is said by its type alone (`isHiddenVettingType`).
     agent.config.logger.info(
-      `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame from ${unpacked.sender} (${bytes.length} bytes, type ${plaintext.type})`
+      isHiddenVettingType(String(plaintext.type ?? ''))
+        ? `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame (${bytes.length} bytes, type ${plaintext.type})`
+        : `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame from ${unpacked.sender} (${bytes.length} bytes, type ${plaintext.type})`
     )
     if (record) {
       const others = (this.state.peerRevisions ?? []).filter((r) => r.vid !== record.vid)
@@ -1089,7 +1133,7 @@ class VtiAgentController {
       })
       await session.sendTspFrame(packed.bytes)
       this.agent.config.logger.info(
-        `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${toDid} (${packed.bytes.length} bytes, type ${type})`
+        `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${named(type, toDid, 'a peer')} (${packed.bytes.length} bytes, type ${type})`
       )
       return
     }
@@ -1138,7 +1182,7 @@ class VtiAgentController {
     if (earlier?.answer) return this.waitFor(earlier, timeoutMs)
     if (earlier && write) {
       this.agent?.config.logger.info(
-        `vtiAgent: ${taskName(type)} was already sent to ${communityDid} and is unanswered — waiting on it, not sending it again`
+        `vtiAgent: ${taskName(type)} was already sent to ${named(type, communityDid, 'the community')} and is unanswered — waiting on it, not sending it again`
       )
       return this.waitFor(earlier, timeoutMs)
     }
@@ -1200,7 +1244,7 @@ class VtiAgentController {
         const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document)
         await session.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(
-          `${TSP_LOG_PREFIX} asked ${communityDid} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
+          `${TSP_LOG_PREFIX} asked ${named(type, communityDid, 'the community')} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
         )
         const viaTsp = await this.waitFor(entry, timeoutMs)
         if (viaTsp) return viaTsp
@@ -1215,13 +1259,13 @@ class VtiAgentController {
         // or a second withdraw. It stays held for its late answer.
         if (write) {
           this.agent.config.logger.warn(
-            `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — a write, so not sent again over DIDComm`
+            `${TSP_LOG_PREFIX} ${named(type, communityDid, 'the community')} did not answer ${type} over TSP in ${timeoutMs}ms — a write, so not sent again over DIDComm`
           )
           return undefined
         }
         // A read is asked once more over DIDComm.
         this.agent.config.logger.warn(
-          `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
+          `${TSP_LOG_PREFIX} ${named(type, communityDid, 'the community')} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
         )
       }
     }
@@ -1486,6 +1530,40 @@ class VtiAgentController {
     }
   }
 
+  /**
+   * Ask the community for the challenge a hidden-vetting proof must bind
+   * (`vtc/vetting/pcs-challenge/0.1`), the same path as the join submit.
+   *
+   * Mutating: the community replaces any challenge it had open for this
+   * applicant, so a proof built on an earlier one is no longer accepted. Ask
+   * immediately before proving, and never send it twice for one proof — the
+   * task is not in `VTI_READ_TASKS`, so `ask` never re-sends it, and an
+   * identical request still in flight is waited on rather than sent again.
+   *
+   * A challenge is never taken from the answer hold, though: an answered one
+   * may already have been spent by a submit, and the community refuses a spent
+   * challenge (`challengeAlreadyUsed`). Every call that is not joining a
+   * request in flight asks the community anew.
+   *
+   * Throws the community's refusal as a `VtiRefusal` (`notHiddenVetting` when
+   * it publishes no hidden-vetting criterion), `VtiSentNoAnswer` on silence,
+   * and an `Error` naming what was wrong with an answer it cannot use.
+   */
+  async fetchChallenge(communityDid: string, options: { criterionId?: string } = {}): Promise<PcsChallenge> {
+    const did = this.state.did
+    for (const [id, entry] of this.asks) {
+      if (entry.did === did && entry.communityDid === communityDid && entry.type === PCS_CHALLENGE_TYPE && entry.answer)
+        this.asks.delete(id)
+    }
+    const answer = await this.ask(communityDid, PCS_CHALLENGE_TYPE, pcsChallengeRequest(options.criterionId))
+    if (!answer) throw this.sentNoAnswer(communityDid, PCS_CHALLENGE_TYPE)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const read = readPcsChallenge((answer.body as { payload?: unknown } | undefined)?.payload)
+    if ('problem' in read) throw new Error(`vtiAgent: ${communityDid}'s challenge cannot be used: ${read.detail}`)
+    return read.challenge
+  }
+
   private presentation(credentials?: unknown[]) {
     return {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
@@ -1639,7 +1717,20 @@ class VtiAgentController {
   async apply(
     communityDid: string,
     manifest: VtiManifest,
-    options: { credentials?: unknown[]; requirementsDigest?: string; registryConsent?: boolean } = {}
+    options: {
+      credentials?: unknown[]
+      requirementsDigest?: string
+      registryConsent?: boolean
+      /**
+       * A hidden-vetting submission: the `vta/pcs/prove` answer, sent verbatim
+       * as `extensions.hiddenVetting`. The presentation then carries **no**
+       * vetting statements — the community counts the proof instead of named
+       * statements, and refuses a hidden-criterion submission that carries no
+       * proof rather than counting statements (vtc-service vetting/pcs.rs), so
+       * a submission with both would name the vetters the proof keeps hidden.
+       */
+      hiddenVetting?: Record<string, unknown>
+    } = {}
   ): Promise<VtiVerdict> {
     let current = manifest
     const refused: JoinWire[] = []
@@ -1657,6 +1748,15 @@ class VtiAgentController {
       // as openvtc does (#412): the community then decides it under the first
       // criterion, in its published order, that the submission meets.
       const criterion = options.requirementsDigest ?? (wire === '0.2' ? current.requirementsDigest : undefined)
+      const hidden = options.hiddenVetting
+      const credentials = hidden ? withoutVettingStatements(options.credentials) : options.credentials
+      if (hidden && credentials?.length !== options.credentials?.length) {
+        this.agent?.config.logger.info(
+          `vtiAgent: hidden-vetting submit: ${
+            (options.credentials?.length ?? 0) - (credentials?.length ?? 0)
+          } vetting statement(s) left out of the presentation; the proof stands for them`
+        )
+      }
       // The presentation is unsigned: the community takes the holder from the
       // sealed envelope's sender (VTI-9), so what matters is that the
       // credentials inside name that same DID as their subject.
@@ -1664,9 +1764,10 @@ class VtiAgentController {
         communityDid,
         type,
         submitPayload(wire, {
-          vp: this.presentation(options.credentials),
+          vp: this.presentation(credentials),
           registryConsent: options.registryConsent === true,
           criterion,
+          ...(hidden ? { extensions: { hiddenVetting: hidden } } : {}),
         }),
         this.submitAnswerTimeoutMs
       )
@@ -1697,6 +1798,14 @@ class VtiAgentController {
 }
 
 export const vtiAgent = new VtiAgentController()
+
+/** The credentials, less any vetter's vetting statement (a community's own identity check stays). */
+function withoutVettingStatements(credentials?: unknown[]): unknown[] | undefined {
+  return credentials?.filter(
+    (c) =>
+      !(c && typeof c === 'object' && classifyCredential(c as Record<string, unknown>).kind === 'vetting-statement')
+  )
+}
 
 /** Keep a community's published name for the next launch; a failure only costs the name. */
 function rememberCommunityName(agent: Agent | undefined, communityDid: string, name?: string): void {

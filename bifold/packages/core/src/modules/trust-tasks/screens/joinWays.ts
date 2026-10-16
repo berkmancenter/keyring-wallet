@@ -21,6 +21,7 @@
  */
 
 import {
+  HIDDEN_VETTING_SUITE,
   joinAsks,
   type JoinAsks,
   type JoinCredentialIssuers,
@@ -86,6 +87,13 @@ export interface JoinWayRow {
    * on the row. A property of the app today, not of the criterion.
    */
   credentialNotYet: boolean
+  /**
+   * The way runs private (hidden) vetting in the suite a person's agent can
+   * run: offered, with its own button. Whether this person's agent can do it
+   * is asked only on that tap (it may push a consent request to an
+   * approver), never here.
+   */
+  privateVetting?: boolean
 }
 
 /**
@@ -149,9 +157,24 @@ const needsOf = (way: JoinWay): JoinNeed[] => {
 
 const sameWay = (a: JoinWay | undefined, b: JoinWay) => Boolean(a) && a!.id === b.id && a!.digest === b.digest
 
-export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
+/**
+ * A private way this app can offer: hidden vetting in the suite agents run,
+ * and this build able to carry it (`privateVettingAvailable`).
+ */
+const offersPrivately = (way: JoinWay, available: boolean) =>
+  available && way.unusableBecause === 'vettingPrivate' && way.hiddenVetting?.suite === HIDDEN_VETTING_SUITE
+
+export function joinCard(
+  offer: JoinAsks,
+  holds: JoinHolds = {},
+  options: {
+    /** This build carries hidden vetting through the person's agent. Off: every private way fails closed (#405). */
+    privateVettingAvailable?: boolean
+  } = {}
+): JoinCard {
+  const available = Boolean(options.privateVettingAvailable) && offer.wire === '0.3'
   const notSupported: JoinVettingNotSupported | undefined = offer.ways.some(
-    (way) => way.unusableBecause === 'vettingPrivate'
+    (way) => way.unusableBecause === 'vettingPrivate' && !offersPrivately(way, available)
   )
     ? 'private'
     : offer.ways.some((way) => way.unusableBecause === 'vettingExtUnsupported')
@@ -169,7 +192,11 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
   const lacksInvitation = (way: JoinWay) => way.requires.invitation && !holds.invitation
   // Ways Keyring can read that this phone does not meet yet.
   // A credential way is left out: Keyring cannot present one, so no step of the person's opens it.
-  const open = offer.ways.filter((way) => way.usable && way.meets !== 'yes' && !way.requires.credentials)
+  // A private way this build carries is an ordinary vetting way to the
+  // person: "Meet a vetter", the same steps (Alberto, 2026-10-15).
+  const open = offer.ways.filter(
+    (way) => (way.usable || offersPrivately(way, available)) && way.meets !== 'yes' && !way.requires.credentials
+  )
   // Vetting the person can go and do now: nothing else of that way is lacking.
   const startable = (way: JoinWay) => open.includes(way) && Boolean(way.requires.vetting) && !lacksInvitation(way)
   const vettingToDo = offer.ways.some(startable)
@@ -186,8 +213,9 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
     // A phone that is admitted now has no vetting to be sent to.
     canStartVetting: !joinsNow && startable(way),
     usable: way.usable,
-    cannotUse: !way.usable,
-    ...(!way.usable && way.unusableBecause
+    cannotUse: !way.usable && !offersPrivately(way, available),
+    ...(offersPrivately(way, available) ? { privateVetting: true } : {}),
+    ...(!way.usable && !offersPrivately(way, available) && way.unusableBecause
       ? {
           cannotUseBecause: CANNOT_USE[way.unusableBecause],
           cannotUseDetail: way.unusableDetail ? `${way.unusableBecause}: ${way.unusableDetail}` : way.unusableBecause,
@@ -226,13 +254,54 @@ export function joinCard(offer: JoinAsks, holds: JoinHolds = {}): JoinCard {
  * since any of them may be the one it is decided by. Undefined when named
  * vetting is what is asked, or the community asks for no vetting at all.
  */
-export function vettingNotSupportedFor(manifest: VtiManifest, digest?: string): JoinVettingNotSupported | undefined {
-  const vettingWays = joinAsks(manifest).ways.filter((way) => way.requires.vetting)
+export function vettingNotSupportedFor(
+  manifest: VtiManifest,
+  digest?: string,
+  options: {
+    /**
+     * This build carries hidden vetting (the applicant module is registered).
+     * Without it every private way is refused, as #405 intended. With it, a
+     * private way in the suite agents run is **not** unsupported — refusing it
+     * anyway is what put Alberto on the named flow under a refusal on 254.
+     */
+    privateVettingAvailable?: boolean
+  } = {}
+): JoinVettingNotSupported | undefined {
+  const asks = joinAsks(manifest)
+  const available = Boolean(options.privateVettingAvailable) && asks.wire === '0.3'
+  const vettingWays = asks.ways.filter((way) => way.requires.vetting)
   const named = digest ? vettingWays.filter((way) => way.digest === digest) : []
   const ways = named.length ? named : vettingWays
   if (!ways.length) return undefined
-  const notSupported = (way: JoinWay) =>
-    way.unusableBecause === 'vettingPrivate' || way.unusableBecause === 'vettingExtUnsupported'
+  const privateAndRefused = (way: JoinWay) =>
+    way.unusableBecause === 'vettingPrivate' && !offersPrivately(way, available)
+  const notSupported = (way: JoinWay) => privateAndRefused(way) || way.unusableBecause === 'vettingExtUnsupported'
   if (!ways.every(notSupported)) return undefined
-  return ways.some((way) => way.unusableBecause === 'vettingPrivate') ? 'private' : 'other'
+  return ways.some(privateAndRefused) ? 'private' : 'other'
+}
+
+/**
+ * The private way this build can carry, for the criterion an application named
+ * (or any of them when it named none — the ways that ask for vetting are the
+ * ones it may be decided by).
+ *
+ * The named vetting screen uses it to hand a ticket to the private flow instead
+ * of starting the named one: a ticket for a hidden criterion gathers statements
+ * the community will reject, so the screen that can actually use it is
+ * `VtiHiddenVetting`. Returns the criterion's id, which is what that screen
+ * takes.
+ */
+export function privateWayFor(
+  manifest: VtiManifest,
+  digest?: string,
+  options: { privateVettingAvailable?: boolean } = {}
+): { id: string; digest?: string } | undefined {
+  const asks = joinAsks(manifest)
+  const available = Boolean(options.privateVettingAvailable) && asks.wire === '0.3'
+  if (!available) return undefined
+  const vettingWays = asks.ways.filter((way) => way.requires.vetting)
+  const named = digest ? vettingWays.filter((way) => way.digest === digest) : []
+  const ways = named.length ? named : vettingWays
+  const found = ways.find((way) => offersPrivately(way, available))
+  return found?.id ? { id: found.id, ...(found.digest ? { digest: found.digest } : {}) } : undefined
 }

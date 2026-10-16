@@ -7,6 +7,8 @@
  * @module trust-tasks
  */
 
+import { registerHiddenVettingModules } from './hiddenVettingModules'
+
 export {
   TrustTaskMessage,
   TRUST_TASK_ATTACHMENT_ID,
@@ -94,6 +96,62 @@ export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
 export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
 export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'
 export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry } from './module/VtaClient'
+// The seam itself lives in screens/, which owns the contract; importing the
+// adapter is what registers the module, so it is re-exported for its side
+// effect as much as its symbol.
+export { registerHiddenVettingModules } from './hiddenVettingModules'
+export { registerHiddenVetting, hiddenVettingSeam } from './screens/hiddenVettingSeam'
+export type {
+  HiddenVettingSeam,
+  HiddenVettingCheck,
+  HiddenVettingRefusal,
+  HiddenVettingProgress,
+  HiddenVettingVerdict,
+} from './screens/hiddenVettingSeam'
+export {
+  registerHiddenVetter,
+  hiddenVetterSeam,
+  DECLARED_RELATIONSHIPS,
+  VOUCH_METHODS,
+} from './screens/hiddenVetterSeam'
+export type {
+  HiddenVetterSeam,
+  HiddenVetterStanding,
+  HiddenVetterRequest,
+  HiddenVetterStatement,
+  DeclaredRelationship,
+  VouchMethod,
+} from './screens/hiddenVetterSeam'
+// 32's community half, exported here because index.ts has one owner.
+export {
+  PCS_CHALLENGE_TYPE,
+  PCS_CHALLENGE_NOT_HIDDEN,
+  readPcsChallenge,
+  pcsChallengeRequest,
+} from './module/pcsChallenge'
+export type { PcsChallenge } from './module/pcsChallenge'
+export { readHiddenAttestation, HIDDEN_VETTING_NS, hiddenApplicantIdOf } from './module/vtiVetting'
+export type { HiddenAttestMeta } from './module/vtiVetting'
+
+export {
+  hiddenVettingUsable,
+  hiddenProgress,
+  startHiddenApplication,
+  refreshHiddenApplication,
+  takeHiddenAttestation,
+  hiddenSubmissionExtensions,
+  forgetHiddenApplication,
+  loadHiddenVettingRecord,
+  NOT_ENOUGH_YET,
+  HIDDEN_VETTING_SUITE,
+} from './module/hiddenVetting'
+export type {
+  HiddenVettingRecord as StoredHiddenVettingRecord,
+  HiddenProgress,
+  HiddenVettingBlock,
+  HiddenVettingUsable,
+} from './module/hiddenVetting'
+export type { PublishedConfig, HiddenAttestation, PcsApplication } from './module/pcsVtaPayloads'
 export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
 export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
 export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
@@ -175,3 +233,8 @@ export {
   type TspPeerRevisionStore,
   type TspSessionIdentity,
 } from './module/vtiTsp'
+
+// Registered here for any consumer that does evaluate this index, and from
+// the app's startup as well, because the package root defers this module
+// wholly. `hiddenVettingModules` explains why it must be a call.
+registerHiddenVettingModules()

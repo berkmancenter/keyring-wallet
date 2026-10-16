@@ -28,17 +28,13 @@ jest.mock('../module/vtiTsp', () => ({
   })),
 }))
 
-import { REPLIES_STALLED_WINDOW_MS, VtaClient, VtaRepliesNotArriving } from '../module/VtaClient'
+import { REPLIES_STALLED_WINDOW_MS, VtaClient, VtaNoAnswer, VtaRepliesNotArriving } from '../module/VtaClient'
 
 const HEARTBEAT = 'https://trusttasks.org/spec/vta/device/heartbeat/0.1'
 
 function tspClient(options: { onRepliesStalled?: (stalled: boolean) => void } = {}) {
-  const client = new VtaClient(
-    { config: { logger: { warn: jest.fn(), info: jest.fn(), debug: jest.fn() } } } as never,
-    'did:webvh:agent',
-    {} as never,
-    options
-  )
+  const logger = { warn: jest.fn(), info: jest.fn(), debug: jest.fn() }
+  const client = new VtaClient({ config: { logger } } as never, 'did:webvh:agent', {} as never, options)
   // What went out, in order: 'invite' or the task's type.
   const frames: string[] = []
   const tasks: Record<string, unknown>[] = []
@@ -77,11 +73,42 @@ function tspClient(options: { onRepliesStalled?: (stalled: boolean) => void } = 
       body: { type: `${doc.type}#response`, threadId: doc.threadId, payload: { ok: true } },
     })
   }
-  return { client, frames, answerLast, deliver: internals.deliver.bind(client) }
+  return { client, frames, answerLast, logger, deliver: internals.deliver.bind(client) }
 }
 const flush = async () => {
   for (let i = 0; i < 8; i++) await Promise.resolve()
 }
+
+// Before this, a task that was sent and never answered threw a bare `Error`
+// with no code, and off TSP it logged nothing at all. A ninety-second silence
+// therefore left nothing in a tester's report to read, which is why we could
+// not say why `vta/pcs/prove` did not answer on 2026-10-15.
+describe('a task that is never answered', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('is a coded error a screen can word, and says how long it waited', async () => {
+    const { client } = tspClient()
+    const asked = client.task('https://t/vta/pcs/prove', {}, 90_000)
+    await flush()
+    jest.advanceTimersByTime(90_001)
+    const error = await asked.then(() => undefined).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(VtaNoAnswer)
+    expect(error).toMatchObject({ code: 'vta:noAnswer', taskType: 'https://t/vta/pcs/prove', waitedMs: 90_000 })
+  })
+
+  it('records the silence at Info, so a release log on iOS keeps it', async () => {
+    // The line sits outside the TSP branch deliberately: the carriage that
+    // logged nothing was DIDComm, and a silence must be readable on both.
+    const { client, logger } = tspClient()
+    const asked = client.task('https://t/vta/pcs/prove', {}, 90_000)
+    await flush()
+    jest.advanceTimersByTime(90_001)
+    await asked.catch(() => undefined)
+    const said = logger.info.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(said).toContain('no answer to https://t/vta/pcs/prove after 90 s')
+  })
+})
 
 describe('greeting the VTA again after an ask over TSP got no answer', () => {
   afterEach(() => jest.useRealTimers())

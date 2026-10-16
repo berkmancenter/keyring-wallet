@@ -592,6 +592,8 @@ export class VtaAgentController {
   private heldAnswer?: { vtaDid: string; answer: Promise<unknown>; until: number }
   private deps: VtaAgentDeps = {}
   private restored = false
+  /** The agent whose in-memory key fetcher is installed (`installKeyFetcher`). */
+  private fetcherFor?: Agent
   private offer?: EnrolmentOffer
   /** A scanned agent-host QR waiting for the person to confirm. Holds a credential: never logged. */
   private hostOffer?: AgentHostOffer
@@ -2592,11 +2594,45 @@ export class VtaAgentController {
    * 'ephemeral'").
    */
   private fetchKeysThrough(agent: Agent): void {
+    this.fetcherFor = agent
     setInMemoryKeyFetcher(agent, (keyId) => this.fetchKeyCopy(agent, keyId))
+  }
+
+  /**
+   * Install the in-memory key fetcher for `agent` now, if it is not already.
+   *
+   * `restore` installs it, but the persona inbox signs in on its own schedule
+   * and, on the first launch after an install, ran before `restore` had: its
+   * key copy was missing and nothing was there to fetch it, so a recoverable
+   * miss read "not found in backend 'ephemeral'" (#422). Whatever may use an
+   * identity's keys at start-up calls this first. Safe to call any number of
+   * times; the fetcher itself waits for the link to be read (`fetchKeyCopy`).
+   */
+  installKeyFetcher(agent: Agent): void {
+    if (this.fetcherFor === agent) return
+    this.fetchKeysThrough(agent)
+  }
+
+  /**
+   * Fetch `persona`'s key copies again, now, through its agent, and say why
+   * when that cannot be done (the agent did not come online, it is no longer
+   * linked). For a sign-in that failed on a missing copy (#422): the backend
+   * does not ask again for a while after a failed fetch, and this does.
+   */
+  async refetchPersonaKeys(agent: Agent, persona: VtiPersona): Promise<void> {
+    this.installKeyFetcher(agent)
+    const keyId = persona.kmsKeyIds?.keyAgreement ?? persona.kmsKeyIds?.signing
+    if (!keyId) throw new Error(`${persona.did} has no borrowed key to fetch`)
+    await this.fetchKeyCopy(agent, keyId)
   }
 
   /** Fetch the copy `keyId` names, through the agent of the identity that names it. */
   private async fetchKeyCopy(agent: Agent, keyId: string): Promise<void> {
+    // Which agent is current is not known until the stored link is read: asked
+    // before then (#422, a sign-in at start-up), the current agent would be
+    // taken for "another linked agent" and asked on a second session as the
+    // same manager key, which the mediator closes (one socket per DID).
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
     const store = this.identityStore(agent)
     const personas = (await Promise.resolve(store.listPersonas?.()).catch(() => undefined)) ?? []
     const persona = personas.find((p) => Object.values(p.kmsKeyIds ?? {}).includes(keyId))
@@ -2628,6 +2664,14 @@ export class VtaAgentController {
       DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
     } finally {
       await client.disconnect().catch(() => undefined)
+    }
+  }
+
+  /** Wait until `restore` has read the stored link, up to `ms`; throws if it has not. */
+  private async untilLinkRead(ms: number): Promise<void> {
+    for (let waited = 0; !this.state.linkRestored; waited += 250) {
+      if (waited >= ms) throw new Error(`the link with this phone's agent was not read within ${ms / 1000} s`)
+      await new Promise((resolve) => setTimeout(resolve, 250))
     }
   }
 

@@ -32,6 +32,19 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
 import {
+  PCS_ERROR,
+  PCS_PROBE_APPLICATION_ID,
+  PCS_VTA_TASK,
+  pcsErrorCode,
+  type ApplicationsCreatePayload,
+  type PcsApplication,
+  type ProvePayload,
+  type VerifyAttestationPayload,
+  PCS_FAMILY,
+  DISCOVERY_TASK,
+} from './pcsVtaPayloads'
+
+import {
   EPHEMERAL_KMS_BACKEND,
   heldInMemory,
   importVtaKey,
@@ -50,7 +63,20 @@ import {
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona } from './VtiIdentityStore'
-import { VtiRefusal } from './vtiAgent'
+import {
+  PCS_VETTER_TASK,
+  type AttestPayload,
+  type RootAcceptPayload,
+  type RootRequestPayload,
+  type RootRequestWire,
+  type TokenDrawWire,
+  type TokensAbandonPayload,
+  type TokensAcceptPayload,
+  type TokensRequestPayload,
+  type VetterShowPayload,
+  type VetterStanding,
+} from './pcsVetterTasks'
+import { VtiRefusal, isHiddenVettingType } from './vtiAgent'
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
 import { isDigestMultibase } from './vettingShape'
 import { TaskVersions } from './taskVersions'
@@ -83,6 +109,12 @@ export const MINT_TIMEOUT_MS = 120_000
 /** How many keyed requests `VtaClient` remembers the attempts of. */
 const MAX_KEYED_REQUESTS_REMEMBERED = 32
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+
+/**
+ * multibase base58btc, as every PCS identifier and blinded half is published:
+ * `z` then the base58 alphabet, which excludes 0, O, I and l.
+ */
+const MULTIBASE_BASE58 = /^z[1-9A-HJ-NP-Za-km-z]+$/
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 
 /** The tasks this client speaks, by the URIs `vta-sdk` registers. */
@@ -267,10 +299,123 @@ export interface VtaAclEntry {
   expiresAt?: string
   createdAt?: string
   createdBy?: string
+  /**
+   * The entry's capability narrowing, from `ext["org.openvtc.capabilities"]`.
+   *
+   * **Absent is not empty.** Absent means the entry holds everything its role
+   * implies; an empty array would mean narrowed to nothing, which is why
+   * upstream omits the member rather than sending `[]`
+   * (`vta-sdk/.../acl_management/entry.rs` `capabilities_into_ext`). The
+   * narrowing rides `ext` because the published `acl/*` schemas are
+   * `additionalProperties: false` and the concept is ecosystem-local.
+   */
+  capabilities?: string[]
+  /**
+   * What the entry may act on, as stated (0.2) or as implied by the shape
+   * (0.1). Prefer this over {@link scopes} for any decision: `scopes` is the
+   * 0.1 wire member and cannot distinguish "everywhere" from "nowhere".
+   */
+  act?: AclAuthority
+  /**
+   * The capability narrowing, as stated. `ceiling` means everything the role
+   * implies; `listed` names capabilities; `none` holds nothing. Absent means
+   * the agent answered 0.1 with no narrowing in `ext`, which also means
+   * everything the role implies.
+   */
+  capabilityScope?: { stated: 'ceiling' } | { stated: 'none' } | { stated: 'listed'; capabilities: string[] }
 }
+
+/** Where an entry's capability narrowing travels in the 0.1 shape, the VTA's own extension member. */
+export const CAPABILITIES_EXT_MEMBER = 'org.openvtc.capabilities'
+
+/**
+ * An entry's authority over contexts and capabilities, read from whichever
+ * `acl/_shared` shape the agent answered in.
+ *
+ * **0.1 states authority by shape, 0.2 states it outright**, and the registry
+ * says why it changed: 0.1's `scopes` was "a list whose emptiness meant
+ * `everywhere` for one role and `nowhere` for another, depending on a
+ * maintainer convention the wire could not carry"
+ * (`specs/acl/_shared/0.2/acl-entry.schema.json`). 0.2 replaces it with an
+ * explicit `act` scope — `all`, `none`, or a non-empty context list — and
+ * makes `capabilities` a declared member with the same three shapes
+ * (`ceiling`, `none`, `listed`), rather than an extension.
+ *
+ * vta-service 0.60 serves `acl/list/0.1` only (its discovery list names no
+ * 0.2), so 0.1 is what agents answer today. This client asks for both, so the
+ * 0.2 shape is read rather than silently seen as an entry with no contexts and
+ * no narrowing — which would refuse a phone that is in fact allowed.
+ */
+export type AclAuthority =
+  | { stated: 'all' }
+  | { stated: 'none' }
+  | { stated: 'contexts'; contexts: string[] }
+  /** 0.1 only: the shape is all the wire carried, so the role decides what empty means. */
+  | { stated: 'byShape'; contexts: string[] }
 
 /** The schema's bound on an entry's label (acl-entry.schema.json `label.maxLength`). */
 const ACL_LABEL_MAX = 256
+
+/**
+ * The capability narrowing out of an entry's `ext`, or nothing when the entry
+ * is not narrowed. An empty array on the wire is kept as an empty array: it
+ * would mean "narrowed to nothing", which is not the same as unnarrowed.
+ */
+function capabilitiesFrom(ext: unknown): { capabilities?: string[] } {
+  if (!ext || typeof ext !== 'object') return {}
+  const value = (ext as Record<string, unknown>)[CAPABILITIES_EXT_MEMBER]
+  if (!Array.isArray(value)) return {}
+  return { capabilities: value.filter((c): c is string => typeof c === 'string') }
+}
+
+/** One of 0.2's three-shape scopes, when the member is one. */
+function statedScope(value: unknown): { scope: string; contexts?: unknown; grants?: unknown } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const scope = (value as { scope?: unknown }).scope
+  return typeof scope === 'string' ? (value as { scope: string }) : undefined
+}
+
+const stringsOf = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+
+/** What the entry may act on: 0.2's stated `act`, else what 0.1's `scopes` shape carries. */
+function actFrom(raw: Record<string, unknown>): { act?: AclAuthority } {
+  const stated = statedScope(raw.act)
+  if (stated) {
+    if (stated.scope === 'all') return { act: { stated: 'all' } }
+    if (stated.scope === 'none') return { act: { stated: 'none' } }
+    if (stated.scope === 'contexts') return { act: { stated: 'contexts', contexts: stringsOf(stated.contexts) } }
+    return {}
+  }
+  // 0.1: the list is all there is, and an empty one means different things for
+  // different roles — so it is marked as read-by-shape rather than resolved
+  // here, and the caller applies its maintainer's convention knowingly.
+  if (Array.isArray(raw.scopes)) return { act: { stated: 'byShape', contexts: stringsOf(raw.scopes) } }
+  return {}
+}
+
+/** The capability narrowing: 0.2's stated `capabilities`, else 0.1's `ext` member. */
+function capabilityScopeFrom(raw: Record<string, unknown>): {
+  capabilityScope?: { stated: 'ceiling' } | { stated: 'none' } | { stated: 'listed'; capabilities: string[] }
+} {
+  const stated = statedScope(raw.capabilities)
+  if (stated) {
+    if (stated.scope === 'ceiling') return { capabilityScope: { stated: 'ceiling' } }
+    if (stated.scope === 'none') return { capabilityScope: { stated: 'none' } }
+    if (stated.scope === 'listed') {
+      // Each grant names its capability; a resource qualifier may narrow it
+      // further, which nothing here reads yet.
+      const grants = Array.isArray(stated.grants) ? stated.grants : []
+      const capabilities = grants
+        .map((g) => (g && typeof g === 'object' ? (g as { capability?: unknown }).capability : undefined))
+        .filter((c): c is string => typeof c === 'string')
+      return { capabilityScope: { stated: 'listed', capabilities } }
+    }
+    return {}
+  }
+  const fromExt = capabilitiesFrom(raw.ext).capabilities
+  return fromExt ? { capabilityScope: { stated: 'listed', capabilities: fromExt } } : {}
+}
 
 /** Read an `AclEntry` off the wire, keeping only the members Keyring uses; undefined if it is not one. */
 function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
@@ -281,12 +426,49 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
   return {
     subject: raw.subject,
     role: raw.role,
+    // `scopes` is the entry's **context** list (the wire form of
+    // `allowed_contexts`), not its capabilities — reading it as capabilities is
+    // how this first went wrong.
     ...(Array.isArray(raw.scopes) ? { scopes: raw.scopes.filter((s): s is string => typeof s === 'string') } : {}),
+    ...capabilitiesFrom(raw.ext),
+    ...actFrom(raw),
+    ...capabilityScopeFrom(raw),
     ...text('label'),
     ...text('expiresAt'),
     ...text('createdAt'),
     ...text('createdBy'),
   }
+}
+
+/**
+ * The entries in an `acl/list` answer, as this client reads them.
+ *
+ * Exported so a test can put a **wire** document through the real parser
+ * rather than hand-building what it imagines the parser returns. That
+ * distinction is not academic: the hidden-vetting tests once faked the parsed
+ * shape with the capability in the wrong member, agreeing with a parser bug
+ * and passing over it. `__tests__/hiddenVettingAcl.test.ts` validates the
+ * documents it passes here against the registry's own `acl/_shared` schemas,
+ * so wire shape and parse are each checked by something that is not the other.
+ */
+export function parseAclEntries(raw: unknown): VtaAclEntry[] {
+  const entries = Array.isArray(raw) ? raw : []
+  return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
+}
+
+/**
+ * How a log line names this phone's agent beside a task type: not at all, for
+ * hidden vetting.
+ *
+ * The vtiAgent side of this redaction keeps a vetter's DID out of the log
+ * (`isHiddenVettingType`). These lines name no vetter — the agent is the
+ * person's own — but `<agent DID> … vta/pcs/applications/create` still says
+ * *this person applied with private vetting*, and the phone's log leaves the
+ * device in remote logs and testers' problem reports. Half a privacy fix is
+ * not one.
+ */
+function agentNamedFor(type: string, vtaDid: string): string {
+  return isHiddenVettingType(type) ? 'its agent' : vtaDid
 }
 
 /** The `{entry}` wrapper that `acl/grant` and `acl/revoke` answer with. */
@@ -502,6 +684,25 @@ export class VtaTaskDropped extends Error {
   }
 }
 
+/**
+ * The task was sent and nothing answered it inside its own timeout.
+ *
+ * It was a bare `Error` with no code and, off TSP, **no log line at all**.
+ * That is why we could not say why `vta/pcs/prove` did not answer on
+ * 2026-10-15: a 90-second wait that ends in silence left nothing behind in the
+ * report to read. A caller can now word it, and the line below records it.
+ */
+export class VtaNoAnswer extends Error {
+  readonly code = 'vta:noAnswer'
+  constructor(
+    readonly taskType: string,
+    readonly waitedMs: number
+  ) {
+    super(`${LOG_PREFIX} the VTA did not answer ${taskType} within ${Math.round(waitedMs / 1000)} s`)
+    this.name = 'VtaNoAnswer'
+  }
+}
+
 /** TSP no-answers in a row that open the breaker (vta-sdk `REPLY_TIMEOUT_BREAKER`). */
 export const REPLY_TIMEOUT_BREAKER = 2
 /**
@@ -683,7 +884,9 @@ export class VtaClient {
   private grantWaiters = new Map<string, () => void>()
   /** Which version of each family this agent was found to serve (taskVersions.ts). */
   private readonly versions = new TaskVersions((family, from, to) =>
-    this.agent.config.logger.info(`${LOG_PREFIX} ${this.vtaDid} does not serve ${from}; asking ${to} (${family})`)
+    this.agent.config.logger.info(
+      `${LOG_PREFIX} ${agentNamedFor(from, this.vtaDid)} does not serve ${from}; asking ${to} (${family})`
+    )
   )
 
   constructor(
@@ -1000,7 +1203,9 @@ export class VtaClient {
         }
         const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document)
         await session.sendTspFrame(packed.bytes)
-        this.agent.config.logger.info(`${LOG_PREFIX} asked ${this.vtaDid} ${type} over ${packed.revision}`)
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} asked ${agentNamedFor(type, this.vtaDid)} ${type} over ${packed.revision}`
+        )
       } else
         await session.sendTo(this.vtaDid, {
           id: envelopeId,
@@ -1051,7 +1256,17 @@ export class VtaClient {
               `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
             )
         }
-        throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
+        // Said on every carriage, not only TSP, and at Info so a release build
+        // keeps it: on iOS this is the only place such a silence is recorded,
+        // and an unanswered task that leaves no trace cannot be diagnosed from
+        // a tester's report — which is exactly what happened with
+        // `vta/pcs/prove` on 2026-10-15.
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} no answer to ${type} after ${Math.round(timeoutMs / 1000)} s over ${
+            overTsp ? 'TSP' : 'DIDComm'
+          } — the ask is not resent, since a repeat could run it twice`
+        )
+        throw new VtaNoAnswer(type, timeoutMs)
       }
 
       // An auth/ACL refusal never reaches the task handler: the VTA answers
@@ -1069,7 +1284,9 @@ export class VtaClient {
         if (!logger) return
         if (verdict.kind === 'verified') logger.info(`${LOG_PREFIX} reply verified: ${type}`)
         else if (verdict.kind === 'wrongSigner')
-          logger.warn(`${LOG_PREFIX} reply signed by ${verdict.signer}, not ${this.vtaDid}: ${type}`)
+          logger.warn(
+            `${LOG_PREFIX} reply signed by ${isHiddenVettingType(type) ? 'another party' : verdict.signer}, not ${agentNamedFor(type, this.vtaDid)}: ${type}`
+          )
         else if (verdict.kind === 'unsigned') logger.warn(`${LOG_PREFIX} reply unsigned: ${type}`)
         else if (verdict.kind === 'invalid')
           logger.warn(`${LOG_PREFIX} reply proof does not verify (${verdict.detail}): ${type}`)
@@ -1404,8 +1621,7 @@ export class VtaClient {
         `${LOG_PREFIX} ${this.vtaDid} answered a partial access list; showing the first page`
       )
     }
-    const entries = Array.isArray(answer?.entries) ? answer.entries : []
-    return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
+    return parseAclEntries(answer?.entries)
   }
 
   /**
@@ -1848,5 +2064,247 @@ export class VtaClient {
       fetched = true
     }
     return fetched
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hidden vetting (PCS): the applicant's five tasks.
+  //
+  // The agent holds the per-application PCS key and builds the proof; this
+  // client only carries messages (zero-knowledge-plan D4). The other seven
+  // `vta/pcs/*` tasks belong to a vetter and are not here.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether this agent serves `vta/pcs/*` at all — `applications/show` with an
+   * id it cannot hold.
+   *
+   * `notFound` means the family is served, which is the answer we want: the
+   * probe asks a question whose "failure" is the success signal.
+   * `unsupportedType` means the agent predates vta-service 0.60.
+   *
+   * Returns `undefined` for "cannot tell", which includes a policy holding the
+   * probe for consent or step-up. `waitForConsent: false` keeps that cheap: a
+   * held task is refused at once rather than waiting, and the caller must NOT
+   * treat the refusal as a verdict — a rule covering reads is not evidence
+   * about the agent's version.
+   */
+  async servesPcs(): Promise<boolean | undefined> {
+    // Ask the agent what it serves, rather than inferring it from a refusal.
+    // `trust-task-discovery/0.1` answers from the dispatch table itself
+    // (`vta-service/src/trust_tasks/discovery.rs` passes `dispatched_uris()`)
+    // and its handler takes no capability check, so the answer is conclusive
+    // both ways and needs no grant.
+    try {
+      const answer = await this.task<{ supportedTypes?: unknown }>(
+        DISCOVERY_TASK,
+        // **No patterns**, deliberately: a responder matches a pattern against
+        // a task's *slug*, not its Type URI
+        // (`vti-common/src/trust_task/discovery.rs` `matches_any` calls
+        // `slug_of(uri)` before `match_slug`), so a URI-shaped pattern matches
+        // nothing and the answer comes back empty — which would read as "does
+        // not serve it" for an agent that does. An empty pattern list means
+        // every supported task (`matches_any` returns true when
+        // `patterns.is_empty()`), and the filtering happens below where the
+        // Type URIs are unambiguous. The spec's own payload note says as much:
+        // a discoverer wanting more asks for everything and filters locally.
+        {},
+        30000,
+        {},
+        undefined,
+        { waitForConsent: false }
+      )
+      const types = Array.isArray(answer?.supportedTypes) ? answer.supportedTypes : []
+      // Entries come as a bare URI or as `{type}` — both forms are legal in
+      // one list (spec 0.1 `supportedTypes`).
+      const uris = types
+        .map((t) =>
+          typeof t === 'string' ? t : t && typeof t === 'object' ? (t as { type?: unknown }).type : undefined
+        )
+        .filter((t): t is string => typeof t === 'string')
+      // An agent that lists nothing has not answered the question: an empty
+      // list is inconclusive, never a no.
+      if (uris.length > 0) return uris.some((uri) => uri.startsWith(PCS_FAMILY))
+    } catch {
+      // An agent that does not serve discovery, or a policy that denies it,
+      // leaves the question to the probe below.
+    }
+
+    try {
+      await this.task(
+        PCS_VTA_TASK.applicationsShow,
+        { applicationId: PCS_PROBE_APPLICATION_ID },
+        30000,
+        {},
+        undefined,
+        {
+          waitForConsent: false,
+        }
+      )
+      // An agent that answered at all serves the family; a hit on this id is
+      // not credible, but it would still prove the task is implemented.
+      return true
+    } catch (error) {
+      const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
+      if (code?.endsWith(':notFound') || code === 'notFound') return true
+      if (code === PCS_ERROR.unsupportedType || code?.endsWith(':unsupportedType')) return false
+      // `permissionDenied` is NOT evidence either way, however tempting it is.
+      // At 0.60 it means the capability check inside the handler ran, so the
+      // handler exists — but the policy gate runs *before* dispatch on older
+      // agents, and with `policy.enforcement` on, a denial for an unknown type
+      // is also `permissionDenied`; so is a policy-store read failure, which
+      // fails closed with "policy evaluation unavailable"
+      // (`vta-service/src/trust_tasks/policy_gate.rs:123-141`, read at
+      // vta-service-v0.56.0). A pre-0.60 agent can therefore say
+      // `permissionDenied` to a task it does not implement, and reading that as
+      // "serves it" would claim hidden vetting is available where it is not.
+      return undefined
+    }
+  }
+
+  /** `vta/pcs/applications/create/0.1`. One per join attempt, before any vetter is asked. */
+  async createPcsApplication(payload: ApplicationsCreatePayload): Promise<PcsApplication> {
+    const answer = await this.task<{ application?: PcsApplication }>(
+      PCS_VTA_TASK.applicationsCreate,
+      payload as unknown as Record<string, unknown>
+    )
+    const application = answer?.application
+    if (!application?.applicationId) throw new Error('vta/pcs/applications/create returned no application')
+    return application
+  }
+
+  /** `vta/pcs/applications/show/0.1`. The agent is the source of truth; this re-reads it. */
+  async showPcsApplication(applicationId: string): Promise<PcsApplication | undefined> {
+    const answer = await this.task<{ application?: PcsApplication }>(PCS_VTA_TASK.applicationsShow, { applicationId })
+    return answer?.application
+  }
+
+  /**
+   * `vta/pcs/verify-attestation/0.1`. The agent verifies the vetter's
+   * attestation and keeps it; nothing is stored on the device, by design.
+   */
+  async verifyPcsAttestation(payload: VerifyAttestationPayload): Promise<PcsApplication | undefined> {
+    const answer = await this.task<{ application?: PcsApplication }>(
+      PCS_VTA_TASK.verifyAttestation,
+      payload as unknown as Record<string, unknown>
+    )
+    return answer?.application
+  }
+
+  /**
+   * `vta/pcs/prove/0.1`. Ninety seconds, not the usual thirty: the agent is
+   * building a zero-knowledge proof, and upstream allows that much for it.
+   *
+   * `prove:noUsableAttestation` is a progress state — too few attestations yet
+   * — and reaches the caller as an error to read with `pcsErrorCode`, not as a
+   * failure of the call.
+   */
+  async provePcs(payload: ProvePayload): Promise<Record<string, unknown>> {
+    const answer = await this.task<{ hiddenVetting?: Record<string, unknown> }>(
+      PCS_VTA_TASK.prove,
+      payload as unknown as Record<string, unknown>,
+      90000
+    )
+    const hiddenVetting = answer?.hiddenVetting
+    if (!hiddenVetting) throw new Error('vta/pcs/prove returned no hiddenVetting object')
+    return hiddenVetting
+  }
+
+  /**
+   * The vetter's seven, in the order a vetter meets them.
+   *
+   * Enrolling and drawing are each three steps across two parties — the agent
+   * blinds, the community signs, the agent unblinds — because the agent holds
+   * the key and the community holds the authority. The phone never sees an
+   * unblinded credential.
+   */
+
+  /** `vta/pcs/vetter/show/0.1`. A read: labels, token counts, draws in flight. */
+  async showPcsVetter(payload: VetterShowPayload): Promise<VetterStanding | undefined> {
+    const answer = await this.task<{ vetter?: VetterStanding }>(
+      PCS_VETTER_TASK.vetterShow,
+      payload as unknown as Record<string, unknown>
+    )
+    return answer?.vetter
+  }
+
+  /**
+   * `vta/pcs/root-request/0.1`. The blinded enrolment request, for the phone
+   * to carry: the community's `pcs-root` payload, which the agent answers
+   * inside a `request` member.
+   */
+  async pcsRootRequest(payload: RootRequestPayload): Promise<RootRequestWire> {
+    const answer = await this.task<{ request?: Partial<RootRequestWire> }>(
+      PCS_VETTER_TASK.rootRequest,
+      payload as unknown as Record<string, unknown>
+    )
+    // The answer is `{ request: { label, id, request } }` — the community's
+    // payload, nested — not `{ id, request }`. Reading `id` one level up gave
+    // `''`, which test-vtc refused against `^z[1-9A-HJ-NP-Za-km-z]+$` in a way
+    // that read as an encoding problem rather than a missing field
+    // (2026-10-15). Never invent the id: a missing or non-base58 one is an
+    // answer we cannot use, so it is said here, before the community sees it.
+    const request = answer?.request
+    if (!request?.request || !request.label) throw new Error('vta/pcs/root-request returned no request')
+    const id = typeof request.id === 'string' ? request.id : ''
+    if (!MULTIBASE_BASE58.test(id)) {
+      throw Object.assign(
+        new Error(`vta/pcs/root-request returned no usable identifier (${id === '' ? 'absent' : 'not base58btc'})`),
+        { code: 'vta/pcs/root-request:noIdentifier' }
+      )
+    }
+    return request as RootRequestWire
+  }
+
+  /** `vta/pcs/root-accept/0.1`. The community's answer, for the agent to unblind and keep. */
+  async pcsRootAccept(payload: RootAcceptPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.rootAccept, payload as unknown as Record<string, unknown>)
+  }
+
+  /**
+   * `vta/pcs/tokens/request/0.1`. One blinded request per token of this tick's
+   * drip: the community's `pcs-tokens` payload, inside a `request` member.
+   */
+  async pcsTokensRequest(payload: TokensRequestPayload): Promise<TokenDrawWire> {
+    const answer = await this.task<{ request?: Partial<TokenDrawWire> }>(
+      PCS_VETTER_TASK.tokensRequest,
+      payload as unknown as Record<string, unknown>
+    )
+    const request = answer?.request
+    if (!Array.isArray(request?.requests) || !request.label || typeof request.tick !== 'number')
+      throw new Error('vta/pcs/tokens/request returned no requests')
+    return request as TokenDrawWire
+  }
+
+  /** `vta/pcs/tokens/accept/0.1`. The drawn tokens, for the agent to unblind and keep. */
+  async pcsTokensAccept(payload: TokensAcceptPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.tokensAccept, payload as unknown as Record<string, unknown>)
+  }
+
+  /** `vta/pcs/tokens/abandon/0.1`. Give up a draw, so the next is not refused as already in flight. */
+  async pcsTokensAbandon(payload: TokensAbandonPayload): Promise<void> {
+    await this.task(PCS_VETTER_TASK.tokensAbandon, payload as unknown as Record<string, unknown>)
+  }
+
+  /**
+   * `vta/pcs/attest/0.1`. The agent spends one token and builds the
+   * attestation, which names no vetter — the point of the construction.
+   * Ninety seconds, as `prove` has: it is the same arithmetic.
+   */
+  async pcsAttest(payload: AttestPayload): Promise<Record<string, unknown>> {
+    const answer = await this.task<{ attestation?: Record<string, unknown> }>(
+      PCS_VETTER_TASK.attest,
+      payload as unknown as Record<string, unknown>,
+      90000
+    )
+    if (!answer?.attestation) throw new Error('vta/pcs/attest returned no attestation')
+    return answer.attestation
+  }
+
+  /**
+   * `vta/pcs/applications/delete/0.1`, once the join is decided either way.
+   * Removes the application's key path and its attestations from the agent.
+   */
+  async deletePcsApplication(applicationId: string): Promise<void> {
+    await this.task(PCS_VTA_TASK.applicationsDelete, { applicationId })
   }
 }

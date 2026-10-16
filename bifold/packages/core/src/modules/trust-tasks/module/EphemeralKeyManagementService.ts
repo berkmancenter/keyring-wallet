@@ -72,6 +72,8 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   private readonly fetching = new Map<string, Promise<void>>()
   /** When a fetch last failed, so a key the agent will not give is not asked for on every use. */
   private readonly failedAt = new Map<string, number>()
+  /** Why the last fetch of each key failed, said when an operation then cannot proceed. */
+  private readonly failureReason = new Map<string, string>()
 
   public constructor() {
     const inner = this.askar as unknown as AskarKmsInternals
@@ -99,7 +101,8 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
       case 'encrypt':
       case 'decrypt':
         // Credo routes these by backend order, not key id: claim only our keys.
-        if (!isInMemoryKeyId(String((operation.keyAgreement as { keyId?: unknown } | undefined)?.keyId ?? ''))) return false
+        if (!isInMemoryKeyId(String((operation.keyAgreement as { keyId?: unknown } | undefined)?.keyId ?? '')))
+          return false
         break
       case 'sign':
       case 'verify':
@@ -133,12 +136,15 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     return this.askar.deleteKey(agentContext, options)
   }
 
-  public createKey<Type extends Kms.KmsCreateKeyType>(agentContext: AgentContext, options: Kms.KmsCreateKeyOptions<Type>) {
+  public createKey<Type extends Kms.KmsCreateKeyType>(
+    agentContext: AgentContext,
+    options: Kms.KmsCreateKeyOptions<Type>
+  ) {
     return this.askar.createKey(agentContext, options)
   }
 
   public async sign(agentContext: AgentContext, options: Kms.KmsSignOptions) {
-    await this.ensureHeld(options.keyId)
+    await this.heldOrExplained(options.keyId)
     return this.askar.sign(agentContext, options)
   }
 
@@ -147,13 +153,30 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   }
 
   public async encrypt(agentContext: AgentContext, options: Kms.KmsEncryptOptions) {
-    await this.ensureHeld(keyAgreementKeyId(options))
+    await this.heldOrExplained(keyAgreementKeyId(options))
     return this.askar.encrypt(agentContext, options)
   }
 
   public async decrypt(agentContext: AgentContext, options: Kms.KmsDecryptOptions) {
-    await this.ensureHeld(keyAgreementKeyId(options))
+    await this.heldOrExplained(keyAgreementKeyId(options))
     return this.askar.decrypt(agentContext, options)
+  }
+
+  /**
+   * `ensureHeld`, and then, for an operation that cannot go on without the
+   * copy, say WHY it is missing when its fetch failed: `KeyCopyUnavailable`
+   * with the fetcher's own reason (the agent did not come online, the
+   * identity's agent is no longer linked, no identity names the key) instead of
+   * the backend's bare "not found", which made every one of those causes look
+   * the same (#422). With no fetcher set, or no failure on record, the
+   * operation fails as it always did.
+   */
+  private async heldOrExplained(keyId: string | undefined): Promise<void> {
+    await this.ensureHeld(keyId)
+    if (!keyId || !isInMemoryKeyId(keyId) || !this.fetchMissing) return
+    const reason = this.failureReason.get(keyId)
+    if (reason === undefined || (await this.isHeld(keyId))) return
+    throw new KeyCopyUnavailable(keyId, reason)
   }
 
   public randomBytes(agentContext: AgentContext, options: Kms.KmsRandomBytesOptions) {
@@ -181,6 +204,7 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   public setMissingKeyFetcher(fetch: ((keyId: string) => Promise<void>) | undefined): void {
     this.fetchMissing = fetch
     this.failedAt.clear()
+    this.failureReason.clear()
   }
 
   /**
@@ -205,8 +229,14 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     const work = Promise.resolve()
       .then(() => fetch(keyId))
       .then(
-        () => void this.failedAt.delete(keyId),
-        () => void this.failedAt.set(keyId, Date.now())
+        () => {
+          this.failedAt.delete(keyId)
+          this.failureReason.delete(keyId)
+        },
+        (error: unknown) => {
+          this.failedAt.set(keyId, Date.now())
+          this.failureReason.set(keyId, error instanceof Error ? error.message : String(error))
+        }
       )
       .finally(() => this.fetching.delete(keyId))
     this.fetching.set(keyId, work)
@@ -238,6 +268,22 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
     } finally {
       await session.close()
     }
+  }
+}
+
+/**
+ * An in-memory key copy an operation needs is not held, and fetching it
+ * failed: `reason` is the fetcher's own (vtaAgent `fetchKeyCopy`), so a caller
+ * can tell "the agent could not be reached" from "this identity's agent is no
+ * longer linked" (#422).
+ */
+export class KeyCopyUnavailable extends Error {
+  constructor(
+    readonly keyId: string,
+    readonly reason: string
+  ) {
+    super(`the in-memory copy of ${keyId} could not be fetched: ${reason}`)
+    this.name = 'KeyCopyUnavailable'
   }
 }
 

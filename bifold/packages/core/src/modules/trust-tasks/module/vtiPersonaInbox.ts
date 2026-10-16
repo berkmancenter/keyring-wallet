@@ -18,7 +18,7 @@
  */
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
 import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
@@ -35,6 +35,8 @@ import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferErro
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
 import { vtiAgent } from './vtiAgent'
+import { vtaAgent } from './vtaAgent'
+import { KeyCopyUnavailable } from './EphemeralKeyManagementService'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
 
@@ -161,6 +163,11 @@ export const PERSONA_INBOX_STUCK_MS = 60_000
 
 /** Start collecting; returns the function that stops it. */
 export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): () => void {
+  // Before the first look signs in: a persona's key copy is borrowed into
+  // memory and gone after an install or restart, and only the fetcher can get
+  // it back. Left to the VTA controller's `restore`, it was installed after
+  // this inbox's first sign-in on a fresh install (#422).
+  vtaAgent.installKeyFetcher(agent)
   const peerRevisionStore = new GenericRecordsTspPeerRevisionStore(agent)
   let persona: VtiPersona | undefined
   let stopped = false
@@ -276,9 +283,27 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
         return said('waiting for a sign-in already running')
       }
       said('signing in as the persona')
-      await vtiAgent.connect(agent, options.mediatorDid, { persona, peerRevisionStore })
+      const signIn = (who: VtiPersona) =>
+        vtiAgent.connect(agent, options.mediatorDid, { persona: who, peerRevisionStore })
+      try {
+        await signIn(persona)
+      } catch (e) {
+        if (!isMissingKeyCopy(e)) throw e
+        // The persona's borrowed key is not in memory (an install, a restart,
+        // a lock). Borrow it again through its agent and sign in once more; if
+        // the agent cannot be reached, say that, not "this persona is broken".
+        said('its borrowed key is not in memory; borrowing it again')
+        try {
+          await vtaAgent.refetchPersonaKeys(agent, persona)
+        } catch (fetchError) {
+          throw new PersonaAgentUnreachable(persona, fetchError)
+        }
+        await signIn(persona)
+      }
+      setAgentState(persona, undefined)
       said('signed in')
     } catch (e) {
+      if (e instanceof PersonaAgentUnreachable && persona) setAgentState(persona, e)
       said(`sign-in failed: ${e instanceof Error ? e.message : String(e)}`)
       options.onError?.(e)
     } finally {
@@ -343,6 +368,68 @@ async function takeInvitationOffer(
     }
     logger?.warn?.(`[VTI] invitation offer not taken: ${(e as Error).message}`)
   }
+}
+
+/** Whether a sign-in failed because a borrowed key copy is not in memory (#422). */
+export function isMissingKeyCopy(error: unknown): boolean {
+  if (error instanceof KeyCopyUnavailable) return true
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /not found in backend 'ephemeral'|in-memory copy of .* could not be fetched/.test(message)
+}
+
+/**
+ * A persona could not sign in because its borrowed key could not be fetched
+ * again: its agent did not answer, or is no longer linked. What the person can
+ * do is reconnect (or re-link) that agent, which is a different thing from a
+ * persona that is broken, so it is said as its own state (#422).
+ */
+export class PersonaAgentUnreachable extends Error {
+  /** `notLinked` when the persona's agent is no longer linked to this phone; else `unreachable`. */
+  readonly kind: 'unreachable' | 'notLinked'
+  constructor(
+    readonly persona: Pick<VtiPersona, 'did' | 'communityDid'>,
+    readonly fetchError: unknown
+  ) {
+    const reason = fetchError instanceof Error ? fetchError.message : String(fetchError)
+    super(`this identity's agent could not be reached to borrow its key again: ${reason}`)
+    this.name = 'PersonaAgentUnreachable'
+    this.kind = /no longer linked/.test(reason) ? 'notLinked' : 'unreachable'
+  }
+}
+
+/** Said when a community's identity's agent cannot be reached, or can again (`undefined`). */
+export const VTI_PERSONA_AGENT_STATE_EVENT = 'vti:persona-agent-state'
+const agentStates = new Map<string, PersonaAgentUnreachable>()
+
+function setAgentState(persona: Pick<VtiPersona, 'communityDid'>, state: PersonaAgentUnreachable | undefined): void {
+  const key = persona.communityDid
+  if (!key || (state === undefined && !agentStates.has(key))) return
+  if (state) agentStates.set(key, state)
+  else agentStates.delete(key)
+  try {
+    DeviceEventEmitter.emit(VTI_PERSONA_AGENT_STATE_EVENT, { communityDid: key, unreachable: state?.kind })
+  } catch {
+    // A listener's failure is the listener's.
+  }
+}
+
+/** Whether `communityDid`'s identity is waiting on its agent to be reconnected, and why. */
+export function personaAgentState(communityDid: string): PersonaAgentUnreachable | undefined {
+  return agentStates.get(communityDid)
+}
+
+/** The same, for a screen: re-read whenever the inbox says it changed. */
+export function usePersonaAgentState(communityDid: string | undefined): PersonaAgentUnreachable | undefined {
+  const [state, setState] = useState(() => (communityDid ? personaAgentState(communityDid) : undefined))
+  useEffect(() => {
+    if (!communityDid) return setState(undefined)
+    setState(personaAgentState(communityDid))
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_AGENT_STATE_EVENT, (e: { communityDid?: string }) => {
+      if (e?.communityDid === communityDid) setState(personaAgentState(communityDid))
+    })
+    return () => sub.remove()
+  }, [communityDid])
+  return state
 }
 
 /** Run the persona inbox while the app is unlocked and an agent exists. */

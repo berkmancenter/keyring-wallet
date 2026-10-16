@@ -20,6 +20,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, VtiSentNoAnswer, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { identityWord } from '../screens/VtiJoin'
+import { registerHiddenVetting, type HiddenVettingSeam } from '../screens/hiddenVettingSeam'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../../vrc/vrc-biometric', () => ({
@@ -152,6 +153,55 @@ describe('Join, at manifest 0.3', () => {
       expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
       expect(tree.queryByText(/Join\.Ways\.ButtonVetting/)).toBeNull()
       expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toBeTruthy()
+    })
+
+    // 242: in a build that carries hidden vetting, the private way is offered.
+    // The person's agent is asked only on the tap; then the identity is made
+    // as for any vetting, and its own screen opens.
+    // Alberto, 2026-10-15: one flow. A private way is "Meet a vetter", marked
+    // as private; the agent is asked on that tap; then the identity and the
+    // ordinary vetting screen, never a separate one.
+    it('in a build that carries it: marked private, "Meet a vetter" asks the agent, then the ordinary vetting', async () => {
+      const check = jest.fn(async () => ({ ok: true as const }))
+      registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+      try {
+        const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+        expect(check).not.toHaveBeenCalled()
+        expect(tree.getByTestId(id('JoinWayPrivate_vetted-member'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+        expect(tree.getByTestId(id('JoinWayPrivate_vetted-memberExplain'))).toBeTruthy()
+        expect(tree.queryByTestId(id('JoinWaysVettingNotSupported'))).toBeNull()
+        expect(tree.queryByTestId(id('JoinPrivateVettingStart_vetted-member'))).toBeNull()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(check).toHaveBeenCalled()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+        expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+        expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+      } finally {
+        registerHiddenVetting(undefined)
+      }
+    })
+
+    it('the agent says no: the reason in place, and no identity step', async () => {
+      const check = jest.fn(async () => ({ ok: false as const, reason: 'agentTooOld' as const }))
+      registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+      try {
+        const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(tree.getByTestId(id('JoinPrivateVettingRefused'))).toHaveTextContent(
+          'Join.Ways.PrivateVettingAgentTooOld'
+        )
+        expect(tree.queryByTestId(id('JoinAsContinue'))).toBeNull()
+      } finally {
+        registerHiddenVetting(undefined)
+      }
     })
 
     it('at manifest 0.2 too: the message, and no way to start', async () => {

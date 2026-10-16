@@ -77,7 +77,7 @@ const KNOWN: ReadonlyArray<NonNullable<JoinSubmission['status']>> = [
  */
 export async function recordSent(
   store: VtiCommunityStore,
-  sent: Pick<JoinSubmission, 'communityDid' | 'personaDid' | 'withInvitation' | 'via'>,
+  sent: Pick<JoinSubmission, 'communityDid' | 'personaDid' | 'withInvitation' | 'via' | 'privateVetting'>,
   now = new Date()
 ): Promise<void> {
   await store.saveSubmission?.({ ...sent, sentAt: now.toISOString() })

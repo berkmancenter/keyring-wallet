@@ -19,6 +19,7 @@ import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
+import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/vtiAgent', () => ({
@@ -218,6 +219,42 @@ describe('the community screen, for a member', () => {
     const tree = show()
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
+  })
+
+  // One flow (Alberto, 2026-10-15): a vetter vouches privately from the
+  // ordinary desk, so there is no separate "Vouch privately" entry here.
+  it('a vetter where a way runs private vetting: only the ordinary desk, no separate entry', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership },
+      vetterGrant: { state: 'active', statusChecked: true },
+    }
+    const { vtiAgent: mocked } = jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }
+    mocked.fetchManifest.mockResolvedValue({
+      criteria: [
+        { id: 'vetted-member', vetting: { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } } },
+      ],
+    })
+    registerHiddenVetter({ standing: jest.fn() } as unknown as HiddenVetterSeam)
+    try {
+      const tree = show()
+      await act(async () => undefined)
+      expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('CommunityVouchPrivately'))).toBeNull()
+    } finally {
+      registerHiddenVetter(undefined)
+      mocked.fetchManifest.mockResolvedValue({ criteria: [] })
+    }
+  })
+
+  // The result is marked as the steps were.
+  it('a membership won by private vetting says so', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership: { ...membership, privateVetting: true } },
+      vetterGrant: { state: 'none' },
+    }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('CommunityJoinedPrivately'))).toHaveTextContent(/Vetting\.Private\.Joined/)
   })
 
   it('someone not yet a member still sees what is asked, and Apply', async () => {

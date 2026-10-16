@@ -57,6 +57,28 @@ import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type Credential
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
 import { emitCommunityChanged } from './communityChanged'
 import {
+  beginHiddenApplication,
+  hiddenParametersOf,
+  hiddenSubmissionExtensions,
+  loadHiddenVettingRecord,
+  NOT_ENOUGH_YET,
+  takeHiddenAttestation,
+  type HiddenVettingRecord,
+} from './hiddenVetting'
+import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
+import {
+  connectedVetterClient,
+  currentHiddenCriterion,
+  drawVetterTokens,
+  enrolVetter,
+  isEnrolled,
+  nowMs,
+  publishedOf as vetterPublishedOf,
+  vetterContextOf,
+} from './hiddenVetterRounds'
+import { vtaAgent } from './vtaAgent'
+import type { VtaClient } from './VtaClient'
+import {
   VETTER_ROLE,
   buildEligibilityPresentation,
   verifyEligibilityPresentation,
@@ -69,6 +91,13 @@ import { releaseWarn } from './releaseLog'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
+  /**
+   * `vetting/attestation/0.1`: a vetter gives the applicant a hidden-vetting
+   * attestation that names nobody (openvtc-core `wire::hidden_attestation`).
+   * Sent by the vetter's agent as a plain DIDComm message whose body is the
+   * attestation, threaded on the vetting session; not a peer document.
+   */
+  attestation: 'https://trusttasks.org/spec/vetting/attestation/0.1',
   session: 'https://trusttasks.org/spec/vetting/session/0.1',
   decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
   revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
@@ -110,6 +139,8 @@ export interface VettingTicket {
   methods?: VettingMethod[]
   createdAt: string
 }
+/** The `ext` namespace a hidden-vetting request carries the applicant's identifier under (openvtc `hidden::REQUEST_EXT_MEMBER`). */
+export const HIDDEN_VETTING_NS = 'org.openvtc.hidden-vetting'
 
 /** One request on the vetter's desk. */
 export interface VettingDeskRequest {
@@ -144,6 +175,14 @@ export interface VettingDeskRequest {
   }
   card?: Record<string, unknown>
   statementId?: string
+  /**
+   * The applicant's PCS identifier, when the request asked to be vetted
+   * privately: its `ext["org.openvtc.hidden-vetting"].id` (openvtc
+   * `hidden::read_request_ext`). Present marks a hidden-vetting request, which
+   * is answered with an attestation that names nobody (`attestHidden`), never
+   * with a signed statement; absent is the named path.
+   */
+  hiddenApplicantId?: string
   /**
    * When this vetter compared the match codes and said they match. Kept on the
    * record, not only on screen: a relaunch after the card had arrived sent the
@@ -241,6 +280,14 @@ export interface VettingApplicationRequest {
     | 'commitment'
     /** No card was sent on the session it names: openvtc `on_statement` (applicant.rs:1104-1106). */
     | 'noCard'
+    /**
+     * A **named** statement arrived for an application being vetted privately:
+     * the vetter's Keyring is too old to vouch privately. The community counts
+     * a proof for a hidden criterion and never statements, so this one can
+     * never count — and saying nothing left the person watching a screen that
+     * would not change (his 2026-10-15 run, where the vetter was on 256).
+     */
+    | 'namedForPrivate'
     /**
      * In the shape from before DTG Credentials v1, received after
      * LEGACY_DTG_SHAPE_UNTIL: no longer read (228).
@@ -998,7 +1045,88 @@ export class VtiVetterDesk {
     // Returned: what the message changes is stored before the mediator is
     // told it was taken, and a failure leaves it for redelivery.
     this.stop = vtiAgent.onInbound((m) => this.inbound(m))
+    void this.keepHiddenVetterReady('listen')
     return this.stop
+  }
+
+  /** When this desk last ran its hidden-vetting round, on the one clock (`nowMs`). */
+  private hiddenReadyAt?: number
+  /** The round running now, so a second trigger joins it rather than starting another. */
+  private hiddenReadying?: Promise<void>
+
+  /**
+   * Keep this vetter ready to vouch privately, without anyone asking: when the
+   * community publishes a hidden criterion this build carries and the phone
+   * holds a live vetter grant for it, enrol for the current period if not
+   * enrolled, then draw this tick's tokens (`hiddenVetterRounds`, the same
+   * rounds the vetter screens run).
+   *
+   * A vetter that held a live grant all evening made no `vta/pcs/*` call at
+   * all, because enrolment sat behind a screen they never opened — so the
+   * desk does it. Quietly: nothing is put on screen, a failure is logged and
+   * the ordinary desk works as before. No DID is logged: the log leaves the
+   * device (`isHiddenVettingType`).
+   *
+   * Run when the desk starts listening (at most once per
+   * `HIDDEN_VETTER_READY_INTERVAL_MS`: the Vetting screen calls `listen` every
+   * few seconds) and at once when a hidden request arrives, so a vetter
+   * enrolled but holding no free token gets one before they try to vouch.
+   */
+  keepHiddenVetterReady(trigger: 'listen' | 'request'): Promise<void> {
+    if (this.hiddenReadying) return this.hiddenReadying
+    const now = nowMs()
+    if (
+      trigger === 'listen' &&
+      this.hiddenReadyAt !== undefined &&
+      now - this.hiddenReadyAt < HIDDEN_VETTER_READY_INTERVAL_MS
+    )
+      return Promise.resolve()
+    this.hiddenReadyAt = now
+    const logger = this.agent.config?.logger
+    this.hiddenReadying = this.readyHiddenVetter(trigger)
+      .catch((e: unknown) => {
+        const code = (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e)
+        logger?.warn?.(
+          `[hidden-vetting] vetter round (${trigger}) did not finish${code ? ` (${String(code)})` : ''}: ${
+            e instanceof Error ? e.message : String(e)
+          }`
+        )
+      })
+      .finally(() => {
+        this.hiddenReadying = undefined
+      })
+    return this.hiddenReadying
+  }
+
+  private async readyHiddenVetter(trigger: 'listen' | 'request'): Promise<void> {
+    const community = this.persona.communityDid
+    const logger = this.agent.config?.logger
+    // Most communities publish no hidden criterion: nothing to do, and nothing said.
+    const criterion = await currentHiddenCriterion(this.agent, community)
+    if (!criterion) return
+    const standing = (await this.grantWithState()).state
+    if (standing.state !== 'active') {
+      logger?.info?.(
+        `[hidden-vetting] vetter round (${trigger}): no live vetter grant (${standing.state}); not enrolling`
+      )
+      return
+    }
+    // A status list that cannot be read now reads as active, unchecked:
+    // enrolling then is right (a vetter must be able to work offline), and
+    // saying which it was explains a later refusal from the community.
+    logger?.info?.(
+      `[hidden-vetting] vetter round (${trigger}): grant active, status ${
+        standing.statusChecked ? 'checked' : `not checked${standing.reason ? ` (${standing.reason})` : ''}`
+      }`
+    )
+    if (!(await isEnrolled(this.agent, community, criterion))) {
+      await enrolVetter(this.agent, community, criterion)
+      logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
+    }
+    const { drawn } = await drawVetterTokens(this.agent, community, criterion)
+    logger?.info?.(
+      `[hidden-vetting] vetter round (${trigger}): ${drawn ? `drew ${drawn} token(s)` : 'no draw due this tick'}`
+    )
   }
 
   /** Stop what `listen` started. A desk left listening answers every request a second time. */
@@ -1140,10 +1268,14 @@ export class VtiVetterDesk {
       requirementsDigest: typeof p.requirementsDigest === 'string' ? p.requirementsDigest : undefined,
       preferredMethod: p.preferredMethod as VettingMethod | undefined,
       message: typeof p.message === 'string' ? p.message : undefined,
+      ...(hiddenApplicantIdOf(p.ext) ? { hiddenApplicantId: hiddenApplicantIdOf(p.ext) } : {}),
       status: 'accepted',
       receivedAt: new Date().toISOString(),
     }
     await this.store.saveDesk(request)
+    // A private request: make sure this vetter is enrolled and holds a token
+    // before they come to vouch (`keepHiddenVetterReady`), without waiting on it.
+    if (request.hiddenApplicantId) void this.keepHiddenVetterReady('request')
     const grant = await this.grant()
     const eligibilityVp = grant
       ? await this.eligibilityPresentation(grant.credential, { nonce: requestDocumentId, domain: joinDid })
@@ -1378,6 +1510,17 @@ export class VtiVetterDesk {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk?.card || !desk.session) throw new Error('vtiVetting: no card to attest')
     if (!decision.livenessConfirmed) throw new Error('vtiVetting: confirm the match code with the person present first')
+
+    // A request that asked to be vetted privately never takes the named path.
+    //
+    // The dispatch belongs here and nowhere else: the screens call this one
+    // method for both kinds, so a check in a screen would have to be repeated
+    // in every screen that ever attests. Build 258 shipped without it, and a
+    // vetter answering a private request wrote a named statement — which the
+    // community discards (it counts a proof for a hidden criterion, never
+    // statements), so the vouch silently did not count, and the statement
+    // named the vetter to the applicant in the process.
+    if (desk.hiddenApplicantId) return this.attestPrivately({ ...desk, session: desk.session }, decision)
     const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
     for (const c of decision.claimsVerified)
       if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
@@ -1503,6 +1646,142 @@ export class VtiVetterDesk {
     return write
   }
 
+  /**
+   * The open requests that asked to be vetted privately, for this community:
+   * only those carrying the applicant's PCS identifier. Never the desk filtered
+   * by community alone, which would show the named queue as private vouching.
+   */
+  async hiddenRequests(communityDid: string): Promise<VettingDeskRequest[]> {
+    return (await this.store.listDesk()).filter(
+      (r) =>
+        r.communityDid === communityDid && !!r.hiddenApplicantId && r.status !== 'attested' && r.status !== 'declined'
+    )
+  }
+
+  /**
+   * Answer a private request: a PCS attestation built by the agent, spending
+   * one of this vetter's tokens and naming nobody.
+   *
+   * Nothing here is invented, and `method` comes from the **session** rather
+   * than the applicant's `preferredMethod` for a reason worth stating: the
+   * meta says what the vetter *did*, and the community verifies it as such.
+   * `preferredMethod` is only what the applicant asked for, so an attestation
+   * reading `inPerson` for a session the vetter actually ran over video would
+   * be a false statement made under that vetter's token (32's argument, which
+   * is better than the one this comment first gave — that the session was
+   * merely the more reliable source). It is also optional, and his 2026-10-15
+   * request carried none, so keying on it refused every attestation until a
+   * test caught it.
+   *
+   * The declared relationship is the vetter's own answer and has no default: a
+   * request without one is refused rather than attested on a guess, because it
+   * too is a member of the attestation the community verifies.
+   */
+  private async attestPrivately(
+    // `attest` has already refused a request with no card or session, so the
+    // session is present by the time this is reached.
+    desk: VettingDeskRequest & { session: NonNullable<VettingDeskRequest['session']> },
+    decision: {
+      claimsVerified: string[]
+      livenessConfirmed: boolean
+      declaredRelationship?: string
+      validDays?: number
+    }
+  ): Promise<VettingDeskRequest> {
+    if (!decision.declaredRelationship) {
+      throw Object.assign(new Error('vtiVetting: a private attestation needs how the vetter knows this person'), {
+        code: 'vtiVetting/attest:noDeclaredRelationship',
+      })
+    }
+    const criterion = await currentHiddenCriterion(this.agent, desk.communityDid)
+    const parameters = criterion && vetterPublishedOf(criterion)
+    if (!parameters) {
+      throw Object.assign(new Error('vtiVetting: this community publishes no private vetting to attest under'), {
+        code: 'vtiVetting/attest:notHiddenCommunity',
+      })
+    }
+    const client = await connectedVetterClient(this.agent)
+    const contextId = await vetterContextOf(client)
+    return this.attestHidden(
+      desk.requestId,
+      {
+        method: desk.session.method,
+        claimsVerified: decision.claimsVerified,
+        livenessConfirmed: decision.livenessConfirmed,
+        declaredRelationship: decision.declaredRelationship as HiddenAttestMeta['declaredRelationship'],
+        ...(decision.validDays !== undefined ? { validDays: decision.validDays } : {}),
+      },
+      async ({ applicantId, meta }) =>
+        client.pcsAttest({ contextId, community: desk.communityDid, parameters, applicantId, meta })
+    )
+  }
+
+  /**
+   * Vouch privately for a hidden-vetting request: the same checks as `attest`,
+   * then the ten `meta` members the agent binds into the attestation, then the
+   * attestation itself to the applicant as `vetting/attestation/0.1`.
+   *
+   * `build` is the agent's half (`vta/pcs/attest`, which holds the key and
+   * spends a token); the caller supplies it with the community's parameters
+   * and its context. What it returns goes to the applicant as it came, as a
+   * plain message whose body is the attestation, threaded on the session —
+   * openvtc's `wire::hidden_attestation`, and what `VtiApplicant` reads.
+   *
+   * Nothing names this vetter to the community: the attestation carries no
+   * issuer, and the desk keeps no statement id for it.
+   *
+   * `validFrom` and `validUntil` are DATES (`hidden-vetting.schema.json`
+   * `StatementMeta`: an exact time would let a community line an attestation
+   * up with a vetter's activity), both from one reading of `now`.
+   */
+  async attestHidden(
+    requestId: string,
+    statement: {
+      method: HiddenAttestMeta['method']
+      claimsVerified: string[]
+      livenessConfirmed: boolean
+      declaredRelationship: HiddenAttestMeta['declaredRelationship']
+      validDays?: number
+    },
+    build: (input: { applicantId: string; meta: HiddenAttestMeta }) => Promise<Record<string, unknown>>,
+    now: number = Date.now()
+  ): Promise<VettingDeskRequest> {
+    const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
+    if (!desk) throw new Error('vtiVetting: no such request')
+    if (!desk.hiddenApplicantId) throw new Error('vtiVetting: this request did not ask to be vetted privately')
+    if (desk.status === 'attested' || desk.status === 'declined')
+      throw new Error(`vtiVetting: this request is already ${desk.status}`)
+    if (!desk.card || !desk.session) throw new Error('vtiVetting: no card to attest')
+    if (!statement.livenessConfirmed)
+      throw new Error('vtiVetting: confirm the match code with the person present first')
+    if (!desk.requirementsDigest)
+      throw new Error('vtiVetting: the request named no criterion, so an attestation could not be bound to one')
+    if (statement.claimsVerified.length === 0) throw new Error('vtiVetting: name at least one claim verified')
+    const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
+    for (const c of statement.claimsVerified)
+      if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
+    for (const c of desk.session.requiredClaims)
+      if (!statement.claimsVerified.includes(c)) throw new Error(`vtiVetting: ${c} was not verified`)
+
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+    const meta: HiddenAttestMeta = {
+      community: desk.communityDid,
+      requirementsDigest: desk.requirementsDigest,
+      method: statement.method,
+      claimsVerified: statement.claimsVerified,
+      livenessConfirmed: true,
+      declaredRelationship: statement.declaredRelationship,
+      identityCommitment: String(desk.card.identityCommitment ?? ''),
+      cardDigestMultibase: cardDigestMultibase(desk.card),
+      validFrom: day(now),
+      validUntil: day(now + (statement.validDays ?? 120) * 86400000),
+    }
+    const attestation = await build({ applicantId: desk.hiddenApplicantId, meta })
+    await vtiAgent.send(desk.applicantDid, VETTING.attestation, attestation, { thid: desk.session.documentId })
+    await this.patchDesk(requestId, () => ({ status: 'attested' }))
+    return { ...desk, status: 'attested' }
+  }
+
   async decline(requestId: string, message?: string): Promise<void> {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk) return
@@ -1607,6 +1886,25 @@ export class VtiApplicant {
     application.claims = { ...application.claims, ...claims }
     if (options.ticket?.trim()) application.pendingTicket = options.ticket.trim()
     await this.store.saveApplication(application)
+
+    // One tap, two applications. A private way in needs an application at the
+    // agent as well — it holds the key and builds the proof — and asking the
+    // person to start a second time on a second screen is the repeated step
+    // Alberto asked us to remove. The named application is saved first and
+    // kept whatever happens here: a phone whose agent cannot carry private
+    // vetting has still started applying, and the refusal belongs where the
+    // person acts, not at the start of a flow they were offered.
+    const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
+    if (privateCriterion && (!digest || privateCriterion.requirementsDigest === digest)) {
+      try {
+        await beginHiddenApplication(this.agent, await this.pcsClient(), this.persona.communityDid, privateCriterion)
+      } catch (error) {
+        this.agent.config?.logger?.info?.(
+          `[hidden-vetting] no agent-side application for ${privateCriterion.id}: ${String(error)}`
+        )
+      }
+    }
+
     this.onChange?.()
     return application
   }
@@ -1637,6 +1935,9 @@ export class VtiApplicant {
 
   private async inbound(m: DidCommV2PlaintextMessage): Promise<void> {
     const type = typeOf(m)
+    // A hidden-vetting attestation belongs to the hidden application, which is
+    // kept apart from the named one (hiddenVetting.ts), so it is routed first.
+    if (type === VETTING.attestation) return this.receiveAttestation(m)
     // With no application there is nothing for these to change, and never
     // will be: taken and dropped, rather than failed and redelivered forever
     // (a failure withholds the mediator's ack, vtiAgent.onInbound).
@@ -1661,6 +1962,104 @@ export class VtiApplicant {
     if (type.startsWith(TASK_ERROR)) return this.refused(m)
     if (type === VETTING.session) return this.sessionOpened(m)
     return this.declined(m)
+  }
+
+  /**
+   * A vetter's hidden attestation (`vetting/attestation/0.1`), handed to this
+   * persona's agent as it came (`vta/pcs/verify-attestation`, through
+   * `takeHiddenAttestation`). The agent verifies and keeps it; this phone stores
+   * no attestation.
+   *
+   * Taken plain, as openvtc's applicant takes it (`inbound.rs` `attestation()`
+   * reads `message.body`): it is not a peer document, and it is not
+   * self-proving to the client. The engine is what verifies it, so opening it
+   * here would add a check upstream does not make and refuse valid ones.
+   *
+   * The sender is authenticated by the envelope and deliberately **not** kept
+   * or logged beside the attestation (nor is the community: the log leaves the
+   * device, `isHiddenVettingType` in vtiAgent): that would rebuild, in the applicant's
+   * own records, the link the exchange exists to remove (openvtc design §18).
+   * One hidden application per community, so the persona's community says
+   * which application it is for.
+   *
+   * Unverified against a real delivery: no attestation has reached a phone yet,
+   * so the body is read as `vetting/attestation/0.1` and openvtc's sender
+   * define it, and a first real run is where that shape is confirmed.
+   *
+   * A refusal by the agent (an old vetter, another community, a closed token
+   * label) is logged and the delivery taken: the same bytes would be refused
+   * again. Anything else (the agent unreachable, say) is thrown, so the
+   * mediator keeps it for redelivery.
+   */
+  private async receiveAttestation(m: DidCommV2PlaintextMessage): Promise<void> {
+    const community = this.persona.communityDid
+    const logger = this.agent.config?.logger
+    const attestation = readHiddenAttestation(m.body)
+    if (!attestation) {
+      logger?.warn?.('[hidden-vetting] an attestation was not in the published shape; dropped')
+      return
+    }
+    if (!(await loadHiddenVettingRecord(this.agent, community))) {
+      logger?.warn?.('[hidden-vetting] an attestation arrived for a community with no hidden application; dropped')
+      return
+    }
+    try {
+      const record = await takeHiddenAttestation(this.agent, await this.pcsClient(), community, attestation)
+      logger?.info?.(`[hidden-vetting] attestation taken by the agent; it reports ${record.held} held`)
+    } catch (error) {
+      const code = pcsErrorCode((error as { document?: unknown })?.document ?? error)
+      if (!code) throw error
+      logger?.warn?.(`[hidden-vetting] the agent refused an attestation (${code}); dropped`)
+      return
+    }
+    this.onChange?.()
+  }
+
+  /**
+   * The hidden application this community's way in is gathering for, if the
+   * way in is private.
+   *
+   * Private mode is read from **state**, not from a flag a screen passes:
+   * `start` creates this record when the criterion publishes hidden-vetting
+   * parameters this build can carry, so its presence is what "this is a
+   * private application" means (Alberto, 2026-10-15 — the same flow, with the
+   * zero-knowledge part on the agent, detected from state).
+   *
+   * Note its `joinDid` is the phone's identity at its **agent**, not this
+   * persona: the agent mints the application key against the identity it
+   * knows. So it is never compared with `persona.did`.
+   */
+  private hiddenApplication(): Promise<HiddenVettingRecord | undefined> {
+    return loadHiddenVettingRecord(this.agent, this.persona.communityDid)
+  }
+
+  /**
+   * The same record, for a reader that must not fail because of it.
+   *
+   * `checklist` is called on every render of a vetting screen, including for
+   * communities with no private way in at all, so a record that cannot be read
+   * must leave the named numbers intact rather than turn a working screen into
+   * an error. **`submit` deliberately does not use this**: there, a read that
+   * failed would fall through to the named path and send statements for a
+   * hidden criterion — the downgrade #405 exists to prevent — so it is better
+   * for a submit to fail loudly than to quietly name the vetters a proof was
+   * meant to hide.
+   */
+  private async hiddenApplicationForDisplay(): Promise<HiddenVettingRecord | undefined> {
+    try {
+      return await this.hiddenApplication()
+    } catch (error) {
+      this.agent.config?.logger?.debug?.(`[hidden-vetting] the private application could not be read: ${String(error)}`)
+      return undefined
+    }
+  }
+
+  /** The linked agent's client, with its session open: where `vta/pcs/*` goes. */
+  private async pcsClient(): Promise<VtaClient> {
+    const vtaDid = vtaAgent.agentAddress()
+    if (!vtaDid) throw new Error('vtiVetting: no agent is linked to take a hidden attestation')
+    await vtaAgent.connect(this.agent, vtaDid)
+    return vtaAgent.client(this.agent, vtaDid)
   }
 
   /**
@@ -1717,6 +2116,7 @@ export class VtiApplicant {
       preferredMethod: input.method ?? 'inPerson',
       languages: ['en'],
       ...(input.message ? { message: input.message } : {}),
+      ...(await this.hiddenRequestExt(application)),
     })
     await vtiAgent.send(vetterDid, VETTING.request, doc)
     const request: VettingApplicationRequest = {
@@ -1732,6 +2132,28 @@ export class VtiApplicant {
     await this.store.saveApplication(application)
     this.onChange?.()
     return request
+  }
+
+  /**
+   * Under a hidden criterion the vetter needs the identifier it will attest to,
+   * and the join DID is not that name. It travels in the request's framework
+   * extension point, as openvtc sends it (`hidden::request_ext`), so a
+   * community or vetter that does not run hidden vetting sees a request it
+   * already understands. Nothing is added for a named application.
+   *
+   * A hidden application whose identifier is not known yet cannot be vetted:
+   * the request is refused here rather than sent to a vetter who could only
+   * answer with a statement that names them.
+   */
+  private async hiddenRequestExt(application: VettingApplication): Promise<{ ext?: Record<string, unknown> }> {
+    const hidden = await loadHiddenVettingRecord(this.agent, application.communityDid)
+    if (!hidden || hidden.joinDid !== application.joinDid) return {}
+    if (!hidden.id) {
+      throw new Error(
+        'vtiVetting: the hidden-vetting application has no identifier yet; refresh it before asking a vetter'
+      )
+    }
+    return { ext: { [HIDDEN_VETTING_NS]: { suite: HIDDEN_VETTING_SUITE, id: hidden.id } } }
   }
 
   /** This person says the codes match: kept, so a relaunch keeps the step. */
@@ -2022,6 +2444,20 @@ export class VtiApplicant {
     const request = application.requests.find((r) => r.vetterDid === sender)
     if (!request) return
 
+    // This application is being vetted privately, so a named statement cannot
+    // count for it however well formed it is: the community counts the agent's
+    // proof and discards statements for a hidden criterion. Refused with a
+    // reason the screen can word, instead of being kept where only the named
+    // checklist would ever look at it.
+    if (await this.hiddenApplicationForDisplay()) {
+      this.agent.config?.logger?.info?.(
+        `[hidden-vetting] a named statement arrived for a private application; refused as namedForPrivate`
+      )
+      await this.update(sender, { status: 'statementRefused', statementRefusal: 'namedForPrivate' })
+      this.onChange?.()
+      return
+    }
+
     const refuse = async (statementRefusal: NonNullable<VettingApplicationRequest['statementRefusal']>) => {
       // One already kept is never replaced by a refusal of a copy.
       if (request.status !== 'attested') await this.update(sender, { status: 'statementRefused', statementRefusal })
@@ -2157,6 +2593,43 @@ export class VtiApplicant {
       // Withdrawn: what follows is a fresh application, sent and recorded as one.
       application = await this.app()
     }
+    // A private application proves instead of showing statements. The steps
+    // are the same submit the person already pressed: read the community's
+    // challenge, have the agent prove against it, and send the join request
+    // with the proof in `extensions.hiddenVetting` and no statements — a
+    // submission carrying both would name the vetters the proof keeps hidden,
+    // and the community refuses a hidden criterion that carries no proof.
+    // Whether this submission is for a private way in is decided from the
+    // manifest, not by reading the record first: a named community must not
+    // pay a store read, or be broken by one, for a question that does not
+    // apply to it.
+    // "Is there a private way in for this application", not "does its digest
+    // still match". A community that rotates its criterion mid-flow changes
+    // the digest, and keying on the match meant a rotation silently returned
+    // this to the named path — sending the statements it had gathered, with
+    // the vetters' names, to a community whose way in is private. The digest
+    // still matters, but it is the proof's business, not the routing's: the
+    // agent binds to the digest the application gathered for and the community
+    // refuses a proof bound to a stale one, which is a refusal in words rather
+    // than a disclosure.
+    const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
+    const forPrivateWay = privateCriterion !== undefined
+    if (forPrivateWay) {
+      // Read strictly here, and refuse if there is nothing to prove from. A
+      // private criterion with no agent-side application means `start` could
+      // not create one — an unreachable agent, most likely — and falling
+      // through to the named path would send statements for a hidden
+      // criterion, naming the vetters a proof exists to hide. That is the
+      // downgrade #405 prevents, so it is said rather than done.
+      const hidden = await this.hiddenApplication()
+      if (!hidden) {
+        throw Object.assign(new Error('this way in is vetted privately, and this phone holds no private application'), {
+          code: 'keyring/hidden-vetting/submit:noApplication',
+        })
+      }
+      return this.submitPrivately(manifest, requirementsDigest, registryConsent)
+    }
+
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
     let verdict: VtiVerdict
     if (open) {
@@ -2255,9 +2728,72 @@ export class VtiApplicant {
    * before the send, answered after — so a lost answer still reads "Sent —
    * waiting for the community".
    */
+  /**
+   * Submit a private application: challenge, prove, send.
+   *
+   * The challenge is fetched **immediately** before proving and never reused:
+   * a community holds at most one open challenge per applicant and replaces it
+   * when asked again, so a proof built on an earlier one is already spent.
+   *
+   * `noUsableAttestation` comes back as a coded error rather than a thrown
+   * failure, because it is a progress state — "keep going", not "something
+   * went wrong" — and `hiddenSubmissionExtensions` now decides it locally
+   * below the threshold rather than spending the agent's ninety-second call.
+   */
+  private async submitPrivately(
+    manifest: VtiManifest,
+    requirementsDigest?: string,
+    registryConsent?: boolean
+  ): Promise<VtiVerdict> {
+    const communityDid = this.persona.communityDid
+    const criterionId = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)?.id
+    const answered = await vtiAgent.fetchChallenge(communityDid, criterionId ? { criterionId } : {})
+    const extensions = await hiddenSubmissionExtensions(
+      this.agent,
+      await this.pcsClient(),
+      communityDid,
+      answered.challenge
+    )
+    if (extensions === NOT_ENOUGH_YET) {
+      throw Object.assign(new Error('not enough attestations yet'), {
+        code: 'vta/pcs/prove:noUsableAttestation',
+      })
+    }
+    // Say how this was decided, durably: the membership arrives later through
+    // the inbox and the credential itself does not record that the community
+    // counted a proof rather than named statements.
+    await recordSent(this.communityStore, {
+      communityDid,
+      personaDid: this.persona.did,
+      withInvitation: false,
+      via: 'vetting',
+      privateVetting: true,
+    }).catch(() => undefined)
+
+    const verdict = await this.applyRecorded(manifest, {
+      credentials: [],
+      requirementsDigest,
+      registryConsent,
+      hiddenVetting: extensions.hiddenVetting,
+    })
+    await this.recordSubmission({
+      requestId: verdict.requestId,
+      state: openStateOf(verdict.effect) ?? 'decided',
+      effect: verdict.effect,
+      needs: verdict.needs,
+      at: new Date().toISOString(),
+    })
+    return verdict
+  }
+
   private async applyRecorded(
     manifest: VtiManifest,
-    options: { credentials: unknown[]; requirementsDigest?: string; registryConsent?: boolean }
+    options: {
+      credentials: unknown[]
+      requirementsDigest?: string
+      registryConsent?: boolean
+      hiddenVetting?: Record<string, unknown>
+    }
   ): Promise<VtiVerdict> {
     const communityDid = this.persona.communityDid
     await recordSent(this.communityStore, {
@@ -2341,8 +2877,43 @@ export class VtiApplicant {
     unreadableMaxAge?: string
     /** Vetters whose grant status could not be reached, and why. */
     unchecked: { vetterDid: string; reason: string }[]
+    /**
+     * Set when this application's way in is private. Absent for named
+     * vetting, so every existing reader is unaffected — the shape is the same
+     * one either way, deliberately, so the screens do not branch.
+     */
+    mode?: 'private'
   }> {
     const application = await this.app()
+
+    // A private application counts vouches it cannot show. The agent holds the
+    // attestations and says how many it accepted, so the numbers come from it
+    // and the rows are empty: statements invented from attestations would
+    // claim more than we know, and naming anyone would undo the privacy the
+    // exchange exists for.
+    const hidden = await this.hiddenApplicationForDisplay()
+    if (hidden) {
+      const needed = hidden.minimum
+      const counted = hidden.held
+      return {
+        held: counted,
+        needed,
+        meets: counted >= needed,
+        statements: [],
+        counted,
+        // The agent refuses an attestation it cannot verify at the moment it
+        // arrives, so nothing discountable is held by the time we are asked.
+        discounted: 0,
+        needs: counted >= needed ? [] : [{ kind: 'statements' as const, n: needed - counted }],
+        // A community that cannot see who vouched cannot apply a
+        // declared-relationship cap. That is a property of hidden vetting, not
+        // a check this client is skipping.
+        independenceOk: true,
+        exceededCaps: [],
+        unchecked: [],
+        mode: 'private',
+      }
+    }
     // Only statements about THIS application count. A phone that was vetted
     // before holds statements naming an older join DID, and the mediator can
     // redeliver one at any time; counting those reads as "2 of 1" and would
@@ -2403,3 +2974,65 @@ export class VtiApplicant {
     }
   }
 }
+
+/**
+ * A `vetting/attestation/0.1` body, as the agent needs it, or undefined.
+ *
+ * Only the shape is read: whether the attestation is valid is the engine's
+ * question (`vta/pcs/verify-attestation`). Undefined for a body that could
+ * not be one, so nothing malformed reaches the agent.
+ */
+export function readHiddenAttestation(body: unknown): HiddenAttestation | undefined {
+  if (!body || typeof body !== 'object') return undefined
+  const b = body as Record<string, unknown>
+  const token = b.token as Record<string, unknown> | undefined
+  if (typeof b.suite !== 'string' || typeof b.attestation !== 'string') return undefined
+  if (!b.meta || typeof b.meta !== 'object') return undefined
+  if (!token || typeof token !== 'object') return undefined
+  if (typeof token.label !== 'string' || typeof token.serial !== 'string' || typeof token.shown !== 'string')
+    return undefined
+  // The published members only. Over a TSP peer leg the body is packed as a
+  // document with its `type` beside them, and the agent's schema
+  // (`additionalProperties: false`) would refuse that.
+  return {
+    suite: b.suite,
+    attestation: b.attestation,
+    meta: b.meta as Record<string, unknown>,
+    token: { label: token.label, serial: token.serial, shown: token.shown },
+    ...(b.ext && typeof b.ext === 'object' ? { ext: b.ext as Record<string, unknown> } : {}),
+  } as HiddenAttestation
+}
+
+/** The ten members of a hidden attestation's `meta` (`vta/pcs/attest/0.1`, `StatementMeta`), all required. */
+export interface HiddenAttestMeta {
+  community: string
+  requirementsDigest: string
+  method: 'inPerson' | 'video' | 'priorAcquaintance'
+  claimsVerified: string[]
+  livenessConfirmed: boolean
+  declaredRelationship: 'none' | 'family' | 'sameEmployer' | 'closeFriend' | 'other'
+  identityCommitment: string
+  cardDigestMultibase: string
+  validFrom: string
+  validUntil: string
+}
+
+/**
+ * The applicant's PCS identifier from a vetting request's `ext`, or undefined.
+ * Undefined, too, for a suite this build does not implement: openvtc refuses
+ * to attest under rules it cannot honour (`hidden::read_request_ext`), and so
+ * such a request stays on the named path here.
+ */
+export function hiddenApplicantIdOf(ext: unknown): string | undefined {
+  const ours = (ext as Record<string, unknown> | undefined)?.[HIDDEN_VETTING_NS] as Record<string, unknown> | undefined
+  if (!ours || ours.suite !== HIDDEN_VETTING_SUITE) return undefined
+  return typeof ours.id === 'string' && ours.id ? ours.id : undefined
+}
+
+/**
+ * The least time between two of a desk's hidden-vetting rounds started by
+ * `listen` (a hidden request starts one at once). Enrolment lasts a period and
+ * a draw is guarded per tick, so this only spares the agent and the community
+ * a check every few seconds while the Vetting screen is open.
+ */
+export const HIDDEN_VETTER_READY_INTERVAL_MS = 10 * 60 * 1000

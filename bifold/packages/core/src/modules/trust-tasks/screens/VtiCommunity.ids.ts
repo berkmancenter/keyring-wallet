@@ -8,6 +8,7 @@ export const VtiCommunityIds = {
   member: 'CommunityMember',
   memberSince: 'CommunityMemberSince',
   openDesk: 'CommunityOpenDesk',
+  vouchPrivately: 'CommunityVouchPrivately',
   criteria: 'CommunityCriteria',
   error: 'CommunityError',
   refusalDetails: 'CommunityRefusalDetails',
