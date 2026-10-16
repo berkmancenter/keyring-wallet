@@ -400,15 +400,32 @@ export function hiddenMinimumOf(criterion: VtiCriterion): number {
  * agent), and the screens' seam calls it for the route that still opens the
  * private screen directly.
  *
- * `joinDid` is the phone's identity **at its agent** (`managerDid`), not the
- * community persona: the agent mints the application key against the identity
- * it knows, and a vetter attests to the PCS id rather than to the join DID.
+ * `joinDid` is **the DID the applicant joins the community as** — the persona
+ * — and the caller passes it, because this function cannot know it.
+ *
+ * It was `client.managerDid`, the phone's identity at its own agent, which is
+ * a different DID and the wrong one. The registry says what it is for: "the
+ * DID the applicant joins the community as. Bound into the proof, so the proof
+ * cannot be carried to another join"
+ * (`vta/pcs/applications/create/0.1` payload schema). Binding the manager DID
+ * meant the proof bound an identity the community never sees, and it also made
+ * `hiddenRequestExt`'s guard — which compares this against the application's
+ * join DID — always false, so a private request went out with no hidden ext
+ * at all and was answered with a named statement (builds 258 and 259).
+ *
+ * The same confusion cost the vetter's half its token draw the same evening,
+ * where the opening proof bound the manager DID while the community verified
+ * against the signer. Any `managerDid` in this area is worth doubting: it is
+ * the right answer only for questions about the phone at its agent, such as
+ * which ACL entry is this phone's.
  */
 export async function beginHiddenApplication(
   agent: Agent,
   client: VtaClient,
   communityDid: string,
-  criterion: VtiCriterion
+  criterion: VtiCriterion,
+  /** The persona this phone joins the community as: what the proof binds to. */
+  joinDid: string
 ): Promise<HiddenVettingRecord> {
   const usable = await hiddenVettingUsable(client, hiddenParametersOf(criterion))
   if (!usable.usable) {
@@ -416,8 +433,7 @@ export async function beginHiddenApplication(
       code: `keyring/hidden-vetting/createApplication:${usable.because}`,
     })
   }
-  const joinDid = client.managerDid
-  if (!joinDid) throw new Error('the phone has no identity at its agent')
+  if (!joinDid) throw new Error('no persona to join this community as')
   return startHiddenApplication(agent, client, {
     contextId: (await client.listContexts().catch(() => []))[0]?.id ?? 'vta',
     community: communityDid,

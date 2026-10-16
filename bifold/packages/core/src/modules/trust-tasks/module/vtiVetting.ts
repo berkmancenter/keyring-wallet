@@ -1717,6 +1717,13 @@ export class VtiVetterDesk {
     }
     const client = await connectedVetterClient(this.agent)
     const contextId = await vetterContextOf(client)
+
+    // Every way out of here is a refusal in words. A private request must
+    // never be answered with a named statement because something private was
+    // unavailable — no token, no enrolment, an agent that cannot be reached —
+    // since that names this vetter for a vouch the community will discard
+    // anyway. `pcsAttest` refuses with `attest:noToken` when there is nothing
+    // to spend, and that reaches the screen as itself (27, after 259).
     return this.attestHidden(
       desk.requestId,
       {
@@ -1912,7 +1919,14 @@ export class VtiApplicant {
     const privateCriterion = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)
     if (privateCriterion && (!digest || privateCriterion.requirementsDigest === digest)) {
       try {
-        await beginHiddenApplication(this.agent, await this.pcsClient(), this.persona.communityDid, privateCriterion)
+        await beginHiddenApplication(
+          this.agent,
+          await this.pcsClient(),
+          this.persona.communityDid,
+          privateCriterion,
+          // The persona: what this phone joins as, and what the proof binds to.
+          this.persona.did
+        )
       } catch (error) {
         this.agent.config?.logger?.info?.(
           `[hidden-vetting] no agent-side application for ${privateCriterion.id}: ${String(error)}`

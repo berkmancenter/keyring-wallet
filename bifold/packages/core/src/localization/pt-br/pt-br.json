@@ -1738,7 +1738,7 @@
       "Done": "Pronto. Seu agente enviou para ela; {{community}} não vai saber que foi você.",
       "NoTokens": "Você não tem mais com o que garantir até o próximo sorteio.",
       "NoTokensUntil": "Você não tem mais com o que garantir até {{date}}.",
-      "NoTokensError": "Você não tem mais com o que garantir agora. Sorteie de novo e tente outra vez.",
+      "NoTokensError": "Você não tem fichas de garantia no momento. O Keyring as obtém para você quando você abre sua mesa de avaliação — abra-a, aguarde um instante e tente de novo.",
       "RequirementsChanged": "{{community}} mudou o que pede de novos membros desde que esta pessoa se candidatou, então garantir agora não valeria. Peça que ela se candidate de novo.",
       "NotEnrolledError": "Você não está inscrito neste período. Inscreva-se e tente de novo.",
       "PeriodClosed": "Este período de verificação terminou. Inscreva-se no novo e tente de novo.",
