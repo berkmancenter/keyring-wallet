@@ -1897,6 +1897,7 @@
       "RequirementsChanged": "{{community}} has changed what it asks of new members since this person applied, so vouching now wouldn't count. Ask them to apply again.",
       "NotEnrolledError": "You're not enrolled for this period. Enrol, then try again.",
       "PeriodClosed": "This vetting period has ended. Enrol for the new one, then try again.",
+      "MemberMismatch": "Your vetter enrolment needs resetting at your agent. It was set up for a different identity from the one you vet with in this community, so the community would refuse every vouching token it draws. Reset private vetting for this community at your agent, then open the desk again.",
       "ErrorGeneric": "Something went wrong. Try again in a moment.",
       "DrawBusy": "A draw is already under way. Try again in a moment.",
       "Method": {

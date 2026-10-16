@@ -1836,6 +1836,7 @@
       "RequirementsChanged": "{{community}} a changé ce qu'elle demande aux nouveaux membres depuis la candidature de cette personne, donc se porter garant maintenant ne compterait pas. Demandez-lui de recommencer sa candidature.",
       "NotEnrolledError": "Vous n'êtes pas inscrit pour cette période. Inscrivez-vous, puis réessayez.",
       "PeriodClosed": "Cette période de vérification est terminée. Inscrivez-vous pour la nouvelle, puis réessayez.",
+      "MemberMismatch": "Votre inscription de vérificateur doit être réinitialisée sur votre agent. Elle a été créée pour une autre identité que celle avec laquelle vous vérifiez dans cette communauté, qui refuserait donc chaque jeton de garantie tiré. Réinitialisez la vérification privée pour cette communauté sur votre agent, puis rouvrez le bureau.",
       "ErrorGeneric": "Un problème est survenu. Réessayez dans un instant.",
       "DrawBusy": "Un tirage est déjà en cours. Réessayez dans un instant.",
       "Method": {

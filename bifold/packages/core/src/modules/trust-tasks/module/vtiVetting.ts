@@ -1053,6 +1053,8 @@ export class VtiVetterDesk {
   private hiddenReadyAt?: number
   /** The round running now, so a second trigger joins it rather than starting another. */
   private hiddenReadying?: Promise<void>
+  /** The last round's failure code; see `hiddenVetterBlockedBy`. */
+  private hiddenRoundFailure?: string
 
   /**
    * Keep this vetter ready to vouch privately, without anyone asking: when the
@@ -1086,6 +1088,7 @@ export class VtiVetterDesk {
     this.hiddenReadying = this.readyHiddenVetter(trigger)
       .catch((e: unknown) => {
         const code = (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e)
+        this.hiddenRoundFailure = code ? String(code) : 'keyring/hidden-vetter:roundFailed'
         logger?.warn?.(
           `[hidden-vetting] vetter round (${trigger}) did not finish${code ? ` (${String(code)})` : ''}: ${
             e instanceof Error ? e.message : String(e)
@@ -1096,6 +1099,17 @@ export class VtiVetterDesk {
         this.hiddenReadying = undefined
       })
     return this.hiddenReadying
+  }
+
+  /**
+   * Why the last round could not make this vetter ready, as a code, or
+   * undefined after a round that finished. The round runs unseen, so a screen
+   * that cannot answer a private request reads this to say the real reason —
+   * an engine bound to the wrong DID (`memberMismatch`) is not "draw tokens
+   * first", and saying so would send the person round in a circle.
+   */
+  get hiddenVetterBlockedBy(): string | undefined {
+    return this.hiddenRoundFailure
   }
 
   private async readyHiddenVetter(trigger: 'listen' | 'request'): Promise<void> {
@@ -1124,6 +1138,7 @@ export class VtiVetterDesk {
       logger?.info?.(`[hidden-vetting] vetter round (${trigger}): enrolled for the current period`)
     }
     const { drawn } = await drawVetterTokens(this.agent, community, criterion)
+    this.hiddenRoundFailure = undefined
     logger?.info?.(
       `[hidden-vetting] vetter round (${trigger}): ${drawn ? `drew ${drawn} token(s)` : 'no draw due this tick'}`
     )

@@ -64,6 +64,7 @@ const mockAsk = jest.fn(async (_did: string, type: string) => ({
 const mockFetchManifest = jest.fn(async () => ({ criteria: [publishedCriterion] }))
 jest.mock('../module/vtiAgent', () => ({
   vtiAgent: {
+    did: 'did:webvh:QmP:example:persona',
     ask: (...a: unknown[]) => mockAsk(...(a as [string, string])),
     fetchManifest: (...a: unknown[]) => mockFetchManifest(...(a as [])),
   },

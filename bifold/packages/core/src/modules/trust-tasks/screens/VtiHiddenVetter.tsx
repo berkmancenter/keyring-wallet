@@ -75,6 +75,9 @@ export function hiddenVetterErrorKey(code: string | undefined): string {
   // spend a scarce token on a proof that can no longer verify.
   if (code.endsWith(':requirementsChanged')) return 'Vetting.Vouch.RequirementsChanged'
   if (code.endsWith(':notImplemented')) return 'Vetting.Hidden.NotInThisBuild'
+  // The agent's engine draws for another DID than this phone signs with, so
+  // every draw would be refused: only a reset at the agent mends it.
+  if (code.endsWith(':memberMismatch')) return 'Vetting.Vouch.MemberMismatch'
   return 'Vetting.Vouch.ErrorGeneric'
 }
 

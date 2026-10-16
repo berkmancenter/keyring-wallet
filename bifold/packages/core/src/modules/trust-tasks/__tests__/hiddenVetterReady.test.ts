@@ -190,6 +190,17 @@ describe('quietly', () => {
     expect(logger.warn.mock.calls[0][0]).toMatch(/did not finish \(vtc\/vetting\/vetters\/pcs-root:labelNotLive\)/)
   })
 
+  it('keeps the failure code for a screen to word, and clears it after a round that finishes', async () => {
+    mockDraw.mockRejectedValueOnce(
+      Object.assign(new Error('bound to another DID'), { code: 'keyring/hidden-vetter:memberMismatch' })
+    )
+    const d = desk()
+    await d.keepHiddenVetterReady('request')
+    expect(d.hiddenVetterBlockedBy).toBe('keyring/hidden-vetter:memberMismatch')
+    await d.keepHiddenVetterReady('request')
+    expect(d.hiddenVetterBlockedBy).toBeUndefined()
+  })
+
   it('no DID, nor any segment of one, reaches the log', async () => {
     mockEnrol.mockRejectedValue(new Error('the agent did not answer'))
     await desk(active(false, 'fetch failed')).keepHiddenVetterReady('listen')
