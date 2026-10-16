@@ -20,6 +20,10 @@
 // anyway: a 177a218 save drops the fields only ed13d29 knows.
 
 import { execFileSync } from 'node:child_process';
+
+// The page that asks for the PNM grant: " Authorise the setup DID via PNM " up to 0.4.0, "Run the PNM command" at 0.5.0
+// (2a4fa2b3), whose [F2] new-context command is the one below.
+const SETUP_ACL_PAGE = / Authorise the setup DID via PNM |Run the PNM command/;
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -67,7 +71,7 @@ try {
   tui.press('Enter');
   await tui.waitFor("Enter the VTA's DID:", { step: 'setup.vtaDid', source: 'ui/pages/setup_flow/vta_enter_did.rs:103' });
   tui.type(a['vta-did']).press('Enter');
-  await tui.waitFor(' Authorise the setup DID via PNM ', {
+  await tui.waitFor(SETUP_ACL_PAGE, {
     timeoutMs: 60000,
     step: 'setup.aclInstructions',
     source: 'ui/pages/setup_flow/vta_acl_instructions.rs:118',
@@ -111,7 +115,7 @@ try {
     if (!String(provisioned[0]).startsWith('return to the ACL')) break;
     say(`provisioning attempt ${attempt} failed: ${tui.screen().split('\n').map((l) => l.trim()).filter((l) => /fail|error|denied|timed out|could not/i.test(l)).slice(0, 3).join(' | ')}`);
     tui.press('Enter');
-    await tui.waitFor(' Authorise the setup DID via PNM ', { step: `setup.retry.${attempt}`, timeoutMs: 30000 });
+    await tui.waitFor(SETUP_ACL_PAGE, { step: `setup.retry.${attempt}`, timeoutMs: 30000 });
     await new Promise((r) => setTimeout(r, 5000));
   }
   if (!String(provisioned[0]).startsWith('Bootstrap complete')) throw new Error(`provisioning: ${provisioned[0]}`);
