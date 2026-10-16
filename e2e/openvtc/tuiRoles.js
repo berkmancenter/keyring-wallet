@@ -24,7 +24,8 @@ import path from 'node:path';
 import { OpenvtcTui } from '../lib/openvtcTui.js';
 
 /** Builds driven with ed13d29's screens. Anything else is driven as 177a218. */
-const CURRENT_STYLE = ['ed13d29'];
+// openvtc builds driven in the current style: ed13d29 (main, 09-25) and 2a4fa2b3 (0.5.0, VTI-Eucalyptus).
+const CURRENT_STYLE = ['ed13d29', '2a4fa2b3'];
 
 /**
  * Whether `tui` is driven as 177a218 (our pin). A version is "current"
@@ -37,7 +38,9 @@ export function at177(tui) {
   if (forced === 'current') return false;
   if (forced === '177a218') return true;
   const v = String(tui?.version ?? '').toLowerCase();
-  return !CURRENT_STYLE.some((c) => v.length >= 7 && (v.startsWith(c) || c.startsWith(v)));
+  // The gate names a release with its commit after the last '-' (OPENVTC_VERSION=v0.5.0-2a4fa2b3): match that as well.
+  const sha = v.slice(v.lastIndexOf('-') + 1);
+  return !CURRENT_STYLE.some((c) => [v, sha].some((x) => x.length >= 7 && (x.startsWith(c) || c.startsWith(x))));
 }
 
 /** The citation for this build: `current` at ed13d29, `pin` (a 177a218 file:line) otherwise. */
@@ -82,7 +85,7 @@ export async function openDesk(tui) {
   await tui.pressEach(['Enter'], 800);
   await tui.waitFor('Vetting desk (', { step: 'vetter.vettingPage', source: src(tui, 'ui/pages/main/vetting_panel.rs:165-175', 'ui/pages/main/components/vetting_panel.rs:163-172') });
   if (!/Requests \(\d+\)\s+Tickets \(\d+\)/.test(tui.screen())) await tui.pressEach(['Tab'], 800);
-  await tui.waitFor(/Requests \(\d+\)\s+Tickets \(\d+\)\s+Issued \(\d+\)/, { step: 'vetter.desk', source: src(tui, 'ui/pages/main/vetting_panel.rs:1425-1445', 'ui/pages/main/components/vetting_panel.rs:1086-1106') });
+  await tui.waitFor(/Requests \(\d+\)\s+Tickets \(\d+\)\s+(?:Issued|History) \(\d+\)/, { step: 'vetter.desk', source: src(tui, 'ui/pages/main/vetting_panel.rs:1425-1445', 'ui/pages/main/components/vetting_panel.rs:1086-1106') });
   if (tui.screen().includes('No community has named you a vetter yet')) {
     throw tui.failure('vetter.seat', new Date(), 'the TUI holds no vetter grant ("No community has named you a vetter yet")');
   }
