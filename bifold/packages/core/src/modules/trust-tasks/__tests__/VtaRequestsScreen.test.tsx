@@ -148,6 +148,22 @@ describe('Requests', () => {
     }
   })
 
+  // p1's "card technical name behind the toggle" (gate efficiency item 12): the sentence never names the task; its
+  // technical name is one tap away, under the card's own toggle, as the device row reads it (/contexts\/get/).
+  it('the task’s technical name is behind its toggle, never in the sentence', async () => {
+    controller.set({ approvals: [request('a', { taskType: 'https://trusttasks.org/spec/vta/contexts/get/1.0' })] })
+    const tree = await show()
+    const asks = tree.getByTestId(id('RequestAsks'))
+    expect(asks).not.toHaveTextContent(/contexts\/get|trusttasks\.org|vta\/|did:/)
+    expect(tree.queryByTestId(id('RequestTaskDid'))).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(id('RequestTaskToggle'))))
+    expect(tree.getByTestId(id('RequestTaskDid'))).toHaveTextContent(/contexts\/get/)
+    expect(tree.getByTestId(id('RequestAsks'))).not.toHaveTextContent(/contexts\/get/)
+    // And folded away again.
+    await act(async () => fireEvent.press(tree.getByTestId(id('RequestTaskToggle'))))
+    expect(tree.queryByTestId(id('RequestTaskDid'))).toBeNull()
+  })
+
   it('names each card and its buttons by the request’s digest, the code the agent’s own tools print', async () => {
     controller.set({ approvals: [request('a'), request('b')] })
     const tree = await show()

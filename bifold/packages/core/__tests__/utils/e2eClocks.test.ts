@@ -50,13 +50,15 @@ describe('E2E_CLOCKS=short', () => {
     config.E2E_CLOCKS = 'short'
   })
 
-  it('makes both grant windows 60 s and the auto-lock default 1 minute', () => {
+  it('makes both grant windows 60 s and the auto-lock default half a minute', () => {
     expect(SHORT_GRANT_POLL_WINDOW_MS).toBe(60_000)
-    expect(SHORT_AUTO_LOCK_MINUTES).toBe(1)
+    expect(SHORT_AUTO_LOCK_MINUTES).toBe(0.5)
     expect(shortClocks()).toBe(true)
     expect(effectiveGrantPollWindowMs(GRANT_POLL_WINDOW_MS)).toBe(60_000)
     expect(effectiveGrantPollWindowMs(PHONE_GRANT_POLL_WINDOW_MS)).toBe(60_000)
-    expect(effectiveDefaultAutoLockMinutes(defaultAutoLockTime)).toBe(1)
+    expect(effectiveDefaultAutoLockMinutes(defaultAutoLockTime)).toBe(0.5)
+    // Shorter than the window, so the window can outlast the lock.
+    expect(SHORT_AUTO_LOCK_MINUTES * 60_000).toBeLessThan(SHORT_GRANT_POLL_WINDOW_MS)
   })
 
   it('is read on every call, so it cannot stick once unset', () => {

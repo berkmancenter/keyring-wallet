@@ -109,10 +109,10 @@ describe('the auto-lock default', () => {
       config.E2E_CLOCKS = 'short'
     })
 
-    it('is one minute for a wallet that never chose one', () => {
+    it('is half a minute for a wallet that never chose one', () => {
       mockSavedAutoLock = undefined
       mount()
-      act(() => jest.advanceTimersByTime(MIN - 1))
+      act(() => jest.advanceTimersByTime(30_000 - 1))
       expect(mockLockOutUser).not.toHaveBeenCalled()
       act(() => jest.advanceTimersByTime(1))
       expect(mockLockOutUser).toHaveBeenCalledWith('Timeout')
@@ -126,18 +126,18 @@ describe('the auto-lock default', () => {
       expect(mockLockOutUser).toHaveBeenCalledTimes(1)
     })
 
-    it('a hold for the short grant window keeps the one-minute lock off until the hold ends', () => {
+    it('a hold for the 60 s grant window keeps the 30 s lock off until the hold ends', () => {
       mockSavedAutoLock = undefined
       const ctx = mount()
       act(() => jest.advanceTimersByTime(10_000))
       act(() => {
         ctx().holdLock(60_000)
       })
-      // The lock fell due at 60 s, inside the hold, and was re-armed instead.
+      // The lock fell due at 30 s and at 60 s, both inside the hold, and was re-armed each time.
       act(() => jest.advanceTimersByTime(60_000))
       expect(mockLockOutUser).not.toHaveBeenCalled()
       // Never released: it still locks, by the hold's end plus one timeout at most.
-      act(() => jest.advanceTimersByTime(60_000))
+      act(() => jest.advanceTimersByTime(30_000))
       expect(mockLockOutUser).toHaveBeenCalledTimes(1)
     })
   })
