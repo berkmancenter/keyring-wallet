@@ -22,9 +22,9 @@ import type { Agent } from '@credo-ts/core'
 
 import type { VtaClient } from './VtaClient'
 import { getKeyed, putKeyed } from './keyedRecords'
-import { PCS_VETTER_ERROR, VTC_VETTER_TASK, type PublishedConfig } from './pcsVetterTasks'
+import { PCS_VETTER_ERROR, VTC_VETTER_TASK, type PublishedConfig, type VetterStanding } from './pcsVetterTasks'
 import { HIDDEN_VETTING_EXT, type VtiCriterion } from './joinManifest'
-import { parametersToSend } from './pcsVtaPayloads'
+import { parametersToSend, pcsErrorCode } from './pcsVtaPayloads'
 import { vtaAgent } from './vtaAgent'
 import { VtiRefusal, vtiAgent } from './vtiAgent'
 
@@ -227,6 +227,28 @@ export const boundElsewhere = (vetter: { memberDid?: string } | undefined): bool
   Boolean(vetter?.memberDid && vetter.memberDid !== vtiAgent.did)
 
 /**
+ * The agent's engine for this community, or undefined when it has none yet.
+ *
+ * `vta/pcs/vetter/show` answers a fresh agent — never enrolled here — with
+ * `vta/pcs/vetter/show:notFound` ("no such engine"), and `root-request` is
+ * what creates the engine (vta-service 0.60, `operations/pcs.rs`: "creating
+ * the vetter engine on first use"). So notFound is the state a first
+ * enrolment starts from, not a failure. Build 261 let it throw: the desk's
+ * round stopped at `isEnrolled`, and a new vetter never reached `root-request`.
+ * Every other refusal still throws.
+ */
+async function engineOf(client: VtaClient, contextId: string, community: string): Promise<VetterStanding | undefined> {
+  try {
+    return await client.showPcsVetter({ contextId, community })
+  } catch (e) {
+    const code =
+      (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e) ?? undefined
+    if (code === PCS_VETTER_ERROR.vetterNotFound) return undefined
+    throw e
+  }
+}
+
+/**
  * Whether the agent holds a vetter credential for the period `criterion`
  * publishes now, **as the DID this phone signs with**. An engine bound to
  * another DID is not enrolled for this purpose: it can enrol, but every draw
@@ -237,7 +259,7 @@ export async function isEnrolled(agent: Agent, communityDid: string, criterion: 
   if (!period) return false
   const client = await connectedVetterClient(agent)
   const contextId = await vetterContextOf(client)
-  const vetter = await client.showPcsVetter({ contextId, community: communityDid })
+  const vetter = await engineOf(client, contextId, communityDid)
   if (vetter?.memberDid && vetter.memberDid !== signerDid()) return false
   return Boolean(vetter?.enrolledLabels?.includes(period))
 }
@@ -253,7 +275,7 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
   const client = await connectedVetterClient(agent)
   const contextId = await vetterContextOf(client)
   const memberDid = signerDid()
-  const before = await client.showPcsVetter({ contextId, community: communityDid })
+  const before = await engineOf(client, contextId, communityDid)
   if (before?.memberDid && before.memberDid !== memberDid) throw memberMismatch(before.memberDid)
 
   // 1 — the agent blinds a request. Only it can: it holds the key. What it
@@ -314,7 +336,7 @@ export async function drawVetterTokens(
   const contextId = await vetterContextOf(client)
   // Never draw from an engine bound to another DID: the community refuses
   // every opening it makes.
-  const vetter = await client.showPcsVetter({ contextId, community: communityDid })
+  const vetter = await engineOf(client, contextId, communityDid)
   if (vetter?.memberDid && vetter.memberDid !== signerDid()) throw memberMismatch(vetter.memberDid)
 
   let drawn = 0
