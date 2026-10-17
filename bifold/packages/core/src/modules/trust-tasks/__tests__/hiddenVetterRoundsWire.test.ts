@@ -408,3 +408,90 @@ describe('the draw follows the community’s schedule, not the phone’s', () =>
     expect(mockTask).not.toHaveBeenCalled()
   })
 })
+
+describe('a fresh agent, with no vetter engine yet (build 261 stopped here)', () => {
+  // What vta-service 0.60 answers vetter/show for an agent never enrolled in
+  // this community: a refusal, which the client throws as a VtiRefusal.
+  const noEngine = () => new VtiRefusal('vta/pcs/vetter/show:notFound', 'no such engine')
+  let engine: Record<string, unknown> | undefined
+  beforeEach(() => {
+    engine = undefined
+    mockTask.mockImplementation(async (type: string, ...rest: unknown[]) => {
+      if (type === PCS_VETTER_TASK.vetterShow) {
+        if (!engine) throw noEngine()
+        return { vetter: engine }
+      }
+      if (type === PCS_VETTER_TASK.rootRequest) {
+        // root-request creates the engine on first use (operations/pcs.rs).
+        engine = {
+          contextId: 'vta',
+          community: COMMUNITY,
+          memberDid: SIGNER,
+          id: rootRequestAnswer.request.id,
+          enrolledLabels: [],
+        }
+        return rootRequestAnswer
+      }
+      if (type === PCS_VETTER_TASK.rootAccept) {
+        engine = { ...engine, enrolledLabels: ['vetter/2026-10'] }
+        return {}
+      }
+      if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestFor(rest[0])
+      return {}
+    })
+    mockAsk.mockImplementation(async (_d: string, type: string, payload: { tick?: number }) =>
+      type === VTC_VETTER_TASK.pcsRoot
+        ? answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+        : answered(VTC_VETTER_TASK.pcsTokens, {
+            label: 'token/2026-10',
+            tick: payload.tick,
+            preCredentials: ['zCPre', 'zDPre'],
+          })
+    )
+  })
+
+  it('is not enrolled, rather than a failure', async () => {
+    await expect(isEnrolled(agent(), COMMUNITY, criterion)).resolves.toBe(false)
+  })
+
+  it('the desk’s round goes on: notFound → root-request → pcs-root → root-accept, then the draw', async () => {
+    // The order readyHiddenVetter runs them in.
+    const a = agent()
+    expect(await isEnrolled(a, COMMUNITY, criterion)).toBe(false)
+    await enrolVetter(a, COMMUNITY, criterion)
+    await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
+    const order = mockTask.mock.calls.map(([t]) => String(t).replace('https://trusttasks.org/spec/', ''))
+    expect(order).toEqual([
+      'vta/pcs/vetter/show/0.1',
+      'vta/pcs/vetter/show/0.1',
+      'vta/pcs/root-request/0.1',
+      'vta/pcs/root-accept/0.1',
+      'vta/pcs/vetter/show/0.1',
+      'vta/pcs/tokens/request/0.1',
+      'vta/pcs/tokens/accept/0.1',
+    ])
+    expect(sentToAgent(PCS_VETTER_TASK.rootRequest).memberDid).toBe(SIGNER)
+    expect(PCS_ROOT(sentToCommunity(VTC_VETTER_TASK.pcsRoot))).toBe(true)
+  })
+
+  it('the draw’s own engine read takes notFound as no engine, and leaves the answer to the agent', async () => {
+    // Not enrolled is a state, so the draw does not die on the read; the agent
+    // says what it says about drawing without an engine.
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
+    expect(sentToAgent(PCS_VETTER_TASK.tokensRequest)).toBeDefined()
+  })
+
+  it('any other vetter/show refusal still stops the round', async () => {
+    mockTask.mockImplementation(async (type: string) => {
+      if (type === PCS_VETTER_TASK.vetterShow) throw new VtiRefusal('vta/pcs/vetter/show:forbidden', 'no')
+      return {}
+    })
+    await expect(isEnrolled(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
+      code: 'vta/pcs/vetter/show:forbidden',
+    })
+    await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
+      code: 'vta/pcs/vetter/show:forbidden',
+    })
+    expect(mockAsk).not.toHaveBeenCalled()
+  })
+})
