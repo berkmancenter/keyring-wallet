@@ -17,6 +17,7 @@ import { watchLinkForPush } from './pushAfterLink'
 import {
   appPushWakeDeps,
   clearPushWake,
+  linkedAgentsWithoutWake,
   notificationsAllowedNow,
   showHandleLimit,
   whenPlatformTokenArrives,
@@ -50,6 +51,7 @@ const PushLinkListener: React.FC = () => {
       log: (message, data) => BCLogger.info(message, data),
       onHandleLimit: showHandleLimit,
       whenTokenArrives: whenPlatformTokenArrives,
+      unwakeableAgents: () => linkedAgentsWithoutWake(agent),
     })
   }, [agent])
 

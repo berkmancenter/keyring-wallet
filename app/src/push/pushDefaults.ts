@@ -8,7 +8,7 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { ToastType, vtaAgent } from '@bifold/core'
+import { GenericRecordsIdentityStore, ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import i18n from 'i18next'
@@ -87,6 +87,21 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
   }
   BCLogger.info('push token: Firebase token present', { os: Platform.OS })
   return { platform: 'fcm', token }
+}
+
+/**
+ * The agents this phone holds an identity for that have no wake from it: no
+ * handle here that one of them accepted (`provisionedAt`). For the log only
+ * ({@link PushAfterLinkDeps.unwakeableAgents}).
+ */
+export async function linkedAgentsWithoutWake(agent: Agent): Promise<string[]> {
+  const managers = (await new GenericRecordsIdentityStore(agent).listManagers()) ?? []
+  const lacking: string[] = []
+  for (const { vtaDid } of managers) {
+    const kept = await appWakeHandles.get(vtaDid).catch(() => undefined)
+    if (kept?.provisionedAt === undefined) lacking.push(vtaDid)
+  }
+  return lacking
 }
 
 /**

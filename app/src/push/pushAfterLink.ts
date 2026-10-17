@@ -53,6 +53,13 @@ export interface PushAfterLinkDeps {
    * minutes after the last try gave up).
    */
   whenTokenArrives?(arrived: () => void): () => void
+  /**
+   * The phone's other agents that hold no wake for it. A wake is registered
+   * only with the agent that is current: one switched away from before a
+   * token existed stays unwakeable until it is switched to again (IN-277).
+   * Logged so a report shows that gap; nothing here acts on it.
+   */
+  unwakeableAgents?(): Promise<string[]>
 }
 
 /** How often one new link is tried before giving up until the next one. */
@@ -113,6 +120,18 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
     }, wait)
   }
 
+  // Which other agents still cannot wake the phone, said once an attempt ends.
+  const sayUnwakeable = () => {
+    if (!deps.unwakeableAgents) return
+    void deps
+      .unwakeableAgents()
+      .then((agents) => {
+        const others = agents.filter((a) => a !== lastAgent)
+        if (others.length > 0) deps.log('push wake: linked agents without a wake', { agents: others })
+      })
+      .catch(() => undefined)
+  }
+
   const check = () => {
     if (stopped) return
     const { link, activity } = deps.source.getState()
@@ -150,6 +169,7 @@ export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
         deps.log('push wake: enable after link', { status: outcome.status, agent: lastAgent })
         // notLinked: the link went away under us; the next new link starts over.
         pending = false
+        if (outcome.status === 'wakeable') sayUnwakeable()
       })
       .catch((e) => {
         deps.log('push wake: enable after link failed', {
