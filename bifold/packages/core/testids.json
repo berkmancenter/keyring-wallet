@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "8dbbde27a569fc6ed58c932a162c0ac3ac7c2f00",
+  "generatedFrom": "a71c85363f2bc82ba5d9c62f4da936a5636a8658",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -950,6 +950,7 @@
     "VettingUnreadableAge": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingUseProfileName": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingVouchStuck": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingVouchTokens": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
@@ -2296,6 +2297,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vetSomeoneElse"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vouchStuck"
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vouchTokens"
