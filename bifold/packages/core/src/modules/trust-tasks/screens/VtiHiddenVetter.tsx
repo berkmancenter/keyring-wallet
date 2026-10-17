@@ -28,10 +28,8 @@ import { vtiAgent } from '../module/vtiAgent'
 import { communityLabelOf, identityWord } from './communityName'
 import { pcsErrorCode } from './hiddenVettingSeam'
 import {
-  OFFERED_RELATIONSHIPS,
   drawDue,
   hiddenVetterSeam,
-  type DeclaredRelationship,
   type HiddenVetterRequest,
   type HiddenVetterStanding,
   VOUCH_METHODS,
@@ -100,7 +98,6 @@ const VtiHiddenVetter: React.FC = () => {
   const [method, setMethod] = useState<VouchMethod>()
   const [claimsChecked, setClaimsChecked] = useState(false)
   const [live, setLive] = useState(false)
-  const [relationship, setRelationship] = useState<DeclaredRelationship>()
   const [vouched, setVouched] = useState<string[]>([])
 
   const styles = StyleSheet.create({
@@ -202,7 +199,6 @@ const VtiHiddenVetter: React.FC = () => {
     setMethod(undefined)
     setClaimsChecked(false)
     setLive(false)
-    setRelationship(undefined)
   }
 
   const claims = (
@@ -214,12 +210,13 @@ const VtiHiddenVetter: React.FC = () => {
 
   const vouch = (request: HiddenVetterRequest) =>
     run(`vouch-${request.id}`, async () => {
-      if (!agent || !criterion || !method || !relationship) return
+      if (!agent || !criterion || !method) return
       await seam.attest(agent, request.id, {
         method,
         claimsVerified: claims,
         livenessConfirmed: live,
-        declaredRelationship: relationship,
+        // Not asked, as in the named flow and openvtc's form.
+        declaredRelationship: 'none',
       })
       setVouched((was) => [...was, request.id])
       setOpen(undefined)
@@ -347,16 +344,6 @@ const VtiHiddenVetter: React.FC = () => {
                       HiddenVetterIds.claims
                     )}
                     {check(live, () => setLive((was) => !was), t('Vetting.Vouch.Live'), HiddenVetterIds.live)}
-                    {/* Declared by the vetter, with no default: the attestation carries it. */}
-                    <ThemedText>{t('Vetting.Vouch.HowKnow')}</ThemedText>
-                    {OFFERED_RELATIONSHIPS.map((rel) =>
-                      check(
-                        relationship === rel,
-                        () => setRelationship(rel),
-                        t(`Vetting.Vouch.Relationship.${rel}`),
-                        `${HiddenVetterIds.relationship}_${rel}`
-                      )
-                    )}
                     {tokens === 0 ? (
                       <ThemedText style={styles.muted}>
                         {standing?.nextDrawAt
@@ -367,7 +354,7 @@ const VtiHiddenVetter: React.FC = () => {
                     <Button
                       title={t('Vetting.Vouch.Confirm')}
                       buttonType={ButtonType.Primary}
-                      disabled={Boolean(busy) || !method || !claimsChecked || !live || !relationship || tokens === 0}
+                      disabled={Boolean(busy) || !method || !claimsChecked || !live || tokens === 0}
                       onPress={() => vouch(r)}
                       testID={testIdWithKey(`${HiddenVetterIds.confirm}_${r.id}`)}
                     />

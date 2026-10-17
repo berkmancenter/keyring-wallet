@@ -57,18 +57,6 @@ export interface HiddenVetterRequest {
 export const DECLARED_RELATIONSHIPS = ['none', 'family', 'sameEmployer', 'closeFriend', 'other'] as const
 export type DeclaredRelationship = (typeof DECLARED_RELATIONSHIPS)[number]
 
-/**
- * The relationships the picker offers: those a private attestation can carry
- * through the agent today (`PRIVATE_ATTEST_RELATIONSHIPS`, in pcsVetterTasks,
- * says why only three). A subset of `DECLARED_RELATIONSHIPS`, kept literal
- * here as that list is, so this seam imports no module code.
- */
-export const OFFERED_RELATIONSHIPS = [
-  'none',
-  'family',
-  'sameEmployer',
-] as const satisfies readonly DeclaredRelationship[]
-
 /** How the vetter met the person: only those the criterion accepts are offered. */
 export const VOUCH_METHODS = ['inPerson', 'video', 'priorAcquaintance'] as const
 export type VouchMethod = (typeof VOUCH_METHODS)[number]

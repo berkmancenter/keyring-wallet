@@ -143,7 +143,7 @@ describe('vouching privately', () => {
     expect(tree.getByTestId(id('HiddenVetterNoRequests'))).toBeTruthy()
   })
 
-  it('vouching asks how they met, what they checked, that it was live, and how they know them, with no default', async () => {
+  it('vouching asks how they met, what they checked and that it was live; how they know them is not asked', async () => {
     const seam = fakeSeam()
     const tree = await open(seam)
     expect(tree.getByTestId(id('HiddenVetterRequest_req-1'))).toHaveTextContent(/Ada/)
@@ -153,16 +153,15 @@ describe('vouching privately', () => {
     await press(tree, 'HiddenVetterMethod_inPerson')
     await press(tree, 'HiddenVetterClaims')
     await press(tree, 'HiddenVetterLive')
-    // Everything but the relationship: still not allowed.
-    expect(confirm()).toBeDisabled()
-    await press(tree, 'HiddenVetterRelationship_closeFriend')
+    expect(tree.queryByTestId(id('HiddenVetterRelationship_none'))).toBeNull()
     expect(confirm()).not.toBeDisabled()
     await press(tree, 'HiddenVetterConfirm_req-1')
+    // `none`, as the named flow sends and openvtc's form defaults to.
     expect(seam.attest).toHaveBeenCalledWith(expect.anything(), 'req-1', {
       method: 'inPerson',
       claimsVerified: ['name.legal'],
       livenessConfirmed: true,
-      declaredRelationship: 'closeFriend',
+      declaredRelationship: 'none',
     })
     expect(tree.getByTestId(id('HiddenVetterDone_req-1'))).toHaveTextContent('Vetting.Vouch.Done')
   })
@@ -171,12 +170,7 @@ describe('vouching privately', () => {
     const seam = fakeSeam({ standing: jest.fn(async () => ({ ...enrolled, tokens: 0 })) })
     const tree = await open(seam)
     await press(tree, 'HiddenVetterVouch_req-1')
-    for (const key of [
-      'HiddenVetterMethod_video',
-      'HiddenVetterClaims',
-      'HiddenVetterLive',
-      'HiddenVetterRelationship_none',
-    ]) {
+    for (const key of ['HiddenVetterMethod_video', 'HiddenVetterClaims', 'HiddenVetterLive']) {
       await press(tree, key)
     }
     expect(tree.getByText(/Vetting\.Vouch\.NoTokensUntil/)).toBeTruthy()

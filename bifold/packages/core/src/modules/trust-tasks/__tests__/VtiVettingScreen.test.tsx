@@ -703,10 +703,10 @@ describe('Vetting — the desk', () => {
     expect(filled(tree)).toEqual(['VettingNewTicketButton'])
   })
 
-  // One flow (Alberto, 2026-10-15): a private request comes to the same desk,
-  // marked "Private vetting", and the same Attest sends the private
-  // attestation. It asks how the vetter knows the person, with no default.
-  test('a private request: marked, asks the relationship with no default, and attests with it', async () => {
+  // One flow: a private request comes to the same desk, marked "Private
+  // vetting", and the same Attest sends the private attestation. No
+  // relationship question: the desk sends `none`, as the named flow does.
+  test('a private request: marked, no relationship question, and the same Attest', async () => {
     const records = [
       persona,
       grant,
@@ -736,18 +736,12 @@ describe('Vetting — the desk', () => {
     const tree = await renderDesk(records)
     await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
     expect(tree.getByTestId(testIdWithKey('VettingDeskPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
-    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).toBeDisabled()
-    // Only what the agent's attest path carries today is offered (vta-service
-    // 0.60 refuses closeFriend and other): no appointment is wasted on a
-    // choice that fails at the last step.
-    expect(tree.queryByTestId(testIdWithKey('VettingRelationship_closeFriend'))).toBeNull()
-    expect(tree.queryByTestId(testIdWithKey('VettingRelationship_other'))).toBeNull()
-    fireEvent.press(tree.getByTestId(testIdWithKey('VettingRelationship_family')))
+    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
     await act(async () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
     })
-    expect(attest).toHaveBeenCalledWith('r1', expect.objectContaining({ declaredRelationship: 'family' }))
+    expect(attest).toHaveBeenCalledWith('r1', expect.not.objectContaining({ declaredRelationship: expect.anything() }))
   })
 
   test('a record carrying only `hidden: true` is not a private request: the screen and the desk read one member', async () => {
@@ -771,7 +765,7 @@ describe('Vetting — the desk', () => {
     ]
     const tree = await renderDesk(records)
     await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
-    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskPrivate'))).toBeNull()
   })
 
   // The quiet token line: read once when the desk opens, from the agent

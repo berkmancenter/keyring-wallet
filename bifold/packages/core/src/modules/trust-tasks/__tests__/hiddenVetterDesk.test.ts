@@ -308,16 +308,11 @@ describe('vouching privately', () => {
       expect(mockPcsAttest).not.toHaveBeenCalled()
     })
 
-    it('refuses rather than guess how the vetter knows the person', async () => {
-      // `declaredRelationship` is a human judgement and a member of the
-      // attestation the community verifies, so a missing one is refused.
+    it('sends `none` when no relationship is named: the vetter is not asked, as in the named flow', async () => {
       const { desk: d } = desk([row({})])
-      const code = await d
-        .attest('r-1', named)
-        .then(() => undefined)
-        .catch((e: unknown) => (e as { code?: string }).code)
-      expect(code).toBe('vtiVetting/attest:noDeclaredRelationship')
-      expect(mockPcsAttest).not.toHaveBeenCalled()
+      await d.attest('r-1', named)
+      expect(mockPcsAttest).toHaveBeenCalledTimes(1)
+      expect(mockPcsAttest.mock.calls[0]?.[0]).toMatchObject({ meta: { declaredRelationship: 'none' } })
     })
 
     it.each(['closeFriend', 'other'])(
