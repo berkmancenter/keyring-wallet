@@ -450,6 +450,9 @@ export async function autoUnlockIfLocked(driver, waitingFor) {
   if (process.env.E2E_NO_AUTO_UNLOCK === "1") return false;
   if (["EnterPIN", "Enter"].includes(waitingFor)) return false;
   if (!(await byTestId(driver, "EnterPIN").isExisting().catch(() => false))) return false;
+  // Onboarding's create-PIN screen names its first field EnterPIN too; its ReenterPIN field says it is no lock
+  // (kk on 261, 1017-0202: two AUTO-UNLOCKs typed the PIN into it for 90 s).
+  if (await byTestId(driver, "ReenterPIN").isExisting().catch(() => false)) return false;
   console.log(`AUTO-UNLOCK ${new Date().toISOString()} ${deviceTag(driver)} while waiting for ${waitingFor}`);
   const { unlockIfLocked } = await import("./flows.js");
   await unlockIfLocked(driver);
