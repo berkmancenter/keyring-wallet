@@ -20,6 +20,7 @@ import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  autoUnlockIfLocked,
   byTestId,
   createSession,
   deviceTag,
@@ -35,7 +36,7 @@ import {
   waitForTestId,
 } from "./driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./config.js";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
+import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
 import { cardPrimaryIds, VETTING_DOOR_WORDS } from "./testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -318,6 +319,8 @@ async function awaitText(d, key, re, timeoutMs) {
   const until = Date.now() + timeoutMs;
   let last = "";
   while (Date.now() < until) {
+    // A text read is no wait for a testID, so the backstop is called here (kk on 261, 1017-0209: both phones locked).
+    await autoUnlockIfLocked(d, key);
     await scrollToTestId(d, key, 3, LOW).catch(() => undefined);
     last = await textOf(d, key).catch(() => "");
     if (re.test(last)) return last;
@@ -516,6 +519,7 @@ export async function unlockToHome(d, timeoutMs = 300000) {
     await sleep(3000);
   }
   await sleep(3000);
+  await keepUnlockedForRun(d);
 }
 
 // ---------------------------------------------------------------- applicant

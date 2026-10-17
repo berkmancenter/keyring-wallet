@@ -392,10 +392,13 @@ export async function completeOnboarding(
  * Settings: a time the person saved wins over the short default (bifold e2eClocks). Not under E2E_NO_AUTO_UNLOCK=1:
  * the rows that assert the lock set it, and keep the build's own clock. driver.js autoUnlockIfLocked stays the
  * backstop, and its AUTO-UNLOCK lines still count a lock nobody expected. A failure here is said and not fatal.
+ * A kept phone never onboards again, so the drivers' unlockToHome calls this too; once per session (setAutoLockNever).
  */
-async function keepUnlockedForRun(driver) {
-  if (process.env.E2E_NO_AUTO_UNLOCK === "1") return;
+export async function keepUnlockedForRun(driver) {
+  if (process.env.E2E_NO_AUTO_UNLOCK === "1" || driver.e2eAutoLockNeverSet) return;
   try {
+    // The feature tour opens over the tab bar right after onboarding (kk on 261, 1017-0209: Settings not displayed).
+    await dismissTourIfPresent(driver);
     await tapTestId(driver, "Settings", 15000);
     await setAutoLockNever(driver);
     console.log(`AUTO-LOCK ${new Date().toISOString()} ${deviceTag(driver)} set to Never in Settings after onboarding`);
