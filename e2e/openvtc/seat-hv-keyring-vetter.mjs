@@ -76,3 +76,5 @@ try {
   stop();
   await d.deleteSession().catch(() => undefined);
 }
+// The Appium server this run started keeps node alive past the rows (run-hv on 261).
+process.exit(process.exitCode ?? 0);

@@ -28,7 +28,7 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
+import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
 import { applicant as applicantRole, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
@@ -105,6 +105,13 @@ try {
   if (!shown) throw new Error('no private vetting screen');
 
   if (!(await scrollToTestId(app, 'VettingStartButton', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('VettingStartButton not reachable');
+  // The screen connects the person's identity by itself on arrival ("Connecting your identity…" on the button), and a
+  // tap then does nothing (hv-tui on 261, 02:48Z): tap once it reads "Start my application".
+  const startLabel = async () => (await byTestId(app, 'VettingStartButton').getText().catch(() => '')) || '';
+  let label = await startLabel();
+  for (let i = 0; i < 60 && !/start my application/i.test(label); i++) { await sleep(3000); label = await startLabel(); }
+  console.log(`[e2e] VettingStartButton reads "${label}" — tapping`);
+  if (!/start my application/i.test(label)) throw new Error(`VettingStartButton never read "Start my application" (last: "${label}")`);
   await tapTestId(app, 'VettingStartButton', 10000);
   let verdict = applicationVerdict('');
   for (let i = 0; i < 12; i++) {
@@ -187,3 +194,5 @@ try {
   await app.deleteSession().catch(() => undefined);
   if (vet) await vet.deleteSession().catch(() => undefined);
 }
+// The Appium server this run started keeps node alive (hv-tui on 261 sat 35 min past its rows until galarm).
+process.exit(process.exitCode ?? 0);
