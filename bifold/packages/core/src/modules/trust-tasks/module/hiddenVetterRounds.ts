@@ -236,14 +236,25 @@ export const boundElsewhere = (vetter: { memberDid?: string } | undefined): bool
  * enrolment starts from, not a failure. Build 261 let it throw: the desk's
  * round stopped at `isEnrolled`, and a new vetter never reached `root-request`.
  * Every other refusal still throws.
+ *
+ * Any `notFound` answer to **this** task is read as "no engine", not only the
+ * fully qualified `vta/pcs/vetter/show:notFound` an 0.60 agent sends. Matching
+ * the one exact string would put us back in build 261 against an agent that
+ * answers a bare `notFound` or prefixes it differently, and the question here
+ * is not which spelling arrived — a `notFound` in reply to "show me this
+ * vetter's engine" means there is none either way. The applicant's own read of
+ * `applications/show` has always done it this way (`refreshHiddenApplication`).
  */
 async function engineOf(client: VtaClient, contextId: string, community: string): Promise<VetterStanding | undefined> {
   try {
     return await client.showPcsVetter({ contextId, community })
   } catch (e) {
+    const raw = (e as { code?: unknown })?.code
     const code =
-      (e as { code?: unknown })?.code ?? pcsErrorCode((e as { document?: unknown })?.document ?? e) ?? undefined
-    if (code === PCS_VETTER_ERROR.vetterNotFound) return undefined
+      (typeof raw === 'string' ? raw : undefined) ??
+      pcsErrorCode((e as { document?: unknown })?.document ?? e) ??
+      undefined
+    if (code === PCS_VETTER_ERROR.vetterNotFound || code === 'notFound' || code?.endsWith(':notFound')) return undefined
     throw e
   }
 }
