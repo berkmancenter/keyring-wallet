@@ -157,18 +157,23 @@ try {
   const attestMs = Date.now();
   if (vet) await vetterRole.attest(vet); else await tui.roles.attest(tui);
   await screenshot(vet ?? app, 'hv-attested').catch(() => undefined);
-  let va, prove;
+  // The attestation first; the proof is made only when the person applies (pcs-challenge, then vta/pcs/prove, then
+  // submit), so it is looked for after Apply (hv-keyring on 262 waited 3 min for a prove nothing had asked for yet).
+  let va;
   for (let i = 0; i < 36; i++) {
     await sleep(5000);
-    const log = deviceLog(appDev, startedMs);
-    va = taskRound(log, '/vta/pcs/verify-attestation/0.1');
-    prove = taskRound(log, '/vta/pcs/prove/0.1');
-    if (prove.verified || prove.noAnswer) break;
+    va = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/verify-attestation/0.1');
+    if (va.verified || va.noAnswer) break;
   }
   mark('hv-attestation-received', va.verified ? 'PASS' : 'FAIL', va.verified ? `the applicant's agent verified the hidden attestation (${va.seconds ?? '?'} s)` : `no verified vta/pcs/verify-attestation (asked: ${va.asked})`);
-  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified in ${prove.seconds} s` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
 
   const outcome = (await applicantRole.apply(app, {}).catch((e) => ({ value: `apply: ${String(e?.message || e).split('\n')[0]}` }))).value;
+  let prove = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/prove/0.1');
+  for (let i = 0; i < 24 && !(prove.verified || prove.noAnswer); i++) {
+    await sleep(5000);
+    prove = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/prove/0.1');
+  }
+  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified in ${prove.seconds} s` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
   let member;
   for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
   mark('hv-admitted', member ? 'PASS' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt})` : 'no member listed since the run began');
