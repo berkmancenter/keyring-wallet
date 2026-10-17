@@ -36,11 +36,14 @@ import { registerHiddenVetter } from '../screens/hiddenVetterSeam'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import {
+  boundElsewhere,
   connectedVetterClient as connected,
   currentHiddenCriterion,
   drawVetterTokens,
   enrolVetter,
   loadVetterRecord as loadRecord,
+  nextTickOpensAt,
+  nowMs,
   publishedOf,
   tickMillis,
   vetterContextOf as contextOf,
@@ -104,16 +107,18 @@ const seam: HiddenVetterSeam = {
 
     const period = parameters?.vetterLabels?.[0]
     const tokenLabel = parameters?.tokenLabels?.[0]
-    const tick = tickMillis(parameters?.tickLength)
-    const lastDraw = record?.lastDrawAt ? Date.parse(record.lastDrawAt) : undefined
-    // Both of these are ours, not the agent's, and both are undefined on a
-    // phone that has never drawn here. The screens treat absence as "unknown",
-    // never as "due now".
-    const nextDrawAt = lastDraw && tick ? new Date(lastDraw + tick).toISOString() : undefined
+    // The community's schedule, not the phone's: tick windows begin at 00:00Z
+    // on the label's first day, so when the next one opens is known whether
+    // or not this phone has drawn before.
+    const nextDrawAt = parameters ? nextTickOpensAt(parameters, nowMs()) : undefined
     const lapsesAt = nextDrawAt
+    const stuck = boundElsewhere(vetter)
 
     return {
-      enrolled: Boolean(period && vetter?.enrolledLabels?.includes(period)),
+      // An engine bound to another DID holds labels it can never draw from:
+      // not enrolled for anything this vetter can do, and said as stuck.
+      enrolled: !stuck && Boolean(period && vetter?.enrolledLabels?.includes(period)),
+      ...(stuck ? { stuck: 'memberMismatch' as const } : {}),
       ...(period ? { period } : {}),
       tokens: vetter?.tokensFree ?? 0,
       ...(tokenLabel ? { tokenLabel } : {}),

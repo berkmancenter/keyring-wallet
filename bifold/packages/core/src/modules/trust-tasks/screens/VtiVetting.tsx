@@ -42,7 +42,6 @@ import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
-import type { VettingDeskRequestPrivacy } from '../module/privateVettingContract'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { deliveredCardCheck } from '../module/vtiDeliveredCheck'
@@ -52,6 +51,7 @@ import {
   VettingTicketError,
   VtiApplicant,
   checkTicketFor,
+  isPrivateVettingRequest,
   VtiVetterDesk,
   type VettingApplication,
   type VettingDeskRequest,
@@ -77,12 +77,7 @@ import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
 import { hiddenVettingSeam, pcsErrorCode } from './hiddenVettingSeam'
 import { PrivateVettingBadge } from './PrivateVettingBadge'
-import {
-  DECLARED_RELATIONSHIPS,
-  hiddenVetterSeam,
-  type DeclaredRelationship,
-  type HiddenVetterStanding,
-} from './hiddenVetterSeam'
+import { hiddenVetterSeam, type HiddenVetterStanding } from './hiddenVetterSeam'
 import { hiddenVetterErrorKey } from './VtiHiddenVetter'
 import { hiddenVettingErrorKey } from './VtiHiddenVetting'
 import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
@@ -150,8 +145,8 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
  * this flow, by its code; undefined for anything else, which is said as any
  * failure is.
  */
-/** A desk request that came with the hidden-vetting ext (the module derives `hidden`). */
-const isPrivateRequest = (request: VettingDeskRequest) => Boolean((request as VettingDeskRequestPrivacy).hidden)
+/** A desk request that asked to be vetted privately: the module's own answer, which `attest` acts on too. */
+const isPrivateRequest = (request: VettingDeskRequest) => isPrivateVettingRequest(request)
 
 function privateVettingWords(e: unknown): string | undefined {
   const code = pcsErrorCode(e)
@@ -190,7 +185,6 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // start (vetterDeskRelaunch, 255).
   const [seatRead, setSeatRead] = useState(false)
   // How the vetter knows the person, per private request: asked, never assumed.
-  const [relationship, setRelationship] = useState<Record<string, DeclaredRelationship>>({})
   /**
    * Whether this phone is a vetter *now*, not merely whether it holds a grant.
    * The desk used to seat anyone with a grant and say nothing about its
@@ -953,6 +947,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             {standingNotice}
             {/* How many people this vetter can vouch for privately now, read
                 once when the desk opens (it is an agent round trip). */}
+            {/* The agent was enrolled under another identity by an earlier
+                build and cannot be changed: said plainly, instead of a token
+                count of 0 that reads as "wait for the next draw". */}
+            {vetterStanding?.stuck === 'memberMismatch' ? (
+              <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchStuck)}>
+                {t('Vetting.Vouch.MemberMismatch')}
+              </Text>
+            ) : null}
             {vetterStanding?.enrolled ? (
               <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchTokens)}>
                 {tp('Vetting.Vouch.Tokens', { count: vetterStanding.tokens })}
@@ -1195,36 +1197,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         testIdStem="VettingCheckApplicant"
                       />
                     </View>
-                    {isPrivateRequest(request) ? (
-                      <View style={{ gap: 4 }} testID={testIdWithKey(VtiVettingIds.relationship)}>
-                        <Text style={styles.label}>{t('Vetting.Vouch.HowKnow')}</Text>
-                        {DECLARED_RELATIONSHIPS.map((rel) => {
-                          const chosen = relationship[request.requestId] === rel
-                          return (
-                            <Pressable
-                              key={rel}
-                              style={[styles.row, { minHeight: 44 }]}
-                              onPress={() => setRelationship((was) => ({ ...was, [request.requestId]: rel }))}
-                              accessibilityRole="radio"
-                              accessibilityState={{ checked: chosen }}
-                              testID={testIdWithKey(`${VtiVettingIds.relationship}_${rel}`)}
-                            >
-                              <Icon
-                                name={chosen ? 'radiobox-marked' : 'radiobox-blank'}
-                                size={22}
-                                color={ColorPalette.brand.primary}
-                              />
-                              <Text style={styles.value}>{t(`Vetting.Vouch.Relationship.${rel}`)}</Text>
-                            </Pressable>
-                          )
-                        })}
-                      </View>
-                    ) : null}
                     <Pressable
                       style={look(VtiVettingIds.attestButton, deskPrimaryId).button}
                       testID={testIdWithKey(VtiVettingIds.attestButton)}
                       accessibilityRole="button"
-                      disabled={!!busy || (isPrivateRequest(request) && !relationship[request.requestId])}
+                      // A private Attest cannot work from an agent stuck under
+                      // another identity: the notice above says why.
+                      disabled={!!busy || (isPrivateRequest(request) && vetterStanding?.stuck !== undefined)}
                       onPress={() =>
                         run('attest', async () => {
                           if (!(await confirmWithBiometrics('', 'Attest'))) return
@@ -1232,11 +1211,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                             documentClasses: ['passport'],
                             claimsVerified: ['name.legal'],
                             livenessConfirmed: true,
-                            // A private attestation carries how the vetter knows the
-                            // person, as they declared it: never filled in for them.
-                            ...(isPrivateRequest(request)
-                              ? { declaredRelationship: relationship[request.requestId] }
-                              : {}),
+                            // No relationship question, private or named: the desk
+                            // sends `none`, as the named flow and openvtc's form do.
                           })
                           // Straight to "Statement issued", not on the next read.
                           setDesk(

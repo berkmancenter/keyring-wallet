@@ -55,8 +55,13 @@ const KIND = 'standing'
 export interface VetterRecord {
   community: string
   lastDrawAt?: string
-  /** The tick last drawn for, so a second draw in one tick is not attempted. */
-  lastTick?: number
+  /**
+   * The last tick served, per token label. Ticks are the community's own
+   * windows of the label (tick 0 begins at 00:00Z on the label's first day),
+   * so this compares with the community's count directly. An older record's
+   * `lastTick` counted from the phone's first draw and is not read.
+   */
+  lastTicks?: Record<string, number>
 }
 
 export const loadVetterRecord = (agent: Agent, community: string) =>
@@ -129,22 +134,51 @@ async function askCommunity<T>(communityDid: string, type: string, payload: Reco
   return got as T
 }
 
+/** The tick length a community that publishes none is taken to mean (vtc-service, openvtc: `P3D`). */
+const DEFAULT_TICK_MS = 3 * 86400 * 1000
+
+/** At most this many owed ticks are drawn in one round; the next round draws the rest. */
+export const MAX_DRAWS_PER_ROUND = 12
+
 /**
- * Which tick a draw is for.
- *
- * Ticks are counted from the community's own epoch, which it does not publish
- * — so this counts from the phone's first draw and is only ever used to avoid
- * drawing twice in one tick. A community refuses a draw that is ahead of its
- * own tick, which is the authority that matters.
+ * The monthly token label covering `now` and when its tick 0 began, or
+ * undefined when no published label covers `now` (the manifest is from last
+ * month: the community stopped issuing under it, and asking would only be
+ * refused). openvtc's `current_month_label`.
  */
-export function currentTick(parameters: PublishedConfig, record: VetterRecord | undefined): number {
-  const tick = tickMillis(parameters.tickLength)
-  const last = record?.lastDrawAt ? Date.parse(record.lastDrawAt) : undefined
-  if (!tick || !last || !record?.lastTick) return record?.lastTick ? record.lastTick + 1 : 1
-  // No `Math.max(1, …)` here: within the same tick no time has elapsed, so the
-  // answer must be the tick already drawn — forcing it forward made the
-  // double-draw guard useless, which is what the test caught.
-  return record.lastTick + Math.floor((nowMs() - last) / tick)
+export function monthLabelAt(tokenLabels: string[], now: number): { label: string; start: number } | undefined {
+  for (const label of tokenLabels) {
+    const m = /^token\/(\d{4})-(\d{2})$/.exec(label)
+    if (!m) continue
+    const start = Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)
+    const end = Date.UTC(Number(m[1]), Number(m[2]), 1)
+    if (start <= now && now < end) return { label, start }
+  }
+  return undefined
+}
+
+/**
+ * The next tick of a label owed to this vetter: one after the last served, or
+ * tick 0, as long as it has begun. A tick that has begun and was not served —
+ * the phone was off, or never drew — is still owed and asked for oldest first;
+ * one that has not begun is refused (`tickNotYet`), so it is never asked for.
+ * A recorded tick later than the current one belongs to no tick of this label
+ * and is read as nothing served. openvtc's `next_tick`.
+ */
+export function nextOwedTick(start: number, tickMs: number, last: number | undefined, now: number): number | undefined {
+  if (now < start) return undefined
+  const current = Math.floor((now - start) / tickMs)
+  const next = last !== undefined && last <= current ? last + 1 : 0
+  return next <= current ? next : undefined
+}
+
+/** When the tick after the current one opens: the next time this vetter is owed a draw. */
+export function nextTickOpensAt(parameters: PublishedConfig, now: number): string | undefined {
+  const month = monthLabelAt(parameters.tokenLabels ?? [], now)
+  if (!month) return undefined
+  const tickMs = tickMillis(parameters.tickLength) ?? DEFAULT_TICK_MS
+  const current = Math.floor((now - month.start) / tickMs)
+  return new Date(month.start + (current + 1) * tickMs).toISOString()
 }
 
 /**
@@ -168,21 +202,29 @@ function signerDid(): string {
 }
 
 /**
- * Engines confirmed bound to a DID other than the signer's even after a fresh
- * root request, keyed by community, signer and the engine's member DID.
- * Re-enrolling such an engine only spends one of the community's re-issues
- * for nothing, so it is tried once per process and then refused in words.
+ * The agent's engine for this community draws as another DID than the one
+ * this phone signs with, and that cannot change.
+ *
+ * At vta-service 0.60 an engine is keyed by context and community and keeps
+ * the member DID of its first `root-request`; a request naming another is
+ * refused (`MemberMismatch`, not retryable), and no task deletes or resets
+ * an engine. Builds before 260 enrolled under the phone's identity at its
+ * VTA, so an agent they enrolled can never draw for that community from that
+ * context: the community would refuse every opening it makes. So nothing is
+ * sent — not a re-enrolment the agent refuses, not a draw the community
+ * refuses — and the person is told it plainly.
  */
-const confirmedMismatch = new Set<string>()
-const mismatchKey = (community: string, signer: string, bound: string) => `${community}\u0000${signer}\u0000${bound}`
-
 const memberMismatch = (bound: string) =>
   Object.assign(
     new Error(
-      'the agent draws tokens for another DID than the one this phone signs with, so the community would refuse every draw'
+      'this agent was enrolled for private vetting in this community under another identity, which cannot be changed'
     ),
     { code: 'keyring/hidden-vetter:memberMismatch', bound }
   )
+
+/** Whether the agent's engine for a community draws as another DID than the signer's. */
+export const boundElsewhere = (vetter: { memberDid?: string } | undefined): boolean =>
+  Boolean(vetter?.memberDid && vetter.memberDid !== vtiAgent.did)
 
 /**
  * Whether the agent holds a vetter credential for the period `criterion`
@@ -212,12 +254,7 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
   const contextId = await vetterContextOf(client)
   const memberDid = signerDid()
   const before = await client.showPcsVetter({ contextId, community: communityDid })
-  if (
-    before?.memberDid &&
-    before.memberDid !== memberDid &&
-    confirmedMismatch.has(mismatchKey(communityDid, memberDid, before.memberDid))
-  )
-    throw memberMismatch(before.memberDid)
+  if (before?.memberDid && before.memberDid !== memberDid) throw memberMismatch(before.memberDid)
 
   // 1 — the agent blinds a request. Only it can: it holds the key. What it
   // answers is the community's payload, whole.
@@ -225,8 +262,7 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
   // A community binds a member to the PCS identifier of their first enrolment
   // and refuses any other (`pcs-root:identifierRebound`); the same identifier
   // under the same label is re-issued. So a re-enrolment that would carry a
-  // new identifier is not sent: it cannot succeed, and it is the agent's
-  // engine, not the community, that needs resetting.
+  // new identifier is not sent: it cannot succeed.
   if (before?.id && request.id !== before.id) throw memberMismatch(before.memberDid ?? memberDid)
   // 2 — the phone carries it to the community, unchanged, and the community
   // signs a pre-credential. A refusal stops the round here.
@@ -243,19 +279,22 @@ export async function enrolVetter(agent: Agent, communityDid: string, criterion:
     parameters,
     response: { label: answer.label, preCredential: answer.preCredential },
   })
-  // An engine the agent created under another DID may keep it whatever the
-  // root request says; then this enrolment cannot be drawn from, and it is
-  // said now rather than as a refused draw.
-  if (before?.memberDid && before.memberDid !== memberDid) {
-    const after = await client.showPcsVetter({ contextId, community: communityDid })
-    if (after?.memberDid && after.memberDid !== memberDid) {
-      confirmedMismatch.add(mismatchKey(communityDid, memberDid, after.memberDid))
-      throw memberMismatch(after.memberDid)
-    }
-  }
 }
 
-/** Draw this tick's tokens, once per tick: agent blinds, community signs, agent unblinds. */
+const servedCode = 'vtc/vetting/vetters/pcs-tokens:alreadyServed'
+const notYetCode = 'vtc/vetting/vetters/pcs-tokens:tickNotYet'
+
+/**
+ * Draw every tick of the current month's label this vetter is owed, oldest
+ * first and at most `dripPerTick` each: agent blinds, community signs, agent
+ * unblinds, per tick.
+ *
+ * On the schedule, not on demand (openvtc's `due`): which ticks are owed comes
+ * from the clock and the label, never from how many tokens are left — drawing
+ * when low would make a vetter's balance a public signal of how much they had
+ * vetted. Right after enrolment that is ticks 0 to the current one, so a
+ * vetter enrolled mid-month can vouch at once.
+ */
 export async function drawVetterTokens(
   agent: Agent,
   communityDid: string,
@@ -264,53 +303,72 @@ export async function drawVetterTokens(
   const parameters = publishedOf(criterion)
   if (!parameters)
     throw Object.assign(new Error('not a hidden criterion'), { code: 'keyring/hidden-vetter:noParameters' })
-  const label = parameters.tokenLabels[0]
+  const month = monthLabelAt(parameters.tokenLabels ?? [], nowMs())
+  if (!month) return { drawn: 0 }
+  const tickMs = tickMillis(parameters.tickLength) ?? DEFAULT_TICK_MS
+  const record = await loadVetterRecord(agent, communityDid)
+  const lastTicks = { ...(record?.lastTicks ?? {}) }
+  if (nextOwedTick(month.start, tickMs, lastTicks[month.label], nowMs()) === undefined) return { drawn: 0 }
+
   const client = await connectedVetterClient(agent)
   const contextId = await vetterContextOf(client)
-
-  const record = await loadVetterRecord(agent, communityDid)
-  const tick = currentTick(parameters, record)
-  if (record?.lastTick === tick) return { drawn: 0 }
-
   // Never draw from an engine bound to another DID: the community refuses
-  // every opening it makes, and the draw it held open must then be given up.
+  // every opening it makes.
   const vetter = await client.showPcsVetter({ contextId, community: communityDid })
   if (vetter?.memberDid && vetter.memberDid !== signerDid()) throw memberMismatch(vetter.memberDid)
 
-  const request = await client.pcsTokensRequest({
-    contextId,
-    community: communityDid,
-    parameters,
-    label,
-    tick,
-    // Never more than the published drip: the agent refuses countExceedsDrip,
-    // and asking for more than a community allows is not the phone's call.
-    count: parameters.dripPerTick,
-  })
-  // Carried as the agent built it. A refusal stops the round, and the draw
-  // the agent holds open for it is given up, or the next tick's draw would be
-  // refused as one already in flight.
-  let answer: { label: string; tick: number; preCredentials: string[] }
-  try {
-    answer = await askCommunity(communityDid, VTC_VETTER_TASK.pcsTokens, {
-      label: request.label,
-      tick: request.tick,
-      requests: request.requests,
-    })
-  } catch (refused) {
-    await client
-      .pcsTokensAbandon({ contextId, community: communityDid, draw: { label: request.label, tick: request.tick } })
-      .catch(() => undefined)
-    throw refused
+  let drawn = 0
+  const served = async (tick: number) => {
+    lastTicks[month.label] = tick
+    await saveVetterRecord(agent, { community: communityDid, lastDrawAt: nowIso(), lastTicks })
   }
-  await client.pcsTokensAccept({
-    contextId,
-    community: communityDid,
-    parameters,
-    response: { label: answer.label, tick: answer.tick, preCredentials: answer.preCredentials },
-  })
-  await saveVetterRecord(agent, { community: communityDid, lastDrawAt: nowIso(), lastTick: tick })
-  return { drawn: answer.preCredentials?.length ?? 0 }
+  for (let i = 0; i < MAX_DRAWS_PER_ROUND; i++) {
+    const tick = nextOwedTick(month.start, tickMs, lastTicks[month.label], nowMs())
+    if (tick === undefined) break
+    const request = await client.pcsTokensRequest({
+      contextId,
+      community: communityDid,
+      parameters,
+      label: month.label,
+      tick,
+      // Never more than the published drip: the agent refuses countExceedsDrip,
+      // and asking for more than a community allows is not the phone's call.
+      count: parameters.dripPerTick,
+    })
+    // Carried as the agent built it. A refusal gives up the draw the agent
+    // holds open for it, or the next draw of that tick would be refused as
+    // one already in flight.
+    let answer: { label: string; tick: number; preCredentials: string[] }
+    try {
+      answer = await askCommunity(communityDid, VTC_VETTER_TASK.pcsTokens, {
+        label: request.label,
+        tick: request.tick,
+        requests: request.requests,
+      })
+    } catch (refused) {
+      await client
+        .pcsTokensAbandon({ contextId, community: communityDid, draw: { label: request.label, tick: request.tick } })
+        .catch(() => undefined)
+      const code = (refused as { code?: string })?.code ?? ''
+      // Served before — an answer this phone lost: done, and on to the next.
+      if (code === servedCode || code.endsWith(':alreadyServed')) {
+        await served(tick)
+        continue
+      }
+      // The community's clock is behind this phone's: wait for the next round.
+      if (code === notYetCode || code.endsWith(':tickNotYet')) break
+      throw refused
+    }
+    await client.pcsTokensAccept({
+      contextId,
+      community: communityDid,
+      parameters,
+      response: { label: answer.label, tick: answer.tick, preCredentials: answer.preCredentials },
+    })
+    await served(tick)
+    drawn += answer.preCredentials?.length ?? 0
+  }
+  return { drawn }
 }
 
 /**

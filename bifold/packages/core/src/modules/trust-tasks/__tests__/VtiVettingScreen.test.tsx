@@ -703,15 +703,19 @@ describe('Vetting — the desk', () => {
     expect(filled(tree)).toEqual(['VettingNewTicketButton'])
   })
 
-  // One flow (Alberto, 2026-10-15): a private request comes to the same desk,
-  // marked "Private vetting", and the same Attest sends the private
-  // attestation. It asks how the vetter knows the person, with no default.
-  test('a private request: marked, asks the relationship with no default, and attests with it', async () => {
+  // One flow: a private request comes to the same desk, marked "Private
+  // vetting", and the same Attest sends the private attestation. No
+  // relationship question: the desk sends `none`, as the named flow does.
+  test('a private request: marked, no relationship question, and the same Attest', async () => {
     const records = [
       persona,
       grant,
       deskRequest('cardReceived', {
-        hidden: true,
+        // As the desk stores a private request: the applicant's PCS identifier
+        // from the request's hidden-vetting ext, and nothing else marks it.
+        // (An earlier fixture said `hidden: true`, a member the module never
+        // writes, and hid that the screen never saw a real private request.)
+        hiddenApplicantId: 'z3ApplicantPcsKey',
         matchConfirmedAt: '2026-09-25T09:01:00Z',
         session: {
           documentId: 'urn:uuid:session',
@@ -732,13 +736,36 @@ describe('Vetting — the desk', () => {
     const tree = await renderDesk(records)
     await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
     expect(tree.getByTestId(testIdWithKey('VettingDeskPrivate'))).toHaveTextContent(/Vetting\.Private\.Badge/)
-    expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).toBeDisabled()
-    fireEvent.press(tree.getByTestId(testIdWithKey('VettingRelationship_closeFriend')))
+    expect(tree.queryByTestId(testIdWithKey('VettingRelationship'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('VettingAttestButton'))).not.toBeDisabled()
     await act(async () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
     })
-    expect(attest).toHaveBeenCalledWith('r1', expect.objectContaining({ declaredRelationship: 'closeFriend' }))
+    expect(attest).toHaveBeenCalledWith('r1', expect.not.objectContaining({ declaredRelationship: expect.anything() }))
+  })
+
+  test('a record carrying only `hidden: true` is not a private request: the screen and the desk read one member', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        hidden: true,
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskPrivate'))).toBeNull()
   })
 
   // The quiet token line: read once when the desk opens, from the agent
@@ -769,6 +796,18 @@ describe('Vetting — the desk', () => {
       const tree = await renderDesk([persona, grant])
       const line = await tree.findByTestId(testIdWithKey('VettingVouchTokens'))
       expect(line).not.toHaveTextContent(/NextDraw/)
+    })
+
+    test('enrolled by an earlier build under another identity: said plainly, no token count, no vouching privately', async () => {
+      jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+      registerHiddenVetter({
+        standing: jest.fn(async () => ({ enrolled: false, tokens: 0, stuck: 'memberMismatch' })),
+      } as unknown as HiddenVetterSeam)
+      const tree = await renderDesk([persona, grant])
+      expect(await tree.findByTestId(testIdWithKey('VettingVouchStuck'))).toHaveTextContent(
+        /Vetting\.Vouch\.MemberMismatch/
+      )
+      expect(tree.queryByTestId(testIdWithKey('VettingVouchTokens'))).toBeNull()
     })
 
     test('never enrolled: no line, and no error', async () => {

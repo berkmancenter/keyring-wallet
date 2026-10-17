@@ -31,6 +31,12 @@ export interface HiddenVetterStanding {
   nextDrawAt?: string
   /** When the current tick ends: a tick not drawn by then is lost. */
   lapsesAt?: string
+  /**
+   * Why this vetter cannot vouch privately here at all, when they cannot.
+   * `memberMismatch`: the agent was enrolled under another identity by an
+   * earlier build, which the agent cannot change.
+   */
+  stuck?: 'memberMismatch'
 }
 
 /** A private vetting request waiting for this vetter. They meet the person, so they know who it is. */

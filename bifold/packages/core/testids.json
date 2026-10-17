@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "8dbbde27a569fc6ed58c932a162c0ac3ac7c2f00",
+  "generatedFrom": "9f40add7e0753631d075c0357ec2a600d36342a0",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -950,6 +950,7 @@
     "VettingUnreadableAge": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingUseProfileName": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingVetSomeoneElse": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
+    "VettingVouchStuck": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingVouchTokens": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingWithdrawButton": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
     "VettingYouVetFor": ["src/modules/trust-tasks/screens/VtiVetting.ids.ts"],
@@ -2190,9 +2191,6 @@
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.readingHeld"
     },
     {
-      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.relationship"
-    },
-    {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.replaceRequest"
     },
     {
@@ -2298,6 +2296,9 @@
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vetSomeoneElse"
     },
     {
+      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vouchStuck"
+    },
+    {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.vouchTokens"
     },
     {
@@ -2305,9 +2306,6 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.youVetFor"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtiVetting.tsx": "`${VtiVettingIds.relationship}_${rel}`"
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "requestTestKey(r.requestDocumentId)"

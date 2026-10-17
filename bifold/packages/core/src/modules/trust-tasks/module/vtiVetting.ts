@@ -66,6 +66,7 @@ import {
   type HiddenVettingRecord,
 } from './hiddenVetting'
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
+import { PRIVATE_ATTEST_RELATIONSHIPS } from './pcsVetterTasks'
 import {
   connectedVetterClient,
   currentHiddenCriterion,
@@ -143,6 +144,15 @@ export interface VettingTicket {
 export const HIDDEN_VETTING_NS = 'org.openvtc.hidden-vetting'
 
 /** One request on the vetter's desk. */
+/**
+ * A request that asked to be vetted privately. The one answer, for the screens
+ * and the desk both: `hiddenApplicantId` is what an inbound private request
+ * really carries, and nothing else should be consulted — a second source is
+ * how build 260's screen and desk came to disagree.
+ */
+export const isPrivateVettingRequest = (request: Pick<VettingDeskRequest, 'hiddenApplicantId'>): boolean =>
+  request.hiddenApplicantId !== undefined
+
 export interface VettingDeskRequest {
   requestId: string
   /**
@@ -1535,7 +1545,7 @@ export class VtiVetterDesk {
     // community discards (it counts a proof for a hidden criterion, never
     // statements), so the vouch silently did not count, and the statement
     // named the vetter to the applicant in the process.
-    if (desk.hiddenApplicantId) return this.attestPrivately({ ...desk, session: desk.session }, decision)
+    if (isPrivateVettingRequest(desk)) return this.attestPrivately({ ...desk, session: desk.session }, decision)
     const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
     for (const c of decision.claimsVerified)
       if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
@@ -1688,9 +1698,10 @@ export class VtiVetterDesk {
    * request carried none, so keying on it refused every attestation until a
    * test caught it.
    *
-   * The declared relationship is the vetter's own answer and has no default: a
-   * request without one is refused rather than attested on a guess, because it
-   * too is a member of the attestation the community verifies.
+   * The declared relationship is not asked: it is `none` unless a caller names
+   * one, as the named flow sends and openvtc's form defaults to (decided
+   * 2026-10-16). One that is named is accepted only if the agent's
+   * attest path can carry it (`PRIVATE_ATTEST_RELATIONSHIPS`).
    */
   private async attestPrivately(
     // `attest` has already refused a request with no card or session, so the
@@ -1703,10 +1714,15 @@ export class VtiVetterDesk {
       validDays?: number
     }
   ): Promise<VettingDeskRequest> {
-    if (!decision.declaredRelationship) {
-      throw Object.assign(new Error('vtiVetting: a private attestation needs how the vetter knows this person'), {
-        code: 'vtiVetting/attest:noDeclaredRelationship',
-      })
+    // Not asked of the vetter, private or named: `none`, as the named flow
+    // sends and openvtc's form defaults to. A caller may still name one, and
+    // only what the agent's attest path carries is accepted.
+    const declaredRelationship = decision.declaredRelationship ?? 'none'
+    if (!(PRIVATE_ATTEST_RELATIONSHIPS as readonly string[]).includes(declaredRelationship)) {
+      throw Object.assign(
+        new Error(`vtiVetting: a private attestation cannot carry the relationship ${declaredRelationship} yet`),
+        { code: 'vtiVetting/attest:relationshipNotAccepted' }
+      )
     }
     const criterion = await currentHiddenCriterion(this.agent, desk.communityDid)
     const parameters = criterion && vetterPublishedOf(criterion)
@@ -1739,7 +1755,7 @@ export class VtiVetterDesk {
         method: desk.session.method,
         claimsVerified: decision.claimsVerified,
         livenessConfirmed: decision.livenessConfirmed,
-        declaredRelationship: decision.declaredRelationship as HiddenAttestMeta['declaredRelationship'],
+        declaredRelationship: declaredRelationship as HiddenAttestMeta['declaredRelationship'],
         ...(decision.validDays !== undefined ? { validDays: decision.validDays } : {}),
       },
       async ({ applicantId, meta }) =>

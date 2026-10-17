@@ -72,6 +72,7 @@ import {
   hiddenApplicantIdOf,
   type VettingDeskRequest,
   type VettingTicket,
+  isPrivateVettingRequest,
 } from '../module/vtiVetting'
 import { VETTING_SCHEMA_DIR, vendoredValidatorIn } from './fixtures/vtcJoinSchemas'
 
@@ -201,6 +202,14 @@ describe('taking a request', () => {
     expect(kept.status).toBe('accepted')
   })
 
+  it('stores a private request in the shape the screens and attest() both read as private (build 260)', async () => {
+    // The real path: a vetting/request with the hidden-vetting ext, through
+    // the desk's own intake, into the store, judged by the one predicate.
+    const [kept] = await take({ [HIDDEN_VETTING_NS]: { suite: SUITE, id: PCS_ID } })
+    expect(isPrivateVettingRequest(kept)).toBe(true)
+    expect(isPrivateVettingRequest((await take())[0])).toBe(false)
+  })
+
   it('marks nothing on a named request, nor on one under a suite this build cannot honour', async () => {
     expect((await take())[0].hiddenApplicantId).toBeUndefined()
     expect(
@@ -299,17 +308,25 @@ describe('vouching privately', () => {
       expect(mockPcsAttest).not.toHaveBeenCalled()
     })
 
-    it('refuses rather than guess how the vetter knows the person', async () => {
-      // `declaredRelationship` is a human judgement and a member of the
-      // attestation the community verifies, so a missing one is refused.
+    it('sends `none` when no relationship is named: the vetter is not asked, as in the named flow', async () => {
       const { desk: d } = desk([row({})])
-      const code = await d
-        .attest('r-1', named)
-        .then(() => undefined)
-        .catch((e: unknown) => (e as { code?: string }).code)
-      expect(code).toBe('vtiVetting/attest:noDeclaredRelationship')
-      expect(mockPcsAttest).not.toHaveBeenCalled()
+      await d.attest('r-1', named)
+      expect(mockPcsAttest).toHaveBeenCalledTimes(1)
+      expect(mockPcsAttest.mock.calls[0]?.[0]).toMatchObject({ meta: { declaredRelationship: 'none' } })
     })
+
+    it.each(['closeFriend', 'other'])(
+      'refuses %s before asking the agent: 0.60 cannot carry it, and saying so late wastes a meeting',
+      async (rel) => {
+        const { desk: d } = desk([row({})])
+        const code = await d
+          .attest('r-1', { ...named, declaredRelationship: rel })
+          .then(() => undefined)
+          .catch((e: unknown) => (e as { code?: string }).code)
+        expect(code).toBe('vtiVetting/attest:relationshipNotAccepted')
+        expect(mockPcsAttest).not.toHaveBeenCalled()
+      }
+    )
 
     it('leaves a named request on the named path', async () => {
       const { desk: d } = desk([row({ hiddenApplicantId: undefined })])

@@ -45,7 +45,14 @@ jest.mock('../module/vtiAgent', () => ({
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
-import { enrolVetter, drawVetterTokens, isEnrolled } from '../module/hiddenVetterRounds'
+import {
+  boundElsewhere,
+  drawVetterTokens,
+  enrolVetter,
+  isEnrolled,
+  monthLabelAt,
+  nextOwedTick,
+} from '../module/hiddenVetterRounds'
 import { PCS_VETTER_TASK, VTC_VETTER_TASK } from '../module/pcsVetterTasks'
 import { VtiRefusal } from '../module/vtiAgent'
 
@@ -134,11 +141,20 @@ const agent = () => {
 beforeEach(() => {
   mockTask.mockReset()
   mockAsk.mockReset()
-  mockTask.mockImplementation(async (type: string) => {
+  mockTask.mockImplementation(async (type: string, ...rest: unknown[]) => {
     if (type === PCS_VETTER_TASK.rootRequest) return rootRequestAnswer
-    if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestAnswer
+    if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestFor(rest[0])
     return {}
   })
+  // 12:00Z on 1 October: tick 0 of token/2026-10 has begun and no other has,
+  // so one draw is owed. jestSetup freezes Date.now at 2024, when no label here
+  // was live.
+  jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 1, 12))
+})
+
+/** The agent's tokens/request answer for the tick it was asked for. */
+const tokensRequestFor = (payload: unknown) => ({
+  request: { ...tokensRequestAnswer.request, tick: (payload as { tick?: number })?.tick ?? 1 },
 })
 
 describe('the stubbed agent answers as the registry says an agent does', () => {
@@ -219,7 +235,7 @@ describe('enrolling', () => {
 describe('drawing', () => {
   beforeEach(() =>
     mockAsk.mockResolvedValue(
-      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 1, preCredentials: ['zCPre', 'zDPre'] })
+      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 0, preCredentials: ['zCPre', 'zDPre'] })
     )
   )
 
@@ -227,7 +243,7 @@ describe('drawing', () => {
     await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
     const carried = sentToCommunity(VTC_VETTER_TASK.pcsTokens)
     expect(PCS_TOKENS(carried)).toBe(true)
-    expect(carried).toEqual(tokensRequestAnswer.request)
+    expect(carried).toEqual({ ...tokensRequestAnswer.request, tick: 0 })
     const accept = sentToAgent(PCS_VETTER_TASK.tokensAccept)
     expect(PCS_TOKENS_ANSWER(accept.response)).toBe(true)
     expect(TOKENS_ACCEPT(accept)).toBe(true)
@@ -240,10 +256,10 @@ describe('drawing', () => {
     expect(sentToAgent(PCS_VETTER_TASK.tokensAccept)).toBeUndefined()
     const abandon = sentToAgent(PCS_VETTER_TASK.tokensAbandon)
     expect(TOKENS_ABANDON(abandon)).toBe(true)
-    expect(abandon.draw).toEqual({ label: 'token/2026-10', tick: 1 })
+    expect(abandon.draw).toEqual({ label: 'token/2026-10', tick: 0 })
     // Not recorded as drawn, so the next round tries this tick again.
     mockAsk.mockResolvedValue(
-      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 1, preCredentials: ['zCPre', 'zDPre'] })
+      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 0, preCredentials: ['zCPre', 'zDPre'] })
     )
     await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
   })
@@ -268,10 +284,10 @@ describe('the member DID the agent binds is the DID that signs to the community'
     },
   })
   const answering = (show: unknown, rootRequest: unknown = rootRequestAnswer) =>
-    mockTask.mockImplementation(async (type: string) => {
+    mockTask.mockImplementation(async (type: string, ...rest: unknown[]) => {
       if (type === PCS_VETTER_TASK.vetterShow) return typeof show === 'function' ? show() : show
       if (type === PCS_VETTER_TASK.rootRequest) return rootRequest
-      if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestAnswer
+      if (type === PCS_VETTER_TASK.tokensRequest) return tokensRequestFor(rest[0])
       return {}
     })
 
@@ -300,41 +316,95 @@ describe('the member DID the agent binds is the DID that signs to the community'
     expect(mockAsk).not.toHaveBeenCalled()
   })
 
+  it('an engine enrolled under another DID is stuck: no re-enrolment the agent refuses, nothing to the community', async () => {
+    // vta-service 0.60 keys an engine by context and community, keeps its first
+    // member DID, refuses a root-request naming another, and has no reset.
+    answering(engineBoundTo(MANAGER))
+    await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
+      code: 'keyring/hidden-vetter:memberMismatch',
+    })
+    expect(sentToAgent(PCS_VETTER_TASK.rootRequest)).toBeUndefined()
+    expect(mockAsk).not.toHaveBeenCalled()
+  })
+
   it('a re-enrolment that would carry a new PCS identifier is not sent (the community refuses identifierRebound)', async () => {
-    answering(engineBoundTo(MANAGER, { id: 'z9AnotherKey' }))
+    answering(engineBoundTo(SIGNER, { id: 'z9AnotherKey' }))
     await expect(enrolVetter(agent(), COMMUNITY, criterion)).rejects.toMatchObject({
       code: 'keyring/hidden-vetter:memberMismatch',
     })
     expect(mockAsk).not.toHaveBeenCalled()
   })
 
-  it('an engine that keeps the old DID after re-enrolling is said once, then not re-enrolled again', async () => {
-    const community = 'did:webvh:QmCommScid:vtc.example:tvtc-wq49'
-    answering(engineBoundTo(MANAGER))
-    mockAsk.mockResolvedValue(
-      answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+  it('the standing a screen reads says stuck, from the same comparison', () => {
+    expect(boundElsewhere({ memberDid: MANAGER })).toBe(true)
+    expect(boundElsewhere({ memberDid: SIGNER })).toBe(false)
+    expect(boundElsewhere(undefined)).toBe(false)
+  })
+})
+
+describe('the draw follows the community’s schedule, not the phone’s', () => {
+  const tokensServed = () =>
+    mockAsk.mockImplementation(async (_did: string, _type: string, payload: { tick: number }) =>
+      answered(VTC_VETTER_TASK.pcsTokens, {
+        label: 'token/2026-10',
+        tick: payload.tick,
+        preCredentials: ['zCPre', 'zDPre'],
+      })
     )
-    await expect(enrolVetter(agent(), community, criterion)).rejects.toMatchObject({
-      code: 'keyring/hidden-vetter:memberMismatch',
-    })
-    expect(mockAsk).toHaveBeenCalledTimes(1)
-    // Trying again would spend one of the community's re-issues for nothing.
-    await expect(enrolVetter(agent(), community, criterion)).rejects.toMatchObject({
-      code: 'keyring/hidden-vetter:memberMismatch',
-    })
-    expect(mockAsk).toHaveBeenCalledTimes(1)
+  const ticksAsked = () => mockAsk.mock.calls.map(([, , p]) => (p as { tick: number }).tick)
+
+  it('tick 0 starts at 00:00Z on the label’s first day; each lasts tickLength', () => {
+    const start = Date.UTC(2026, 9, 1)
+    const day = 86400 * 1000
+    expect(monthLabelAt(['token/2026-09', 'token/2026-10'], start + day)).toEqual({ label: 'token/2026-10', start })
+    expect(monthLabelAt(['token/2026-09'], start + day)).toBeUndefined()
+    expect(nextOwedTick(start, 3 * day, undefined, start + day)).toBe(0)
+    expect(nextOwedTick(start, 3 * day, 0, start + day)).toBeUndefined()
+    expect(nextOwedTick(start, 3 * day, 0, start + 3 * day)).toBe(1)
+    // A tick later than the current one belongs to no tick of this label.
+    expect(nextOwedTick(start, 3 * day, 20000, start + day)).toBe(0)
   })
 
-  it('an engine the re-enrolment re-binds is fine, and draws', async () => {
-    let shows = 0
-    answering(() => engineBoundTo(++shows === 1 ? MANAGER : SIGNER))
-    mockAsk.mockResolvedValue(
-      answered(VTC_VETTER_TASK.pcsRoot, { label: 'vetter/2026-10', preCredential: 'zBPreCred' })
+  it('right after enrolment, every owed tick is drawn, oldest first, each at the published drip', async () => {
+    // 16 October 12:00Z under P3D: ticks 0 to 5 have begun.
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 16, 12))
+    tokensServed()
+    const a = agent()
+    await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 12 })
+    expect(ticksAsked()).toEqual([0, 1, 2, 3, 4, 5])
+    for (const [type, payload] of mockTask.mock.calls)
+      if (type === PCS_VETTER_TASK.tokensRequest) expect((payload as { count: number }).count).toBe(2)
+    // And nothing again until tick 6 opens.
+    mockAsk.mockClear()
+    await expect(drawVetterTokens(a, COMMUNITY, criterion)).resolves.toEqual({ drawn: 0 })
+    expect(mockAsk).not.toHaveBeenCalled()
+  })
+
+  it('a tick served before (an answer this phone lost) is passed over, and the next one drawn', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 4, 12))
+    mockAsk.mockImplementation(async (_d: string, _t: string, payload: { tick: number }) =>
+      payload.tick === 0
+        ? refused('vtc/vetting/vetters/pcs-tokens:alreadyServed', 'served')
+        : answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: payload.tick, preCredentials: ['zCPre'] })
     )
-    await expect(enrolVetter(agent(), COMMUNITY, criterion)).resolves.toBeUndefined()
-    mockAsk.mockResolvedValue(
-      answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: 1, preCredentials: ['zCPre', 'zDPre'] })
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 1 })
+    expect(ticksAsked()).toEqual([0, 1])
+  })
+
+  it('stops, without failing, when the community says a tick has not begun', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 4, 12))
+    mockAsk.mockImplementation(async (_d: string, _t: string, payload: { tick: number }) =>
+      payload.tick === 1
+        ? refused('vtc/vetting/vetters/pcs-tokens:tickNotYet', 'not yet')
+        : answered(VTC_VETTER_TASK.pcsTokens, { label: 'token/2026-10', tick: payload.tick, preCredentials: ['zCPre'] })
     )
-    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 2 })
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 1 })
+    expect(ticksAsked()).toEqual([0, 1])
+  })
+
+  it('draws nothing when no published label covers today (last month’s manifest)', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 2, 12))
+    await expect(drawVetterTokens(agent(), COMMUNITY, criterion)).resolves.toEqual({ drawn: 0 })
+    expect(mockTask).not.toHaveBeenCalled()
   })
 })

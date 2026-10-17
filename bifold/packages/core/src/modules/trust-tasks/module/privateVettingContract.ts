@@ -35,31 +35,13 @@
  */
 export type PrivateModeIsState = never
 
-/**
- * `checklist()` keeps the named shape exactly, and grows one member.
- *
- * The mapping in private mode, which is the whole of what the screen needs to
- * know: `held` is attestations taken, `counted` those the agent accepted,
- * `discounted` those it refused, `needed` the criterion's `minStatements`, and
- * `meets` is `counted >= needed`. `statements` is empty — there are none to
- * show, and rows invented from attestations would claim more than we know.
- * `independenceOk` is true with no `exceededCaps`: a community that cannot see
- * who vouched cannot apply a relationship cap, which is a property of hidden
- * vetting rather than a gap in this client.
- *
- * `mode` is absent for named vetting, so every existing reader is unaffected.
- */
-export type VettingChecklistMode = { mode?: 'private' }
+// The checklist's private mode is declared by `checklist()`'s own return
+// type, which is the contract; a separate type here was a second place to
+// disagree with it.
 
-/**
- * What a vetter's desk request gains when its `vetting/request` carried the
- * hidden-vetting ext.
- *
- * `hiddenApplicantId` already carries the applicant's PCS identifier; `hidden`
- * is derived from it so a screen never has to know what that id means, and
- * nothing should key behaviour on the id itself.
- */
-export type VettingDeskRequestPrivacy = { hidden?: boolean }
+// A private desk request is told by `isPrivateVettingRequest` (vtiVetting),
+// which reads `hiddenApplicantId`. A `hidden` member was declared here once
+// and never set; a screen cast to it read undefined forever (build 260).
 
 /**
  * The steps that change behind the existing members, stated so the screens'
