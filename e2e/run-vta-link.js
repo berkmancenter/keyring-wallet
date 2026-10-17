@@ -578,6 +578,8 @@ async function linkCase(driver, which, timing) {
     return row(cont && resumed && same && linked && own.ok, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ${own.text} · ACL entries ${before} → ${after}`);
   }
   if (which === "create-wait-no-lock") {
+    // This case asserts the auto-lock (EnterPIN or its absence): no auto-unlock under it (driver.js autoUnlockIfLocked).
+    process.env.E2E_NO_AUTO_UNLOCK = "1";
     // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5
     // min, half-way through the 10-min window (the 1013-1633 rerun found it). Copy starts the window; then no touch
     // at all past the lock (idle only polls; 400 s on real clocks, past the 5-min lock): still waiting, no PIN screen.
@@ -598,6 +600,8 @@ async function linkCase(driver, which, timing) {
     return row(!locked && still && inside, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before ${t.noLock.readBeforeS} s of the ${t.clocks.grantWindowS} s window: ${inside}) · ${clocksSaid(t.clocks)}`);
   }
   if (which === "link-no-answer") {
+    // This case asserts the auto-lock (EnterPIN or its absence): no auto-unlock under it (driver.js autoUnlockIfLocked).
+    process.env.E2E_NO_AUTO_UNLOCK = "1";
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
     // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
     // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.

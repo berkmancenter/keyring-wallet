@@ -427,7 +427,7 @@ export async function waitForTestId(driver, key, timeout = 30000) {
     // look once more before giving up.
     const cleared =
       key !== PREFLIGHT_ALLOW_KEY &&
-      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))));
+      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))) || (await autoUnlockIfLocked(driver, key)));
     if (cleared) {
       await el.waitForExist({ timeout: Math.min(timeout, 10000), timeoutMsg });
     } else {
@@ -438,6 +438,23 @@ export async function waitForTestId(driver, key, timeout = 30000) {
 }
 
 const PREFLIGHT_ALLOW_KEY = "LocalityPreflightAllow";
+
+/**
+ * A test build locks after 30 s without a touch (bifold e2eClocks SHORT_AUTO_LOCK_MINUTES = 0.5, E2E_CLOCKS=short),
+ * and a driver's reads (page source, screenshots, a measure) are not touches: a wait that meets the PIN screen
+ * unlocks and looks again. Every unlock is said on an `AUTO-UNLOCK <time> <device> while waiting for <testID>`
+ * line, which the leg counts (lib.sh leg_end), so a lock nobody expected still shows. Off with E2E_NO_AUTO_UNLOCK=1:
+ * the rows that assert the lock set it. Returns whether it unlocked.
+ */
+export async function autoUnlockIfLocked(driver, waitingFor) {
+  if (process.env.E2E_NO_AUTO_UNLOCK === "1") return false;
+  if (["EnterPIN", "Enter"].includes(waitingFor)) return false;
+  if (!(await byTestId(driver, "EnterPIN").isExisting().catch(() => false))) return false;
+  console.log(`AUTO-UNLOCK ${new Date().toISOString()} ${deviceTag(driver)} while waiting for ${waitingFor}`);
+  const { unlockIfLocked } = await import("./flows.js");
+  await unlockIfLocked(driver);
+  return true;
+}
 
 /**
  * If the witness-connect Bluetooth pre-flight sheet (LocalityPreflightModal,

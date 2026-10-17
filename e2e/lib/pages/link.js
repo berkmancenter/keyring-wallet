@@ -37,6 +37,7 @@ import path from "node:path";
 
 import { TEST_ID_PREFIX } from "../config.js";
 import {
+  autoUnlockIfLocked,
   acceptSystemAlertIfPresent,
   byTestId,
   clearLocalityPreflightIfUp,
@@ -50,7 +51,7 @@ import {
   tapTestId,
   waitForTestId,
 } from "../driver.js";
-import { dismissTourIfPresent, passNewPhoneOfferIfShown, pasteLinkOnScanScreen, unlockIfLocked } from "../flows.js";
+import { dismissTourIfPresent, passNewPhoneOfferIfShown, pasteLinkOnScanScreen } from "../flows.js";
 
 export class StepError extends Error {
   constructor(message, record) {
@@ -74,7 +75,7 @@ export const defaultIo = {
   dismissTourIfPresent,
   passNewPhoneOfferIfShown,
   pasteLinkOnScanScreen,
-  unlockIfLocked,
+  autoUnlockIfLocked,
   /**
    * What covers a screen mid-link and hides it from the tree: a system alert
    * (a camera permission), the "also open as you" notice of a shared runner
@@ -201,6 +202,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
       // pre-flight) hides what is under it from the tree: clear it, as
       // waitForTestId does on a miss.
       await io.clearNotices(d).catch(() => false);
+      // A test build's 30 s auto-lock (driver.js autoUnlockIfLocked): unlock and keep waiting, unless the PIN screen is
+      // what is wanted.
+      if (current === "EnterPIN" && !wanted.includes("EnterPIN") && io.autoUnlockIfLocked) await io.autoUnlockIfLocked(d, wanted.join("|"));
       if (each) await each();
       if (io.now() > until) {
         const observed = {
@@ -547,13 +551,7 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
         await io.screenshot(d, "link-06-intro");
         const centre = await measureIntroCentre();
         if (onCentre) await onCentre(centre);
-        // A test build's short auto-lock (E2E_CLOCKS=short, bifold #411) can lock the app while the introduction is
-        // measured: unlock and go on, it comes back on the introduction (261 kk, 2026-10-17: EnterPIN in place of
-        // AgentIntroNext after the centring measure).
-        for (let i = 0; i < 3; i++) {
-          if (io.unlockIfLocked && (await io.unlockIfLocked(d))) await awaitStep("AgentIntro", 30000);
-          await io.tapTestId(d, "AgentIntroNext", 15000);
-        }
+        for (let i = 0; i < 3; i++) await io.tapTestId(d, "AgentIntroNext", 15000);
         await awaitStep("AgentHome", 30000);
         return { value: { offerKept, centre } };
       }),
