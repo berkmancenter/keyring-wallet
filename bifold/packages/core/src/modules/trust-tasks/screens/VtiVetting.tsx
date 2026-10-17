@@ -42,7 +42,6 @@ import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
-import type { VettingDeskRequestPrivacy } from '../module/privateVettingContract'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { deliveredCardCheck } from '../module/vtiDeliveredCheck'
@@ -52,6 +51,7 @@ import {
   VettingTicketError,
   VtiApplicant,
   checkTicketFor,
+  isPrivateVettingRequest,
   VtiVetterDesk,
   type VettingApplication,
   type VettingDeskRequest,
@@ -78,7 +78,7 @@ import { communityLabelOf, communityLabelStartOf, identityWord } from './communi
 import { hiddenVettingSeam, pcsErrorCode } from './hiddenVettingSeam'
 import { PrivateVettingBadge } from './PrivateVettingBadge'
 import {
-  DECLARED_RELATIONSHIPS,
+  OFFERED_RELATIONSHIPS,
   hiddenVetterSeam,
   type DeclaredRelationship,
   type HiddenVetterStanding,
@@ -150,8 +150,8 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
  * this flow, by its code; undefined for anything else, which is said as any
  * failure is.
  */
-/** A desk request that came with the hidden-vetting ext (the module derives `hidden`). */
-const isPrivateRequest = (request: VettingDeskRequest) => Boolean((request as VettingDeskRequestPrivacy).hidden)
+/** A desk request that asked to be vetted privately: the module's own answer, which `attest` acts on too. */
+const isPrivateRequest = (request: VettingDeskRequest) => isPrivateVettingRequest(request)
 
 function privateVettingWords(e: unknown): string | undefined {
   const code = pcsErrorCode(e)
@@ -953,6 +953,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             {standingNotice}
             {/* How many people this vetter can vouch for privately now, read
                 once when the desk opens (it is an agent round trip). */}
+            {/* The agent was enrolled under another identity by an earlier
+                build and cannot be changed: said plainly, instead of a token
+                count of 0 that reads as "wait for the next draw". */}
+            {vetterStanding?.stuck === 'memberMismatch' ? (
+              <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchStuck)}>
+                {t('Vetting.Vouch.MemberMismatch')}
+              </Text>
+            ) : null}
             {vetterStanding?.enrolled ? (
               <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchTokens)}>
                 {tp('Vetting.Vouch.Tokens', { count: vetterStanding.tokens })}
@@ -1198,7 +1206,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     {isPrivateRequest(request) ? (
                       <View style={{ gap: 4 }} testID={testIdWithKey(VtiVettingIds.relationship)}>
                         <Text style={styles.label}>{t('Vetting.Vouch.HowKnow')}</Text>
-                        {DECLARED_RELATIONSHIPS.map((rel) => {
+                        {OFFERED_RELATIONSHIPS.map((rel) => {
                           const chosen = relationship[request.requestId] === rel
                           return (
                             <Pressable
@@ -1224,7 +1232,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       style={look(VtiVettingIds.attestButton, deskPrimaryId).button}
                       testID={testIdWithKey(VtiVettingIds.attestButton)}
                       accessibilityRole="button"
-                      disabled={!!busy || (isPrivateRequest(request) && !relationship[request.requestId])}
+                      disabled={
+                        !!busy ||
+                        (isPrivateRequest(request) &&
+                          (!relationship[request.requestId] || vetterStanding?.stuck !== undefined))
+                      }
                       onPress={() =>
                         run('attest', async () => {
                           if (!(await confirmWithBiometrics('', 'Attest'))) return

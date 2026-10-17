@@ -179,6 +179,20 @@ export interface TokensAbandonPayload {
 
 /** The relationship a vetter declares, exactly as the registry's enum has it. */
 export const DECLARED_RELATIONSHIPS = ['none', 'family', 'sameEmployer', 'closeFriend', 'other'] as const
+/**
+ * The relationships a private attestation can actually carry today: the ones
+ * in **both** of the enums vta-service 0.60's `vta/pcs/attest` reads a meta
+ * through. The handler validates against the attest schema's enum (above),
+ * then reads the meta into the vetting manifest's `StatementMeta` enum (none,
+ * communityColleague, sameEmployer, family, otherPersonal), so `closeFriend`
+ * and `other` pass the first and are refused `malformedRequest` by the
+ * second. Offering them would let a vetter meet someone, confirm a code, and
+ * only then be refused — so they are not offered until upstream reconciles
+ * the two (vta-service 0.60, trust_tasks/pcs.rs: attest schema enum vs
+ * StatementMeta).
+ */
+export const PRIVATE_ATTEST_RELATIONSHIPS = ['none', 'family', 'sameEmployer'] as const
+
 /** How the vetting was done. A community publishes which of these it accepts. */
 export const VOUCH_METHODS = ['inPerson', 'video', 'priorAcquaintance'] as const
 

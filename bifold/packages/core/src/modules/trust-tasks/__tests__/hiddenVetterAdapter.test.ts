@@ -185,6 +185,9 @@ describe('enrolling, which crosses the agent and the community and back', () => 
 })
 
 describe('drawing tokens', () => {
+  // 12:00Z on 1 October: tick 0 of token/2026-10 is the one tick owed.
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 1, 12)))
+
   it('asks for exactly the published drip, never more', async () => {
     const drawn = await hiddenVetterSeam()?.drawTokens(fakeAgent(), COMMUNITY, criterion)
     expect(mockPcsTokensRequest).toHaveBeenCalledWith(expect.objectContaining({ count: 3, label: 'token/2026-10' }))

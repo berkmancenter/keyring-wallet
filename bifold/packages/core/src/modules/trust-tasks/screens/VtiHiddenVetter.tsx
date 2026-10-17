@@ -28,7 +28,7 @@ import { vtiAgent } from '../module/vtiAgent'
 import { communityLabelOf, identityWord } from './communityName'
 import { pcsErrorCode } from './hiddenVettingSeam'
 import {
-  DECLARED_RELATIONSHIPS,
+  OFFERED_RELATIONSHIPS,
   drawDue,
   hiddenVetterSeam,
   type DeclaredRelationship,
@@ -349,7 +349,7 @@ const VtiHiddenVetter: React.FC = () => {
                     {check(live, () => setLive((was) => !was), t('Vetting.Vouch.Live'), HiddenVetterIds.live)}
                     {/* Declared by the vetter, with no default: the attestation carries it. */}
                     <ThemedText>{t('Vetting.Vouch.HowKnow')}</ThemedText>
-                    {DECLARED_RELATIONSHIPS.map((rel) =>
+                    {OFFERED_RELATIONSHIPS.map((rel) =>
                       check(
                         relationship === rel,
                         () => setRelationship(rel),

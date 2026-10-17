@@ -31,6 +31,12 @@ export interface HiddenVetterStanding {
   nextDrawAt?: string
   /** When the current tick ends: a tick not drawn by then is lost. */
   lapsesAt?: string
+  /**
+   * Why this vetter cannot vouch privately here at all, when they cannot.
+   * `memberMismatch`: the agent was enrolled under another identity by an
+   * earlier build, which the agent cannot change.
+   */
+  stuck?: 'memberMismatch'
 }
 
 /** A private vetting request waiting for this vetter. They meet the person, so they know who it is. */
@@ -50,6 +56,18 @@ export interface HiddenVetterRequest {
  */
 export const DECLARED_RELATIONSHIPS = ['none', 'family', 'sameEmployer', 'closeFriend', 'other'] as const
 export type DeclaredRelationship = (typeof DECLARED_RELATIONSHIPS)[number]
+
+/**
+ * The relationships the picker offers: those a private attestation can carry
+ * through the agent today (`PRIVATE_ATTEST_RELATIONSHIPS`, in pcsVetterTasks,
+ * says why only three). A subset of `DECLARED_RELATIONSHIPS`, kept literal
+ * here as that list is, so this seam imports no module code.
+ */
+export const OFFERED_RELATIONSHIPS = [
+  'none',
+  'family',
+  'sameEmployer',
+] as const satisfies readonly DeclaredRelationship[]
 
 /** How the vetter met the person: only those the criterion accepts are offered. */
 export const VOUCH_METHODS = ['inPerson', 'video', 'priorAcquaintance'] as const

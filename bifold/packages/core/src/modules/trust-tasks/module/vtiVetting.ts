@@ -66,6 +66,7 @@ import {
   type HiddenVettingRecord,
 } from './hiddenVetting'
 import { HIDDEN_VETTING_SUITE, pcsErrorCode, type HiddenAttestation } from './pcsVtaPayloads'
+import { PRIVATE_ATTEST_RELATIONSHIPS } from './pcsVetterTasks'
 import {
   connectedVetterClient,
   currentHiddenCriterion,
@@ -143,6 +144,15 @@ export interface VettingTicket {
 export const HIDDEN_VETTING_NS = 'org.openvtc.hidden-vetting'
 
 /** One request on the vetter's desk. */
+/**
+ * A request that asked to be vetted privately. The one answer, for the screens
+ * and the desk both: `hiddenApplicantId` is what an inbound private request
+ * really carries, and nothing else should be consulted — a second source is
+ * how build 260's screen and desk came to disagree.
+ */
+export const isPrivateVettingRequest = (request: Pick<VettingDeskRequest, 'hiddenApplicantId'>): boolean =>
+  request.hiddenApplicantId !== undefined
+
 export interface VettingDeskRequest {
   requestId: string
   /**
@@ -1535,7 +1545,7 @@ export class VtiVetterDesk {
     // community discards (it counts a proof for a hidden criterion, never
     // statements), so the vouch silently did not count, and the statement
     // named the vetter to the applicant in the process.
-    if (desk.hiddenApplicantId) return this.attestPrivately({ ...desk, session: desk.session }, decision)
+    if (isPrivateVettingRequest(desk)) return this.attestPrivately({ ...desk, session: desk.session }, decision)
     const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
     for (const c of decision.claimsVerified)
       if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
@@ -1707,6 +1717,14 @@ export class VtiVetterDesk {
       throw Object.assign(new Error('vtiVetting: a private attestation needs how the vetter knows this person'), {
         code: 'vtiVetting/attest:noDeclaredRelationship',
       })
+    }
+    if (!(PRIVATE_ATTEST_RELATIONSHIPS as readonly string[]).includes(decision.declaredRelationship)) {
+      throw Object.assign(
+        new Error(
+          `vtiVetting: a private attestation cannot carry the relationship ${decision.declaredRelationship} yet`
+        ),
+        { code: 'vtiVetting/attest:relationshipNotAccepted' }
+      )
     }
     const criterion = await currentHiddenCriterion(this.agent, desk.communityDid)
     const parameters = criterion && vetterPublishedOf(criterion)
