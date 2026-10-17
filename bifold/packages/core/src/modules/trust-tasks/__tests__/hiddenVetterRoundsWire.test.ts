@@ -454,6 +454,35 @@ describe('a fresh agent, with no vetter engine yet (build 261 stopped here)', ()
     await expect(isEnrolled(agent(), COMMUNITY, criterion)).resolves.toBe(false)
   })
 
+  // The spelling of the refusal is not the question: a `notFound` in reply to
+  // "show me this vetter's engine" means there is none, however it is written.
+  // Matching only the fully qualified code would put a differently-spelled
+  // agent back in build 261, where a fresh vetter could not enrol at all.
+  it.each([
+    ['fully qualified, as 0.60 sends it', 'vta/pcs/vetter/show:notFound'],
+    ['bare', 'notFound'],
+    ['another prefix', 'pcs/vetter:notFound'],
+  ])('reads a %s notFound as no engine', async (_shape, code) => {
+    mockTask.mockImplementation(async (type: string) => {
+      if (type === PCS_VETTER_TASK.vetterShow) throw new VtiRefusal(code, 'no such engine')
+      return {}
+    })
+    await expect(isEnrolled(agent(), COMMUNITY, criterion)).resolves.toBe(false)
+  })
+
+  it('still throws a refusal that is not a notFound', async () => {
+    // The guard must stay narrow: an agent too old, or a phone not allowed,
+    // is not "no engine yet" and must not be read as one.
+    mockTask.mockImplementation(async (type: string) => {
+      if (type === PCS_VETTER_TASK.vetterShow) throw new VtiRefusal('vta/pcs/vetter/show:permissionDenied', 'no')
+      return {}
+    })
+    const code = await isEnrolled(agent(), COMMUNITY, criterion)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('vta/pcs/vetter/show:permissionDenied')
+  })
+
   it('the desk’s round goes on: notFound → root-request → pcs-root → root-accept, then the draw', async () => {
     // The order readyHiddenVetter runs them in.
     const a = agent()
