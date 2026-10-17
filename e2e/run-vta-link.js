@@ -1633,6 +1633,8 @@ try {
     await waitForTestId(driver, "Contacts", 300000);
     await sleep(3000);
   } else {
+    // A clock case times the build's own auto-lock: no Never saved after onboarding (flows.js keepUnlockedForRun).
+    if (CLOCK_CASES.has(process.env.LINK_CASE)) process.env.E2E_NO_AUTO_UNLOCK = "1";
     await completeOnboarding(driver, { firstName: "Link", lastName: "Phone" });
   }
 
