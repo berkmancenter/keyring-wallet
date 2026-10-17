@@ -12,6 +12,9 @@ import {
   startPlatformPush,
   stopPlatformPush,
   waitForApnsToken,
+  watchForToken,
+  LATE_TOKEN_POLL_MS,
+  LATE_TOKEN_WATCH_MS,
   type PlatformMessaging,
 } from '@/push/pushPlatform'
 
@@ -145,5 +148,55 @@ describe("reading Apple's token after registering", () => {
     const get = jest.fn(async () => null)
     await expect(waitForApnsToken(get, { waitMs: 1000, pollMs: 250, sleep: noSleep })).resolves.toBeNull()
     expect(get).toHaveBeenCalledTimes(5)
+  })
+})
+
+describe('watching for a token that arrives late (IN-277)', () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+  const tick = async (ms: number) => {
+    jest.advanceTimersByTime(ms)
+    await flush()
+  }
+
+  it('reads the token on each poll and says once when it is there, then stops reading', async () => {
+    const getToken = jest.fn(async (): Promise<string | null> => null)
+    const arrived = jest.fn()
+    watchForToken(getToken, arrived)
+    await tick(LATE_TOKEN_POLL_MS)
+    await tick(LATE_TOKEN_POLL_MS)
+    expect(arrived).not.toHaveBeenCalled()
+    getToken.mockResolvedValue('apns-token')
+    await tick(LATE_TOKEN_POLL_MS)
+    expect(arrived).toHaveBeenCalledTimes(1)
+    const reads = getToken.mock.calls.length
+    await tick(10 * LATE_TOKEN_POLL_MS)
+    expect(getToken).toHaveBeenCalledTimes(reads)
+    expect(arrived).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives up after its watch, and a read that fails is no token', async () => {
+    const getToken = jest.fn(async (): Promise<string | null> => {
+      throw new Error('not yet')
+    })
+    const arrived = jest.fn()
+    watchForToken(getToken, arrived)
+    await tick(LATE_TOKEN_WATCH_MS)
+    const reads = getToken.mock.calls.length
+    expect(reads).toBe(LATE_TOKEN_WATCH_MS / LATE_TOKEN_POLL_MS)
+    await tick(10 * LATE_TOKEN_POLL_MS)
+    expect(getToken).toHaveBeenCalledTimes(reads)
+    expect(arrived).not.toHaveBeenCalled()
+  })
+
+  it('stopping stops it', async () => {
+    const getToken = jest.fn(async () => 'apns-token')
+    const arrived = jest.fn()
+    const stop = watchForToken(getToken, arrived)
+    stop()
+    await tick(5 * LATE_TOKEN_POLL_MS)
+    expect(getToken).not.toHaveBeenCalled()
+    expect(arrived).not.toHaveBeenCalled()
   })
 })
