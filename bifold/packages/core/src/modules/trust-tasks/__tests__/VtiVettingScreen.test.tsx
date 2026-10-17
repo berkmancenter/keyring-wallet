@@ -17,6 +17,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import VtiVetting, { confirmedNameOf, requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
+import * as hiddenVettingModule from '../module/hiddenVetting'
 import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 import * as grantState from '../module/vtiGrantState'
@@ -940,5 +941,151 @@ describe('Vetting — opened with a ticket for a community that runs private vet
   test('without it: no mark, as #405 left it', async () => {
     const tree = await openAsApplicant()
     expect(tree.queryByTestId(testIdWithKey('VettingPrivate'))).toBeNull()
+  })
+})
+
+// 262: the vetter attested privately and the applicant's agent took it ("it
+// reports 1 held"), but the screen stayed on "The vetter is checking your
+// document" — the request was never moved on. Driven here through the real
+// inbound path: the applicant the screen runs, receiving the attestation as
+// vtiAgent delivers it, with no status set by hand.
+describe('Vetting — a private attestation arriving moves the applicant on to Apply', () => {
+  const vetterDid = 'did:webvh:example:vetter-zq51'
+  const SESSION = 'urn:uuid:session-zq51'
+  const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+  const application = (): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      startedAt: '2026-10-16T23:00:00Z',
+      requests: [
+        {
+          vetterDid,
+          requestDocumentId: 'urn:uuid:request-zq51',
+          status: 'cardSent',
+          cardSentAt: '2026-10-16T23:58:00Z',
+          matchConfirmedAt: '2026-10-16T23:57:00Z',
+          session: {
+            documentId: SESSION,
+            challenge: 'c',
+            domain: communityDid,
+            requiredClaims: ['name.legal'],
+            method: 'inPerson',
+            expiresAt: '2099-01-01T00:00:00Z',
+            matchCode: 'PBWW-HACW',
+          },
+        },
+      ],
+    },
+  })
+  /** A store that keeps what the applicant writes, so the next read sees it. */
+  const keeping = (records: Rec[]) => ({
+    agent: {
+      ...fakeAgent().agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)),
+        save: async (r: Rec) => void records.push({ tags: r.tags, content: r.content }),
+        update: async () => undefined,
+        delete: async () => undefined,
+      },
+    },
+  })
+  const hiddenRecord = (held: number) =>
+    ({
+      community: communityDid,
+      joinDid: personaDid,
+      applicationId: 'app-1',
+      id: 'zApplicantPcsKey',
+      requirementsDigest: 'zQmDigest',
+      parameters: {},
+      held,
+      minimum: 1,
+    }) as never
+  const handlers: ((m: unknown) => Promise<void> | void)[] = []
+
+  beforeEach(() => {
+    handlers.length = 0
+    setVta({ link: linked })
+    registerHiddenVetting({} as never)
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue(testVtc as never)
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    jest.spyOn(vtiAgent, 'onInbound').mockImplementation(((h: (m: unknown) => Promise<void>) => {
+      handlers.push(h)
+      return () => undefined
+    }) as never)
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(linkedVtaDid as never)
+    jest.spyOn(vtaAgent, 'connect').mockResolvedValue(undefined as never)
+    jest.spyOn(vtaAgent, 'client').mockReturnValue({} as never)
+  })
+  afterEach(() => {
+    registerHiddenVetting(undefined)
+    jest.restoreAllMocks()
+  })
+
+  test('cardSent ("checking") until the agent takes it; then Apply, with no statement id', async () => {
+    let held = 0
+    jest.spyOn(hiddenVettingModule, 'loadHiddenVettingRecord').mockImplementation(async () => hiddenRecord(held))
+    const take = jest.spyOn(hiddenVettingModule, 'takeHiddenAttestation').mockImplementation(async () => {
+      held = 1
+      return hiddenRecord(1)
+    })
+    const records = [persona, application()]
+    mockUseAgent.mockReturnValue(keeping(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    expect(await tree.findByTestId(testIdWithKey('VettingApplicantStep_checking'))).toBeTruthy()
+    expect(handlers.length).toBeGreaterThan(0)
+
+    // As vtiAgent hands an inbound message to every listener.
+    const attestation = {
+      id: 'urn:uuid:att-zq51',
+      type: 'https://trusttasks.org/spec/vetting/attestation/0.1',
+      from: vetterDid,
+      to: [personaDid],
+      thid: SESSION,
+      body: {
+        suite: 'ps-ddh-bls12381',
+        attestation: 'zBbsywyzdGiuJ3aCc147SQheEgDJFJHkgNKctAcZPqHkJqPcYTwKcWQV6wYqPnB1e9N',
+        meta: {
+          community: communityDid,
+          requirementsDigest: 'zQmDigest',
+          method: 'inPerson',
+          claimsVerified: ['name.legal'],
+          livenessConfirmed: true,
+          declaredRelationship: 'none',
+          identityCommitment: 'zQmPRccGTPKwUUB8nUdSGuK7oN8Ht7c6iEDsLqdK7LNsxKz',
+          cardDigestMultibase: 'zQmRnZq46vDQnAzSuEnWz3zvfQoigbe23KtSp6S1Vm1UXuL',
+          validFrom: '2026-10-16',
+          validUntil: '2027-01-18',
+          tokenLabel: 'token/2026-10',
+          tokenSerial: 'zBKHjA2kQWBpQPgwiHBG1DrzCykjsvdMfnKBYrhiM4STW',
+        },
+        token: {
+          label: 'token/2026-10',
+          serial: 'zBKHjA2kQWBpQPgwiHBG1DrzCykjsvdMfnKBYrhiM4STW',
+          shown: 'z26q5oFrp6i2aTKLp6Y6jsLESJMoNfZQwk8VKXc37c24bJPj5fwBoUEsqv51ADbnUNM',
+        },
+      },
+    }
+    await act(async () => {
+      for (const h of handlers) await h(attestation)
+    })
+    expect(take).toHaveBeenCalled()
+    expect(await tree.findByTestId(testIdWithKey('VettingApplicantStep_apply'))).toBeTruthy()
+    const stored = (
+      records.find((r) => r.tags.kind === 'application')?.content.requests as Record<string, unknown>[]
+    )[0]
+    expect(stored.status).toBe('attested')
+    expect(stored.statementId).toBeUndefined()
   })
 })

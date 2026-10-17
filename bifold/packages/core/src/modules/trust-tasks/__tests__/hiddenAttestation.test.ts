@@ -277,6 +277,58 @@ describe("a vetter's attestation arriving", () => {
     expect(JSON.stringify(log.warn.mock.calls)).toContain('wrongCommunity')
   })
 
+  describe('the request it answers moves on, so the screen leaves "checking"', () => {
+    // The applicant's request as the session left it: card sent, waiting.
+    const waiting = (session = 'session-1', vetterDid = VETTER) => ({
+      vetterDid,
+      requestDocumentId: `req-${session}`,
+      status: 'cardSent' as const,
+      session: {
+        documentId: session,
+        challenge: 'c',
+        domain: COMMUNITY,
+        requiredClaims: ['name.legal'],
+        method: 'inPerson' as const,
+        expiresAt: '2099-01-01T00:00:00Z',
+        matchCode: 'PBWW-HACW',
+      },
+    })
+    const requestsAfter = async (store: VtiVettingStore, m: Record<string, unknown>) => {
+      mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
+      mockTake.mockResolvedValue({ ...HIDDEN_RECORD, held: 1 })
+      await deliver(applicantWith(store), m)
+      return (await store.getApplication(COMMUNITY))?.requests ?? []
+    }
+
+    it('the request threaded on the attestation’s session is attested, with no statement id', async () => {
+      const store = memoryStore({ requests: [waiting(), waiting('session-2', 'did:webvh:Qm:vta.example:other')] })
+      const [answered, other] = await requestsAfter(store, attestationMessage(ATTESTATION))
+      expect(answered.status).toBe('attested')
+      expect(answered.statementId).toBeUndefined()
+      expect(other.status).toBe('cardSent')
+    })
+
+    it('not when the agent refused it', async () => {
+      const store = memoryStore({ requests: [waiting()] })
+      mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
+      mockTake.mockRejectedValue({ document: { payload: { code: 'vta/pcs/verify-attestation:wrongCommunity' } } })
+      await deliver(applicantWith(store), attestationMessage(ATTESTATION))
+      expect((await store.getApplication(COMMUNITY))?.requests[0].status).toBe('cardSent')
+    })
+
+    it('not for a session no request ran, nor from anyone but that request’s vetter', async () => {
+      const store = memoryStore({ requests: [waiting()] })
+      expect((await requestsAfter(store, { ...attestationMessage(ATTESTATION), thid: 'session-9' }))[0].status).toBe(
+        'cardSent'
+      )
+      expect(
+        (
+          await requestsAfter(store, { ...attestationMessage(ATTESTATION), from: 'did:webvh:Qm:vta.example:stranger' })
+        )[0].status
+      ).toBe('cardSent')
+    })
+  })
+
   it('is left for redelivery when the agent cannot be reached', async () => {
     mockLoadRecord.mockResolvedValue(HIDDEN_RECORD)
     mockTake.mockRejectedValue(new Error('socket closed'))
