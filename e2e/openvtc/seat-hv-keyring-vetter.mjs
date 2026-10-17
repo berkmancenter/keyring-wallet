@@ -31,6 +31,8 @@ const { values: a } = parseArgs({
     'admin-credential': { type: 'string' },
     criterion: { type: 'string', default: 'hv-vetted' },
     out: { type: 'string' },
+    // A phone already seated (asked, approved, granted) on an earlier build: run only the enrol step again.
+    'resume-member': { type: 'string' },
   },
 });
 for (const k of ['udid', 'community-did', 'vtc-base', 'admin-credential']) if (!a[k]) throw new Error(`--${k} is required`);
@@ -46,8 +48,23 @@ const before = await enrolled();
 await ensureAppium();
 const d = await openDevice({ platform: a.platform, udid: a.udid, deviceName: a['device-name'], wdaPort: a['wda-port'], mjpegPort: a['mjpeg-port'] });
 const stop = keepAlive(d);
+/** The phone's desk opens; the community's count of hidden vetters under the live label grows by one. */
+async function awaitEnrolled() {
+  await vetterRole.openDesk(d);
+  await screenshot(d, 'hvk-vetter-desk').catch(() => undefined);
+  let now = before;
+  for (let i = 0; i < 24 && now <= before; i++) { await sleep(10000); now = await enrolled(); }
+  row('hvk-vetter-enrolled', now > before ? 'PASS' : 'FAIL', `hidden vetters enrolled on ${a.criterion}: ${before} → ${now} (vtc/vetting/hidden/show)`);
+}
+
 try {
   await unlockToHome(d);
+  if (a['resume-member']) {
+    const m = admin.members().find((x) => x.did === a['resume-member']);
+    row('hvk-vetter-member', m ? 'PASS' : 'FAIL', m ? `already a member: ${m.did} (resumed)` : `${a['resume-member']} is not a member`);
+    if (!m) throw new Error('the resumed vetter is not a member');
+    await awaitEnrolled();
+  } else {
   await join.openCommunity(d, { did: a['community-did'], name: '' });
   await join.ask(d, { tag: 'hvk-vetter' });
   const sent = (await join.awaitSent(d, { required: false })).value;
@@ -66,11 +83,8 @@ try {
   const grant = admin.grantVetter(member.did);
   row('hvk-vetter-granted', grant.status === 200 ? 'PASS' : 'FAIL', `vetter-grant ${grant.status} ${grant.body?.credentialId ?? ''} until ${grant.body?.validUntil ?? '?'}`);
 
-  await vetterRole.openDesk(d);
-  await screenshot(d, 'hvk-vetter-desk').catch(() => undefined);
-  let now = before;
-  for (let i = 0; i < 24 && now <= before; i++) { await sleep(10000); now = await enrolled(); }
-  row('hvk-vetter-enrolled', now > before ? 'PASS' : 'FAIL', `hidden vetters enrolled on ${a.criterion}: ${before} → ${now} (vtc/vetting/hidden/show)`);
+  await awaitEnrolled();
+  }
 } catch (e) {
   console.log(`❌ seat-hv-keyring-vetter: ${String(e?.message || e).split('\n')[0]}`);
   await screenshot(d, 'hvk-vetter-failure').catch(() => undefined);
