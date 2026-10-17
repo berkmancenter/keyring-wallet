@@ -293,7 +293,9 @@ export async function attest(tui) {
   // Down = next field and Space ticks, ui/pages/main/mod.rs:2493-2513).
   await tui.pressEach(['Down', 'Down', 'Down', ' ', 'Down', ' '], 400);
   await tui.pressEach(['Enter'], 1500);
-  await tui.waitFor('Statement signed and sent.', { step: 'vetter.statementSent', source: src(tui, 'state_handler/vetting_actions.rs:3372', 'state_handler/vetting_actions.rs:2870'), timeoutMs: 60000 });
+  // A named criterion signs a statement; a hidden (PCS ZKP) one sends an attestation that names nobody (0.5.0,
+  // vetting_actions.rs:5773 and :5778 at 2a4fa2b; hv-tui on 261 sent one and this waited for the named words).
+  await tui.waitFor(/Statement signed and sent\.|Attestation sent\. The community will count it without learning it was you\./, { step: 'vetter.statementSent', source: src(tui, 'state_handler/vetting_actions.rs:5773-5781', 'state_handler/vetting_actions.rs:3372'), timeoutMs: 60000 });
 }
 
 /**
