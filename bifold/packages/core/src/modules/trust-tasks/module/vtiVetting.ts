@@ -2066,7 +2066,38 @@ export class VtiApplicant {
       logger?.warn?.(`[hidden-vetting] the agent refused an attestation (${code}); dropped`)
       return
     }
+    await this.markAttestedOnSession(m)
     this.onChange?.()
+  }
+
+  /**
+   * Move the request whose session this attestation answers to `attested`.
+   *
+   * The screens follow the request: `cardSent` reads "the vetter is checking
+   * your document", `attested` moves on to Apply. Build 262's agent took the
+   * attestation and the request stayed at `cardSent`, so the applicant watched
+   * that line forever and never reached the challenge, the proof or the
+   * submit. The request is the one asked of the attestation's sender, and the
+   * attestation must be threaded on that request's session (`attestHidden`
+   * sends it with the session's `documentId` as `thid`).
+   *
+   * This is the phone's own bookkeeping: what the community sees is the
+   * agent's proof, which names no vetter, and nothing here reaches it. No
+   * statement id is set, because there is no statement — the private
+   * checklist counts what the agent holds, never these requests.
+   */
+  private async markAttestedOnSession(m: DidCommV2PlaintextMessage): Promise<void> {
+    // Found as `receiveStatement` finds a statement's request: by its sender,
+    // the vetter it was asked of. And only on that request's own session, as
+    // a refusal is held to its request's thread.
+    const sender = String(m.from ?? '')
+    if (!sender) return
+    const application = await this.store.getApplication(this.persona.communityDid)
+    const request = application?.requests.find((r) => r.vetterDid === sender)
+    if (!request || request.status === 'attested') return
+    const thread = threadOf(m)
+    if (thread && thread !== request.session?.documentId) return
+    await this.update(request.vetterDid, { status: 'attested' })
   }
 
   /**
