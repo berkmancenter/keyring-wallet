@@ -28,12 +28,12 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
+import { byTestId, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
 import { applicant as applicantRole, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
-import { applicationVerdict, taskRound } from './hvVerdict.js';
+import { appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -179,10 +179,13 @@ try {
   mark('hv-admitted', member ? 'PASS' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt})` : 'no member listed since the run began');
   mark('hv-member-card', /member|joined|welcome|done/i.test(String(outcome)) ? 'PASS' : 'FAIL', `the app says "${String(outcome).slice(0, 120)}"`);
 
-  // No vetter named: not in what the applicant was shown since the attestation (its log and the page it ends on), not
-  // in the community's record of the join (the request it decided, the member it lists).
+  // No vetter named where it would be a leak: in the app's own lines since the attestation and the page it ends on (the
+  // attestation as the applicant holds and is shown it), and in the community's record of the join (the request it
+  // decided, the member it lists). Not counted: Credo's transport lines resolving the vetter's DID to reach it, and the
+  // applicant's own request and session card. The applicant meets its vetter by design; what must not name the vetter
+  // is the attestation and what the community keeps (hv-keyring on 262: all ten mentions were transport lines).
   const vetterDid = a.vetter === 'keyring' ? a['vetter-did'] : a['tui-persona'];
-  const shownToApplicant = deviceLog(appDev, attestMs) + (await app.getPageSource().catch(() => ''));
+  const shownToApplicant = appLevelLines(deviceLog(appDev, attestMs)) + withoutOwnRequestCard(await app.getPageSource().catch(() => ''));
   const req = newestRequestSince([...admin.joinRequests('approved'), ...admin.joinRequests('pending')], since);
   const record = JSON.stringify(req ?? {}) + JSON.stringify(member ?? {});
   const leaks = [shownToApplicant.includes(vetterDid) && 'the applicant side', record.includes(vetterDid) && "the community's record"].filter(Boolean);
@@ -200,5 +203,7 @@ try {
   await app.deleteSession().catch(() => undefined);
   if (vet) await vet.deleteSession().catch(() => undefined);
 }
-// The Appium server this run started keeps node alive (hv-tui on 261 sat 35 min past its rows until galarm).
+// The Appium server this run started keeps node alive (hv-tui on 261 sat 35 min past its rows until galarm), and an
+// exit alone left it orphaned on its port (seat on 262): stop it, then exit.
+stopAppium();
 process.exit(process.exitCode ?? 0);

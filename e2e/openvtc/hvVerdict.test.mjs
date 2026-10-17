@@ -1,7 +1,7 @@
 // node --test e2e/openvtc/hvVerdict.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applicationVerdict, lineSeconds, taskRound } from './hvVerdict.js';
+import { appLevelLines, applicationVerdict, lineSeconds, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
 
 const AGENT = 'did:webvh:QmWj8ssa:dids.ic3.dev:hidden-vet-vta';
 // The 257 check's lines (2026-10-16, mini), with the logcat prefix as Android prints it.
@@ -61,4 +61,30 @@ test('taskRound reports the no-answer line verbatim', () => {
   const r = taskRound(log, '/vta/pcs/prove/0.1');
   assert.equal(r.verified, false);
   assert.match(r.noAnswer, /no answer to \S+\/vta\/pcs\/prove\/0\.1 after 90 s/);
+});
+
+test('appLevelLines keeps the app\'s own lines and drops transport resolution', () => {
+  const v = 'did:webvh:Qmv:dids.example:vetter';
+  const log = [
+    `2026-10-16 23:59:14.217 I  KeyRing[1:2] [com.facebook.react.log:javascript] resolving didUrl ${v}`,
+    `2026-10-16 23:59:14.501 I  KeyRing[1:2] [com.facebook.react.log:javascript] [TrustTasks:TspCapability] ${v} does not advertise TSPTransport — using DIDComm`,
+    `2026-10-16 23:59:41.686 I  KeyRing[1:2] [com.facebook.react.log:javascript] [hidden-vetting] attestation taken by the agent; it reports 1 held`,
+    `2026-10-16 23:59:42.000 I  KeyRing[1:2] [com.facebook.react.log:javascript] [VTI] statement from ${v}`,
+    `2026-10-16 23:59:43.000 Df KeyRing[1:2] [com.apple.network] ${v}`,
+  ].join('\n');
+  const kept = appLevelLines(log);
+  assert.equal(kept.split('\n').length, 2);
+  assert.ok(kept.includes(`statement from ${v}`), 'an app-level mention is still caught');
+  assert.ok(!kept.includes('resolving didUrl'));
+});
+
+test('withoutOwnRequestCard drops only the applicant\'s own request and session card', () => {
+  const src = [
+    '<XCUIElementTypeStaticText name="com.ariesbifold:id/VettingRequestVetterDid" value="did:x"/>',
+    '<XCUIElementTypeStaticText name="com.ariesbifold:id/VettingSessionVetter" value="did:x"/>',
+    '<XCUIElementTypeStaticText name="com.ariesbifold:id/VettingAttestationHeld" value="did:x"/>',
+  ].join('\n');
+  const kept = withoutOwnRequestCard(src);
+  assert.ok(!kept.includes('VettingRequestVetterDid') && !kept.includes('VettingSessionVetter'));
+  assert.ok(kept.includes('VettingAttestationHeld'));
 });

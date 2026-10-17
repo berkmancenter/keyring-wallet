@@ -13,7 +13,7 @@
 //     [--criterion hv-vetted] [--out <file for the member DID>]
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { ensureAppium, screenshot, sleep } from '../lib/driver.js';
+import { ensureAppium, screenshot, sleep, stopAppium } from '../lib/driver.js';
 import { unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
@@ -93,5 +93,7 @@ try {
   stop();
   await d.deleteSession().catch(() => undefined);
 }
-// The Appium server this run started keeps node alive past the rows (run-hv on 261).
+// The Appium server this run started keeps node alive past the rows (run-hv on 261), and an exit alone left it
+// orphaned on its port (seat on 262): stop it, then exit.
+stopAppium();
 process.exit(process.exitCode ?? 0);

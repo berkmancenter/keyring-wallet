@@ -33,3 +33,25 @@ export function taskRound(log, taskPath) {
   const seconds = t0 !== undefined && t1 !== undefined ? Math.round(((t1 - t0 + 86400) % 86400) * 10) / 10 : undefined;
   return { asked: ai >= 0, verified: ai >= 0 && vi > ai, seconds, noAnswer: na ? na.replace(/^.*?(\[|no answer)/, '$1').trim() : undefined };
 }
+
+/**
+ * Where a vetter's DID would be a leak on the applicant's side: the app's own JS lines, without Credo's transport
+ * lines. The applicant holds a session with its vetter by design, so resolving the vetter's DID document to reach it
+ * (`resolving didUrl`, `Found did`, a TSP capability probe, outbound routing) says nothing about the attestation
+ * (hv-keyring on 262: all ten mentions were those, the last as the attestation's envelope arrived).
+ */
+const TRANSPORT = /resolving didUrl|Found did '|\[TrustTasks:TspCapability\]|Resolving services for connection|Sending outbound message|Unpacked DIDComm|Payload received from mediator/;
+export function appLevelLines(log) {
+  return String(log)
+    .split('\n')
+    .filter((l) => l.includes('com.facebook.react.log') && !TRANSPORT.test(l))
+    .join('\n');
+}
+
+/** A page source without the applicant's own request and session card, which names the vetter they met by design. */
+export function withoutOwnRequestCard(pageSource) {
+  return String(pageSource)
+    .split('\n')
+    .filter((l) => !/name="com\.ariesbifold:id\/Vetting(Request|Session)/.test(l))
+    .join('\n');
+}
