@@ -74,7 +74,8 @@ const appDev = { platform: a.platform, udid: a.udid };
 const vetDev = { platform: a['vetter-platform'] || a.platform, udid: a['vetter-udid'] };
 const ROWS = ['hv-private-badge', 'hv-vetting-private-shown', 'hv-application-created', 'hv-ticket', 'hv-card', 'hv-attestation-received', 'hv-proof', 'hv-admitted', 'hv-member-card', 'hv-vetter-anonymous'];
 const done = new Set();
-const mark = (name, status, detail) => { done.add(name); row(name, status, detail); };
+// A FAIL row fails the run (try 4 on 261 printed five FAIL rows and exited 0).
+const mark = (name, status, detail) => { done.add(name); row(name, status, detail); if (status === 'FAIL') process.exitCode = 1; };
 
 const startedMs = Date.now();
 const since = new Date(startedMs).toISOString();

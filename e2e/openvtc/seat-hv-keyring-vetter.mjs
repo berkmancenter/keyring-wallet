@@ -34,7 +34,10 @@ const { values: a } = parseArgs({
   },
 });
 for (const k of ['udid', 'community-did', 'vtc-base', 'admin-credential']) if (!a[k]) throw new Error(`--${k} is required`);
-const row = (name, status, detail) => console.log(`ROW ${name} ${status} — ${String(detail).replace(/\s+/g, ' ').slice(0, 300)}`);
+const row = (name, status, detail) => {
+  console.log(`ROW ${name} ${status} — ${String(detail).replace(/\s+/g, ' ').slice(0, 300)}`);
+  if (status === 'FAIL') process.exitCode = 1;
+};
 const admin = createHvAdmin({ vtcBase: a['vtc-base'], communityDid: a['community-did'], adminCredential: a['admin-credential'] });
 const enrolled = async () => Object.values((await admin.hiddenShow(a.criterion)).enrolledVetters ?? {}).reduce((s, n) => s + Number(n), 0);
 
