@@ -1,5 +1,6 @@
 import {
   DispatchAction,
+  E2EClockRows,
   SafeAreaModal,
   Screens,
   testIdWithKey,
@@ -1105,6 +1106,9 @@ const Developer: React.FC = () => {
             )}
           </Pressable>
         </View>
+        {/* The clocks in force, for the gate's linkwait rows (bifold E2EClockRows): in a test build only, since a store
+            build never sets E2E_CLOCKS. This screen replaces bifold's, so it renders them itself. */}
+        <E2EClockRows />
       </ScrollView>
     </SafeAreaView>
   )
