@@ -13,6 +13,9 @@ export const SHORT_GRANT_POLL_WINDOW_MS = 60 * 1000
  */
 export const SHORT_AUTO_LOCK_MINUTES = 0.5
 
+/** True in a test build: E2E_CLOCKS set at all (`short`, or `real` for a real-clocks test build). Never in a store build. */
+export const e2eClocksSet = (): boolean => Boolean(Config.E2E_CLOCKS?.trim())
+
 /** True only in a test build that was built with `E2E_CLOCKS=short`. Read on every call, never cached. */
 export const shortClocks = (): boolean => Config.E2E_CLOCKS === 'short'
 
