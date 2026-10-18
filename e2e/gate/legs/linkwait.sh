@@ -43,6 +43,8 @@ for c in ${LINK_CASES:-link-address-resume link-address-resume-later create-wind
     PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always galarm 2400 node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
   r=$(grep -E "^ROW $c(-[a-z]+)? " "$LEG_DIR/$c.out")
   # A driver failure (the case's own "driver: …" error) is no verdict on the app: the leg is broken, not red.
-  d=$(grep -m1 -oE 'driver: .*' "$LEG_DIR/$c.out" | cut -c1-160)
+  # The thrown error's own line ("Error: driver: …"), not the first "driver:" in the log: WebDriver's own lines say
+  # "driver: Initiate new session…" (1018-2047 rerun named that as the reason).
+  d=$(grep -m1 -oE 'Error: driver: .*' "$LEG_DIR/$c.out" | sed 's/^Error: //' | cut -c1-160)
   if [ -n "$r" ]; then echo "$r"; elif [ -n "$d" ]; then broken "$c: $d"; else row "$c" FAIL "rc=$rc, no row: $(grep -E '❌|Error:' "$LEG_DIR/$c.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
 done

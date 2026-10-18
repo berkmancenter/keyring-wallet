@@ -840,8 +840,23 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
 export async function readClocks(driver, { buildHasRows } = {}) {
   if (buildHasRows === false) return { ...REAL_CLOCKS, source: "real clocks: this build has no clock rows (before bifold #411)" };
   await openDeveloperScreen(driver, { keepAutoLock: true });
+  // The clock rows are the Developer screen's last children, below a long list of switches. On Android a fixed
+  // number of swipes did not reach them (1018-2047 rerun: "E2EClocksMode not found" after 8 down and 8 up, the page
+  // source holding the switches above them and no E2E* id), so UiAutomator scrolls the ScrollView to the row itself,
+  // as setAutoLockNever finds its Lockout row; swipes stay as the fallback, and are iOS's way (XCUITest lists
+  // off-screen elements).
+  const find = async (key) => {
+    if (driver.e2ePlatform === "android") {
+      const el = driver.$(
+        `android=new UiScrollable(new UiSelector().scrollable(true).instance(0)).setMaxSearchSwipes(30)` +
+          `.scrollIntoView(new UiSelector().resourceId("${TEST_ID_PREFIX}${key}"))`
+      );
+      if (await el.isExisting().catch(() => false)) return el;
+    }
+    return scrollToTestId(driver, key, 16).catch(() => undefined);
+  };
   const read = async (key) => {
-    const el = await scrollToTestId(driver, key, 8).catch(() => undefined);
+    const el = await find(key);
     if (!el) {
       // buildHasRows undefined: no build file was known to tell an old build (real clocks) from a read that broke.
       const why = buildHasRows === undefined ? " (no build file known, so an old build without clock rows cannot be told from a broken read)" : "";
