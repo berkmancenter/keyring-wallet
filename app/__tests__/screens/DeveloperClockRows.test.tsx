@@ -20,6 +20,8 @@ jest.mock('@react-navigation/native', () => ({
 const config = Config as Record<string, string | undefined>
 const ROWS = ['E2EClocksMode', 'E2EGrantWindowSeconds', 'E2EPhoneGrantWindowSeconds', 'E2EAutoLockMinutes']
 const id = (key: string) => `com.ariesbifold:id/${key}`
+/** A row's text, as the app's tests read it (the jest-native matchers have no types here). */
+const textOf = (tree: ReturnType<typeof show>, key: string) => String(tree.getByTestId(id(key)).props.children)
 const show = () =>
   render(
     <BasicAppContext>
@@ -46,17 +48,17 @@ describe("the app's Developer screen and the e2e clock rows", () => {
   test('a short-clock test build shows the short clocks, under the testIDs the gate reads', () => {
     config.E2E_CLOCKS = 'short'
     const tree = show()
-    expect(tree.getByTestId(id('E2EClocksMode'))).toHaveTextContent('short')
-    expect(tree.getByTestId(id('E2EGrantWindowSeconds'))).toHaveTextContent('60')
-    expect(tree.getByTestId(id('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('60')
-    expect(tree.getByTestId(id('E2EAutoLockMinutes'))).toHaveTextContent('0.5')
+    expect(textOf(tree, 'E2EClocksMode')).toBe('short')
+    expect(textOf(tree, 'E2EGrantWindowSeconds')).toBe('60')
+    expect(textOf(tree, 'E2EPhoneGrantWindowSeconds')).toBe('60')
+    expect(textOf(tree, 'E2EAutoLockMinutes')).toBe('0.5')
   })
 
   test('a real-clocks test build shows the real clocks', () => {
     config.E2E_CLOCKS = 'real'
     const tree = show()
-    expect(tree.getByTestId(id('E2EClocksMode'))).toHaveTextContent('real')
-    expect(tree.getByTestId(id('E2EGrantWindowSeconds'))).toHaveTextContent('600')
-    expect(tree.getByTestId(id('E2EAutoLockMinutes'))).toHaveTextContent('5')
+    expect(textOf(tree, 'E2EClocksMode')).toBe('real')
+    expect(textOf(tree, 'E2EGrantWindowSeconds')).toBe('600')
+    expect(textOf(tree, 'E2EAutoLockMinutes')).toBe('5')
   })
 })
