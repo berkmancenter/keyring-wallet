@@ -8,6 +8,9 @@
  * cannot do hidden vetting, so on such a build Join says the vetter's way is not supported instead of offering "Meet a
  * vetter". Each build gets one of the two rows; the other SKIPs naming the build. If the community goes back to named
  * vetting, the IN-264 row fails: read its manifest before calling that the app's.
+ * A build that carries hidden vetting (263+, bifold #430/#432) badges the way Private (JoinWayPrivate_<criterion>) and
+ * offers "Meet a vetter" for it: there the IN-264 row passes on that, not on the refusal (read from the screen, since
+ * such a build still has the JoinWaysVettingNotSupported id for a suite it cannot carry).
  * Rows: outside-join-meet-vetter, outside-join-vetting-not-supported (lib/rows.js). Exit 0 pass, 3 fail, 1 broke.
  *   E2E_APP_ID=… UDID=emulator-5572 OUTSIDE_VTC_DID=… node run-join-outside.mjs
  */
@@ -48,23 +51,26 @@ try {
     meet = pos("Meet a vetter");
   }
   // The vetter's way in, as 239 words it (the request's "One vetter must confirm who you are" was a paraphrase).
-  const heading = pos("A statement from one of its vetters");
+  // On a way badged Private (263+) the card words it as private vetting instead.
+  const heading = pos("A statement from one of its vetters") ?? pos("This way uses private vetting");
   const toggle = (src.match(/resource-id="com\.ariesbifold:id\/JoinWaysOthersToggle"[^>]*bounds="\[\d+,(\d+)\]/) || [])[1];
   const toggleY = toggle === undefined ? undefined : Number(toggle);
   await screenshot(d, "outside-join-meet-vetter").catch(() => undefined);
   const notSupportedShown = await existsTestId(d, "JoinWaysVettingNotSupported", 3000);
+  // The hidden way badged Private: this build carries hidden vetting, so it offers the vetter's way instead of refusing.
+  const privateWay = (src.match(/resource-id="com\.ariesbifold:id\/JoinWayPrivate_([^"]+?)"/) || [])[1];
   await rows.row(
     "outside-join-vetting-not-supported",
     () => ({
-      ok: ways && notSupportedShown && meet === undefined,
-      detail: `JoinWays ${ways} · JoinWaysVettingNotSupported ${notSupportedShown ? "shown" : "absent"} · "Meet a vetter" ${meet !== undefined ? `offered at y ${meet}` : "not offered"} (IN-264, hidden-vetting community; read-only, nothing tapped on Join)`,
+      ok: ways && (privateWay ? !notSupportedShown && meet !== undefined : notSupportedShown && meet === undefined),
+      detail: `JoinWays ${ways} · ${privateWay ? `the ${privateWay} way badged Private (this build carries hidden vetting, so "Meet a vetter" is the right offer)` : "no way badged Private"} · JoinWaysVettingNotSupported ${notSupportedShown ? "shown" : "absent"} · "Meet a vetter" ${meet !== undefined ? `offered at y ${meet}` : "not offered"} (IN-264, hidden-vetting community; read-only, nothing tapped on Join)`,
     }),
-    { skip: notSupported ? undefined : "build lacks JoinWaysVettingNotSupported (IN-264): outside-join-meet-vetter covers it" },
+    { skip: notSupported || privateWay ? undefined : "build lacks JoinWaysVettingNotSupported (IN-264): outside-join-meet-vetter covers it" },
   );
   await rows.row("outside-join-meet-vetter", () => ({
     ok: ways && meet !== undefined && heading !== undefined && heading < meet && (toggleY === undefined || meet < toggleY),
-    detail: `JoinWays ${ways} · "A statement from one of its vetters" ${heading !== undefined ? `at y ${heading}` : "absent"} · "Meet a vetter" ${meet !== undefined ? `at y ${meet}` : "not shown without opening See them"} · See them ${toggleY !== undefined ? `at y ${toggleY}` : "absent"} (IN-149; read-only, nothing tapped on Join)`,
-  }), { skip: notSupported ? "build has JoinWaysVettingNotSupported: on a hidden-vetting community IN-264 replaces Meet a vetter" : undefined });
+    detail: `JoinWays ${ways} · the vetter's way heading ("A statement from one of its vetters" or "This way uses private vetting") ${heading !== undefined ? `at y ${heading}` : "absent"} · "Meet a vetter" ${meet !== undefined ? `at y ${meet}` : "not shown without opening See them"} · See them ${toggleY !== undefined ? `at y ${toggleY}` : "absent"} (IN-149; read-only, nothing tapped on Join)`,
+  }), { skip: notSupported && !privateWay ? "build has JoinWaysVettingNotSupported: on a hidden-vetting community IN-264 replaces Meet a vetter" : undefined });
   await d.back().catch(() => undefined);
 } catch (e) {
   rows.fatal(e);
