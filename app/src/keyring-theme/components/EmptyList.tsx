@@ -16,9 +16,20 @@ const ICON_SIZE = 80
 
 export interface EmptyListProps {
   message?: string
+  /**
+   * For an empty state other than the Wallet's (the new-navigation preview's
+   * Communities): its own icon, line, button and testIDs. Without them this
+   * is the Wallet's empty state, unchanged.
+   */
+  icon?: React.ReactNode
+  description?: string
+  actionTitle?: string
+  onAction?: () => void
+  actionTestID?: string
+  testID?: string
 }
 
-const EmptyList = ({ message }: EmptyListProps) => {
+const EmptyList = ({ message, icon, description, actionTitle, onAction, actionTestID, testID }: EmptyListProps) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const [addCredentialPressed, setAddCredentialPressed] = useState<boolean>(false)
@@ -38,9 +49,12 @@ const EmptyList = ({ message }: EmptyListProps) => {
   }, [addCredentialPressed])
 
   return (
-    <View style={[styles.container, { backgroundColor: ColorPalette.brand.primaryBackground }]}>
+    <View
+      style={[styles.container, { backgroundColor: ColorPalette.brand.primaryBackground }]}
+      {...(testID ? { testID: testIdWithKey(testID) } : {})}
+    >
       <View style={styles.iconCircle}>
-        <WalletIcon width={ICON_SIZE} height={ICON_SIZE} fill="#000000" />
+        {icon ?? <WalletIcon width={ICON_SIZE} height={ICON_SIZE} fill="#000000" />}
       </View>
       <ThemedText
         variant="headingThree"
@@ -53,17 +67,27 @@ const EmptyList = ({ message }: EmptyListProps) => {
         style={[styles.text, { color: ColorPalette.grayscale.mediumGrey, fontSize: 16, lineHeight: 22 }]}
         testID={testIdWithKey('NoCredentials')}
       >
-        {t('Credentials.EmptyListDescription')}
+        {description ?? t('Credentials.EmptyListDescription')}
       </ThemedText>
       <View style={styles.buttonContainer}>
-        <Button
-          title={t('Credentials.AddFirstCredential')}
-          accessibilityLabel={t('Credentials.AddFirstCredential')}
-          testID={testIdWithKey('AddFirstCredential')}
-          buttonType={ButtonType.Primary}
-          onPress={addCredentialPress}
-          disabled={addCredentialPressed}
-        />
+        {onAction && actionTitle ? (
+          <Button
+            title={actionTitle}
+            accessibilityLabel={actionTitle}
+            testID={testIdWithKey(actionTestID ?? 'EmptyListAction')}
+            buttonType={ButtonType.Primary}
+            onPress={onAction}
+          />
+        ) : (
+          <Button
+            title={t('Credentials.AddFirstCredential')}
+            accessibilityLabel={t('Credentials.AddFirstCredential')}
+            testID={testIdWithKey('AddFirstCredential')}
+            buttonType={ButtonType.Primary}
+            onPress={addCredentialPress}
+            disabled={addCredentialPressed}
+          />
+        )}
       </View>
     </View>
   )
