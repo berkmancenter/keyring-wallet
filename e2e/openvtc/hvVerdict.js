@@ -38,13 +38,14 @@ export function taskRound(log, taskPath) {
  * Where a vetter's DID would be a leak on the applicant's side: the app's own JS lines, without Credo's transport
  * lines. The applicant holds a session with its vetter by design, so resolving the vetter's DID document to reach it
  * (`resolving didUrl`, `Found did`, a TSP capability probe, outbound routing) says nothing about the attestation
- * (hv-keyring on 262: all ten mentions were those, the last as the attestation's envelope arrived).
+ * (hv-keyring on 262: all ten mentions were those, the last as the attestation's envelope arrived). The app's JS lines
+ * are `com.facebook.react.log` on iOS (log show) and the `ReactNativeJS` tag on Android (logcat).
  */
 const TRANSPORT = /resolving didUrl|Found did '|\[TrustTasks:TspCapability\]|Resolving services for connection|Sending outbound message|Unpacked DIDComm|Payload received from mediator/;
 export function appLevelLines(log) {
   return String(log)
     .split('\n')
-    .filter((l) => l.includes('com.facebook.react.log') && !TRANSPORT.test(l))
+    .filter((l) => (l.includes('com.facebook.react.log') || l.includes('ReactNativeJS')) && !TRANSPORT.test(l))
     .join('\n');
 }
 

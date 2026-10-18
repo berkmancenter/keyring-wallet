@@ -88,3 +88,15 @@ test('withoutOwnRequestCard drops only the applicant\'s own request and session 
   assert.ok(!kept.includes('VettingRequestVetterDid') && !kept.includes('VettingSessionVetter'));
   assert.ok(kept.includes('VettingAttestationHeld'));
 });
+
+test('appLevelLines reads Android\'s ReactNativeJS lines too (an empty read would pass hollow)', () => {
+  const v = 'did:webvh:Qmv:dids.example:vetter';
+  const log = [
+    `10-18 09:00:00.000  1234  1300 I ReactNativeJS: resolving didUrl ${v}`,
+    `10-18 09:00:01.000  1234  1300 I ReactNativeJS: [VTI] statement from ${v}`,
+    `10-18 09:00:02.000  1234  1301 D OkHttp  : ${v}`,
+  ].join('\n');
+  const kept = appLevelLines(log);
+  assert.equal(kept.split('\n').length, 1);
+  assert.ok(kept.includes(`statement from ${v}`));
+});

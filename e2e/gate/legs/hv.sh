@@ -27,13 +27,23 @@ LEG_CLEANUP=fin
 export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN ENROL_PORT=8197 E2E_RELEASE=1
 export PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD APPIUM_PORT=4761 OPENVTC_TUI_STYLE=current
 emu_start 5570; adb -s $E uninstall $BID >/dev/null 2>&1
+# The rows read the app's log back with logcat -d: a buffer that wraps loses the ceremony (the iOS log did, on 261).
+adb -s $E logcat -G 16M >/dev/null 2>&1
 curl -s -m 2 http://127.0.0.1:4761/status >/dev/null || { nohup appium --port 4761 --relaxed-security > "$LEG_DIR/appium.log" 2>&1 & AP=$!; for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:4761/status >/dev/null && break; sleep 1; done; }
 cd "$E2E"
 t=$(date +%s)
 E2E_KEEP_APP=1 LINK_MODE=manual galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 \
   || broken "applicant link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 row hv-link PASS "$(( $(date +%s) - t ))s, admin grant on $RUNNER_MAIN_SLUG"
-(cd "$REPO" && galarm 1500 node e2e/openvtc/run-hv.mjs --udid $E --community-did "$HV_C_DID" --criterion "${HV_CRITERION:-hv-vetted}" \
+# VETTER=keyring: the vetter is a seated Keyring, the iOS simulator HV_VETTER_UDID (named HV_VETTER_NAME), a member of
+# the hv community with a vetter grant and enrolled (e2e/openvtc/seat-hv-keyring-vetter.mjs), DID HV_VETTER_DID.
+VK=()
+if [ "${VETTER:-tui}" = keyring ]; then
+  need HV_VETTER_UDID HV_VETTER_DID
+  sim_boot "$HV_VETTER_UDID"
+  VK=(--vetter-platform ios --vetter-udid "$HV_VETTER_UDID" --vetter-device-name "${HV_VETTER_NAME:-iPhone 17 HV Vetter}" --vetter-wda-port 8132 --vetter-mjpeg-port 9132 --vetter-did "$HV_VETTER_DID")
+fi
+(cd "$REPO" && galarm 1500 node e2e/openvtc/run-hv.mjs --udid $E "${VK[@]}" --log-dir "$LEG_DIR" --community-did "$HV_C_DID" --criterion "${HV_CRITERION:-hv-vetted}" \
   --vtc-base "$HV_C_REST" --admin-credential "$HV_C_ADMIN_CRED" --vetter "${VETTER:-tui}" \
   ${HV_TUI_FX:+--fixture-dir "$HV_TUI_FX"} ${HV_TUI_PROFILE:+--profile "$HV_TUI_PROFILE"} ${HV_TUI_PERSONA:+--tui-persona "$HV_TUI_PERSONA"} \
   --openvtc-bin "${OPENVTC_BIN:-}" --openvtc-version "${OPENVTC_VERSION:-}") > "$LEG_DIR/hv.out" 2>&1; rc=$?
