@@ -108,6 +108,16 @@ export { BifoldError } from './types/error'
 export { Screens, Stacks, TabStacks } from './types/navigators'
 export * from './types/version-check'
 export { createLinkSecretIfRequired, getAgentModules, useAppAgent } from './utils/agent'
+// The e2e clock switch (gate efficiency items 3 and 4): the rows an app's own Developer screen renders, and the clocks.
+export { E2EClockRows } from './components/misc/E2EClockRows'
+export {
+  e2eClocksSet,
+  effectiveDefaultAutoLockMinutes,
+  effectiveGrantPollWindowMs,
+  shortClocks,
+  SHORT_AUTO_LOCK_MINUTES,
+  SHORT_GRANT_POLL_WINDOW_MS,
+} from './utils/e2eClocks'
 export { RetryingWebVhDidResolver } from './utils/RetryingWebVhDidResolver'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {

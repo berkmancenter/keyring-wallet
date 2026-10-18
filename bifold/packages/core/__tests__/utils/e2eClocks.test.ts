@@ -11,6 +11,7 @@ import {
   SHORT_AUTO_LOCK_MINUTES,
   SHORT_GRANT_POLL_WINDOW_MS,
   effectiveDefaultAutoLockMinutes,
+  e2eClocksSet,
   effectiveGrantPollWindowMs,
   shortClocks,
 } from '../../src/utils/e2eClocks'
@@ -65,5 +66,26 @@ describe('E2E_CLOCKS=short', () => {
     expect(shortClocks()).toBe(true)
     delete config.E2E_CLOCKS
     expect(shortClocks()).toBe(false)
+  })
+})
+
+describe('whether the build is a test build at all', () => {
+  afterEach(() => {
+    delete config.E2E_CLOCKS
+  })
+
+  it('is false with E2E_CLOCKS unset or blank, as in a store build', () => {
+    expect(e2eClocksSet()).toBe(false)
+    config.E2E_CLOCKS = '  '
+    expect(e2eClocksSet()).toBe(false)
+  })
+
+  it('is true for short and for real; only short shortens the clocks', () => {
+    config.E2E_CLOCKS = 'real'
+    expect(e2eClocksSet()).toBe(true)
+    expect(shortClocks()).toBe(false)
+    config.E2E_CLOCKS = 'short'
+    expect(e2eClocksSet()).toBe(true)
+    expect(shortClocks()).toBe(true)
   })
 })

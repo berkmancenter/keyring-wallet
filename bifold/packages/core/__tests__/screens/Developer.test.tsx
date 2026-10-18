@@ -26,14 +26,28 @@ describe('Developer Screen', () => {
     expect(tree).toMatchSnapshot()
   })
 
-  // Gate efficiency item 3: the e2e rows read the clocks in force from here.
-  test('shows the real clocks in force, under testIDs', () => {
-    const { getByTestId } = render(<Developer />)
+  // Gate efficiency items 3 and 4: the e2e rows read the clocks in force from here, in a test build only.
+  test('a store build (E2E_CLOCKS unset) shows no clock rows', () => {
+    const { queryByTestId } = render(<Developer />)
 
-    expect(getByTestId(testIdWithKey('E2EClocksMode'))).toHaveTextContent('real')
-    expect(getByTestId(testIdWithKey('E2EGrantWindowSeconds'))).toHaveTextContent('600')
-    expect(getByTestId(testIdWithKey('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('600')
-    expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('5')
+    for (const key of ['E2EClocksMode', 'E2EGrantWindowSeconds', 'E2EPhoneGrantWindowSeconds', 'E2EAutoLockMinutes']) {
+      expect(queryByTestId(testIdWithKey(key))).toBeNull()
+    }
+  })
+
+  test('a real-clocks test build (E2E_CLOCKS=real) shows the real clocks in force, under testIDs', () => {
+    const config = Config as Record<string, string | undefined>
+    config.E2E_CLOCKS = 'real'
+    try {
+      const { getByTestId } = render(<Developer />)
+
+      expect(getByTestId(testIdWithKey('E2EClocksMode'))).toHaveTextContent('real')
+      expect(getByTestId(testIdWithKey('E2EGrantWindowSeconds'))).toHaveTextContent('600')
+      expect(getByTestId(testIdWithKey('E2EPhoneGrantWindowSeconds'))).toHaveTextContent('600')
+      expect(getByTestId(testIdWithKey('E2EAutoLockMinutes'))).toHaveTextContent('5')
+    } finally {
+      delete config.E2E_CLOCKS
+    }
   })
 
   test('in a test build with E2E_CLOCKS=short, shows the short clocks', () => {
