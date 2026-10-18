@@ -29,7 +29,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { byTestId, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
-import { applicant as applicantRole, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
+import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
@@ -108,7 +108,16 @@ try {
   if (!(await scrollToTestId(app, 'VettingStartButton', 6, { from: 0.6 }).catch(() => undefined))) throw new Error('VettingStartButton not reachable');
   // The screen connects the person's identity by itself on arrival ("Connecting your identity…" on the button), and a
   // tap then does nothing (hv-tui on 261, 02:48Z): tap once it reads "Start my application".
-  const startLabel = async () => (await byTestId(app, 'VettingStartButton').getText().catch(() => '')) || '';
+  // iOS reads the button's label; Android carries the words in text or content-desc (textOf), or only in the child
+  // TextView a Pressable renders (the hv leg on Android read "" every time while the screen said Start my application).
+  const startLabel = async () => {
+    const own = await textOf(app, 'VettingStartButton').catch(() => '');
+    if (own || app.e2ePlatform === 'ios') return own || '';
+    const kids = await byTestId(app, 'VettingStartButton').$$('.//android.widget.TextView').catch(() => []);
+    const words = [];
+    for (const k of kids) words.push(await k.getText().catch(() => ''));
+    return words.join(' ').trim();
+  };
   let label = await startLabel();
   for (let i = 0; i < 60 && !/start my application/i.test(label); i++) { await sleep(3000); label = await startLabel(); }
   console.log(`[e2e] VettingStartButton reads "${label}" — tapping`);
