@@ -291,6 +291,7 @@ export async function completeOnboarding(
   while (Date.now() < deadline) {
     if (await existsTestId(driver, "Contacts", 2000)) {
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
+      await keepUnlockedForRun(driver);
       return;
     }
 
@@ -348,6 +349,7 @@ export async function completeOnboarding(
         await unlockIfLocked(driver);
       }
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
+      await keepUnlockedForRun(driver);
       return;
     }
 
@@ -382,6 +384,29 @@ export async function completeOnboarding(
   throw new Error(
     `onboarding did not finish within 5min (last action: ${lastAction})`
   );
+}
+
+/**
+ * A test build locks after 30 s without a touch (E2E_CLOCKS=short), and a run that waits on the other side (a grant,
+ * a vetter's answer) loses its screen to it. So right after onboarding the run saves Never as the auto-lock in
+ * Settings: a time the person saved wins over the short default (bifold e2eClocks). Not under E2E_NO_AUTO_UNLOCK=1:
+ * the rows that assert the lock set it, and keep the build's own clock. driver.js autoUnlockIfLocked stays the
+ * backstop, and its AUTO-UNLOCK lines still count a lock nobody expected. A failure here is said and not fatal.
+ * A kept phone never onboards again, so the drivers' unlockToHome calls this too; once per session (setAutoLockNever).
+ */
+export async function keepUnlockedForRun(driver) {
+  if (process.env.E2E_NO_AUTO_UNLOCK === "1" || driver.e2eAutoLockNeverSet) return;
+  try {
+    // The feature tour opens over the tab bar right after onboarding (kk on 261, 1017-0209: Settings not displayed).
+    await dismissTourIfPresent(driver);
+    await tapTestId(driver, "Settings", 15000);
+    await setAutoLockNever(driver);
+    console.log(`AUTO-LOCK ${new Date().toISOString()} ${deviceTag(driver)} set to Never in Settings after onboarding`);
+  } catch (e) {
+    console.log(`AUTO-LOCK ${new Date().toISOString()} ${deviceTag(driver)} not set (${String(e?.message || e).split("\n")[0]}); auto-unlock is the backstop`);
+  }
+  await tapTestId(driver, "Contacts", 15000).catch(() => undefined);
+  await waitForTestId(driver, "Contacts", 15000).catch(() => undefined);
 }
 
 /**

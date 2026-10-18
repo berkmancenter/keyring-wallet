@@ -37,6 +37,7 @@ import path from "node:path";
 
 import { TEST_ID_PREFIX } from "../config.js";
 import {
+  autoUnlockIfLocked,
   acceptSystemAlertIfPresent,
   byTestId,
   clearLocalityPreflightIfUp,
@@ -74,6 +75,7 @@ export const defaultIo = {
   dismissTourIfPresent,
   passNewPhoneOfferIfShown,
   pasteLinkOnScanScreen,
+  autoUnlockIfLocked,
   /**
    * What covers a screen mid-link and hides it from the tree: a system alert
    * (a camera permission), the "also open as you" notice of a shared runner
@@ -200,6 +202,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
       // pre-flight) hides what is under it from the tree: clear it, as
       // waitForTestId does on a miss.
       await io.clearNotices(d).catch(() => false);
+      // A test build's 30 s auto-lock (driver.js autoUnlockIfLocked): unlock and keep waiting, unless the PIN screen is
+      // what is wanted.
+      if (current === "EnterPIN" && !wanted.includes("EnterPIN") && io.autoUnlockIfLocked) await io.autoUnlockIfLocked(d, wanted.join("|"));
       if (each) await each();
       if (io.now() > until) {
         const observed = {
@@ -546,7 +551,16 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
         await io.screenshot(d, "link-06-intro");
         const centre = await measureIntroCentre();
         if (onCentre) await onCentre(centre);
-        for (let i = 0; i < 3; i++) await io.tapTestId(d, "AgentIntroNext", 15000);
+        for (let i = 0; i < 3; i++) {
+          // After an unlock (a test build's 30 s auto-lock, driver.js autoUnlockIfLocked) a 261 app comes back on its
+          // home tabs, not on the introduction (1017-0154: Contacts after the unlock): go back to My Agent, where the
+          // introduction shows again or, if the app counts it seen, the agent's home.
+          if (!(await io.existsTestId(d, "AgentIntroNext", 3000))) {
+            if (await io.existsTestId(d, "MyAgent", 2000)) await io.tapTestId(d, "MyAgent", 10000);
+            if ((await awaitStep(["AgentIntro", "AgentHome"], 30000)) === "AgentHome") break;
+          }
+          await io.tapTestId(d, "AgentIntroNext", 15000);
+        }
         await awaitStep("AgentHome", 30000);
         return { value: { offerKept, centre } };
       }),

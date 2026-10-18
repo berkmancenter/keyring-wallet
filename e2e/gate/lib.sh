@@ -498,7 +498,10 @@ leg_end() {
     LEG_PASS=$(grep -cE '^ROW .* PASS — ' "$LEG_DIR/leg.log"); LEG_FAILS=$(grep -cE '^ROW .* FAIL — ' "$LEG_DIR/leg.log"); LEG_SKIP=$(grep -cE '^ROW .* SKIP — ' "$LEG_DIR/leg.log")
   fi
   if [ -n "$LEG_BROKEN" ] || { [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; }; then rc=1; elif [ "$LEG_FAILS" -gt 0 ]; then rc=3; else rc=0; fi
-  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s"
+  # Auto-unlocks (driver.js autoUnlockIfLocked: a test build locks after 30 s without a touch): counted, so a lock
+  # nobody expected shows in the verdict rather than being papered over.
+  local unlocks=0; [ -d "${LEG_DIR:-}" ] && unlocks=$(cat "$LEG_DIR"/*.out 2>/dev/null | grep -c '^AUTO-UNLOCK ' || true)
+  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0}"
   exit $rc
 }
 
