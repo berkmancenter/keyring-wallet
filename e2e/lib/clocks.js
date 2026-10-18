@@ -95,3 +95,16 @@ export function linkWaitTiming(c) {
     },
   };
 }
+
+/**
+ * A row's text in an Android page source (UiAutomator XML), by its testID: undefined when no node carries that
+ * resource-id, "" when the node is there with no text yet. React Native can lay a Text out before it fills it, and
+ * UiAutomator then reports the node with text="" (1018-2229 rerun: E2EClocksMode read ""), so readClocks looks again.
+ */
+export function textInSource(src, prefix, key) {
+  const id = `${prefix}${key}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tag = String(src ?? "").match(new RegExp(`<[^>]*\\bresource-id="${id}"[^>]*>`));
+  if (!tag) return undefined;
+  const text = tag[0].match(/\btext="([^"]*)"/);
+  return (text ? text[1] : "").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+}

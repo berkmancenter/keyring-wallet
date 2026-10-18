@@ -15,11 +15,12 @@ import {
   tapTestIdReliable,
   waitForTestId,
   screenshot,
-  simTarget
+  simTarget,
+  dumpSource
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
-import { REAL_CLOCKS, parseClocks } from "./clocks.js";
+import { REAL_CLOCKS, parseClocks, textInSource } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -851,18 +852,46 @@ export async function readClocks(driver, { buildHasRows } = {}) {
         `android=new UiScrollable(new UiSelector().scrollable(true).instance(0)).setMaxSearchSwipes(30)` +
           `.scrollIntoView(new UiSelector().resourceId("${TEST_ID_PREFIX}${key}"))`
       );
-      if (await el.isExisting().catch(() => false)) return el;
+      // A UiScrollable whose target is not found resolves to the scrollable itself (1018-2229 rerun: "found", text ""):
+      // only the row, by its own resource-id, counts.
+      if ((await el.isExisting().catch(() => false)) && (await el.getAttribute("resource-id").catch(() => "")) === `${TEST_ID_PREFIX}${key}`) return el;
     }
     return scrollToTestId(driver, key, 16).catch(() => undefined);
+  };
+  // The rows are rendered by the app's own Developer screen too (app/src/screens/Developer.tsx replaces bifold's): a
+  // row on neither is a build whose Developer screen does not show the clocks, said so, never read as empty.
+  const absent = (key) => {
+    // buildHasRows undefined: no build file was known to tell an old build (real clocks) from a read that broke.
+    const why = buildHasRows === undefined ? "; no build file known, so an old build without clock rows cannot be told from a broken read" : "";
+    return new Error(`driver: ${key} not on the Developer screen (the screen the app shows must render the E2E clock rows${why})`);
   };
   const read = async (key) => {
     const el = await find(key);
     if (!el) {
-      // buildHasRows undefined: no build file was known to tell an old build (real clocks) from a read that broke.
-      const why = buildHasRows === undefined ? " (no build file known, so an old build without clock rows cannot be told from a broken read)" : "";
-      throw new Error(`driver: ${key} not found on the Developer screen${why}`);
+      await dumpSource(driver, `clocks-absent-${key}`).catch(() => undefined);
+      throw absent(key);
     }
-    return ((await el.getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "").trim();
+    // Found is not yet filled: React Native can lay the row out before its text arrives (1018-2229 rerun: the node was
+    // found, its text ""). Look until it says something, up to 5 s: on Android from the page source (the element
+    // handle can stay on that first, empty layout), scrolling to the row again if it has left the hierarchy; on iOS
+    // by its label. Still empty, the page source of that moment is kept and the row reads "" (parseClocks says which).
+    let seen = driver.e2ePlatform === "ios";
+    for (const until = Date.now() + 5000; ; ) {
+      let said;
+      if (driver.e2ePlatform === "ios") said = ((await el.getAttribute("label").catch(() => "")) || "").trim();
+      else {
+        said = textInSource(await driver.getPageSource().catch(() => ""), TEST_ID_PREFIX, key);
+        if (said === undefined) await find(key);
+        else seen = true;
+      }
+      if (said) return said;
+      if (Date.now() > until) {
+        await dumpSource(driver, `clocks-empty-${key}`).catch(() => undefined);
+        if (!seen) throw absent(key);
+        return "";
+      }
+      await sleep(300);
+    }
   };
   const raw = {
     mode: await read("E2EClocksMode"),

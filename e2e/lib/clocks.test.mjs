@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { REAL_CLOCKS, clocksSaid, linkWaitTiming, parseClocks } from "./clocks.js";
+import { REAL_CLOCKS, clocksSaid, linkWaitTiming, parseClocks, textInSource } from "./clocks.js";
 
 const screen = (over = {}) => ({ mode: "real", grantWindowS: "600", phoneGrantWindowS: "600", autoLockMin: "5", ...over });
 
@@ -89,4 +89,18 @@ test("linkWaitTiming: a lock set to Never is refused", () => {
 
 test("clocksSaid names the clocks and where they came from", () => {
   assert.equal(clocksSaid(REAL_CLOCKS), "clocks real: window 600 s, lock 300 s (real clocks)");
+});
+
+test("textInSource: a row's text by its resource-id; empty while React Native has not filled it; absent when gone", () => {
+  const P = "com.ariesbifold:id/";
+  const node = (id, text) => `<android.widget.TextView index="1" text="${text}" resource-id="${P}${id}" bounds="[0,10][100,40]"/>`;
+  const src = `<hierarchy>${node("E2EClocksModeX", "nope")}${node("E2EClocksMode", "short")}${node("E2EAutoLockMinutes", "0.5")}</hierarchy>`;
+  assert.equal(textInSource(src, P, "E2EClocksMode"), "short", "the exact id, not one that starts with it");
+  assert.equal(textInSource(src, P, "E2EAutoLockMinutes"), "0.5");
+  assert.equal(textInSource(`<hierarchy>${node("E2EClocksMode", "")}</hierarchy>`, P, "E2EClocksMode"), "", "laid out, not yet filled");
+  assert.equal(textInSource(src, P, "E2EGrantWindowSeconds"), undefined, "not in the hierarchy");
+  assert.equal(textInSource("", P, "E2EClocksMode"), undefined);
+  // Attribute order is UiAutomator's to choose: resource-id before text reads the same.
+  assert.equal(textInSource(`<x resource-id="${P}E2EGrantWindowSeconds" text=" 60 "/>`, P, "E2EGrantWindowSeconds"), "60");
+  assert.equal(textInSource(`<x resource-id="${P}E2EClocksMode" text="a&amp;b"/>`, P, "E2EClocksMode"), "a&b");
 });
