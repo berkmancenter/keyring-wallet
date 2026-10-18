@@ -1626,6 +1626,10 @@ try {
   link = createLinkPage(driver);
   // The leg selects the case (E2E_ONLY_ROWS, lib.sh `selected`); every row of the one case it runs is printed.
   rows = createRows({ label: "vta-link", driver, only: null });
+  // A clock case times the build's own auto-lock, on every path that reaches it (kept app or fresh install): no Never
+  // saved after onboarding (flows.js keepUnlockedForRun) and no auto-unlock during its idle (driver.js
+  // autoUnlockIfLocked). A saved Never would also read 0 on the Developer screen and break linkWaitTiming.
+  if (CLOCK_CASES.has(process.env.LINK_CASE)) process.env.E2E_NO_AUTO_UNLOCK = "1";
 
   if (keepState) {
     await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
@@ -1633,8 +1637,6 @@ try {
     await waitForTestId(driver, "Contacts", 300000);
     await sleep(3000);
   } else {
-    // A clock case times the build's own auto-lock: no Never saved after onboarding (flows.js keepUnlockedForRun).
-    if (CLOCK_CASES.has(process.env.LINK_CASE)) process.env.E2E_NO_AUTO_UNLOCK = "1";
     await completeOnboarding(driver, { firstName: "Link", lastName: "Phone" });
   }
 
