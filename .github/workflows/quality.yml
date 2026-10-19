@@ -116,6 +116,11 @@ jobs:
           bash e2e/gate/ci/pnm-locked.test.sh || { echo "::error file=e2e/gate/ci/pnm-locked.test.sh::the pnm call cap test failed"; fail=1; }
           # The CI lane's configuration must name one runner, linkfail's approver DID and no admin credential (item 11).
           bash e2e/gate/ci/ci-env-check.test.sh || { echo "::error file=e2e/gate/ci/ci-env-check.test.sh::the CI configuration check test failed"; fail=1; }
+          # The gate harness's own unit tests (node built-ins only, no install): a gate.sh / lib.sh / run-summary change
+          # merged green while breaking two of them (#518, #522; fixed in #523), since nothing here ran them.
+          for t in e2e/gate/*.test.mjs; do
+            node --test "$t" || { echo "::error file=$t::$t failed"; fail=1; }
+          done
           exit $fail
 
   test:
