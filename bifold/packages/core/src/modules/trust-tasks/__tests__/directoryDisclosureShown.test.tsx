@@ -39,7 +39,12 @@ jest.mock('../module/vtiAgent', () => {
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
-import { DisclosureNotShown, MalformedDisclosure, readDirectoryDisclosure } from '../module/directoryDisclosure'
+import {
+  DisclosureNotShown,
+  MalformedDisclosure,
+  readDirectoryDisclosure,
+  readShownThenConfirm,
+} from '../module/directoryDisclosure'
 import { joinCommunity } from '../module/vtiJoin'
 import { DirectoryDisclosureCard, durationWords } from '../screens/DirectoryDisclosureCard'
 import { plainError } from '../screens/plainError'
@@ -152,5 +157,40 @@ describe('the statement in words', () => {
     expect(durationWords('P30D', t)).toBe('30 days')
     expect(durationWords('P2WT12H', t)).toBe('2 weeks, 12 hours')
     expect(durationWords('P1Y', t)).toBe('P1Y')
+  })
+})
+
+describe('the order a screen sends in: read, check, then confirm (vetting’s Apply)', () => {
+  const withStatement = { directoryDisclosure: { statementDigest: 'zQmCurrent' } }
+
+  it('never asks for a confirmation for a request that will not be sent', async () => {
+    const confirm = jest.fn(async () => true)
+    await expect(readShownThenConfirm(undefined, async () => withStatement, confirm)).rejects.toBeInstanceOf(
+      DisclosureNotShown
+    )
+    await expect(readShownThenConfirm('zQmEarlier', async () => withStatement, confirm)).rejects.toBeInstanceOf(
+      DisclosureNotShown
+    )
+    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it('asks once the statement is the one shown, and sends nothing when declined', async () => {
+    const confirm = jest.fn(async () => true)
+    await expect(readShownThenConfirm('zQmCurrent', async () => withStatement, confirm)).resolves.toBe(withStatement)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    await expect(
+      readShownThenConfirm(
+        'zQmCurrent',
+        async () => withStatement,
+        async () => false
+      )
+    ).resolves.toBeUndefined()
+    await expect(
+      readShownThenConfirm(
+        undefined,
+        async () => ({}),
+        async () => true
+      )
+    ).resolves.toEqual({})
   })
 })

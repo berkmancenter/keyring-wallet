@@ -187,3 +187,17 @@ export function disclosureShown(
 ): boolean {
   return !manifest.directoryDisclosure || manifest.directoryDisclosure.statementDigest === seen
 }
+
+/**
+ * The order a screen sends in, when it asks for a confirmation (Face ID)
+ * first: read the manifest, refuse if its statement is not the one shown,
+ * and only then ask. Nobody is asked to confirm a request that will not be
+ * sent. Undefined: the person declined to confirm.
+ */
+export async function readShownThenConfirm<
+  M extends { directoryDisclosure?: Pick<DirectoryDisclosure, 'statementDigest'> },
+>(shown: string | undefined, read: () => Promise<M>, confirm: () => Promise<boolean>): Promise<M | undefined> {
+  const manifest = await read()
+  if (!disclosureShown(manifest, shown)) throw new DisclosureNotShown(manifest.directoryDisclosure!.statementDigest)
+  return (await confirm()) ? manifest : undefined
+}

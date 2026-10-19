@@ -85,7 +85,7 @@ import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
 import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
-import { DisclosureNotShown, disclosureShown } from '../module/directoryDisclosure'
+import { readShownThenConfirm } from '../module/directoryDisclosure'
 import { EligibilityNote } from './EligibilityNote'
 import { EnvelopeRefusalNote } from './EnvelopeRefusalNote'
 import { RefusalNote } from './RefusalNote'
@@ -1502,12 +1502,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     run(replace ? 'replace' : 'apply', async () => {
       // The directory statement on screen when Apply was pressed (manifest/0.4).
       const shown = manifest?.directoryDisclosure?.statementDigest
-      // Before the confirmation: nothing is asked for an application that is not sent.
-      const m = await vettingManifest(application?.requirementsDigest)
-      // A statement the person has not seen yet (it arrived with this read)
-      // is shown now, and the request waits for them to send it again.
-      if (!disclosureShown(m, shown)) throw new DisclosureNotShown(m.directoryDisclosure!.statementDigest)
-      if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
+      // Before the confirmation: nothing is asked for an application that is
+      // not sent. A statement the person has not seen yet (it arrived with
+      // this read) is shown now, and the request waits for them to send again.
+      const m = await readShownThenConfirm(
+        shown,
+        () => vettingManifest(application?.requirementsDigest),
+        () => confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply')
+      )
+      if (!m) return
       // Ask about the grants now, not when the statements were
       // gathered: the community applies the status at intake,
       // so a vetter revoked since is the case this catches.

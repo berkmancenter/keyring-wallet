@@ -18,10 +18,17 @@ import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
 import MyAgent from '../screens/MyAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
+import { DisclosureNotShown } from '../module/directoryDisclosure'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+const mockJoin = jest.fn()
+jest.mock('../module/vtiJoin', () => ({
+  ...jest.requireActual('../module/vtiJoin'),
+  joinCommunity: (...args: unknown[]) => mockJoin(...args),
+}))
 // The VTA session itself is out of scope here: a client that reports itself
 // connected, so the controller's `connect` is a no-op and the screen reads
 // the state the test sets.
@@ -343,6 +350,47 @@ describe('My Agent — the connected gate', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(testIdWithKey('MyAgentMembershipCard'))).toBeTruthy()
+  })
+
+  // manifest/0.4: this older panel joins in place and cannot show a
+  // community's directory statement. A join refused for that opens the
+  // invitation where the statement is shown, rather than a message the person
+  // could not act on here.
+  test('a join refused because the directory terms were not shown opens the invitation where they are', async () => {
+    const records = [
+      manager,
+      persona,
+      {
+        tags: { recordType: 'keyring/vti-community', kind: 'invitation', key: 'inv-1' },
+        content: {
+          id: 'inv-1',
+          communityDid: config.communityDid,
+          subjectDid: personaDid,
+          role: 'member',
+          credential: {},
+          receivedAt: '2026-10-18T00:00:00Z',
+          status: 'pending',
+        },
+      },
+    ]
+    const agent = fakeAgent(records)
+    mockUseAgent.mockReturnValue(agent)
+    connectedTo(agent)
+    mockJoin.mockRejectedValueOnce(new DisclosureNotShown('zQmStatement'))
+    const navigate = (useNavigation() as unknown as { navigate: jest.Mock }).navigate
+    navigate.mockClear()
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCommunityButton'))))
+    expect(communityTarget.getChosen()?.communityDid).toBe(config.communityDid)
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiInvited)
+    expect(tree.queryByText(/Errors\.DirectoryNotShown/)).toBeNull()
   })
 
   test('while connecting, the step is named and nothing else is offered', async () => {
