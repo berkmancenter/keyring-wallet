@@ -12,9 +12,10 @@ const VTC = 'did:webvh:QmNvAiYMwoZMWGfY62gqNJuedQgH224FMpHenzJTK1wJrG:webvh.stor
 const OTHER_VTC = 'did:webvh:QmOther:webvh.storm.ws:other-vtc'
 const A = 'did:webvh:QmA:dids.example:agent-a'
 const B = 'did:webvh:QmB:dids.example:agent-b'
+// Literals, not A and B: the agents fake below names AGENTS, so jest hoists it above them.
 const AGENTS = [
-  { vtaDid: A, name: 'Home agent', current: true },
-  { vtaDid: B, name: 'Work agent', current: false },
+  { vtaDid: 'did:webvh:QmA:dids.example:agent-a', name: 'Home agent', current: true },
+  { vtaDid: 'did:webvh:QmB:dids.example:agent-b', name: 'Work agent', current: false },
 ]
 
 const entry = (over: Partial<VtaVaultEntry> = {}): VtaVaultEntry => ({
