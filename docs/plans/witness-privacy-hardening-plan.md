@@ -36,8 +36,8 @@ Phase 2 wait on decisions listed under *Not decided*.
   challenge across both parties and the reporting graph. The Trust Task path persists
   almost nothing beyond the witness's connection record and stdout log.
 - **Reporting is a test aid.** The reporting graph (`enableReporting` in the wallet,
-  `WITNESS_REPORTING_ENABLED` on the witness) defaults on only for test builds; production
-  builds ship it off. Everything below assumes it is off. Residue that persists with it
+  `WITNESS_REPORTING_ENABLED` on the witness) is for testing. Both default on today;
+  production ships it off (steps 1.2 and 0.10). Everything below assumes it is off. Residue that persists with it
   off is in scope (step 0.3).
 - **The witness always learns the pair.** A submitted VRC names both relationship DIDs
   (the presenter is the issuer, the counterparty is the subject), and the witness needs
@@ -110,8 +110,10 @@ still completes with badges and witness-share on both the Trust Task and legacy 
 | 0.7 | **Hardware attestation claim.** Have the witness verify the evidence chain before reporting `verified`, or report the member as unverified. | A VRC with a self-reported but invalid chain does not produce `verified`. |
 | 0.8 | **Operator surface.** Authenticate or remove the mock-control routes; escape identifiers rendered into the activity page; decide the verification endpoint's exposure; document TLS. | The routes need a credential or are absent; a crafted identifier renders as text; the endpoint decision is recorded in the README. |
 | 0.9 | **Legacy persistence.** Delete credential-exchange and message records after delivery; prune the in-memory relationship registry; refuse to start in production mode with message retention or verbose logging on, or warn loudly. | After a legacy exchange, the witness's wallet holds no exchange record naming the parties; the registry is bounded; the production start check is tested. |
+| 0.10 | **Reporting off by default on the server.** The witness-server defaults reporting off; an operator enables it explicitly for testing, and test deployment configuration sets it. | A witness-server started with no reporting setting records no reporting edges, and the broadcaster and the network view expose none, through a legacy exchange where both parties send a `reportingDid`; setting it on restores the behaviour for test deployments; the README and test deployment configuration state the setting. |
 
 Order: 0.1 and 0.2 first; then 0.3, 0.4, 0.6 and 0.7; 0.5 after step 1.1; then 0.8 and 0.9.
+Step 0.10 is independent and can land with 0.1.
 
 ## 4. Phase 1 — wallet
 
