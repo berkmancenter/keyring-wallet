@@ -391,6 +391,18 @@ jobs:
           rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
           cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
+      # Draft build only (never merges): the approval key's Kotlin unit tests (ApprovalKeyTest), which no other CI runs.
+      - name: Approval key unit tests (react-native-attestation)
+        working-directory: app/android
+        env:
+          GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
+        run: |
+          set -euo pipefail
+          project=$(./gradlew projects -q | grep -oE "':[^']*attestation[^']*'" | head -1 | tr -d "'")
+          test -n "$project" || { echo "::error::no react-native-attestation Gradle project"; exit 1; }
+          echo "running $project:testReleaseUnitTest"
+          ./gradlew "$project:testReleaseUnitTest" --tests 'com.attestation.ApprovalKeyTest' --stacktrace
+
       - name: Package the APK and its manifest
         run: |
           set -euo pipefail
