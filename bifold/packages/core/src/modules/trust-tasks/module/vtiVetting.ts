@@ -51,7 +51,7 @@ import {
   type StatementShapeChoice,
 } from './dtgV1Writing'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
-import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
+import { disclosedUnder, recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
@@ -2882,6 +2882,7 @@ export class VtiApplicant {
       withInvitation: false,
       via: 'vetting',
       ...(options.hiddenVetting ? { privateVetting: true } : {}),
+      ...disclosedUnder(manifest),
     }).catch(() => undefined)
     try {
       const verdict = await vtiAgent.apply(communityDid, manifest, options)

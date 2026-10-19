@@ -72,12 +72,24 @@ const KNOWN: ReadonlyArray<NonNullable<JoinSubmission['status']>> = [
 ]
 
 /**
+ * The directory statement a request goes under, for its record: the
+ * `statementDigest` of the manifest's `directoryDisclosure`, when it carried one.
+ */
+export const disclosedUnder = (manifest: {
+  directoryDisclosure?: { statementDigest: string }
+}): { directoryStatementDigest?: string } =>
+  manifest.directoryDisclosure ? { directoryStatementDigest: manifest.directoryDisclosure.statementDigest } : {}
+
+/**
  * Record a request as sent, before the send. Replaces any earlier record for
  * the community: this is now the request that matters.
  */
 export async function recordSent(
   store: VtiCommunityStore,
-  sent: Pick<JoinSubmission, 'communityDid' | 'personaDid' | 'withInvitation' | 'via' | 'privateVetting'>,
+  sent: Pick<
+    JoinSubmission,
+    'communityDid' | 'personaDid' | 'withInvitation' | 'via' | 'privateVetting' | 'directoryStatementDigest'
+  >,
   now = new Date()
 ): Promise<void> {
   await store.saveSubmission?.({ ...sent, sentAt: now.toISOString() })

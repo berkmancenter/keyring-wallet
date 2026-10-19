@@ -336,6 +336,13 @@ async function keepMembershipCard(
         ...((existing?.privateVetting ?? (await store.getSubmission?.(item.communityDid))?.privateVetting)
           ? { privateVetting: true }
           : {}),
+        // The directory statement the person applied under, from that same submission.
+        ...(await (async () => {
+          const digest =
+            existing?.directoryStatementDigest ??
+            (await store.getSubmission?.(item.communityDid))?.directoryStatementDigest
+          return digest ? { directoryStatementDigest: digest } : {}
+        })()),
       })
       if (!existing) DeviceEventEmitter.emit(VTI_JOINED_EVENT, { communityDid: item.communityDid })
     } else {

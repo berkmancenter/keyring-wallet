@@ -63,13 +63,17 @@ import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
 import { classifyCredential } from './vtiInbox'
 import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
+import { MalformedDisclosure } from './directoryDisclosure'
 import {
   JOIN_MANIFEST_TYPES,
   joinTaskType,
+  manifestTaskType,
+  manifestWireAfterRefusal,
+  manifestWiresToTry,
   submitPayload,
   wireAfterRefusal,
-  wiresToTry,
   type JoinWire,
+  type ManifestWire,
 } from './joinWire'
 
 export type { VtiCriterion, VtiManifest } from './joinManifest'
@@ -468,12 +472,6 @@ class VtiAgentController {
    * two envelope formats; the plan asks for a session-scoped choice, logged.
    */
   private readonly carriageByPeer = new Map<string, Carriage>()
-  /**
-   * The version of the join tasks each community last answered in (`joinWire`).
-   * Asked first the next time; a community that has since moved refuses it
-   * with `unsupportedVersion`, which is what moves this.
-   */
-  private readonly joinWireByCommunity = new Map<string, JoinWire>()
   /**
    * How each peer last reached us, by its DID (the DIDComm sender, the TSP
    * sender, and the document's issuer). A reply goes back the same way: a
@@ -1346,16 +1344,20 @@ class VtiAgentController {
    * name the community publishes) could not be read before a session existed,
    * the one moment the REST read is for (Farm gate, 2026-09-23).
    */
-  async fetchManifest(communityDid: string, agent?: Agent): Promise<VtiManifest> {
+  async fetchManifest(communityDid: string, agent?: Agent, prefer?: JoinWire): Promise<VtiManifest> {
     const withAgent = agent ?? this.agent
     // Packing to the community resolves its document; warm that resolution
     // patiently so a tunnel's rate limit does not surface as a failed send.
     if (withAgent) await resolveDidDocumentRetrying(withAgent, communityDid)
-    // The version is the community's to state (`joinWire`): the one it last
-    // answered in is asked first, and a version it refuses as unsupported is
-    // never asked again in this read, over either carriage.
-    const refused: JoinWire[] = []
-    let wire: JoinWire | undefined = wiresToTry(this.joinWireByCommunity.get(communityDid))[0]
+    // The version is the community's to state (`joinWire`). The newest is
+    // asked first every time, so a community that has moved up is read at its
+    // newest (manifest/0.4 carries the directory statement); `prefer` puts a
+    // criteria version first, for a submit refused as unsupported. A version
+    // the community refuses as unsupported is never asked again in this read,
+    // over either carriage.
+    const order = manifestWiresToTry(prefer)
+    const refused: ManifestWire[] = []
+    let wire: ManifestWire | undefined = order[0]
     // A community answers the join manifest over REST with no session at all
     // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
     // what is asked of them on a first join — before any channel exists — and
@@ -1367,13 +1369,13 @@ class VtiAgentController {
       if (!overRest) break
       if ('manifest' in overRest) return this.learnManifest(communityDid, withAgent, overRest.manifest)
       refused.push(wire)
-      wire = wireAfterRefusal(overRest.unsupported, 'manifest', refused)
+      wire = manifestWireAfterRefusal(overRest.unsupported, refused, order)
       // It serves no version this wallet speaks, and said so: asking again
       // over DIDComm would only be told the same.
       if (!wire) throw overRest.unsupported
     }
     while (wire) {
-      const type = joinTaskType('manifest', wire)
+      const type = manifestTaskType(wire)
       const answer = await this.ask(communityDid, type, {})
       // Each unanswered ask names its task and request (`VtiSentNoAnswer`):
       // three callers used to share one sentence, and a failed join could not
@@ -1385,7 +1387,7 @@ class VtiAgentController {
         return this.learnManifest(communityDid, withAgent, readManifest(payload, wire))
       }
       refused.push(wire)
-      wire = wireAfterRefusal(refusal, 'manifest', refused)
+      wire = manifestWireAfterRefusal(refusal, refused, order)
       if (!wire) throw refusal
     }
     // Unreachable: the loop above returns or throws while a version is left.
@@ -1405,7 +1407,6 @@ class VtiAgentController {
    * that subscribes to `communityTarget` picks the name up whenever it lands.
    */
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
-    if (manifest.wire) this.joinWireByCommunity.set(communityDid, manifest.wire)
     const branded = manifest.branding?.displayName?.trim()
     if (branded) {
       communityTarget.publishedName(communityDid, branded)
@@ -1458,7 +1459,7 @@ class VtiAgentController {
   private async manifestOverRest(
     communityDid: string,
     agent: Agent | undefined,
-    wire: JoinWire
+    wire: ManifestWire
   ): Promise<{ manifest: VtiManifest } | { unsupported: VtiRefusal } | undefined> {
     if (!agent) return undefined
     try {
@@ -1477,7 +1478,7 @@ class VtiAgentController {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             id: `urn:uuid:${utils.uuid()}`,
-            type: joinTaskType('manifest', wire),
+            type: manifestTaskType(wire),
             threadId: `urn:uuid:${utils.uuid()}`,
             payload: {},
             issuer: this.state.did ?? communityDid,
@@ -1502,7 +1503,10 @@ class VtiAgentController {
       if (!response.ok) return undefined
       if (!body?.payload?.criteria) return undefined
       return { manifest: readManifest(body.payload, wire) }
-    } catch {
+    } catch (e) {
+      // A directory statement that cannot be shown stops the join here: read
+      // again over DIDComm it would say the same.
+      if (e instanceof MalformedDisclosure) throw e
       return undefined
     }
   }
@@ -1786,8 +1790,7 @@ class VtiAgentController {
         this.agent?.config.logger.warn(
           `vtiAgent: ${communityDid} does not serve ${taskName(type)}/${wire} (${refusal.code}); reading its criteria again and submitting at ${other}`
         )
-        this.joinWireByCommunity.set(communityDid, other)
-        current = await this.fetchManifest(communityDid)
+        current = await this.fetchManifest(communityDid, undefined, other)
         // The manifest and the submit disagree on the version: nothing safe is left to try.
         if ((current.wire ?? '0.2') !== other) throw refusal
         continue

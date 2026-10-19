@@ -21,7 +21,8 @@
 
 import { digestMultibase } from '@bifold/trust-tasks'
 
-import type { JoinWire } from './joinWire'
+import { readDirectoryDisclosure, type DirectoryDisclosure } from './directoryDisclosure'
+import { criteriaWireOf, type JoinWire, type ManifestWire } from './joinWire'
 import { checkVettingRequirements, isDigestMultibase } from './vettingShape'
 
 /** A community's published join criteria, as a manifest states them. */
@@ -54,8 +55,14 @@ export interface VtiCriterion {
 }
 
 export interface VtiManifest {
-  /** The version of the manifest task this was read in. Absent: 0.2. */
+  /**
+   * The criteria-and-submit version this manifest answers to. Absent: 0.2.
+   * A manifest read at 0.4 has 0.3's criteria and is answered by submit/0.3,
+   * so its `wire` is 0.3 (`criteriaWireOf`).
+   */
   wire?: JoinWire
+  /** The version of the manifest task this was read at, when it was read by this build. */
+  manifestWire?: ManifestWire
   communityDid?: string
   /** The criteria exactly as published — from manifest/0.3, in the order the community decides by. */
   criteria: VtiCriterion[]
@@ -71,16 +78,36 @@ export interface VtiManifest {
     logoUrl?: string
     [key: string]: unknown
   }
+  /**
+   * What the community's member directory would show about the person, and
+   * to whom (manifest/0.4). Absent says nothing: a 0.3 answer, or a community
+   * with no directory, carries none, and that is never "no directory".
+   */
+  directoryDisclosure?: DirectoryDisclosure
 }
 
-/** A manifest answer's payload as a manifest, with the version it was asked in. */
-export function readManifest(payload: Partial<VtiManifest> | undefined, wire: JoinWire): VtiManifest {
+/**
+ * A manifest answer's payload as a manifest, with the version it was asked
+ * at. A 0.4 answer's `directoryDisclosure` is read strictly: one that cannot
+ * be shown as it stands throws `MalformedDisclosure`, and the read fails.
+ * Any other version's answer carries none and is not read for one.
+ */
+export function readManifest(
+  payload: (Partial<Omit<VtiManifest, 'directoryDisclosure'>> & { directoryDisclosure?: unknown }) | undefined,
+  wire: ManifestWire
+): VtiManifest {
+  const disclosed =
+    wire === '0.4' && payload?.directoryDisclosure !== undefined
+      ? readDirectoryDisclosure(payload.directoryDisclosure)
+      : undefined
   return {
-    wire,
+    wire: criteriaWireOf(wire),
+    manifestWire: wire,
     communityDid: payload?.communityDid,
     criteria: Array.isArray(payload?.criteria) ? payload.criteria : [],
     requirementsDigest: payload?.requirementsDigest,
     branding: payload?.branding,
+    ...(disclosed ? { directoryDisclosure: disclosed } : {}),
   }
 }
 

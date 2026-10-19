@@ -15,7 +15,7 @@
 import type { Agent } from '@credo-ts/core'
 import { DeviceEventEmitter } from 'react-native'
 
-import { parseJoinNeed, recordAnswer, recordSent, recordStatus, type JoinNeed } from './joinSubmission'
+import { disclosedUnder, parseJoinNeed, recordAnswer, recordSent, recordStatus, type JoinNeed } from './joinSubmission'
 import { vtaAgent } from './vtaAgent'
 import {
   GenericRecordsCommunityStore,
@@ -126,6 +126,7 @@ export async function joinCommunity(
     personaDid: persona.did,
     withInvitation: Boolean(invitation),
     via: 'join',
+    ...disclosedUnder(manifest),
   })
   let verdict: VtiVerdict
   try {
@@ -177,6 +178,7 @@ export async function joinCommunity(
         }
       }
       if (membership) {
+        membership = { ...membership, ...disclosedUnder(manifest) }
         await deps.communityStore.saveMembership(membership)
       } else {
         // The card comes by delivery, not inline: give the outbox a moment.

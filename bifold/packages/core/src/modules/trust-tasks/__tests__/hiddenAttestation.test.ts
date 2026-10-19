@@ -560,6 +560,25 @@ describe('the named flow, applied to a private way in', () => {
     expect(await community.getMembership(COMMUNITY, PERSONA.did)).toMatchObject({ privateVetting: true })
   })
 
+  it('a private request under a directory statement keeps both: the mark and the statement it was shown', async () => {
+    // One record per send, which both have to be in: dropping either is silent,
+    // since both are optional (manifest/0.4, tf#823).
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    const { agent } = fakeAgent()
+    const community = new GenericRecordsCommunityStore(agent)
+    const shown = { ...manifest, directoryDisclosure: { statementDigest: 'zQmShownStatement' } }
+    await new VtiApplicant(
+      { config: { logger: logger() } } as never,
+      PERSONA as never,
+      memoryStore({}),
+      community
+    ).submit(shown as never, [], 'zQmDigest')
+    expect(await community.getSubmission(COMMUNITY, PERSONA.did)).toMatchObject({
+      privateVetting: true,
+      directoryStatementDigest: 'zQmShownStatement',
+    })
+  })
+
   it('refuses to submit a private way in with no private application, rather than naming vetters', async () => {
     // `start` could not create the agent-side application — an unreachable
     // agent, most likely. Falling through to the named path would send
