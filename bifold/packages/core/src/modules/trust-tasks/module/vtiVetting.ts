@@ -2844,17 +2844,10 @@ export class VtiApplicant {
         code: 'vta/pcs/prove:noUsableAttestation',
       })
     }
-    // Say how this was decided, durably: the membership arrives later through
-    // the inbox and the credential itself does not record that the community
-    // counted a proof rather than named statements.
-    await recordSent(this.communityStore, {
-      communityDid,
-      personaDid: this.persona.did,
-      withInvitation: false,
-      via: 'vetting',
-      privateVetting: true,
-    }).catch(() => undefined)
-
+    // The request's record says it carried a proof (`applyRecorded`): the
+    // membership arrives later through the inbox, and the credential itself
+    // does not record that the community counted a proof rather than named
+    // statements.
     const verdict = await this.applyRecorded(manifest, {
       credentials: [],
       requirementsDigest,
@@ -2881,11 +2874,14 @@ export class VtiApplicant {
     }
   ): Promise<VtiVerdict> {
     const communityDid = this.persona.communityDid
+    // One record per send, and it replaces the last: a hidden-vetting proof is
+    // said here, in the same record, or the mark is lost before the verdict.
     await recordSent(this.communityStore, {
       communityDid,
       personaDid: this.persona.did,
       withInvitation: false,
       via: 'vetting',
+      ...(options.hiddenVetting ? { privateVetting: true } : {}),
     }).catch(() => undefined)
     try {
       const verdict = await vtiAgent.apply(communityDid, manifest, options)
