@@ -56,3 +56,25 @@ export function withoutOwnRequestCard(pageSource) {
     .filter((l) => !/name="com\.ariesbifold:id\/Vetting(Request|Session)/.test(l))
     .join('\n');
 }
+
+/** The part of a did:webvh the app's log keeps when it shortens one ("did:webvh:QmZWDgXD…"): its first 8 SCID chars. */
+export const didStub = (did) => (String(did ?? '').match(/^did:webvh:([A-Za-z0-9]{8})/) || [])[0] ?? String(did ?? '');
+
+/**
+ * hv-vetter-anonymous: the vetter's DID must appear neither where the applicant is shown things nor in the community's
+ * record. Each source must first show it was read: the applicant side names the applicant's own persona (at least its
+ * shortened form), the record names the member. An empty or unread source fails as such, never passes as "absent".
+ */
+export function anonymityVerdict({ vetterDid, memberDid, shown, record }) {
+  if (!vetterDid) return { ok: false, detail: 'no vetter DID given to check against' };
+  if (!memberDid) return { ok: false, detail: 'source empty: no member to read the record or the applicant side by' };
+  const empty = [
+    !String(shown ?? '').includes(didStub(memberDid)) && "the applicant side (its own persona not in it)",
+    !String(record ?? '').includes(memberDid) && "the community's record (the member not in it)",
+  ].filter(Boolean);
+  if (empty.length) return { ok: false, detail: `source empty: ${empty.join(' and ')}` };
+  const leaks = [String(shown).includes(vetterDid) && 'the applicant side', String(record).includes(vetterDid) && "the community's record"].filter(Boolean);
+  return leaks.length
+    ? { ok: false, detail: `the vetter's DID appears in ${leaks.join(' and ')}` }
+    : { ok: true, detail: "the vetter's DID is in neither the applicant's screens and log nor the community's record (both read: each names the applicant)" };
+}

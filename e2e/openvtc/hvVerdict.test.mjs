@@ -100,3 +100,27 @@ test('appLevelLines reads Android\'s ReactNativeJS lines too (an empty read woul
   assert.equal(kept.split('\n').length, 1);
   assert.ok(kept.includes(`statement from ${v}`));
 });
+
+test('anonymityVerdict: an empty source fails as such, never passes as "absent"', async () => {
+  const { anonymityVerdict } = await import('./hvVerdict.js');
+  const vetterDid = 'did:webvh:QmVetterVetterVetter:dids.example:vetter';
+  const memberDid = 'did:webvh:QmZWDgXDWUxxkR3SHZWLzF:dids.example:quiz-pyramid';
+  const record = JSON.stringify({ did: memberDid });
+  const shown = '… vtiAgent: inbound …/submit/0.3#response (session did:webvh:QmZWDgXD…)';
+  assert.equal(anonymityVerdict({ vetterDid, memberDid, shown: '', record }).ok, false);
+  assert.match(anonymityVerdict({ vetterDid, memberDid, shown: '', record }).detail, /source empty: the applicant side/);
+  assert.match(anonymityVerdict({ vetterDid, memberDid, shown, record: '{}' }).detail, /source empty: the community's record/);
+  assert.equal(anonymityVerdict({ vetterDid, memberDid: undefined, shown, record }).ok, false);
+});
+
+test('anonymityVerdict: both sources read, the vetter absent passes; present fails', async () => {
+  const { anonymityVerdict } = await import('./hvVerdict.js');
+  const vetterDid = 'did:webvh:QmVetterVetterVetter:dids.example:vetter';
+  const memberDid = 'did:webvh:QmZWDgXDWUxxkR3SHZWLzF:dids.example:quiz-pyramid';
+  const record = JSON.stringify({ did: memberDid });
+  const shown = 'session did:webvh:QmZWDgXD… card filed';
+  assert.equal(anonymityVerdict({ vetterDid, memberDid, shown, record }).ok, true);
+  const leak = anonymityVerdict({ vetterDid, memberDid, shown: shown + ` [VTI] statement from ${vetterDid}`, record });
+  assert.equal(leak.ok, false);
+  assert.match(leak.detail, /appears in the applicant side/);
+});

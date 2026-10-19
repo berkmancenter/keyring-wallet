@@ -33,7 +33,7 @@ import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole 
 import { join } from '../lib/pages/join.js';
 import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
-import { appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
+import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -197,8 +197,10 @@ try {
   const shownToApplicant = appLevelLines(deviceLog(appDev, attestMs)) + withoutOwnRequestCard(await app.getPageSource().catch(() => ''));
   const req = newestRequestSince([...admin.joinRequests('approved'), ...admin.joinRequests('pending')], since);
   const record = JSON.stringify(req ?? {}) + JSON.stringify(member ?? {});
-  const leaks = [shownToApplicant.includes(vetterDid) && 'the applicant side', record.includes(vetterDid) && "the community's record"].filter(Boolean);
-  mark('hv-vetter-anonymous', vetterDid && !leaks.length ? 'PASS' : 'FAIL', !vetterDid ? 'no vetter DID given to check against' : leaks.length ? `the vetter's DID appears in ${leaks.join(' and ')}` : "the vetter's DID is in neither the applicant's screens and log nor the community's record");
+  // Each source must show it was read (the applicant side names the applicant, the record names the member) before an
+  // absent vetter DID counts: an empty page source or log read fails as "source empty" (review on #500).
+  const anon = anonymityVerdict({ vetterDid, memberDid: member?.did, shown: shownToApplicant, record });
+  mark('hv-vetter-anonymous', anon.ok ? 'PASS' : 'FAIL', anon.detail);
 } catch (e) {
   console.log(`❌ run-hv: ${String(e?.message || e).split('\n')[0]}`);
   await screenshot(app, 'hv-failure').catch(() => undefined);
