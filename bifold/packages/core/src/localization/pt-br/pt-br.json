@@ -2322,7 +2322,7 @@
       "notEnrolledDevice": "Este telefone ainda não está configurado com seu agente, então não pode entrar por você.",
       "noUvKey": "Este telefone ainda não tem uma chave de aprovação para seu agente. Tente novamente; nada foi conectado.",
       "uvCancelled": "A aprovação foi cancelada, então nada foi conectado.",
-      "uvKeyLost": "O bloqueio de tela do seu telefone mudou, então a chave de aprovação foi redefinida. Escaneie um novo código para tentar novamente.",
+      "uvKeyLost": "Não foi possível configurar de novo a aprovação de entradas depois que seu Face ID ou suas digitais mudaram. Tente entrar novamente.",
       "uvUnavailable": "Aprovar exige o bloqueio de tela do seu telefone (Face ID, digital ou senha). Nada foi conectado.",
       "grantReplayed": "Este login já foi usado. Atualize a página de login e escaneie o novo código.",
       "assertionMethodMissing": "Sua identidade nesta comunidade ainda não pode aprovar logins, então nada foi conectado.",

@@ -115,7 +115,7 @@ const LOGIN = 'login'
  *  - `notEnrolledDevice`: the agent does not know this phone as a registered device;
  *  - `noUvKey` / `uvRequired`: the agent has no Face ID approval key for this phone, or got no approval;
  *  - `uvCancelled`: the person cancelled the Face ID prompt; nothing was sent;
- *  - `uvKeyLost`: the approval key is gone (Face ID or fingerprints changed): set it up again;
+ *  - `uvKeyLost`: the approval key is gone (Face ID or fingerprints changed) and setting it up again failed too;
  *  - `uvUnavailable`: the phone could not use its approval key;
  *  - `grantReplayed`: the agent already signed this approval;
  *  - `assertionMethodMissing`: the persona's DID document cannot approve sign-ins;
@@ -166,7 +166,8 @@ export const SIGN_IN_FAILURE_MESSAGES: Record<SignInFailure, string> = {
   noUvKey: "This phone isn't set up to approve sign-ins with your agent yet.",
   uvRequired: 'Your agent needs your approval on this phone to sign in.',
   uvCancelled: "The sign-in wasn't approved.",
-  uvKeyLost: 'Your Face ID or fingerprints changed, so approving sign-ins must be set up again.',
+  uvKeyLost:
+    "Approving sign-ins couldn't be set up again after your Face ID or fingerprints changed. Try signing in again.",
   uvUnavailable: "This phone couldn't approve the sign-in.",
   grantReplayed: 'This approval was already used. Refresh the sign-in page and scan the new code.',
   assertionMethodMissing: "Your identity in this community can't approve sign-ins yet.",

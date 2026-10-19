@@ -2482,7 +2482,7 @@
       "notEnrolledDevice": "This phone isn't registered with your agent, so it can't sign in.",
       "noUvKey": "This phone isn't set up to approve sign-ins with your agent yet.",
       "uvCancelled": "The sign-in wasn't approved.",
-      "uvKeyLost": "Your Face ID or fingerprints changed, so approving sign-ins must be set up again.",
+      "uvKeyLost": "Approving sign-ins couldn't be set up again after your Face ID or fingerprints changed. Try signing in again.",
       "uvUnavailable": "This phone couldn't approve the sign-in.",
       "grantReplayed": "This approval was already used. Refresh the sign-in page and scan the new code.",
       "assertionMethodMissing": "Your identity in this community can't approve sign-ins yet.",
