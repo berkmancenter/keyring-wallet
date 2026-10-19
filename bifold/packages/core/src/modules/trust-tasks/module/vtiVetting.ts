@@ -51,6 +51,7 @@ import {
   type StatementShapeChoice,
 } from './dtgV1Writing'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
+import { DisclosureNotShown, disclosureShown } from './directoryDisclosure'
 import { disclosedUnder, recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
@@ -2668,8 +2669,15 @@ export class VtiApplicant {
     // The person chose to replace an open request sent without the vetting
     // (pending, under review): it is withdrawn first, then this one is sent.
     // A community takes no second request while one is open (IN-127, 10-06).
-    options: { replacePending?: boolean } = {}
+    // `disclosureSeen`: the digest of the directory statement the screen
+    // showed (manifest/0.4); see `vtiAgent.apply`.
+    options: { replacePending?: boolean; disclosureSeen?: string } = {}
   ): Promise<VtiVerdict> {
+    // Before anything else — a withdrawal, a challenge, a proof: a request
+    // under a directory statement the person was not shown is not made.
+    if (!disclosureShown(manifest, options.disclosureSeen)) {
+      throw new DisclosureNotShown(manifest.directoryDisclosure!.statementDigest)
+    }
     let application = await this.app()
     const communityDid = this.persona.communityDid
     if (options.replacePending && application.submission?.state === 'pending') {
@@ -2712,7 +2720,7 @@ export class VtiApplicant {
           code: 'keyring/hidden-vetting/submit:noApplication',
         })
       }
-      return this.submitPrivately(manifest, requirementsDigest, registryConsent)
+      return this.submitPrivately(manifest, requirementsDigest, registryConsent, options.disclosureSeen)
     }
 
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
@@ -2734,6 +2742,7 @@ export class VtiApplicant {
             credentials: statements,
             requirementsDigest,
             registryConsent,
+            disclosureSeen: options.disclosureSeen,
           })
         } else {
           if (reason === 'alreadyDecided') await this.recordSubmission({ ...open, state: 'decided' })
@@ -2746,6 +2755,7 @@ export class VtiApplicant {
           credentials: statements,
           requirementsDigest,
           registryConsent,
+          disclosureSeen: options.disclosureSeen,
         })
       } catch (e) {
         // The community already holds an open request from this applicant that
@@ -2828,7 +2838,8 @@ export class VtiApplicant {
   private async submitPrivately(
     manifest: VtiManifest,
     requirementsDigest?: string,
-    registryConsent?: boolean
+    registryConsent?: boolean,
+    disclosureSeen?: string
   ): Promise<VtiVerdict> {
     const communityDid = this.persona.communityDid
     const criterionId = manifest.criteria.find((c) => hiddenParametersOf(c) !== undefined)?.id
@@ -2853,6 +2864,7 @@ export class VtiApplicant {
       requirementsDigest,
       registryConsent,
       hiddenVetting: extensions.hiddenVetting,
+      disclosureSeen,
     })
     await this.recordSubmission({
       requestId: verdict.requestId,
@@ -2871,6 +2883,7 @@ export class VtiApplicant {
       requirementsDigest?: string
       registryConsent?: boolean
       hiddenVetting?: Record<string, unknown>
+      disclosureSeen?: string
     }
   ): Promise<VtiVerdict> {
     const communityDid = this.persona.communityDid

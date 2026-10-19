@@ -12,6 +12,7 @@
  * @module trust-tasks/module/vtiJoin
  */
 
+import { DisclosureNotShown, disclosureShown } from './directoryDisclosure'
 import type { Agent } from '@credo-ts/core'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -51,6 +52,12 @@ export interface VtiJoinDeps {
   communityDid: string
   /** Whether the person asked to be listed in the community's public member directory. */
   registryConsent?: boolean
+  /**
+   * The `statementDigest` of the directory statement the screen showed
+   * (manifest/0.4). Where the manifest carries one, the request is not sent
+   * unless it is this exact statement.
+   */
+  disclosureSeen?: string
   onStep?: (step: VtiJoinStep, detail?: string) => void
 }
 
@@ -119,6 +126,11 @@ export async function joinCommunity(
 
   step('manifest')
   const manifest = await vtiAgent.fetchManifest(deps.communityDid, deps.agent)
+  // Before anything is recorded as sent: a request under a directory
+  // statement the person was not shown is not sent at all.
+  if (!disclosureShown(manifest, deps.disclosureSeen)) {
+    throw new DisclosureNotShown(manifest.directoryDisclosure!.statementDigest)
+  }
 
   step('submitting', invitation ? 'with invitation' : 'empty')
   await recordSent(deps.communityStore, {
@@ -133,6 +145,7 @@ export async function joinCommunity(
     verdict = await vtiAgent.apply(deps.communityDid, manifest, {
       credentials: invitation ? [invitation.credential] : [],
       registryConsent: deps.registryConsent,
+      disclosureSeen: deps.disclosureSeen,
     })
   } catch (e) {
     await recordAnswer(deps.communityStore, deps.communityDid, { refusal: e }).catch(() => undefined)

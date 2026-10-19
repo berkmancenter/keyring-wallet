@@ -16,7 +16,7 @@
 import { VtiRefusal, VtiSentNoAnswer, isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent } from '../module/vtiAgent'
 import { criterionDigest, readManifest, type VtiCriterion, type VtiManifest } from '../module/joinManifest'
 import { parseJoinNeed } from '../module/joinSubmission'
-import { MalformedDisclosure } from '../module/directoryDisclosure'
+import { DisclosureNotShown, MalformedDisclosure } from '../module/directoryDisclosure'
 import { statement } from './fixtures/directoryStatement'
 
 import vtc049 from './fixtures/join-0.3/vtc-0.49.0-answers.json'
@@ -393,8 +393,20 @@ describe('manifest/0.4 and the directory statement (tf#823)', () => {
     const communityDid = nextCommunity()
     const asked = asking({ [`${SUBMIT}/0.3`]: [answer(`${SUBMIT}/0.3`, verdict('refer'))] })
     const manifest = readManifest({ ...payload03, directoryDisclosure: statement() }, '0.4')
-    await vtiAgent.apply(communityDid, manifest)
+    await vtiAgent.apply(communityDid, manifest, { disclosureSeen: statement().statementDigest })
     expect(typesOf(asked)).toEqual([`${SUBMIT}/0.3`])
+  })
+
+  it.each([
+    ['none was shown', undefined],
+    ['another statement was shown', 'zQmAnEarlierStatement'],
+  ])('sends no submit under a statement when %s', async (_, seen) => {
+    const communityDid = nextCommunity()
+    const asked = asking({})
+    const manifest = readManifest({ ...payload03, directoryDisclosure: statement() }, '0.4')
+    const failure = await vtiAgent.apply(communityDid, manifest, { disclosureSeen: seen }).catch((e) => e)
+    expect(failure).toBeInstanceOf(DisclosureNotShown)
+    expect(asked).toEqual([])
   })
 
   it('a statement that cannot be shown stops the read, and is not asked for again over DIDComm', async () => {

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "5d042503b893bf5afd646d810fc0ed9451a5287a",
+  "generatedFrom": "de0ef3c35e3a3f9ea10d163e508b0215dadb6937",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -386,6 +386,12 @@
     "DirectoryConsent": ["src/modules/trust-tasks/screens/DirectoryConsent.tsx"],
     "DirectoryConsentNote": ["src/modules/trust-tasks/screens/DirectoryConsent.tsx"],
     "DirectoryConsentSwitch": ["src/modules/trust-tasks/screens/DirectoryConsent.tsx"],
+    "DirectoryDisclosure": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
+    "DirectoryDisclosureDid": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
+    "DirectoryDisclosureExternal": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
+    "DirectoryDisclosureGroups": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
+    "DirectoryDisclosureNewCard": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
+    "DirectoryDisclosureNotes": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
     "Dismiss": [
       "src/components/modals/AppGuideModal.tsx",
       "src/components/modals/DismissiblePopupModal.tsx",
@@ -538,6 +544,7 @@
     "JoinCheckAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "JoinContinueVetting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinDirectoryUnreadable": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinDone": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinError": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinErrorCard": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
@@ -1100,6 +1107,7 @@
     "AutoLockTime": ["src/screens/Settings.tsx"],
     "DeleteProfile-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "DenyConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
+    "DirectoryDisclosureField_": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
     "Dismiss": ["src/components/listItems/NotificationListItem.tsx", "src/components/misc/InfoBox.tsx"],
     "JoinPrivateVettingRefused_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinPrivateVettingStart_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
@@ -1932,6 +1940,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.continueVetting"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.directoryUnreadable"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.done"

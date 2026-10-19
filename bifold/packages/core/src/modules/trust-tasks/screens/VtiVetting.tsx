@@ -84,6 +84,8 @@ import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
+import { DisclosureNotShown, disclosureShown } from '../module/directoryDisclosure'
 import { EligibilityNote } from './EligibilityNote'
 import { EnvelopeRefusalNote } from './EnvelopeRefusalNote'
 import { RefusalNote } from './RefusalNote'
@@ -1498,8 +1500,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // replace it, so it is withdrawn and this one sent (IN-127, 10-06).
   const sendApplication = (replace: boolean) =>
     run(replace ? 'replace' : 'apply', async () => {
+      // The directory statement on screen when Apply was pressed (manifest/0.4).
+      const shown = manifest?.directoryDisclosure?.statementDigest
       // Before the confirmation: nothing is asked for an application that is not sent.
       const m = await vettingManifest(application?.requirementsDigest)
+      // A statement the person has not seen yet (it arrived with this read)
+      // is shown now, and the request waits for them to send it again.
+      if (!disclosureShown(m, shown)) throw new DisclosureNotShown(m.directoryDisclosure!.statementDigest)
       if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
       // Ask about the grants now, not when the statements were
       // gathered: the community applies the status at intake,
@@ -1520,6 +1527,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         try {
           verdict = await applicantRef.current!.submit(m, statements, application?.requirementsDigest, listMe, {
             replacePending: replace,
+            disclosureSeen: shown,
           })
         } catch (e) {
           // Already applied (requestAlreadyOpen): not an error. The
@@ -1874,6 +1882,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   </Text>
                 ) : null}
                 {/* Asked with a fresh application; a supplement keeps the consent given when it was sent. */}
+                {/* What its directory would show, before the request goes (manifest/0.4). */}
+                {checklist?.meets && manifest?.directoryDisclosure ? (
+                  <DirectoryDisclosureCard
+                    disclosure={manifest.directoryDisclosure}
+                    community={communityLabelOf(communityDid ?? '', t)}
+                  />
+                ) : null}
                 {checklist?.meets && application?.submission?.state !== 'deferred' ? (
                   <DirectoryConsent communityDid={communityDid} value={listMe} onChange={setListMe} disabled={!!busy} />
                 ) : null}

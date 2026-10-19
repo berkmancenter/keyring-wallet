@@ -1998,6 +1998,61 @@
     "ReplaceRequest": "Substituir minha solicitação",
     "AddWhatTheyAsked": "Adicionar o que pediram"
   },
+  "Directory": {
+    "Title": "O que o diretório de membros de {{community}} mostraria",
+    "AtMost": "Cada linha é o máximo que pode ser mostrado. Depois de entrar, você sempre pode mostrar menos.",
+    "Field": "Preenchido por {{who}}. Um novo cartão mostra para {{shown}}; no máximo para {{most}}.",
+    "Searchable": "Os membros podem encontrar você por este campo em uma busca.",
+    "NewCard": "Um novo cartão fica {{listing}} e {{search}}.",
+    "Introductions": "Ele aceita apresentações de {{from}}.",
+    "Identifier": "O identificador com que você entra pode alcançar no máximo {{most}}. Um novo cartão mostra só para os administradores.",
+    "NotesKept": "Os administradores fazem anotações sobre os membros. As anotações nunca chegam a outros membros, e você pode pedir as anotações sobre você.",
+    "NotesNone": "Os administradores não fazem anotações sobre os membros.",
+    "Groups": "{{community}} tem grupos. Uma credencial de participação em grupo vale por {{validity}} e é renovada enquanto você estiver no grupo; uma já emitida continua válida até expirar, mesmo depois que você sair.",
+    "ExternalAllowed": "Você pode escolher publicar um cartão fora da comunidade. Isso fica desligado em um novo cartão.",
+    "ExternalNone": "Os cartões não são publicados fora da comunidade.",
+    "Audience": {
+      "admins": "só os administradores",
+      "groups": "as pessoas dos seus grupos",
+      "connections": "as suas conexões",
+      "members": "todos os membros de {{community}}",
+      "public": "qualquer pessoa, inclusive fora da comunidade"
+    },
+    "Source": {
+      "member": "você",
+      "admin": "os administradores da comunidade (você pode ler, não alterar)",
+      "credential": "uma credencial sua",
+      "derived": "a comunidade, a partir de outras informações"
+    },
+    "Listing": {
+      "listed": "listado no diretório",
+      "findable": "fora da lista mas encontrável",
+      "hidden": "oculto do diretório"
+    },
+    "Search": {
+      "byName": "pode ser encontrado pelo nome",
+      "exactNickname": "só pode ser encontrado pelo apelido exato",
+      "off": "não pode ser encontrado por busca"
+    },
+    "IntroductionsFrom": {
+      "anyone": "qualquer pessoa",
+      "groups": "pessoas dos seus grupos",
+      "connections": "suas conexões",
+      "off": "ninguém"
+    },
+    "Duration": {
+      "weeks_one": "1 semana",
+      "weeks_other": "{{count}} semanas",
+      "days_one": "1 dia",
+      "days_other": "{{count}} dias",
+      "hours_one": "1 hora",
+      "hours_other": "{{count}} horas",
+      "minutes_one": "1 minuto",
+      "minutes_other": "{{count}} minutos",
+      "seconds_one": "1 segundo",
+      "seconds_other": "{{count}} segundos"
+    }
+  },
   "Errors": {
     "AlreadyAsked": "Você já pediu para entrar. A comunidade ainda está decidindo, ou aguardando sua verificação.",
     "JoinChanged": "Esta comunidade mudou o que pede. Leia de novo e continue.",
@@ -2013,6 +2068,8 @@
     "NoDidHost": "Seu agente não tem onde publicar uma nova identidade. Peça ao administrador dele para registrar um host de DID, depois tente de novo.",
     "Unreachable": "Nada respondeu nesse endereço. Verifique sua conexão e tente de novo.",
     "Unknown": "Não funcionou, e o aplicativo não sabe por quê. Tente de novo; se continuar, envie os detalhes abaixo.",
+    "DirectoryUnreadable": "Não foi possível ler os termos do diretório desta comunidade, então o Keyring não vai enviar seu pedido. Tente mais tarde ou fale com a comunidade.",
+    "DirectoryNotShown": "O Keyring ainda não mostrou os termos atuais do diretório desta comunidade. Leia-os e envie seu pedido de novo.",
     "AgentBusy": "Seu agente está ocupado agora. Espere um minuto e tente de novo.",
     "ShowDetails": "Detalhes"
   },

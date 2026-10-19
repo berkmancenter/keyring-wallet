@@ -63,7 +63,7 @@ import { releaseWarn } from './releaseLog'
 import { readManifest, type VtiManifest } from './joinManifest'
 import { classifyCredential } from './vtiInbox'
 import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
-import { MalformedDisclosure } from './directoryDisclosure'
+import { DisclosureNotShown, MalformedDisclosure, disclosureShown } from './directoryDisclosure'
 import {
   JOIN_MANIFEST_TYPES,
   joinTaskType,
@@ -1726,6 +1726,12 @@ class VtiAgentController {
       requirementsDigest?: string
       registryConsent?: boolean
       /**
+       * The `statementDigest` of the directory statement the person was shown
+       * (manifest/0.4). Where the manifest carries one, nothing is sent
+       * unless it is this exact statement (`DisclosureNotShown`).
+       */
+      disclosureSeen?: string
+      /**
        * A hidden-vetting submission: the `vta/pcs/prove` answer, sent verbatim
        * as `extensions.hiddenVetting`. The presentation then carries **no**
        * vetting statements — the community counts the proof instead of named
@@ -1739,6 +1745,11 @@ class VtiAgentController {
     let current = manifest
     const refused: JoinWire[] = []
     for (;;) {
+      // Never under a statement the person was not shown, including one read
+      // again below after a version refusal.
+      if (!disclosureShown(current, options.disclosureSeen)) {
+        throw new DisclosureNotShown(current.directoryDisclosure!.statementDigest)
+      }
       const wire = current.wire ?? '0.2'
       const type = joinTaskType('submit', wire)
       // Which criterion the submission is made under. An application gathered

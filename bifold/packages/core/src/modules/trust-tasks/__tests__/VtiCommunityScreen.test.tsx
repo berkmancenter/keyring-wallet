@@ -21,6 +21,9 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import VtiCommunity from '../screens/VtiCommunity'
 import { registerHiddenVetter, type HiddenVetterSeam } from '../screens/hiddenVetterSeam'
 
+import { readDirectoryDisclosure } from '../module/directoryDisclosure'
+import { statement } from './fixtures/directoryStatement'
+
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/vtiAgent', () => ({
   vtiAgent: { fetchManifest: jest.fn(async () => ({ criteria: [] })) },
@@ -193,6 +196,40 @@ describe('leaving a community (220)', () => {
 })
 
 /** A member is not asked to apply (the journey-state audit, E). */
+describe('the community screen, before joining: its directory statement (manifest/0.4)', () => {
+  beforeEach(() => communityTarget.clear())
+  afterEach(() => {
+    mockJourney = undefined
+  })
+  const mocked = () =>
+    (jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }).vtiAgent.fetchManifest
+
+  it('shows what its member directory would show, to someone not yet a member', async () => {
+    mocked().mockResolvedValueOnce({ criteria: [], directoryDisclosure: readDirectoryDisclosure(statement()) })
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('DirectoryDisclosure'))).toBeTruthy()
+  })
+
+  it('says nothing about a directory when the community carries no statement', async () => {
+    mocked().mockResolvedValueOnce({ criteria: [] })
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('DirectoryDisclosure'))).toBeNull()
+  })
+
+  it('does not show it to a member', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership: { communityDid, role: 'member', grantedAt: '2026-09-23T20:04:44Z' } },
+      vetterGrant: { state: 'none' },
+    }
+    mocked().mockResolvedValueOnce({ criteria: [], directoryDisclosure: readDirectoryDisclosure(statement()) })
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('DirectoryDisclosure'))).toBeNull()
+  })
+})
+
 describe('the community screen, for a member', () => {
   const membership = { communityDid, role: 'member', grantedAt: '2026-09-23T20:04:44Z' }
   beforeEach(() => communityTarget.clear())

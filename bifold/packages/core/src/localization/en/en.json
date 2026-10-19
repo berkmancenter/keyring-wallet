@@ -2158,6 +2158,61 @@
     "ReplaceRequest": "Replace my request",
     "AddWhatTheyAsked": "Add what they asked for"
   },
+  "Directory": {
+    "Title": "What {{community}}'s member directory would show",
+    "AtMost": "Each line is the most that can ever be shown. After joining you can always show less.",
+    "Field": "Written by {{who}}. A new card shows it to {{shown}}; at most {{most}}.",
+    "Searchable": "Members can find you by it in a search.",
+    "NewCard": "A new card is {{listing}} and {{search}}.",
+    "Introductions": "It accepts introductions from {{from}}.",
+    "Identifier": "The identifier you join with can reach at most {{most}}. A new card shows it only to administrators.",
+    "NotesKept": "Administrators keep notes about members. Notes never reach other members, and you can ask for the notes about you.",
+    "NotesNone": "Administrators keep no notes about members.",
+    "Groups": "{{community}} has groups. A group membership credential is valid for {{validity}} and renewed while you stay in the group; one already issued stays valid until it expires, even after you leave.",
+    "ExternalAllowed": "You may choose to publish a card outside the community. It's off on a new card.",
+    "ExternalNone": "Cards are not published outside the community.",
+    "Audience": {
+      "admins": "administrators only",
+      "groups": "people in your groups",
+      "connections": "your connections",
+      "members": "all members of {{community}}",
+      "public": "anyone, outside the community too"
+    },
+    "Source": {
+      "member": "you",
+      "admin": "the community's administrators (you can read it, not change it)",
+      "credential": "a credential you hold",
+      "derived": "the community, from other information"
+    },
+    "Listing": {
+      "listed": "listed in the directory",
+      "findable": "not listed but findable",
+      "hidden": "hidden from the directory"
+    },
+    "Search": {
+      "byName": "can be found by name",
+      "exactNickname": "can be found only by its exact nickname",
+      "off": "cannot be found by search"
+    },
+    "IntroductionsFrom": {
+      "anyone": "anyone",
+      "groups": "people in your groups",
+      "connections": "your connections",
+      "off": "nobody"
+    },
+    "Duration": {
+      "weeks_one": "1 week",
+      "weeks_other": "{{count}} weeks",
+      "days_one": "1 day",
+      "days_other": "{{count}} days",
+      "hours_one": "1 hour",
+      "hours_other": "{{count}} hours",
+      "minutes_one": "1 minute",
+      "minutes_other": "{{count}} minutes",
+      "seconds_one": "1 second",
+      "seconds_other": "{{count}} seconds"
+    }
+  },
   "Errors": {
     "AlreadyAsked": "You already asked to join. The community is still deciding, or waiting for your vetting.",
     "JoinChanged": "This community changed what it asks. Read it again, then continue.",
@@ -2173,6 +2228,8 @@
     "NoDidHost": "Your agent has nowhere to publish a new identity. Ask its admin to register a DID host with it, then try again.",
     "Unreachable": "Nothing answered at that address. Check your connection, then try again.",
     "Unknown": "That didn't work, and the app doesn't know why. Try again; if it keeps happening, send us the details below.",
+    "DirectoryUnreadable": "This community's directory terms could not be read, so Keyring won't send your request. Try again later, or ask the community.",
+    "DirectoryNotShown": "Keyring hasn't shown you this community's current directory terms yet. Read them, then send your request again.",
     "AgentBusy": "Your agent is busy right now. Wait a minute and try again.",
     "ShowDetails": "Details"
   },

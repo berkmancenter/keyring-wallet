@@ -43,6 +43,7 @@ import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { claimWords, joinNeedWords } from './claimWords'
 import { DidDetails } from './DidDetails'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { readJoinHolds } from './joinHolds'
 import { joinCard, VETTING_NOT_SUPPORTED_KEY } from './joinWays'
@@ -168,6 +169,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [holds, setHolds] = useState<JoinHolds>({})
   // The community answers no join version this app speaks.
   const [unsupported, setUnsupported] = useState<string>()
+  // The community's directory statement could not be read: the join stops (manifest/0.4).
+  const [termsUnreadable, setTermsUnreadable] = useState<string>()
   // A request was refused because the community changed what it asks meanwhile.
   const [changed, setChanged] = useState(false)
   const [reread, setReread] = useState(0)
@@ -205,6 +208,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setAsks(undefined)
     setManifest(undefined)
     setUnsupported(undefined)
+    setTermsUnreadable(undefined)
     // No session needed: a community answers the join manifest over REST, which
     // is how an applicant reads what is asked of them before any channel
     // exists. Guarding this on `connected` is why a community's published name
@@ -225,6 +229,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         if (!live) return
         // Reached, but it speaks no join version this app does: not "unreachable".
         if (isUnsupportedJoinVersion(e)) setUnsupported(communityDid)
+        // Reached, but its directory statement cannot be shown: nothing is offered.
+        else if ((e as { code?: string })?.code === 'keyring/join/disclosureMalformed') setTermsUnreadable(communityDid)
         else setUnreachable(communityDid)
       })
       .finally(() => live && setNameRead(communityDid))
@@ -355,6 +361,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             vtaDid,
             mediatorDid: config?.mediatorDid,
             communityDid,
+            disclosureSeen: manifest?.directoryDisclosure?.statementDigest,
           },
           undefined,
           { freshPersona: again }
@@ -398,7 +405,19 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again, plainRequest, config?.mediatorDid])
+  }, [
+    agent,
+    vtaDid,
+    communityDid,
+    name,
+    navigation,
+    t,
+    joinAs.selected,
+    again,
+    plainRequest,
+    config?.mediatorDid,
+    manifest?.directoryDisclosure?.statementDigest,
+  ])
 
   if (!vtaDid) {
     return (
@@ -590,6 +609,19 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {waysTitle}
             <View style={styles.card} testID={testIdWithKey(VtiJoinIds.versionUnsupported)}>
               <ThemedText>{t('Join.Ways.VersionUnsupported', named)}</ThemedText>
+            </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // Its directory statement cannot be shown, so nobody applies without seeing it.
+      if (communityDid && termsUnreadable === communityDid) {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.directoryUnreadable)}>
+              <ThemedText>{t('Errors.DirectoryUnreadable')}</ThemedText>
             </View>
           </>
         )
@@ -879,6 +911,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               onCreate={joinAs.createProfile}
             />
           </View>
+          {/* What its directory would show, before the request goes (manifest/0.4). */}
+          {manifest?.directoryDisclosure ? (
+            <DirectoryDisclosureCard disclosure={manifest.directoryDisclosure} community={name} />
+          ) : null}
         </>
       )
       actions = (

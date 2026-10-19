@@ -40,6 +40,7 @@ import { useCommunityCalled } from './useCommunity'
 import { localDate } from './localTime'
 import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
 import { PrivateVettingBadge } from './PrivateVettingBadge'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
 import { VtiCommunityIds } from './VtiCommunity.ids'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
@@ -301,6 +302,13 @@ const VtiCommunity: React.FC = () => {
               </View>
             ))}
           </View>
+        ) : null}
+        {/* What its directory would show about a member, read before deciding to apply (manifest/0.4). */}
+        {manifest?.directoryDisclosure && !membership ? (
+          <DirectoryDisclosureCard
+            disclosure={manifest.directoryDisclosure}
+            community={called.name ?? communityLabelOf(communityDid, t)}
+          />
         ) : null}
 
         {error ? (
