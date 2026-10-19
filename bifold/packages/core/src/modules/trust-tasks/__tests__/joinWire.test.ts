@@ -7,7 +7,16 @@
  * `details.servedVersions`. The submit payloads are checked against the
  * published 0.3 schema's own member list (dtgwg-trust-tasks-tf e675cc1b).
  */
-import { JOIN_MANIFEST_TYPES, joinTaskType, submitPayload, wireAfterRefusal, wiresToTry } from '../module/joinWire'
+import {
+  JOIN_MANIFEST_TYPES,
+  criteriaWireOf,
+  joinTaskType,
+  manifestTaskType,
+  manifestWireAfterRefusal,
+  manifestWiresToTry,
+  submitPayload,
+  wireAfterRefusal,
+} from '../module/joinWire'
 
 import submitSchema from './fixtures/join-0.3/submit-payload.schema.json'
 
@@ -19,12 +28,41 @@ describe('the task types', () => {
   it('names each task at each version', () => {
     expect(joinTaskType('manifest', '0.3')).toBe(`${MANIFEST}/0.3`)
     expect(joinTaskType('submit', '0.2')).toBe(`${SUBMIT}/0.2`)
-    expect(JOIN_MANIFEST_TYPES).toEqual([`${MANIFEST}/0.3`, `${MANIFEST}/0.2`])
+    expect(manifestTaskType('0.4')).toBe(`${MANIFEST}/0.4`)
+    expect(JOIN_MANIFEST_TYPES).toEqual([`${MANIFEST}/0.4`, `${MANIFEST}/0.3`, `${MANIFEST}/0.2`])
   })
 
-  it('asks the newest version first, and the one a community last answered before any other', () => {
-    expect(wiresToTry()).toEqual(['0.3', '0.2'])
-    expect(wiresToTry('0.2')).toEqual(['0.2', '0.3'])
+  it('a manifest read at 0.4 answers to 0.3’s criteria and submit: there is no submit/0.4', () => {
+    expect(criteriaWireOf('0.4')).toBe('0.3')
+    expect(criteriaWireOf('0.3')).toBe('0.3')
+    expect(criteriaWireOf('0.2')).toBe('0.2')
+  })
+
+  it('asks for the manifest newest first; after a refused submit, in the version the submit will go at', () => {
+    expect(manifestWiresToTry()).toEqual(['0.4', '0.3', '0.2'])
+    expect(manifestWiresToTry('0.3')).toEqual(['0.4', '0.3', '0.2'])
+    expect(manifestWiresToTry('0.2')).toEqual(['0.2', '0.4', '0.3'])
+  })
+})
+
+describe('the manifest version to ask in after a refusal', () => {
+  it('asks 0.3 when a community that predates 0.4 refuses it as an unknown type (tf#823)', () => {
+    expect(manifestWireAfterRefusal({ code: 'unsupportedType' }, ['0.4'])).toBe('0.3')
+  })
+
+  it('goes straight to what the refusal names as served', () => {
+    const named = (versions: string[]) => ({
+      code: 'unsupportedVersion',
+      details: { servedVersions: versions.map((v) => `${MANIFEST}/${v}`) },
+    })
+    expect(manifestWireAfterRefusal(named(['0.3']), ['0.4'])).toBe('0.3')
+    expect(manifestWireAfterRefusal(named(['0.1', '0.2']), ['0.4'])).toBe('0.2')
+    expect(manifestWireAfterRefusal(named(['0.5']), ['0.4'])).toBeUndefined()
+  })
+
+  it('is not a reason to ask again for any other refusal', () => {
+    expect(manifestWireAfterRefusal({ code: 'malformedRequest' }, ['0.4'])).toBeUndefined()
+    expect(manifestWireAfterRefusal(undefined, ['0.4'])).toBeUndefined()
   })
 })
 

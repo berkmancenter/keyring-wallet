@@ -14,12 +14,25 @@
  * again in the version it names is not a second request. Silence is no such
  * proof, and is never answered with a resend (see `ask`).
  *
+ * The manifest has one version more than submit. manifest/0.4 is 0.3 plus an
+ * optional `directoryDisclosure` (tf#823): the same criteria, answered by the
+ * same submit/0.3. So the manifest is asked at its own versions
+ * (`MANIFEST_WIRES`), newest first, and the version it was read at maps to the
+ * criteria-and-submit version (`JoinWire`) through `criteriaWireOf`.
+ *
  * @module trust-tasks/module/joinWire
  */
 
-/** The versions of the join manifest and submit this wallet speaks, newest first. */
+/** The versions of the join criteria and submit this wallet speaks, newest first. */
 export const JOIN_WIRES = ['0.3', '0.2'] as const
 export type JoinWire = (typeof JOIN_WIRES)[number]
+
+/** The versions of the join manifest this wallet asks for, newest first. */
+export const MANIFEST_WIRES = ['0.4', '0.3', '0.2'] as const
+export type ManifestWire = (typeof MANIFEST_WIRES)[number]
+
+/** The criteria-and-submit version a manifest read at `wire` answers to: 0.4's criteria are 0.3's. */
+export const criteriaWireOf = (wire: ManifestWire): JoinWire => (wire === '0.4' ? '0.3' : wire)
 
 const FAMILY = {
   manifest: 'https://trusttasks.org/spec/vtc/join-requests/manifest',
@@ -30,12 +43,56 @@ export type JoinTask = keyof typeof FAMILY
 /** The Trust Task `type` of a join task at a version. */
 export const joinTaskType = (task: JoinTask, wire: JoinWire): string => `${FAMILY[task]}/${wire}`
 
-/** Every manifest `type` this wallet may send: each is a read. */
-export const JOIN_MANIFEST_TYPES: readonly string[] = JOIN_WIRES.map((wire) => joinTaskType('manifest', wire))
+/** The Trust Task `type` of the join manifest at one of its versions. */
+export const manifestTaskType = (wire: ManifestWire): string => `${FAMILY.manifest}/${wire}`
 
-/** The order to try versions in: the one this community last answered first, then the rest, newest first. */
-export function wiresToTry(remembered?: JoinWire): JoinWire[] {
-  return remembered ? [remembered, ...JOIN_WIRES.filter((w) => w !== remembered)] : [...JOIN_WIRES]
+/** Every manifest `type` this wallet may send: each is a read. */
+export const JOIN_MANIFEST_TYPES: readonly string[] = MANIFEST_WIRES.map(manifestTaskType)
+
+/**
+ * The order to ask for the manifest in: newest first, every time, so a
+ * community that has moved up is read at its newest the next time it is
+ * asked. `prefer`, a criteria-and-submit version, puts the manifest versions
+ * answering to it first: after a submit refused as unsupported, the criteria
+ * are read again in the version the submit will be sent at.
+ */
+export function manifestWiresToTry(prefer?: JoinWire): ManifestWire[] {
+  if (!prefer) return [...MANIFEST_WIRES]
+  const first = MANIFEST_WIRES.filter((w) => criteriaWireOf(w) === prefer)
+  return [...first, ...MANIFEST_WIRES.filter((w) => !first.includes(w))]
+}
+
+/** The version a refusal leaves to ask in, from `versions` (newest first), given those already `tried`. */
+function versionAfterRefusal<W extends string>(
+  refusal: { code?: unknown; details?: unknown } | undefined,
+  family: string,
+  versions: readonly W[],
+  tried: readonly W[]
+): W | undefined {
+  const code = String(refusal?.code ?? '')
+    .split(':')
+    .pop()
+  if (code !== 'unsupportedVersion' && code !== 'unsupportedType') return undefined
+  const left = versions.filter((w) => !tried.includes(w))
+  const served = (refusal?.details as { servedVersions?: unknown } | undefined)?.servedVersions
+  if (Array.isArray(served)) {
+    const named = served
+      .filter((uri): uri is string => typeof uri === 'string' && uri.startsWith(`${family}/`))
+      .map((uri) => uri.slice(family.length + 1))
+    // It names what it serves for this task: only those are worth asking, and
+    // when this wallet speaks none of them there is nothing left to ask.
+    if (named.length) return left.find((w) => named.includes(w))
+  }
+  return left[0]
+}
+
+/** The manifest version to ask in next after a refusal; undefined when none is left (see `wireAfterRefusal`). */
+export function manifestWireAfterRefusal(
+  refusal: { code?: unknown; details?: unknown } | undefined,
+  tried: readonly ManifestWire[],
+  versions: readonly ManifestWire[] = MANIFEST_WIRES
+): ManifestWire | undefined {
+  return versionAfterRefusal(refusal, FAMILY.manifest, versions, tried)
 }
 
 /**
@@ -53,21 +110,7 @@ export function wireAfterRefusal(
   task: JoinTask,
   tried: readonly JoinWire[]
 ): JoinWire | undefined {
-  const code = String(refusal?.code ?? '')
-    .split(':')
-    .pop()
-  if (code !== 'unsupportedVersion' && code !== 'unsupportedType') return undefined
-  const left = JOIN_WIRES.filter((w) => !tried.includes(w))
-  const served = (refusal?.details as { servedVersions?: unknown } | undefined)?.servedVersions
-  if (Array.isArray(served)) {
-    const versions = served
-      .filter((uri): uri is string => typeof uri === 'string' && uri.startsWith(`${FAMILY[task]}/`))
-      .map((uri) => uri.slice(FAMILY[task].length + 1))
-    // It names what it serves for this task: only those are worth asking, and
-    // when this wallet speaks none of them there is nothing left to ask.
-    if (versions.length) return left.find((w) => versions.includes(w))
-  }
-  return left[0]
+  return versionAfterRefusal(refusal, FAMILY[task], JOIN_WIRES, tried)
 }
 
 /**

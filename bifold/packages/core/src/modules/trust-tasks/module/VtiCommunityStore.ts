@@ -59,6 +59,8 @@ export interface VtiMembership {
    * nothing in the credential itself says how it was decided.
    */
   privateVetting?: boolean
+  /** The directory statement the person applied under (manifest/0.4), from the submission that earned this. */
+  directoryStatementDigest?: string
   /**
    * The community removed this member, as its signed removal notice says
    * (vtc/members/removal-notice/0.1, `vtiCommunityNotices`). Kept with the
@@ -121,6 +123,12 @@ export interface JoinSubmission {
    * credential does not say how the community decided.
    */
   privateVetting?: boolean
+  /**
+   * The `statementDigest` of the directory statement the person was shown
+   * before this request (manifest/0.4), so a later statement can be told
+   * apart from the one they applied under. Absent: none was shown.
+   */
+  directoryStatementDigest?: string
   /** The request's state as the community last stated it. */
   status?: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn'
   /** What the community still needs, verbatim, while `deferred`. */
