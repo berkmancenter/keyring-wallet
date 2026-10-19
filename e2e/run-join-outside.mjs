@@ -39,10 +39,14 @@ try {
   const ways = Boolean(await scrollToTestId(d, "JoinWays", 6, { from: 0.5 }).catch(() => undefined)) || (await existsTestId(d, "JoinWays", 30000));
   await sleep(2000);
   let src = await d.getPageSource();
+  // Read before any scroll, too: a badge the scroll below moves out of the hierarchy must not turn the IN-264 row red.
+  const firstSrc = src;
   const pos = (re) => {
     const m = src.match(new RegExp(`<[^>]*(?:text|content-desc)="[^"]*${re}[^"]*"[^>]*bounds="\\[\\d+,(\\d+)\\]`, "i"));
     return m ? Number(m[1]) : undefined;
   };
+  // "Meet a vetter" is the way's start button only beside "Ask to join" (bifold JoinWaysCard: otherwise Join.Start), so a
+  // card without an ask-to-join way names it differently and this read is not that row's question.
   let meet = pos("Meet a vetter");
   if (meet === undefined) {
     // Further down the card: scroll once and look again (still no tap on Join).
@@ -52,13 +56,15 @@ try {
   }
   // The vetter's way in, as 239 words it (the request's "One vetter must confirm who you are" was a paraphrase).
   // On a way badged Private (263+) the card words it as private vetting instead.
-  const heading = pos("A statement from one of its vetters") ?? pos("This way uses private vetting");
+  // The colon keeps the refusal copy for a suite this build cannot carry (CannotUsePrivateVetting) from matching.
+  const heading = pos("A statement from one of its vetters") ?? pos("This way uses private vetting:");
   const toggle = (src.match(/resource-id="com\.ariesbifold:id\/JoinWaysOthersToggle"[^>]*bounds="\[\d+,(\d+)\]/) || [])[1];
   const toggleY = toggle === undefined ? undefined : Number(toggle);
   await screenshot(d, "outside-join-meet-vetter").catch(() => undefined);
   const notSupportedShown = await existsTestId(d, "JoinWaysVettingNotSupported", 3000);
   // The hidden way badged Private: this build carries hidden vetting, so it offers the vetter's way instead of refusing.
-  const privateWay = (src.match(/resource-id="com\.ariesbifold:id\/JoinWayPrivate_([^"]+?)"/) || [])[1];
+  const privateOf = (x) => (x.match(/resource-id="com\.ariesbifold:id\/JoinWayPrivate_([^"]+?)"/) || [])[1];
+  const privateWay = privateOf(firstSrc) ?? privateOf(src);
   await rows.row(
     "outside-join-vetting-not-supported",
     () => ({

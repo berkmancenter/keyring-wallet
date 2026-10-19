@@ -44,6 +44,7 @@ adb -s $E logcat -G 16M >/dev/null 2>&1
 # secret", second run 1019-1354: the link's agent creation stopped on it), not only at a sign-in's Approve. A person
 # touches the sensor each time; this answers every system biometric prompt for the whole leg with fingerprint 1, and
 # logs each touch (biometric.log). The sign-in's own proof of a biometric approval is the redeem's amr ("uv").
+SEEN=0   # handleAuthenticate lines already classified: a prompt is read only by a line new since the last one
 ( while :; do
     if adb -s $E shell dumpsys window windows 2>/dev/null | grep -qE 'BiometricPrompt|AuthContainer|biometric_scrollview'; then
       # The prompt's window exists before it has animated in, and a touch then is dropped: "Keyring couldn't confirm
@@ -55,7 +56,10 @@ adb -s $E logcat -G 16M >/dev/null 2>&1
       # screen (1019-1514), so it is classified from BiometricService's own line for it: CredentialRequested true is a
       # prompt that offers "Use PIN" (the owner confirm), false is biometric-only (the UV key).
       ts=$(date -u +%H%M%S)
-      h=$(adb -s $E logcat -d -s BiometricService:D 2>/dev/null | grep 'handleAuthenticate' | tail -1)
+      # Only a line new since the last prompt: the log is kept from boot, so its last line may be the previous prompt's
+      # (review on #512). No new line yet: unclassified, and the PIN is not tapped blind.
+      all=$(adb -s $E logcat -d -s BiometricService:D 2>/dev/null | grep 'handleAuthenticate'); n=$(printf '%s\n' "$all" | grep -c 'handleAuthenticate')
+      if [ "$n" -gt "$SEEN" ]; then h=$(printf '%s\n' "$all" | tail -1); SEEN=$n; else h=; fi
       case "$h" in *"CredentialRequested: true"*) kind="offers Use PIN";; *"CredentialRequested: false"*) kind="biometric only (no Use PIN)";; *) kind="unclassified";; esac
       title=$(echo "$h" | grep -oE 'StrengthRequested: [0-9]+' | head -1); b=   # "Use PIN" sits at [32,2179][263,2305] on this AVD
       if [ "${SIGNIN_UV:-pin}" = pin ] && [ "$kind" = "offers Use PIN" ]; then
