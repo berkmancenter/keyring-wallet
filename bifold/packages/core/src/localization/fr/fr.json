@@ -2320,6 +2320,8 @@
     "No": "Non",
     "NotReported": "Non indiqué",
     "SessionOnly": "Cela connecte ce navigateur pour cette session seulement.",
+    "SigningScope": "Cela permet aussi à ce navigateur d'agir en votre nom, pour cette session, dans : {{areas}}.",
+    "ScopeDirectory": "l'annuaire des membres (le consulter, et modifier votre propre fiche)",
     "Approve": "Approuver",
     "Decline": "Refuser",
     "Approving": "Approbation…",

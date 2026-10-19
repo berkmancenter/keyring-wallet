@@ -2229,6 +2229,8 @@
     "No": "Não",
     "NotReported": "Não informado",
     "SessionOnly": "Isso conecta aquele navegador apenas nesta sessão.",
+    "SigningScope": "Isso também permite que aquele navegador aja como você, nesta sessão, em: {{areas}}.",
+    "ScopeDirectory": "o diretório de membros (consultá-lo e editar o seu próprio cartão)",
     "Approve": "Aprovar",
     "Decline": "Recusar",
     "Approving": "Aprovando…",

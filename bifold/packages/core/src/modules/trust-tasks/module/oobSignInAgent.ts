@@ -37,10 +37,13 @@ import {
   SignInError,
   agentDidResolver,
   httpsPost,
+  isUnsupportedTaskCode,
   oobEnvelope,
   sendToCommunity,
+  signingScopeProblem,
   signWithSigner,
   type ClaimedSignIn,
+  type OobVersion,
   type SignInDeps,
   type SignInDidDocument,
   type SignInFailure,
@@ -120,6 +123,13 @@ export type ProvedSignIn = {
   /** Who the community identified: the persona. */
   identifiedAs: string
   persona: SignInPersona
+  /** The `prove` / `grant` / `respond` version the community took: 0.2, or 0.1 from a community before it. */
+  version: OobVersion
+  /**
+   * 0.2: the task families the community offers to let the browser's key sign as the member, for the session
+   * (step 2's `signingScope`, checked). The grant copies it unchanged; the approval screen says it in words.
+   */
+  signingScope?: string[]
 }
 
 const nowSeconds = (deps: { now?: () => number }) => deps.now?.() ?? Math.floor(Date.now() / 1000)
@@ -169,6 +179,8 @@ const AGENT_REFUSALS: Record<string, SignInFailure> = {
   oobNoUvKey: 'noUvKey',
   oobGrantReplayed: 'grantReplayed',
   oobAssertionMethodMissing: 'assertionMethodMissing',
+  // An agent from before auth/oob/grant/0.2 (VTI #2190): approveSignIn grants at 0.1 instead when it can.
+  oobUnsupportedType: 'agentNeedsUpdate',
   // The entry is gone (vault.rs:1794).
   notFound: 'noVaultEntry',
   // An agent from before sign-in signing (VTI #1997): it serves only
@@ -299,14 +311,16 @@ async function step2Problem(
   }
   if (payload.identifiedAs !== expected.persona) return 'step 2 identified someone else'
   if (!isObject(payload.requester)) return 'step 2 does not describe the requester'
+  if (payload.signingScope !== undefined) return signingScopeProblem(payload.signingScope)
   return undefined
 }
 
 /**
  * Tell the community who is signing in, with the number the person typed:
  * the member's VTA signs `auth/oob/identify/0.1` as the persona, the phone
- * sends it in `auth/oob/prove/0.1` under K_a, and the community's step-2
- * reply is checked before anything of it is shown.
+ * sends it in `auth/oob/prove/0.2` under K_a (0.1 to a community before 0.2,
+ * which refuses 0.2 as a type or version it does not serve), and the
+ * community's step-2 reply is checked before anything of it is shown.
  *
  * A typed value that is not two digits is refused before anything is sent
  * (`badNumber`); a number the community says is wrong ends the request
@@ -331,8 +345,26 @@ export async function identifyAndProve(
   )
   const identify = await signedByAgent(deps, persona, unsignedIdentify, 'authentication')
 
-  const prove = keyA.sign(oobEnvelope(OOB_TASKS.prove, { identify }, keyA.did, vtcDid, requestId), 'authentication')
-  const step2 = await sendToCommunity(deps, base, prove)
+  const proveAt = (at: OobVersion) =>
+    keyA.sign(
+      oobEnvelope(at === '0.2' ? OOB_TASKS.prove02 : OOB_TASKS.prove, { identify }, keyA.did, vtcDid, requestId),
+      'authentication'
+    )
+  // 0.2 first, as the browser plugin does (vta-browser-plugin #356). A community from before it refuses the type
+  // at dispatch, before the request is touched, so the same identify proves again at 0.1.
+  let version: OobVersion = '0.2'
+  let prove = proveAt(version)
+  let step2: Record<string, unknown>
+  try {
+    step2 = await sendToCommunity(deps, base, prove)
+  } catch (error) {
+    if (!(error instanceof SignInError) || error.reason !== 'refused' || !isUnsupportedTaskCode(error.detail)) {
+      throw error
+    }
+    version = '0.1'
+    prove = proveAt(version)
+    step2 = await sendToCommunity(deps, base, prove)
+  }
   const vtcDocument = await resolveOrUnreachable(deps, vtcDid)
   const problem = await step2Problem(step2, {
     claimed,
@@ -358,6 +390,11 @@ export async function identifyAndProve(
     },
     identifiedAs: payload.identifiedAs as string,
     persona,
+    version,
+    // Only a 0.2 grant can carry it; checked by step2Problem.
+    ...(version === '0.2' && Array.isArray(payload.signingScope)
+      ? { signingScope: [...(payload.signingScope as string[])] }
+      : {}),
   }
 }
 
@@ -386,51 +423,72 @@ export async function approveSignIn(proved: ProvedSignIn, deps: SignInAgentDeps)
   const now = nowSeconds(deps)
   if (claimed.decisionDeadline <= now) throw new SignInError('expired', 'the decision deadline has passed')
 
-  const unsignedGrant = personaDocument(
-    OOB_TASKS.grant,
-    {
-      requestId,
-      decision: 'approve',
-      sessionKey,
-      approverKey: keyA.did,
-      origin: portalOrigin,
-      // Over the whole signed step 2 as received, proof included (grant spec producer rule 1).
-      contextDigest: digestMultibase(step2),
-      notAfter: now + GRANT_LIFETIME_SECONDS,
-    },
-    persona.did,
-    vtcDid
-  )
-
-  // The person's approval of exactly this grant: challenge and payloadDigest
-  // are both its digest (oob_sign_in.rs:681-694).
-  const digest = digestMultibase(unsignedGrant)
-  let decision: Record<string, unknown>
-  try {
-    const uvDid = await deps.uvDid()
-    decision = await signWithSigner(
+  // The grant at a version, approved with Face ID and signed by the member's VTA. At 0.2 it copies step 2's
+  // signingScope unchanged (the community holds the two equal; absent, the grant delegates no signing).
+  const grantAt = async (at: OobVersion): Promise<Record<string, unknown>> => {
+    const unsignedGrant = personaDocument(
+      at === '0.2' ? OOB_TASKS.grant02 : OOB_TASKS.grant,
       {
-        id: `urn:uuid:${utils.uuid()}`,
-        type: UV_DECISION_TASK,
-        issuer: uvDid,
-        recipient: deps.vta.did,
-        issuedAt: wireTimestamp(new Date(Math.floor(Date.now() / 1000) * 1000)),
-        payload: { challenge: digest, payloadDigest: digest, decision: 'approve' },
+        requestId,
+        decision: 'approve',
+        sessionKey,
+        approverKey: keyA.did,
+        origin: portalOrigin,
+        // Over the whole signed step 2 as received, proof included (grant spec producer rule 1).
+        contextDigest: digestMultibase(step2),
+        notAfter: now + GRANT_LIFETIME_SECONDS,
+        ...(at === '0.2' && proved.signingScope ? { signingScope: proved.signingScope } : {}),
       },
-      (input) => deps.uvSign(input, UV_APPROVE_PROMPT),
-      didKeyVerificationMethod(uvDid),
-      // A decision is an attestation (proofPurpose.ts ATTESTATION_SLUGS; ref-24).
-      'assertionMethod'
+      persona.did,
+      vtcDid
     )
-  } catch (error) {
-    throw uvFailure(error)
+
+    // The person's approval of exactly this grant: challenge and payloadDigest
+    // are both its digest (oob_sign_in.rs:681-694).
+    const digest = digestMultibase(unsignedGrant)
+    let decision: Record<string, unknown>
+    try {
+      const uvDid = await deps.uvDid()
+      decision = await signWithSigner(
+        {
+          id: `urn:uuid:${utils.uuid()}`,
+          type: UV_DECISION_TASK,
+          issuer: uvDid,
+          recipient: deps.vta.did,
+          issuedAt: wireTimestamp(new Date(Math.floor(Date.now() / 1000) * 1000)),
+          payload: { challenge: digest, payloadDigest: digest, decision: 'approve' },
+        },
+        (input) => deps.uvSign(input, UV_APPROVE_PROMPT),
+        didKeyVerificationMethod(uvDid),
+        // A decision is an attestation (proofPurpose.ts ATTESTATION_SLUGS; ref-24).
+        'assertionMethod'
+      )
+    } catch (error) {
+      throw uvFailure(error)
+    }
+
+    return signedByAgent(deps, persona, unsignedGrant, 'assertionMethod', {
+      [EXT_UV_CONSENT]: { decision },
+    })
   }
 
-  const grant = await signedByAgent(deps, persona, unsignedGrant, 'assertionMethod', {
-    [EXT_UV_CONSENT]: { decision },
-  })
+  let version = proved.version
+  let grant: Record<string, unknown>
+  try {
+    grant = await grantAt(version)
+  } catch (error) {
+    // The member's VTA is older than auth/oob/grant/0.2 (VTI #2190) while the community is not: grant at 0.1
+    // under the same step 2. The community holds the scopes equal only for a 0.2 respond, so this signs in with
+    // nothing delegated. The Face ID approval names one grant's digest, so the 0.1 grant asks once more.
+    if (version !== '0.2' || !(error instanceof SignInError) || error.detail !== 'oobUnsupportedType') throw error
+    version = '0.1'
+    grant = await grantAt(version)
+  }
 
-  const respond = keyA.sign(oobEnvelope(OOB_TASKS.respond, { grant }, keyA.did, vtcDid, requestId), 'authentication')
+  const respond = keyA.sign(
+    oobEnvelope(version === '0.2' ? OOB_TASKS.respond02 : OOB_TASKS.respond, { grant }, keyA.did, vtcDid, requestId),
+    'authentication'
+  )
   const answer = await sendToCommunity(deps, base, respond, { responded: true })
   // The answer is the community's attestation, signed for `assertionMethod`
   // like steps 1 and 2, since VTI b345ebd1 (2026-10-11, #2024). A community

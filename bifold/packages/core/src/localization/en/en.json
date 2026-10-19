@@ -2389,6 +2389,8 @@
     "No": "No",
     "NotReported": "Not reported",
     "SessionOnly": "This signs in that browser for this session only.",
+    "SigningScope": "It also lets that browser act as you, for this session, in: {{areas}}.",
+    "ScopeDirectory": "the member directory (reading it, and editing your own card)",
     "Approve": "Approve",
     "Decline": "Decline",
     "Approving": "Approving…",

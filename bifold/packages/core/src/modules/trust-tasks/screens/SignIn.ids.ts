@@ -28,6 +28,8 @@ export const SignInIds = {
   identifiedAs: 'SignInIdentifiedAs',
   website: 'SignInWebsite',
   sessionOnly: 'SignInSessionOnly',
+  // 0.2: what else the browser may sign as the person, for the session (auth/oob signingScope).
+  signingScope: 'SignInSigningScope',
   approve: 'SignInApprove',
   decline: 'SignInDecline',
   busy: 'SignInBusy',

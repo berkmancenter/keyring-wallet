@@ -436,6 +436,17 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             <ThemedText variant="bold" testID={id(SignInIds.sessionOnly)}>
               {t('SignIn.SessionOnly')}
             </ThemedText>
+            {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session,
+                without asking the phone each time. Said in words; a family Keyring has no words for is named. */}
+            {proved.signingScope?.length ? (
+              <ThemedText testID={id(SignInIds.signingScope)}>
+                {t('SignIn.SigningScope', {
+                  areas: proved.signingScope
+                    .map((family) => (family === 'vtc/directory' ? t('SignIn.ScopeDirectory') : family))
+                    .join(', '),
+                })}
+              </ThemedText>
+            ) : null}
             {busy ? null : timeLeft()}
             {busy ? (
               busyNote(t('SignIn.Approving'), SignInIds.busy)

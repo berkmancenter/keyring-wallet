@@ -43,7 +43,48 @@ export const OOB_TASKS = {
   /** Signed by the member's VTA as the persona, on the phone's user verification (oobSignInAgent). */
   grant: 'https://trusttasks.org/spec/auth/oob/grant/0.1',
   respond: 'https://trusttasks.org/spec/auth/oob/respond/0.1',
+  // 0.2 (VTI #2190, trust-tasks-tf #820): step 2 may offer `signingScope`, which the grant copies to let the
+  // browser's key sign those task families as the member for the session. identify stays 0.1.
+  prove02: 'https://trusttasks.org/spec/auth/oob/prove/0.2',
+  grant02: 'https://trusttasks.org/spec/auth/oob/grant/0.2',
+  respond02: 'https://trusttasks.org/spec/auth/oob/respond/0.2',
 } as const
+
+/**
+ * Which `prove` / `grant` / `respond` a sign-in runs at. 0.2 is tried first; a community from before it refuses
+ * `prove/0.2` as a type or version it does not serve, and the sign-in proves at 0.1, which delegates nothing.
+ */
+export type OobVersion = '0.1' | '0.2'
+
+/**
+ * Task families a wallet never lets a browser sign as the member, whatever a community offers (auth/oob/grant/0.2):
+ * signing in, access control, consent. A member's VTA refuses them too (vta-service oob_sign_in.rs).
+ */
+export const UNDELEGABLE_FAMILIES = ['auth', 'acl', 'consent', 'task-consent', 'confirm'] as const
+
+/** A task-family slug prefix, as `SigningScope` admits one. */
+const SCOPE_FAMILY = /^[a-z][a-z0-9-]*(\/[a-z][a-z0-9-]*)*$/
+
+/**
+ * Why a step 2's `signingScope` cannot be granted, or undefined when it can: 1–8 distinct task-family slugs
+ * (`SigningScope`), none of them a family a wallet never delegates.
+ */
+export function signingScopeProblem(scope: unknown): string | undefined {
+  if (!Array.isArray(scope) || scope.length === 0 || scope.length > 8 || new Set(scope).size !== scope.length) {
+    return "step 2's signing scope is malformed"
+  }
+  for (const family of scope) {
+    if (typeof family !== 'string' || !SCOPE_FAMILY.test(family)) return "step 2's signing scope is malformed"
+    if (UNDELEGABLE_FAMILIES.some((never) => family === never || family.startsWith(`${never}/`))) {
+      return `step 2 asks to let the browser sign ${family} documents as the member, which a wallet never delegates`
+    }
+  }
+  return undefined
+}
+
+/** A refusal for a task type or version the other side does not serve (VTI `unsupported_type_or_version`). */
+export const isUnsupportedTaskCode = (code: string | undefined): boolean =>
+  /(^|[:/])unsupported(Type|Version)$/.test(code ?? '')
 
 /** The service types a sign-in community's DID document publishes. */
 export const TRUST_TASK_HTTPS = 'TrustTaskHTTPS'

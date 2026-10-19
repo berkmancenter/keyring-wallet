@@ -45,6 +45,7 @@ const proved: ProvedSignIn = {
   requester: { browser: 'Firefox 131', os: 'macOS', location: 'Boston, US', sameNetwork: true },
   identifiedAs: 'Alberto',
   persona: { did: 'did:webvh:QmP:host:persona', entryId: 'entry-1' },
+  version: '0.2',
 }
 
 const fakeSteps = (over: Partial<SignInSteps> = {}): jest.Mocked<SignInSteps> =>
@@ -236,6 +237,20 @@ describe('5. the request, as the community reports it', () => {
     expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
     expect(tree.getByTestId(id(SignInIds.sessionOnly))).toHaveTextContent('SignIn.SessionOnly')
     expect(en.SignIn.SessionOnly).toBe('This signs in that browser for this session only.')
+  })
+
+  // IN-280: a 0.2 sign-in that delegates signing says so, in words, before the person approves.
+  test('a scope the community offers is said in words: the browser may also act as the person there, this session', async () => {
+    const scoped = { ...proved, signingScope: ['vtc/directory'] }
+    const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
+    expect(tree.getByTestId(id(SignInIds.signingScope))).toHaveTextContent(/SignIn\.SigningScope/)
+    expect(en.SignIn.SigningScope).toContain('{{areas}}')
+    expect(en.SignIn.ScopeDirectory).toBe('the member directory (reading it, and editing your own card)')
+  })
+
+  test('no scope offered (0.1, or none): nothing more is said', async () => {
+    const tree = await toReview(fakeSteps())
+    expect(tree.queryByTestId(id(SignInIds.signingScope))).toBeNull()
   })
 
   test('what the community did not report is said to be not reported', async () => {
