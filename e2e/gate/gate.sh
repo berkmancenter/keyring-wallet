@@ -23,10 +23,12 @@ fi
 
 # Legs in the order they run on one platform, and which device each needs.
 LEGS_IOS="kk p2 smoke-ios update-ios signin-ios"
-LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait hv"
-# `signin` (Android) runs by name only (--legs signin): on the emulator a sign-in's approval raises the UV key's
-# biometric-only prompt, and the fingerprint HAL's token is read as expired (1019-1416, 1019-1514), so it cannot pass
-# there; `signin-ios` is the gate's member sign-in proof, and an Android one needs a real phone.
+LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait hv signin"
+# Legs that run only when named (--legs signin), never in `all`: `signin` (Android), whose approval raises the UV key's
+# biometric-only prompt, and the emulator's fingerprint HAL token is read as expired (1019-1416, 1019-1514), so it cannot
+# pass there; `signin-ios` is the gate's member sign-in proof, and an Android one needs a real phone. A leg has to be in
+# a leg list to be scheduled at all (run_legs), so it stays in LEGS_ANDROID and is kept out of `all` here.
+LEGS_BY_NAME_ONLY="signin"
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail pnmlink"
@@ -108,7 +110,7 @@ run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; 
 # Whether leg $1 is among the wanted legs $2 ("all", or a comma list). "all" is every leg but the nightly-only ones.
 leg_wanted() {
   [[ ",$2," == *",$1,"* ]] && return 0
-  [ "$2" = all ] && [[ " $LEGS_NIGHTLY_ONLY " != *" $1 "* ]]
+  [ "$2" = all ] && [[ " $LEGS_NIGHTLY_ONLY $LEGS_BY_NAME_ONLY " != *" $1 "* ]]
 }
 
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
