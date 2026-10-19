@@ -261,6 +261,8 @@ export interface VtaAgentDeps {
   ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
   /** How long a key fetch waits for the current agent's session (KEY_FETCH_WAIT_MS); shorter in tests. */
   keyFetchWaitMs?: number
+  /** The client a session with a linked agent that is not the current one opens (withAgentSession). */
+  agentClient?: (agent: Agent, vtaDid: string, store: VtiIdentityStore) => VtaClient
   /** The client a key fetch opens for a linked agent that is not the current one (fetchKeyCopy). */
   keyClient?: (
     agent: Agent,
@@ -2282,16 +2284,60 @@ export class VtaAgentController {
   }
 
   /**
-   * What trigger-link sign-in needs from the linked agent: a signed-in client,
-   * and the persona this phone holds there for `communityDid` (none when it
-   * joined through another agent). Signs in if it must. Refuses with
-   * {@link DeviceActionRefused}.
+   * Every agent this phone is linked to, the current one first, each by the
+   * name this phone shows for it (the person's nickname, the agent's own name,
+   * or its host's). Waits for the stored link to be read, as a sign-in at
+   * start-up may ask before then.
    */
-  async signInSession(agent: Agent, communityDid: string): Promise<{ client: VtaClient; persona?: VtiPersona }> {
-    const vtaDid = this.linkedAgent()
-    const client = await this.signedIn(agent, vtaDid)
-    const persona = await this.identityStore(agent).getPersona(communityDid, vtaDid)
-    return { client, persona }
+  async linkedAgents(agent: Agent): Promise<{ vtaDid: string; name: string; current: boolean }[]> {
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+    const store = this.linkStore(agent)
+    let links = await Promise.resolve(store.list?.()).catch(() => undefined)
+    if (!links) {
+      const one = await store.get().catch(() => undefined)
+      links = one ? [one] : []
+    }
+    const current = this.agentAddress()
+    return links
+      .map((l) => ({
+        vtaDid: l.vtaDid,
+        name: l.nickname?.trim() || this.state.agentNames?.[l.vtaDid]?.label || l.agentName?.label || l.label,
+        current: l.vtaDid === current,
+      }))
+      .sort((x, y) => Number(y.current) - Number(x.current))
+  }
+
+  /**
+   * `use` with a signed-in client for the linked agent `vtaDid` (IN-296: a
+   * sign-in through whichever agent holds the persona). The current agent is
+   * asked on its own session; another linked agent on a short session of its
+   * own, closed after, never beside a look at it (as fetchKeyCopy does: one
+   * session per agent at a time). Refuses with {@link DeviceActionRefused}.
+   */
+  async withAgentSession<T>(agent: Agent, vtaDid: string, use: (client: VtaClient) => Promise<T>): Promise<T> {
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+    if (vtaDid === this.agentAddress()) return use(await this.signedIn(agent, vtaDid))
+    const link = this.state.link
+    // An agent being linked right now is not reachable for this yet: a side session would sign in as the same
+    // manager key as the link, and the mediator keeps one live socket per DID.
+    if (link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid)
+      throw new DeviceActionRefused('unreachable', 'that agent is being linked now')
+    const links = (await Promise.resolve(this.linkStore(agent).list?.()).catch(() => undefined)) ?? []
+    if (!links.some((l) => l.vtaDid === vtaDid)) throw new DeviceActionRefused('notLinked')
+    await this.looking?.catch(() => undefined)
+    const store = this.identityStore(agent)
+    const client = (this.deps.agentClient ?? ((a, did, s) => new VtaClient(a, did, s)))(agent, vtaDid, store)
+    try {
+      try {
+        await client.connect()
+      } catch (error) {
+        if (connectFailureRevokes(error)) throw this.refused(error)
+        throw new DeviceActionRefused('unreachable', error instanceof Error ? error.message : String(error))
+      }
+      return await use(client)
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
   }
 
   /**
