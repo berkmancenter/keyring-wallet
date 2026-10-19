@@ -15,6 +15,13 @@ if [ -z "${HV_C_DID:-}" ] || [ -z "${HV_C_REST:-}" ] || [ -z "${HV_C_ADMIN_CRED:
   for r in $HV_ROWS; do row "$r" SKIP "no hv community configured (HV_C_DID, HV_C_REST, HV_C_ADMIN_CRED)"; done
   exit 0  # leg_begin's EXIT trap ends the leg (leg_end)
 fi
+# Settled from the environment alone, before any emulator, Appium or runner grant (review on #517): an unconfigured
+# machine skips at once. The reason says a core journey did not run, so an all-SKIP hv leg is not read as green.
+VETTER=${VETTER:-keyring}
+if [ "$VETTER" = keyring ] && { [ -z "${HV_VETTER_UDID:-}" ] || [ -z "${HV_VETTER_DID:-}" ]; }; then
+  for r in $HV_ROWS; do row "$r" SKIP "NOT RUN (core journey: Keyring↔Keyring vetting): no seated Keyring vetter configured (HV_VETTER_UDID, HV_VETTER_DID; seat one with e2e/openvtc/seat-hv-keyring-vetter.mjs), or VETTER=tui for the openvtc vetter"; done
+  exit 0
+fi
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN
 T0=$(stamp); E=emulator-5570; AP=
 fin() {
@@ -39,11 +46,6 @@ row hv-link PASS "$(( $(date +%s) - t ))s, admin grant on $RUNNER_MAIN_SLUG"
 # VETTER=keyring: the vetter is a seated Keyring, the iOS simulator HV_VETTER_UDID (named HV_VETTER_NAME), a member of
 # the hv community with a vetter grant and enrolled (e2e/openvtc/seat-hv-keyring-vetter.mjs), DID HV_VETTER_DID.
 VK=()
-VETTER=${VETTER:-keyring}
-if [ "$VETTER" = keyring ] && { [ -z "${HV_VETTER_UDID:-}" ] || [ -z "${HV_VETTER_DID:-}" ]; }; then
-  for r in $HV_ROWS; do row "$r" SKIP "no seated Keyring vetter configured (HV_VETTER_UDID, HV_VETTER_DID; seat one with e2e/openvtc/seat-hv-keyring-vetter.mjs), or VETTER=tui for the openvtc vetter"; done
-  exit 0
-fi
 if [ "$VETTER" = keyring ]; then
   sim_boot "$HV_VETTER_UDID"
   VK=(--vetter-platform ios --vetter-udid "$HV_VETTER_UDID" --vetter-device-name "${HV_VETTER_NAME:-iPhone 17 HV Vetter}" --vetter-wda-port 8132 --vetter-mjpeg-port 9132 --vetter-did "$HV_VETTER_DID")
