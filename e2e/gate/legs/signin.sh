@@ -51,20 +51,21 @@ adb -s $E logcat -G 16M >/dev/null 2>&1
       sleep 2.5
       # Which prompt is this? A screenshot of each (prompt-<time>.png) and its words: the owner confirm offers "Use PIN"
       # (ownerConfirm.ts, biometry or passcode); the UV key's is biometric-only (uvKey.ts) and offers none (a5, 10-19).
-      ts=$(date -u +%H%M%S); adb -s $E exec-out screencap -p > "$LEG_DIR/prompt-$ts.png" 2>/dev/null
-      adb -s $E shell uiautomator dump /sdcard/uv.xml >/dev/null 2>&1; x=$(adb -s $E shell cat /sdcard/uv.xml 2>/dev/null)
-      title=$(echo "$x" | grep -oE 'resource-id="com.android.systemui:id/title"[^>]*' | grep -oE 'text="[^"]*"' | head -1)
-      [ -n "$title" ] || title=$(echo "$x" | grep -oE 'text="[^"]{3,60}"' | head -1)
-      b=$(echo "$x" | grep -oE 'resource-id="com.android.systemui:id/button_use_credential"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' | tr '[],' '   ')
-      if [ -z "$x" ]; then kind="unread (dump failed)"; elif [ -n "$b" ]; then kind="offers Use PIN"; else kind="biometric only (no Use PIN)"; fi
-      if [ "${SIGNIN_UV:-pin}" = pin ] && [ "$kind" != "biometric only (no Use PIN)" ]; then
+      # The prompt is a secure window (a screencap of it is empty) and a uiautomator dump fails while Appium holds the
+      # screen (1019-1514), so it is classified from BiometricService's own line for it: CredentialRequested true is a
+      # prompt that offers "Use PIN" (the owner confirm), false is biometric-only (the UV key).
+      ts=$(date -u +%H%M%S)
+      h=$(adb -s $E logcat -d -s BiometricService:D 2>/dev/null | grep 'handleAuthenticate' | tail -1)
+      case "$h" in *"CredentialRequested: true"*) kind="offers Use PIN";; *"CredentialRequested: false"*) kind="biometric only (no Use PIN)";; *) kind="unclassified";; esac
+      title=$(echo "$h" | grep -oE 'StrengthRequested: [0-9]+' | head -1); b=   # "Use PIN" sits at [32,2179][263,2305] on this AVD
+      if [ "${SIGNIN_UV:-pin}" = pin ] && [ "$kind" = "offers Use PIN" ]; then
         # The device PIN through "Use PIN" (its place on this AVD when the screen could not be read: [32,2179][263,2305]).
-        set -- $b; if [ $# -eq 4 ]; then adb -s $E shell input tap $(( ($1+$3)/2 )) $(( ($2+$4)/2 )) >/dev/null 2>&1; else adb -s $E shell input tap 147 2242 >/dev/null 2>&1; fi; sleep 2
+        adb -s $E shell input tap 147 2242 >/dev/null 2>&1; sleep 2
         adb -s $E shell input text 1234 >/dev/null 2>&1; adb -s $E shell input keyevent 66 >/dev/null 2>&1
-        echo "PROMPT $(date -u +%H:%M:%SZ) ${title:-?} · $kind · answered with the device PIN · prompt-$ts.png"; sleep 3
+        echo "PROMPT $(date -u +%H:%M:%SZ) ${title:-?} · $kind · answered with the device PIN ($ts)"; sleep 3
       else
         adb -s $E emu finger touch 1 >/dev/null 2>&1; sleep 1; adb -s $E emu finger remove 1 >/dev/null 2>&1
-        echo "PROMPT $(date -u +%H:%M:%SZ) ${title:-?} · $kind · answered with fingerprint 1 · prompt-$ts.png"; sleep 3
+        echo "PROMPT $(date -u +%H:%M:%SZ) ${title:-?} · $kind · answered with fingerprint 1 ($ts)"; sleep 3
       fi
     fi
     sleep 1

@@ -23,7 +23,10 @@ fi
 
 # Legs in the order they run on one platform, and which device each needs.
 LEGS_IOS="kk p2 smoke-ios update-ios signin-ios"
-LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait signin"
+LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait"
+# `signin` (Android) runs by name only (--legs signin): on the emulator a sign-in's approval raises the UV key's
+# biometric-only prompt, and the fingerprint HAL's token is read as expired (1019-1416, 1019-1514), so it cannot pass
+# there; `signin-ios` is the gate's member sign-in proof, and an Android one needs a real phone.
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail pnmlink"

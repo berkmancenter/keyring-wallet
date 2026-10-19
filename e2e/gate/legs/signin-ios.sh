@@ -1,8 +1,8 @@
 #!/bin/bash
 # Member sign-in (auth/oob), end to end, on an iOS simulator with Face ID enrolled: the same driver as `signin`
-# (e2e/run-signin-member.mjs; the portal half is e2e/openvtc/signinPortal.js). It runs on iOS because the Android
-# emulator's software keystore refuses a biometric-gated keychain secret after a successful fingerprint
-# (UserNotAuthenticatedException, Signin_API_33, 10-19), while the iOS simulator's keychain honours biometry.
+# (e2e/run-signin-member.mjs; the portal half is e2e/openvtc/signinPortal.js). It runs on iOS because on the Android
+# emulator the fingerprint HAL's auth token is read by keystore as expired 1 ms after it is added (UserNotAuthenticated,
+# Signin_API_33, runs 1019-1416 and 1019-1514), while the iOS simulator's Face ID satisfies the keychain.
 # The simulator is its own (SIGNIN_SIM_UDID, "iPhone 17 Signin": Face ID enrolled with simctl notifyutil); Face ID is
 # answered by posting a match for the whole leg (biometric.log), and the proof of a biometric approval is the portal's
 # redeem ("uv" in amr). The community defaults to keyring-hv-lab1 (HV_C_*), as in `signin`.

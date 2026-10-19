@@ -40,7 +40,7 @@ import { createSigninPortal, originOf, signinConfig, triggerLink } from "./openv
 const UDID = process.env.UDID;
 const PLATFORM = process.env.PLATFORM === "ios" ? "ios" : "android";
 /** How the person verified at Approve, said in the verdict: Face ID (iOS), or on Android the fingerprint or device PIN. */
-const VERIFIED_BY = PLATFORM === "ios" ? "Face ID" : process.env.SIGNIN_UV === "pin" ? "the device PIN (the emulator's fingerprint HAL fails keystore)" : "a fingerprint";
+const VERIFIED_BY = PLATFORM === "ios" ? "Face ID (the leg's watcher)" : process.env.SIGNIN_UV === "pin" ? "the leg's watcher, SIGNIN_UV=pin: the device PIN where a prompt offers it, fingerprint 1 where it is biometric-only (biometric.log)" : "fingerprint 1 (the leg's watcher)";
 const C_DID = process.env.SIGNIN_C_DID;
 const C_REST = process.env.SIGNIN_C_REST;
 const PORTAL = process.env.SIGNIN_PORTAL;
