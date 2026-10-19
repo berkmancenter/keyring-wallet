@@ -31,16 +31,20 @@ fin() {
 LEG_CLEANUP=fin
 emu_start 5572
 adb -s $E root >/dev/null 2>&1; sleep 3; adb -s $E wait-for-device; echo "adb root: uid $(adb -s $E shell id -u)"
+# Each case keeps the app's own log (its [VTA] resume lines among them): a case that fails can be read afterwards
+# (#513: link-address-resume failed once and nothing showed whether the app's resume ran). 16M so a case cannot wrap.
+adb -s $E logcat -G 16M >/dev/null 2>&1
 cd "$E2E"
 # The host-code cases (link-host-sleep, link-host-lock-after-grant, host-code-lapsed, link-try-again) need an https
 # callback on ic3.dev or firstperson.dev (agentHostConnection.ts, AGENT_HOST_SITES): the gate's local http page cannot
 # serve one, so for 239 they are unit-only (vtaAgentHostLink) plus manual. LINK_CASES overrides.
 for c in ${LINK_CASES:-link-address-resume link-address-resume-later create-window-paused link-no-answer create-wait-no-lock}; do
   selected "$c" || continue
-  adb -s $E uninstall $BID >/dev/null 2>&1
+  adb -s $E uninstall $BID >/dev/null 2>&1; adb -s $E logcat -c >/dev/null 2>&1
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 E2E_RELEASE=1 \
     LINK_MODE=manual LINK_CASE=$c BLOCK_HOST=$RUNNER_MEDIATOR_HOST RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL \
     PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always galarm 2400 node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
+  adb -s $E logcat -d > "$LEG_DIR/$c-logcat.log" 2>/dev/null
   r=$(grep -E "^ROW $c(-[a-z]+)? " "$LEG_DIR/$c.out")
   # A driver failure (the case's own "driver: …" error) is no verdict on the app: the leg is broken, not red.
   # The thrown error's own line ("Error: driver: …"), not the first "driver:" in the log: WebDriver's own lines say
