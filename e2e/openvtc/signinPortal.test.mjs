@@ -24,7 +24,7 @@ test('redeem: approved, declined, expired, anything else', () => {
   assert.deepEqual(ok.amr, ['did', 'oob', 'uv']);
   assert.equal(redeemState({ code: 'auth/oob/redeem:declined', details: { state: 'cancelled' } }).state, 'declined');
   assert.equal(redeemState({ code: 'auth/oob/redeem:requestExpired' }).state, 'expired');
-  assert.equal(redeemState({ code: 'auth/oob/redeem:pending', details: { state: 'cancelled' } }).state, 'pending');
+  assert.equal(redeemState({ code: 'auth/oob/redeem:pending', details: { state: 'cancelled' } }).state, 'declined');
   assert.equal(redeemState({ code: 'requestExpired' }).state, 'expired');
   assert.equal(redeemState({ code: 'permissionDenied', message: 'accepted only from the portal' }).state, 'error');
   assert.equal(redeemState(undefined).state, 'error');

@@ -27,6 +27,8 @@ export function redeemState(body) {
   const code = String(b.code ?? '');
   // The portal reads the local part of `auth/oob/redeem:<code>` (oob.ts); a bare code is its own local part.
   const local = code.slice(code.lastIndexOf(':') + 1);
+  // A pending reply whose request was cancelled on the phone is over: declined, not a wait for the deadline.
+  if (local === 'pending' && b.details?.state === 'cancelled') return { state: 'declined', code, phase: 'cancelled' };
   if (local === 'pending') return { state: 'pending', phase: b.details?.state, matchNumber: b.details?.matchNumber };
   if (local === 'requestExpired' || local === 'expired') return { state: 'expired', code };
   if (local === 'declined' || local === 'cancelled') return { state: 'declined', code, phase: b.details?.state };
