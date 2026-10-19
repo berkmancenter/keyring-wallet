@@ -30,6 +30,18 @@ LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-and
 # push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
 # Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
 LEGS_SOLO="linkfail pnmlink"
+# The core journeys, Keyring to Keyring (Alberto 10-19: "what people will mostly use today is joining, signing in, join
+# by vetting (hidden and non hidden)"), and the legs that prove each. Scoped by the coordinator on 10-19 to exactly these
+# four Keyring-to-Keyring journeys for this release; the 10-14 list's Farm connect and mediator are not in it (their
+# legs, e.g. the smoke legs' link rows, stay ordinary verdicts). A full gate (kind=gate) in which one of them did
+# not run, skipped every row, or passed only informationally is not green (run-summary.mjs coreMissing). Sign-in is
+# signin-ios alone: the Android `signin` leg runs by name only (the emulator's fingerprint HAL), so its absence is an
+# ordinary SKIP. journey:leg[,leg] entries.
+CORE_JOURNEYS="vetting-named:kk vetting-hidden:hv signin:signin-ios join:waiting"
+# Rows reported apart and never a verdict, while their other side is behind: p1's TUI vetter against keyring-test's VTC
+# (it refuses openvtc 0.5.0's manifest/0.2). A leg can name more with an INFORMATIONAL rows=a,b line (hv's
+# VETTER=tui: the rows downstream of openvtc's attestation, which is not the published shape).
+INFORMATIONAL_ROWS="p1-tui-vets"
 # iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
 # so they run first, with nothing beside them; the rest of iOS then runs beside Android.
 LEGS_IOS_ALONE="kk p2 smoke-ios"
@@ -145,7 +157,7 @@ new_run() {
   local pin=$1 kind=$2 rd
   rd=$GATE_HOME/runs/$(date -u +%m%d-%H%M)-${pin:0:8}-$kind
   mkdir -p "$rd"
-  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; } > "$rd/meta"
+  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; echo "core=$CORE_JOURNEYS"; echo "informational=$INFORMATIONAL_ROWS"; } > "$rd/meta"
   echo "$rd"
 }
 
@@ -528,6 +540,8 @@ cmd_report() {
     node "$GATE_SRC/steps.mjs" "$rd/$leg/steps.tsv" 2>/dev/null | sed 's/^/    /'
   done < "$rd/legs.tsv"
   echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"
+  # Core journeys no leg proved (a full gate is not green while any is listed), and informational rows, apart.
+  node "$GATE_SRC/run-summary.mjs" "$rd" 2>/dev/null | tail -n +2
 }
 
 case ${1:-} in

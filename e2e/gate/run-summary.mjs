@@ -7,6 +7,12 @@
 //   harness  not the app: the leg broke (setup, link, crash; LEG … BROKEN), or the meta names it (harness-legs=)
 //   none     no result: not run (exit 4, paused) or stopped (exit 143)
 // overall: pass (every leg an app pass), fail (any app fail), incomplete (some legs are no verdict on the app).
+// Informational rows (meta informational=, or the rows a leg names in INFORMATIONAL rows=a,b <why>): the openvtc/TUI rows
+// while keyring-test's VTC and openvtc's attestation shape are behind. Listed under informational; they never fail a
+// leg, and a leg passing only through them proves no core journey.
+// Core journeys (meta core= journey:leg[,leg]…, gate.sh CORE_JOURNEYS): what people use Keyring for, Keyring to
+// Keyring. Each needs a leg that ran with an app pass and at least one PASS row; in a full gate (kind=gate) one that
+// did not makes overall incomplete, never pass, and coreMissing says which and why.
 // A tracked row (rows.js `tracked`: a SKIP until its fix passes) that PASSed in an earlier run and SKIPs again has
 // regressed: the leg lists it under regressions and counts as an app fail, so a fixed bug cannot hide as a SKIP.
 // Only when the passing run's build is an ANCESTOR of this run's (wallet pin=, and bifold= when a bifold clone is at
@@ -40,7 +46,17 @@ const list = (v) => (first(v) || '').split(/\s+/).filter(Boolean);
 
 /** One leg's record from its legs.tsv line and its log. */
 export function legRecord({ name, exit, start, end }, log, meta, passedBefore = new Map()) {
-  const rows = [...log.matchAll(/^ROW (.*?) (PASS|FAIL|SKIP) — (.*)$/gm)].map((m) => ({ name: m[1], status: m[2], detail: m[3] }));
+  const all = [...log.matchAll(/^ROW (.*?) (PASS|FAIL|SKIP) — (.*)$/gm)].map((m) => ({ name: m[1], status: m[2], detail: m[3] }));
+  // Informational FAILs are set aside: listed, never a verdict (see the header).
+  // A leg's INFORMATIONAL line names its rows (rows=a,b): only those are set aside, never the leg's other rows (a
+  // regression in Keyring's own rows must still fail it; review on #518).
+  const infoLine = (log.match(/^INFORMATIONAL (.*)$/m) || [])[1];
+  const infoLegRows = new Set(((infoLine || '').match(/\brows=(\S+)/) || [])[1]?.split(',').filter(Boolean) || []);
+  const infoLeg = infoLine === undefined ? undefined : infoLine.replace(/\brows=\S+\s*/, '').trim();
+  const infoRows = new Set(list(meta.informational));
+  const isInfo = (r) => r.status === 'FAIL' && (infoLegRows.has(r.name) || infoRows.has(r.name));
+  const informational = all.filter(isInfo).map((r) => ({ row: r.name, detail: r.detail.slice(0, 200), why: infoLeg || 'informational row' }));
+  const rows = all.filter((r) => !isInfo(r));
   const count = (s) => rows.filter((r) => r.status === s).length;
   const broken = (log.match(/^LEG \S+ BROKEN — (.*)$/m) || [])[1];
   const env = [...log.matchAll(/^ENV (.*)$/gm)].map((m) => m[1]);
@@ -55,9 +71,12 @@ export function legRecord({ name, exit, start, end }, log, meta, passedBefore = 
   }
   if (regressions.length) rec.regressions = regressions;
   if (possible.length) rec.possiblyRegressed = possible;
+  if (informational.length) rec.informational = informational;
+  if (infoLeg !== undefined) rec.informationalLeg = infoLeg;
   if (exit === 4) return { ...rec, result: 'not-run', verdict: 'none', reason: 'not run (paused)' };
   if (exit === 143) return { ...rec, result: 'stopped', verdict: 'none', reason: 'stopped mid-leg' };
-  const result = exit === 0 ? 'pass' : exit === 3 ? 'fail' : exit === 1 ? 'broken' : 'error';
+  // A leg whose only FAILs are informational exited 3 for them alone: a pass on the app.
+  const result = exit === 0 || (exit === 3 && informational.length && !count('FAIL')) ? 'pass' : exit === 3 ? 'fail' : exit === 1 ? 'broken' : 'error';
   if (list(meta['env-legs']).includes(name)) return { ...rec, result, verdict: 'env', reason: (first(meta.env) || 'marked env in meta').slice(0, 200) };
   if (list(meta['harness-legs']).includes(name)) return { ...rec, result, verdict: 'harness', reason: (first(meta.harness) || 'marked harness in meta').slice(0, 200) };
   if (env.length) return { ...rec, result, verdict: 'env', reason: env[0].slice(0, 200) };
@@ -116,6 +135,22 @@ function defaultRepos() {
 }
 
 /** The whole run. */
+/** The core journeys (meta core=) no leg of this run proved, each with its legs and why. */
+export function coreJourneysMissing(meta, legs) {
+  const missing = [];
+  for (const entry of list(meta.core)) {
+    const [journey, legList = ''] = entry.split(':');
+    const names = legList.split(',').filter(Boolean);
+    const ran = legs.filter((l) => names.includes(l.name));
+    const proven = ran.some((l) => l.verdict === 'app' && l.result === 'pass' && l.pass > 0 && l.informationalLeg === undefined);
+    if (proven) continue;
+    const why = !ran.length ? 'not run'
+      : ran.map((l) => `${l.name}: ${l.informationalLeg !== undefined ? `informational (${l.informationalLeg})` : l.result === 'pass' && !l.pass ? 'every row SKIP' : `${l.result} (${l.verdict})`}`).join('; ');
+    missing.push({ journey, legs: names, why: why.slice(0, 300) });
+  }
+  return missing;
+}
+
 export function summarize(runDir, repos) {
   const meta = parseMeta(read(path.join(runDir, 'meta')));
   const passedBefore = passedBeforeIn(runDir, repos);
@@ -125,7 +160,9 @@ export function summarize(runDir, repos) {
   });
   const by = (v) => legs.filter((l) => l.verdict === v).length;
   const appFail = legs.some((l) => l.verdict === 'app' && l.result === 'fail');
-  const overall = appFail ? 'fail' : legs.length && legs.every((l) => l.verdict === 'app' && l.result === 'pass') ? 'pass' : 'incomplete';
+  const coreMissing = coreJourneysMissing(meta, legs);
+  const fullGate = first(meta.kind) === 'gate';
+  const overall = appFail ? 'fail' : legs.length && legs.every((l) => l.verdict === 'app' && l.result === 'pass') && !(fullGate && coreMissing.length) ? 'pass' : 'incomplete';
   const heads = {};
   for (const k of ['wallet', 'bifold', 'harness', 'target', 'farm', 'farm-drift', 'openvtc', 'builds', 'push-on']) if (meta[k] !== undefined) heads[k] = first(meta[k]);
   return {
@@ -139,6 +176,8 @@ export function summarize(runDir, repos) {
     ended: first(meta.ended) || null,
     overall,
     counts: { legs: legs.length, app: by('app'), env: by('env'), harness: by('harness'), none: by('none'), appFail: legs.filter((l) => l.verdict === 'app' && l.result === 'fail').length, regressions: legs.reduce((n, l) => n + (l.regressions?.length || 0), 0), possiblyRegressed: legs.reduce((n, l) => n + (l.possiblyRegressed?.length || 0), 0) },
+    coreMissing,
+    informational: legs.flatMap((l) => (l.informational || []).map((i) => ({ leg: l.name, ...i }))),
     env: { note: first(meta.env) || null, paused: first(meta.paused) || null, stopped: first(meta.stopped) || null, legs: legs.filter((l) => l.verdict === 'env').map((l) => l.name) },
     legs,
   };
@@ -151,4 +190,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(s, null, 2) + '\n');
   const c = s.counts;
   console.log(`${s.run}: ${s.overall} · ${c.legs} legs: ${c.app} app (${c.appFail} fail), ${c.env} env, ${c.harness} harness, ${c.none} none`);
+  for (const m of s.coreMissing) console.log(`!! core journey not proven: ${m.journey} (${m.legs.join(', ')}): ${m.why}`);
+  for (const i of s.informational) console.log(`info: ${i.leg} ${i.row} — ${i.detail.slice(0, 140)} (${i.why})`);
 }
