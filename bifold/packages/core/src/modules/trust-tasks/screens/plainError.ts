@@ -74,6 +74,16 @@ const JOIN_REFUSALS: Record<string, string> = {
 }
 
 /**
+ * The community's directory statement (manifest/0.4): one that cannot be
+ * read stops the join, and a request is never sent under one the person was
+ * not shown (`directoryDisclosure`). Neither is worth retrying as it stands.
+ */
+const DIRECTORY_FAILURES: Record<string, string> = {
+  'keyring/join/disclosureMalformed': 'Errors.DirectoryUnreadable',
+  'keyring/join/disclosureNotShown': 'Errors.DirectoryNotShown',
+}
+
+/**
  * The agent or its host is turning requests away for now: rate-limited (HTTP
  * 429, Cloudflare's error 1015) or overloaded (503). It said so; it is not
  * unknown. Waiting a minute is what helps, so that is what the sentence says
@@ -91,9 +101,9 @@ const UNREACHABLE = /network|fetch failed|ECONN|ENOTFOUND|unreachable|could not 
 export function plainError(error: unknown): PlainError {
   const detail = error instanceof Error ? error.message : String(error)
   const bare = withoutOurJargon(detail)
-  const code = String((error as { code?: unknown } | undefined)?.code ?? '')
-    .split(':')
-    .pop()
+  const fullCode = String((error as { code?: unknown } | undefined)?.code ?? '')
+  if (DIRECTORY_FAILURES[fullCode]) return { line: DIRECTORY_FAILURES[fullCode], detail, retry: false }
+  const code = fullCode.split(':').pop()
   if (code && JOIN_REFUSALS[code]) return { line: JOIN_REFUSALS[code], detail, retry: false }
   // By name, not `instanceof`: this module stays free of the agent's imports.
   if ((error instanceof Error && error.name === 'VtiSentNoAnswer') || SENT_NO_ANSWER.test(bare)) {

@@ -23,6 +23,9 @@ import { communityLinkReturn } from '../module/vtiLinks'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtiInvited from '../screens/VtiInvited'
 
+import { readDirectoryDisclosure } from '../module/directoryDisclosure'
+import { statement } from './fixtures/directoryStatement'
+
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../../vrc/vrc-biometric', () => ({
   requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true, reason: 'confirmed' })),
@@ -238,6 +241,35 @@ describe('I was invited', () => {
     })
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('InvitedInvitationCard'))).toBeTruthy()
+  })
+
+  test('an invitation to a community with a directory: its statement above Join, and the statement shown sent with the join', async () => {
+    const manifest = jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      criteria: [{ id: 'invited-member' }],
+      directoryDisclosure: readDirectoryDisclosure(statement()),
+    } as never)
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('DirectoryDisclosure'))).toBeTruthy()
+    mockJoin.mockResolvedValue({ membership: {} })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(mockJoin).toHaveBeenCalledWith(
+      expect.objectContaining({ disclosureSeen: statement().statementDigest }),
+      expect.anything()
+    )
+    manifest.mockRestore()
+  })
+
+  test('an invitation to a community without a statement says nothing about a directory', async () => {
+    const manifest = jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue({ criteria: [{ id: 'invited-member' }] } as never)
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('DirectoryDisclosure'))).toBeNull()
+    manifest.mockRestore()
   })
 
   test('the invitation already arrived: Join', async () => {

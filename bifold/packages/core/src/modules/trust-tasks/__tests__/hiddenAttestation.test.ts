@@ -560,6 +560,30 @@ describe('the named flow, applied to a private way in', () => {
     expect(await community.getMembership(COMMUNITY, PERSONA.did)).toMatchObject({ privateVetting: true })
   })
 
+  it('refuses a private request under a statement the person was not shown before any challenge or proof', async () => {
+    // The challenge and the proof are spent by asking; nothing is asked first.
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    mockFetchChallenge.mockClear()
+    mockExtensions.mockClear()
+    mockApply.mockClear()
+    const saved: Record<string, unknown>[] = []
+    const community = { saveSubmission: async (x: Record<string, unknown>) => void saved.push(x) } as never
+    const shown = { ...manifest, directoryDisclosure: { statementDigest: 'zQmShownStatement' } }
+    const failure = await new VtiApplicant(
+      { config: { logger: logger() } } as never,
+      PERSONA as never,
+      memoryStore({}),
+      community
+    )
+      .submit(shown as never, [], 'zQmDigest')
+      .catch((e) => e)
+    expect(failure).toMatchObject({ code: 'keyring/join/disclosureNotShown' })
+    expect(mockFetchChallenge).not.toHaveBeenCalled()
+    expect(mockExtensions).not.toHaveBeenCalled()
+    expect(mockApply).not.toHaveBeenCalled()
+    expect(saved).toEqual([])
+  })
+
   it('a private request under a directory statement keeps both: the mark and the statement it was shown', async () => {
     // One record per send, which both have to be in: dropping either is silent,
     // since both are optional (manifest/0.4, tf#823).
@@ -572,7 +596,7 @@ describe('the named flow, applied to a private way in', () => {
       PERSONA as never,
       memoryStore({}),
       community
-    ).submit(shown as never, [], 'zQmDigest')
+    ).submit(shown as never, [], 'zQmDigest', undefined, { disclosureSeen: 'zQmShownStatement' })
     expect(await community.getSubmission(COMMUNITY, PERSONA.did)).toMatchObject({
       privateVetting: true,
       directoryStatementDigest: 'zQmShownStatement',

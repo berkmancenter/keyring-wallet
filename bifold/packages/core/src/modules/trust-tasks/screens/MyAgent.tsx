@@ -30,6 +30,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { useTheme } from '../../../contexts/theme'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import {
@@ -237,12 +238,20 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         if (result.membership) setActivity((prev) => [...prev, t('MyAgent.AddedToWallet')])
         await refresh()
       } catch (error) {
+        // The community has a directory statement, which this panel cannot
+        // show: the invitation opens where it is shown, rather than stopping
+        // here on a message the person could not act on (manifest/0.4).
+        if ((error as { code?: string })?.code === 'keyring/join/disclosureNotShown') {
+          communityTarget.choose(invitation.communityDid)
+          navigation.navigate(Screens.VtiInvited)
+          return
+        }
         setHoldingError(sayFailure(error))
       } finally {
         setBusy(undefined)
       }
     },
-    [agent, vtaDid, mediatorDid, refresh, stepText, t]
+    [agent, vtaDid, mediatorDid, refresh, stepText, t, navigation]
   )
 
   const styles = StyleSheet.create({

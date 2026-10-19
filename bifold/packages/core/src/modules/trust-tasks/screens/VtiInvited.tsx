@@ -47,6 +47,8 @@ import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { needWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { DirectoryConsent } from './DirectoryConsent'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
+import type { DirectoryDisclosure } from '../module/directoryDisclosure'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
@@ -94,13 +96,21 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   // What the community asks, so the screen says truthfully whether the
   // invitation is enough: where every way in is vetted, it is not (join.rego).
   const [asks, setAsks] = useState<Asks>()
+  // What the community's directory would show, read with the manifest and
+  // shown before joining (manifest/0.4). Absent: nothing is said about one.
+  const [disclosure, setDisclosure] = useState<DirectoryDisclosure>()
   useEffect(() => {
     if (!communityDid) return
     let live = true
     setAsks(undefined)
+    setDisclosure(undefined)
     vtiAgent
       .fetchManifest(communityDid, agent)
-      .then((m) => live && setAsks(asksFrom(m)))
+      .then((m) => {
+        if (!live) return
+        setAsks(asksFrom(m))
+        setDisclosure(m.directoryDisclosure)
+      })
       .catch(() => undefined)
     return () => {
       live = false
@@ -244,6 +254,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           mediatorDid,
           communityDid: invitation.communityDid,
           registryConsent: listMe,
+          disclosureSeen: disclosure?.statementDigest,
         },
         invitation
       )
@@ -290,7 +301,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       setBusy(false)
       setBusyWith(undefined)
     }
-  }, [agent, vtaDid, mediatorDid, invitation, listMe])
+  }, [agent, vtaDid, mediatorDid, invitation, listMe, disclosure?.statementDigest])
 
   // The person's own way out of a request the community holds open
   // (vtc/join-requests/withdraw): it frees them to ask again later. The
@@ -579,6 +590,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             </View>
             <DidDetails did={invitation.communityDid} testIdStem="InvitedCommunity" />
           </View>
+          {disclosure ? <DirectoryDisclosureCard disclosure={disclosure} community={community} /> : null}
           <DirectoryConsent
             communityDid={invitation.communityDid}
             value={listMe}

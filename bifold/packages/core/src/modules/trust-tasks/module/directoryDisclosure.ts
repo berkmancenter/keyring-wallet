@@ -162,3 +162,42 @@ export function readDirectoryDisclosure(raw: unknown): DirectoryDisclosure {
     statementDigest,
   }
 }
+
+/**
+ * A request about to be sent under a directory statement the person was not
+ * shown: none shown, or a different one (the statement changed after it was
+ * shown). Nothing is sent; the screen shows the current statement again.
+ */
+export class DisclosureNotShown extends Error {
+  readonly code = 'keyring/join/disclosureNotShown'
+  constructor(readonly statementDigest: string) {
+    super("The community's directory statement must be shown before the request is sent")
+    this.name = 'DisclosureNotShown'
+  }
+}
+
+/**
+ * Whether a request under `manifest` may go: it carries no statement, or the
+ * person was shown this exact one (`seen` is the digest of the statement the
+ * screen showed).
+ */
+export function disclosureShown(
+  manifest: { directoryDisclosure?: Pick<DirectoryDisclosure, 'statementDigest'> },
+  seen: string | undefined
+): boolean {
+  return !manifest.directoryDisclosure || manifest.directoryDisclosure.statementDigest === seen
+}
+
+/**
+ * The order a screen sends in, when it asks for a confirmation (Face ID)
+ * first: read the manifest, refuse if its statement is not the one shown,
+ * and only then ask. Nobody is asked to confirm a request that will not be
+ * sent. Undefined: the person declined to confirm.
+ */
+export async function readShownThenConfirm<
+  M extends { directoryDisclosure?: Pick<DirectoryDisclosure, 'statementDigest'> },
+>(shown: string | undefined, read: () => Promise<M>, confirm: () => Promise<boolean>): Promise<M | undefined> {
+  const manifest = await read()
+  if (!disclosureShown(manifest, shown)) throw new DisclosureNotShown(manifest.directoryDisclosure!.statementDigest)
+  return (await confirm()) ? manifest : undefined
+}

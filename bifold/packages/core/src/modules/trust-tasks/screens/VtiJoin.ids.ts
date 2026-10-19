@@ -17,6 +17,7 @@ export const VtiJoinIds = {
   scanCommunity: 'JoinScanCommunity',
   waysTitle: 'JoinWaysTitle',
   versionUnsupported: 'JoinVersionUnsupported',
+  directoryUnreadable: 'JoinDirectoryUnreadable',
   notAccepting: 'JoinNotAccepting',
   vettingNotSupported: 'JoinVettingNotSupported',
   privateRefused: 'JoinPrivateVettingRefused',

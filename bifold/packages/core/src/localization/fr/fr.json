@@ -2092,6 +2092,61 @@
     "ReplaceRequest": "Remplacer ma demande",
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   },
+  "Directory": {
+    "Title": "Ce que l’annuaire des membres de {{community}} montrerait",
+    "AtMost": "Chaque ligne indique le maximum qui puisse être montré. Après avoir rejoint, vous pouvez toujours montrer moins.",
+    "Field": "Rempli par {{who}}. Une nouvelle carte le montre à {{shown}} ; au plus à {{most}}.",
+    "Searchable": "Les membres peuvent vous trouver par ce champ dans une recherche.",
+    "NewCard": "Une nouvelle carte est {{listing}} et {{search}}.",
+    "Introductions": "Elle accepte les mises en relation de {{from}}.",
+    "Identifier": "L’identifiant avec lequel vous rejoignez peut atteindre au plus {{most}}. Une nouvelle carte ne le montre qu’aux administrateurs.",
+    "NotesKept": "Les administrateurs prennent des notes sur les membres. Les notes n’atteignent jamais les autres membres, et vous pouvez demander les notes vous concernant.",
+    "NotesNone": "Les administrateurs ne prennent pas de notes sur les membres.",
+    "Groups": "{{community}} a des groupes. Une attestation d’appartenance à un groupe est valable {{validity}} et renouvelée tant que vous restez dans le groupe ; une attestation déjà émise reste valable jusqu’à son expiration, même après votre départ.",
+    "ExternalAllowed": "Vous pouvez choisir de publier une carte hors de la communauté. C’est désactivé sur une nouvelle carte.",
+    "ExternalNone": "Les cartes ne sont pas publiées hors de la communauté.",
+    "Audience": {
+      "admins": "aux administrateurs seulement",
+      "groups": "aux personnes de vos groupes",
+      "connections": "à vos relations",
+      "members": "à tous les membres de {{community}}",
+      "public": "à tout le monde, y compris hors de la communauté"
+    },
+    "Source": {
+      "member": "vous",
+      "admin": "les administrateurs de la communauté (vous pouvez le lire, pas le modifier)",
+      "credential": "une attestation que vous détenez",
+      "derived": "la communauté, à partir d’autres informations"
+    },
+    "Listing": {
+      "listed": "listée dans l’annuaire",
+      "findable": "non listée mais trouvable",
+      "hidden": "masquée dans l’annuaire"
+    },
+    "Search": {
+      "byName": "peut être trouvée par le nom",
+      "exactNickname": "ne peut être trouvée que par son pseudonyme exact",
+      "off": "ne peut pas être trouvée par une recherche"
+    },
+    "IntroductionsFrom": {
+      "anyone": "tout le monde",
+      "groups": "personnes de vos groupes",
+      "connections": "vos relations",
+      "off": "personne"
+    },
+    "Duration": {
+      "weeks_one": "1 semaine",
+      "weeks_other": "{{count}} semaines",
+      "days_one": "1 jour",
+      "days_other": "{{count}} jours",
+      "hours_one": "1 heure",
+      "hours_other": "{{count}} heures",
+      "minutes_one": "1 minute",
+      "minutes_other": "{{count}} minutes",
+      "seconds_one": "1 seconde",
+      "seconds_other": "{{count}} secondes"
+    }
+  },
   "Errors": {
     "AlreadyAsked": "Vous avez déjà demandé à rejoindre. La communauté décide encore, ou attend votre vérification.",
     "JoinChanged": "Cette communauté a modifié ce qu'elle demande. Relisez, puis continuez.",
@@ -2107,6 +2162,8 @@
     "NoDidHost": "Votre agent n'a aucun endroit où publier une nouvelle identité. Demandez à son administrateur d'y enregistrer un hébergeur de DID, puis réessayez.",
     "Unreachable": "Rien n'a répondu à cette adresse. Vérifiez votre connexion, puis réessayez.",
     "Unknown": "Cela n'a pas fonctionné et l'application ne sait pas pourquoi. Réessayez ; si cela persiste, envoyez-nous les détails ci-dessous.",
+    "DirectoryUnreadable": "Les conditions de l’annuaire de cette communauté n’ont pas pu être lues, donc Keyring n’enverra pas votre demande. Réessayez plus tard, ou contactez la communauté.",
+    "DirectoryNotShown": "Keyring ne vous a pas encore montré les conditions actuelles de l’annuaire de cette communauté. Lisez-les, puis renvoyez votre demande.",
     "AgentBusy": "Votre agent est occupé pour le moment. Attendez une minute et réessayez.",
     "ShowDetails": "Détails"
   },
