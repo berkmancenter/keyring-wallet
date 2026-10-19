@@ -63,6 +63,12 @@ export const EXT_UV_CONSENT = 'org.openvtc.uv-consent'
 export const DID_SELF_ISSUED = 'did-self-issued'
 
 /**
+ * The label the sign-in entries Keyring makes carry, `Keyring sign-in · <community DID>` ({@link ensureSignInVaultEntry}):
+ * how a sign-in tells Keyring's own entries from ones made elsewhere (the browser plugin).
+ */
+export const KEYRING_SIGN_IN_LABEL = 'Keyring sign-in'
+
+/**
  * How long the session the grant opens may last at most: the grant's notAfter. The VTC ends the session at the
  * earlier of this and its own refresh-token expiry (24 h by default), refreshing access silently until then, and a
  * 0.2 signing scope dies with it (maintainer, IN-280). 12 h, as the browser plugin grants; the approval screen says
@@ -565,7 +571,7 @@ export async function ensureSignInVaultEntry(
     const { entry } = await deps.vta.vaultUpsert({
       contextId: persona.contextId,
       targets: [{ kind: 'did', did: vtcDid }],
-      label: persona.label ?? `Keyring sign-in · ${vtcDid}`,
+      label: persona.label ?? `${KEYRING_SIGN_IN_LABEL} · ${vtcDid}`,
       secretKind: DID_SELF_ISSUED,
       sealedSecret,
     })

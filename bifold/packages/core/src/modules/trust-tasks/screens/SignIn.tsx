@@ -112,6 +112,12 @@ export interface SignInFlowProps {
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
 
+/** A persona with no name, by its DID's last part (a did:webvh path names it), never the whole DID on a picker row. */
+export const shortPersonaDid = (did: string): string => {
+  const last = did.split(':').pop() || did
+  return last.length > 24 ? `${last.slice(0, 20)}…` : last
+}
+
 export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSeconds, onClose }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
@@ -388,7 +394,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                 }}
                 testID={id(`${SignInIds.identityOption}-${n}`)}
               >
-                <ThemedText variant="bold">{identity.label?.trim() || identity.did}</ThemedText>
+                <ThemedText variant="bold">{identity.label?.trim() || shortPersonaDid(identity.did)}</ThemedText>
                 <ThemedText testID={id(`${SignInIds.identityAgent}-${n}`)}>
                   {t(identity.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
                     agent: identity.agentName,

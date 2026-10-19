@@ -93,6 +93,57 @@ describe('which identities a sign-in can use', () => {
     ).toEqual([])
   })
 
+  // Gate 1019-1815: a fresh phone joined through a runner earlier phones had signed in through, and the picker
+  // listed their leftover "Keyring sign-in · <community>" entries beside its own persona.
+  it("the phone's persona, its own sign-in entry and another persona's Keyring entry: one identity, no picker", () => {
+    const persona = {
+      communityDid: VTC,
+      vtaDid: AGENTS[0].vtaDid,
+      did: 'did:webvh:QmJ:host:party-dirt',
+      contextId: 'ctx-j',
+      label: 'keyring-mvfmgsvu',
+    }
+    const keyringLabel = `Keyring sign-in · ${VTC}`
+    const counts = {}
+    const found = signInIdentitiesFrom(
+      VTC,
+      AGENTS,
+      [persona],
+      {
+        [AGENTS[0].vtaDid]: [
+          entry({ id: 'own', principalDid: persona.did, contextId: 'ctx-j', label: keyringLabel }),
+          entry({
+            id: 'stale-1',
+            principalDid: 'did:webvh:QmS:host:gone-member',
+            contextId: 'ctx-s',
+            label: keyringLabel,
+          }),
+          entry({
+            id: 'stale-2',
+            principalDid: 'did:webvh:QmT:host:other-gone',
+            contextId: 'ctx-t',
+            label: keyringLabel,
+          }),
+        ],
+      },
+      counts
+    )
+    expect(found).toEqual([
+      expect.objectContaining({ did: persona.did, entryId: 'own', label: 'keyring-mvfmgsvu', source: 'thisPhone' }),
+    ])
+    expect(counts).toEqual({
+      [AGENTS[0].vtaDid]: { listed: 3, matched: 3, keyringMadeDropped: 2 },
+      [AGENTS[1].vtaDid]: { listed: 0, matched: 0, keyringMadeDropped: 0 },
+    })
+  })
+
+  it("a foreign entry is offered, but a label naming the community is never shown as the persona's name", () => {
+    const [found] = signInIdentitiesFrom(VTC, AGENTS, [], {
+      [AGENTS[0].vtaDid]: [entry({ label: `Sign-in for ${VTC}` })],
+    })
+    expect(found).toMatchObject({ source: 'agent', label: undefined })
+  })
+
   it('0.1 spells the kind did-self-issued: taken too', () => {
     expect(signInIdentitiesFrom(VTC, AGENTS, [], { [A]: [entry({ secretKind: 'did-self-issued' })] })).toHaveLength(1)
   })
