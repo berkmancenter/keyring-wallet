@@ -37,6 +37,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import type { ClaimedSignIn } from '../module/oobSignIn'
+import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import {
   agentSignInSteps,
   pendingSignInLink,
@@ -434,8 +435,19 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               {row(t('SignIn.SameNetwork'), sameNetwork, SignInIds.sameNetwork)}
             </View>
             <ThemedText variant="bold" testID={id(SignInIds.sessionOnly)}>
-              {t('SignIn.SessionOnly')}
+              {t('SignIn.SessionOnly', { hours: GRANT_LIFETIME_SECONDS / 3600 })}
             </ThemedText>
+            {/* 0.2 (IN-280): the browser's key may also sign these documents as the person, for this session,
+                without asking the phone each time. Said in words; a family Keyring has no words for is named. */}
+            {proved.signingScope?.length ? (
+              <ThemedText testID={id(SignInIds.signingScope)}>
+                {t('SignIn.SigningScope', {
+                  areas: proved.signingScope
+                    .map((family) => (family === 'vtc/directory' ? t('SignIn.ScopeDirectory') : family))
+                    .join(', '),
+                })}
+              </ThemedText>
+            ) : null}
             {busy ? null : timeLeft()}
             {busy ? (
               busyNote(t('SignIn.Approving'), SignInIds.busy)

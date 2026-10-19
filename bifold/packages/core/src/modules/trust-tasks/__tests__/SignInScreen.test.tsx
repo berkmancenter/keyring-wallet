@@ -15,6 +15,7 @@ import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
+import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import { pendingSignInLink, type ProvedSignIn, type SignInSteps } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
@@ -45,6 +46,7 @@ const proved: ProvedSignIn = {
   requester: { browser: 'Firefox 131', os: 'macOS', location: 'Boston, US', sameNetwork: true },
   identifiedAs: 'Alberto',
   persona: { did: 'did:webvh:QmP:host:persona', entryId: 'entry-1' },
+  version: '0.2',
 }
 
 const fakeSteps = (over: Partial<SignInSteps> = {}): jest.Mocked<SignInSteps> =>
@@ -235,7 +237,24 @@ describe('5. the request, as the community reports it', () => {
     expect(tree.getByTestId(id(SignInIds.website))).toHaveTextContent('https://portal.example.org')
     expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
     expect(tree.getByTestId(id(SignInIds.sessionOnly))).toHaveTextContent('SignIn.SessionOnly')
-    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for this session only.')
+    // How long it lasts, in hours read from the grant's notAfter (maintainer, IN-280: 12 h, as the plugin grants).
+    // A ceiling: the VTC ends the session sooner if its refresh-token expiry comes first (review on #435).
+    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for up to {{hours}} hours, or until you sign out.')
+    expect(GRANT_LIFETIME_SECONDS).toBe(12 * 60 * 60)
+  })
+
+  // IN-280: a 0.2 sign-in that delegates signing says so, in words, before the person approves.
+  test('a scope the community offers is said in words: the browser may also act as the person there, this session', async () => {
+    const scoped = { ...proved, signingScope: ['vtc/directory'] }
+    const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
+    expect(tree.getByTestId(id(SignInIds.signingScope))).toHaveTextContent(/SignIn\.SigningScope/)
+    expect(en.SignIn.SigningScope).toBe('For that time it also lets that browser act as you in: {{areas}}.')
+    expect(en.SignIn.ScopeDirectory).toBe('the member directory (reading it, and editing your own card)')
+  })
+
+  test('no scope offered (0.1, or none): nothing more is said', async () => {
+    const tree = await toReview(fakeSteps())
+    expect(tree.queryByTestId(id(SignInIds.signingScope))).toBeNull()
   })
 
   test('what the community did not report is said to be not reported', async () => {
