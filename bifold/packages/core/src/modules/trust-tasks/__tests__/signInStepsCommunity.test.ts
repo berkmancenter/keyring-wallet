@@ -13,6 +13,8 @@ jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
   readPublicProfileName: (...args: unknown[]) => mockReadPublicProfileName(...(args as [])),
 }))
+// No linked agent holds a persona here (IN-296's identities are signInIdentities.test.ts's).
+jest.mock('../module/vtaAgent', () => ({ vtaAgent: { linkedAgents: async () => [] } }))
 const mockNames: { communityDid: string; name: string }[] = []
 const mockMemberships: { communityDid: string }[] = []
 jest.mock('../module/VtiCommunityStore', () => ({
@@ -42,14 +44,14 @@ beforeEach(() => {
 describe("a sign-in's community, by name", () => {
   it('a member with no name on record: the name it publishes', async () => {
     const found = await agentSignInSteps(agent as never).community(VTC)
-    expect(found).toEqual({ member: true, name: 'Test VTC' })
+    expect(found).toEqual({ member: true, name: 'Test VTC', identities: [] })
     expect(mockReadPublicProfileName).toHaveBeenCalledWith('https://vtc.example/v1', VTC)
   })
 
   it('a community never joined: nothing is resolved or read before Continue', async () => {
     mockMemberships.splice(0)
     const found = await agentSignInSteps(agent as never).community(VTC)
-    expect(found).toEqual({ member: false, name: undefined })
+    expect(found).toEqual({ member: false, name: undefined, identities: [] })
     expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
     expect(mockReadPublicProfileName).not.toHaveBeenCalled()
   })

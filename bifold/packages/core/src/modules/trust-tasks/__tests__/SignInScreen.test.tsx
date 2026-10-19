@@ -16,7 +16,7 @@ import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
-import { pendingSignInLink, type ProvedSignIn, type SignInSteps } from '../module/signInSteps'
+import { pendingSignInLink, type ProvedSignIn, type SignInIdentity, type SignInSteps } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
 
@@ -175,6 +175,88 @@ describe('1. confirm, before anything is sent', () => {
   })
 })
 
+// IN-296: identities on any linked agent, the plugin's too. Several: which one signs in is asked before anything is
+// sent; one goes straight on, as before.
+const identity = (over: Partial<SignInIdentity> = {}): SignInIdentity => ({
+  vtaDid: 'did:webvh:QmA:dids.example:agent-a',
+  agentName: 'Home agent',
+  current: true,
+  did: 'did:webvh:QmP:host:joined',
+  contextId: 'ctx-a',
+  label: 'Me at Test',
+  source: 'thisPhone',
+  ...over,
+})
+const PLUGIN = identity({
+  vtaDid: 'did:webvh:QmB:dids.example:agent-b',
+  agentName: 'Work agent',
+  current: false,
+  did: 'did:webvh:QmQ:host:plugin',
+  entryId: 'entry-plugin',
+  label: 'Test (browser)',
+  source: 'agent',
+})
+
+describe('1b. which identity, when several hold a membership', () => {
+  test('several: a picker with each identity, its agent and where it came from; nothing is sent before a choice', async () => {
+    const steps = fakeSteps({
+      community: jest.fn(async () => ({ member: true, name: 'Test Community', identities: [identity(), PLUGIN] })),
+    })
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    expect(tree.getByTestId(id(SignInIds.choose))).toBeTruthy()
+    expect(steps.claim).not.toHaveBeenCalled()
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-0`))).toHaveTextContent(/Me at Test/)
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-0`))).toHaveTextContent('SignIn.ChooseOnAgentCurrent')
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-0`))).toHaveTextContent(/SignIn\.ChooseFromPhone/)
+    expect(tree.getByTestId(id(`${SignInIds.identityAgent}-1`))).toHaveTextContent('SignIn.ChooseOnAgent')
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/SignIn\.ChooseFromAgent/)
+
+    await press(tree, `${SignInIds.identityOption}-1`)
+    expect(steps.claim).toHaveBeenCalledWith(LINK)
+    await typeNumber(tree, '42')
+    await press(tree, SignInIds.numberContinue)
+    expect(steps.identifyAndProve).toHaveBeenCalledWith(claimed, '42', PLUGIN)
+    // The review still says who is signing in.
+    expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
+  })
+
+  test('one: no picker, straight on to the claim as before', async () => {
+    const steps = fakeSteps({
+      community: jest.fn(async () => ({ member: true, name: 'Test Community', identities: [PLUGIN] })),
+    })
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    expect(tree.queryByTestId(id(SignInIds.choose))).toBeNull()
+    expect(steps.claim).toHaveBeenCalledWith(LINK)
+    expect(tree.getByTestId(id(SignInIds.number))).toBeTruthy()
+  })
+
+  test('Cancel at the picker leaves without sending anything', async () => {
+    const steps = fakeSteps({
+      community: jest.fn(async () => ({ member: true, name: 'Test Community', identities: [identity(), PLUGIN] })),
+    })
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    await press(tree, SignInIds.cancel)
+    expect(onClose).toHaveBeenCalled()
+    expect(steps.claim).not.toHaveBeenCalled()
+  })
+
+  test('the words are in every language', () => {
+    for (const lang of [en, fr, ptBr] as Record<string, Record<string, string>>[])
+      for (const key of [
+        'ChooseTitle',
+        'ChooseBody',
+        'ChooseOnAgent',
+        'ChooseOnAgentCurrent',
+        'ChooseFromPhone',
+        'ChooseFromAgent',
+      ])
+        expect(lang.SignIn[key]).toBeTruthy()
+  })
+})
+
 describe('3. the number the website shows', () => {
   test('takes two digits only, and Continue waits for both', async () => {
     const steps = fakeSteps()
@@ -190,7 +272,7 @@ describe('3. the number the website shows', () => {
     await typeNumber(tree, 'a4-25')
     expect(tree.getByTestId(id(SignInIds.numberInput)).props.value).toBe('42')
     await press(tree, SignInIds.numberContinue)
-    expect(steps.identifyAndProve).toHaveBeenCalledWith(claimed, '42')
+    expect(steps.identifyAndProve).toHaveBeenCalledWith(claimed, '42', undefined)
   })
 
   test('shows the time left to decide', async () => {

@@ -10,6 +10,10 @@ export const SignInIds = {
   continue: 'SignInContinue',
   cancel: 'SignInCancel',
   notMember: 'SignInNotMember',
+  // 1b. Several identities hold a membership (IN-296): which one signs in. An option is `SignInIdentity-<n>`, n from 0.
+  choose: 'SignInChoose',
+  identityOption: 'SignInIdentity',
+  identityAgent: 'SignInIdentityAgent',
   // 2 and 4. Waiting on the community.
   claiming: 'SignInClaiming',
   checking: 'SignInChecking',

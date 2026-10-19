@@ -4,7 +4,10 @@
  *
  *  1. Confirm — the community named from Keyring's own records, its host,
  *     Continue and Cancel. Nothing is sent before Continue; a community this
- *     phone has not joined is said so, and nothing else is offered.
+ *     phone has not joined is said so, and nothing else is offered. A
+ *     community where several identities hold a membership (on this phone or
+ *     on any linked agent, IN-296) asks which one first: the identity, the
+ *     agent that holds it, and where it came from. One goes straight on.
  *  2. Claiming — the code is claimed for this phone (`claim`).
  *  3. The number — the two digits the website shows, typed once. A wrong
  *     number ends the request.
@@ -28,7 +31,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -45,6 +48,7 @@ import {
   signInReasonOf,
   type ProvedSignIn,
   type SignInEndReason,
+  type SignInIdentity,
   type SignInSteps,
 } from '../module/signInSteps'
 
@@ -66,8 +70,9 @@ export type SignInEnd =
 
 type Step =
   | { kind: 'reading' }
-  | { kind: 'confirm'; vtcDid: string; name: string; host?: string }
+  | { kind: 'confirm'; vtcDid: string; name: string; host?: string; identities: SignInIdentity[] }
   | { kind: 'notMember'; name: string; vtcDid: string }
+  | { kind: 'choose'; identities: SignInIdentity[] }
   | { kind: 'claiming' }
   | { kind: 'number'; claimed: ClaimedSignIn }
   | { kind: 'checking'; claimed: ClaimedSignIn }
@@ -121,6 +126,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
 
   // What the unmount and the deadline need without re-running effects.
   const claimedRef = useRef<ClaimedSignIn | undefined>(undefined)
+  // The identity the person chose, when there was a choice; else the steps take the one found.
+  const chosenRef = useRef<SignInIdentity | undefined>(undefined)
   const approveStarted = useRef(false)
   const endedRef = useRef(false)
   const stepsRef = useRef(steps)
@@ -158,7 +165,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     let live = true
     stepsRef.current
       .community(read.vtcDid)
-      .then(({ member, name }) => {
+      .then(({ member, name, identities = [] }) => {
         if (!live) return
         // Never the raw DID as its name: what the community calls itself,
         // else its handle, with the DID behind Details (IN-249).
@@ -166,7 +173,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         setCommunityName(label)
         setStep(
           member
-            ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didDomainPath(read.vtcDid) }
+            ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didDomainPath(read.vtcDid), identities }
             : { kind: 'notMember', name: label, vtcDid: read.vtcDid }
         )
       })
@@ -204,8 +211,13 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     []
   )
 
-  const onContinue = async () => {
+  const onContinue = async (identities: SignInIdentity[] = []) => {
     if (!link) return
+    // Several identities: which one signs in is asked before anything is sent.
+    if (identities.length > 1 && !chosenRef.current) {
+      setStep({ kind: 'choose', identities })
+      return
+    }
     setStep({ kind: 'claiming' })
     try {
       const claimed = await steps.claim(link)
@@ -222,7 +234,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     if (number.length !== 2) return
     setStep({ kind: 'checking', claimed })
     try {
-      const proved = await steps.identifyAndProve(claimed, number)
+      const proved = await steps.identifyAndProve(claimed, number, chosenRef.current)
       advance({ kind: 'review', proved })
     } catch (e) {
       fail(e)
@@ -329,7 +341,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               <Button
                 title={t('SignIn.Continue')}
                 buttonType={ButtonType.Primary}
-                onPress={() => void onContinue()}
+                onPress={() => void onContinue(step.identities)}
                 testID={id(SignInIds.continue)}
               />
               <Button
@@ -355,6 +367,44 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
               buttonType={ButtonType.Primary}
               onPress={onClose}
               testID={id(SignInIds.done)}
+            />
+          </View>
+        )
+      case 'choose':
+        return (
+          <View style={{ gap: 16 }} testID={id(SignInIds.choose)}>
+            <ThemedText variant="headingThree" accessibilityRole="header">
+              {t('SignIn.ChooseTitle')}
+            </ThemedText>
+            <ThemedText>{t('SignIn.ChooseBody')}</ThemedText>
+            {step.identities.map((identity, n) => (
+              <Pressable
+                key={`${identity.vtaDid} ${identity.did}`}
+                style={styles.card}
+                accessibilityRole="button"
+                onPress={() => {
+                  chosenRef.current = identity
+                  void onContinue()
+                }}
+                testID={id(`${SignInIds.identityOption}-${n}`)}
+              >
+                <ThemedText variant="bold">{identity.label?.trim() || identity.did}</ThemedText>
+                <ThemedText testID={id(`${SignInIds.identityAgent}-${n}`)}>
+                  {t(identity.current ? 'SignIn.ChooseOnAgentCurrent' : 'SignIn.ChooseOnAgent', {
+                    agent: identity.agentName,
+                    interpolation: { escapeValue: false },
+                  })}
+                </ThemedText>
+                <ThemedText style={styles.muted}>
+                  {t(identity.source === 'thisPhone' ? 'SignIn.ChooseFromPhone' : 'SignIn.ChooseFromAgent')}
+                </ThemedText>
+              </Pressable>
+            ))}
+            <Button
+              title={t('SignIn.Cancel')}
+              buttonType={ButtonType.Secondary}
+              onPress={onClose}
+              testID={id(SignInIds.cancel)}
             />
           </View>
         )
