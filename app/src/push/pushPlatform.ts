@@ -114,6 +114,49 @@ export function watchForToken(
 }
 
 /**
+ * The Android counterpart of {@link watchForToken}: Firebase's token read is a
+ * network call there, not a local read, so polling it every
+ * {@link LATE_TOKEN_POLL_MS} would ask Google's servers ~120 times in the
+ * watch. Instead: one read now, in case the token turned up just before this
+ * was called, then Firebase's own `onTokenRefresh`, which fires when a token
+ * is issued. Gives up after {@link LATE_TOKEN_WATCH_MS}; returns a stop.
+ */
+export function watchForTokenRefresh(
+  getToken: () => Promise<string | null | undefined>,
+  onTokenRefresh: (listener: (token: string) => void) => () => void,
+  arrived: () => void,
+  opts: { watchMs?: number } = {}
+): () => void {
+  let done = false
+  // Held in an object so `stop` can reach the unsubscribe however early it
+  // runs, including from a listener Firebase calls while still subscribing.
+  const subscription: { off?: () => void } = {}
+  const stop = () => {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    subscription.off?.()
+  }
+  const once = () => {
+    if (done) return
+    stop()
+    arrived()
+  }
+  const timer = setTimeout(stop, opts.watchMs ?? LATE_TOKEN_WATCH_MS)
+  subscription.off = onTokenRefresh((token) => {
+    if (token) once()
+  })
+  // Stopped while subscribing: unsubscribe now that there is something to drop.
+  if (done) subscription.off()
+  void getToken()
+    .catch(() => null)
+    .then((token) => {
+      if (token) once()
+    })
+  return stop
+}
+
+/**
  * The person turned notifications off: withdraw what {@link startPlatformPush}
  * set up. What stops the wakes is the agent clearing this device's channel;
  * this step only withdraws the platform token where that can be undone.
