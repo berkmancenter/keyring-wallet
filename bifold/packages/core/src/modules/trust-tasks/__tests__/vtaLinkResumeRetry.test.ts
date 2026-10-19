@@ -141,6 +141,22 @@ describe('a resumed link whose one check got no answer', () => {
     expect(mockClient.connect).toHaveBeenCalledTimes(2)
     await jest.advanceTimersByTimeAsync(1000)
     expect(vta.getState().link.kind).toBe('linked')
+    expect(appStateHandlers).toHaveLength(0)
+  })
+
+  it.each([
+    ['linked', { type: 'linked', linkedAt: new Date(NOW).toISOString() }, 'linked'],
+    ['refused', { type: 'failed', failure: { reason: 'refused' } }, 'notLinked'],
+  ])('a wait for the foreground ends when the link is %s meanwhile: no listener stays', async (_, event, kind) => {
+    mockClient.connect.mockImplementationOnce(hang)
+    const vta = controller()
+    await resumedUnanswered(vta)
+    appState = 'background'
+    await jest.advanceTimersByTimeAsync(RESUME_RETRY_DELAYS_MS[0] + 10)
+    expect(appStateHandlers).toHaveLength(1)
+    ;(vta as unknown as { dispatch(e: unknown): void }).dispatch(event)
+    expect(vta.getState().link.kind).toBe(kind)
+    expect(appStateHandlers).toHaveLength(0)
   })
 
   it('ends when the link changes: the person cancels', async () => {
@@ -150,6 +166,7 @@ describe('a resumed link whose one check got no answer', () => {
     vta.cancelLink()
     await jest.advanceTimersByTimeAsync(2 * 60 * 1000)
     expect(mockClient.connect).toHaveBeenCalledTimes(1)
+    expect(appStateHandlers).toHaveLength(0)
   })
 })
 

@@ -670,6 +670,8 @@ export class VtaAgentController {
     const next = reduceLink(previous, event)
     if (next === previous) return
     this.set({ link: next })
+    // A link that left the key screen (linked, refused) needs no further check: no wait outlives it.
+    if (next.kind !== 'showingKey') this.cancelResumeRetry()
     // The activity list records what changed for the person, not every retry.
     const wasOnline = previous.kind === 'linked' && previous.connection.kind === 'online'
     const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
