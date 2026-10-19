@@ -12,7 +12,9 @@ APK=$APK_OFF
 leg_begin hv "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 # The openvtc TUI as vetter is informational: its attestation is not the published vetting/attestation/0.1 shape, so
 # hv-attestation-received fails on openvtc's side (run-summary.mjs: reported apart, proves no core journey).
-[ "${VETTER:-}" = tui ] && echo "INFORMATIONAL VETTER=tui: openvtc's attestation is not the published shape"
+# Only the rows downstream of the attestation, and hv-driver (run-hv exits non-zero on any FAIL row): a crash before
+# the attestation still fails the applicant's own rows as "not reached", which stay verdicts.
+[ "${VETTER:-}" = tui ] && echo "INFORMATIONAL rows=hv-attestation-received,hv-proof,hv-admitted,hv-member-card,hv-vetter-anonymous,hv-driver VETTER=tui: openvtc's attestation is not the published shape"
 if [ -z "${HV_C_DID:-}" ] || [ -z "${HV_C_REST:-}" ] || [ -z "${HV_C_ADMIN_CRED:-}" ]; then
   for r in $HV_ROWS; do row "$r" SKIP "no hv community configured (HV_C_DID, HV_C_REST, HV_C_ADMIN_CRED)"; done
   exit 0  # leg_begin's EXIT trap ends the leg (leg_end)

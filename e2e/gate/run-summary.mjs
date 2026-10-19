@@ -7,7 +7,7 @@
 //   harness  not the app: the leg broke (setup, link, crash; LEG … BROKEN), or the meta names it (harness-legs=)
 //   none     no result: not run (exit 4, paused) or stopped (exit 143)
 // overall: pass (every leg an app pass), fail (any app fail), incomplete (some legs are no verdict on the app).
-// Informational rows (meta informational=, or every FAIL in a leg that logs INFORMATIONAL <why>): the openvtc/TUI rows
+// Informational rows (meta informational=, or the rows a leg names in INFORMATIONAL rows=a,b <why>): the openvtc/TUI rows
 // while keyring-test's VTC and openvtc's attestation shape are behind. Listed under informational; they never fail a
 // leg, and a leg passing only through them proves no core journey.
 // Core journeys (meta core= journey:leg[,leg]…, gate.sh CORE_JOURNEYS): what people use Keyring for, Keyring to
@@ -48,9 +48,13 @@ const list = (v) => (first(v) || '').split(/\s+/).filter(Boolean);
 export function legRecord({ name, exit, start, end }, log, meta, passedBefore = new Map()) {
   const all = [...log.matchAll(/^ROW (.*?) (PASS|FAIL|SKIP) — (.*)$/gm)].map((m) => ({ name: m[1], status: m[2], detail: m[3] }));
   // Informational FAILs are set aside: listed, never a verdict (see the header).
-  const infoLeg = (log.match(/^INFORMATIONAL (.*)$/m) || [])[1];
+  // A leg's INFORMATIONAL line names its rows (rows=a,b): only those are set aside, never the leg's other rows (a
+  // regression in Keyring's own rows must still fail it; review on #518).
+  const infoLine = (log.match(/^INFORMATIONAL (.*)$/m) || [])[1];
+  const infoLegRows = new Set(((infoLine || '').match(/\brows=(\S+)/) || [])[1]?.split(',').filter(Boolean) || []);
+  const infoLeg = infoLine === undefined ? undefined : infoLine.replace(/\brows=\S+\s*/, '').trim();
   const infoRows = new Set(list(meta.informational));
-  const isInfo = (r) => r.status === 'FAIL' && (infoLeg !== undefined || infoRows.has(r.name));
+  const isInfo = (r) => r.status === 'FAIL' && (infoLegRows.has(r.name) || infoRows.has(r.name));
   const informational = all.filter(isInfo).map((r) => ({ row: r.name, detail: r.detail.slice(0, 200), why: infoLeg || 'informational row' }));
   const rows = all.filter((r) => !isInfo(r));
   const count = (s) => rows.filter((r) => r.status === s).length;

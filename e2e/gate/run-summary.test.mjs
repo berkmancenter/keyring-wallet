@@ -172,7 +172,7 @@ test('a core journey not run, all SKIP, or proven only informationally makes a f
   const r = runs({ '1019-1100-cccc-gate': { meta: `kind=gate\n${CORE}`, legs: [
     ['kk', 0, pass('kk-vetting')],
     ['hv', 0, 'ROW hv-admitted SKIP — NOT RUN (core journey): no seated Keyring vetter configured\n'],
-    ['waiting', 3, 'INFORMATIONAL VETTER=tui\nROW join-sent FAIL — openvtc\n'],
+    ['waiting', 3, 'INFORMATIONAL rows=join-sent VETTER=tui\nROW join-sent FAIL — openvtc\n'],
     ['other', 0, pass('x')],
   ] } });
   try {
@@ -208,5 +208,19 @@ test('core journeys only decide a full gate: a rerun of a few legs reports them 
     const s = summarize(path.join(r.root, '1019-1300-cccc-rerun'));
     assert.equal(s.overall, 'pass');
     assert.equal(s.coreMissing.length, 3);
+  } finally { r.done(); }
+});
+
+test("a leg's INFORMATIONAL line sets aside only the rows it names: its other FAILs still fail it", () => {
+  const r = runs({ '1019-1400-cccc-rerun': { meta: 'kind=rerun\n', legs: [
+    ['hv', 3, 'INFORMATIONAL rows=hv-proof,hv-driver VETTER=tui\nROW hv-private-badge FAIL — no badge\nROW hv-proof FAIL — openvtc\nROW hv-driver FAIL — rc=1\n'],
+  ] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1400-cccc-rerun'));
+    const hv = s.legs[0];
+    assert.equal(hv.result, 'fail');
+    assert.match(hv.reason, /hv-private-badge/);
+    assert.deepEqual(s.informational.map((i) => i.row).sort(), ['hv-driver', 'hv-proof']);
+    assert.equal(s.overall, 'fail');
   } finally { r.done(); }
 });
