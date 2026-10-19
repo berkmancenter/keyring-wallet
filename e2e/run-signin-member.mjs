@@ -39,6 +39,8 @@ import { createSigninPortal, originOf, signinConfig, triggerLink } from "./openv
 
 const UDID = process.env.UDID;
 const PLATFORM = process.env.PLATFORM === "ios" ? "ios" : "android";
+/** How the person verified at Approve, said in the verdict: Face ID (iOS), or on Android the fingerprint or device PIN. */
+const VERIFIED_BY = PLATFORM === "ios" ? "Face ID" : process.env.SIGNIN_UV === "pin" ? "the device PIN (the emulator's fingerprint HAL fails keystore)" : "a fingerprint";
 const C_DID = process.env.SIGNIN_C_DID;
 const C_REST = process.env.SIGNIN_C_REST;
 const PORTAL = process.env.SIGNIN_PORTAL;
@@ -46,8 +48,12 @@ const rows = createRows({ label: "signin-member" });
 const adb = (...args) => execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8", timeout: 30000 });
 const admin = createHvAdmin({ vtcBase: C_REST, communityDid: C_DID, adminCredential: process.env.SIGNIN_C_ADMIN_CRED });
 
-/** The system's biometric or credential window, or "" (Android; on iOS the leg's Face ID watcher answers it). */
-const authWindow = () => PLATFORM === "ios" ? "" : (adb("shell", "dumpsys", "window", "windows").match(/Window\{[^}]*(BiometricPrompt|AuthContainer|ConfirmDeviceCredential|CredentialView|biometric)[^}]*\}/i) || [""])[0];
+/**
+ * The system's biometric or credential window, or "": the driver touches the sensor only there. On iOS the leg's Face ID
+ * watcher answers, and with SIGNIN_UV=pin the leg's watcher answers with the device PIN (the Android emulator's
+ * fingerprint HAL gives a token keystore treats as expired, run 1019-1459), so the driver leaves the prompt to it.
+ */
+const authWindow = () => PLATFORM === "ios" || process.env.SIGNIN_UV === "pin" ? "" : (adb("shell", "dumpsys", "window", "windows").match(/Window\{[^}]*(BiometricPrompt|AuthContainer|ConfirmDeviceCredential|CredentialView|biometric)[^}]*\}/i) || [""])[0];
 /** The phone says it cannot approve here: an environment without biometrics, not a sign-in verdict. */
 async function uvBroken(d) {
   const t = (await d.getPageSource().catch(() => "")) || "";
@@ -123,11 +129,11 @@ try {
     else if (touched) break;
     else if (await existsTestId(d, "SignInResult", 500)) break;
   }
-  console.log(`[e2e] ${PLATFORM === "ios" ? "Face ID: answered by the leg's watcher" : `fingerprint touches at Approve: ${touched}`}`);
+  console.log(`[e2e] ${PLATFORM === "ios" ? "Face ID: answered by the leg's watcher" : process.env.SIGNIN_UV === "pin" ? "device PIN: answered by the leg's watcher" : `fingerprint touches at Approve: ${touched}`}`);
   const r = await portal.awaitRedeem(req);
   await rows.row("signin-approved", () => ({
     ok: r.state === "approved" && r.subject === memberDid && (r.amr ?? []).includes("uv"),
-    detail: r.state === "approved" ? `redeem approved: subject ${r.subject === memberDid ? "= the phone's member DID" : `${r.subject} (member ${memberDid})`} · amr ${JSON.stringify(r.amr)} · notAfter ${r.notAfter}` : `redeem ${r.state}: ${JSON.stringify(r).slice(0, 160)}`,
+    detail: r.state === "approved" ? `verified with ${VERIFIED_BY} · redeem approved: subject ${r.subject === memberDid ? "= the phone's member DID" : `${r.subject} (member ${memberDid})`} · amr ${JSON.stringify(r.amr)} · notAfter ${r.notAfter}` : `redeem ${r.state}: ${JSON.stringify(r).slice(0, 160)}`,
   }));
   await uvBroken(d);
   const result = await waitForTestId(d, "SignInResult", 60000).then(() => true, () => false);
