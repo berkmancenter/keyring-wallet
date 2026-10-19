@@ -12,7 +12,7 @@
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
-import { DeviceEventEmitter, Platform } from 'react-native'
+import { AppState, DeviceEventEmitter, Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
@@ -382,6 +382,13 @@ export const GRANT_CHECK_DEADLINE_MS = 10000
  * time was thrown away (Android, 2026-09-24: connect ≈5.5 s, answer ≈4.3 s).
  */
 export const GRANT_CONNECT_DEADLINE_MS = 30000
+
+/**
+ * A link picked back up after a relaunch (resumeLink) is checked once; when that check gets no answer in time (a
+ * slow network, a busy agent), it is checked again after each of these, while the app is in the foreground and the
+ * same key is still shown unanswered. Then the person's "Continue linking" takes over, as before.
+ */
+export const RESUME_RETRY_DELAYS_MS = [5_000, 15_000, 45_000] as const
 /** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
 export const SESSION_CONNECT_DEADLINE_MS = 30000
 /** How long Unlink waits on the agent to hear it (wake cleared, sessions ended), from when it is told, before it unlinks anyway. */
@@ -601,6 +608,8 @@ export class VtaAgentController {
   private attemptToken = 0
   private reconnectAttempt = 0
   private retryTimer?: ReturnType<typeof setTimeout>
+  /** The next check of a resumed link that went unanswered: a timer, or a wait for the foreground. */
+  private resumeRetry?: { timer?: ReturnType<typeof setTimeout>; subscription?: { remove(): void } }
   private reconnecting = false
   private opening?: { client: VtaClient; done: Promise<void> }
   /** The VTA whose client an unlock just retired; its replacement opens quietly. */
@@ -661,6 +670,8 @@ export class VtaAgentController {
     const next = reduceLink(previous, event)
     if (next === previous) return
     this.set({ link: next })
+    // A link that left the key screen (linked, refused) needs no further check: no wait outlives it.
+    if (next.kind !== 'showingKey') this.cancelResumeRetry()
     // The activity list records what changed for the person, not every retry.
     const wasOnline = previous.kind === 'linked' && previous.connection.kind === 'online'
     const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
@@ -1129,6 +1140,8 @@ export class VtaAgentController {
    */
   private async adoptAgent(agent: Agent): Promise<void> {
     const before = this.agent
+    // Keyring was locked meanwhile: a resumed link's further checks end; its card stays.
+    this.cancelResumeRetry()
     this.agent = agent
     this.fetchKeysThrough(agent)
     if (this.retryTimer) clearTimeout(this.retryTimer)
@@ -1153,6 +1166,7 @@ export class VtaAgentController {
   }
 
   cancelLink() {
+    this.cancelResumeRetry()
     const cancelling = this.state.link
     // The attempt given up: the one on screen, or the one a failure names
     // (a swap held for an approval ends there, its key kept for Try again).
@@ -1217,6 +1231,7 @@ export class VtaAgentController {
    */
   async unlink(agent: Agent): Promise<void> {
     const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    this.cancelResumeRetry()
     await this.tellAgentBeforeUnlink()
     this.attemptToken++
     this.offer = undefined
@@ -1865,10 +1880,61 @@ export class VtaAgentController {
           : (pending.vtaDid.split(':')[3] ?? pending.vtaDid)
       this.dispatch({ type: 'keyShown', vtaDid: pending.vtaDid, label, did: pending.did, resumed: true })
       await this.checkManualGrant(agent)
+      // One check that got no answer is not the end: a slow relaunch would otherwise leave a link the agent already
+      // granted on "Continue linking" until the person tapped it (the 1018-2239 gate, a busy runner).
+      this.scheduleResumeRetry(agent, pending.vtaDid, pending.did, 0)
       return true
     } finally {
       this.resuming = false
     }
+  }
+
+  /** Whether the key shown is still the resumed `did` for `vtaDid`, its last check unanswered and none under way. */
+  private resumedUnanswered(vtaDid: string, did: string): boolean {
+    const link = this.state.link
+    return (
+      link.kind === 'showingKey' &&
+      link.vtaDid === vtaDid &&
+      link.did === did &&
+      link.resumed === true &&
+      link.noAnswer === true &&
+      !link.checking
+    )
+  }
+
+  /**
+   * Check a resumed link again after RESUME_RETRY_DELAYS_MS[step], if it is still shown unanswered: only after no
+   * answer, never after "not added yet" or a refusal. In the background it waits for the foreground, where it
+   * checks at once. Any change of the link (linked, refused, cancelled, another key) ends it, as do unlink and a lock.
+   */
+  private scheduleResumeRetry(agent: Agent, vtaDid: string, did: string, step: number): void {
+    this.cancelResumeRetry()
+    if (step >= RESUME_RETRY_DELAYS_MS.length || !this.resumedUnanswered(vtaDid, did)) return
+    const run = async (): Promise<void> => {
+      this.resumeRetry = undefined
+      if (!this.resumedUnanswered(vtaDid, did)) return
+      if (AppState.currentState !== 'active') {
+        const subscription = AppState.addEventListener('change', (next) => {
+          if (next !== 'active') return
+          this.cancelResumeRetry()
+          void run()
+        })
+        this.resumeRetry = { subscription }
+        return
+      }
+      agent.config?.logger?.info?.(
+        `[VTA] checking a resumed link again (${step + 1} of ${RESUME_RETRY_DELAYS_MS.length})`
+      )
+      await this.checkManualGrant(this.agent ?? agent).catch(() => undefined)
+      this.scheduleResumeRetry(agent, vtaDid, did, step + 1)
+    }
+    this.resumeRetry = { timer: setTimeout(() => void run(), RESUME_RETRY_DELAYS_MS[step]) }
+  }
+
+  private cancelResumeRetry(): void {
+    if (this.resumeRetry?.timer) clearTimeout(this.resumeRetry.timer)
+    this.resumeRetry?.subscription?.remove()
+    this.resumeRetry = undefined
   }
 
   /** A swap the person backed out of has settled: its temporary key goes, as on any cancel. */
