@@ -62,7 +62,12 @@ export const EXT_UV_CONSENT = 'org.openvtc.uv-consent'
 /** The vault secret kind a persona's sign-in entry has (0.1 spelling; 0.2 says `didSelfIssued`). */
 export const DID_SELF_ISSUED = 'did-self-issued'
 
-/** How long the session the grant opens may last at most. */
+/**
+ * How long the session the grant opens may last at most: the grant's notAfter. The VTC ends the session at the
+ * earlier of this and its own refresh-token expiry (24 h by default), refreshing access silently until then, and a
+ * 0.2 signing scope dies with it (maintainer, IN-280). 12 h, as the browser plugin grants; the approval screen says
+ * it in hours, read from here.
+ */
 export const GRANT_LIFETIME_SECONDS = 12 * 60 * 60
 
 /** The Face ID prompt's words when approving. */

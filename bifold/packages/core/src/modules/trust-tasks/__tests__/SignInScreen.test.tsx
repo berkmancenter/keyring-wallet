@@ -15,6 +15,7 @@ import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
+import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import { pendingSignInLink, type ProvedSignIn, type SignInSteps } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
@@ -236,7 +237,9 @@ describe('5. the request, as the community reports it', () => {
     expect(tree.getByTestId(id(SignInIds.website))).toHaveTextContent('https://portal.example.org')
     expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
     expect(tree.getByTestId(id(SignInIds.sessionOnly))).toHaveTextContent('SignIn.SessionOnly')
-    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for this session only.')
+    // How long it lasts, in hours read from the grant's notAfter (maintainer, IN-280: 12 h, as the plugin grants).
+    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for {{hours}} hours, or until you sign out.')
+    expect(GRANT_LIFETIME_SECONDS).toBe(12 * 60 * 60)
   })
 
   // IN-280: a 0.2 sign-in that delegates signing says so, in words, before the person approves.
@@ -244,7 +247,7 @@ describe('5. the request, as the community reports it', () => {
     const scoped = { ...proved, signingScope: ['vtc/directory'] }
     const tree = await toReview(fakeSteps({ identifyAndProve: jest.fn(async () => scoped) }))
     expect(tree.getByTestId(id(SignInIds.signingScope))).toHaveTextContent(/SignIn\.SigningScope/)
-    expect(en.SignIn.SigningScope).toContain('{{areas}}')
+    expect(en.SignIn.SigningScope).toBe('For that time it also lets that browser act as you in: {{areas}}.')
     expect(en.SignIn.ScopeDirectory).toBe('the member directory (reading it, and editing your own card)')
   })
 
