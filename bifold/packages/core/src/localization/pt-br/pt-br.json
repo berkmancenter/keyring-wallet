@@ -2228,7 +2228,7 @@
     "Yes": "Sim",
     "No": "Não",
     "NotReported": "Não informado",
-    "SessionOnly": "Isso conecta aquele navegador por {{hours}} horas, ou até você sair.",
+    "SessionOnly": "Isso conecta aquele navegador por até {{hours}} horas, ou até você sair.",
     "SigningScope": "Durante esse tempo, isso também permite que aquele navegador aja como você em: {{areas}}.",
     "ScopeDirectory": "o diretório de membros (consultá-lo e editar o seu próprio cartão)",
     "Approve": "Aprovar",

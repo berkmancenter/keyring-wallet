@@ -2388,7 +2388,7 @@
     "Yes": "Yes",
     "No": "No",
     "NotReported": "Not reported",
-    "SessionOnly": "This signs in that browser for {{hours}} hours, or until you sign out.",
+    "SessionOnly": "This signs in that browser for up to {{hours}} hours, or until you sign out.",
     "SigningScope": "For that time it also lets that browser act as you in: {{areas}}.",
     "ScopeDirectory": "the member directory (reading it, and editing your own card)",
     "Approve": "Approve",

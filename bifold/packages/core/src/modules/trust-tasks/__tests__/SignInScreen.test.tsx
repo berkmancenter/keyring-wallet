@@ -238,7 +238,8 @@ describe('5. the request, as the community reports it', () => {
     expect(tree.getByTestId(id(SignInIds.identifiedAs))).toHaveTextContent('Alberto')
     expect(tree.getByTestId(id(SignInIds.sessionOnly))).toHaveTextContent('SignIn.SessionOnly')
     // How long it lasts, in hours read from the grant's notAfter (maintainer, IN-280: 12 h, as the plugin grants).
-    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for {{hours}} hours, or until you sign out.')
+    // A ceiling: the VTC ends the session sooner if its refresh-token expiry comes first (review on #435).
+    expect(en.SignIn.SessionOnly).toBe('This signs in that browser for up to {{hours}} hours, or until you sign out.')
     expect(GRANT_LIFETIME_SECONDS).toBe(12 * 60 * 60)
   })
 
