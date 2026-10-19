@@ -28,7 +28,7 @@ test('gate.sh has leg_wanted and the nightly window functions to test', () => {
 });
 
 test('"all" leaves the nightly-only legs out; naming one still runs it', () => {
-  const wanted = (leg, want) => bash(`LEGS_NIGHTLY_ONLY="${list('LEGS_NIGHTLY_ONLY').join(' ')}"\n${fn('leg_wanted')}\nleg_wanted "${leg}" "${want}"`);
+  const wanted = (leg, want) => bash(`LEGS_NIGHTLY_ONLY="${list('LEGS_NIGHTLY_ONLY').join(' ')}"\nLEGS_BY_NAME_ONLY="${list('LEGS_BY_NAME_ONLY').join(' ')}"\n${fn('leg_wanted')}\nleg_wanted "${leg}" "${want}"`);
   assert.equal(wanted('p2', 'all'), false, 'p2 is nightly only');
   assert.equal(wanted('p2', 'p2,lostreq'), true, 'named, it runs');
   assert.equal(wanted('lostreq', 'all'), true, 'lostreq still runs in the gate (its other rows)');
@@ -190,4 +190,22 @@ test('linkwait in a nightly run takes the real-clocks build, and skips saying wh
   assert.match(leg, /APK=\$APK_REAL/);
   // The watcher hands the run the commit whose real-clocks build stands for the nightly one.
   assert.match(fn('cmd_watch_main'), /real_sha=\$\(nightly_real_build "\$sha"\)[\s\S]*GATE_REAL_SHA=\$real_sha [^\n]*--kind nightly/);
+});
+
+test('a by-name-only leg is in a leg list (so it can be scheduled), out of "all", and runs when named', () => {
+  // run_legs schedules only legs in LEGS_IOS / LEGS_ANDROID / LEGS_SOLO: a by-name-only leg outside them never runs
+  // ("no legs", run 1019-2300-68c7d1fd-rerun).
+  const scheduled = new Set([...list('LEGS_IOS'), ...list('LEGS_ANDROID'), ...list('LEGS_SOLO')]);
+  const byName = list('LEGS_BY_NAME_ONLY');
+  assert.ok(byName.includes('signin'), 'the Android sign-in leg runs by name only');
+  for (const leg of byName) assert.ok(scheduled.has(leg), `${leg} is in a leg list, so --legs ${leg} can schedule it`);
+  const wanted = (leg, want) => bash(`LEGS_NIGHTLY_ONLY="${list('LEGS_NIGHTLY_ONLY').join(' ')}"\nLEGS_BY_NAME_ONLY="${byName.join(' ')}"\n${fn('leg_wanted')}\nleg_wanted "${leg}" "${want}"`);
+  assert.equal(wanted('signin', 'all'), false, 'not in a full gate');
+  assert.equal(wanted('signin', 'signin'), true, 'named, it runs');
+  assert.equal(wanted('signin-ios', 'all'), true, 'the iOS sign-in leg stays in the gate');
+  assert.equal(wanted('hv', 'all'), true);
+});
+
+test('leg_wanted stands unset lists (set -u): a script that sets neither list still selects', () => {
+  assert.equal(bash(`${fn('leg_wanted')}\nleg_wanted kk all`), true);
 });

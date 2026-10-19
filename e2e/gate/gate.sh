@@ -110,7 +110,7 @@ run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; 
 # Whether leg $1 is among the wanted legs $2 ("all", or a comma list). "all" is every leg but the nightly-only ones.
 leg_wanted() {
   [[ ",$2," == *",$1,"* ]] && return 0
-  [ "$2" = all ] && [[ " $LEGS_NIGHTLY_ONLY $LEGS_BY_NAME_ONLY " != *" $1 "* ]]
+  [ "$2" = all ] && [[ " ${LEGS_NIGHTLY_ONLY:-} ${LEGS_BY_NAME_ONLY:-} " != *" $1 "* ]]
 }
 
 # Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
@@ -159,7 +159,7 @@ new_run() {
   local pin=$1 kind=$2 rd
   rd=$GATE_HOME/runs/$(date -u +%m%d-%H%M)-${pin:0:8}-$kind
   mkdir -p "$rd"
-  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; echo "core=$CORE_JOURNEYS"; echo "informational=$INFORMATIONAL_ROWS"; } > "$rd/meta"
+  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; echo "core=${CORE_JOURNEYS:-}"; echo "informational=${INFORMATIONAL_ROWS:-}"; } > "$rd/meta"
   echo "$rd"
 }
 
