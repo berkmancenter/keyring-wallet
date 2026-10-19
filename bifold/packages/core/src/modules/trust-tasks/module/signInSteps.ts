@@ -34,6 +34,7 @@ import {
   enrolUvKey,
   ensureSignInVaultEntry,
   identifyAndProve,
+  KEYRING_SIGN_IN_LABEL,
   signInAgentDeps,
   signInFailureFromAgent,
   type ProvedSignIn,
@@ -117,6 +118,13 @@ async function publishedName(agent: Agent, vtcDid: string): Promise<string | und
 
 const isDidSelfIssued = (kind: unknown) => kind === 'did-self-issued' || kind === 'didSelfIssued'
 
+/** An entry Keyring made itself when a phone signed in (its label says so). */
+const keyringMade = (e: VtaVaultEntry) =>
+  typeof e.label === 'string' && e.label.startsWith(`${KEYRING_SIGN_IN_LABEL} · `)
+
+/** Why each agent's entries were or were not offered, for the device log. */
+export type SignInIdentityCounts = Record<string, { listed: number; matched: number; keyringMadeDropped: number }>
+
 /**
  * Every identity for `vtcDid` among what the phone and its agents hold, the
  * current agent's first and the phone's own before the agent's: the personas
@@ -124,16 +132,26 @@ const isDidSelfIssued = (kind: unknown) => kind === 'did-self-issued' || kind ==
  * self-issued vault entries whose targets name the community, matched here as
  * the browser plugin matches them (VTI-LNK-073). `entries` is undefined for an
  * agent that could not be asked: its personas on this phone still count.
+ *
+ * One identity per persona: a persona this phone joined with and its own
+ * sign-in entry are the same one. An entry Keyring made for a persona this
+ * phone did not join with is not offered (IN-296, gate 1019-1815): on an agent
+ * several phones have signed in through, those are other phones' — most often
+ * members long gone, which only the community could tell apart, and it is not
+ * asked before Continue. Entries made elsewhere (the browser plugin) are. An
+ * entry's label is shown only when it names the persona, never the community.
  */
 export function signInIdentitiesFrom(
   vtcDid: string,
   agents: { vtaDid: string; name: string; current: boolean }[],
   personas: Pick<VtiPersona, 'communityDid' | 'vtaDid' | 'did' | 'contextId' | 'label'>[],
-  entries: Record<string, VtaVaultEntry[] | undefined>
+  entries: Record<string, VtaVaultEntry[] | undefined>,
+  counts?: SignInIdentityCounts
 ): SignInIdentity[] {
   const found: SignInIdentity[] = []
   for (const a of agents) {
-    const forCommunity = (entries[a.vtaDid] ?? []).filter(
+    const listed = entries[a.vtaDid] ?? []
+    const forCommunity = listed.filter(
       (e) =>
         isDidSelfIssued(e.secretKind) &&
         (e.status === undefined || e.status === 'active') &&
@@ -152,17 +170,28 @@ export function signInIdentitiesFrom(
         source: 'thisPhone',
       })
     }
+    let dropped = 0
     for (const e of forCommunity) {
       if (found.some((f) => f.vtaDid === a.vtaDid && f.did === e.principalDid)) continue
+      if (keyringMade(e)) {
+        dropped++
+        continue
+      }
       found.push({
         ...held,
         did: e.principalDid as string,
         contextId: e.contextId as string,
         entryId: e.id,
-        label: e.label,
+        label: e.label?.includes(vtcDid) ? undefined : e.label,
         source: 'agent',
       })
     }
+    if (counts)
+      counts[a.vtaDid] = {
+        listed: listed.length,
+        matched: forCommunity.length,
+        keyringMadeDropped: dropped,
+      }
   }
   return found
 }
@@ -188,7 +217,14 @@ async function findIdentities(agent: Agent, vtcDid: string): Promise<SignInIdent
       return [vtaDid, entries] as const
     })
   )
-  return signInIdentitiesFrom(vtcDid, agents, personas, Object.fromEntries(listed))
+  const counts: SignInIdentityCounts = {}
+  const found = signInIdentitiesFrom(vtcDid, agents, personas, Object.fromEntries(listed), counts)
+  for (const [vtaDid, c] of Object.entries(counts))
+    agent.config?.logger?.info?.(
+      `[SignIn] ${vtaDid.slice(0, 32)}…: ${c.listed} vault entries, ${c.matched} for the community, ${c.keyringMadeDropped} Keyring-made for personas not on this phone (not offered)`
+    )
+  agent.config?.logger?.info?.(`[SignIn] ${found.length} identit${found.length === 1 ? 'y' : 'ies'} to sign in as`)
+  return found
 }
 
 /**

@@ -243,6 +243,20 @@ describe('1b. which identity, when several hold a membership', () => {
     expect(steps.claim).not.toHaveBeenCalled()
   })
 
+  test("an identity with no name is shown by its DID's last part, never the whole DID", async () => {
+    const steps = fakeSteps({
+      community: jest.fn(async () => ({
+        member: true,
+        name: 'Test Community',
+        identities: [identity(), { ...PLUGIN, label: undefined }],
+      })),
+    })
+    const tree = await show(steps)
+    await press(tree, SignInIds.continue)
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).toHaveTextContent(/^plugin/)
+    expect(tree.getByTestId(id(`${SignInIds.identityOption}-1`))).not.toHaveTextContent(/did:webvh/)
+  })
+
   test('the words are in every language', () => {
     for (const lang of [en, fr, ptBr] as Record<string, Record<string, string>>[])
       for (const key of [
