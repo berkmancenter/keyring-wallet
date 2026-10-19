@@ -108,9 +108,10 @@ describe('a resumed link whose one check got no answer', () => {
     await resumedUnanswered(vta)
     expect(mockClient.connect).toHaveBeenCalledTimes(1)
 
-    await jest.advanceTimersByTimeAsync(RESUME_RETRY_DELAYS_MS[0] - 1)
+    // The 5 s count starts when the first check gave up, a little before resumedUnanswered's own wait ended.
+    await jest.advanceTimersByTimeAsync(RESUME_RETRY_DELAYS_MS[0] - 2 * CONNECT_MS)
     expect(mockClient.connect).toHaveBeenCalledTimes(1)
-    await jest.advanceTimersByTimeAsync(1 + CONNECT_MS)
+    await jest.advanceTimersByTimeAsync(3 * CONNECT_MS)
     expect(mockClient.connect).toHaveBeenCalledTimes(2)
     // The link's own last steps (the key swap) may wait on timers of their own.
     await jest.advanceTimersByTimeAsync(1000)
@@ -145,16 +146,30 @@ describe('a resumed link whose one check got no answer', () => {
   })
 
   it.each([
-    ['linked', { type: 'linked', linkedAt: new Date(NOW).toISOString() }, 'linked'],
-    ['refused', { type: 'failed', failure: { reason: 'refused' } }, 'notLinked'],
-  ])('a wait for the foreground ends when the link is %s meanwhile: no listener stays', async (_, event, kind) => {
+    [
+      'linked',
+      // The person taps "Continue linking" meanwhile, and the agent answers (the real way to linked).
+      async (vta: VtaAgentController) => {
+        await vta.checkManualGrant({} as never)
+        await jest.advanceTimersByTimeAsync(1000)
+      },
+      'linked',
+    ],
+    [
+      'refused',
+      async (vta: VtaAgentController) =>
+        (vta as unknown as { dispatch(e: unknown): void }).dispatch({ type: 'failed', failure: { reason: 'refused' } }),
+      'notLinked',
+    ],
+  ])('a wait for the foreground ends when the link is %s meanwhile: no listener stays', async (_, end, kind) => {
     mockClient.connect.mockImplementationOnce(hang)
     const vta = controller()
     await resumedUnanswered(vta)
     appState = 'background'
     await jest.advanceTimersByTimeAsync(RESUME_RETRY_DELAYS_MS[0] + 10)
+    expect(mockClient.connect).toHaveBeenCalledTimes(1)
     expect(appStateHandlers).toHaveLength(1)
-    ;(vta as unknown as { dispatch(e: unknown): void }).dispatch(event)
+    await end(vta)
     expect(vta.getState().link.kind).toBe(kind)
     expect(appStateHandlers).toHaveLength(0)
   })
