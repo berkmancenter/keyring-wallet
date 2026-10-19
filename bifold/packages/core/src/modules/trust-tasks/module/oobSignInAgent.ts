@@ -316,7 +316,10 @@ async function step2Problem(
   }
   if (payload.identifiedAs !== expected.persona) return 'step 2 identified someone else'
   if (!isObject(payload.requester)) return 'step 2 does not describe the requester'
-  if (payload.signingScope !== undefined) return signingScopeProblem(payload.signingScope)
+  if (payload.signingScope !== undefined) {
+    const scopeProblem = signingScopeProblem(payload.signingScope)
+    if (scopeProblem) return scopeProblem
+  }
   return undefined
 }
 

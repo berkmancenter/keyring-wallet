@@ -16,6 +16,7 @@ import {
   OOB_TASKS,
   SIGN_IN_FAILURE_MESSAGES,
   SignInError,
+  isUnsupportedTaskCode,
   newThrowawayKey,
   signWithKey,
   type ClaimedSignIn,
@@ -815,6 +816,8 @@ describe('auth/oob 0.2: the signing scope', () => {
     [['auth'], /never delegates/],
     [['acl/grant'], /never delegates/],
     [['task-consent'], /never delegates/],
+    [['confirm'], /never delegates/],
+    [['consent'], /never delegates/],
     [['vtc/directory', 'consent'], /never delegates/],
     [[], /malformed/],
     [['vtc/directory', 'vtc/directory'], /malformed/],
@@ -845,6 +848,14 @@ describe('auth/oob 0.2: the signing scope', () => {
     expect(community.state.grant).toMatchObject({ type: OOB_TASKS.grant })
     expect(community.state.grant?.payload).not.toHaveProperty('signingScope')
     expect(community.post.mock.calls[1][1]).toMatchObject({ type: OOB_TASKS.respond })
+  })
+
+  it("keeps the community's and the agent's 'unsupported' refusals apart (the two fallbacks never cross)", () => {
+    expect(isUnsupportedTaskCode('unsupportedVersion')).toBe(true)
+    expect(isUnsupportedTaskCode('unsupportedType')).toBe(true)
+    expect(isUnsupportedTaskCode('trust-task:unsupportedType')).toBe(true)
+    expect(isUnsupportedTaskCode('oobUnsupportedType')).toBe(false)
+    expect(isUnsupportedTaskCode(undefined)).toBe(false)
   })
 
   it("maps the agent's oobUnsupportedType to 'needs an update' when there is nothing to fall back to", () => {

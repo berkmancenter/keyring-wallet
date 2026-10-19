@@ -82,7 +82,12 @@ export function signingScopeProblem(scope: unknown): string | undefined {
   return undefined
 }
 
-/** A refusal for a task type or version the other side does not serve (VTI `unsupported_type_or_version`). */
+/**
+ * A refusal for a task type or version the other side does not serve (VTI `unsupported_type_or_version`): the
+ * community's, which sends prove at 0.1 instead. Case-sensitive on purpose: it does not match the member VTA's
+ * `oobUnsupportedType`, the separate sentinel the grant's fallback keys on, so neither fallback fires on the other's
+ * refusal. Normalising either code would join them, and nothing would fail loudly.
+ */
 export const isUnsupportedTaskCode = (code: string | undefined): boolean =>
   /(^|[:/])unsupported(Type|Version)$/.test(code ?? '')
 
