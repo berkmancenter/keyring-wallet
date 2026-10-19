@@ -22,6 +22,9 @@ import {
   type VettingApplication,
   type VtiVettingStore,
 } from '../module/vtiVetting'
+import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
+import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
+import { CREDENTIAL_EXCHANGE_ISSUE, receiveIssue } from '../module/vtiInbox'
 import { registryPath, expectNoDrift } from './fixtures/registryDrift'
 import { VETTING_SCHEMA_DIR, vendoredValidatorIn } from './fixtures/vtcJoinSchemas'
 
@@ -36,6 +39,11 @@ const mockConnect = jest.fn(async () => undefined)
 const CLIENT = { name: 'the agent client' }
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// The store's change events are deferred on a timer; nothing here listens for them.
+jest.mock('../module/communityChanged', () => ({
+  ...jest.requireActual('../module/communityChanged'),
+  emitCommunityChanged: jest.fn(),
+}))
 jest.mock('@bifold/trust-tasks', () => ({
   ...jest.requireActual('@bifold/trust-tasks'),
   // Signing is not what is tested here.
@@ -506,7 +514,50 @@ describe('the named flow, applied to a private way in', () => {
       [],
       'zQmDigest'
     )
-    expect(saved.at(0)).toMatchObject({ via: 'vetting', privateVetting: true })
+    // Every save of the request's record, not only the first: each replaces the last.
+    expect(saved.length).toBeGreaterThan(0)
+    for (const record of saved) expect(record).toMatchObject({ via: 'vetting', privateVetting: true })
+  })
+
+  it('the membership that follows says it came through a proof: the mark survives to the card the inbox files', async () => {
+    // With the store the phone uses, where a request's record is replaced on
+    // every save, and the community's card filed by the inbox as on a phone.
+    // Every save of the record has to keep the mark, not only the first.
+    mockLoadRecord.mockResolvedValue({ ...HIDDEN_RECORD, held: 1, minimum: 1 })
+    const { agent } = fakeAgent()
+    const community = new GenericRecordsCommunityStore(agent)
+    await new VtiApplicant(
+      { config: { logger: logger() } } as never,
+      PERSONA as never,
+      memoryStore({}),
+      community
+    ).submit(manifest, [], 'zQmDigest')
+    expect(await community.getSubmission(COMMUNITY, PERSONA.did)).toMatchObject({
+      via: 'vetting',
+      privateVetting: true,
+    })
+
+    const card = {
+      '@context': ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1'],
+      id: 'urn:uuid:9b0e5c1a-3d2f-4e6a-8b7c-1d2e3f4a5b6c',
+      type: ['VerifiableCredential', 'DTGCredential', 'MembershipCredential'],
+      issuer: COMMUNITY,
+      validFrom: '2026-10-18T09:00:00Z',
+      credentialSubject: { id: PERSONA.did },
+      proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022', proofValue: 'z-test' },
+    }
+    await receiveIssue(
+      community,
+      PERSONA.did,
+      {
+        id: 'urn:uuid:1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+        type: CREDENTIAL_EXCHANGE_ISSUE,
+        from: COMMUNITY,
+        body: { credential_response: { credential: card } },
+      } as never,
+      { checkCard: async () => undefined }
+    )
+    expect(await community.getMembership(COMMUNITY, PERSONA.did)).toMatchObject({ privateVetting: true })
   })
 
   it('refuses to submit a private way in with no private application, rather than naming vetters', async () => {
