@@ -24,7 +24,13 @@ import BCLogger from '@/utils/logger'
 import { setMediatorDeviceInfo } from './mediatorDeviceInfo'
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
-import { startPlatformPush, stopPlatformPush, waitForApnsToken, watchForToken } from './pushPlatform'
+import {
+  startPlatformPush,
+  stopPlatformPush,
+  waitForApnsToken,
+  watchForToken,
+  watchForTokenRefresh,
+} from './pushPlatform'
 import { enablePushWake, type KeptWakeHandle, type PushWakeDeps, type WakeHandleStore } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
@@ -111,7 +117,14 @@ export async function linkedAgentsWithoutWake(agent: Agent): Promise<string[]> {
  */
 export function whenPlatformTokenArrives(arrived: () => void): () => void {
   const m = messaging()
-  return watchForToken(() => (Platform.OS === 'ios' ? m.getAPNSToken() : m.getToken()), arrived)
+  // iOS reads the APNs token the app already holds; on Android the read is a
+  // call to Firebase's servers, so it listens for the token instead of asking.
+  if (Platform.OS === 'ios') return watchForToken(() => m.getAPNSToken(), arrived)
+  return watchForTokenRefresh(
+    () => m.getToken(),
+    (listener) => m.onTokenRefresh(listener),
+    arrived
+  )
 }
 
 const HANDLE_KEY_PREFIX = 'keyring.push.handle.'
