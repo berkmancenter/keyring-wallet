@@ -51,7 +51,7 @@ import {
 import type { VtaClient, VtaSealedSecret, VtaVaultEntry } from './VtaClient'
 import { AGENT_DEVICE_TASK, defaultDeviceName, registerThisDevice } from './vtaDevices'
 import { VtiRefusal } from './vtiAgent'
-import { didKeyVerificationMethod, getUvDid, uvSign, UvKeyError } from './uvKey'
+import { didKeyVerificationMethod, getUvDid, resetUvKey, uvSign, UvKeyError } from './uvKey'
 
 /** The decision version the VTA verifies a UV approval as (oob_sign_in.rs:92, :624-635; not grant spec's `consent/decision`, G9). */
 export const UV_DECISION_TASK = 'https://trusttasks.org/spec/task-consent/decision/0.2'
@@ -107,6 +107,8 @@ export type SignInAgentDeps = Pick<SignInDeps, 'post' | 'resolveDid' | 'now'> & 
   uvDid: () => Promise<string>
   /** Sign with the UV key; shows the system Face ID prompt (uvKey.uvSign). */
   uvSign: (bytes: Uint8Array, prompt: string) => Promise<Uint8Array>
+  /** Forget the UV key, so the next `uvDid` makes a new one (uvKey.resetUvKey). */
+  uvReset: () => Promise<void>
 }
 
 /** The persona that signs in, and its vault entry ({@link ensureSignInVaultEntry}). */
@@ -583,6 +585,32 @@ export async function ensureSignInVaultEntry(
 }
 
 /**
+ * Enrol the UV key and approve, setting the key up again once if it is gone.
+ *
+ * A key the OS no longer reads (Face ID or fingerprints changed) read as
+ * `uvKeyLost` on every approval after, since the DID kept beside it still
+ * named it and no new key was ever made. Now it is forgotten, a new one is
+ * made and enrolled (a heartbeat replaces the UV key, vta-service
+ * operations/device.rs:252-272), and the approval asked once more. `uvKeyLost`
+ * is thrown before the agent signs anything or the community hears of it, so
+ * asking again is safe; a second loss is said as it is.
+ */
+export async function approveSignInWithUvKey(
+  proved: ProvedSignIn,
+  deps: SignInAgentDeps
+): Promise<{ status: 'approved' }> {
+  await enrolUvKey(deps)
+  try {
+    return await approveSignIn(proved, deps)
+  } catch (error) {
+    if (!(error instanceof SignInError) || error.reason !== 'uvKeyLost') throw error
+    await deps.uvReset()
+    await enrolUvKey(deps)
+    return approveSignIn(proved, deps)
+  }
+}
+
+/**
  * Enrol the phone's UV key with the member's VTA, so it can approve grants.
  * Idempotent: a heartbeat carrying the key replaces whatever key the binding
  * had (vta-service operations/device.rs:252-272) — the same key again changes
@@ -651,5 +679,6 @@ export function signInAgentDeps(agent: Agent, client: VtaClient, device: { platf
     vta: vtaSignInPort(client, device),
     uvDid: () => getUvDid(),
     uvSign,
+    uvReset: resetUvKey,
   }
 }

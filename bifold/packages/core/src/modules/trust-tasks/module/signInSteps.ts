@@ -30,8 +30,7 @@ import {
   type SignInFailure,
 } from './oobSignIn'
 import {
-  approveSignIn,
-  enrolUvKey,
+  approveSignInWithUvKey,
   ensureSignInVaultEntry,
   identifyAndProve,
   KEYRING_SIGN_IN_LABEL,
@@ -296,8 +295,7 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
       const chosen = member?.vtcDid === vtcDid ? member.identity : await chosenFor(vtcDid)
       // The persona's own entry, as identify found or made it.
       return withMember(agent, vtcDid, { ...chosen, entryId: proved.persona.entryId }, async (deps) => {
-        await enrolUvKey(deps)
-        return approveSignIn(proved, deps)
+        return approveSignInWithUvKey(proved, deps)
       })
     },
     cancel: (claimed) => cancelSignIn(claimed, claimDeps),

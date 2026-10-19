@@ -186,8 +186,7 @@ jest.mock('../module/oobSignInAgent', () => ({
   ...jest.requireActual('../module/oobSignInAgent'),
   signInAgentDeps: (_agent: unknown, client: { vtaDid: string }) => ({ vta: { did: client.vtaDid } }),
   identifyAndProve: (...args: unknown[]) => mockIdentify(...args),
-  approveSignIn: (...args: unknown[]) => mockApprove(...args),
-  enrolUvKey: jest.fn(async () => undefined),
+  approveSignInWithUvKey: (...args: unknown[]) => mockApprove(...args),
   ensureSignInVaultEntry: (..._args: unknown[]) => mockEnsureEntry(),
 }))
 

@@ -30,6 +30,7 @@ import {
   UV_APPROVE_PROMPT,
   UV_DECISION_TASK,
   approveSignIn,
+  approveSignInWithUvKey,
   digestMultibase,
   enrolUvKey,
   ensureSignInVaultEntry,
@@ -337,6 +338,7 @@ function depsWith(
     vta: vtaFake.vta,
     uvDid: jest.fn(async () => UV_DID),
     uvSign: jest.fn(async (bytes: Uint8Array) => ed25519.sign(bytes, uvSecret)),
+    uvReset: jest.fn(async () => undefined),
     persona: { did: PERSONA, entryId: ENTRY_ID },
     ...overrides,
   }
@@ -590,6 +592,51 @@ describe('approving a sign-in', () => {
       throw new UvKeyError('lost', 'the approval key is no longer readable')
     })
     expect((await failureOf(approveSignIn(p, deps))).reason).toBe('uvKeyLost')
+  })
+
+  // A lost key read as uvKeyLost on every approval after: the DID kept beside it still named it, and nothing made a
+  // new one. Now it is set up again once, and the approval asked once more.
+  describe('a lost approval key is set up again, once', () => {
+    const lostOnce = (deps: SignInAgentDeps) => {
+      const sign = deps.uvSign
+      let first = true
+      deps.uvSign = jest.fn(async (bytes: Uint8Array, prompt: string) => {
+        if (first) {
+          first = false
+          throw new UvKeyError('lost', 'the approval key is no longer readable')
+        }
+        return sign(bytes, prompt)
+      })
+    }
+
+    it('forgets the key, enrols a new one and approves', async () => {
+      const { deps, vtaFake, proved: p } = await proved()
+      lostOnce(deps)
+      await expect(approveSignInWithUvKey(p, deps)).resolves.toEqual({ status: 'approved' })
+      expect(deps.uvReset).toHaveBeenCalledTimes(1)
+      // Enrolled before the first try, and again with the new key.
+      expect(vtaFake.vta.heartbeat).toHaveBeenCalledTimes(2)
+      expect(deps.uvSign).toHaveBeenCalledTimes(2)
+    })
+
+    it('lost again: said as lost, after one setting-up only', async () => {
+      const { deps, vtaFake, proved: p } = await proved()
+      deps.uvSign = jest.fn(async () => {
+        throw new UvKeyError('lost', 'the approval key is no longer readable')
+      })
+      expect((await failureOf(approveSignInWithUvKey(p, deps))).reason).toBe('uvKeyLost')
+      expect(deps.uvReset).toHaveBeenCalledTimes(1)
+      expect(vtaFake.signTrustTask).toHaveBeenCalledTimes(1) // identify only: no grant was signed
+    })
+
+    it('a cancelled prompt is not a lost key: nothing is reset', async () => {
+      const { deps, proved: p } = await proved()
+      deps.uvSign = jest.fn(async () => {
+        throw new UvKeyError('cancelled', 'User canceled the operation')
+      })
+      expect((await failureOf(approveSignInWithUvKey(p, deps))).reason).toBe('uvCancelled')
+      expect(deps.uvReset).not.toHaveBeenCalled()
+    })
   })
 
   it('maps the VTA refusing a decision signed by a key it does not know', async () => {
