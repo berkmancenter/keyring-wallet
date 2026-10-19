@@ -3,8 +3,9 @@
 # gate's own admin grant (so its identity derives pcs-applicant), applies to the hv community (HV_C_*, keyring-hv-lab1:
 # a community the gate administers, never keyring-test, whose criteria other rows depend on) by its hidden-vetting
 # criterion: the "Private vetting" badge, the vetting screen, and its own agent creating the PCS application
-# (e2e/openvtc/run-hv.mjs). The vetter is the openvtc TUI seated there (VETTER=tui, HV_TUI_*), or later a second
-# Keyring (VETTER=keyring); the vetter's half of the rows is written after the first watched device run.
+# (e2e/openvtc/run-hv.mjs). The vetter is a second Keyring by default (VETTER=keyring: Keyring↔Keyring is the product
+# path), or the openvtc TUI seated there by choice (VETTER=tui, HV_TUI_*), which goes red at hv-attestation-received
+# until openvtc sends the published vetting/attestation/0.1 shape (its storage shape has no suite and a flat token).
 # Without HV_C_* configured, every row is SKIP and nothing starts.
 . "$(dirname "$0")/../lib.sh"; gate_env
 HV_ROWS="hv-private-badge hv-vetting-private-shown hv-application-created hv-ticket hv-card hv-attestation-received hv-proof hv-admitted hv-member-card hv-vetter-anonymous"
@@ -38,13 +39,17 @@ row hv-link PASS "$(( $(date +%s) - t ))s, admin grant on $RUNNER_MAIN_SLUG"
 # VETTER=keyring: the vetter is a seated Keyring, the iOS simulator HV_VETTER_UDID (named HV_VETTER_NAME), a member of
 # the hv community with a vetter grant and enrolled (e2e/openvtc/seat-hv-keyring-vetter.mjs), DID HV_VETTER_DID.
 VK=()
-if [ "${VETTER:-tui}" = keyring ]; then
-  need HV_VETTER_UDID HV_VETTER_DID
+VETTER=${VETTER:-keyring}
+if [ "$VETTER" = keyring ] && { [ -z "${HV_VETTER_UDID:-}" ] || [ -z "${HV_VETTER_DID:-}" ]; }; then
+  for r in $HV_ROWS; do row "$r" SKIP "no seated Keyring vetter configured (HV_VETTER_UDID, HV_VETTER_DID; seat one with e2e/openvtc/seat-hv-keyring-vetter.mjs), or VETTER=tui for the openvtc vetter"; done
+  exit 0
+fi
+if [ "$VETTER" = keyring ]; then
   sim_boot "$HV_VETTER_UDID"
   VK=(--vetter-platform ios --vetter-udid "$HV_VETTER_UDID" --vetter-device-name "${HV_VETTER_NAME:-iPhone 17 HV Vetter}" --vetter-wda-port 8132 --vetter-mjpeg-port 9132 --vetter-did "$HV_VETTER_DID")
 fi
 (cd "$REPO" && galarm 1500 node e2e/openvtc/run-hv.mjs --udid $E "${VK[@]}" --log-dir "$LEG_DIR" --community-did "$HV_C_DID" --criterion "${HV_CRITERION:-hv-vetted}" \
-  --vtc-base "$HV_C_REST" --admin-credential "$HV_C_ADMIN_CRED" --vetter "${VETTER:-tui}" \
+  --vtc-base "$HV_C_REST" --admin-credential "$HV_C_ADMIN_CRED" --vetter "$VETTER" \
   ${HV_TUI_FX:+--fixture-dir "$HV_TUI_FX"} ${HV_TUI_PROFILE:+--profile "$HV_TUI_PROFILE"} ${HV_TUI_PERSONA:+--tui-persona "$HV_TUI_PERSONA"} \
   --openvtc-bin "${OPENVTC_BIN:-}" --openvtc-version "${OPENVTC_VERSION:-}") > "$LEG_DIR/hv.out" 2>&1; rc=$?
 take_rows "$LEG_DIR/hv.out"
