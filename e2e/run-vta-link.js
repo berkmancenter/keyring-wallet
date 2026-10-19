@@ -561,7 +561,9 @@ async function linkCase(driver, which, timing) {
       const after = aclSize();
       const own = ownOf(granted);
       await screenshot(driver, which);
-      return row(intro && own.ok, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ${own.text} · ACL entries ${before} → ${after}`);
+      // Judged on AgentIntro and this case's own entries only; the runner-wide count is context (a leg beside this one,
+      // kk on the same runner, grows it: #513).
+      return row(intro && own.ok, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ${own.text} · runner ACL ${before} → ${after} (not judged)`);
     }
     const { continueLink: cont, resumed } = (await link.resume({ waitMs: 30000, required: false })).value;
     // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
