@@ -1,8 +1,6 @@
-# Google Play release notes for the next build (at most 500 characters).
-# Lines starting with # are ignored.
 
-• Build 260: private vouching draws tokens and counts.
-• Private vetting: apply and vouch in communities that use it, with the same vetting steps; your vetters stay private. Needs your agent on 0.60+.
-• Vetters: enrolment and vouching tokens are automatic.
-• New DTG credential formats for relationships and witnessing.
-• Community identities keep signing in after an update.
+• Website sign-in: the newer version, keeping your directory card up to date where communities support it.
+• Sign in as any identity your agent holds, with a choice if there are several.
+• See what a community's directory would show about you before you join.
+• Private-vetting memberships keep their mark.
+• Late notification setup and agent reconnects recover by themselves.
