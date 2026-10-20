@@ -86,6 +86,26 @@ static NSString *KeyringWakeLink(NSDictionary *userInfo)
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
 }
 
+// A wake that arrives while Keyring is open. Without this, iOS shows nothing
+// for a notification whose app is in the foreground, so an approval request
+// made from the phone itself (My Agent > "Send me a test request") rang the
+// gateway and APNs delivered it, and the person saw no banner (IN-309, 264).
+// Shown as a banner, in Notification Centre, and with its sound, but with no
+// app-icon badge: the app already shows its own count of waiting requests.
+// Firebase messaging takes the delegate over at launch and forwards this to
+// it for any notification that is not its own (no gcm.message_id).
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
+{
+  if (KeyringIsWakeNotification(notification.request.content.userInfo)) {
+    completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList |
+                      UNNotificationPresentationOptionSound);
+    return;
+  }
+  completionHandler(UNNotificationPresentationOptionNone);
+}
+
 // A tap on a notification while the app is running or suspended.
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
     didReceiveNotificationResponse:(UNNotificationResponse *)response
