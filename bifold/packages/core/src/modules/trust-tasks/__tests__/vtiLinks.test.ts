@@ -326,6 +326,14 @@ describe('a community link brought for "I was invited"', () => {
     await routeKeyringAgentLink(link, {} as never, navigate)
     expect(navigate).toHaveBeenLastCalledWith('VtiJoin')
   })
+  // IN-304: a scan from "I was invited" that brought no community.
+  it('lands on Join once the return is cancelled: a scanner closed with nothing, or "I was invited" left', async () => {
+    const navigate = jest.fn()
+    communityLinkReturn.toInvited()
+    communityLinkReturn.cancel()
+    await routeKeyringAgentLink(link, {} as never, navigate)
+    expect(navigate).toHaveBeenLastCalledWith('VtiJoin')
+  })
 })
 
 /**

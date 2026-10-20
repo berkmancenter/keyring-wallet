@@ -1656,6 +1656,7 @@
     "Sent": "I've sent it",
     "WaitingTitle": "Waiting for your invitation",
     "WaitingBody": "When the admin of {{community}} sends you an invitation link, open it on this phone or paste it here. It will show up on this screen.",
+    "AlsoWithoutInvitation": "{{community}} also takes requests without an invitation: an administrator reviews them.",
     "Checking": "Checking for your invitation…",
     "Paste": "Paste the invitation",
     "SendAgain": "Send my identity again",

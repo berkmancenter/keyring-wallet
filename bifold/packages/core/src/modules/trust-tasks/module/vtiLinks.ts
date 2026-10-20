@@ -380,7 +380,11 @@ export function myAgentLinkParams(destination: MyAgentDestination): { screen: Sc
  * made for a community, so the community has to be known before any
  * invitation exists. When it sends the person to the scanner for that, the
  * community link they bring should land back on "I was invited", not on Join.
- * One-shot: taken by the next community link, whoever brings it.
+ * One-shot: taken by the next community link, whoever brings it, and
+ * cancelled when the scanner closes or "I was invited" is left without one:
+ * left set, a later scan of a community for any other reason — a guide's
+ * "scan the community DID to send a join request" — landed on "I was
+ * invited" instead of Join (IN-304).
  */
 let communityLinkForInvited = false
 export const communityLinkReturn = {
@@ -391,6 +395,10 @@ export const communityLinkReturn = {
     const back = communityLinkForInvited
     communityLinkForInvited = false
     return back
+  },
+  /** The scanner closed, or "I was invited" was left: nothing is brought back there. */
+  cancel(): void {
+    communityLinkForInvited = false
   },
 }
 

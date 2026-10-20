@@ -1595,6 +1595,7 @@
     "Sent": "Je l'ai envoyé",
     "WaitingTitle": "En attente de votre invitation",
     "WaitingBody": "Quand l'admin de {{community}} vous envoie un lien d'invitation, ouvrez-le sur ce téléphone ou collez-le ici. Il apparaîtra sur cet écran.",
+    "AlsoWithoutInvitation": "{{community}} accepte aussi les demandes sans invitation : un administrateur les examine.",
     "Checking": "Recherche de votre invitation…",
     "Paste": "Coller l'invitation",
     "SendAgain": "Renvoyer mon identité",

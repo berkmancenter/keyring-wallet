@@ -40,6 +40,7 @@ import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { joinSeed } from '../module/vtiJoinSeed'
+import { joinAsks } from '../module/joinManifest'
 import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
@@ -68,6 +69,11 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
+  // Left without the community it sent the person to scan: a later scan of a
+  // community, for any other reason, goes to Join, not back here (IN-304).
+  // Not on blur: the scanner opens over this screen, which must stay the way
+  // back while it is open.
+  useEffect(() => () => communityLinkReturn.cancel(), [])
   const { ColorPalette, TextTheme } = useTheme()
   const { width } = useWindowDimensions()
   const communityDid = useCommunityDid(config?.communityDid)
@@ -99,17 +105,22 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   // What the community's directory would show, read with the manifest and
   // shown before joining (manifest/0.4). Absent: nothing is said about one.
   const [disclosure, setDisclosure] = useState<DirectoryDisclosure>()
+  // The community also takes a request that needs nothing — no invitation,
+  // credential or vetting — which goes to its administrators (IN-304).
+  const [alsoOpen, setAlsoOpen] = useState(false)
   useEffect(() => {
     if (!communityDid) return
     let live = true
     setAsks(undefined)
     setDisclosure(undefined)
+    setAlsoOpen(false)
     vtiAgent
       .fetchManifest(communityDid, agent)
       .then((m) => {
         if (!live) return
         setAsks(asksFrom(m))
         setDisclosure(m.directoryDisclosure)
+        setAlsoOpen(joinAsks(m).ways.some((way) => way.requiresNothing && !way.unusableBecause))
       })
       .catch(() => undefined)
     return () => {
@@ -736,6 +747,22 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           the tab bar: none of it hides behind them (as on Join, 239). */}
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 20 + roomAboveTabBar }]}>
         {body}
+        {alsoOpen && !invitation && (current === 'intro' || current === 'share' || current === 'waiting') ? (
+          <View style={{ gap: 8 }} testID={testIdWithKey('InvitedAlsoWithoutInvitation')}>
+            <ThemedText>
+              {t('Invited.AlsoWithoutInvitation', { community, interpolation: { escapeValue: false } })}
+            </ThemedText>
+            <Button
+              title={t('Join.Ways.ButtonAsk')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => {
+                if (communityDid) communityTarget.choose(communityDid)
+                ;(navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiJoin)
+              }}
+              testID={testIdWithKey('InvitedAskToJoin')}
+            />
+          </View>
+        ) : null}
         {different}
         {actions ? <View style={styles.actions}>{actions}</View> : null}
       </ScrollView>

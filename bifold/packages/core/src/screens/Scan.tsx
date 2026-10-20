@@ -14,7 +14,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
 import { agentAddressScan } from '../modules/trust-tasks/module/agentAddressScan'
 import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
-import { KeyringLinkError, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
+import { KeyringLinkError, communityLinkReturn, keyringLinkErrorText } from '../modules/trust-tasks/module/vtiLinks'
 import { BifoldError, QrCodeScanError } from '../types/error'
 import { ConnectStackParams } from '../types/navigators'
 import { PermissionContract } from '../types/permissions'
@@ -161,6 +161,12 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
 
     return false
   }
+
+  // A scan "I was invited" asked for comes back there only from this visit:
+  // closed without a community, nothing is brought back (IN-304). A community
+  // scanned here is routed before the scanner closes, so it has taken the
+  // return by then.
+  useEffect(() => () => communityLinkReturn.cancel(), [])
 
   useEffect(() => {
     const asyncEffect = async () => {

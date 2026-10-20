@@ -7,7 +7,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { ContainerProvider } from '../../src/container-api'
 import { MainContainer } from '../../src/container-impl'
 import Scan, { scanErrorOf } from '../../src/screens/Scan'
-import { KeyringLinkError } from '../../src/modules/trust-tasks/module/vtiLinks'
+import { KeyringLinkError, communityLinkReturn } from '../../src/modules/trust-tasks/module/vtiLinks'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
 import { BasicAppContext } from '../helpers/app'
 
@@ -41,6 +41,24 @@ describe('Scan Screen', () => {
         },
       },
     })
+  })
+
+  // IN-304: "I was invited" sends the person here to scan their community, and
+  // the community they bring lands back there. A scanner closed without one
+  // must not leave that set, or a later, unrelated scan of a community — the
+  // one a guide asks for, to send a join request — lands on "I was invited".
+  test('closing the scanner forgets that "I was invited" sent the person here', async () => {
+    communityLinkReturn.take()
+    communityLinkReturn.toInvited()
+    const main = new MainContainer(container.createChildContainer()).init()
+    const tree = render(
+      <ContainerProvider value={main}>
+        <Scan navigation={useNavigation()} route={{} as any} />
+      </ContainerProvider>
+    )
+    await waitFor(() => expect(tree.toJSON()).toBeTruthy())
+    tree.unmount()
+    expect(communityLinkReturn.take()).toBe(false)
   })
 
   test('Renders correctly', async () => {
