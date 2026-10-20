@@ -209,8 +209,9 @@ describe('signing in through the agent that holds the persona', () => {
     const found = await steps.community(VTC)
     expect(found.member).toBe(true)
     expect(found.identities).toHaveLength(1)
-    // Only the agents were asked: nothing about the community was resolved before Continue.
-    expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
+    // Before Continue, the community itself is asked for its published name only, and only because the person belongs
+    // to it through this identity (IN-340, the IN-249 allowance); nothing else about it is resolved.
+    expect(agent.dids.resolveDidDocument.mock.calls).toEqual([[VTC]])
 
     mockSessions.splice(0)
     await steps.identifyAndProve(claimed, '42')
