@@ -2270,8 +2270,11 @@
     "Test": "M'envoyer une demande de test",
     "TestHint": "Demande à votre agent de créer un contexte. Il vous le demande d'abord, et rien n'est créé quelle que soit votre réponse.",
     "TestHeld": "Envoyé. Votre agent vous le demande maintenant : regardez dans Demandes.",
-    "TestLetThrough": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Le contexte créé a été supprimé.",
-    "TestLetThroughKept": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Il a créé un contexte nommé « Keyring test request » que Keyring n'a pas pu supprimer.",
+    "TestLetThrough": "Il a créé le contexte de test, que Keyring a supprimé ensuite.",
+    "TestLetThroughKept": "Il a créé un contexte appelé « Keyring test request », que Keyring n’a pas pu supprimer.",
+    "LetThroughTitle": "Votre agent ne vous a pas demandé",
+    "LetThroughBody": "Rien ne sera donc envoyé à votre téléphone, et aucune notification n’arrivera. Pour qu’il vous demande, vérifiez que l’application des approbations est activée pour votre agent là où il est hébergé.",
+    "LastTestLetThrough": "Votre dernière demande de test ne vous a pas été envoyée : votre agent ne vous a pas demandé.",
     "Nudge": "Les demandes attendent toujours dans Keyring ; une notification est un rappel, pas une promesse.",
     "Details": "Détails",
     "HideDetails": "Masquer les détails"

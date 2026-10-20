@@ -2336,8 +2336,11 @@
     "Test": "Send me a test request",
     "TestHint": "Asks your agent to create a context. It asks you first, and nothing is created whatever you answer.",
     "TestHeld": "Sent. Your agent is asking you now: look in Requests.",
-    "TestLetThrough": "Your agent didn't ask: approvals aren't switched on where it is hosted. The context it created was deleted again.",
-    "TestLetThroughKept": "Your agent didn't ask: approvals aren't switched on where it is hosted. It created a context called \"Keyring test request\", which Keyring couldn't delete.",
+    "TestLetThrough": "It created the test context, which Keyring deleted again.",
+    "TestLetThroughKept": "It created a context called \"Keyring test request\", which Keyring couldn't delete.",
+    "LetThroughTitle": "Your agent didn't ask you",
+    "LetThroughBody": "So nothing will be sent to your phone, and no notification will come. To be asked, check that approval enforcement is on for your agent where it's hosted.",
+    "LastTestLetThrough": "Your last test request wasn't sent to you: your agent didn't ask.",
     "Nudge": "Requests always wait in Keyring; a notification is a nudge, not a promise.",
     "Details": "Details",
     "HideDetails": "Hide details"
