@@ -100,8 +100,42 @@ ports, and neither container keeps an access log.
   Before each upload the CLI checks objects with HEAD requests on the URLs the
   server returns, and a cache or a rate limiter in between breaks publishes. The
   server answers those requests on the origin the publisher came in on.
-- Not built or run here yet: the image and the compose file are checked
-  (`docker compose config`) but not deployed.
+- **Deployed:** the server runs at `https://keyring-ota.asml.berkmancenter.org`,
+  from the infrastructure repository's `infra/environments/ota-prod`.
+- **Do not delete or rewrite `spike/ota-hot-updater`.** The live server is
+  pinned there: ota-prod's `package_branch` is `spike/ota-hot-updater`, and its
+  `package_ref` is a commit on that branch (304f0d4b). The VM checks out
+  `deploy/keyring-ota` at that commit on every boot and resync. Pruning or
+  force-pushing the branch can leave the pinned commit unfetchable, and the
+  next boot would then fail to start the server. Moving the pin to a commit on
+  `main` is a reviewed edit to ota-prod's `terraform.tfvars`, applied by the
+  infrastructure owner. Only after that is the branch free to go.
+
+## Upgrading hot-updater
+
+OTA is dormant in a build without `OTA_UPDATE_URL`. One part of that depends on
+the library version, not on our code: at app start, the native loader only
+picks a local file and makes no network request. That was checked for
+`@hot-updater/react-native` **0.36.18**, from its native source:
+- iOS: `bundleURL` → `prepareLaunch` → `selectLaunch`.
+- Android: `getJSBundleFile` → `prepareLaunch` → `selectLaunch`.
+- Every download call is reachable only from `updateBundle`, which only the JS
+  module calls.
+- In JS, `fetch` lives only in `fetchUpdateInfo.ts`, behind `wrap`.
+
+The file and line trail is on wallet PR #525.
+
+A new version could move a download onto the launch path without any of our
+code changing, and nothing in this tree would notice. **Any bump of
+`@hot-updater/*` re-walks that path** before it merges:
+1. Read both platforms' `selectLaunch`.
+2. List every download call site and confirm each is reachable only from
+   `updateBundle`.
+3. Check the JS package for module-level effects.
+
+Record the result in the bump PR. Also run the OTA gate leg (`gate-ota.yml`).
+Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
+(the server's update-check routes and the app's loader are one protocol).
 
 ## Configuration in the repository (phase 1)
 

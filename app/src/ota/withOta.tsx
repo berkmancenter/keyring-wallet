@@ -12,6 +12,10 @@
  *   kill before that rolls the next start back to the previous bundle.
  * The loader verifies each bundle's RSA signature against the public key in the
  * binary before installing it, and refuses unsigned bundles when a key is present.
+ *
+ * That the native loader makes no network request at app start when this wrapper
+ * stays idle was checked for @hot-updater/react-native 0.36.18 only: a version
+ * bump re-checks it (deploy/keyring-ota/README.md, "Upgrading hot-updater").
  */
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
