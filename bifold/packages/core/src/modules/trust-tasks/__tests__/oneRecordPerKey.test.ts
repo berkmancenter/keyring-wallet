@@ -195,6 +195,38 @@ describe("a community's published name survives a relaunch", () => {
     expect(records.filter((r) => r.tags.kind === 'community-name')).toHaveLength(1)
   })
 
+  // IN-340: a sign-in reads a name again once it is over a day old, so a name said again today must not stay old.
+  it('the same name said again is kept as said now, still one record', async () => {
+    const { agent, records } = fakeAgent()
+    const did = 'did:webvh:QmAgain:dids.example:again'
+    const store = new GenericRecordsCommunityStore(agent)
+    // The clock only: the store's own timers keep running.
+    jest.useFakeTimers({
+      now: Date.parse('2026-10-19T00:00:00Z'),
+      doNotFake: [
+        'nextTick',
+        'setImmediate',
+        'setTimeout',
+        'setInterval',
+        'queueMicrotask',
+        'clearTimeout',
+        'clearInterval',
+      ],
+    })
+    try {
+      await store.saveCommunityName(did, 'Again')
+      jest.setSystemTime(Date.parse('2026-10-20T12:00:00Z'))
+      await store.saveCommunityName(did, 'Again')
+    } finally {
+      jest.useRealTimers()
+    }
+    const names = await store.listCommunityNames()
+    expect(names).toEqual([
+      expect.objectContaining({ communityDid: did, name: 'Again', at: '2026-10-20T12:00:00.000Z' }),
+    ])
+    expect(records.filter((r) => r.tags.kind === 'community-name')).toHaveLength(1)
+  })
+
   it('with no name known, a community is said to be unnamed, never named by its host', () => {
     const label = communityLabelOf('did:webvh:QmNoName:dids.ic3.dev:no-name', t)
     expect(label).toBe('Community.UnnamedRef')

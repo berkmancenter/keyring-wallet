@@ -21,7 +21,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { changeOfHeldCredential, emitCommunityChanged } from './communityChanged'
-import { getKeyed, listKeyed, putKeyed } from './keyedRecords'
+import { listKeyed, putKeyed } from './keyedRecords'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 
 export interface VtiInvitation {
@@ -307,17 +307,19 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
    * relaunch still names it: the name otherwise lived only in memory, and
    * every community read as unnamed until a join or vetting screen happened
    * to read its manifest again (IN-26).
+   *
+   * `at` is when the community last said it, unchanged or not: a sign-in reads
+   * the name again once it is older than a day (signInSteps, IN-340), and a
+   * name confirmed today must not read as a day old.
    */
   async saveCommunityName(communityDid: string, name?: string) {
     const named = name?.trim()
     if (!communityDid || !named) return
-    const known = await getKeyed<{ name?: string }>(this.agent, RECORD_TYPE, 'community-name', communityDid)
-    if (known?.name === named) return
     await this.put('community-name', communityDid, { communityDid, name: named, at: new Date().toISOString() })
   }
 
   listCommunityNames() {
-    return this.list<{ communityDid: string; name: string }>('community-name')
+    return this.list<{ communityDid: string; name: string; at?: string }>('community-name')
   }
 
   async forgetCommunity(communityDid: string, personaDid?: string) {

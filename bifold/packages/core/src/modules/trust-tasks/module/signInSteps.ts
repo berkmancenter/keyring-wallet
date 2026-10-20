@@ -3,9 +3,10 @@
  * screen is tested with fakes and the protocol stays in `oobSignIn`.
  *
  * `community` reads Keyring's own records: whether this phone holds a
- * current membership of the community, and the name it knows it by. Only for
- * a member with no name on record does it read the name the community
- * publishes; for any other community nothing goes out before Continue. It also
+ * current membership of the community, and the name it knows it by. For a
+ * community the person belongs to (on this phone or on a linked agent) whose
+ * name on record is missing or over a day old, it reads the name the community
+ * publishes again; for any other community nothing goes out before Continue. It also
  * finds every identity the phone could sign in as (IN-296): a persona any of
  * its linked agents holds for the community, from that agent's own vault
  * (`vault/list`, matched here), not only one joined on this phone — the
@@ -87,19 +88,39 @@ export type SignInSteps = {
   cancel: (claimed: ClaimedSignIn) => Promise<{ cancelled: boolean }>
 }
 
-/** Whether this phone holds a current membership of `vtcDid`, and the name its records keep. */
-async function recordedCommunity(agent: Agent, vtcDid: string): Promise<{ member: boolean; name?: string }> {
+/** How long a community's name on record is taken as it is, before a sign-in reads it again (IN-340). */
+export const COMMUNITY_NAME_TTL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Whether this phone holds a current membership of `vtcDid`, and the name to
+ * show for it.
+ *
+ * A community the person belongs to (this phone's own membership, or an
+ * identity a linked agent holds there, `heldOnAgent`) has its published name
+ * read again when the one on record is missing or over a day old, and kept:
+ * a community that published a name after the person joined, or renamed
+ * itself, read as unnamed, or by its old name, for good (IN-340). The same
+ * allowance as IN-249's: before the person continues, nothing is resolved for
+ * a community they do not belong to (VTI-LNK-050, 051). A read that fails
+ * keeps the name on record.
+ */
+async function recordedCommunity(
+  agent: Agent,
+  vtcDid: string,
+  heldOnAgent = false
+): Promise<{ member: boolean; name?: string }> {
   const store = new GenericRecordsCommunityStore(agent)
   const memberships = await store.listMemberships()
   const member = memberships.some((m) => m.communityDid === vtcDid && isCurrentMembership(m))
-  const name =
-    communityTarget.publishedNameOf(vtcDid) ??
-    (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)?.name ??
-    // A community this phone is a member of but has no name on record for:
-    // the one it publishes, read once, so it is not shown as a raw DID
-    // (IN-249). Only for a member: before the person continues, nothing is
-    // resolved for a community the phone does not know (VTI-LNK-050, 051).
-    (member ? await publishedName(agent, vtcDid) : undefined)
+  const kept = (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)
+  const keptAt = kept?.at ? Date.parse(kept.at) : NaN
+  const stale = !kept || !(Date.now() - keptAt < COMMUNITY_NAME_TTL_MS)
+  const fresh = (member || heldOnAgent) && stale ? await publishedName(agent, vtcDid) : undefined
+  if (fresh) {
+    communityTarget.publishedName(vtcDid, fresh)
+    await store.saveCommunityName(vtcDid, fresh).catch(() => undefined)
+  }
+  const name = fresh ?? communityTarget.publishedNameOf(vtcDid) ?? kept?.name
   return { member, name }
 }
 
@@ -266,7 +287,9 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
     return identities.get(vtcDid) as Promise<SignInIdentity[]>
   }
   const community = async (vtcDid: string) => {
-    const [recorded, found] = await Promise.all([recordedCommunity(agent, vtcDid), identitiesFor(vtcDid)])
+    // The identities first: one on a linked agent makes the community one the person belongs to, whose name is read.
+    const found = await identitiesFor(vtcDid)
+    const recorded = await recordedCommunity(agent, vtcDid, found.length > 0)
     return { ...recorded, member: recorded.member || found.length > 0, identities: found }
   }
   const claimDeps: SignInDeps = {
