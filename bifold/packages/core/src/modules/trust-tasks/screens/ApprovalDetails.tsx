@@ -77,6 +77,11 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
               whole digest can be matched against it too (al-signer, 10-06). */}
           {approval.payloadDigest ? (
             <>
+              {/* A tool may print the whole digest where this screen shows its start (IN-323: the same request read
+                  as two unrelated codes); the toggle shows it. */}
+              <ThemedText style={styles.muted} testID={testIdWithKey('ApprovalFullCodeHint')}>
+                {t('Requests.FullCodeHint')}
+              </ThemedText>
               <Pressable
                 onPress={() => setFullOpen(!fullOpen)}
                 accessibilityRole="button"

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "d0bddf438e7dbfa084b7aeafd62a5a138eb3c97a",
+  "generatedFrom": "44849c388ec72e56e4a66ae3fecd939de4cad84f",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -163,6 +163,7 @@
     "ApplyToCommunityButton": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "ApprovalDigest": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalDigestToggle": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
+    "ApprovalFullCodeHint": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalMatchCode": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalOutcome": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],
     "ApprovalOutcomeUnknown": ["src/modules/trust-tasks/screens/ApprovalDetails.tsx"],

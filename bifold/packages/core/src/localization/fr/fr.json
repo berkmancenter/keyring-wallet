@@ -881,6 +881,7 @@
     "TaskDoes": "Votre agent ne l'a pas décrit. Cette tâche consisterait à {{action}}.",
     "About": "Objet : {{subject}}",
     "ApproveIfYouStartedIt": "N'approuvez que si vous en êtes à l'origine.",
+    "FullCodeHint": "Certains outils affichent plutôt le code complet, un long code qui commence par zQm.",
     "ShowFullCode": "Afficher le code complet",
     "HideFullCode": "Masquer le code complet",
     "TaskContextsCreate": "créer un contexte (un groupe d’identités)",

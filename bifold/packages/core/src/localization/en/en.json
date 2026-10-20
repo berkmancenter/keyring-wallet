@@ -954,6 +954,7 @@
     "TaskDoes": "Your agent didn't describe it. This task would {{action}}.",
     "About": "About: {{subject}}",
     "ApproveIfYouStartedIt": "Approve only if you started this yourself.",
+    "FullCodeHint": "Some tools show the full code instead, a long one starting with zQm.",
     "ShowFullCode": "Show the full code",
     "HideFullCode": "Hide the full code",
     "TaskContextsCreate": "create a context (a group of identities)",
