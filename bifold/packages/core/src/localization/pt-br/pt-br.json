@@ -2176,8 +2176,11 @@
     "Test": "Enviar um pedido de teste",
     "TestHint": "Pede ao seu agente para criar um contexto. Ele pergunta a você primeiro, e nada é criado, qualquer que seja a resposta.",
     "TestHeld": "Enviado. Seu agente está perguntando agora: veja em Pedidos.",
-    "TestLetThrough": "Seu agente não perguntou: as aprovações não estão ativadas onde ele está hospedado. O contexto criado foi excluído.",
-    "TestLetThroughKept": "Seu agente não perguntou: as aprovações não estão ativadas onde ele está hospedado. Ele criou um contexto chamado \"Keyring test request\", que o Keyring não conseguiu excluir.",
+    "TestLetThrough": "Ele criou o contexto de teste, que o Keyring apagou em seguida.",
+    "TestLetThroughKept": "Ele criou um contexto chamado \"Keyring test request\", que o Keyring não conseguiu apagar.",
+    "LetThroughTitle": "Seu agente não pediu a você",
+    "LetThroughBody": "Então nada será enviado para o seu telefone, e nenhuma notificação vai chegar. Para que ele peça, verifique se a aplicação de aprovações está ativada para o seu agente onde ele está hospedado.",
+    "LastTestLetThrough": "Seu último pedido de teste não foi enviado a você: seu agente não pediu.",
     "Nudge": "Os pedidos sempre esperam no Keyring; uma notificação é um lembrete, não uma promessa.",
     "Details": "Detalhes",
     "HideDetails": "Ocultar detalhes"

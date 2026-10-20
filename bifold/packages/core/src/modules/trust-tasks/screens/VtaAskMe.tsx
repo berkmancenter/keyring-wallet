@@ -16,7 +16,7 @@
  */
 import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -27,6 +27,12 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { effectiveMinApprovals } from '../module/approvalsPolicy'
 import { releaseWarn } from '../module/releaseLog'
+import {
+  GenericRecordsTestRequestStore,
+  lastTestLetThrough,
+  letThroughCardShown,
+  type TestRequestOutcome,
+} from '../module/testRequestOutcome'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 
 import { deviceErrorWords } from './VtaDevices'
@@ -40,11 +46,31 @@ const VtaAskMe: React.FC = () => {
   const [busy, setBusy] = useState<string | undefined>()
   const [tested, setTested] = useState<string | undefined>()
   const [details, setDetails] = useState(false)
+  // The last test's outcome for this agent, kept on the phone: a test the
+  // agent let through sends nothing, and a line on screen was missed by a
+  // person who put the phone away straight after pressing (IN-277).
+  const vtaDid = useSyncExternalStore(vtaAgent.subscribe, () => {
+    const link = vtaAgent.getState().link
+    return link.kind === 'linked' ? link.vtaDid : undefined
+  })
+  const [outcome, setOutcome] = useState<TestRequestOutcome>()
+  useEffect(() => {
+    if (!agent || !vtaDid) return
+    let live = true
+    new GenericRecordsTestRequestStore(agent)
+      .get(vtaDid)
+      .then((o) => live && setOutcome(o))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, vtaDid])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 20, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 6 },
+    attention: { borderLeftWidth: 4, borderLeftColor: ColorPalette.semantic.error },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     grow: { flex: 1 },
     error: { color: ColorPalette.semantic.error },
@@ -108,11 +134,19 @@ const VtaAskMe: React.FC = () => {
     setBusy('test')
     try {
       const result = await vtaAgent.sendTestRequest(agent)
-      setTested(
-        result.kind === 'held'
-          ? t('AskMe.TestHeld')
-          : t(result.cleanedUp ? 'AskMe.TestLetThrough' : 'AskMe.TestLetThroughKept')
-      )
+      // Held: said in place, the request is in Requests. Let through: the card
+      // below says it, and stays until dismissed or the next test.
+      if (result.kind === 'held') setTested(t('AskMe.TestHeld'))
+      if (vtaDid) {
+        const next: TestRequestOutcome = {
+          vtaDid,
+          kind: result.kind,
+          ...(result.kind === 'letThrough' ? { cleanedUp: result.cleanedUp } : {}),
+          at: new Date().toISOString(),
+        }
+        setOutcome(next)
+        await new GenericRecordsTestRequestStore(agent).set(next).catch(() => undefined)
+      }
     } catch (e) {
       setError(wordsFor(e))
     } finally {
@@ -132,6 +166,28 @@ const VtaAskMe: React.FC = () => {
         <ThemedText style={styles.muted} testID={testIdWithKey('AskMeEnforcement')}>
           {t('AskMe.Enforcement')}
         </ThemedText>
+        {/* What the agent did, not why: no task reports whether it enforces approvals. */}
+        {letThroughCardShown(outcome) ? (
+          <View style={[styles.card, styles.attention]} testID={testIdWithKey('AskMeLetThroughCard')}>
+            <ThemedText variant="bold" accessibilityRole="header">
+              {t('AskMe.LetThroughTitle')}
+            </ThemedText>
+            <ThemedText>{t('AskMe.LetThroughBody')}</ThemedText>
+            <ThemedText style={styles.muted}>
+              {t(outcome?.cleanedUp ? 'AskMe.TestLetThrough' : 'AskMe.TestLetThroughKept')}
+            </ThemedText>
+            <Button
+              title={t('Global.Dismiss')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => {
+                if (!agent || !vtaDid) return
+                setOutcome((o) => (o ? { ...o, dismissed: true } : o))
+                void new GenericRecordsTestRequestStore(agent).dismiss(vtaDid).catch(() => undefined)
+              }}
+              testID={testIdWithKey('AskMeLetThroughDismiss')}
+            />
+          </View>
+        ) : null}
         {error ? (
           <ThemedText style={styles.error} testID={testIdWithKey('AskMeError')}>
             {error}
@@ -182,6 +238,9 @@ const VtaAskMe: React.FC = () => {
         {state?.view.canTest ? (
           <View style={styles.card}>
             <ThemedText style={styles.muted}>{t('AskMe.TestHint')}</ThemedText>
+            {lastTestLetThrough(outcome) ? (
+              <ThemedText testID={testIdWithKey('AskMeLastLetThrough')}>{t('AskMe.LastTestLetThrough')}</ThemedText>
+            ) : null}
             <Button
               title={t('AskMe.Test')}
               buttonType={ButtonType.Secondary}

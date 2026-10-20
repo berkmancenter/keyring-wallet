@@ -11,6 +11,7 @@ import React from 'react'
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
 import { EMPTY_APPROVALS, approvalsView, withPhoneRule, type ApprovalsModel } from '../module/approvalRules'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
@@ -127,5 +128,104 @@ describe('Ask me before…', () => {
     jest.spyOn(vtaAgent, 'approvalRules').mockRejectedValue(new DeviceActionRefused('unreachable'))
     const tree = await show()
     expect(tree.getByTestId(id('AskMeError'))).toHaveTextContent('CreateAgent.Device.unreachable')
+  })
+})
+
+// IN-277: the sign-in reporter twice concluded "no notifications" after a
+// test the agent let through: nothing reaches the phone then, and the one
+// line on screen was gone by the time they looked. The outcome is kept, and
+// says what the agent did, never why.
+describe('a test request the agent let through', () => {
+  type Setter = { set(next: Record<string, unknown>): void }
+  const AGENT = 'did:webvh:QmAgent:vta.example:me'
+  const on = () => ({ ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME), version: 1 })
+  const linked = () =>
+    (vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'linked',
+        vtaDid: AGENT,
+        label: 'me',
+        linkedAt: '2026-10-20T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+  const press = async (tree: Awaited<ReturnType<typeof show>>) =>
+    act(async () => {
+      fireEvent.press(tree.getByTestId(id('AskMeTest')))
+    })
+
+  let agent: ReturnType<typeof fakeAgent>['agent']
+  beforeEach(() => {
+    agent = fakeAgent().agent
+    ;(useAgent as jest.Mock).mockReturnValue({ agent })
+    linked()
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(on()))
+  })
+  afterEach(() => (vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked' } }))
+
+  test('before any test: no card, and nothing said beside the button', async () => {
+    const tree = await show()
+    expect(tree.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(tree.queryByTestId(id('AskMeLastLetThrough'))).toBeNull()
+  })
+
+  test('says so in a card that is still there after leaving and coming back', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const first = await show()
+    await press(first)
+    const card = first.getByTestId(id('AskMeLetThroughCard'))
+    expect(card).toHaveTextContent(/AskMe\.LetThroughTitle/)
+    expect(card).toHaveTextContent(/AskMe\.LetThroughBody/)
+    expect(card).toHaveTextContent(/AskMe\.TestLetThrough(?!Kept)/)
+    first.unmount()
+    const again = await show()
+    expect(again.getByTestId(id('AskMeLetThroughCard'))).toBeTruthy()
+    expect(again.getByTestId(id('AskMeLastLetThrough'))).toHaveTextContent('AskMe.LastTestLetThrough')
+  })
+
+  test('says when the test context could not be deleted', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: false })
+    const tree = await show()
+    await press(tree)
+    expect(tree.getByTestId(id('AskMeLetThroughCard'))).toHaveTextContent(/AskMe\.TestLetThroughKept/)
+  })
+
+  test('dismissed, the card goes and stays gone; the line beside the button still says it', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const first = await show()
+    await press(first)
+    await act(async () => fireEvent.press(first.getByTestId(id('AskMeLetThroughDismiss'))))
+    expect(first.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(first.getByTestId(id('AskMeLastLetThrough'))).toBeTruthy()
+    first.unmount()
+    const again = await show()
+    expect(again.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(again.getByTestId(id('AskMeLastLetThrough'))).toBeTruthy()
+  })
+
+  test('the next test replaces it: asked this time, no card and no line', async () => {
+    const send = jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const tree = await show()
+    await press(tree)
+    send.mockResolvedValue({ kind: 'held' })
+    await press(tree)
+    expect(tree.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(tree.queryByTestId(id('AskMeLastLetThrough'))).toBeNull()
+    expect(tree.getByTestId(id('AskMeTested'))).toHaveTextContent('AskMe.TestHeld')
+  })
+
+  test('the words say what the agent did, never why', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    for (const copy of [require('../../../localization/en/en.json').AskMe]) {
+      for (const key of [
+        'LetThroughTitle',
+        'LetThroughBody',
+        'LastTestLetThrough',
+        'TestLetThrough',
+        'TestLetThroughKept',
+      ]) {
+        expect(copy[key]).not.toMatch(/aren't switched on|is off|isn't on|not enforced/i)
+      }
+    }
   })
 })
