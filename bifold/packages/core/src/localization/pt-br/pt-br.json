@@ -813,6 +813,7 @@
     "TaskDoes": "Seu agente não descreveu isso. Esta tarefa iria {{action}}.",
     "About": "Sobre: {{subject}}",
     "ApproveIfYouStartedIt": "Aprove somente se foi você quem começou isso.",
+    "FullCodeHint": "Algumas ferramentas mostram o código completo, um código longo que começa com zQm.",
     "ShowFullCode": "Mostrar o código completo",
     "HideFullCode": "Ocultar o código completo",
     "TaskContextsCreate": "criar um contexto (um grupo de identidades)",

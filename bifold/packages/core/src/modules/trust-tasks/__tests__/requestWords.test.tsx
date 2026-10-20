@@ -91,6 +91,7 @@ describe('the words', () => {
         'ApproveIfYouStartedIt',
         'ShowFullCode',
         'HideFullCode',
+        'FullCodeHint',
       ])
         expect(typeof requests[key]).toBe('string')
     }
@@ -147,6 +148,8 @@ describe('what approving would do, when the agent did not say', () => {
     )
     expect(tree.getByTestId(testIdWithKey('ApprovalMatchCode'))).toHaveTextContent('0af466')
     expect(tree.queryByTestId(testIdWithKey('ApprovalDigest'))).toBeNull()
+    // IN-323: a tool that prints the whole digest showed a code that looked unrelated to this one; the screen says so.
+    expect(tree.getByTestId(testIdWithKey('ApprovalFullCodeHint'))).toHaveTextContent('Requests.FullCodeHint')
     fireEvent.press(tree.getByTestId(testIdWithKey('ApprovalDigestToggle')))
     expect(tree.getByTestId(testIdWithKey('ApprovalDigest'))).toHaveTextContent(approval.payloadDigest)
   })
