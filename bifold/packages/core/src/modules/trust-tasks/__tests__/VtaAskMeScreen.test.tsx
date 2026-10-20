@@ -15,6 +15,7 @@ import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
 import { EMPTY_APPROVALS, approvalsView, withPhoneRule, type ApprovalsModel } from '../module/approvalRules'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
+import { GenericRecordsTestRequestStore } from '../module/testRequestOutcome'
 import { DeviceActionRefused, OwnerNotConfirmed } from '../module/vtaOwner'
 import VtaAskMe from '../screens/VtaAskMe'
 
@@ -188,6 +189,30 @@ describe('a test request the agent let through', () => {
     const tree = await show()
     await press(tree)
     expect(tree.getByTestId(id('AskMeLetThroughCard'))).toHaveTextContent(/AskMe\.TestLetThroughKept/)
+  })
+
+  test('a kept outcome that never said whether the context was deleted claims neither', async () => {
+    await agent.genericRecords.save({
+      content: { vtaDid: AGENT, kind: 'letThrough', at: '2026-10-20T00:00:00Z' },
+      tags: { recordType: 'keyring.vta-test-request', vtaDid: AGENT },
+    } as never)
+    const tree = await show()
+    const card = tree.getByTestId(id('AskMeLetThroughCard'))
+    expect(card).toHaveTextContent(/AskMe\.LetThroughBody/)
+    expect(card).not.toHaveTextContent(/AskMe\.TestLetThrough/)
+  })
+
+  test('an outcome the phone could not keep, or a dismissal, is logged', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    jest.spyOn(GenericRecordsTestRequestStore.prototype, 'set').mockRejectedValue(new Error('store closed'))
+    jest.spyOn(GenericRecordsTestRequestStore.prototype, 'dismiss').mockRejectedValue(new Error('store closed'))
+    const tree = await show()
+    await press(tree)
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/test request: outcome not kept .*store closed/))
+    await act(async () => fireEvent.press(tree.getByTestId(id('AskMeLetThroughDismiss'))))
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/test request: dismissal not kept .*store closed/))
+    warn.mockRestore()
   })
 
   test('dismissed, the card goes and stays gone; the line beside the button still says it', async () => {

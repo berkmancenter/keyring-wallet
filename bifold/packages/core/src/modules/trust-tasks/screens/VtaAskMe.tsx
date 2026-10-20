@@ -37,6 +37,10 @@ import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
 
 import { deviceErrorWords } from './VtaDevices'
 
+/** A store write that failed, in the device log: the card then lasts only until the screen is left. */
+const notKept = (what: string) => (e: unknown) =>
+  releaseWarn(`[VTI] test request: ${what} not kept (${(e as Error)?.name ?? 'error'}: ${(e as Error)?.message ?? e})`)
+
 const VtaAskMe: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
@@ -145,7 +149,7 @@ const VtaAskMe: React.FC = () => {
           at: new Date().toISOString(),
         }
         setOutcome(next)
-        await new GenericRecordsTestRequestStore(agent).set(next).catch(() => undefined)
+        await new GenericRecordsTestRequestStore(agent).set(next).catch(notKept('outcome'))
       }
     } catch (e) {
       setError(wordsFor(e))
@@ -173,16 +177,19 @@ const VtaAskMe: React.FC = () => {
               {t('AskMe.LetThroughTitle')}
             </ThemedText>
             <ThemedText>{t('AskMe.LetThroughBody')}</ThemedText>
-            <ThemedText style={styles.muted}>
-              {t(outcome?.cleanedUp ? 'AskMe.TestLetThrough' : 'AskMe.TestLetThroughKept')}
-            </ThemedText>
+            {/* Only what the test reported: an outcome without it says nothing about the context. */}
+            {outcome?.cleanedUp === true ? (
+              <ThemedText style={styles.muted}>{t('AskMe.TestLetThrough')}</ThemedText>
+            ) : outcome?.cleanedUp === false ? (
+              <ThemedText style={styles.muted}>{t('AskMe.TestLetThroughKept')}</ThemedText>
+            ) : null}
             <Button
               title={t('Global.Dismiss')}
               buttonType={ButtonType.Secondary}
               onPress={() => {
                 if (!agent || !vtaDid) return
                 setOutcome((o) => (o ? { ...o, dismissed: true } : o))
-                void new GenericRecordsTestRequestStore(agent).dismiss(vtaDid).catch(() => undefined)
+                void new GenericRecordsTestRequestStore(agent).dismiss(vtaDid).catch(notKept('dismissal'))
               }}
               testID={testIdWithKey('AskMeLetThroughDismiss')}
             />
