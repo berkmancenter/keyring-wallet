@@ -96,7 +96,7 @@ export const COMMUNITY_NAME_TTL_MS = 24 * 60 * 60 * 1000
  * show for it.
  *
  * A community the person belongs to (this phone's own membership, or an
- * identity a linked agent holds there, `heldOnAgent`) has its published name
+ * identity a linked agent holds there, asked of `heldOnAgent` only when it decides) has its published name
  * read again when the one on record is missing or over a day old, and kept:
  * a community that published a name after the person joined, or renamed
  * itself, read as unnamed, or by its old name, for good (IN-340). The same
@@ -107,7 +107,7 @@ export const COMMUNITY_NAME_TTL_MS = 24 * 60 * 60 * 1000
 async function recordedCommunity(
   agent: Agent,
   vtcDid: string,
-  heldOnAgent = false
+  heldOnAgent: () => Promise<boolean> = async () => false
 ): Promise<{ member: boolean; name?: string }> {
   const store = new GenericRecordsCommunityStore(agent)
   const memberships = await store.listMemberships()
@@ -115,7 +115,9 @@ async function recordedCommunity(
   const kept = (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)
   const keptAt = kept?.at ? Date.parse(kept.at) : NaN
   const stale = !kept || !(Date.now() - keptAt < COMMUNITY_NAME_TTL_MS)
-  const fresh = (member || heldOnAgent) && stale ? await publishedName(agent, vtcDid) : undefined
+  // The agents are waited on only when they decide it: a name to read again, and no membership on this phone.
+  const belongs = member || (stale && (await heldOnAgent()))
+  const fresh = belongs && stale ? await publishedName(agent, vtcDid) : undefined
   if (fresh) {
     communityTarget.publishedName(vtcDid, fresh)
     await store.saveCommunityName(vtcDid, fresh).catch(() => undefined)
@@ -287,9 +289,11 @@ export function agentSignInSteps(agent: Agent): SignInSteps {
     return identities.get(vtcDid) as Promise<SignInIdentity[]>
   }
   const community = async (vtcDid: string) => {
-    // The identities first: one on a linked agent makes the community one the person belongs to, whose name is read.
-    const found = await identitiesFor(vtcDid)
-    const recorded = await recordedCommunity(agent, vtcDid, found.length > 0)
+    // Side by side: the name waits on the identities only when one on a linked agent decides whether it is read
+    // (no membership on this phone, and the name on record missing or old); a slow agent never holds up a known name.
+    const identities = identitiesFor(vtcDid)
+    const recorded = await recordedCommunity(agent, vtcDid, async () => (await identities).length > 0)
+    const found = await identities
     return { ...recorded, member: recorded.member || found.length > 0, identities: found }
   }
   const claimDeps: SignInDeps = {

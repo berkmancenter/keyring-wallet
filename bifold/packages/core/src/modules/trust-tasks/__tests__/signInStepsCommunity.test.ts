@@ -21,9 +21,14 @@ jest.mock('../module/vtiAgent', () => ({
 // The linked agents and what each one's vault lists (an identity there makes the person a member too, IN-296).
 const mockAgents: { vtaDid: string; name: string; current: boolean }[] = []
 const mockVault: Record<string, unknown[]> = {}
+// Held until a test lets it go, to see what waits on the agents.
+let mockAgentsReady: Promise<void> = Promise.resolve()
 jest.mock('../module/vtaAgent', () => ({
   vtaAgent: {
-    linkedAgents: async () => mockAgents,
+    linkedAgents: async () => {
+      await mockAgentsReady
+      return mockAgents
+    },
     withAgentSession: async (_a: unknown, vtaDid: string, use: (c: unknown) => Promise<unknown>) =>
       use({ vaultList: async () => mockVault[vtaDid] ?? [] }),
   },
@@ -73,6 +78,7 @@ beforeEach(() => {
   for (const k of Object.keys(mockVault)) delete mockVault[k]
   mockPublished.clear()
   mockMemberships.push({ communityDid: VTC })
+  mockAgentsReady = Promise.resolve()
 })
 
 describe("a sign-in's community, by name", () => {
@@ -156,5 +162,48 @@ describe('a name on record that is over a day old, or a membership held on a lin
     expect(found).toMatchObject({ member: false, name: 'Old name' })
     expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
     expect(mockReadPublicProfileName).not.toHaveBeenCalled()
+  })
+})
+
+// 7a on #451: finding the identities first held every name up behind the slowest agent (up to 8 s), read or not.
+describe('the name does not wait on the linked agents unless they decide it', () => {
+  const slowAgents = () => {
+    let release = () => undefined as void
+    mockAgentsReady = new Promise<void>((resolve) => (release = resolve))
+    return () => release()
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('a member with an old name: the name is read while a slow agent is still being asked', async () => {
+    const release = slowAgents()
+    mockNames.push({ communityDid: VTC, name: 'Old name', at: ago(2 * COMMUNITY_NAME_TTL_MS) })
+    const pending = agentSignInSteps(agent as never).community(VTC)
+    await settle()
+    expect(mockReadPublicProfileName).toHaveBeenCalledTimes(1)
+    release()
+    expect((await pending).name).toBe('Test VTC')
+  })
+
+  it('a fresh name on record: nothing is read, and nothing waits on the agents to decide it', async () => {
+    const release = slowAgents()
+    mockMemberships.splice(0)
+    mockNames.push({ communityDid: VTC, name: 'Recorded', at: ago(60 * 1000) })
+    const pending = agentSignInSteps(agent as never).community(VTC)
+    await settle()
+    release()
+    expect((await pending).name).toBe('Recorded')
+    expect(mockReadPublicProfileName).not.toHaveBeenCalled()
+  })
+
+  it('no membership on this phone and an old name: the agents decide, and with no identity there nothing is read', async () => {
+    const release = slowAgents()
+    mockMemberships.splice(0)
+    mockNames.push({ communityDid: VTC, name: 'Old name', at: ago(2 * COMMUNITY_NAME_TTL_MS) })
+    const pending = agentSignInSteps(agent as never).community(VTC)
+    await settle()
+    expect(mockReadPublicProfileName).not.toHaveBeenCalled()
+    release()
+    expect((await pending).name).toBe('Old name')
+    expect(agent.dids.resolveDidDocument).not.toHaveBeenCalled()
   })
 })
