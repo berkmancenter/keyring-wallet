@@ -172,7 +172,7 @@ describe('a wake that arrives while Keyring is open (iOS)', () => {
 
   it('is presented: banner, Notification Centre and sound, only for the gateway wake', () => {
     const body = method()
-    expect(body).toMatch(/KeyringIsWakeNotification\(notification\.request\.content\.userInfo\)/)
+    expect(body).toMatch(/KeyringIsWakeNotification\(userInfo\)/)
     expect(body).toMatch(/UNNotificationPresentationOptionBanner/)
     expect(body).toMatch(/UNNotificationPresentationOptionList/)
     expect(body).toMatch(/UNNotificationPresentationOptionSound/)
@@ -182,6 +182,18 @@ describe('a wake that arrives while Keyring is open (iOS)', () => {
     const body = method()
     expect(body).not.toMatch(/UNNotificationPresentationOptionBadge/)
     expect(body).toMatch(/completionHandler\(UNNotificationPresentationOptionNone\)/)
+  })
+
+  // A message wake while Keyring is open: the message arrives in the app,
+  // and the in-app notice says so; a banner too would say it twice.
+  it('a message wake is not presented: only an approval wake gets the banner', () => {
+    const body = method()
+    expect(body).toMatch(/KeyringIsWakeNotification\(userInfo\) && !KeyringIsMessageWake\(userInfo\)/)
+    const src = delegate()
+    expect(src).toMatch(/static BOOL KeyringIsMessageWake\(NSDictionary \*userInfo\)/)
+    expect(src).toMatch(/hasPrefix:@"keyring-msg-"/)
+    // The tap's destination reads the same rule.
+    expect(src).toMatch(/return KeyringIsMessageWake\(userInfo\) \? KeyringMessagesLink : KeyringApprovalsLink;/)
   })
 
   it('is on the delegate Firebase messaging forwards to', () => {
