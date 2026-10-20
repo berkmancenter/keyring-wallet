@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "2a10dd3c1e6a7b187a98d7ba4c3af8dd0c473875",
+  "generatedFrom": "13ff3c1a55173bb87c4032c9e2d30ca6e526c8ea",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -665,6 +665,9 @@
     "MyQRCodeTitle": ["src/components/misc/QRScanner.tsx"],
     "MyQRContact": ["src/components/misc/QRScanner.tsx"],
     "MyQRIdentity": ["src/components/misc/QRScanner.tsx"],
+    "MyQRShareLink": ["src/components/misc/QRScanner.tsx"],
+    "MyQRShareLinkError": ["src/components/misc/QRScanner.tsx"],
+    "MyQRShareLinkNote": ["src/components/misc/QRScanner.tsx"],
     "NameInput": ["src/components/forms/WalletNameForm.tsx", "src/screens/RenameContact.tsx"],
     "NewPhoneOffer": ["src/modules/trust-tasks/screens/VtaNewPhoneOffer.tsx"],
     "Next": ["src/components/tour/TourBox.tsx", "src/screens/Onboarding.tsx"],

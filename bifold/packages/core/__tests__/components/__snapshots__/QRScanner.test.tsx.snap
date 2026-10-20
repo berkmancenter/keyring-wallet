@@ -833,6 +833,127 @@ exports[`QRScanner Component Renders QR code view when defaultToConnect is true 
       >
         Scan.YourQRCodeInstruction
       </Text>
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "gap": 4,
+            "marginTop": 12,
+          }
+        }
+      >
+        <View
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "opacity": 1,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/MyQRShareLink"
+        >
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "gap": 8,
+                "minHeight": 44,
+                "paddingHorizontal": 12,
+              }
+            }
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#42803E",
+                    "fontSize": 20,
+                  },
+                  undefined,
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰒗
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#42803E",
+                  },
+                ]
+              }
+            >
+              Scan.ShareLink
+            </Text>
+          </View>
+        </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 14,
+                "textAlign": "center",
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/MyQRShareLinkNote"
+        >
+          Scan.ShareLinkNote
+        </Text>
+      </View>
     </View>
   </RNCSafeAreaView>
 </View>
