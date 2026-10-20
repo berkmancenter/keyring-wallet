@@ -60,7 +60,12 @@ Everything a run makes goes under `~/.keyring-fleet/gate/`, never `/private/tmp`
 e2e/gate/gate.sh run --pin <wallet-sha>            # every leg, on that pin's CI builds
 e2e/gate/gate.sh run --pin <sha> --legs kk,p1      # some legs
 e2e/gate/gate.sh rerun <run-id> --only-failed      # only the rows that FAILed or did not run, same builds
+GATE_RERUN_WHOLE="agents" e2e/gate/gate.sh rerun <run-id> --only-failed   # …but these legs whole (a failed row needs one that passed)
+node e2e/gate/ledger.mjs [--days 14] [--json]          # each row's pass rate over recent runs; FLAKY = passed and failed on the same pin and harness
+GATE_RERUN_SKIP="p2" e2e/gate/gate.sh rerun <run-id> --only-failed        # …leaving these legs out (a known cause a rerun cannot change; rerun-skipped= in the meta)
+GATE_LOGCAT=1 e2e/gate/gate.sh rerun <run-id> --only-failed               # every Android leg saves its emulator's whole log (emulator-NNNN.logcat)
 e2e/gate/gate.sh dry --golden                      # these drivers against the shipped build, before a candidate
+e2e/gate/gate.sh nightly [--pin <sha>]             # the nightly legs (LEGS_NIGHTLY) on main's newest green build
 e2e/gate/gate.sh watch --pr <n>                    # start `run` when that pin PR merges and its builds finish
 e2e/gate/gate.sh watch --main                      # continuous gating: a run for every new green push build of main
 e2e/gate/gate.sh report <run-id>                   # the run's rows, per leg, with wall-clock
@@ -133,6 +138,15 @@ The iOS legs (K↔K, iOS smoke) use simulators. The Android legs (P1 + approvals
 smoke, device rows) use the emulator. With enough free disk (about 15 GB), the two groups run side by side,
 each with its own `E2E_RUN_DIR` and Appium port. Below that, they run one after another.
 
+## A stale emulator
+
+The gate's AVD keeps its userdata across boots (every boot is cold, `-no-snapshot`, but the data partition stays).
+Google Play services' state can go stale there: on 10-14 a leftover `.pushtest` registration swallowed every FCM
+message, so ANDROID-NOTIF-CHANNEL saw no wake in three runs while the gateway reported each one delivered. One
+`scripts/emu.sh start Pixel_6_API_33 --port 5570 -- -wipe-data` boot (then `emu.sh stop`) fixed it; the next run's
+wake arrived one second after the hold. When a push row sees `pushCapable true` but no FCM line in the phone's log,
+wipe the AVD before suspecting the app or the push path.
+
 ## Cleanup
 
 Every leg records when it started. On exit it removes the phone keys it made on each runner since then, the
@@ -202,6 +216,45 @@ only a `-push-on` artifact and does not start it). What does not move to a hoste
 physical-phone legs, the terminal-app fixture, and anything that links a Farm runner (stage B would need the
 runner personas provisioned for CI).
 
+## On a hosted runner: the Farm legs (gate-ci.yml)
+
+`.github/workflows/gate-ci.yml` runs the Android Farm legs (`CI_LEGS` there: the smoke, testreq, the link cases,
+linkfail, pnmlink) one at a time, as the **CI lane**: one machine (a hosted runner), one identity (`keyring-ci-gate`,
+a 30-day runner admin a person renews from the Mac), one runner VTA of its own on the Farm. A lane never shares a
+runner with another lane: two identities on one runner collide on its ACL and its rate limit. The lane's
+configuration is the `GATE_CI_ENV` secret, and `ci/ci-env-check.sh` refuses any shape but one runner slug (plus
+`RUNNER_A_DID`, the DID linkfail puts in its approver set, which names no agent pnm reaches); `ci/pnm-ci.sh` then
+allows only that slug and the commands the legs use, and sends them over the runner's REST service (`--transport
+rest`), not the mediator socket: the harness's control path, which a dropped mediator connection held for 90 minutes
+on 15 October, is not what the legs test. `FARM_VERSIONS` in the same file names the lane's runner
+version, which `farm-drift.mjs` checks against CI's pnm (`pnm-linux.yml`). The Mac's `farm.env` stays the Mac lane's:
+its runners, its versions.
+
+## The nightly run
+
+Rows whose Jest twin runs on every pull request leave the per-release gate and run once a night instead (gate
+efficiency §6, item 9). `LEGS_NIGHTLY` in `gate.sh` names the legs: `p2`, which runs only there (`LEGS_NIGHTLY_ONLY`,
+so `run` and `all` leave it out; `--legs p2` still names it), and `lostreq`, whose offline-ask row
+`lost-ask-offline-error` runs only in a nightly run (its twin is bifold's `joinLostRequest.test.tsx`, #414). In a
+gate the row is a SKIP that says so; a rerun that names it runs it. Every leg gets its run's kind as `GATE_KIND`.
+
+`linkwait` runs in both too: in a gate on the short-clock test build (`E2E_CLOCKS=short`), and at night on a
+real-clocks build (`test-builds.yml` dispatched with `clocks: real`; `APK_REAL`), so the clocks the store build has
+are proven as well. The watcher finds that build for the nightly commit, or for main's HEAD when nothing between them
+changes the app (as for a push-on build). It asks for one once (`watch-requested-real-<sha8>`) when a main build's
+gate ends, so it is built before the window opens, and again at night if there is still none; the nightly run then
+waits up to an hour, less once nothing of that commit is building any more (a red build is not asked for again: the
+log names its run). Without one, the nightly linkwait is a SKIP that says so. `gate.sh nightly` by hand uses one that
+exists, HEAD's standing in included. The run's meta names it (`real-clocks=`).
+
+`watch --main` starts the nightly legs once a day, in a window of local hours from `GATE_NIGHTLY_HOUR` (default 3)
+until `GATE_NIGHTLY_UNTIL` (default 6), on the newest green main build, only in a cycle where no gate started and
+under the same busy and stability rules as a gate. `nightly-<YYYYMMDD>` in `$GATE_HOME` marks the day: written once
+the run holds the run lock (so a long or failed run is not started twice, and one that never started is tried again
+in the window), or when the window passes with no run, which the watcher's log says. `GATE_NIGHTLY=0` turns it off.
+A nightly run is `<id>-nightly`, never counted as a gate of its commit. A running `watch --main` keeps the `gate.sh`
+it started with: after a change here, restart it (the LaunchAgent's bootout and bootstrap) between gates.
+
 ## Continuous gating on main
 
 `gate.sh watch --main` runs for ever: every five minutes (`GATE_WATCH_INTERVAL`) it asks `green.mjs` for the newest
@@ -246,9 +299,10 @@ gated again by the loop; reruns stay a person's call (`rerun <id> --only-failed`
 - **The push-on build of main's HEAD** stands for an older green commit when nothing between them changes the app (the CI build's own `paths-ignore` list, read by `samebuild.mjs`; `node --test e2e/gate/samebuild.test.mjs`). The run's `meta` records it as `push-on=<run> of <head> (no app change since <commit>)`. When the app did change, the watcher says so and runs without the push legs instead of waiting an hour for a build that cannot come.
 - **A pause for another lane's device build.** `gate.sh pause [reason]` lets the legs already running finish and starts nothing else: each leg not started is recorded as `not run (paused)` (exit 4), the watcher skips its cycles, and `run`/`rerun` refuse to start. `gate.sh resume` lifts it; `gate.sh rerun <run> --only-failed` then runs the paused legs, and any broken or stopped one, in full.
 - **Farm or local.** `GATE_ENV` picks what a run tests against: `env/farm.env` (the default) or `env/local.env`, the fallback stack on the newest VTI release tag for when the Farm is down. The target (`GATE_TARGET`, else the file's name) is written to the run's `meta`, the report's first line and every `HEADS` line, so a local pass is never read as a Farm pass. The watcher runs on the Farm only; a local run is started by hand.
-- **Layout rules on every smoke (`e2e/lib/layoutRules.js`).** Over each welcome slide's view hierarchy: tap targets under 44 pt (iOS) or 48 dp (Android), interactive elements clipped by the window outside a scroller, overlapping tap targets, and navigation titles off the centre line. Each finding is a `LAYOUT <screen> <rule> <element> — <detail>` line, listed in the CI step summary; the `layout-welcome` row is a SKIP that lists them until the rules are calibrated (`LAYOUT_STRICT=1` makes it a FAIL). The page sources are kept as `layout-welcome-<n>-<platform>.xml` beside the screenshots. Text truncation is not checkable from the hierarchy (it holds the full text): that is the screenshot review.
+- **Layout rules on every smoke (`e2e/lib/layoutRules.js`).** Over each welcome slide's view hierarchy: tap targets under 44 pt (iOS) or 48 dp (Android), interactive elements clipped by the window outside a scroller, overlapping tap targets, and navigation titles off the centre line. Each finding is a `LAYOUT <screen> <rule> <element> — <detail>` line, listed in the CI step summary; the `layout-welcome` row is a SKIP that lists them until the rules are calibrated (`LAYOUT_STRICT=1` makes it a FAIL). The page sources are kept as `layout-welcome-<n>-<platform>.xml` beside the screenshots, each with a `.json` holding the density and both windows (the driver's and the hierarchy root's), so a finding can be re-measured from the artifacts. Calibration: the window is the root element's frame; frames sharing at most 1 pt/dp are neighbours, not an overlap; the keyboard is never judged; `e2e/lib/layout.allow.json` names findings the hierarchy cannot see past (a hitSlop, say), each with a reason, printed as `LAYOUT-ALLOWED` and never counted. Text truncation is not checkable from the hierarchy (it holds the full text): that is the screenshot review.
 - **A fast check for a fix: `gate.sh changed --pin <sha> --range <a>..<b>`** (or `--files f,…`). It runs only the legs whose drivers reach a testID a changed file owns (`changed.mjs`: file → the testIDs it owns, including its typed ids map → the page-object methods and helper functions that name them → the drivers that call those → the legs that run them, honouring each leg's env flags, so a flow behind `JOURNEY=1` counts only where it is on). The run is `<id>-changed`; its `meta` and report say **changed legs only**, record the legs chosen and why (`changed-why=`), and the watcher never counts it as the gate of the commit. It is minutes, not hours, and never the release gate: an external release still needs the full gate. A changed file that owns no testID (a client, a store, logic) stops it with "run the full gate"; a change no leg looks at stops it with "write a row for it". `node --test e2e/gate/changed.test.mjs`.
 - **From a tester's report to a proven fix: `node e2e/gate/repro.mjs --report IN-<n> --files <the files the fix will touch>`.** It says whether the gate already reaches those files (`changed.mjs`), and where the failing test goes first: a bifold unit test when a file owns no testID (logic: the gate cannot see it) or no leg reaches it, otherwise a plain row in a leg's own driver that builds rows (a page-object or driver hit first, then a smoke leg). A row only gets `tracked` when it lands before its fix, and the fix's PR removes it: left in place, a tracked row would hide the bug coming back. It prints a starting test that fails until it is written, and the rest of the loop: red on the tester's build, the fix, green, `gate.sh changed` on the fix's range, `scripts/release/tier.mjs` to route it (OTA ring 0, or a store build), and the full gate before any external release. It reads the report's newest line from the local queue for you (private: never paste it into a PR or an issue), checks that the files exist, and writes nothing. `node --test e2e/gate/repro.test.mjs`.
+- **The gate on GitHub runners (`.github/workflows/gate-ci.yml`, `GATE_TARGET=ci`).** The Android Farm legs that need one emulator and one build run one per job, one at a time (they share one CI-only runner-admin identity, and the mediator keeps one live connection per identity). Not usable until the owner approves that identity (D-8); until then each leg stops at once as ENV. pnm is the Linux build (`pnm-linux.yml`), reached only through `ci/pnm-ci.sh`: the configuration's own runner and community agents, never a person's, never verbose, its sessions under `RUNNER_TEMP` at 700 and removed when the job ends. A drifted pin (`farm-drift.mjs`) stops the leg as ENV. Mac-only by the owner's decision (D-8): `agents`, `waiting`, `lostreq` (they need the community admin credential, which stays out of CI). Not on CI yet: `devices`, `relaunch-android`, `update-android`, the push legs, `p1` (the openvtc TUI), the iOS legs and `p2`. `bash e2e/gate/ci/pnm-ci.test.sh`.
 - **Every run as data: `<run>/summary.json`** (`run-summary.mjs`), written when a run ends and again with `gate.sh summary <run>` after meta notes are added. Per leg: exit, pass/fail/skip, and whose result it is: `app` (a verdict on the app), `env` (a Mac sleep, or `env-legs=` in meta), `harness` (the leg broke, or `harness-legs=`), `none` (paused or stopped); overall `pass`, `fail` or `incomplete`. A tracked row that passed in an earlier run (by `started=`) on an ancestor build and skips again is listed under `regressions` and counts as an app fail; an older build without the fix (a dry run on the golden) is not judged by a newer build's pass, and ancestry that can't be told goes under `possiblyRegressed`, which never changes the verdict. The command-center board reads it instead of retyping legs.
 - **Downloads retry** five times a minute apart; the 239 auto-start lost its gate to two transient download failures.
 - **PATH is yours to set.** launchd starts the watcher with almost no PATH. The example names the node that runs

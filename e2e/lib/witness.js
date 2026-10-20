@@ -174,7 +174,11 @@ export async function startWitness({
   // transpile-only: the witness-server has pre-existing @types/node `Timeout`
   // type errors (WitnessService.ts:377/397) that a full ts-node typecheck
   // rejects; a harness launching the server only needs it to run.
-  const proc = spawn("yarn", ["ts-node", "--transpile-only", "src/index.ts"], {
+  // bifold #402: the witness reaches @openvtc/vti-tsp-js (ESM-only) through its workspace packages, and every start
+  // script of the server loads tsp-esm-preload.cjs for it; started without, it fails on that import. Loaded when the
+  // checkout has it (a bifold from before #402 does not).
+  const preload = existsSync(join(witnessDir, "tsp-esm-preload.cjs")) ? ["-r", "./tsp-esm-preload.cjs"] : [];
+  const proc = spawn("yarn", ["ts-node", "--transpile-only", ...preload, "src/index.ts"], {
     cwd: witnessDir,
     // `yarn ts-node ...` spawns ts-node as a GRANDCHILD of this process — killing
     // just `proc` only signals the yarn wrapper, orphaning the actual witness

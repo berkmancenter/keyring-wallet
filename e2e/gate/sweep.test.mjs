@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const lib = readFileSync(path.join(here, 'lib.sh'), 'utf8');
-const pnmFn = lib.match(/^pnm\(\) \{.*\}$/m)?.[0];
+// pnm() spans several lines (its CI guard); is_ci and the refused slugs it reads come with it. Off CI (here) the guard
+// is skipped, so the sweep sees the Mac's pnm.
+const pnmFn = lib.match(/^pnm\(\) \{[\s\S]*?^\}$/m)?.[0];
+const ciBits = [lib.match(/^is_ci\(\) \{.*\}$/m)?.[0], lib.match(/^CI_REFUSED_SLUGS=.*$/m)?.[0]].join('\n');
 const tasks = lib.match(/^GATE_RULE_TASKS=.*$/m)?.[0];
 const sweep = lib.match(/^gate_sweep_runner\(\) \{[\s\S]*?^\}$/m)?.[0];
 
@@ -42,6 +45,7 @@ esac
       set -u
       say() { :; }; sleep() { :; }
       REPO=${JSON.stringify(dir)}; PNM_BIN=unused
+      ${ciBits}
       ${pnmDefinition}
       ${tasks}
       ${sweep}

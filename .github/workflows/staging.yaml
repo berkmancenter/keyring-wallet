@@ -393,6 +393,9 @@ jobs:
               echo "::warning::PUSH_GATEWAY_URL is set but google-services.json is project '${project}', not PUSH_FCM_PROJECT_ID '${PUSH_FCM_PROJECT_ID}': push stays OFF in the Android build"
             fi
           fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
           echo "Push notifications (Android): ${push}"
           echo "- Push notifications (Android): **${push}**" >>"$GITHUB_STEP_SUMMARY"
 
@@ -922,6 +925,9 @@ jobs:
             echo "PUSH_APNS_ENVIRONMENT=production" >>.env
             push=on
           fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
           echo "Push notifications (iOS): ${push}"
           echo "- Push notifications (iOS): **${push}**" >>"$GITHUB_STEP_SUMMARY"
 
@@ -1031,8 +1037,9 @@ jobs:
           path: export/KeyRing.ipa
           retention-days: 30
 
+      # Runs on every event. It once ran on a push only, so a build run by hand
+      # (every release/* build) shipped a version number as its notes (247, 248).
       - name: Summarise what this build adds
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
         shell: bash
         run: |

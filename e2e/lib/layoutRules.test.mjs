@@ -1,7 +1,7 @@
 // node --test e2e/lib/layoutRules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkLayout, layoutLines, parsePageSource } from './layoutRules.js';
+import { checkLayout, counted, layoutLines, parsePageSource, readAllow, rootWindow } from './layoutRules.js';
 
 const IOS = `<?xml version="1.0" encoding="UTF-8"?><AppiumAUT>
 <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="390" height="844" visible="true" enabled="true">
@@ -59,4 +59,103 @@ test('a centred title and a clean screen give no findings; lines name the screen
   const els = parsePageSource(ok.replace(/<XCUIElementTypeButton[^>]*name="(Back|Edge|A|B)"[^>]*\/>/g, ''), { platform: 'ios' });
   assert.deepEqual(rules(checkLayout(els, { platform: 'ios', window: { w: 390, h: 844 } })), []);
   assert.deepEqual(layoutLines('welcome-1', [{ rule: 'tap-size', element: 'Button "Back"', detail: '30×30 pt' }]), ['LAYOUT welcome-1 tap-size Button "Back" — 30×30 pt']);
+});
+
+const ios = (inner) => `<?xml version="1.0"?><AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="390" height="844" visible="true" enabled="true">${inner}</XCUIElementTypeApplication></AppiumAUT>`;
+const btn = (n, x, y, w = 80, h = 48) => `<XCUIElementTypeButton type="XCUIElementTypeButton" name="${n}" x="${x}" y="${y}" width="${w}" height="${h}" visible="true" enabled="true"/>`;
+
+test('calibration: the window defaults to the root element frame', () => {
+  const els = parsePageSource(ios(btn('Edge', 360, 400, 60)), { platform: 'ios' });
+  assert.deepEqual(rootWindow(els), { w: 390, h: 844 });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })), ['clipped Button "Edge"']);
+  const and = parsePageSource(ANDROID, { platform: 'android', scale: 2.625 });
+  assert.ok(Math.abs(rootWindow(and).w - 1080 / 2.625) < 0.01);
+});
+
+test('calibration: frames sharing at most 1 pt are neighbours, not an overlap', () => {
+  const touch = parsePageSource(ios(btn('A', 100, 600) + btn('B', 179, 600)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(touch, { platform: 'ios' })), []);
+  const real = parsePageSource(ios(btn('A', 100, 600) + btn('B', 170, 600)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(real, { platform: 'ios' })), ['overlap Button "A" / Button "B"']);
+});
+
+test('calibration: the keyboard is never judged (iOS keys, an Android input method)', () => {
+  const kb = `<XCUIElementTypeKeyboard type="XCUIElementTypeKeyboard" x="0" y="560" width="390" height="284" visible="true"><XCUIElementTypeKey type="XCUIElementTypeKey" name="q" x="3" y="570" width="33" height="42" visible="true" enabled="true"/>${btn('shift', 3, 680, 42, 42)}</XCUIElementTypeKeyboard>`;
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(kb), { platform: 'ios' }), { platform: 'ios' })), []);
+  const and = ANDROID.replace('</hierarchy>', '<android.widget.FrameLayout class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[0,1500][1080,2400]" displayed="true"><android.widget.Button class="android.widget.Button" package="com.google.android.inputmethod.latin" bounds="[0,1500][60,1560]" displayed="true" clickable="true" enabled="true"/></android.widget.FrameLayout></hierarchy>');
+  assert.deepEqual(rules(checkLayout(parsePageSource(and, { platform: 'android', scale: 2.625 }), { platform: 'android' })), ['tap-size ViewGroup "Back"']);
+});
+
+test('calibration: an allowlisted finding is printed with its reason, never counted; entries need a reason', () => {
+  const els = parsePageSource(IOS, { platform: 'ios' });
+  const allow = readAllow({ allow: [{ rule: 'tap-size', label: 'Back', reason: 'hitSlop 12 makes it 54 pt' }, { rule: 'overlap', label: 'B', with: 'A', reason: 'B sits on A by design' }] });
+  const found = checkLayout(els, { platform: 'ios', allow });
+  assert.deepEqual(rules(counted(found)), ['centred StaticText "Your agent"', 'clipped Button "Edge"']);
+  const lines = layoutLines('welcome-1', found);
+  assert.ok(lines.includes('LAYOUT-ALLOWED welcome-1 tap-size Button "Back" — 30×30 pt, under 44×44 (allowed: hitSlop 12 makes it 54 pt)'));
+  assert.equal(lines.filter((l) => l.startsWith('LAYOUT ')).length, 2);
+  assert.throws(() => readAllow({ allow: [{ rule: 'tap-size', label: 'Back' }] }), /needs rule, label and reason/);
+  assert.deepEqual(readAllow({ allow: [] }), []);
+});
+
+test('calibration: only the app window is judged; iOS keyboard keys live in a later window with KeyboardKey traits', () => {
+  // The shape of a real smoke dump (link-failure, 10-11): window 0 the app, window 1 hidden, window 2 the keyboard host
+  // whose Emoji and dictation keys are plain Buttons, not under a Keyboard element.
+  const key = (n, x) => `<XCUIElementTypeButton type="XCUIElementTypeButton" name="${n}" x="${x}" y="805" width="69" height="70" visible="true" enabled="true" traits="KeyboardKey, Button"/>`;
+  const xml = `<?xml version="1.0"?><AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Keyring" x="0" y="0" width="402" height="874" visible="true" enabled="true">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="true" enabled="true">${btn('Continue', 20, 700, 362, 48)}${btn('Edge', 370, 400, 60)}</XCUIElementTypeWindow>
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="false" enabled="true"/>
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874" visible="true" enabled="true"><XCUIElementTypeOther type="XCUIElementTypeOther" x="0" y="560" width="402" height="314" visible="true">${key('Emoji', 8)}${key('dictation', 325)}${key('dictation', 325)}${btn('Stray', 380, 300, 60)}</XCUIElementTypeOther></XCUIElementTypeWindow>
+  </XCUIElementTypeApplication></AppiumAUT>`;
+  const els = parsePageSource(xml, { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })), ['clipped Button "Edge"']);
+  // A key trait alone is enough, even in the app's own window.
+  const inApp = parsePageSource(ios(key('Emoji', 360)), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(inApp, { platform: 'ios' })), []);
+});
+
+test('calibration: allowlist entries narrow by screen and platform, and an overlap needs its exact pair', () => {
+  const els = parsePageSource(IOS, { platform: 'ios' });
+  const allowed = (entries, opts = {}) => rules(checkLayout(els, { platform: 'ios', allow: readAllow({ allow: entries }), ...opts }).filter((f) => f.allowed));
+  const back = { rule: 'tap-size', label: 'Back', reason: 'hitSlop' };
+  assert.deepEqual(allowed([{ ...back, screen: 'welcome-2' }], { screen: 'welcome-1' }), []);
+  assert.deepEqual(allowed([{ ...back, screen: 'welcome-1' }], { screen: 'welcome-1' }), ['tap-size Button "Back"']);
+  assert.deepEqual(allowed([{ ...back, platform: 'android' }]), []);
+  assert.deepEqual(allowed([{ ...back, platform: 'ios' }]), ['tap-size Button "Back"']);
+  assert.deepEqual(allowed([{ rule: 'overlap', label: 'A', with: 'Next', reason: 'r' }]), []);
+  assert.deepEqual(allowed([{ rule: 'overlap', label: 'B', with: 'A', reason: 'r' }]), ['overlap Button "A" / Button "B"']);
+  assert.throws(() => readAllow({ allow: [{ rule: 'overlap', label: 'B', reason: 'r' }] }), /needs "with"/);
+});
+
+test('overlap: frames are clipped to their scroll viewport (the R-Card form scrolled under the No-internet banner)', () => {
+  // The shape of the real smoke dump (link-failure, 10-11, iPhone 402x874): the form scrolled up 216 pt, so the label
+  // field's frame starts at y=147 while its scroll view's viewport starts at 179; the banner ends at 162.
+  const xml = ios(`<XCUIElementTypeButton type="XCUIElementTypeButton" name="com.ariesbifold:id/button-error" x="0" y="106" width="402" height="56" visible="true" enabled="true"/>
+    <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="21" y="179" width="360" height="374" visible="true"><XCUIElementTypeOther type="XCUIElementTypeOther" x="21" y="-37" width="360" height="700" visible="true">
+      <XCUIElementTypeTextField type="XCUIElementTypeTextField" name="com.ariesbifold:id/RCardLabelInput" x="42" y="147" width="318" height="44" visible="true" enabled="true"/>
+      ${btn('Hidden', 42, 100, 318, 48)}
+    </XCUIElementTypeOther></XCUIElementTypeScrollView>`);
+  const els = parsePageSource(xml, { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(els, { platform: 'ios' })).filter((r) => r.startsWith('overlap')), []);
+  // The same field not inside a scroller does overlap the banner: the clip is what clears it.
+  const flat = parsePageSource(ios(`<XCUIElementTypeButton type="XCUIElementTypeButton" name="button-error" x="0" y="106" width="402" height="56" visible="true" enabled="true"/>${'<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="RCardLabelInput" x="42" y="147" width="318" height="44" visible="true" enabled="true"/>'}`), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(flat, { platform: 'ios' })).filter((r) => r.startsWith('overlap')), ['overlap Button "button-error" / TextField "RCardLabelInput"']);
+  // Two buttons both on screen inside the scroller still overlap.
+  const both = parsePageSource(ios(`<XCUIElementTypeScrollView type="XCUIElementTypeScrollView" x="0" y="100" width="390" height="600" visible="true">${btn('A', 100, 300)}${btn('B', 150, 320)}</XCUIElementTypeScrollView>`), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(both, { platform: 'ios' })), ['overlap Button "A" / Button "B"']);
+});
+
+test('overlap: only hierarchy nesting makes one control; a sibling drawn over a button and covering it is an overlap', () => {
+  const cell = (inner) => `<XCUIElementTypeCell type="XCUIElementTypeCell" name="Row" x="0" y="200" width="390" height="80" visible="true" enabled="true">${inner}</XCUIElementTypeCell>`;
+  const nested = parsePageSource(ios(cell(btn('Info', 300, 210, 60, 60))), { platform: 'ios' });
+  assert.deepEqual(rules(checkLayout(nested, { platform: 'ios' })), []);
+  assert.deepEqual(nested.map((e) => e.parentIndex), [-1, 0, 1]);
+  // A backdrop drawn after the button covers it: the button's taps are swallowed.
+  const over = checkLayout(parsePageSource(ios(btn('Close', 300, 60, 60, 48) + btn('Backdrop', 0, 0, 390, 844)), { platform: 'ios' }), { platform: 'ios' });
+  assert.deepEqual(rules(over), ['overlap Button "Close" / Button "Backdrop"']);
+  assert.match(over[0].detail, /Button "Backdrop" is drawn over Button "Close" and covers it/);
+  // A button drawn after a large tap area sits on top and gets its taps (the scan screen's camera area): no finding.
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(btn('CameraTapArea', 0, 0, 390, 844) + btn('ScanTorch', 300, 700, 60, 60)), { platform: 'ios' }), { platform: 'ios' })), []);
+  // A partial overlap of siblings is a finding whatever the order.
+  assert.deepEqual(rules(checkLayout(parsePageSource(ios(btn('B', 150, 620) + btn('A', 100, 600)), { platform: 'ios' }), { platform: 'ios' })), ['overlap Button "B" / Button "A"']);
 });

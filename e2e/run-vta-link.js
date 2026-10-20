@@ -55,11 +55,13 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 
+import { buildLacks } from "./lib/buildHas.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { deleteAcl, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, fromGrant, grantAfter, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -423,8 +425,11 @@ async function afterRefusal(driver, said, temporaryDid) {
  *   link-again-rescan          IN-251 (bifold #383): linked, the agent removes this phone, RemovedPhone shows; Link
  *                              again, the same agent scanned: a link starts (not "already has that agent") and links
  */
-async function linkCase(driver, which) {
+async function linkCase(driver, which, timing) {
   const udid = driver.e2eUdid;
+  // The waits of the cases that time the app's clocks (CLOCK_CASES), from the clocks the build has (lib/clocks.js);
+  // the real ones when the caller read none.
+  const t = timing ?? { clocks: REAL_CLOCKS, ...linkWaitTiming(REAL_CLOCKS) };
   const sh = (...a) => execFileSync("adb", ["-s", udid, "shell", ...a], { encoding: "utf8" });
   const PAUSE_S = Number(process.env.PAUSE_S || 150);
   const lockFor = async (s) => {
@@ -454,6 +459,13 @@ async function linkCase(driver, which) {
     const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
     try { return JSON.parse(t.slice(t.indexOf("["))).length; } catch { return -1; }
   };
+  // Entries created at or after `since` (ms): a case's own writes, whatever else writes to the runner meanwhile.
+  // `since` is the VTA's own createdAt (an ISO string), not the Mac's clock: the two can disagree by seconds.
+  const aclList = () => {
+    const t = execFileSync(PNM, ["--vta", VTA_SLUG, "acl", "list", "--json"], { env: { ...process.env, ...pnmHomeEnv }, encoding: "utf8" });
+    try { return JSON.parse(t.slice(t.indexOf("["))); } catch { return null; }
+  };
+  const aclSince = (since) => { const l = aclList(); return l && since ? l.filter((e) => Date.parse(e.createdAt) >= Date.parse(since)) : null; };
   const words = async (id) => (await textOf(driver, id).catch(() => "")).replace(/\s+/g, " ").trim();
   // The key VtaLink holds: as text when it shows one, else by Copy and the clipboard (239's resumed VtaLink offers only
   // Share and Copy, so a text read came back empty); empty when there is none, for the row to record.
@@ -522,7 +534,23 @@ async function linkCase(driver, which) {
     const later = which === "link-address-resume-later";
     const did = await addressCode();
     sh("am", "force-stop", process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
-    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grant(did); }
+    // The case's own entry is found by its grant (fromGrant), not by the ACL's size: another leg linking a phone to the
+    // same runner meanwhile grew the ACL by two (1015-1852: kk's key landed mid-case, "ACL entries 2 → 4").
+    // The grant's entry, against the ACL just before it: by subject, or, when a live app's poll has rotated the key
+    // already, the entry new since then (grantAfter; `ambiguous` when another leg granted in the same moment).
+    let granted, ambiguous = false;
+    const grantNow = () => {
+      const pre = aclList() || [];
+      grant(did);
+      ({ entry: granted, ambiguous } = grantAfter(pre, aclList() || [], did));
+    };
+    const ownOf = (g) => {
+      const own = fromGrant(aclList() || [], g);
+      const how = own.length === 1 ? (own[0].subject === did ? " (not rotated yet)" : " (rotated)") : "";
+      // An ambiguous read is never a pass: the entry taken may be the other leg's.
+      return { ok: own.length === 1 && !ambiguous, text: `own entries ${own.length}${how}${ambiguous ? " · NOT JUDGED: the grant was read among several new keyring-admin entries (another leg granted on this runner at the same moment)" : ""}` };
+    };
+    if (!later) { console.log("[e2e] app force-stopped with the code out; granting"); grantNow(); }
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     // A cold start opens on "Enter PIN" a moment after launch (239 gate: the check ran before it showed).
     await waitForTestId(driver, "EnterPIN", 20000).catch(() => undefined);
@@ -531,8 +559,11 @@ async function linkCase(driver, which) {
     if (!later) {
       const intro = await existsTestId(driver, "AgentIntro", 60000);
       const after = aclSize();
+      const own = ownOf(granted);
       await screenshot(driver, which);
-      return row(intro && after === before + 1, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ACL entries ${before} → ${after}`);
+      // Judged on AgentIntro and this case's own entries only; the runner-wide count is context (a leg beside this one,
+      // kk on the same runner, grows it: #513).
+      return row(intro && own.ok, `granted before the relaunch: linked by itself (AgentIntro ${intro}) · ${own.text} · runner ACL ${before} → ${after} (not judged)`);
     }
     const { continueLink: cont, resumed } = (await link.resume({ waitMs: 30000, required: false })).value;
     // The key first, then the grant: granted earlier, the resumed check links within seconds and the key is gone
@@ -540,48 +571,135 @@ async function linkCase(driver, which) {
     const shown = await linkKey();
     const same = shown === did;
     console.log(`[e2e] resumed key ${shown ? shown.slice(-12) : "(not shown)"} · copied ${did.slice(-12)}; granting now`);
-    grant(did);
+    grantNow();
     if (await existsTestId(driver, "VtaLinkCheckGrant", 5000)) await link.pressCheckGrant();
     const linked = await waitForTestId(driver, "VtaLinkDone", 180000).then(() => true, () => false) || (await existsTestId(driver, "AgentIntro", 2000));
     const after = aclSize();
+    const own = ownOf(granted);
     await screenshot(driver, which);
-    return row(cont && resumed && same && linked && after === before + 1, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ACL entries ${before} → ${after}`);
+    return row(cont && resumed && same && linked && own.ok, `granted after the relaunch: MyAgentContinueLink ${cont} · VtaLinkResumed ${resumed} · same key ${same} · linked after Check ${linked} · ${own.text} · ACL entries ${before} → ${after}`);
+  }
+  if (which === "create-wait-no-lock") {
+    // This case asserts the auto-lock (EnterPIN or its absence): no auto-unlock under it (driver.js autoUnlockIfLocked).
+    process.env.E2E_NO_AUTO_UNLOCK = "1";
+    // 241, bifold #396 (CREATE-WAIT-LOCK): a person waiting on Create in the foreground is no longer locked out at 5
+    // min, half-way through the 10-min window (the 1013-1633 rerun found it). Copy starts the window; then no touch
+    // at all past the lock (idle only polls; 400 s on real clocks, past the 5-min lock): still waiting, no PIN screen.
+    // No grant is made, so the window has nothing to find and keeps waiting.
+    await addressCode();
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    await copy.click();
+    if (!(await existsTestId(driver, "AgentCreateWaiting", 15000))) return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s");
+    const copied = Date.now();
+    await idle(t.noLock.idleMs);
+    const locked = await existsTestId(driver, "EnterPIN", 2000);
+    const still = await existsTestId(driver, "AgentCreateWaiting", 2000);
+    // Read inside the window, or "still waiting" would say nothing about the lock (review on #426).
+    const at = Math.round((Date.now() - copied) / 1000);
+    const inside = at < t.noLock.readBeforeS;
+    await screenshot(driver, which);
+    return row(!locked && still && inside, `${at} s in the foreground with no touch: EnterPIN ${locked} · AgentCreateWaiting ${still} (#396: the wait holds the auto-lock; read before ${t.noLock.readBeforeS} s of the ${t.clocks.grantWindowS} s window: ${inside}) · ${clocksSaid(t.clocks)}`);
   }
   if (which === "link-no-answer") {
+    // This case asserts the auto-lock (EnterPIN or its absence): no auto-unlock under it (driver.js autoUnlockIfLocked).
+    process.env.E2E_NO_AUTO_UNLOCK = "1";
     // 239 (UI/UX, from eb7c4ad4): while Create's poll window is open (10 min of foreground time) the screen stays on
     // AgentCreateWaiting whatever each 6 s check found; under the cut each check ends "no answer" with the key kept.
     // When the window ends: AgentCreateError (CreateAgent.Unreachable, "didn't answer") with AgentCreateCheckAgain.
     // The cut is the whole Farm: every ic3.dev host shares the blocked Cloudflare addresses, the agent too.
+    // Create's 600 s window (wall clock, foreground) starts only on Copy, Share or Connect (VtaCreateAgent.tsx
+    // :334-337, handOut/onConnect): showing the code alone starts nothing, so the 1013-1106 rerun waited 669 s on a
+    // screen with no window open and no AgentCreateWaiting (a driver bug, not the app's). Block first, then Copy:
+    // every check from the first on runs under the cut, and each is bounded (30 s connect, 10 s answer).
     const did = await addressCode();
     grant(did);
-    const mark = Date.now();
+    // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
+    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
     block(true);
+    // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
+    // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
+    const copy = await scrollToTestId(driver, "AgentCreateCopyCode", 4).catch(() => undefined);
+    if (!copy) {
+      block(false);
+      throw new Error("driver: AgentCreateCopyCode not displayed after scrolling — not a verdict on Create");
+    }
+    await copy.click();
+    const mark = Date.now();
+    const waitingShown = await existsTestId(driver, "AgentCreateWaiting", 15000);
+    if (!waitingShown) {
+      await screenshot(driver, `${which}-no-window`);
+      block(false);
+      return row(false, "Copy did not start Create's window: no AgentCreateWaiting within 15 s of AgentCreateCopyCode");
+    }
     let failedEarly = false;
     let waited = 0;
-    for (const until = Date.now() + 660000; Date.now() < until; ) {
+    // The window is 600 s on real clocks (60 s on a short-clock test build); AgentCreateError is due once it has ended
+    // and the next 6 s check has run. Look 120 s past it (720 s on real clocks).
+    // A person waiting on Create touches the screen now and then; a test that only polls does not, and the wallet's
+    // 5-min inactivity lock (contexts/activity.tsx: any touch resets it, through the root PanResponder) signed the
+    // 1013-1633 rerun out at 5 min, half-way through the 10-min window. Tap inert text every ~2 min. The lock firing in the foreground while Create waits is a product item (CREATE-WAIT-LOCK), not
+    // what this row tests: "didn't answer" + Check again. The tap goes on the card's body text (AgentCreateOwnerBody,
+    // or AgentCreateAsDevice for a device link), never the waiting row: Connect sits right under that row and moves
+    // into its place when the window ends, so a tap there could restart the checks (review on #415).
+    const inert = (await existsTestId(driver, "AgentCreateOwnerBody", 1000)) ? "AgentCreateOwnerBody" : "AgentCreateAsDevice";
+    let touched = Date.now();
+    for (const until = mark + t.noAnswer.lookUntilMs; Date.now() < until; ) {
       if (await existsTestId(driver, "AgentCreateError", 1500)) break;
-      if (!(await existsTestId(driver, "AgentCreateWaiting", 1000)) && !(await existsTestId(driver, "AgentCreateError", 500))) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300));
+      const waiting = await existsTestId(driver, "AgentCreateWaiting", 1000);
+      if (!waiting) failedEarly = failedEarly || (await existsTestId(driver, "VtaLinkError", 300)) || (await existsTestId(driver, "EnterPIN", 300));
+      if (waiting && Date.now() - touched > t.noAnswer.touchEveryMs) {
+        // The case scrolled down to Copy, which can leave the body text above the view: bring it back first (the
+        // swipe is a touch too), so the tap lands on screen where the root PanResponder sees it.
+        await scrollToTestId(driver, inert, 3, { direction: "up" }).catch(() => undefined);
+        await tapTestId(driver, inert, 3000).catch(() => undefined);
+        touched = Date.now();
+      }
       waited = Math.round((Date.now() - mark) / 1000);
-      await idle(20000);
+      await idle(t.noAnswer.stepMs);
     }
+    waited = Math.round((Date.now() - mark) / 1000);
+    // "didn't answer" before the window ran out would be a failure too: the checks must not end it early.
+    const tooSoon = waited < t.noAnswer.tooSoonS;
+    failedEarly = failedEarly || tooSoon;
     const unreachable = await existsTestId(driver, "AgentCreateError", 2000);
     const said = unreachable ? await words("AgentCreateError") : "";
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 2000);
-    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => byTestId(driver, "AgentCreateShowCode"))).click().catch(() => undefined);
-    const sameKey = (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") === did;
+    // The key after "didn't answer": as text where Create shows it (AgentCreateOwnerDid, after AgentCreateShowCode).
+    // A phone with no screen lock joins as a device, and that layout shows no key text, only Copy and Share (the
+    // 1013-1753 rerun read nothing there and called a kept key "not the same"). Copy is not tapped again (it would
+    // start a new window); there the key is proved by the link itself: linked after Check again with no new ACL entry
+    // means the same granted key. sameKey null = "shown no text; judged by the link".
+    if (!(await existsTestId(driver, "AgentCreateOwnerDid", 1000))) await (await scrollToTestId(driver, "AgentCreateShowCode", 4).catch(() => undefined))?.click().catch(() => undefined);
+    const keyNow = (await existsTestId(driver, "AgentCreateOwnerDid", 1000)) ? (await words("AgentCreateOwnerDid")).replace(/\s+/g, "") : "";
+    const sameKey = keyNow ? keyNow === did : null;
     let marks = 0;
     try { marks = execFileSync("adb", ["-s", udid, "logcat", "-d"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }).split("\n").filter((l) => l.includes("the grant check did not finish; the key stays")).length; } catch { /* no log */ }
     await screenshot(driver, `${which}-blocked`);
     block(false);
     await sleep(3000);
     if (checkAgain) await tapTestId(driver, "AgentCreateCheckAgain", 10000);
+    // Check again starts a new window: wait until the old "didn't answer" has gone (the screen back on
+    // AgentCreateWaiting) before waiting for ready, or the stale AgentCreateError ends the wait at once (1013-1753).
+    if (checkAgain) {
+      for (const until = Date.now() + 15000; Date.now() < until && (await existsTestId(driver, "AgentCreateError", 500)); ) await sleep(1000);
+    }
     const linked = checkAgain && (await ready());
     const after = aclSize();
-    return row(unreachable && checkAgain && sameKey && !failedEarly && linked && after === before + 1,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): waiting held ${waited} s with no failure ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${sameKey}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}`);
+    // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
+    // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
+    // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
+    const mine = aclSince(grantAt);
+    const oneGrant = Array.isArray(mine) && mine.length === 1;
+    const sameSubject = oneGrant && mine[0].subject === did;
+    const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
+    const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
+    return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "create-window-paused") {
-    // UI/UX (10-08, from 59feae2f): two cases in one install.
+    // UI/UX (10-08, from 59feae2f): two cases in one install. The absences are the real-clock ones (3 and 15 min)
+    // scaled to the build's clocks (t.paused): the first under the lock, the second past both the window and the lock.
     // (1) create-window-paused-short: away 3 min, under the wallet's 5-min inactivity lock: Create is still waiting
     //     (AgentCreateWaiting), its window paused while in the background rather than counting it.
     // (2) create-window-paused: away 15 min: the lock signs the person out and the navigator restarts on the first tab,
@@ -590,19 +708,21 @@ async function linkCase(driver, which) {
     //     restarted). Fails on Check again, an error, Try again, or a different key.
     const did = await addressCode();
     await tapTestId(driver, "AgentCreateCopyCode", 10000).catch(() => undefined);
-    console.log("[e2e] the app in the background 180 s");
+    const shortS = t.paused.shortAwayMs / 1000;
+    const longS = t.paused.longAwayMs / 1000;
+    console.log(`[e2e] the app in the background ${shortS} s (${clocksSaid(t.clocks)})`);
     sh("input", "keyevent", "3");
-    await idle(180000);
+    await idle(t.paused.shortAwayMs);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
     const shortWaiting = await existsTestId(driver, "AgentCreateWaiting", 10000);
     const shortCheck = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     const shortLocked = await existsTestId(driver, "EnterPIN", 1000);
     await screenshot(driver, `${which}-short`);
-    await rows.row("create-window-paused-short", async () => ({ ok: shortWaiting && !shortCheck && !shortLocked, detail: `after 3 min in the background: AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}` }));
-    console.log("[e2e] the app in the background 900 s");
+    await rows.row("create-window-paused-short", async () => ({ ok: shortWaiting && !shortCheck && !shortLocked, detail: `after ${shortS} s in the background (under the ${t.clocks.autoLockS} s lock): AgentCreateWaiting ${shortWaiting} · Check again ${shortCheck} · locked ${shortLocked}` }));
+    console.log(`[e2e] the app in the background ${longS} s`);
     sh("input", "keyevent", "3");
-    await idle(900000);
+    await idle(t.paused.longAwayMs);
     await driver.activateApp(process.env.E2E_APP_ID || "asml.bkc.harvard.wallet");
     await sleep(3000);
     await waitForTestId(driver, "EnterPIN", 10000).catch(() => undefined);
@@ -618,7 +738,7 @@ async function linkCase(driver, which) {
     const checkAgain = await existsTestId(driver, "AgentCreateCheckAgain", 1000);
     const failed = (await existsTestId(driver, "AgentCreateError", 500)) || (await existsTestId(driver, "VtaLinkError", 500));
     await screenshot(driver, which);
-    return row(cont && same && !tryAgain && !checkAgain && !failed, `after 15 min away (the wallet's lock signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed}`);
+    return row(cont && same && !tryAgain && !checkAgain && !failed, `after ${longS} s away (past the ${t.clocks.grantWindowS} s window and the ${t.clocks.autoLockS} s lock, which signed out): MyAgentContinueLink ${cont} · the same key on VtaLink ${same} · Try again ${tryAgain} · Check again ${checkAgain} · an error ${failed} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "link-try-again") {
     const view = await hostLink({ afterGrant: async () => block(true) });
@@ -700,7 +820,10 @@ async function linkCase(driver, which) {
       const out = deleteAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME, subject: e.subject });
       console.log(`[e2e] removed this phone's key …${e.subject.slice(-12)}: ${out.trim().split("\n").pop()?.slice(0, 60)}`);
     }
-    // The phone hears of it on its next call: the app to the background and back, My Agent, past an introduction.
+    // The phone hears of it on its presence tick (bifold vtaPresence.ts: heartbeat, then "DID not in ACL" moves the
+    // link on), which runs every HEARTBEAT_INTERVAL_MS (5 min, vtaDevices.ts) from app start; a foreground or My
+    // Agent does not call the agent (rerun 1014-1651: six nudges, no call in 181 s after the removal). So the wait
+    // covers one whole tick and a margin. The nudge keeps the app unlocked and on My Agent meanwhile.
     const nudge = async () => {
       await driver.execute("mobile: backgroundApp", { seconds: 5 }).catch(() => undefined);
       await sleep(1500);
@@ -709,7 +832,7 @@ async function linkCase(driver, which) {
       await waitForTestId(driver, "MyAgent", 15000).then((el) => el.click(), () => undefined).catch(() => undefined);
     };
     await nudge();
-    const removed = (await link.awaitRemoved({ nudge })).value;
+    const removed = (await link.awaitRemoved({ nudge, timeoutMs: 6.5 * 60_000 })).value;
     await screenshot(driver, `${which}-removed`);
     const again = await scanAndLink(did);
     await screenshot(driver, which);
@@ -1462,6 +1585,8 @@ let page;
 let link;
 /** The LINK_CASE rows (rows.js): one per case, printed as the legs read them. */
 let rows;
+/** The cases that wait on the app's clocks (the grant window, the auto-lock): timed from readClocks. */
+const CLOCK_CASES = new Set(["create-wait-no-lock", "link-no-answer", "create-window-paused"]);
 // The keys this run adds to the runner VTA, removed again in `finally`: the
 // ACL as it was, and the phone's temporary key, whose chain is ours.
 let aclBefore;
@@ -1503,6 +1628,10 @@ try {
   link = createLinkPage(driver);
   // The leg selects the case (E2E_ONLY_ROWS, lib.sh `selected`); every row of the one case it runs is printed.
   rows = createRows({ label: "vta-link", driver, only: null });
+  // A clock case times the build's own auto-lock, on every path that reaches it (kept app or fresh install): no Never
+  // saved after onboarding (flows.js keepUnlockedForRun) and no auto-unlock during its idle (driver.js
+  // autoUnlockIfLocked). A saved Never would also read 0 on the Developer screen and break linkWaitTiming.
+  if (CLOCK_CASES.has(process.env.LINK_CASE)) process.env.E2E_NO_AUTO_UNLOCK = "1";
 
   if (keepState) {
     await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
@@ -1515,9 +1644,20 @@ try {
 
   if (process.env.LINK_CASE) {
     // IN-135 (239): one link case, its row through rows.js (a throw is that row's FAIL); 3 when a row failed.
-    const run = () => linkCase(driver, process.env.LINK_CASE);
+    // A case for a fix the build under test does not carry is a SKIP that says so, never a red against an old build.
+    const skip = { "create-wait-no-lock": () => buildLacks("holdLock", { platform: driver.e2ePlatform }) }[process.env.LINK_CASE]?.();
+    // The clocks a case times, read from the Developer screen before it starts (gate efficiency item 4): a short-clock
+    // test build waits about a minute, the shipped build ten. Read outside the row: a clock the driver cannot read, or
+    // clocks that leave the case nothing to prove, break the leg ("driver: …"); they say nothing about the app.
+    let timing;
+    if (CLOCK_CASES.has(process.env.LINK_CASE) && !skip) {
+      const clocks = await readClocks(driver, { buildHasRows: buildHas("E2EClocksMode", { platform: driver.e2ePlatform }) });
+      timing = { clocks, ...linkWaitTiming(clocks) };
+      console.log(`[e2e] ${process.env.LINK_CASE} timed against ${clocksSaid(clocks)}`);
+    }
+    const run = () => linkCase(driver, process.env.LINK_CASE, timing);
     if (TRACKED[process.env.LINK_CASE]) await trackedRow(process.env.LINK_CASE, run);
-    else await rows.row(process.env.LINK_CASE, run);
+    else await rows.row(process.env.LINK_CASE, run, { skip: skip ? `${skip} (bifold #396)` : undefined });
     rows.summary();
     process.exitCode = rows.exitCode();
   } else if (LINK_MODE === "manual") {

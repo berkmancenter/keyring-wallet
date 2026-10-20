@@ -11,7 +11,15 @@ name: Test builds
 # With `push: on` a build also names the push gateway, and its artifact name
 # ends in -push-on, so it cannot be taken for the testers' configuration.
 # What each build carries, like the staging build: MEDIATOR_URL and nothing else
-# baked in (no VTI_* value: testers link their own agent and community).
+# baked in (no VTI_* value: testers link their own agent and community), except
+# E2E_CLOCKS=short: the grant windows wait 60 s and the auto-lock defaults to
+# 1 minute, so the release checks wait a minute instead of ten (gate efficiency
+# item 3). Only this workflow sets it; quality.yml fails if another does, and
+# staging refuses a store build that carries it. A dispatch with `clocks: real`
+# writes E2E_CLOCKS=real instead, for the nightly real-clock run (§6): the store
+# build's clocks, with the Developer screen's clock rows that show only in a test
+# build. Its artifact names end in -real-clocks, so it cannot be taken for the
+# testers' configuration either.
 #
 #   gh workflow run test-builds.yml -R berkmancenter/keyring-wallet --ref <branch>
 #   gh run download <run-id> -R berkmancenter/keyring-wallet
@@ -47,6 +55,15 @@ on:
         type: choice
         options: ["off", "on"]
         default: "off"
+      clocks:
+        description: >-
+          "short" (the default, as every push build) writes E2E_CLOCKS=short:
+          60 s grant windows and a 30 s auto-lock, for the release checks.
+          "real" writes E2E_CLOCKS=real: the clocks a store build has, for the
+          nightly real-clock run. Its artifacts end in -real-clocks.
+        type: choice
+        options: ["short", "real"]
+        default: "short"
 
 permissions:
   contents: read
@@ -58,7 +75,7 @@ permissions:
 # release's build (238 lost its build that way and had to be re-dispatched on
 # a cut branch). (inputs.push is empty on a push to main, a push-off build.)
 concurrency:
-  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}
+  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
   cancel-in-progress: true
 
 jobs:
@@ -164,6 +181,7 @@ jobs:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
+          CLOCKS: ${{ inputs.clocks || 'short' }}
           # The gateway a store build would name; the repository variable when
           # it is set, otherwise the production gateway's address.
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
@@ -172,6 +190,12 @@ jobs:
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # The test build's short clocks (see the top of this file), unless this
+          # build was asked for the real ones.
+          # A real-clocks build says so (E2E_CLOCKS=real): the clocks a store build has, and the Developer screen's clock
+          # rows, which show only in a test build, for the gate to read.
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS was already in .env"; exit 1; fi
+          if [ "${CLOCKS}" = real ]; then echo "E2E_CLOCKS=real" >> .env; else echo "E2E_CLOCKS=short" >> .env; fi
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # The same lines the staging workflow writes for an iOS push build.
@@ -234,7 +258,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: keyring-ios-sim-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}
+          name: keyring-ios-sim-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}${{ inputs.clocks == 'real' && '-real-clocks' || '' }}
           path: out/
           retention-days: 7
 
@@ -295,6 +319,7 @@ jobs:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
+          CLOCKS: ${{ inputs.clocks || 'short' }}
           # The gateway a store build would name; the repository variable when
           # it is set, otherwise the production gateway's address.
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
@@ -305,6 +330,12 @@ jobs:
           echo "MEDIATOR_V2_URL=" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
+          # The test build's short clocks (see the top of this file), unless this
+          # build was asked for the real ones.
+          # A real-clocks build says so (E2E_CLOCKS=real): the clocks a store build has, and the Developer screen's clock
+          # rows, which show only in a test build, for the gate to read.
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS was already in .env"; exit 1; fi
+          if [ "${CLOCKS}" = real ]; then echo "E2E_CLOCKS=real" >> .env; else echo "E2E_CLOCKS=short" >> .env; fi
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # As in the staging workflow: Android gets the gateway only when the
@@ -387,6 +418,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: keyring-android-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}
+          name: keyring-android-${{ needs.heads.outputs.wallet }}-bf${{ needs.heads.outputs.bifold }}${{ inputs.push == 'on' && '-push-on' || '' }}${{ inputs.clocks == 'real' && '-real-clocks' || '' }}
           path: out/
           retention-days: 7

@@ -21,7 +21,7 @@ import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSou
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
@@ -181,6 +181,8 @@ async function unlockToHome(d) {
     await sleep(3000);
   }
   await sleep(4000);
+  // A kept phone never onboards again: save Never here too (flows.js keepUnlockedForRun).
+  await keepUnlockedForRun(d);
 }
 /**
  * The release gate's §2 after member: the done card, My Agent's "Joined"

@@ -104,7 +104,7 @@ if [ -n "${TUI_APPLICANT_PERSONA_DID:-}" ]; then
   echo "P2_PERSONA_REUSED" > "$LEG_DIR/p2.out"
 fi
 t=$(date +%s)
-(cd "$REPO" && perl -e 'alarm 2400; exec @ARGV' node e2e/openvtc/run-phase2.mjs --platform "$PLAT" --label "P2-gate-${CAND_WALLET:0:8}" \
+(cd "$REPO" && galarm 2400 node e2e/openvtc/run-phase2.mjs --platform "$PLAT" --label "P2-gate-${CAND_WALLET:0:8}" \
   --no-install --apk "$BUILD" --udid "$U" --wda-port 8107 --mjpeg-port 9107 --vetter-did "$P2_VETTER_DID" \
   --openvtc-bin "$OPENVTC_BIN" --openvtc-version "$OPENVTC_VERSION" --fixture-dir "$TUI_APPLICANT_FX" --profile "$TUI_APPLICANT_PROFILE" \
   --community-did "$C_DID" --community-name "$C_NAME" --vtc-base "$C_REST" --admin-credential "$C_ADMIN_CRED" ${persona[@]+"${persona[@]}"}) >> "$LEG_DIR/p2.out" 2>&1; rc=$?

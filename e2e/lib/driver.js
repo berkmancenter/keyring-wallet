@@ -1,10 +1,12 @@
 import { execFileSync as execFileSyncForSim } from "node:child_process";
+import { assertCapsSafe } from "./prodGuard.js";
 import { remote } from "webdriverio";
 import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 import { isEmulatorPid, pinToRunningEmulator } from "./emulator.js";
@@ -43,7 +45,26 @@ function portInUse(port) {
  * before wasting a full install+onboarding cycle on it.
  */
 async function checkMetroIsThisWorktree() {
-  if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
+  if (!(await portInUse(METRO_PORT))) {
+    // Metro's absence was assumed here to be "a self-evident failure later".
+    // It is not: a debug build with no packager installs, launches and renders
+    // nothing, and the run dies five minutes on with "onboarding did not
+    // finish within 5min (last action: )", which names neither Metro nor the
+    // bundle. `yarn android` makes this easy to hit, because it starts Metro as
+    // a child of the build and takes it down when the build command exits,
+    // leaving the `adb reverse` tunnel pointing at a dead port.
+    //
+    // A warning rather than a throw: a real-device build made with
+    // FORCE_BUNDLING=1 carries its JS and needs no packager, so an empty port
+    // is legitimate there.
+    console.warn(
+      `[e2e] nothing is listening on :${METRO_PORT}. A DEBUG build loads its JS ` +
+        `from Metro and will render nothing without it — run 'yarn start' in ` +
+        `this worktree's app/. Ignore this if the binary under test has its JS ` +
+        `bundled in (FORCE_BUNDLING=1, release builds).`
+    );
+    return;
+  }
   // The process listening on THIS port — not the first Metro in `ps`, which on
   // a shared machine can be another worktree's Metro on another port.
   let metroAppDir;
@@ -71,6 +92,13 @@ async function checkMetroIsThisWorktree() {
 }
 
 let appiumProc;
+
+/** ANDROID_HOME for Appium: as set, else ANDROID_SDK_ROOT, else the SDK's usual place on a Mac when it is there. */
+export function androidHomeEnv(env = process.env, exists = existsSync) {
+  if (env.ANDROID_HOME) return {};
+  const guess = env.ANDROID_SDK_ROOT || path.join(os.homedir(), "Library", "Android", "sdk");
+  return exists(guess) ? { ANDROID_HOME: guess } : {};
+}
 
 export async function ensureAppium() {
   await checkMetroIsThisWorktree();
@@ -113,6 +141,8 @@ export async function ensureAppium() {
     {
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
+      // Appium's Android driver needs ANDROID_HOME, or session creation fails (#397 device run, 10-14).
+      env: { ...process.env, ...androidHomeEnv() },
     }
   );
   appiumProc.stdout.pipe(log);
@@ -183,6 +213,8 @@ export async function createSession(platform, capsOverride) {
   const requested =
     capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
   const realDevice = Boolean(requested["appium:udid"]);
+  // Never fullReset (uninstall) the production app on a person's own phone (prodGuard.js).
+  assertCapsSafe(platform, requested);
   // Attach to a running emulator by udid; never let Appium launch one (emulator.js).
   const capabilities = pinToRunningEmulator(requested);
   console.log(
@@ -196,6 +228,8 @@ export async function createSession(platform, capsOverride) {
     capabilities,
   });
   driver.e2ePlatform = platform;
+  // The device the harness asked for, on every platform (Appium's echo of it varies by driver): deviceWait keys on it.
+  driver.e2eRequestedUdid = capabilities["appium:udid"] || undefined;
   // Two simulators of the same platform both logged as "ios", so a two-sim run
   // could not say WHICH phone was stuck (2026-09-23: five minutes spent working
   // out which of two iPhones was sitting on a PIN pad). Keep the simulator name
@@ -393,7 +427,7 @@ export async function waitForTestId(driver, key, timeout = 30000) {
     // look once more before giving up.
     const cleared =
       key !== PREFLIGHT_ALLOW_KEY &&
-      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))));
+      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))) || (await autoUnlockIfLocked(driver, key)));
     if (cleared) {
       await el.waitForExist({ timeout: Math.min(timeout, 10000), timeoutMsg });
     } else {
@@ -404,6 +438,26 @@ export async function waitForTestId(driver, key, timeout = 30000) {
 }
 
 const PREFLIGHT_ALLOW_KEY = "LocalityPreflightAllow";
+
+/**
+ * A test build locks after 30 s without a touch (bifold e2eClocks SHORT_AUTO_LOCK_MINUTES = 0.5, E2E_CLOCKS=short),
+ * and a driver's reads (page source, screenshots, a measure) are not touches: a wait that meets the PIN screen
+ * unlocks and looks again. Every unlock is said on an `AUTO-UNLOCK <time> <device> while waiting for <testID>`
+ * line, which the leg counts (lib.sh leg_end), so a lock nobody expected still shows. Off with E2E_NO_AUTO_UNLOCK=1:
+ * the rows that assert the lock set it. Returns whether it unlocked.
+ */
+export async function autoUnlockIfLocked(driver, waitingFor) {
+  if (process.env.E2E_NO_AUTO_UNLOCK === "1") return false;
+  if (["EnterPIN", "Enter"].includes(waitingFor)) return false;
+  if (!(await byTestId(driver, "EnterPIN").isExisting().catch(() => false))) return false;
+  // Onboarding's create-PIN screen names its first field EnterPIN too; its ReenterPIN field says it is no lock
+  // (kk on 261, 1017-0202: two AUTO-UNLOCKs typed the PIN into it for 90 s).
+  if (await byTestId(driver, "ReenterPIN").isExisting().catch(() => false)) return false;
+  console.log(`AUTO-UNLOCK ${new Date().toISOString()} ${deviceTag(driver)} while waiting for ${waitingFor}`);
+  const { unlockIfLocked } = await import("./flows.js");
+  await unlockIfLocked(driver);
+  return true;
+}
 
 /**
  * If the witness-connect Bluetooth pre-flight sheet (LocalityPreflightModal,

@@ -8,7 +8,7 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { ToastType, vtaAgent } from '@bifold/core'
+import { GenericRecordsIdentityStore, ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import i18n from 'i18next'
@@ -24,7 +24,13 @@ import BCLogger from '@/utils/logger'
 import { setMediatorDeviceInfo } from './mediatorDeviceInfo'
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
-import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
+import {
+  startPlatformPush,
+  stopPlatformPush,
+  waitForApnsToken,
+  watchForToken,
+  watchForTokenRefresh,
+} from './pushPlatform'
 import { enablePushWake, type KeptWakeHandle, type PushWakeDeps, type WakeHandleStore } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
@@ -70,6 +76,14 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
       })
       return undefined
     }
+    // That it arrived, and how long it took: only failures used to be
+    // logged, so a report could not tell a late token from a stale handle
+    // (IN-277). Never the token.
+    BCLogger.info("push token: Apple's token arrived", {
+      os: Platform.OS,
+      waitedMs: Date.now() - startedAt,
+      environment: apnsEnvironment(),
+    })
     return { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() }
   }
   const token = await m.getToken()
@@ -77,7 +91,40 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
     BCLogger.info('push token: none, Firebase returned no token', { os: Platform.OS, permission: status })
     return undefined
   }
+  BCLogger.info('push token: Firebase token present', { os: Platform.OS })
   return { platform: 'fcm', token }
+}
+
+/**
+ * The agents this phone holds an identity for that have no wake from it: no
+ * handle here that one of them accepted (`provisionedAt`). For the log only
+ * ({@link PushAfterLinkDeps.unwakeableAgents}).
+ */
+export async function linkedAgentsWithoutWake(agent: Agent): Promise<string[]> {
+  const managers = (await new GenericRecordsIdentityStore(agent).listManagers()) ?? []
+  const lacking: string[] = []
+  for (const { vtaDid } of managers) {
+    const kept = await appWakeHandles.get(vtaDid).catch(() => undefined)
+    if (kept?.provisionedAt === undefined) lacking.push(vtaDid)
+  }
+  return lacking
+}
+
+/**
+ * Call `arrived` once this phone's platform token turns up (see
+ * {@link watchForToken}); returns a stop. The read, not a registration: Apple's
+ * token on iOS, Firebase's elsewhere.
+ */
+export function whenPlatformTokenArrives(arrived: () => void): () => void {
+  const m = messaging()
+  // iOS reads the APNs token the app already holds; on Android the read is a
+  // call to Firebase's servers, so it listens for the token instead of asking.
+  if (Platform.OS === 'ios') return watchForToken(() => m.getAPNSToken(), arrived)
+  return watchForTokenRefresh(
+    () => m.getToken(),
+    (listener) => m.onTokenRefresh(listener),
+    arrived
+  )
 }
 
 const HANDLE_KEY_PREFIX = 'keyring.push.handle.'

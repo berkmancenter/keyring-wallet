@@ -21,16 +21,16 @@ for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; do
 cd "$E2E"
 PUSH_STEP=notnow E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4762 ENROL_PORT=8197 \
   E2E_RELEASE=1 LINK_MODE=manual RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 \
-  perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
+  galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 || broken "link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 grep -q 'tapped PushNotificationNotNow' "$LEG_DIR/link.out" && row push2-declined-at-onboarding PASS "Not now at onboarding" || row push2-declined-at-onboarding FAIL "no notifications step declined in the link run"
 adb -s $E shell locksettings set-pin 1234 >/dev/null 2>&1; sleep 8
 ROWS="R1" A_SLUG=$RUNNER_MAIN_SLUG A_DID=$RUNNER_MAIN_DID A_NAME=$RUNNER_MAIN_NAME B_SLUG=$RUNNER_B_SLUG B_DID=$RUNNER_B_DID B_NAME=$RUNNER_B_NAME \
   C_DID=${C_DID:-} C_ADMIN="${C_REST:-} ${C_DID:-} ${C_ADMIN_CRED:-}" DEVICE_PIN=1234 E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 \
-  PNM_BIN=$PNM_BIN perl -e 'alarm 1500; exec @ARGV' node run-several-agents.mjs > "$LEG_DIR/second-agent.out" 2>&1
+  PNM_BIN=$PNM_BIN galarm 1500 node run-several-agents.mjs > "$LEG_DIR/second-agent.out" 2>&1
 grep -q '^ROW R1 add + keep PASS' "$LEG_DIR/second-agent.out" || broken "the second agent was not added: $(grep -E '^ROW R1' "$LEG_DIR/second-agent.out" | head -1 | cut -c1-120)"
 a0=$(devices "$RUNNER_MAIN_SLUG"); sleep 5; b0=$(devices "$RUNNER_B_SLUG")
 echo "before: A $a0 · B $b0"
-PLATFORM=android UDID=$E APPIUM_PORT=4762 DEVICE_PIN=1234 perl -e 'alarm 600; exec @ARGV' node run-push-switch-on.mjs > "$LEG_DIR/switch-on.out" 2>&1
+PLATFORM=android UDID=$E APPIUM_PORT=4762 DEVICE_PIN=1234 galarm 600 node run-push-switch-on.mjs > "$LEG_DIR/switch-on.out" 2>&1
 grep -E '^PUSH300|^\[e2e\] [0-9]' "$LEG_DIR/switch-on.out" | cut -c1-160
 ok=0; for i in 1 2 3 4 5 6; do sleep 15; a1=$(devices "$RUNNER_MAIN_SLUG"); sleep 3; b1=$(devices "$RUNNER_B_SLUG")
   [ "$a1" = "1 true" ] && [ "$b1" = "1 true" ] && { ok=1; break; }; done

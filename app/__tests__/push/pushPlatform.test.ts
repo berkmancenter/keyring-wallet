@@ -12,6 +12,10 @@ import {
   startPlatformPush,
   stopPlatformPush,
   waitForApnsToken,
+  watchForToken,
+  watchForTokenRefresh,
+  LATE_TOKEN_POLL_MS,
+  LATE_TOKEN_WATCH_MS,
   type PlatformMessaging,
 } from '@/push/pushPlatform'
 
@@ -145,5 +149,135 @@ describe("reading Apple's token after registering", () => {
     const get = jest.fn(async () => null)
     await expect(waitForApnsToken(get, { waitMs: 1000, pollMs: 250, sleep: noSleep })).resolves.toBeNull()
     expect(get).toHaveBeenCalledTimes(5)
+  })
+})
+
+describe('watching for a token that arrives late (IN-277)', () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+  const tick = async (ms: number) => {
+    jest.advanceTimersByTime(ms)
+    await flush()
+  }
+
+  it('reads the token on each poll and says once when it is there, then stops reading', async () => {
+    const getToken = jest.fn(async (): Promise<string | null> => null)
+    const arrived = jest.fn()
+    watchForToken(getToken, arrived)
+    await tick(LATE_TOKEN_POLL_MS)
+    await tick(LATE_TOKEN_POLL_MS)
+    expect(arrived).not.toHaveBeenCalled()
+    getToken.mockResolvedValue('apns-token')
+    await tick(LATE_TOKEN_POLL_MS)
+    expect(arrived).toHaveBeenCalledTimes(1)
+    const reads = getToken.mock.calls.length
+    await tick(10 * LATE_TOKEN_POLL_MS)
+    expect(getToken).toHaveBeenCalledTimes(reads)
+    expect(arrived).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives up after its watch, and a read that fails is no token', async () => {
+    const getToken = jest.fn(async (): Promise<string | null> => {
+      throw new Error('not yet')
+    })
+    const arrived = jest.fn()
+    watchForToken(getToken, arrived)
+    await tick(LATE_TOKEN_WATCH_MS)
+    const reads = getToken.mock.calls.length
+    expect(reads).toBe(LATE_TOKEN_WATCH_MS / LATE_TOKEN_POLL_MS)
+    await tick(10 * LATE_TOKEN_POLL_MS)
+    expect(getToken).toHaveBeenCalledTimes(reads)
+    expect(arrived).not.toHaveBeenCalled()
+  })
+
+  it('stopping stops it', async () => {
+    const getToken = jest.fn(async () => 'apns-token')
+    const arrived = jest.fn()
+    const stop = watchForToken(getToken, arrived)
+    stop()
+    await tick(5 * LATE_TOKEN_POLL_MS)
+    expect(getToken).not.toHaveBeenCalled()
+    expect(arrived).not.toHaveBeenCalled()
+  })
+})
+
+// 54's review of #505: on Android the token read is a call to Firebase's
+// servers, so the late-token watch listens for `onTokenRefresh` instead of
+// polling it every 15 s for half an hour.
+describe('watching for a late token on Android: listen, do not poll', () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+  function firebase(initial: string | null = null) {
+    let listener: ((token: string) => void) | undefined
+    const unsubscribe = jest.fn(() => {
+      listener = undefined
+    })
+    const getToken = jest.fn(async () => initial)
+    const onTokenRefresh = jest.fn((l: (token: string) => void) => {
+      listener = l
+      return unsubscribe
+    })
+    return { getToken, onTokenRefresh, unsubscribe, refresh: (t: string) => listener?.(t), listening: () => !!listener }
+  }
+
+  it('reads once, then waits for Firebase to say a token was issued, and stops listening', async () => {
+    const fb = firebase()
+    const arrived = jest.fn()
+    watchForTokenRefresh(fb.getToken, fb.onTokenRefresh, arrived)
+    await flush()
+    expect(arrived).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(10 * LATE_TOKEN_POLL_MS)
+    await flush()
+    // No polling: the one read at the start, and nothing after it.
+    expect(fb.getToken).toHaveBeenCalledTimes(1)
+    fb.refresh('fcm-token')
+    expect(arrived).toHaveBeenCalledTimes(1)
+    expect(fb.unsubscribe).toHaveBeenCalledTimes(1)
+    fb.refresh('fcm-token-2')
+    expect(arrived).toHaveBeenCalledTimes(1)
+  })
+
+  it('a token already there when it starts is said at once', async () => {
+    const fb = firebase('fcm-token')
+    const arrived = jest.fn()
+    watchForTokenRefresh(fb.getToken, fb.onTokenRefresh, arrived)
+    await flush()
+    expect(arrived).toHaveBeenCalledTimes(1)
+    expect(fb.listening()).toBe(false)
+  })
+
+  it('a listener Firebase calls while subscribing still unsubscribes, and says it once', async () => {
+    const unsubscribe = jest.fn()
+    const onTokenRefresh = jest.fn((l: (token: string) => void) => {
+      l('fcm-token')
+      return unsubscribe
+    })
+    const arrived = jest.fn()
+    watchForTokenRefresh(async () => 'fcm-token', onTokenRefresh, arrived)
+    await flush()
+    expect(arrived).toHaveBeenCalledTimes(1)
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives up after its watch, and stopping stops it', async () => {
+    const fb = firebase()
+    const arrived = jest.fn()
+    watchForTokenRefresh(fb.getToken, fb.onTokenRefresh, arrived)
+    jest.advanceTimersByTime(LATE_TOKEN_WATCH_MS)
+    await flush()
+    expect(fb.listening()).toBe(false)
+    fb.refresh('fcm-token')
+    expect(arrived).not.toHaveBeenCalled()
+
+    const fb2 = firebase()
+    const stop = watchForTokenRefresh(fb2.getToken, fb2.onTokenRefresh, arrived)
+    stop()
+    expect(fb2.listening()).toBe(false)
+    fb2.refresh('fcm-token')
+    await flush()
+    expect(arrived).not.toHaveBeenCalled()
   })
 })

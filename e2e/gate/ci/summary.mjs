@@ -53,6 +53,13 @@ if (layout.length) {
   if (layout.length > 40) out.push(`| … | | ${layout.length - 40} more in the leg log |`);
   out.push("");
 }
+// Allowlisted findings (lib/layout.allow.json): named with their reason, never counted.
+const allowed = log.split("\n").filter((l) => l.startsWith("LAYOUT-ALLOWED "));
+if (allowed.length) {
+  out.push(`### Layout findings allowed: ${allowed.length}`, "", "| Screen | Rule | Element, detail and reason |", "|---|---|---|");
+  for (const l of allowed.slice(0, 40)) { const [, screen, rule, ...rest] = l.split(" "); out.push(`| ${esc(screen)} | ${esc(rule)} | ${esc(rest.join(" ")).slice(0, 240)} |`); }
+  out.push("");
+}
 if (broken) out.push(`**${esc(broken)}**`, "");
 out.push(done ? `\`${done}\`` : "_no LEG DONE line_", "");
 

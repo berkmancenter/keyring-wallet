@@ -22,6 +22,7 @@ _ah=${ANDROID_HOME:-}; _asr=${ANDROID_SDK_ROOT:-}; _path=$PATH
 [ -z "$_ah" ] || export ANDROID_HOME=$_ah; [ -z "$_asr" ] || export ANDROID_SDK_ROOT=$_asr; export PATH=$_path:$PATH
 export E2E_RUN_DIR=$LEG_DIR
 STEPS=$LEG_DIR/steps.tsv
+export GALARM_STEPS=0   # this leg times its own phases below; galarm's lines would count them twice
 step() { local n=$1 t0=$2 s; s=$(( $(date +%s) - t0 )); printf '%s\t%s\t%s\n' "$n" "$t0" "$s" >> "$STEPS"; echo "STEP $n ${s}s"; }
 step_at() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$STEPS"; echo "STEP $1 $3s"; }
 MANIFEST=$(dirname "$BUILD")/manifest.txt
@@ -43,7 +44,7 @@ farm_rows() {
 # with a note appended to each ROW's detail when given.
 welcome_try() {
   local sfx=${1:-} t0; t0=$(date +%s); WELCOME_OUT=$LEG_DIR/$PLATFORM-welcome$sfx.out
-  (cd "$E2E" && perl -e 'alarm 1200; exec @ARGV' node run-welcome.mjs > "$WELCOME_OUT" 2>&1); WELCOME_RC=$?
+  (cd "$E2E" && galarm 1200 node run-welcome.mjs > "$WELCOME_OUT" 2>&1); WELCOME_RC=$?
   local a s; a=$(grep -oE '^\[welcome\] appium ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$'); s=$(grep -oE '^\[welcome\] session ready [0-9]+' "$WELCOME_OUT" | grep -oE '[0-9]+$')
   [ -z "$a" ] || step_at "appium-start$sfx" "$t0" "$a"
   [ -z "$s" ] || step_at "appium-session$sfx" "$((t0 + ${a:-0}))" "$s"
@@ -53,7 +54,7 @@ welcome_rows() {
   local note; note=$(printf '%s' "${1:-}" | sed -e 's/[\/&\\]/\\&/g')
   # The driver prints its rows through rows.js, which ends with its own "LEG welcome DONE" line; only its ROW lines,
   # its LAYOUT findings (lib/layoutRules.js) and a BROKEN line belong in this leg's log (the leg prints its own DONE).
-  grep -E '^ROW |^LAYOUT |^LEG [^ ]+ BROKEN' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
+  grep -E '^ROW |^LAYOUT |^LAYOUT-ALLOWED |^LEG [^ ]+ BROKEN' "$WELCOME_OUT" | sed -E "/^ROW /s/\$/$note/"
   driver_rc "welcome-driver-$PLATFORM" "$WELCOME_RC" "$WELCOME_OUT"
 }
 # Android: a System UI ANR dialog (the emulator's own, on a loaded runner) covers the app and the driver finds no
@@ -84,7 +85,7 @@ ios)
   LEG_HEADS_EXTRA="device=\"$NAME\" runtime=${DEVVER:-?}"
   leg_begin smoke-ci-ios "$(shasum -a 256 "$APP/main.jsbundle" | cut -c1-12)"
   echo "SMOKE iOS (CI) start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' "$MANIFEST" | tr '\n' ' ')· bundle $(shasum -a 256 "$APP/main.jsbundle" | cut -c1-12) · GoogleService-Info project $(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' "$APP/GoogleService-Info.plist" 2>/dev/null || echo '(no plist in the app)') · sim $NAME $SIM ${DEVVER:-}"
-  t=$(date +%s); xcrun simctl boot "$SIM" 2>/dev/null; perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$SIM" >/dev/null 2>&1; xcrun simctl uninstall "$SIM" $BID 2>/dev/null; step sim-bootstatus "$t"
+  t=$(date +%s); xcrun simctl boot "$SIM" 2>/dev/null; galarm 180 xcrun simctl bootstatus "$SIM" >/dev/null 2>&1; xcrun simctl uninstall "$SIM" $BID 2>/dev/null; step sim-bootstatus "$t"
   t=$(date +%s); L0=$t; xcrun simctl install "$SIM" "$APP"; step install-app "$t"
   t=$(date +%s); P=$(xcrun simctl launch "$SIM" $BID | awk '{print $2}'); echo "plain launch pid $P $(date -u +%T)Z"
   sleep 20; xcrun simctl io "$SIM" screenshot "$LEG_DIR/ios-plain-20s.png" >/dev/null 2>&1; a1=$(ps -p "$P" >/dev/null 2>&1 && echo alive || echo GONE)
@@ -108,6 +109,8 @@ ios)
   ;;
 android)
   APK=$BUILD; E=$DEV
+  # This leg uninstalls with adb: only ever an emulator, never a person's phone (lib/prodGuard.js on the JS side).
+  [[ $E =~ ^emulator-[0-9]{4}$ ]] || { echo "smoke-ci: refusing $E: not an emulator serial (this leg uninstalls the app)"; exit 2; }
   LEG_HEADS_EXTRA="device=\"${DEVNAME:-$E}\" runtime=${DEVVER:-$(adb -s "$E" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')}"
   leg_begin smoke-ci-android "$(shasum -a 256 "$APK" | cut -c1-12)"
   echo "SMOKE Android (CI) start $(date -u +%T)Z · $(grep -E '^(wallet|bifold)=' "$MANIFEST" | tr '\n' ' ')· APK $(shasum -a 256 "$APK" | cut -c1-12) · $E $(adb -s "$E" shell getprop ro.product.model 2>/dev/null | tr -d '\r') API $(adb -s "$E" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"

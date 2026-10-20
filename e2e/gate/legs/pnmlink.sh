@@ -44,7 +44,7 @@ for c in ${LINK_CASES:-pnmqr-scan scan-agent-no-rest link-again-rescan}; do
     LINK_MODE=manual LINK_CASE=$c RUNNER_VTA=$slug RUNNER_VTA_DID=$did RUNNER_VTA_URL=$url \
     PNM_QR_SVG=$LEG_DIR/pnm-qr.svg PNM_QR_OUT=$LEG_DIR/pnm-qr.out \
     NO_REST_AGENT_DID=${NO_REST_AGENT_DID:-} NO_REST_AGENT_SLUG=${NO_REST_AGENT_SLUG:-} EXPECT_IN251=${EXPECT_IN251:-} \
-    PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
+    PNM_BIN=$PNM_BIN E2E_KEEP_APP=1 E2E_ACL_CLEANUP=always galarm 1800 node run-vta-link.js > "$LEG_DIR/$c.out" 2>&1; rc=$?
   take_rows "$LEG_DIR/$c.out"
   # No row of its own: the driver stopped outside it (setup, onboarding), or ended without one.
   if ! grep -q "^ROW $c " "$LEG_DIR/$c.out"; then
