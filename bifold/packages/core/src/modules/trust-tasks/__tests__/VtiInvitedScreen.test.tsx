@@ -20,6 +20,7 @@ import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityLinkReturn } from '../module/vtiLinks'
+import { criterionDigest } from '../module/joinManifest'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtiInvited from '../screens/VtiInvited'
 
@@ -380,6 +381,48 @@ describe('I was invited', () => {
     }
     const { tree } = await renderInvited([theirs])
     expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+  })
+
+  // IN-304: leaving "I was invited" after it sent the person to scan forgets
+  // that, so a later scan of a community goes to Join.
+  test('leaving the screen after "A different community" forgets the way back here', async () => {
+    communityLinkReturn.take()
+    const { tree } = await renderInvited([personaRecord])
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedDifferentCommunity'))))
+    tree.unmount()
+    expect(communityLinkReturn.take()).toBe(false)
+  })
+
+  // IN-304: a tester sent here for a community that takes open requests was
+  // left with only "send this to the admin". Said, and the way to it offered.
+  test('a community that also takes requests without an invitation says so, and Ask to join leads to Join', async () => {
+    const open = { id: 'review', admission: 'review' }
+    const invitedOnly = { id: 'invited', admission: 'automatic', invitationRequired: true }
+    const manifest = jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      wire: '0.3',
+      criteria: [invitedOnly, open].map((c) => ({ ...c, requirementsDigest: criterionDigest(c as never) })),
+    } as never)
+    const navigate = (useNavigation() as unknown as { navigate: jest.Mock }).navigate
+    navigate.mockClear()
+    const { tree } = await renderInvited([personaRecord])
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedAlsoWithoutInvitation'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedAskToJoin'))))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+    expect(communityTarget.getChosen()?.communityDid).toBe(communityDid)
+    manifest.mockRestore()
+  })
+
+  test('a community that takes only invitations: nothing about another way', async () => {
+    const invitedOnly = { id: 'invited', admission: 'automatic', invitationRequired: true }
+    const manifest = jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      wire: '0.3',
+      criteria: [{ ...invitedOnly, requirementsDigest: criterionDigest(invitedOnly as never) }],
+    } as never)
+    const { tree } = await renderInvited([personaRecord])
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('InvitedAlsoWithoutInvitation'))).toBeNull()
+    manifest.mockRestore()
   })
 
   // 233: a member of one community, invited by another, only ever saw the first.

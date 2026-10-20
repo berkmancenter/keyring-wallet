@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "42f1b12b1e4f9e9a95a16c34174593c62f2ad9b2",
+  "generatedFrom": "a9b781705cfd5956af28636d9156fabf1c0ab2a2",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -493,7 +493,9 @@
     "InlineErrorText": ["src/components/inputs/InlineErrorText.tsx"],
     "InvitationUrl": ["src/components/misc/QRScanner.tsx"],
     "InviteContact": ["src/modules/vrc/components/EmptyContactsList.tsx"],
+    "InvitedAlsoWithoutInvitation": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],
     "InvitedArrivedBody": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],
+    "InvitedAskToJoin": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],
     "InvitedContinue": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],
     "InvitedContinueVetting": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],
     "InvitedCopy": ["src/modules/trust-tasks/screens/VtiInvited.tsx"],

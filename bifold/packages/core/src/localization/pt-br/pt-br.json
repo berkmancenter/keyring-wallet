@@ -1501,6 +1501,7 @@
     "Sent": "Já enviei",
     "WaitingTitle": "Aguardando seu convite",
     "WaitingBody": "Quando o admin de {{community}} enviar um link de convite, abra-o neste telefone ou cole-o aqui. Ele aparecerá nesta tela.",
+    "AlsoWithoutInvitation": "{{community}} também aceita pedidos sem convite: um administrador os analisa.",
     "Checking": "Procurando seu convite…",
     "Paste": "Colar o convite",
     "SendAgain": "Enviar minha identidade de novo",
