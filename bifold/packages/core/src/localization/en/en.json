@@ -2534,5 +2534,8 @@
       "alreadyOnPhone": "This phone already has that agent.",
       "noCode": "There's no code to use. Scan the code on your agent host's page again."
     }
+  },
+  "MessageWake": {
+    "Fetching": "Fetching new messages…"
   }
 }

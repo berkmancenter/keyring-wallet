@@ -228,3 +228,51 @@ test('a community link from another tab opens Join on top of "Your agent", and b
   expect(focused(root)).toBe(Screens.VtaAgent)
   expect(tabOf(root)).toBe('MyAgent')
 })
+
+// IN-329: a second notification tapped while Requests is already open. The
+// navigation changes nothing there, so before, nothing looked at the other
+// agents again and the request waiting at one of them never came.
+test('the link again while Requests is open: the other agents are looked at again', async () => {
+  const look = jest.spyOn(vtaAgent, 'lookAtOtherAgents').mockResolvedValue(undefined)
+  const navRef = React.createRef<any>()
+  render(<App navRef={navRef} />)
+  await settle()
+  await act(async () => {
+    await openLink(navRef)
+  })
+  await settle()
+  expect(focused(navRef.current.getRootState())).toBe(Screens.VtaRequests)
+  const before = look.mock.calls.length
+  expect(before).toBeGreaterThan(0)
+
+  await act(async () => {
+    await openLink(navRef)
+  })
+  await settle()
+  expect(focused(navRef.current.getRootState())).toBe(Screens.VtaRequests)
+  expect(look.mock.calls.length).toBeGreaterThan(before)
+  look.mockRestore()
+})
+
+test('coming back to Requests from a screen above it looks at the other agents again', async () => {
+  const look = jest.spyOn(vtaAgent, 'lookAtOtherAgents').mockResolvedValue(undefined)
+  const navRef = React.createRef<any>()
+  render(<App navRef={navRef} />)
+  await settle()
+  await act(async () => {
+    await openLink(navRef)
+  })
+  await settle()
+  await act(async () => {
+    navRef.current.navigate('TabStack', { screen: 'MyAgent', params: { screen: Screens.VtiJoin } })
+  })
+  await settle()
+  const before = look.mock.calls.length
+  await act(async () => {
+    navRef.current.goBack()
+  })
+  await settle()
+  expect(focused(navRef.current.getRootState())).toBe(Screens.VtaRequests)
+  expect(look.mock.calls.length).toBeGreaterThan(before)
+  look.mockRestore()
+})
