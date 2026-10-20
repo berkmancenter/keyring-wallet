@@ -37,7 +37,9 @@
     "typecheck": "tsc --noEmit",
     "ios:setup": "bundle install && cd ios && bundle exec pod install",
     "android:setup": "cd android && ./gradlew app:dependencies --write-locks",
-    "setup": "yarn ios:setup && yarn android:setup"
+    "setup": "yarn ios:setup && yarn android:setup",
+    "ota:fingerprint": "hot-updater fingerprint create",
+    "ota:deploy": "node scripts/ota-deploy.mjs"
   },
   "dependencies": {
     "@animo-id/expo-secure-environment": "0.1.5",
@@ -71,6 +73,7 @@
     "@formatjs/intl-numberformat": "~8.15.6",
     "@formatjs/intl-pluralrules": "~5.4.6",
     "@formatjs/intl-relativetimeformat": "~11.4.13",
+    "@hot-updater/react-native": "0.36.18",
     "@hyperledger/anoncreds-react-native": "0.4.0",
     "@hyperledger/indy-vdr-react-native": "0.3.0",
     "@hyperledger/indy-vdr-shared": "0.3.0",
@@ -163,6 +166,9 @@
     "@babel/runtime": "~7.28.6",
     "@commitlint/cli": "~11.0.0",
     "@eslint/js": "~8.57.1",
+    "@expo/fingerprint": "0.15.5",
+    "@hot-updater/bare": "0.36.18",
+    "@hot-updater/standalone": "0.36.18",
     "@react-native-community/cli": "20.0.2",
     "@react-native-community/cli-platform-android": "20.0.2",
     "@react-native-community/cli-platform-ios": "20.0.2",
@@ -195,6 +201,7 @@
     "eslint-plugin-prettier": "~5.2.6",
     "eslint-plugin-react": "~7.35.2",
     "eslint-plugin-react-hooks": "~4.6.2",
+    "hot-updater": "0.36.18",
     "husky": "~7.0.4",
     "jest": "~29.6.4",
     "lint-staged": "~11.2.6",

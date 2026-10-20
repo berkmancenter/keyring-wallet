@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "20f0c678506361606569962f003a2326056c3d47",
+  "generatedFrom": "7f9b8fa39003a5fe785d1cd77b13ff816e99ff07",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "Accept": ["src/screens/Terms.tsx"],
@@ -34,6 +34,11 @@
     "LoadingActivityIndicator": ["src/components/Spinner.tsx", "src/screens/Splash.tsx"],
     "LoadingActivityIndicatorImage": ["src/screens/Splash.tsx"],
     "NoCredentials": ["src/keyring-theme/components/EmptyList.tsx"],
+    "OtaBundleId": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaJoinRing0": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaLeaveRing0": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaRing": ["src/ota/OtaDeveloperSection.tsx"],
+    "OtaRolledBack": ["src/ota/OtaDeveloperSection.tsx"],
     "ProbeVtaManagerButton": ["src/screens/Developer.tsx"],
     "ProbeVtaMediatorButton": ["src/screens/Developer.tsx"],
     "ReferenceCode": ["src/errors/components/ErrorInfoCard.tsx"],

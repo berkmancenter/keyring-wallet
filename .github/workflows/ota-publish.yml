@@ -1,0 +1,190 @@
+name: OTA publish (ring 0)
+
+# Publishes an over-the-air JS bundle to ring 0 (the maintainers' own devices),
+# phase 1 of docs/plans/release-cadence-and-testing-strategy/ota_updates_subtask.md.
+# Run by hand from the Actions tab, on main, or on the release/* or hotfix/*
+# branch of the store build it targets (a hot fix for build N descends from
+# that build's own commit, not from main). A real publish first waits for a
+# required reviewer on the "ota-approval" environment, which holds no secrets;
+# only then does the "ota" environment hand over the signing key.
+#
+# A dry run checks the commit and probes the server and token without uploading.
+# Not usable until both of these exist: the hosted update server (OTA_SERVER_URL)
+# and store builds that carry the public key, the channel and the native
+# fingerprint (a change to staging.yaml, in its own PR). Until then the spike
+# publishes from a laptop with a throwaway key (deploy/keyring-ota/README.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'The store build the bundle targets, by number (its staging-v*-NNN tag)'
+        type: string
+        required: true
+      platform:
+        description: Which platform's bundle to publish
+        type: choice
+        options: [both, ios, android]
+        default: both
+      scope:
+        description: 'fix, or within-purpose (a small addition inside an existing flow)'
+        type: choice
+        options: [fix, within-purpose]
+        default: fix
+      dry_run:
+        description: 'Only run the checks (including the server and token probe); publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-publish
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-22.04
+    environment: ota-approval
+    steps:
+      - run: echo "Approved - publish ${{ github.sha }} (for build ${{ inputs.build }}, ${{ inputs.platform }}, scope ${{ inputs.scope }}) to ring 0."
+
+  publish:
+    needs: [approve]
+    # Runs after an approval, or straight away for a dry run (approve is skipped).
+    if: ${{ !cancelled() && (needs.approve.result == 'success' || inputs.dry_run) }}
+    runs-on: ubuntu-22.04
+    environment: ota
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      # main's ruleset requires signed commits and green checks; release/* and
+      # hotfix/* have no rule, so the commit must be signed and verified by
+      # GitHub whatever the branch, and the approver sees which commit it is.
+      # The script then checks that it descends from the build's own tag.
+      - name: Publish only a verified commit of main, release/* or hotfix/*
+        env:
+          REF: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$REF" in
+            main|release/*|hotfix/*) ;;
+            *) echo "::error::$REF: an OTA bundle is published only from main, release/* or hotfix/*"; exit 1 ;;
+          esac
+          verified=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.verification.verified)
+          if [ "$verified" != "true" ]; then
+            echo "::error::$GITHUB_SHA is not a signed commit that GitHub verified"
+            exit 1
+          fi
+          echo "publishing $GITHUB_SHA from $REF (signature verified)"
+
+      # Runs on a dry run too, and before the slow install: a dry run then proves
+      # the server and the token, not only the build. Nothing is uploaded: one
+      # read-only management call (the list of channels), once without the token
+      # (the server must refuse it, so it is ours and auth is on) and once with
+      # it (it must be accepted). The token reaches curl as a config on stdin,
+      # never on its command line.
+      - name: Probe the update server and token (no upload)
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+        run: |
+          case "$OTA_SERVER_URL" in
+            https://*) ;;
+            "") echo "::error::the repository variable OTA_SERVER_URL is not set"; exit 1 ;;
+            *) echo "::error::OTA_SERVER_URL must be https:// (got $OTA_SERVER_URL)"; exit 1 ;;
+          esac
+          if [ -z "$HOT_UPDATER_AUTH_TOKEN" ]; then
+            echo "::error::the ota environment has no HOT_UPDATER_AUTH_TOKEN secret (set it from Secret Manager's kota-auth-token)"
+            exit 1
+          fi
+          probe="${OTA_SERVER_URL%/}/hot-updater/api/bundles/channels"
+          anon=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || true)
+          if [ "$anon" != "401" ]; then
+            echo "::error::$probe answered $anon without a token; expected 401 (wrong URL, server down, or auth off)"
+            exit 1
+          fi
+          auth=$(printf 'header = "Authorization: Bearer %s"\n' "$HOT_UPDATER_AUTH_TOKEN" \
+            | curl -sS -K - -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || true)
+          if [ "$auth" != "200" ]; then
+            echo "::error::$probe answered $auth with the token; expected 200 (the secret does not match kota-auth-token?)"
+            exit 1
+          fi
+          echo "update server reachable at $OTA_SERVER_URL; token accepted (401 without, 200 with)"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Verify bifold linking
+        run: node scripts/verify-bifold-linking.js
+
+      - name: Signing key
+        if: ${{ !inputs.dry_run }}
+        env:
+          OTA_SIGNING_KEY_PEM: ${{ secrets.OTA_SIGNING_KEY_PEM }}
+        run: |
+          umask 077
+          printf '%s\n' "$OTA_SIGNING_KEY_PEM" > "$RUNNER_TEMP/ota-private-key.pem"
+
+      # The same native settings the store build wrote (staging.yaml), from the
+      # same repository variables: the CLI refuses to publish a signed bundle
+      # unless the checkout carries the public key and a fingerprint.json, and
+      # the fingerprint must come out as the build's did.
+      - name: The checkout is clean before the native settings are written
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+            git status --porcelain --untracked-files=all
+            echo "::error::the checkout is not clean before the native OTA settings"
+            exit 1
+          fi
+
+      - name: Native OTA settings
+        if: ${{ !inputs.dry_run }}
+        env:
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: node scripts/ota/native-config.mjs
+
+      - name: Publish to ring 0
+        if: ${{ !inputs.dry_run }}
+        working-directory: app
+        env:
+          OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          BUILD: ${{ inputs.build }}
+          PLATFORM: ${{ inputs.platform }}
+          SCOPE: ${{ inputs.scope }}
+        run: node scripts/ota-deploy.mjs --build "$BUILD" --platform "$PLATFORM" --scope "$SCOPE" --after-native-config
+
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          BUILD: ${{ inputs.build }}
+        run: |
+          tag=$(git tag --list "staging-v*-$BUILD")
+          if [ "$(printf '%s\n' "$tag" | grep -c .)" != 1 ]; then
+            echo "::error::expected one staging-v*-$BUILD tag, found: ${tag:-none}"
+            exit 1
+          fi
+          node scripts/release/tier.mjs --range "$tag..$GITHUB_SHA" --json
+
+      - name: Remove the signing key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/ota-private-key.pem"

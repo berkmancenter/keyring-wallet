@@ -1,0 +1,14 @@
+# One site, the update server. With SITE_SCHEME=https (the default) Caddy
+# obtains and renews the certificate: OTA_HOST needs a public DNS record pointing
+# here and ports 80 and 443 open. Caddy sets X-Forwarded-Proto, which the server
+# uses to answer the publisher on the scheme it came in on.
+#
+# No `log` directive: no access log. Update checks and downloads are public on
+# purpose (every bundle is signed); management (/hot-updater/api/*) and uploads
+# (/storage/*) need the server's bearer token.
+{$SITE_SCHEME:https}://{$OTA_HOST} {
+	request_body /storage/upload* {
+		max_size 200MB
+	}
+	reverse_proxy ota:3080
+}

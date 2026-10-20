@@ -1941,6 +1941,141 @@ exports[`Developer Screen screen renders correctly 1`] = `
           </Text>
         </View>
       </View>
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Over-the-air updates
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          State: off (this build names no update server)
+        </Text>
+        <Text
+          accessibilityLabel="embedded (00000000-0000-0000-0000-000000000000)"
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+          testID="com.ariesbifold:id/OtaBundleId"
+        >
+          Running: embedded (00000000-0000-0000-0000-000000000000)
+        </Text>
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          Channel: production
+        </Text>
+        <Text
+          accessibilityLabel="ring2"
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+          testID="com.ariesbifold:id/OtaRing"
+        >
+          Ring: ring2
+        </Text>
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          Native fingerprint: none
+        </Text>
+      </View>
     </View>
   </RCTScrollView>
 </RNCSafeAreaView>

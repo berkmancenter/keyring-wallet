@@ -47,6 +47,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
+import OtaDeveloperSection from '@/ota/OtaDeveloperSection'
 import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
@@ -1106,6 +1107,8 @@ const Developer: React.FC = () => {
             )}
           </Pressable>
         </View>
+        <SectionHeader icon={'system-update'} title={'Over-the-air updates'} />
+        <OtaDeveloperSection />
         {/* The clocks in force, for the gate's linkwait rows (bifold E2EClockRows): in a test build only, since a store
             build never sets E2E_CLOCKS. This screen replaces bifold's, so it renders them itself. */}
         <E2EClockRows />

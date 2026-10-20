@@ -1,0 +1,43 @@
+# Keyring over-the-air update server behind Caddy with automatic HTTPS.
+#
+#   cp .env.example .env   # then fill it in
+#   docker compose config  # static check
+#   docker compose up -d
+#
+# Only Caddy publishes ports. Neither container writes an access log: Caddy
+# logs requests only when a `log` directive asks it to, and the server keeps
+# no per-request record (README "Privacy").
+
+name: keyring-ota
+
+services:
+  ota:
+    build: .
+    # On a host the image is pulled from a registry and tagged with this name;
+    # locally `docker compose up --build` builds it under :local.
+    image: keyring-ota/server:${OTA_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      HOT_UPDATER_AUTH_TOKEN: ${HOT_UPDATER_AUTH_TOKEN:?set HOT_UPDATER_AUTH_TOKEN in .env (openssl rand -hex 32)}
+      OTA_PUBLIC_URL: ${SITE_SCHEME:-https}://${OTA_HOST:?set OTA_HOST in .env}
+      PORT: "3080"
+    # Bind mounts under ./data (gitignored), so a host can keep them on its own
+    # backed-up disk by mounting that disk over ./data. The server runs as the
+    # image's `node` user (uid 1000): ./data/ota must be writable by it.
+    volumes:
+      - ./data/ota:/data
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [ota]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      OTA_HOST: ${OTA_HOST:?set OTA_HOST in .env}
+      SITE_SCHEME: ${SITE_SCHEME:-https}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config

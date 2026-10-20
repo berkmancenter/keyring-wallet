@@ -2,6 +2,7 @@
 
 #import <WebRTCModuleOptions.h>
 #import <Firebase.h>
+#import <HotUpdater/HotUpdater.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <React/RCTBridge.h>
 #import <React/RCTBundleURLProvider.h>
@@ -115,7 +116,9 @@ static NSString *KeyringWakeLink(NSDictionary *userInfo)
 #if DEBUG
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
 #else
-  return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
+  // The over-the-air update loader: an installed update when there is one,
+  // otherwise this build's own main.jsbundle (src/ota/withOta.tsx).
+  return [HotUpdater bundleURL];
 #endif
 }
 
