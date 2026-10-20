@@ -105,13 +105,13 @@ jobs:
             exit 1
           fi
           probe="${OTA_SERVER_URL%/}/hot-updater/api/bundles/channels"
-          anon=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || echo 000)
+          anon=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || true)
           if [ "$anon" != "401" ]; then
             echo "::error::$probe answered $anon without a token; expected 401 (wrong URL, server down, or auth off)"
             exit 1
           fi
           auth=$(printf 'header = "Authorization: Bearer %s"\n' "$HOT_UPDATER_AUTH_TOKEN" \
-            | curl -sS -K - -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || echo 000)
+            | curl -sS -K - -o /dev/null -w '%{http_code}' --max-time 20 "$probe" || true)
           if [ "$auth" != "200" ]; then
             echo "::error::$probe answered $auth with the token; expected 200 (the secret does not match kota-auth-token?)"
             exit 1
