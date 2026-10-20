@@ -67,7 +67,9 @@ describe('hot-updater version tripwire', () => {
     const version = serverLockedVersion(name)
     if (version !== CHECKED_VERSION) {
       throw new Error(
-        `deploy/keyring-ota/package-lock.json has ${name} at ${version ?? 'nothing'}, not ${CHECKED_VERSION}. ${RECHECK}`
+        `deploy/keyring-ota/package-lock.json has ${name} at ${
+          version ?? 'nothing'
+        }, not ${CHECKED_VERSION}. ${RECHECK}`
       )
     }
   })
