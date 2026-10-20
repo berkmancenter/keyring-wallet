@@ -139,6 +139,12 @@ export type SignInIdentityCounts = Record<string, { listed: number; matched: num
  * members long gone, which only the community could tell apart, and it is not
  * asked before Continue. Entries made elsewhere (the browser plugin) are. An
  * entry's label is shown only when it names the persona, never the community.
+ *
+ * Keyring's own entries are told by their label alone, the one signal there is
+ * locally: `Keyring sign-in · <community DID>`, which every entry this app makes
+ * carries (ensureSignInVaultEntry's one caller passes no persona label). An
+ * entry another client made under a persona's own label cannot be told from a
+ * plugin entry, and is offered.
  */
 export function signInIdentitiesFrom(
   vtcDid: string,
