@@ -884,6 +884,7 @@
     "FullCodeHint": "Certains outils affichent plutôt le code complet, un long code qui commence par zQm.",
     "ShowFullCode": "Afficher le code complet",
     "HideFullCode": "Masquer le code complet",
+    "FullCodeLabel": "Code complet",
     "TaskContextsCreate": "créer un contexte (un groupe d’identités)",
     "TaskContextsDelete": "supprimer un contexte",
     "TaskDidsCreate": "créer une identité (un DID)",
