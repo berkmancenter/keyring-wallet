@@ -2269,6 +2269,8 @@
     "RuleReauth": "Nouvelle connexion requise",
     "Test": "M'envoyer une demande de test",
     "TestHint": "Demande à votre agent de créer un contexte. Il vous le demande d'abord, et rien n'est créé quelle que soit votre réponse.",
+    "TestHintOpen": "Vous verrez une notification même avec Keyring ouvert.",
+    "TestHintClosed": "Les vraies demandes arrivent aussi quand Keyring est fermé.",
     "TestHeld": "Envoyé. Votre agent vous le demande maintenant : regardez dans Demandes.",
     "TestLetThrough": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Le contexte créé a été supprimé.",
     "TestLetThroughKept": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Il a créé un contexte nommé « Keyring test request » que Keyring n'a pas pu supprimer.",

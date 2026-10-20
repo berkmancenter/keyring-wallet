@@ -2175,6 +2175,8 @@
     "RuleReauth": "Precisa entrar de novo",
     "Test": "Enviar um pedido de teste",
     "TestHint": "Pede ao seu agente para criar um contexto. Ele pergunta a você primeiro, e nada é criado, qualquer que seja a resposta.",
+    "TestHintOpen": "Você verá uma notificação mesmo com o Keyring aberto.",
+    "TestHintClosed": "Pedidos reais também chegam quando o Keyring está fechado.",
     "TestHeld": "Enviado. Seu agente está perguntando agora: veja em Pedidos.",
     "TestLetThrough": "Seu agente não perguntou: as aprovações não estão ativadas onde ele está hospedado. O contexto criado foi excluído.",
     "TestLetThroughKept": "Seu agente não perguntou: as aprovações não estão ativadas onde ele está hospedado. Ele criou um contexto chamado \"Keyring test request\", que o Keyring não conseguiu excluir.",

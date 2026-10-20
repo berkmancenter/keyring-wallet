@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -182,6 +182,18 @@ const VtaAskMe: React.FC = () => {
         {state?.view.canTest ? (
           <View style={styles.card}>
             <ThemedText style={styles.muted}>{t('AskMe.TestHint')}</ThemedText>
+            {/* The request is made while Keyring is open, so its notification
+                arrives then. iOS now shows it as a banner (AppDelegate
+                willPresentNotification, IN-309); Android does not yet show a
+                notification while the app is open, so that is not promised there. */}
+            {Platform.OS === 'ios' ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey('AskMeTestHintOpen')}>
+                {t('AskMe.TestHintOpen')}
+              </ThemedText>
+            ) : null}
+            <ThemedText style={styles.muted} testID={testIdWithKey('AskMeTestHintClosed')}>
+              {t('AskMe.TestHintClosed')}
+            </ThemedText>
             <Button
               title={t('AskMe.Test')}
               buttonType={ButtonType.Secondary}

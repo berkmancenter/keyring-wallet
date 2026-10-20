@@ -2335,6 +2335,8 @@
     "RuleReauth": "Needs a fresh sign-in",
     "Test": "Send me a test request",
     "TestHint": "Asks your agent to create a context. It asks you first, and nothing is created whatever you answer.",
+    "TestHintOpen": "You'll see a notification even with Keyring open.",
+    "TestHintClosed": "Real requests also arrive when Keyring is closed.",
     "TestHeld": "Sent. Your agent is asking you now: look in Requests.",
     "TestLetThrough": "Your agent didn't ask: approvals aren't switched on where it is hosted. The context it created was deleted again.",
     "TestLetThroughKept": "Your agent didn't ask: approvals aren't switched on where it is hosted. It created a context called \"Keyring test request\", which Keyring couldn't delete.",

@@ -7,6 +7,7 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -71,6 +72,35 @@ describe('Ask me before…', () => {
     expect(set).toHaveBeenCalledWith({}, CREATE, true)
     expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.accessibilityState).toMatchObject({ checked: true })
     expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
+  })
+
+  // IN-309: the test request is made while Keyring is open, so its
+  // notification arrives then. iOS shows it as a banner now; Android does not
+  // yet show a notification while the app is open, so it is not promised there.
+  describe('what the test request says about notifications', () => {
+    const real = Platform.OS
+    afterEach(() => {
+      Platform.OS = real
+    })
+    const withTest = async () => {
+      const on = { ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME), version: 1 }
+      jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(on))
+      return show()
+    }
+
+    test('on iOS: a notification even with Keyring open, and real requests when it is closed', async () => {
+      Platform.OS = 'ios'
+      const tree = await withTest()
+      expect(tree.getByTestId(id('AskMeTestHintOpen'))).toHaveTextContent('AskMe.TestHintOpen')
+      expect(tree.getByTestId(id('AskMeTestHintClosed'))).toHaveTextContent('AskMe.TestHintClosed')
+    })
+
+    test('on Android: only that real requests arrive when Keyring is closed', async () => {
+      Platform.OS = 'android'
+      const tree = await withTest()
+      expect(tree.queryByTestId(id('AskMeTestHintOpen'))).toBeNull()
+      expect(tree.getByTestId(id('AskMeTestHintClosed'))).toHaveTextContent('AskMe.TestHintClosed')
+    })
   })
 
   test('the test request says the agent is asking', async () => {

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "a9b781705cfd5956af28636d9156fabf1c0ab2a2",
+  "generatedFrom": "d0bddf438e7dbfa084b7aeafd62a5a138eb3c97a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -180,6 +180,8 @@
     "AskMeHoldsThisPhone": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeReadOnly": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeTest": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
+    "AskMeTestHintClosed": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
+    "AskMeTestHintOpen": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeTested": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AttachTourStep": ["src/components/tour/AttachTourStep.tsx"],
     "AttestationVerified": ["src/screens/CredentialOffer.tsx"],
