@@ -11,6 +11,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
@@ -36,6 +37,13 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
     muted: { color: ColorPalette.grayscale.mediumGrey },
     code: { ...TextTheme.bold, fontFamily: 'Menlo', letterSpacing: 2 },
     digest: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
+    // In the link colour with a chevron, a whole row high: a grey line here read
+    // as a caption, and Details below it was opened instead (IN-333).
+    toggle: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, alignSelf: 'flex-start' },
+    link: { color: ColorPalette.brand.link },
+    // Framed in the toggle's colour and labelled, so it is told from the DID
+    // that Details shows.
+    fullCode: { borderLeftWidth: 3, borderLeftColor: ColorPalette.brand.link, paddingLeft: 10, gap: 2 },
   })
   const outcome = approval.outcome ?? { from: 'unknown' as const }
   const [fullOpen, setFullOpen] = useState(false)
@@ -83,19 +91,24 @@ export const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ approval }) =>
                 {t('Requests.FullCodeHint')}
               </ThemedText>
               <Pressable
+                style={styles.toggle}
                 onPress={() => setFullOpen(!fullOpen)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: fullOpen }}
                 testID={testIdWithKey('ApprovalDigestToggle')}
               >
-                <ThemedText style={styles.muted}>
+                <Icon name={fullOpen ? 'chevron-up' : 'chevron-down'} size={20} color={ColorPalette.brand.link} />
+                <ThemedText style={styles.link}>
                   {t(fullOpen ? 'Requests.HideFullCode' : 'Requests.ShowFullCode')}
                 </ThemedText>
               </Pressable>
               {fullOpen ? (
-                <ThemedText style={styles.digest} selectable testID={testIdWithKey('ApprovalDigest')}>
-                  {approval.payloadDigest}
-                </ThemedText>
+                <View style={styles.fullCode} testID={testIdWithKey('ApprovalFullCode')}>
+                  <ThemedText style={styles.muted}>{t('Requests.FullCodeLabel')}</ThemedText>
+                  <ThemedText style={styles.digest} selectable testID={testIdWithKey('ApprovalDigest')}>
+                    {approval.payloadDigest}
+                  </ThemedText>
+                </View>
               ) : null}
             </>
           ) : null}

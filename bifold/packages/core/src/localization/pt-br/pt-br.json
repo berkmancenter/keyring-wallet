@@ -816,6 +816,7 @@
     "FullCodeHint": "Algumas ferramentas mostram o código completo, um código longo que começa com zQm.",
     "ShowFullCode": "Mostrar o código completo",
     "HideFullCode": "Ocultar o código completo",
+    "FullCodeLabel": "Código completo",
     "TaskContextsCreate": "criar um contexto (um grupo de identidades)",
     "TaskContextsDelete": "excluir um contexto",
     "TaskDidsCreate": "criar uma identidade (um DID)",

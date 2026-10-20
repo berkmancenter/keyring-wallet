@@ -957,6 +957,7 @@
     "FullCodeHint": "Some tools show the full code instead, a long one starting with zQm.",
     "ShowFullCode": "Show the full code",
     "HideFullCode": "Hide the full code",
+    "FullCodeLabel": "Full code",
     "TaskContextsCreate": "create a context (a group of identities)",
     "TaskContextsDelete": "delete a context",
     "TaskDidsCreate": "create an identity (a DID)",
