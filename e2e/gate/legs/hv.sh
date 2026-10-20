@@ -29,9 +29,21 @@ if [ "$VETTER" = keyring ] && { [ -z "${HV_VETTER_UDID:-}" ] || [ -z "${HV_VETTE
 fi
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN
 T0=$(stamp); E=emulator-5570; AP=
+# Every process below a PID, found by parent PID (pgrep -P), never by name.
+pid_tree() { local k; for k in $(pgrep -P "$1" 2>/dev/null); do echo "$k"; pid_tree "$k"; done; }
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1
-  [ -n "$AP" ] && kill "$AP" 2>/dev/null; emu_stop
+  # The Appium this leg started also started the iOS vetter's WebDriverAgent (an xcodebuild). Killing Appium alone left
+  # it orphaned, driving the vetter simulator for hours (10-18 and 10-19's RC gate). So: Appium's own descendants by
+  # PID first, never an emulator (emu.sh owns those), then Appium.
+  if [ -n "${AP:-}" ]; then
+    local p; for p in $(pid_tree "$AP"); do case "$(ps -o comm= -p "$p" 2>/dev/null)" in *emulator*|*qemu*) ;; *) kill "$p" 2>/dev/null;; esac; done
+    kill "$AP" 2>/dev/null
+  fi
+  emu_stop
+  # The vetter simulator back to Shutdown, by its UDID and only on the Keyring-vetter path; never deleted or erased (it
+  # holds the seated, enrolled vetter).
+  [ "${VETTER:-keyring}" = keyring ] && [ -n "${HV_VETTER_UDID:-}" ] && xcrun simctl shutdown "$HV_VETTER_UDID" 2>/dev/null
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
   # The PCS application the phone's agent made lives on the runner with the phone's grant, and goes with it; the
   # community admits no one in the applicant-only rows, so it has no member to remove yet.
