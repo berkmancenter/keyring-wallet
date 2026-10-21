@@ -212,3 +212,40 @@ describe('a tapped message notification, driven as the app drives it', () => {
     expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
   })
 })
+
+/**
+ * Why the list reports its own focus, pinned so it stays true or says it no
+ * longer is. In this tree, the main stack's state (what TabStack's
+ * navigation.getState() returns) reaches the tabs but not the message stack's
+ * own state, so a walk for the focused route stops at the tab while the list is
+ * on screen. That is what build 265 tripped over. If a react-navigation upgrade
+ * makes the nested state visible here, this fails: the focus report still
+ * holds, but the reason recorded for it would then be out of date.
+ */
+describe('why the Messages list reports its own focus', () => {
+  const deepest = (state: unknown): string | undefined => {
+    let node = state as { index?: number; routes?: { name: string; state?: unknown }[] } | undefined
+    let name: string | undefined
+    while (node?.routes?.length) {
+      const route = node.routes[node.index ?? node.routes.length - 1]
+      name = route.name
+      node = route.state as typeof node
+    }
+    return name
+  }
+
+  it("the main stack's state stops at the tab while the list is on screen", async () => {
+    const tree = render(<App />)
+    await act(async () => {
+      mainNavigation!.navigate(Stacks.TabStack, { screen: TabStacks.MessageStack })
+    })
+    for (let i = 0; i < 10; i++)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+    expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+    const seen = deepest((mainNavigation as unknown as { getState(): unknown }).getState())
+    expect(seen).toBe(TabStacks.MessageStack)
+    expect(seen).not.toBe(Screens.Messages)
+  })
+})
