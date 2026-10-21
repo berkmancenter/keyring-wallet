@@ -225,3 +225,24 @@ test('flags: an unknown or misspelt policy throws, never a plain ota', () => {
   assert.throws(() => verdict(signIn, { added: {}, flags: typo }), /policy must be store, strict, advisory, not "Strict"/);
   assert.throws(() => flagsOf(['docs/a.md'], {}, [{ flag: 'x', policy: 'later', path: /x/ }]), /policy must be/);
 });
+
+test("flags read only what the app ships: the update server's own store.remove holds nothing (OTA dry run, 10-19)", () => {
+  // The line that raised "deletes stored records" in the dry run, in the update server, which the app never bundles.
+  const server = 'deploy/keyring-ota/src/server.mjs';
+  const added = { [server]: ['    await store.remove(storageUri)'] };
+  assert.equal(classify([server]).tier, 'none');
+  assert.deepEqual(flagsOf([server], added), []);
+  assert.equal(verdict([server], { added }).tier, 'none');
+  // Beside an app change it holds nothing either: the app change keeps its own tier.
+  const app = 'app/src/screens/X.tsx';
+  const both = verdict([server, app], { added });
+  assert.equal(both.tier, 'ota');
+  assert.deepEqual([both.flags, both.held], [[], []]);
+  // Every other folder the rules call none behaves the same; the same line in the app still holds.
+  for (const f of ['scripts/ota/x.mjs', 'e2e/gate/x.mjs', 'bifold/packages/witness-server/src/x.ts', 'bifold/packages/mediator-server/src/x.ts', 'docs/x.md']) {
+    assert.deepEqual(flagsOf([f], { [f]: added[server] }), [], f);
+  }
+  assert.equal(verdict([app], { added: { [app]: added[server] } }).tier, 'store');
+  // An unknown path is store, and still raises its flags, so the approver sees them.
+  assert.equal(flagsOf(['somewhere/new.ts'], { 'somewhere/new.ts': added[server] }).length, 1);
+});
