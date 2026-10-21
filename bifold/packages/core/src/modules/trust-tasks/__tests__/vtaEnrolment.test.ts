@@ -14,6 +14,7 @@ const TEMP_DID = 'did:peer:2.Vz6MkTemporary.Ez6LSTemporary'
 jest.mock('../module/VtaClient', () => ({
   resolveVtaMediator: jest.fn(async () => ({ did: 'did:peer:2.mediator' })),
   refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
+  consentPendingOf: jest.requireActual('../module/VtaClient').consentPendingOf,
 }))
 jest.mock('../module/VtiMediatorTransport', () => ({
   createVtiClientDid: jest.fn(async () => 'did:peer:2.Vz6MkTemporary.Ez6LSTemporary'),

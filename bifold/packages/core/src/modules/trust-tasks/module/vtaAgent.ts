@@ -350,7 +350,9 @@ const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
  */
 export function connectFailureRevokes(error: unknown): boolean {
   if (isUnsettledSwap(error)) return error.refusedBoth
-  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error))
+  // The ACL's own words count however the rest of the refusal is worded: a bare "ACL entry expired", without
+  // "forbidden", must not read as unreachable (the community service already words an expiry that way).
+  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error)) || refusedAsNotOnAcl(error)
 }
 
 /** A key swap the VTA could not be asked about, or refused both keys of. */
@@ -800,6 +802,9 @@ export class VtaAgentController {
         this.learnAgentName(client, vtaDid)
       } catch (error) {
         this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+        // Removed here, for every caller: My Agent's own connect drops the throw, and would otherwise wait for the
+        // next presence tick (IN-350). Only while linked (`refused`): a key being enrolled is not on the ACL yet.
+        if (refusedAsNotOnAcl(error)) this.refused(error)
         throw error
       }
     })()
@@ -2916,6 +2921,8 @@ export class VtaAgentController {
   /** An owner act's failure, worded; an agent that no longer knows this phone also moves the link. */
   private refused(error: unknown): DeviceActionRefused {
     const refusal = deviceRefusalOf(error)
+    // Only a working link is ended: while a phone is being linked its key is not on the ACL yet, and a refusal then is
+    // the link's own business (not yet granted), never a removal.
     if (refusal.reason === 'accessRevoked' && this.state.link.kind === 'linked') {
       this.dispatch({ type: 'accessRevoked', reason: refusal.detail ?? refusal.message })
     }
