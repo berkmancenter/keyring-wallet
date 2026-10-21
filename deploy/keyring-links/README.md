@@ -37,6 +37,14 @@ At the cap, `POST /i` answers `503`. **Keyring then shares the long link instead
 
 A per-client cap on *stored* links would need client addresses on disk, so it isn't used.
 
+**Going above 250,000 links.** Don't raise `LINKS_MAX_LINKS` on the boot disk. Each link costs an inode, and a 20 GB boot disk has about 1.3M in total, shared with the OS and the container images. Use a dedicated disk instead:
+- give it **no snapshot schedule**, so backups still can't keep invitations past their lifetime;
+- format it with enough inodes (for example `mkfs.ext4 -i 4096`);
+- mount it at `LINKS_DATA_PATH`;
+- then raise the cap.
+
+On ota-prod that means a new `kota-*` disk in the infra repo, attached and mounted by `kota-sync`. That's an infra change for the owner to plan and apply.
+
 ## Privacy
 
 **The service has no published port on purpose.** Caddy must be its only way in: Caddy's 8 KB body cap is its first size limit, and the rate limiter trusts the last `X-Forwarded-For` entry because Caddy sets it.
