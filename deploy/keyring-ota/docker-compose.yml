@@ -27,17 +27,39 @@ services:
     volumes:
       - ./data/ota:/data
 
+  # Short invitation links for the wallet host (deploy/keyring-links). Its files
+  # live at LINKS_DATA_PATH, which on a host is a disk that is NOT snapshotted, so
+  # a backup never keeps an invitation past its 7 days (keyring-links README).
+  #
+  # NO `ports:`, on purpose. Caddy must be the only way in: its 8 KB body cap
+  # (Caddyfile) is the service's first size limit, and the rate limiter trusts the
+  # last X-Forwarded-For entry because Caddy sets it. Publishing a port, even for
+  # debugging, removes the cap and makes the rate limit spoofable.
+  links:
+    build: ../keyring-links
+    image: keyring-ota/links:${LINKS_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: ${SITE_SCHEME:-https}://${WALLET_HOST:-wallet.localhost}
+      PORT: "3090"
+      LINKS_DATA_DIR: /data
+    volumes:
+      - ${LINKS_DATA_PATH:-./links-data}:/data
+
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
-    depends_on: [ota]
+    depends_on: [ota, links]
     ports:
       - "80:80"
       - "443:443"
     environment:
       OTA_HOST: ${OTA_HOST:?set OTA_HOST in .env}
+      WALLET_HOST: ${WALLET_HOST:-wallet.localhost}
       SITE_SCHEME: ${SITE_SCHEME:-https}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The wallet host's static site: universal-link files and the install page.
+      - ../../app/universal-link-site:/srv/wallet-site:ro
       - ./data/caddy/data:/data
       - ./data/caddy/config:/config
