@@ -38,13 +38,21 @@ channel_ids() {
 }
 
 commit_change() { # commit_change MESSAGE FILE... : a local commit of exactly these files
-  git -c user.email=ota-device-test@example.invalid -c user.name="OTA device test" -c commit.gpgsign=false \
+  # No hooks at all. --no-verify skips pre-commit and commit-msg but not prepare-commit-msg, a lefthook hook
+  # that, finding no lefthook, probes `swift package lefthook` in the repo root; on a runner with Swift that
+  # leaves an untracked .build/ behind, and ota-deploy then refuses the tree (run 39565363897).
+  HUSKY=0 LEFTHOOK=0 git -c core.hooksPath=/dev/null \
+    -c user.email=ota-device-test@example.invalid -c user.name="OTA device test" -c commit.gpgsign=false \
     commit -q --no-verify -m "$1" -- "${@:2}"
 }
 
 publish() { # publish MESSAGE
   : "${OTA_BASE:?}" "${OTA_PUBLIC_KEY_FILE:?}" "${OTA_SIGNING_KEY:?}" "${PLATFORM:?}"
   OTA_PUBLIC_KEY="$(cat "$OTA_PUBLIC_KEY_FILE")" OTA_CHANNEL="$CHANNEL" node scripts/ota/native-config.mjs
+  # The native fingerprint this bundle is built for: it must equal the test app's own (Developer -> OTA ->
+  # Native fingerprint, or its build copy's app/fingerprint.json), or no phone is offered the bundle.
+  node -e 'const f = JSON.parse(require("fs").readFileSync("app/fingerprint.json", "utf8"));
+    for (const p of ["ios", "android"]) console.log(`device-test: ${p} fingerprint ${f[p]?.hash ?? "?"}`)'
   (cd app && node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform "$PLATFORM" --channel "$CHANNEL" \
     --skip-tier --after-native-config --message "$1")
 }
