@@ -666,6 +666,11 @@
     "IdentityFor": "Identity for {{community}}",
     "YourQRCodeTitle": "Your contact code",
     "YourQRCodeInstruction": "Another Keyring user scans this to connect with you and exchange relationship cards. It is not for linking an agent or joining a community.",
+    "ShareLink": "Share as a link",
+    "ShareLinkNote": "Anyone with the link can connect with you, once. Send it only to the person you mean to connect with.",
+    "ShareLinkTitle": "Connect with me on Keyring",
+    "ShareLinkMessage": "Open this link on your phone to connect with me on Keyring:",
+    "ShareLinkFailed": "Keyring couldn't make the link. Try again in a moment.",
     "YourIdentityTitle": "Your identity for {{community}}",
     "YourIdentityInstruction": "The community's admin scans this to invite you. It is not a contact card.",
     "PlaceQRCodeInsideFrame": "Place QR code inside the frame to scan please avoid shake to get results quickly",
@@ -954,8 +959,10 @@
     "TaskDoes": "Your agent didn't describe it. This task would {{action}}.",
     "About": "About: {{subject}}",
     "ApproveIfYouStartedIt": "Approve only if you started this yourself.",
+    "FullCodeHint": "Some tools show the full code instead, a long one starting with zQm.",
     "ShowFullCode": "Show the full code",
     "HideFullCode": "Hide the full code",
+    "FullCodeLabel": "Full code",
     "TaskContextsCreate": "create a context (a group of identities)",
     "TaskContextsDelete": "delete a context",
     "TaskDidsCreate": "create an identity (a DID)",
@@ -2334,12 +2341,15 @@
     "RuleConsent_other": "Needs {{count}} approvals",
     "RuleReauth": "Needs a fresh sign-in",
     "Test": "Send me a test request",
-    "TestHint": "Asks your agent to create a context. It asks you first, and nothing is created whatever you answer.",
-    "TestHintOpen": "You'll see a notification even with Keyring open.",
+    "TestHint": "Asks your agent to create a test context. Your agent should ask you first. If it lets the request through instead, Keyring says so here.",
+    "TestHintOpen": "When your agent asks you, you'll see a notification even with Keyring open.",
     "TestHintClosed": "Real requests also arrive when Keyring is closed.",
     "TestHeld": "Sent. Your agent is asking you now: look in Requests.",
-    "TestLetThrough": "Your agent didn't ask: approvals aren't switched on where it is hosted. The context it created was deleted again.",
-    "TestLetThroughKept": "Your agent didn't ask: approvals aren't switched on where it is hosted. It created a context called \"Keyring test request\", which Keyring couldn't delete.",
+    "TestLetThrough": "It created the test context, which Keyring deleted again.",
+    "TestLetThroughKept": "It created a context called \"Keyring test request\", which Keyring couldn't delete.",
+    "LetThroughTitle": "Your agent didn't ask you",
+    "LetThroughBody": "So nothing will be sent to your phone, and no notification will come. To be asked, check that approval enforcement is on for your agent where it's hosted.",
+    "LastTestLetThrough": "Your last test request wasn't sent to you: your agent didn't ask.",
     "Nudge": "Requests always wait in Keyring; a notification is a nudge, not a promise.",
     "Details": "Details",
     "HideDetails": "Hide details"
@@ -2531,5 +2541,8 @@
       "alreadyOnPhone": "This phone already has that agent.",
       "noCode": "There's no code to use. Scan the code on your agent host's page again."
     }
+  },
+  "MessageWake": {
+    "Fetching": "Fetching new messages…"
   }
 }

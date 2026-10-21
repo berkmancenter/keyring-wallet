@@ -3,7 +3,7 @@ import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Image, Pressable, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { Image, Pressable, Share, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -12,6 +12,7 @@ import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
 import { useConnectionByOutOfBandId } from '../../hooks/connections'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../../modules/trust-tasks/module/VtiIdentityStore'
+import { releaseWarn } from '../../modules/trust-tasks/module/releaseLog'
 import { currentAgentDid } from '../../modules/trust-tasks/module/currentAgent'
 import { communityTarget } from '../../modules/trust-tasks/module/vtiCommunityLink'
 import { communityLabelOf } from '../../modules/trust-tasks/screens/communityName'
@@ -158,6 +159,9 @@ const QRScanner: React.FC<Props> = ({
       textAlign: 'center',
       marginTop: 16,
     },
+    shareLink: { alignItems: 'center', marginTop: 12, gap: 4 },
+    shareLinkButton: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12 },
+    shareLinkNote: { fontSize: 14, color: ColorPalette.grayscale.mediumGrey, textAlign: 'center' },
     choice: {
       flexDirection: 'row',
       alignSelf: 'stretch',
@@ -203,22 +207,48 @@ const QRScanner: React.FC<Props> = ({
     },
   })
 
+  /** One invitation of the kind this screen offers: for the code, or for a link shared on its own. */
+  const mintInvitation = useCallback(
+    () =>
+      offerRelationshipCredential
+        ? createRelationshipInvitation(agent, store.preferences.walletName)
+        : createConnectionInvitation(agent),
+    [agent, offerRelationshipCredential, store.preferences.walletName]
+  )
+
   const createInvitation = useCallback(async () => {
     setInvitation(undefined)
-    if (offerRelationshipCredential) {
-      const result = await createRelationshipInvitation(agent, store.preferences.walletName)
-      if (result) {
-        setRecordId(result.record.id)
-        setInvitation(result.invitationUrl)
-      }
-    } else {
-      const result = await createConnectionInvitation(agent)
-      if (result) {
-        setRecordId(result.record.id)
-        setInvitation(result.invitationUrl)
-      }
+    const result = await mintInvitation()
+    if (result) {
+      setRecordId(result.record.id)
+      setInvitation(result.invitationUrl)
     }
-  }, [agent, offerRelationshipCredential, store.preferences.walletName])
+  }, [mintInvitation])
+
+  // Someone not in the room gets the invitation as a link. A fresh one, single
+  // use like the code, so the code on screen still works for someone who is.
+  const [sharingLink, setSharingLink] = useState(false)
+  const [shareLinkFailed, setShareLinkFailed] = useState(false)
+  const shareLink = useCallback(async () => {
+    setShareLinkFailed(false)
+    setSharingLink(true)
+    try {
+      const result = await mintInvitation()
+      if (!result) throw new Error('no invitation')
+      releaseWarn('[VRC] invitation link: made, share sheet opened')
+      // The words, then the link on its own line, as the message only: given a
+      // url as well, iOS sends both. A sheet closed without sharing is not an error.
+      await Share.share({
+        title: t('Scan.ShareLinkTitle'),
+        message: `${t('Scan.ShareLinkMessage')}\n${result.invitationUrl}`,
+      }).catch(() => undefined)
+    } catch (e) {
+      releaseWarn(`[VRC] invitation link: not made (${(e as Error)?.message ?? e})`)
+      setShareLinkFailed(true)
+    } finally {
+      setSharingLink(false)
+    }
+  }, [mintInvitation, t])
 
   useEffect(() => {
     if (!showTabs && defaultToConnect && showingQRCodeView) {
@@ -508,6 +538,34 @@ const QRScanner: React.FC<Props> = ({
             <ThemedText style={styles.instruction} testID={testIdWithKey('MyQRCodeInstruction')}>
               {identityShown ? t('Scan.YourIdentityInstruction') : t('Scan.YourQRCodeInstruction')}
             </ThemedText>
+            {!identityShown && invitation ? (
+              <View style={styles.shareLink}>
+                <Pressable
+                  style={styleForState}
+                  onPress={() => void shareLink()}
+                  disabled={sharingLink}
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: sharingLink }}
+                  testID={testIdWithKey('MyQRShareLink')}
+                >
+                  <View style={styles.shareLinkButton}>
+                    <Icon name="share-variant" size={20} color={ColorPalette.brand.link} />
+                    <ThemedText style={{ color: ColorPalette.brand.link }}>{t('Scan.ShareLink')}</ThemedText>
+                  </View>
+                </Pressable>
+                <ThemedText style={styles.shareLinkNote} testID={testIdWithKey('MyQRShareLinkNote')}>
+                  {t('Scan.ShareLinkNote')}
+                </ThemedText>
+                {shareLinkFailed ? (
+                  <ThemedText
+                    style={{ color: ColorPalette.semantic.error, textAlign: 'center' }}
+                    testID={testIdWithKey('MyQRShareLinkError')}
+                  >
+                    {t('Scan.ShareLinkFailed')}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
           </View>
         )}
         <SafeAreaModal visible={showProfilePicker} animationType="slide" transparent>

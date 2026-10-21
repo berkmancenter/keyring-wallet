@@ -1,15 +1,16 @@
 import { DidCommConnectionType, DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { useConnections } from '@bifold/react-hooks'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect } from 'react'
+import React, { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native'
 
 import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import EmptyListConnections from '../modules/vrc/components/EmptyListConnections'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { MessageStackParams, Screens, Stacks } from '../types/navigators'
+import { messageWakeFetching } from '../utils/messageWake'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
 
@@ -21,6 +22,9 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   const { ColorPalette } = useTheme()
   const { t } = useTranslation()
   const { records: connectionRecords } = useConnections()
+  // A tapped message notification is being resolved (utils/messageWake.ts):
+  // said here, so the list is not a blank wait while the messages come in.
+  const fetchingNew = useSyncExternalStore(messageWakeFetching.subscribe, messageWakeFetching.get)
   const [store] = useStore()
   const [{ contactHideList }, ContactListItem, defaultScreenOptionsDict] = useServices([
     TOKENS.CONFIG,
@@ -47,6 +51,8 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
     list: {
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
+    fetching: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+    fetchingText: { color: ColorPalette.grayscale.mediumGrey },
     itemSeparator: {
       backgroundColor: ColorPalette.brand.primaryBackground,
       height: 1,
@@ -96,6 +102,14 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
           shouldShowEmptyState ? <EmptyListConnections navigation={navigation as any} /> : null
         }
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          fetchingNew ? (
+            <View style={style.fetching} testID={testIdWithKey('MessagesFetchingNew')}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <Text style={style.fetchingText}>{t('MessageWake.Fetching')}</Text>
+            </View>
+          ) : null
+        }
       />
     </View>
   )

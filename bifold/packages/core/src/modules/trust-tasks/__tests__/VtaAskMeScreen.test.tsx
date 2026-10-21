@@ -12,9 +12,11 @@ import { Platform } from 'react-native'
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { fakeAgent } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
 import { EMPTY_APPROVALS, approvalsView, withPhoneRule, type ApprovalsModel } from '../module/approvalRules'
 import { vtaAgent, type ApprovalRulesState } from '../module/vtaAgent'
+import { GenericRecordsTestRequestStore } from '../module/testRequestOutcome'
 import { DeviceActionRefused, OwnerNotConfirmed } from '../module/vtaOwner'
 import VtaAskMe from '../screens/VtaAskMe'
 
@@ -95,11 +97,12 @@ describe('Ask me before…', () => {
       expect(tree.getByTestId(id('AskMeTestHintClosed'))).toHaveTextContent('AskMe.TestHintClosed')
     })
 
-    test('on Android: only that real requests arrive when Keyring is closed', async () => {
+    test('on Android: nothing promised about notifications, open or closed', async () => {
       Platform.OS = 'android'
       const tree = await withTest()
+      expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
       expect(tree.queryByTestId(id('AskMeTestHintOpen'))).toBeNull()
-      expect(tree.getByTestId(id('AskMeTestHintClosed'))).toHaveTextContent('AskMe.TestHintClosed')
+      expect(tree.queryByTestId(id('AskMeTestHintClosed'))).toBeNull()
     })
   })
 
@@ -157,5 +160,166 @@ describe('Ask me before…', () => {
     jest.spyOn(vtaAgent, 'approvalRules').mockRejectedValue(new DeviceActionRefused('unreachable'))
     const tree = await show()
     expect(tree.getByTestId(id('AskMeError'))).toHaveTextContent('CreateAgent.Device.unreachable')
+  })
+})
+
+// IN-277: the sign-in reporter twice concluded "no notifications" after a
+// test the agent let through: nothing reaches the phone then, and the one
+// line on screen was gone by the time they looked. The outcome is kept, and
+// says what the agent did, never why.
+describe('a test request the agent let through', () => {
+  type Setter = { set(next: Record<string, unknown>): void }
+  const AGENT = 'did:webvh:QmAgent:vta.example:me'
+  const on = () => ({ ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME), version: 1 })
+  const linked = () =>
+    (vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'linked',
+        vtaDid: AGENT,
+        label: 'me',
+        linkedAt: '2026-10-20T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+  const press = async (tree: Awaited<ReturnType<typeof show>>) =>
+    act(async () => {
+      fireEvent.press(tree.getByTestId(id('AskMeTest')))
+    })
+
+  let agent: ReturnType<typeof fakeAgent>['agent']
+  beforeEach(() => {
+    agent = fakeAgent().agent
+    ;(useAgent as jest.Mock).mockReturnValue({ agent })
+    linked()
+    jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(on()))
+  })
+  afterEach(() => (vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked' } }))
+
+  test('before any test: no card, and nothing said beside the button', async () => {
+    const tree = await show()
+    expect(tree.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(tree.queryByTestId(id('AskMeLastLetThrough'))).toBeNull()
+  })
+
+  test('says so in a card that is still there after leaving and coming back', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const first = await show()
+    await press(first)
+    const card = first.getByTestId(id('AskMeLetThroughCard'))
+    expect(card).toHaveTextContent(/AskMe\.LetThroughTitle/)
+    expect(card).toHaveTextContent(/AskMe\.LetThroughBody/)
+    expect(card).toHaveTextContent(/AskMe\.TestLetThrough(?!Kept)/)
+    first.unmount()
+    const again = await show()
+    expect(again.getByTestId(id('AskMeLetThroughCard'))).toBeTruthy()
+    expect(again.getByTestId(id('AskMeLastLetThrough'))).toHaveTextContent('AskMe.LastTestLetThrough')
+  })
+
+  test('says when the test context could not be deleted', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: false })
+    const tree = await show()
+    await press(tree)
+    expect(tree.getByTestId(id('AskMeLetThroughCard'))).toHaveTextContent(/AskMe\.TestLetThroughKept/)
+  })
+
+  test('a kept outcome that never said whether the context was deleted claims neither', async () => {
+    await agent.genericRecords.save({
+      content: { vtaDid: AGENT, kind: 'letThrough', at: '2026-10-20T00:00:00Z' },
+      tags: { recordType: 'keyring.vta-test-request', vtaDid: AGENT },
+    } as never)
+    const tree = await show()
+    const card = tree.getByTestId(id('AskMeLetThroughCard'))
+    expect(card).toHaveTextContent(/AskMe\.LetThroughBody/)
+    expect(card).not.toHaveTextContent(/AskMe\.TestLetThrough/)
+  })
+
+  test('an outcome the phone could not keep, or a dismissal, is logged', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    jest.spyOn(GenericRecordsTestRequestStore.prototype, 'set').mockRejectedValue(new Error('store closed'))
+    jest.spyOn(GenericRecordsTestRequestStore.prototype, 'dismiss').mockRejectedValue(new Error('store closed'))
+    const tree = await show()
+    await press(tree)
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/test request: outcome not kept .*store closed/))
+    await act(async () => fireEvent.press(tree.getByTestId(id('AskMeLetThroughDismiss'))))
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/test request: dismissal not kept .*store closed/))
+    warn.mockRestore()
+  })
+
+  test('dismissed, the card goes and stays gone; the line beside the button still says it', async () => {
+    jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const first = await show()
+    await press(first)
+    await act(async () => fireEvent.press(first.getByTestId(id('AskMeLetThroughDismiss'))))
+    expect(first.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(first.getByTestId(id('AskMeLastLetThrough'))).toBeTruthy()
+    first.unmount()
+    const again = await show()
+    expect(again.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(again.getByTestId(id('AskMeLastLetThrough'))).toBeTruthy()
+  })
+
+  test('the next test replaces it: asked this time, no card and no line', async () => {
+    const send = jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+    const tree = await show()
+    await press(tree)
+    send.mockResolvedValue({ kind: 'held' })
+    await press(tree)
+    expect(tree.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
+    expect(tree.queryByTestId(id('AskMeLastLetThrough'))).toBeNull()
+    expect(tree.getByTestId(id('AskMeTested'))).toHaveTextContent('AskMe.TestHeld')
+  })
+
+  // IN-309 with #445: the notification hint sits beside "your agent didn't
+  // ask", so it promises a notification only for a request the agent asks about.
+  test('after a let-through, the notification hint still holds: it promises one only when the agent asks', async () => {
+    const real = Platform.OS
+    Platform.OS = 'ios'
+    try {
+      jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+      const tree = await show()
+      await press(tree)
+      expect(tree.getByTestId(id('AskMeLastLetThrough'))).toHaveTextContent('AskMe.LastTestLetThrough')
+      expect(tree.getByTestId(id('AskMeTestHintOpen'))).toHaveTextContent('AskMe.TestHintOpen')
+    } finally {
+      Platform.OS = real
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const copies = ['en/en.json', 'fr/fr.json', 'pt-br/pt-br.json'].map(
+      (f) => require(`../../../localization/${f}`).AskMe
+    )
+    const [en, fr, ptBr] = copies.map((c) => c.TestHintOpen as string)
+    expect(en).toMatch(/^When your agent asks you, /)
+    expect(fr).toMatch(/^Quand votre agent vous demande, /)
+    expect(ptBr).toMatch(/^Quando o seu agente perguntar, /)
+  })
+
+  // The agent may let the request through and create the context (#445), so
+  // the hint before pressing never promises that nothing is created.
+  test('the hint says the agent should ask, never that nothing is created', () => {
+    const files = { en: 'en/en.json', fr: 'fr/fr.json', ptBr: 'pt-br/pt-br.json' }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const hint = (f: string) => require(`../../../localization/${f}`).AskMe.TestHint as string
+    expect(hint(files.en)).toMatch(/should ask you first/)
+    expect(hint(files.fr)).toMatch(/devrait vous demander d'abord/)
+    expect(hint(files.ptBr)).toMatch(/deveria perguntar a você primeiro/)
+    expect(hint(files.en)).not.toMatch(/nothing is created/i)
+    expect(hint(files.fr)).not.toMatch(/rien n'est créé/i)
+    expect(hint(files.ptBr)).not.toMatch(/nada é criado/i)
+  })
+
+  test('the words say what the agent did, never why', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    for (const copy of [require('../../../localization/en/en.json').AskMe]) {
+      for (const key of [
+        'LetThroughTitle',
+        'LetThroughBody',
+        'LastTestLetThrough',
+        'TestLetThrough',
+        'TestLetThroughKept',
+      ]) {
+        expect(copy[key]).not.toMatch(/aren't switched on|is off|isn't on|not enforced/i)
+      }
+    }
   })
 })

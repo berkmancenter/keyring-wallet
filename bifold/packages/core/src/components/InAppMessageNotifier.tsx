@@ -10,6 +10,7 @@ import { getVrcNameForConnection } from '../modules/vrc/utils/vrcNameHelper'
 import { PersistentStorage } from '../services/storage'
 import { Preferences } from '../types/state'
 import { getActiveChatConnectionId } from '../utils/activeChatTracker'
+import { messageWakeHold } from '../utils/messageWake'
 import { Screens, Stacks } from '../types/navigators'
 
 const isVrcProtocolMessage = (content: string): boolean => {
@@ -79,12 +80,22 @@ const InAppMessageNotifier: React.FC = () => {
       if (isVrcProtocolMessage(record.content)) return
       if (isConnectionExcludedFromNotifications(record.connectionId)) return
       if (getActiveChatConnectionId() === record.connectionId) return
+      // A tapped message notification is being resolved: wait for it. If it
+      // opens this message's chat, no toast; otherwise toast as usual.
+      if (messageWakeHold.isHolding()) {
+        messageWakeHold.after((opened) => {
+          if (opened === record.connectionId || getActiveChatConnectionId() === record.connectionId) return
+          void showToast(record)
+        })
+        return
+      }
+      await showToast(record)
+    }
 
+    const showToast = async (record: DidCommBasicMessageRecord) => {
       const senderName = await resolveContactName(agent, record.connectionId)
 
-      const preview = record.content.length > 80
-        ? record.content.substring(0, 80) + '…'
-        : record.content
+      const preview = record.content.length > 80 ? record.content.substring(0, 80) + '…' : record.content
 
       Toast.show({
         type: 'message',

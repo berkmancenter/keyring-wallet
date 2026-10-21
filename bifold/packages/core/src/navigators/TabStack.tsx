@@ -18,8 +18,9 @@ import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
-import { Stacks, TabStackParams, TabStacks } from '../types/navigators'
+import { Screens, Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { appMessageWakeDeps, openMessageWake, type WakeNavigation } from '../utils/messageWake'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
@@ -167,11 +168,30 @@ const TabStack: React.FC = () => {
 
       // A tapped message notification (MESSAGES_LINK): the Messages tab,
       // through the main stack so it comes above any open modal.
+      // The wake carries no content, so the chat it is for is found after the
+      // tap: the list at once, a pickup now, then the newest unread chat
+      // (utils/messageWake.ts).
       if (isMessagesLink(deepLink)) {
-        ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(Stacks.TabStack, {
-          screen: TabStacks.MessageStack,
-        })
         dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
+        const nav = navigation as unknown as WakeNavigation
+        if (!agent) {
+          nav.navigate(Stacks.TabStack, { screen: TabStacks.MessageStack })
+          return
+        }
+        void openMessageWake(
+          appMessageWakeDeps({
+            navigation: nav,
+            agent,
+            names: {
+              tabStack: Stacks.TabStack,
+              messageStack: TabStacks.MessageStack,
+              messages: Screens.Messages,
+              contactStack: Stacks.ContactStack,
+              chat: Screens.Chat,
+            },
+            log: (message, data) => logger.info(message, data),
+          })
+        ).then((outcome) => logger.info(`message wake: ${outcome}`))
         return
       }
 

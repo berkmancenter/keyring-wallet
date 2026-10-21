@@ -632,6 +632,11 @@
     "IdentityFor": "Identité pour {{community}}",
     "YourQRCodeTitle": "Votre code de contact",
     "YourQRCodeInstruction": "Un autre utilisateur de Keyring le scanne pour se connecter à vous et échanger des cartes de relation. Il ne sert pas à lier un agent ni à rejoindre une communauté.",
+    "ShareLink": "Partager un lien",
+    "ShareLinkNote": "Toute personne qui a le lien peut se connecter à vous, une seule fois. Ne l'envoyez qu'à la personne avec qui vous voulez vous connecter.",
+    "ShareLinkTitle": "Connectons-nous sur Keyring",
+    "ShareLinkMessage": "Ouvrez ce lien sur votre téléphone pour vous connecter à moi sur Keyring :",
+    "ShareLinkFailed": "Keyring n'a pas pu créer le lien. Réessayez dans un instant.",
     "YourIdentityTitle": "Votre identité pour {{community}}",
     "YourIdentityInstruction": "L'administrateur de la communauté le scanne pour vous inviter. Ce n'est pas une carte de contact.",
     "PlaceQRCodeInsideFrame": "Placez le code QR dans le cadre pour le scanner, évitez les tremblements pour obtenir des résultats rapidement",
@@ -881,8 +886,10 @@
     "TaskDoes": "Votre agent ne l'a pas décrit. Cette tâche consisterait à {{action}}.",
     "About": "Objet : {{subject}}",
     "ApproveIfYouStartedIt": "N'approuvez que si vous en êtes à l'origine.",
+    "FullCodeHint": "Certains outils affichent plutôt le code complet, un long code qui commence par zQm.",
     "ShowFullCode": "Afficher le code complet",
     "HideFullCode": "Masquer le code complet",
+    "FullCodeLabel": "Code complet",
     "TaskContextsCreate": "créer un contexte (un groupe d’identités)",
     "TaskContextsDelete": "supprimer un contexte",
     "TaskDidsCreate": "créer une identité (un DID)",
@@ -2268,12 +2275,15 @@
     "RuleConsent_other": "{{count}} approbations requises",
     "RuleReauth": "Nouvelle connexion requise",
     "Test": "M'envoyer une demande de test",
-    "TestHint": "Demande à votre agent de créer un contexte. Il vous le demande d'abord, et rien n'est créé quelle que soit votre réponse.",
-    "TestHintOpen": "Vous verrez une notification même avec Keyring ouvert.",
+    "TestHint": "Demande à votre agent de créer un contexte de test. Votre agent devrait vous demander d'abord. S'il laisse passer la demande, Keyring vous le dit ici.",
+    "TestHintOpen": "Quand votre agent vous demande, vous verrez une notification même avec Keyring ouvert.",
     "TestHintClosed": "Les vraies demandes arrivent aussi quand Keyring est fermé.",
     "TestHeld": "Envoyé. Votre agent vous le demande maintenant : regardez dans Demandes.",
-    "TestLetThrough": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Le contexte créé a été supprimé.",
-    "TestLetThroughKept": "Votre agent n'a rien demandé : les approbations ne sont pas activées là où il est hébergé. Il a créé un contexte nommé « Keyring test request » que Keyring n'a pas pu supprimer.",
+    "TestLetThrough": "Il a créé le contexte de test, que Keyring a supprimé ensuite.",
+    "TestLetThroughKept": "Il a créé un contexte appelé « Keyring test request », que Keyring n’a pas pu supprimer.",
+    "LetThroughTitle": "Votre agent ne vous a pas demandé",
+    "LetThroughBody": "Rien ne sera donc envoyé à votre téléphone, et aucune notification n’arrivera. Pour qu’il vous demande, vérifiez que l’application des approbations est activée pour votre agent là où il est hébergé.",
+    "LastTestLetThrough": "Votre dernière demande de test ne vous a pas été envoyée : votre agent ne vous a pas demandé.",
     "Nudge": "Les demandes attendent toujours dans Keyring ; une notification est un rappel, pas une promesse.",
     "Details": "Détails",
     "HideDetails": "Masquer les détails"
@@ -2462,5 +2472,8 @@
       "alreadyOnPhone": "Ce téléphone a déjà cet agent.",
       "noCode": "Il n'y a aucun code à utiliser. Scannez à nouveau le code sur la page de votre hébergeur."
     }
+  },
+  "MessageWake": {
+    "Fetching": "Récupération des nouveaux messages…"
   }
 }

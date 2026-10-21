@@ -3,14 +3,16 @@
  * loop on al-signer, 10-06: "Someone asks your agent to run
  * vta/contexts/create/1.0", and "Keyring couldn't tell what this would do").
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { fireEvent, render, within } from '@testing-library/react-native'
 import i18n from 'i18next'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import en from '../../../localization/en/en.json'
 import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { ColorPalette } from '../../../theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { VtaAgentController } from '../module/vtaAgent'
 import { ApprovalDetails } from '../screens/ApprovalDetails'
@@ -91,6 +93,8 @@ describe('the words', () => {
         'ApproveIfYouStartedIt',
         'ShowFullCode',
         'HideFullCode',
+        'FullCodeHint',
+        'FullCodeLabel',
       ])
         expect(typeof requests[key]).toBe('string')
     }
@@ -147,8 +151,30 @@ describe('what approving would do, when the agent did not say', () => {
     )
     expect(tree.getByTestId(testIdWithKey('ApprovalMatchCode'))).toHaveTextContent('0af466')
     expect(tree.queryByTestId(testIdWithKey('ApprovalDigest'))).toBeNull()
+    // IN-323: a tool that prints the whole digest showed a code that looked unrelated to this one; the screen says so.
+    expect(tree.getByTestId(testIdWithKey('ApprovalFullCodeHint'))).toHaveTextContent('Requests.FullCodeHint')
     fireEvent.press(tree.getByTestId(testIdWithKey('ApprovalDigestToggle')))
     expect(tree.getByTestId(testIdWithKey('ApprovalDigest'))).toHaveTextContent(approval.payloadDigest)
+  })
+
+  // IN-333: the toggle read as a caption, and a tester opened Details below it and took the DID for the code.
+  it('the toggle looks pressable, and the code it shows is labelled apart from Details', () => {
+    const tree = render(
+      <BasicAppContext>
+        <ApprovalDetails approval={approval} />
+      </BasicAppContext>
+    )
+    const toggle = tree.getByTestId(testIdWithKey('ApprovalDigestToggle'))
+    expect(StyleSheet.flatten(toggle.props.style).minHeight).toBeGreaterThanOrEqual(44)
+    const words = within(toggle).getByText('Requests.ShowFullCode')
+    expect(StyleSheet.flatten(words.props.style).color).toBe(ColorPalette.brand.link)
+    expect(tree.UNSAFE_getAllByProps({ name: 'chevron-down', color: ColorPalette.brand.link })).toHaveLength(1)
+    fireEvent.press(toggle)
+    expect(tree.UNSAFE_getAllByProps({ name: 'chevron-up', color: ColorPalette.brand.link })).toHaveLength(1)
+    const shown = tree.getByTestId(testIdWithKey('ApprovalFullCode'))
+    expect(shown).toHaveTextContent(/Requests\.FullCodeLabel/)
+    expect(within(shown).getByTestId(testIdWithKey('ApprovalDigest'))).toHaveTextContent(approval.payloadDigest)
+    expect(StyleSheet.flatten(shown.props.style).borderLeftColor).toBe(ColorPalette.brand.link)
   })
 })
 

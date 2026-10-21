@@ -1,6 +1,7 @@
 import { useAgent, useConnections } from '@bifold/react-hooks'
 import { act, render, fireEvent, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
+import { Share } from 'react-native'
 
 import QRScanner from '../../src/components/misc/QRScanner'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
@@ -548,5 +549,105 @@ describe('QRScanner — what the codes are', () => {
     expect(tree.getByTestId(testIdWithKey('MyQRIdentityCode'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('MyQRCodeTitle'))).toHaveTextContent('Scan.YourIdentityTitle')
     expect(tree.getByTestId(testIdWithKey('MyQRCodeInstruction'))).toHaveTextContent('Scan.YourIdentityInstruction')
+  })
+
+  test('the identity is not offered as an invitation link: only the contact card is', async () => {
+    mockedUseAgent.mockReturnValue(withPersona([personaRecord]))
+    const tree = await renderQr(true)
+    expect(await tree.findByTestId(testIdWithKey('MyQRShareLink'))).toBeTruthy()
+    await act(async () => fireEvent.press(await tree.findByTestId(testIdWithKey('MyQRIdentity'))))
+    expect(tree.getByTestId(testIdWithKey('MyQRIdentityCode'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('MyQRShareLink'))).toBeNull()
+  })
+})
+
+// Connecting with someone who is not in the room: the invitation goes out as a
+// link through the system share sheet, a fresh one, so the code on screen
+// still works for someone who is.
+describe('QRScanner — the invitation as a link', () => {
+  const navigation = useNavigation()
+  let mint: jest.SpyInstance
+  let share: jest.SpyInstance
+  let warn: jest.SpyInstance
+
+  beforeAll(() => jest.useFakeTimers())
+  afterAll(() => jest.useRealTimers())
+  beforeEach(() => {
+    let n = 0
+    mint = jest.spyOn(vrcManager, 'createRelationshipInvitation').mockImplementation(async () => {
+      n += 1
+      return { record: { id: `oob-${n}` }, invitationUrl: `https://wallet.example/invite?oob=${n}` } as any
+    })
+    share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction } as any)
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    mint.mockRestore()
+    share.mockRestore()
+    warn.mockRestore()
+  })
+
+  const renderInvite = async () => {
+    const tree = render(
+      <BasicAppContext>
+        <QRScanner
+          showTabs={false}
+          defaultToConnect
+          offerRelationshipCredential
+          handleCodeScan={() => Promise.resolve()}
+          navigation={navigation as any}
+          route={{} as any}
+        />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.runAllTimers()
+    })
+    return tree
+  }
+
+  test('under the code: a button to share it as a link, and who can use one', async () => {
+    const tree = await renderInvite()
+    expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('MyQRShareLink'))).toHaveTextContent(/Scan\.ShareLink$/)
+    expect(tree.getByTestId(testIdWithKey('MyQRShareLinkNote'))).toHaveTextContent('Scan.ShareLinkNote')
+  })
+
+  test('the link shared is a new invitation; the code on screen stays as it was', async () => {
+    const tree = await renderInvite()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(mint).toHaveBeenCalledTimes(2)
+    expect(share).toHaveBeenCalledTimes(1)
+    const sent = share.mock.calls[0][0] as { message: string; url?: string }
+    expect(sent.message).toContain('https://wallet.example/invite?oob=2')
+    expect(sent.message).not.toContain('oob=1')
+    // Message only: iOS sends both when a url is given as well.
+    expect(sent.url).toBeUndefined()
+    expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('oob=2'))
+  })
+
+  test('closing the share sheet is not an error, and the button is still there', async () => {
+    share.mockRejectedValue(new Error('User did not share'))
+    const tree = await renderInvite()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(share).toHaveBeenCalledTimes(1)
+    expect(tree.getByTestId(testIdWithKey('MyQRShareLink'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('MyQRShareLinkError'))).toBeNull()
+  })
+
+  test('a link that could not be made is said, and nothing is shared', async () => {
+    const tree = await renderInvite()
+    mint.mockRejectedValueOnce(new Error('mediator unreachable'))
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(share).not.toHaveBeenCalled()
+    expect(tree.getByTestId(testIdWithKey('MyQRShareLinkError'))).toHaveTextContent('Scan.ShareLinkFailed')
+  })
+
+  test('no button before the code is ready', async () => {
+    mint.mockImplementation(() => new Promise(() => undefined))
+    const tree = await renderInvite()
+    expect(tree.getByTestId(testIdWithKey('MyQRCodeTitle'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('MyQRShareLink'))).toBeNull()
   })
 })

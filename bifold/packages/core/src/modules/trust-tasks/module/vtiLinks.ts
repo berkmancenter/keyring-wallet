@@ -456,6 +456,12 @@ export async function routeKeyringAgentLink(
       return
     }
     case 'approvals':
+      // Look at the other agents as well: the request a notification is for
+      // may wait at one that is not current, and a tap made while Keyring is
+      // open (the foreground banner) brings no return to the foreground to
+      // look for it. With Requests already open, navigating again changes
+      // nothing, so without this its row never came (IN-329).
+      void vtaAgent.lookAtOtherAgents(agent).catch(() => undefined)
       navigate('VtaRequests')
       return
     case 'enrolment': {
