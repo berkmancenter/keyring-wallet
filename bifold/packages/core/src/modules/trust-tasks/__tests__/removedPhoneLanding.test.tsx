@@ -23,6 +23,7 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: { consentRequest: 'consent-request', consentGranted: 'consent-granted' },
   resolveVtaMediator: async () => Promise.reject(new Error('offline')),
+  refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
   VtaClient: class {
     isConnected = true
     managerDid = 'did:key:z6MkManager'

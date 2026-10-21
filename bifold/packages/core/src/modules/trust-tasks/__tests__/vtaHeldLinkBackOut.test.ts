@@ -27,6 +27,7 @@ const mockClient = {
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
+  refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
   ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
   SwapDoneSignInFailed: jest.requireActual('../module/VtaClient').SwapDoneSignInFailed,
   VtaClient: jest.fn(() => mockClient),

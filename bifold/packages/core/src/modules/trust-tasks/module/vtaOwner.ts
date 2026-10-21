@@ -14,7 +14,7 @@
  * @module trust-tasks/module/vtaOwner
  */
 
-import { consentPendingOf } from './VtaClient'
+import { consentPendingOf, refusedAsNotOnAcl } from './VtaClient'
 import { StepUpDeclined } from './stepUp'
 import { VtiRefusal } from './vtiAgent'
 
@@ -155,8 +155,6 @@ export function deviceCodeIn(text: string): string | undefined {
   return found.size === 1 ? [...found][0] : undefined
 }
 
-/** The VTA's refusal of a sender it holds no live grant for (VtaClient's NOT_ON_ACL). */
-const NOT_ON_ACL = /not in (the )?ACL|ACL entry expired/i
 /** `delete_acl`'s self-delete refusal (vta-service operations/acl.rs:792-796). */
 const SELF_DELETE = /cannot delete your own ACL entry/i
 /** `create_acl`'s duplicate refusal (vta-service operations/acl.rs:391-395). */
@@ -184,7 +182,7 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   if (!(error instanceof VtiRefusal)) return refusal(NO_ANSWER.test(message) ? 'noAnswer' : 'failed')
   const details = (error.details ?? {}) as { reason?: unknown }
   if (message === STEP_UP_REQUIRED || details.reason === STEP_UP_REQUIRED) return refusal('stepUpRequired')
-  if (NOT_ON_ACL.test(message)) return refusal('accessRevoked')
+  if (refusedAsNotOnAcl(error)) return refusal('accessRevoked')
   if (SELF_DELETE.test(message)) return refusal('thisPhone')
   if (details.reason === 'conflict' && ALREADY_EXISTS.test(message)) return refusal('alreadyAdded')
   if (details.reason === 'not_found') return refusal('notFound')

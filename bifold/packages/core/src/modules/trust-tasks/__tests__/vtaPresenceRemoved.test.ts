@@ -26,6 +26,7 @@ const mockClient = {
 }
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
+  refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
   ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
   SwapDoneSignInFailed: jest.requireActual('../module/VtaClient').SwapDoneSignInFailed,
   consentPendingOf: jest.requireActual('../module/VtaClient').consentPendingOf,
@@ -41,7 +42,12 @@ const settle = async () => {
   for (let i = 0; i < 6; i++) await new Promise((resolve) => setImmediate(resolve))
 }
 
-async function onlineController() {
+const logger = { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() }
+const appAgent = { config: { logger } }
+
+async function onlineController(
+  options: { personas?: unknown[]; links?: unknown[]; keyClient?: unknown; expect?: 'online' | 'revoked' } = {}
+) {
   let record: Record<string, unknown> | undefined = { vtaDid: 'did:webvh:bob', label: 'bob', linkedAt: LINKED_AT }
   const vta = new VtaAgentController()
   vta.configure({
@@ -54,13 +60,18 @@ async function onlineController() {
       clear: async () => {
         record = undefined
       },
+      list: async () => (options.links ?? (record ? [record] : [])) as never,
     }),
-    identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [] }) as never,
+    identityStore: () =>
+      ({ setManager: async () => undefined, listPersonas: async () => options.personas ?? [] }) as never,
     agentAddress: jest.fn(async () => 'found' as const),
+    keyFetchWaitMs: 50,
+    ...(options.keyClient ? { keyClient: () => options.keyClient as never } : {}),
   })
-  await vta.restore({} as never)
+  await vta.restore(appAgent as never)
   await settle()
-  expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  if ((options.expect ?? 'online') === 'online')
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   return vta
 }
 
@@ -95,5 +106,67 @@ describe('a heartbeat the agent refused', () => {
     vta.presenceFailed(new VtiRefusal('invalid', 'displayName too long'))
     vta.presenceFailed(new VtiRefusal('permissionDenied', 'auth:stepUpRequired'))
     expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+  })
+})
+
+// IN-350: an agent that no longer had this phone's key on its ACL refused it everywhere, yet the phone said its agent
+// "didn't answer". The link is removed wherever this phone's own agent says so, and the report says it happened.
+const NOT_ON_ACL = () =>
+  new VtiRefusal('permissionDenied', 'permission denied: forbidden: DID not in ACL: did:peer:2.permanent')
+
+describe('this phone refused by its own agent, outside a heartbeat', () => {
+  beforeAll(() => jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] }))
+  afterAll(() => jest.useRealTimers())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
+    mockClient.holdPersonaKeys.mockImplementation(async () => false)
+  })
+
+  it("at the connect's hello: the link is removed at once, and the device log says so", async () => {
+    mockClient.whoAmI.mockRejectedValue(NOT_ON_ACL())
+    const vta = await onlineController({ expect: 'revoked' })
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked', vtaDid: 'did:webvh:bob', cause: 'notInAcl' })
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/no longer accepts this phone; the link is removed/))
+  })
+
+  it('a hello nobody answered, or refused by a policy that says nothing of the ACL: still linked', async () => {
+    mockClient.whoAmI.mockRejectedValue(new Error('[TrustTasks:VtaClient] the VTA did not answer whoami'))
+    await onlineController()
+    mockClient.whoAmI.mockRejectedValue(new VtiRefusal('permissionDenied', 'forbidden: auth:consent_required'))
+    await onlineController()
+  })
+
+  it("an identity's key the current agent refuses: the link is removed", async () => {
+    mockClient.holdPersonaKeys.mockRejectedValue(NOT_ON_ACL())
+    const persona = { did: 'did:webvh:persona', vtaDid: 'did:webvh:bob', kmsKeyIds: { signing: 'mem:k' } }
+    const vta = await onlineController({ personas: [persona], expect: 'revoked' })
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+  })
+
+  it('a key refetch the current agent refuses: removed, and the caller still hears the refusal to word it', async () => {
+    const persona = { did: 'did:webvh:persona', vtaDid: 'did:webvh:bob', kmsKeyIds: { keyAgreement: 'mem:ka' } }
+    const vta = await onlineController({ personas: [persona] })
+    mockClient.holdPersonaKeys.mockRejectedValue(NOT_ON_ACL())
+    await expect(vta.refetchPersonaKeys(appAgent as never, persona as never)).rejects.toThrow(/DID not in ACL/)
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+  })
+
+  it("another linked agent refusing an identity's key says nothing about this phone's link", async () => {
+    const elsewhere = { did: 'did:webvh:elsewhere', vtaDid: 'did:webvh:alice', kmsKeyIds: { keyAgreement: 'mem:ke' } }
+    const other = {
+      holdPersonaKeys: jest.fn(async () => Promise.reject(NOT_ON_ACL())),
+      disconnect: jest.fn(async () => undefined),
+    }
+    const vta = await onlineController({
+      personas: [elsewhere],
+      links: [
+        { vtaDid: 'did:webvh:bob', label: 'bob', linkedAt: LINKED_AT },
+        { vtaDid: 'did:webvh:alice', label: 'alice', linkedAt: LINKED_AT },
+      ],
+      keyClient: other,
+    })
+    await expect(vta.refetchPersonaKeys(appAgent as never, elsewhere as never)).rejects.toThrow(/DID not in ACL/)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: 'did:webvh:bob' })
   })
 })

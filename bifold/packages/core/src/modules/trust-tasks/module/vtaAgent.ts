@@ -40,6 +40,7 @@ import {
   VTA_TASK,
   VtaClient,
   consentPendingOf,
+  refusedAsNotOnAcl,
   resolveVtaMediator,
   type KeySwapNotDone,
   type VtaAclEntry,
@@ -685,8 +686,15 @@ export class VtaAgentController {
         void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
     }
     if (event.type === 'linked') this.note('linked')
-    else if (event.type === 'accessRevoked') this.note('revoked')
-    else if (wasOnline && !isOnline) this.note('wentOffline')
+    else if (event.type === 'accessRevoked') {
+      this.note('revoked')
+      // Seen in a report, not only on screen (IN-350: a refused key read as "didn't answer", and nothing said the
+      // link had gone).
+      if (next.kind === 'revoked')
+        this.agent?.config?.logger?.warn?.(
+          `[VTA] the agent no longer accepts this phone; the link is removed: ${event.reason}`
+        )
+    } else if (wasOnline && !isOnline) this.note('wentOffline')
     else if (!wasOnline && isOnline && previous.kind === 'linked') this.note('reconnected')
   }
 
@@ -780,8 +788,14 @@ export class VtaAgentController {
         // Say hello to the VTA so it caches a reply route for this DID. Without a
         // round-trip the VTA has never seen this approver and drops a consent
         // request to it as "no mediator route" (VTI-24). whoami is the cheapest
-        // authenticated call and is what makes the approver reachable.
-        await client.whoAmI().catch(() => undefined)
+        // authenticated call and is what makes the approver reachable. An
+        // agent that no longer has this phone's key on its ACL says so here:
+        // that ends the connect, so the link is removed at once rather than at
+        // the next presence tick (IN-350). Any other failure of the hello is
+        // not a verdict on the link.
+        await client.whoAmI().catch((error: unknown) => {
+          if (refusedAsNotOnAcl(error)) throw error
+        })
         this.set({ status: 'connected', managerDid: client.managerDid })
         this.learnAgentName(client, vtaDid)
       } catch (error) {
@@ -2692,6 +2706,12 @@ export class VtaAgentController {
         agent.config?.logger?.warn?.(
           `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
         )
+        // This phone's own agent refusing its key is the link's end, as a refused heartbeat is (IN-350). Another
+        // linked agent refusing says nothing about this link.
+        if (refusedAsNotOnAcl(e) && vtaDid === this.agentAddress()) {
+          this.refused(e)
+          return
+        }
       }
     }
   }
@@ -2759,7 +2779,14 @@ export class VtaAgentController {
     const linking = link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid
     if (linking) {
       await this.untilOnline(vtaDid, this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
-      await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      await this.client(agent, vtaDid)
+        .holdPersonaKeys(persona)
+        .catch((error: unknown) => {
+          // This phone's own agent no longer accepts it: the link ends here too (IN-350), and the caller (the persona
+          // inbox) still hears the refusal, to word it.
+          if (refusedAsNotOnAcl(error)) this.refused(error)
+          throw error
+        })
       DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       return
     }

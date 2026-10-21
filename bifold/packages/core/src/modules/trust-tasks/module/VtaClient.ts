@@ -635,10 +635,18 @@ export class ManagerKeyUnresolved extends Error {
  * `permissionDenied` also covers policy refusals that say nothing about which
  * key the VTA knows. For a probe this is conclusive: the key is not (or no
  * longer) on the ACL.
+ *
+ * The one test for "this phone's agent no longer accepts this phone" (IN-350):
+ * the link, the device screens and the persona inbox all read it from here.
+ * It reads any error's message, so a refusal wrapped by the caller (the persona
+ * inbox's) still counts. The words alone do not say WHO refused: a community
+ * words its own ACL refusal the same way (vtc-service acl/storage.rs:85). Apply
+ * it only to an error from a call to this phone's own agent, never to one from
+ * a community.
  */
 const NOT_ON_ACL = /not in (the )?ACL|ACL entry expired/i
-function refusedAsNotOnAcl(error: unknown): boolean {
-  return error instanceof VtiRefusal && NOT_ON_ACL.test(error.message)
+export function refusedAsNotOnAcl(error: unknown): boolean {
+  return error instanceof Error && NOT_ON_ACL.test(error.message)
 }
 
 /**
