@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
+import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
@@ -97,6 +97,13 @@ try {
       await dismissTourIfPresent(a);
       await openQrSheet(a);
       await tapTestId(a, "GenerateRelationshipQRCode", 15000);
+      // A fresh install meets the camera disclosure first ("Allow camera use"): Continue, then the system alert, as
+      // showRelationshipInvitation does (the 1021-0158 RC gate stopped here).
+      if (await existsTestId(a, "Continue", 5000)) {
+        await tapTestId(a, "Continue");
+        await acceptSystemAlertIfPresent(a);
+      }
+      await existsTestId(a, "MyQRShareLink", 20000);
       await scrollToTestId(a, "MyQRShareLink", 4).catch(() => undefined);
       // The code's own invitation is readable only in a dev build (InvitationUrl, __DEV__); a release build says so.
       const codeEl = (await existsTestId(a, "InvitationUrl", 5000)) ? await a.$("~InvitationUrl") : undefined;
