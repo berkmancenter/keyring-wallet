@@ -18,6 +18,8 @@ import type { ShareContent } from 'react-native'
 
 import { BifoldError } from '../types/error'
 
+import { isShortInvitationLink } from './shortInvitationLink'
+
 /**
  * What the share sheet sends: the link, and nothing else. On iOS a link item
  * (`url`), so AirDrop and Messages hand over a link to tap: shared as text,
@@ -30,6 +32,15 @@ export function invitationShareContent(invitationUrl: string, title: string, os:
 }
 
 const INLINE_INVITATION = /[?&](oob|c_i|d_m)=([^&#\s]*)/
+
+/**
+ * Whether a deep link carries an invitation for the connect path: an inline one
+ * (`oob`, `c_i`, `d_m`), a link to fetch one from (`url`), or one of our short
+ * links, which Credo fetches. Anything else is not handed to it.
+ */
+export function deepLinkCarriesInvitation(link: string): boolean {
+  return /[?&](oob|c_i|d_m|url)=/.test(link) || isShortInvitationLink(link)
+}
 
 /** Whether `link` carries an inline invitation that cannot be read. */
 export function invitationLinkIncomplete(link: string): boolean {
