@@ -14,7 +14,7 @@
  * @module trust-tasks/screens/VtaRequests
  */
 import { useAgent } from '@bifold/react-hooks'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { HeaderBackButton } from '@react-navigation/elements'
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -50,10 +50,14 @@ const VtaRequests: React.FC = () => {
   const { ColorPalette } = useTheme()
   const navigation = useNavigation() as unknown as Nav
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
-  // Opening Requests looks at the other agents too: a request there waits on this phone as well.
-  useEffect(() => {
-    if (agent) void vtaAgent.lookAtOtherAgents(agent)
-  }, [agent])
+  // Coming to Requests looks at the other agents too: a request there waits on
+  // this phone as well. On every focus, not only the first mount: Requests left
+  // open under another screen and returned to used to show what it saw then.
+  useFocusEffect(
+    useCallback(() => {
+      if (agent) void vtaAgent.lookAtOtherAgents(agent)
+    }, [agent])
+  )
 
   // The clock: a request expires, and "quiet long enough" arrives, with nothing else happening.
   const [now, setNow] = useState(() => Date.now())

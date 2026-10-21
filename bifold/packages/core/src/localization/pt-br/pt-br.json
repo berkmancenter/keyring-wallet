@@ -2374,5 +2374,8 @@
       "alreadyOnPhone": "Este telefone já tem esse agente.",
       "noCode": "Não há código para usar. Escaneie novamente o código na página do seu provedor."
     }
+  },
+  "MessageWake": {
+    "Fetching": "Buscando novas mensagens…"
   }
 }

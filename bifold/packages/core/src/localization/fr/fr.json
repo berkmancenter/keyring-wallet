@@ -2465,5 +2465,8 @@
       "alreadyOnPhone": "Ce téléphone a déjà cet agent.",
       "noCode": "Il n'y a aucun code à utiliser. Scannez à nouveau le code sur la page de votre hébergeur."
     }
+  },
+  "MessageWake": {
+    "Fetching": "Récupération des nouveaux messages…"
   }
 }
