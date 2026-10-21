@@ -124,6 +124,19 @@ export function fromGrant(entries, grant) {
 }
 
 /**
+ * A case's own entries since its grant: the grant, wherever its subject has rotated (`fromGrant`), and whatever that
+ * key went on to create (`ownedBy`), so a second key the phone made still counts. Another leg's grant on the same
+ * runner in the same minutes (same admin, same label, its own createdAt) does not: the 1021-0158 RC gate's linkwait
+ * read smoke-ios's grant, 25 s into its window, as a second entry of its own. Pure.
+ */
+export function grantEntries(entries, grant) {
+  const own = fromGrant(entries, grant);
+  if (!own.length) return [];
+  const chain = ownedBy(entries.filter((e) => !own.includes(e)), own[0].subject, own.slice(1).map((e) => e.subject));
+  return [...own, ...chain];
+}
+
+/**
  * The entry a grant of `did` made, read after the grant against `before` (the ACL just before it). By subject while
  * the phone has not rotated; once it has (a live app's poll can rotate within a second of the grant), the entry new
  * since `before` labelled like the grant. Several such entries mean another leg granted on the same runner in the same

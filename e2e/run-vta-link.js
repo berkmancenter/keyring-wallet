@@ -61,7 +61,7 @@ import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/confi
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, readClocks, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { REAL_CLOCKS, clocksSaid, linkWaitTiming } from "./lib/clocks.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { deleteAcl, fromGrant, grantAfter, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
+import { deleteAcl, fromGrant, grantAfter, grantEntries, heirOf, listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 import { createLinkPage } from "./lib/pages/link.js";
 import { createRows } from "./lib/rows.js";
@@ -615,7 +615,8 @@ async function linkCase(driver, which, timing) {
     const did = await addressCode();
     grant(did);
     // The grant's own entry, by the VTA's clock: "since the grant" counts from here (review on #418).
-    const grantAt = (aclList() || []).find((e) => e.subject === did)?.createdAt;
+    const grantEntry = (aclList() || []).find((e) => e.subject === did);
+    const grantAt = grantEntry?.createdAt;
     block(true);
     // Copy must be on screen to be tapped: an off-screen node may take the click or not. Not found after scrolling is
     // the driver's failure, not Create's, so it stops the case as broken rather than writing a FAIL row about the app.
@@ -689,13 +690,16 @@ async function linkCase(driver, which, timing) {
     // The case's own entries, counted from its grant: exactly one, the grant (a parallel leg, a sweep or a person on
     // the runner can move the total meanwhile). acl/swap-key keeps the entry but can move it to a new subject, so its
     // subject still being `did` is "same key"; otherwise it is "same grant, no second key" (review on #418).
-    const mine = aclSince(grantAt);
+    // Only this grant's entries: another leg linking to the same runner meanwhile is not this case's (1021-0158).
+    const sinceGrant = aclSince(grantAt);
+    const mine = sinceGrant && grantEntry ? grantEntries(sinceGrant, grantEntry) : null;
+    const others = Array.isArray(mine) ? sinceGrant.filter((e) => !mine.includes(e)) : [];
     const oneGrant = Array.isArray(mine) && mine.length === 1;
     const sameSubject = oneGrant && mine[0].subject === did;
     const keyHeld = sameKey === true || (sameKey === null && linked && oneGrant);
     const keySaid = sameKey !== null ? String(sameKey) : `no key text in this layout; judged by the link: ${linked && oneGrant ? (sameSubject ? "same key: yes" : "same grant, key rotated") : "not shown"}`;
     return row(unreachable && checkAgain && keyHeld && !failedEarly && linked && oneGrant,
-      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant ${Array.isArray(mine) ? mine.length : "?"} · ${clocksSaid(t.clocks)}`);
+      `whole-Farm cut (every ic3.dev host shares the blocked Cloudflare addresses, the agent too): Copy started the window (AgentCreateWaiting ${waitingShown}); "didn't answer" after ${waited} s (due past ${t.noAnswer.windowS}) with no failure before it ${!failedEarly}; then "${said.slice(0, 60)}" + Check again ${checkAgain}; same key ${keySaid}; "${"grant check did not finish"}" lines ${marks}; linked after unblocking ${linked}; ACL ${before} → ${after}, entries since the grant: this case's ${Array.isArray(mine) ? mine.length : "?"}, others' ${others.length}${others.length ? ` (${others.map((e) => e.subject.slice(0, 16)).join(", ")}: not counted)` : ""} · ${clocksSaid(t.clocks)}`);
   }
   if (which === "create-window-paused") {
     // UI/UX (10-08, from 59feae2f): two cases in one install. The absences are the real-clock ones (3 and 15 min)
