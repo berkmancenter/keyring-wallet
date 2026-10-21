@@ -148,7 +148,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 | Name | Kind | Holds | Used by |
 | --- | --- | --- | --- |
-| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off** | staging.yaml (both store builds) |
+| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off**. It stays unset until a bad update recovers without a force-quit (today an iOS update that crashes at load leaves a black screen) and a store build has recorded a fingerprint a publish matches (docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md) | staging.yaml (both store builds) |
 | `OTA_PUBLIC_KEY` | variable | the loader's RSA public key (PEM; public) | staging.yaml, ota-publish.yml |
 | `OTA_CHANNEL` | variable | the channel, default `production` | staging.yaml, ota-publish.yml |
 | `OTA_SERVER_URL` | variable | `https://<OTA_HOST>` for the publisher | ota-publish.yml |
