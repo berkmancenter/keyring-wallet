@@ -160,6 +160,12 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 Every channel waits for the `ota-approval` reviewer.
 
+The channels are not isolated in the same way:
+
+- **`device-test` is isolated cryptographically.** Only the test app carries its public key, so even a store phone that asked for that channel would refuse its bundles.
+- **`preview` is isolated by channel routing alone.** It is signed with the store key on purpose, since its audience is store builds. Any store build that asks for the preview channel accepts its bundles. Treat a preview publish as reaching real users who opted in.
+- **`production` has no isolation at all:** it is what every store build asks for.
+
 The key pair is generated offline (`npx hot-updater keys generate`). The public
 half goes into `OTA_PUBLIC_KEY`; the private half goes into the `ota` environment
 plus an offline backup. Replacing the key takes a store build, because the public

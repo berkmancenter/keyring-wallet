@@ -14,8 +14,9 @@
  *   accept a device-test bundle.
  * - When both private keys are present they must differ.
  * - --tamper (device-test only) signs with a fresh key made here and thrown
- *   away, while the checkout keeps the test public key: the phone must refuse
- *   the bundle. That is the trial's "tampered bundle is refused" step.
+ *   away, of the test key's own type and size, while the checkout keeps the
+ *   test public key: the phone must refuse the bundle. That is the trial's
+ *   "tampered bundle is refused" step.
  * - --check validates without writing anything (a dry run).
  *
  * Writes <out>/ota-private-key.pem (mode 600) and <out>/ota-public-key.pem,
@@ -73,7 +74,11 @@ export const selectSigningKey = ({ channel, signingKeyPem, testSigningKeyPem, pu
     if (!tamper) {
       return { privateKeyPem: test.export({ type: 'pkcs8', format: 'pem' }), publicKeyPem, role: 'test key' }
     }
-    const throwaway = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey
+    // The same type and size as the test key, so the phone's refusal can only mean
+    // "signed by a key this app does not carry", not "a signature of an odd shape".
+    if (test.asymmetricKeyType !== 'rsa') throw new Error('OTA_TEST_SIGNING_KEY_PEM must be an RSA key')
+    const { modulusLength, publicExponent } = test.asymmetricKeyDetails
+    const throwaway = generateKeyPairSync('rsa', { modulusLength, publicExponent: Number(publicExponent) }).privateKey
     return {
       privateKeyPem: throwaway.export({ type: 'pkcs8', format: 'pem' }),
       publicKeyPem,
