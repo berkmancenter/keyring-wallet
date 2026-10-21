@@ -363,6 +363,7 @@ jobs:
           name: ota-fingerprint-android
           path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
           retention-days: 90
+          if-no-files-found: error
 
       - name: Create environment settings
         working-directory: app
@@ -914,6 +915,7 @@ jobs:
           name: ota-fingerprint-ios
           path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
           retention-days: 90
+          if-no-files-found: error
 
       - name: Bump Build No.
         id: ios-version

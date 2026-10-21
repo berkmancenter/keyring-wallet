@@ -8,19 +8,19 @@
 #   scripts/ota/record-fingerprint.sh <ios|android> <out-dir>
 #
 # Writes <out-dir>/fingerprint.json (every source, for naming a difference
-# later), prints the hash, and sets the step output `hash`.
-#
-# Exit status (staging.yaml runs this without continue-on-error):
-#   0  recorded; or the fingerprint could not be computed, which is said as a
-#      warning and sets no `hash` (a later publish for this build is refused,
-#      and the release goes on)
-#   3  a file it touched could not be put back: the build would ship the OTA
-#      key, channel and fingerprint with OTA off, so the build job fails
-#      ("nothing baked into the shipped app") It changes nothing in
+# later), prints the hash, and sets the step output `hash`. It changes nothing in
 # the build: `hot-updater fingerprint create` also writes the hash into
 # Info.plist and the Android manifest, so those files (and any fingerprint.json)
 # are put back exactly as they were. A build with OTA off ships unchanged; one
 # with OTA on gets its fingerprint from the OTA step, as before.
+#
+# Exit status (staging.yaml runs this without continue-on-error):
+#   0  recorded; or the fingerprint could not be computed, which is said as a
+#      warning and sets no `hash` (a later publish for this build is refused,
+#      and the release goes on).
+#   3  a file it touched could not be put back: the build would ship the OTA
+#      key, channel and fingerprint with OTA off, so the build job fails
+#      ("nothing baked into the shipped app").
 set -euo pipefail
 
 platform=${1:?ios or android}
