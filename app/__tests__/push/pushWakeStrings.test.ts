@@ -156,3 +156,47 @@ describe('the iOS notification delegate', () => {
     expect(delegate).toContain('UIApplicationLaunchOptionsRemoteNotificationKey')
   })
 })
+
+// IN-309: a wake that arrives while Keyring is open was dropped by iOS, since
+// the AppDelegate did not say how to present it. Native code is not run here,
+// so this reads it: the method exists, shows a wake as a banner with its
+// sound and no icon badge, and leaves every other notification as it was.
+describe('a wake that arrives while Keyring is open (iOS)', () => {
+  const delegate = () => fs.readFileSync(path.join(APP, 'ios', 'AriesBifold', 'AppDelegate.mm'), 'utf8')
+  const method = () => {
+    const src = delegate()
+    const start = src.indexOf('willPresentNotification:(UNNotification *)notification')
+    expect(start).toBeGreaterThan(-1)
+    return src.slice(start, src.indexOf('\n}\n', start))
+  }
+
+  it('is presented: banner, Notification Centre and sound, only for the gateway wake', () => {
+    const body = method()
+    expect(body).toMatch(/KeyringIsWakeNotification\(userInfo\)/)
+    expect(body).toMatch(/UNNotificationPresentationOptionBanner/)
+    expect(body).toMatch(/UNNotificationPresentationOptionList/)
+    expect(body).toMatch(/UNNotificationPresentationOptionSound/)
+  })
+
+  it('sets no icon badge (the app counts its own waiting requests), and presents nothing else', () => {
+    const body = method()
+    expect(body).not.toMatch(/UNNotificationPresentationOptionBadge/)
+    expect(body).toMatch(/completionHandler\(UNNotificationPresentationOptionNone\)/)
+  })
+
+  // A message wake while Keyring is open: the message arrives in the app,
+  // and the in-app notice says so; a banner too would say it twice.
+  it('a message wake is not presented: only an approval wake gets the banner', () => {
+    const body = method()
+    expect(body).toMatch(/KeyringIsWakeNotification\(userInfo\) && !KeyringIsMessageWake\(userInfo\)/)
+    const src = delegate()
+    expect(src).toMatch(/static BOOL KeyringIsMessageWake\(NSDictionary \*userInfo\)/)
+    expect(src).toMatch(/hasPrefix:@"keyring-msg-"/)
+    // The tap's destination reads the same rule.
+    expect(src).toMatch(/return KeyringIsMessageWake\(userInfo\) \? KeyringMessagesLink : KeyringApprovalsLink;/)
+  })
+
+  it('is on the delegate Firebase messaging forwards to', () => {
+    expect(delegate()).toMatch(/\[UNUserNotificationCenter currentNotificationCenter\]\.delegate = self;/)
+  })
+})

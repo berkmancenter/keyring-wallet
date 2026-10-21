@@ -25,15 +25,21 @@ static BOOL KeyringIsWakeNotification(NSDictionary *userInfo)
   return [alert isKindOfClass:[NSDictionary class]] && [alert[@"loc-key"] isEqual:@"KEYRING_WAKE"];
 }
 
-// Where a tapped wake leads: the Messages tab for a message wake, whose thread
-// id is its own collapse id, starting keyring-msg- (gateway patch 0003); the
-// approvals for every other wake (pushHandlers.ts tapKind does the same on Android).
-static NSString *KeyringWakeLink(NSDictionary *userInfo)
+// Whether a wake is for a message: its thread id is its own collapse id,
+// starting keyring-msg- (gateway patch 0003). pushHandlers.ts tapKind reads
+// the same on Android.
+static BOOL KeyringIsMessageWake(NSDictionary *userInfo)
 {
   id aps = userInfo[@"aps"];
   id thread = [aps isKindOfClass:[NSDictionary class]] ? aps[@"thread-id"] : nil;
-  BOOL message = [thread isKindOfClass:[NSString class]] && [thread hasPrefix:@"keyring-msg-"];
-  return message ? KeyringMessagesLink : KeyringApprovalsLink;
+  return [thread isKindOfClass:[NSString class]] && [thread hasPrefix:@"keyring-msg-"];
+}
+
+// Where a tapped wake leads: the Messages tab for a message wake, the
+// approvals for every other wake.
+static NSString *KeyringWakeLink(NSDictionary *userInfo)
+{
+  return KeyringIsMessageWake(userInfo) ? KeyringMessagesLink : KeyringApprovalsLink;
 }
 
 @interface AppDelegate () <UNUserNotificationCenterDelegate>
@@ -84,6 +90,33 @@ static NSString *KeyringWakeLink(NSDictionary *userInfo)
   }
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
+}
+
+// A wake that arrives while Keyring is open. Without this, iOS shows nothing
+// for a notification whose app is in the foreground, so an approval request
+// made from the phone itself (My Agent > "Send me a test request") rang the
+// gateway and APNs delivered it, and the person saw no banner (IN-309, 264).
+//
+// - An approval wake: a banner, in Notification Centre, with its sound, and no
+//   app-icon badge, since the app keeps its own count of waiting requests.
+// - A message wake: nothing. The app is open, so the message itself arrives
+//   in it, and the in-app message notice (InAppMessageNotifier) says so unless
+//   that chat is on screen. A banner too would say it twice.
+// - Anything else: as before, nothing.
+//
+// Firebase messaging takes the delegate over at launch and forwards this to
+// it for any notification that is not its own (no gcm.message_id).
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
+{
+  NSDictionary *userInfo = notification.request.content.userInfo;
+  if (KeyringIsWakeNotification(userInfo) && !KeyringIsMessageWake(userInfo)) {
+    completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList |
+                      UNNotificationPresentationOptionSound);
+    return;
+  }
+  completionHandler(UNNotificationPresentationOptionNone);
 }
 
 // A tap on a notification while the app is running or suspended.
