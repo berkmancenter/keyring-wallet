@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
+import { byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
@@ -37,6 +37,8 @@ const rows = createRows({
   label: "pair-ios",
   needs: { "pair-share-link-connects": ["pair-share-link-made"], "pair-wake-opens-chat": ["pair-share-link-connects"], "pair-wake-no-unread-list": ["pair-wake-opens-chat"] },
 });
+// Off when the build names no push gateway: no notification permission, so no banner to tap (pair-ios.sh).
+const WAKE_NOT_RUN = process.env.PAIR_WAKE === "off" ? "NOT RUN (no push permission in gate builds): #452 rests on its unit and real-navigator tests and the device check" : undefined;
 const simctl = (...args) => execFileSync("xcrun", ["simctl", ...args], { encoding: "utf8", timeout: 60000 });
 
 /** The message-wake outcomes the app logged since `sinceMs` ("message wake: chat|list|moved", TabStack.tsx). */
@@ -141,17 +143,18 @@ try {
       for (const until = Date.now() + 60000; Date.now() < until && !chat; await sleep(2000)) chat = await onChat(a, B);
       await screenshot(a, "pair-wake-chat").catch(() => undefined);
       return { ok: chat, detail: `tapped a wake with B's message unread: "Fetching new messages…" seen ${fetching} · B's chat open ${chat} · logged ${wakeOutcomes(A.udid, since).join(",") || "no outcome"} (tap path only; the mediator wake isn't exercised)` };
-    });
+    }, { skip: WAKE_NOT_RUN });
     await rows.row("pair-wake-no-unread-list", async () => {
       const since = Date.now();
       await pushAndTapWake(a, A.udid, "list");
       // The wake looks for an unread message for a while before it settles on the list (messageWake.ts).
       await sleep(20000);
-      const list = await existsTestId(a, "AddContact", 5000);
+      // AddContact is the Messages list's own header button: present and on screen, not under a chat pushed over it.
+      const list = (await existsTestId(a, "AddContact", 5000)) && (await byTestId(a, "AddContact").isDisplayed().catch(() => false));
       const chat = await onChat(a, B);
       await screenshot(a, "pair-wake-list").catch(() => undefined);
       return { ok: list && !chat, detail: `tapped a wake with nothing unread: the Messages list ${list} · a chat open ${chat} · logged ${wakeOutcomes(A.udid, since).join(",") || "no outcome"} (tap path only)` };
-    });
+    }, { skip: WAKE_NOT_RUN });
   } finally {
     stop();
   }

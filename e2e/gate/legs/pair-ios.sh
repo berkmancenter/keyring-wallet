@@ -5,6 +5,7 @@
 # agent, so the leg holds no runner. A and B default to kk's applicant and the sign-in simulator (both are wiped by
 # their own legs too, and the iOS group runs one leg at a time); PAIR_A_SIM_UDID / PAIR_B_SIM_UDID name others.
 # The build needs the testIDs MyQRShareLink (#453) and MessagesFetchingNew (#452): an older build SKIPs every row.
+# The wake rows also need a build that names a push gateway; on the gate's push-off build they are NOT RUN.
 . "$(dirname "$0")/../lib.sh"; gate_env
 PAIR_ROWS="pair-share-link-made pair-share-link-connects pair-wake-opens-chat pair-wake-no-unread-list"
 leg_begin pair-ios "$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)" "$CAND_APP"
@@ -18,6 +19,12 @@ fi
 miss=; for id in MyQRShareLink MessagesFetchingNew; do grep -aq "$id" "$CAND_APP/main.jsbundle" || miss="$miss $id"; done
 if [ -n "$miss" ]; then for r in $PAIR_ROWS; do row "$r" SKIP "the build lacks$miss (before bifold #452/#453)"; done; exit 0; fi
 need IOS_VERSION
+# The wake rows need the notification permission, which the app asks for only when the build names a push gateway.
+# The gate's iOS build is the push-off one (the testers' configuration): its config carries MEDIATOR_URL and no
+# PUSH_GATEWAY_URL key, so the two wake rows are NOT RUN there. The config is never changed to make them run.
+PAIR_WAKE=on
+bin="$CAND_APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$CAND_APP/Info.plist" 2>/dev/null)"
+if strings "$bin" 2>/dev/null | grep -q '^MEDIATOR_URL$' && ! strings "$bin" | grep -q '^PUSH_GATEWAY_URL$'; then PAIR_WAKE=off; fi
 T0S=$(date +%s)
 wda_stop() { local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$1" | grep -v grep | awk '{print $1}'); do kill "$p"; done; }
 fin() {
@@ -33,7 +40,7 @@ for u in "$A" "$B"; do
 done
 cd "$E2E"
 E2E_APP_ID=$BID PLATFORM=ios IOS_APP=$CAND_APP IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4776 E2E_RELEASE=1 \
-  A_UDID=$A A_NAME="$A_NAME" B_UDID=$B B_NAME="$B_NAME" \
+  A_UDID=$A A_NAME="$A_NAME" B_UDID=$B B_NAME="$B_NAME" PAIR_WAKE=$PAIR_WAKE \
   galarm 1800 node run-pair-ios.mjs > "$LEG_DIR/pair.out" 2>&1; rc=$?
 take_rows "$LEG_DIR/pair.out"
 driver_rc pair-ios-driver "$rc" "$LEG_DIR/pair.out"
