@@ -40,6 +40,7 @@ import {
   VTA_TASK,
   VtaClient,
   consentPendingOf,
+  refusedAsNotOnAcl,
   resolveVtaMediator,
   type KeySwapNotDone,
   type VtaAclEntry,
@@ -349,7 +350,9 @@ const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
  */
 export function connectFailureRevokes(error: unknown): boolean {
   if (isUnsettledSwap(error)) return error.refusedBoth
-  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error))
+  // The ACL's own words count however the rest of the refusal is worded: a bare "ACL entry expired", without
+  // "forbidden", must not read as unreachable (the community service already words an expiry that way).
+  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error)) || refusedAsNotOnAcl(error)
 }
 
 /** A key swap the VTA could not be asked about, or refused both keys of. */
@@ -685,8 +688,15 @@ export class VtaAgentController {
         void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
     }
     if (event.type === 'linked') this.note('linked')
-    else if (event.type === 'accessRevoked') this.note('revoked')
-    else if (wasOnline && !isOnline) this.note('wentOffline')
+    else if (event.type === 'accessRevoked') {
+      this.note('revoked')
+      // Seen in a report, not only on screen (IN-350: a refused key read as "didn't answer", and nothing said the
+      // link had gone).
+      if (next.kind === 'revoked')
+        this.agent?.config?.logger?.warn?.(
+          `[VTA] the agent no longer accepts this phone; the link is removed: ${event.reason}`
+        )
+    } else if (wasOnline && !isOnline) this.note('wentOffline')
     else if (!wasOnline && isOnline && previous.kind === 'linked') this.note('reconnected')
   }
 
@@ -780,12 +790,21 @@ export class VtaAgentController {
         // Say hello to the VTA so it caches a reply route for this DID. Without a
         // round-trip the VTA has never seen this approver and drops a consent
         // request to it as "no mediator route" (VTI-24). whoami is the cheapest
-        // authenticated call and is what makes the approver reachable.
-        await client.whoAmI().catch(() => undefined)
+        // authenticated call and is what makes the approver reachable. An
+        // agent that no longer has this phone's key on its ACL says so here:
+        // that ends the connect, so the link is removed at once rather than at
+        // the next presence tick (IN-350). Any other failure of the hello is
+        // not a verdict on the link.
+        await client.whoAmI().catch((error: unknown) => {
+          if (refusedAsNotOnAcl(error)) throw error
+        })
         this.set({ status: 'connected', managerDid: client.managerDid })
         this.learnAgentName(client, vtaDid)
       } catch (error) {
         this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+        // Removed here, for every caller: My Agent's own connect drops the throw, and would otherwise wait for the
+        // next presence tick (IN-350). Only while linked (`refused`): a key being enrolled is not on the ACL yet.
+        if (refusedAsNotOnAcl(error)) this.refused(error)
         throw error
       }
     })()
@@ -2692,6 +2711,12 @@ export class VtaAgentController {
         agent.config?.logger?.warn?.(
           `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
         )
+        // This phone's own agent refusing its key is the link's end, as a refused heartbeat is (IN-350). Another
+        // linked agent refusing says nothing about this link.
+        if (refusedAsNotOnAcl(e) && vtaDid === this.agentAddress()) {
+          this.refused(e)
+          return
+        }
       }
     }
   }
@@ -2759,7 +2784,14 @@ export class VtaAgentController {
     const linking = link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid
     if (linking) {
       await this.untilOnline(vtaDid, this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
-      await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      await this.client(agent, vtaDid)
+        .holdPersonaKeys(persona)
+        .catch((error: unknown) => {
+          // This phone's own agent no longer accepts it: the link ends here too (IN-350), and the caller (the persona
+          // inbox) still hears the refusal, to word it.
+          if (refusedAsNotOnAcl(error)) this.refused(error)
+          throw error
+        })
       DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       return
     }
@@ -2889,6 +2921,8 @@ export class VtaAgentController {
   /** An owner act's failure, worded; an agent that no longer knows this phone also moves the link. */
   private refused(error: unknown): DeviceActionRefused {
     const refusal = deviceRefusalOf(error)
+    // Only a working link is ended: while a phone is being linked its key is not on the ACL yet, and a refusal then is
+    // the link's own business (not yet granted), never a removal.
     if (refusal.reason === 'accessRevoked' && this.state.link.kind === 'linked') {
       this.dispatch({ type: 'accessRevoked', reason: refusal.detail ?? refusal.message })
     }
