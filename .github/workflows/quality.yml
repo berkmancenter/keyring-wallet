@@ -153,3 +153,8 @@ jobs:
 
       - name: Automated testing
         run: yarn test
+
+      # The OTA publishing scripts' own tests (node:test, Node built-ins only):
+      # among them, which key each channel signs with (scripts/ota/signing-key.mjs).
+      - name: OTA script tests
+        run: node --test scripts/ota/
