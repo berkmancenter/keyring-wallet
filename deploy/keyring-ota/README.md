@@ -141,6 +141,12 @@ code changing, and nothing in this tree would notice. **Any bump of
 3. Check the JS package for module-level effects.
 
 Record the result in the bump PR. Also run the OTA gate leg (`gate-ota.yml`).
+The iOS update watchdog in `app/ios/AriesBifold/AppDelegate.mm` reads
+hot-updater's own `bundle-store/metadata.json` (`verification_pending`,
+`staging_bundle_id`) to tell a trial launch apart, since 0.36.18 has no public
+API for it. Check that the file and both keys still mean the same thing; if they
+don't, the watchdog never arms, which is safe but leaves the black screen it
+exists to close.
 Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 (the server's update-check routes and the app's loader are one protocol).
 
