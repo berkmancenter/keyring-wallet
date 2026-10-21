@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fromGrant, grantAfter, grantEntries, ownedBy } from "./aclCleanup.js";
+import { fromGrant, grantAfter, grantEntries, linkedPhoneEntries, ownedBy } from "./aclCleanup.js";
 
 const ADMIN = "did:key:zRunnerAdmin";
 // 1015-1852's link-address-resume: this case granted its phone's temporary key; kk, beside it, linked its own phone to
@@ -75,4 +75,27 @@ test("grantEntries: a second key the phone made still counts, so the row still f
 
 test("grantEntries: no grant read, nothing counted", () => {
   assert.deepEqual(grantEntries([smoke], undefined), []);
+});
+
+// The refused leg (IN-350): the phone's own grant, found from its link record, and nothing else on the runner.
+const link = { before: ["did:key:zCi", "did:key:zOther"], tempDid: "did:key:zTemp", heirs: ["did:peer:2.zRotated"] };
+const runner = [
+  { subject: "did:key:zCi", createdBy: ADMIN, createdAt: "2026-10-01T00:00:00Z", label: "keyring-ci-gate" },
+  { subject: "did:key:zOther", createdBy: ADMIN, createdAt: "2026-10-21T08:00:00Z", label: "keyring-admin" },
+  { subject: "did:peer:2.zRotated", createdBy: ADMIN, createdAt: "2026-10-21T08:01:00Z", label: "keyring-admin" },
+  { subject: "did:key:zLegBeside", createdBy: ADMIN, createdAt: "2026-10-21T08:01:30Z", label: "keyring-admin" },
+];
+
+test("linkedPhoneEntries: the phone's rotated grant, not what was there before nor another leg's new grant", () => {
+  assert.deepEqual(linkedPhoneEntries(runner, link).map((e) => e.subject), ["did:peer:2.zRotated"]);
+});
+
+test("linkedPhoneEntries: a key the phone made from its grant is its own too", () => {
+  const made = { subject: "did:key:zMade", createdBy: "did:peer:2.zRotated", createdAt: "2026-10-21T08:02:00Z", label: "keyring-admin" };
+  assert.deepEqual(linkedPhoneEntries([...runner, made], link).map((e) => e.subject), ["did:peer:2.zRotated", "did:key:zMade"]);
+});
+
+test("linkedPhoneEntries: no link record, nothing selected", () => {
+  assert.deepEqual(linkedPhoneEntries(runner, {}), []);
+  assert.deepEqual(linkedPhoneEntries(runner, { before: [], heirs: ["did:peer:2.zRotated"] }), []);
 });
