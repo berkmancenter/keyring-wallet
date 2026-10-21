@@ -171,7 +171,6 @@ const TabStack: React.FC = () => {
             names: {
               tabStack: Stacks.TabStack,
               messageStack: TabStacks.MessageStack,
-              messages: Screens.Messages,
               contactStack: Stacks.ContactStack,
               chat: Screens.Chat,
             },

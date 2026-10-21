@@ -1,34 +1,54 @@
 /**
- * A tapped message notification with REAL navigators in the app's shape: the
- * root stack, the tabs (Messages among them) and the contact stack the chat is
- * in (TabStack.tsx, MessageStack.tsx, ContactStack.tsx). The wiring is the app's
- * own (`appMessageWakeDeps`); only the agent is a stand-in, whose pickup brings
- * the messages that were waiting at the mediator.
+ * A tapped message notification with REAL navigators, driven the way the app
+ * drives it: from inside the main stack, with the navigation the TabStack
+ * component gets from useNavigation(), under an outer root stack (RootStack →
+ * MainStack → TabStack, MessageStack, ContactStack → Chat). The Messages list
+ * says when it has focus (useReportMessagesListFocus), as the real one does.
+ *
+ * Build 265 (VTRM-RFH2) opened no chat: the check read navigation state for
+ * the focused route, and in the app's nested tree it never saw the list, even
+ * while the list was on screen. The test before this one drove the wake from
+ * the container's root ref, and so never ran the app's path.
  */
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { NavigationContainer, useRoute } from '@react-navigation/native'
+import { NavigationContainer, useNavigation, useRoute } from '@react-navigation/native'
 import { createStackNavigator } from '@react-navigation/stack'
 import { act, render } from '@testing-library/react-native'
-import React, { useEffect, useSyncExternalStore } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Text } from 'react-native'
 
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { setActiveChatConnectionId } from '../activeChatTracker'
-import { appMessageWakeDeps, messageWakeFetching, openMessageWake } from '../messageWake'
+import {
+  appMessageWakeDeps,
+  messageWakeHold,
+  openMessageWake,
+  useReportMessagesListFocus,
+  type WakeNavigation,
+} from '../messageWake'
 
 jest.unmock('@react-navigation/native')
 jest.unmock('@react-navigation/core')
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
+/** How late the list mounts, as on a cold start (0 = at once). */
+let listMountsAfterMs = 0
+/** The main stack's navigation, as TabStack's handleDeepLink holds it. */
+let mainNavigation: WakeNavigation | undefined
+
 const Contacts = () => <Text testID="ContactsScreen">contacts</Text>
+const List = () => {
+  useReportMessagesListFocus()
+  return <Text testID="MessagesScreen">messages</Text>
+}
 const Messages = () => {
-  const fetching = useSyncExternalStore(messageWakeFetching.subscribe, messageWakeFetching.get)
-  return (
-    <>
-      <Text testID="MessagesScreen">messages</Text>
-      {fetching ? <Text testID="FetchingNew">fetching</Text> : null}
-    </>
-  )
+  const [mounted, setMounted] = useState(listMountsAfterMs === 0)
+  useEffect(() => {
+    if (mounted) return
+    const timer = setTimeout(() => setMounted(true), listMountsAfterMs)
+    return () => clearTimeout(timer)
+  }, [mounted])
+  return mounted ? <List /> : <Text testID="MessagesLoading">loading</Text>
 }
 const Chat = () => {
   const { connectionId } = useRoute().params as { connectionId: string }
@@ -42,33 +62,42 @@ const Chat = () => {
 const Tabs = createBottomTabNavigator()
 const MessageStack = createStackNavigator()
 const ContactStack = createStackNavigator()
+const Main = createStackNavigator()
 const Root = createStackNavigator()
 const MessagesTab = () => (
   <MessageStack.Navigator>
     <MessageStack.Screen name={Screens.Messages} component={Messages} />
   </MessageStack.Navigator>
 )
-const TabStack = () => (
-  <Tabs.Navigator initialRouteName="Contacts">
-    <Tabs.Screen name="Contacts" component={Contacts} />
-    <Tabs.Screen name={TabStacks.MessageStack} component={MessagesTab} />
-  </Tabs.Navigator>
-)
+/** As TabStack.tsx: it takes the main stack's navigation with useNavigation(). */
+const TabStack = () => {
+  mainNavigation = useNavigation() as unknown as WakeNavigation
+  return (
+    <Tabs.Navigator initialRouteName="Contacts">
+      <Tabs.Screen name="Contacts" component={Contacts} />
+      <Tabs.Screen name={TabStacks.MessageStack} component={MessagesTab} />
+    </Tabs.Navigator>
+  )
+}
 const Contact = () => (
   <ContactStack.Navigator>
     <ContactStack.Screen name={Screens.Chat} component={Chat} />
   </ContactStack.Navigator>
 )
-const App = ({ navRef }: { navRef: React.RefObject<any> }) => (
-  <NavigationContainer ref={navRef}>
+const MainStack = () => (
+  <Main.Navigator initialRouteName={Stacks.TabStack}>
+    <Main.Screen name={Stacks.TabStack} component={TabStack} />
+    <Main.Screen name={Stacks.ContactStack} component={Contact} />
+  </Main.Navigator>
+)
+const App = () => (
+  <NavigationContainer>
     <Root.Navigator>
-      <Root.Screen name={Stacks.TabStack} component={TabStack} />
-      <Root.Screen name={Stacks.ContactStack} component={Contact} />
+      <Root.Screen name="MainStack" component={MainStack} />
     </Root.Navigator>
   </NavigationContainer>
 )
 
-/** A basic message as the agent stores it. */
 const record = (connectionId: string, at: string) => ({
   connectionId,
   content: `hello from ${connectionId}`,
@@ -77,11 +106,10 @@ const record = (connectionId: string, at: string) => ({
   metadata: { get: () => undefined },
 })
 
-/** An agent with a mediator whose pickup delivers `waiting`, and its messages store. */
 function agentWith(
   stored: ReturnType<typeof record>[],
   waiting: ReturnType<typeof record>[],
-  duringPickup?: () => void
+  duringPickup?: () => Promise<void>
 ) {
   const listeners = new Set<(event: unknown) => void>()
   return {
@@ -111,18 +139,15 @@ function agentWith(
   } as never
 }
 
-const tap = (navRef: React.RefObject<any>, agent: never) =>
+/** The app's tap: the main stack's own navigation, the app's own wiring. */
+const tap = (agent: never) =>
   openMessageWake({
     ...appMessageWakeDeps({
-      navigation: {
-        navigate: (name, params) => navRef.current.navigate(name, params),
-        getState: () => navRef.current.getRootState(),
-      },
+      navigation: mainNavigation!,
       agent,
       names: {
         tabStack: Stacks.TabStack,
         messageStack: TabStacks.MessageStack,
-        messages: Screens.Messages,
         contactStack: Stacks.ContactStack,
         chat: Screens.Chat,
       },
@@ -130,11 +155,7 @@ const tap = (navRef: React.RefObject<any>, agent: never) =>
     graceMs: 0,
   })
 
-/**
- * Run a tap the way the app does: started from outside React, with React free
- * to render between its steps (a single act() around it would hold every
- * render, and so the navigation, back until the tap had finished).
- */
+/** Let React render between the tap's steps, as the app does; a single act() would hold every render back. */
 async function settle<T>(work: Promise<T>): Promise<T> {
   let done = false
   let value: T | undefined
@@ -142,7 +163,7 @@ async function settle<T>(work: Promise<T>): Promise<T> {
     done = true
     value = v
   })
-  for (let i = 0; i < 200 && !done; i++) {
+  for (let i = 0; i < 400 && !done; i++) {
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
     })
@@ -151,39 +172,43 @@ async function settle<T>(work: Promise<T>): Promise<T> {
   return value as T
 }
 
-describe('a tapped message notification, with real navigators', () => {
+beforeEach(() => {
+  listMountsAfterMs = 0
+  mainNavigation = undefined
+})
+
+describe('a tapped message notification, driven as the app drives it', () => {
   it('two contacts with unread messages: the chat with the newest one opens', async () => {
-    const navRef = React.createRef<any>()
-    const tree = render(<App navRef={navRef} />)
+    const tree = render(<App />)
     const agent = agentWith([record('ada', '2026-10-20T10:00:00Z')], [record('bob', '2026-10-20T10:05:00Z')])
-    const outcome = await settle(tap(navRef, agent))
-    expect(outcome).toBe('chat')
+    expect(await settle(tap(agent))).toBe('chat')
     expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
     expect(tree.queryByTestId('Chat_ada')).toBeNull()
   })
 
-  it('a person who goes elsewhere while the messages come in is not moved', async () => {
-    const navRef = React.createRef<any>()
-    const tree = render(<App navRef={navRef} />)
-    // They tap the Contacts tab while the pickup is still under way; the tap
-    // renders before the waiting message has landed, as a real tap does.
-    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], async () => {
-      navRef.current.navigate('Contacts')
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    const outcome = await settle(tap(navRef, agent))
-    expect(outcome).toBe('moved')
-    expect(tree.getByTestId('ContactsScreen')).toBeTruthy()
-    expect(tree.queryByTestId('Chat_bob')).toBeNull()
+  it('a cold-start tap, the list mounting 1.5 s late: the chat still opens (build 265 stayed put)', async () => {
+    listMountsAfterMs = 1500
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')])
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
   })
 
-  it('nothing unread: it stays on the Messages list, and stops saying it is fetching', async () => {
-    const navRef = React.createRef<any>()
-    const tree = render(<App navRef={navRef} />)
-    const agent = agentWith([], [])
-    const outcome = await settle(tap(navRef, agent))
-    expect(outcome).toBe('list')
+  it('a person who goes elsewhere after the list took focus is not moved', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], async () => {
+      mainNavigation!.navigate(Stacks.TabStack, { screen: 'Contacts' })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(await settle(tap(agent))).toBe('moved')
+    expect(tree.getByTestId('ContactsScreen')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_bob')).toBeNull()
+    expect(messageWakeHold.isHolding()).toBe(false)
+  })
+
+  it('nothing unread: it stays on the Messages list', async () => {
+    const tree = render(<App />)
+    expect(await settle(tap(agentWith([], [])))).toBe('list')
     expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
-    expect(tree.queryByTestId('FetchingNew')).toBeNull()
   })
 })
