@@ -21,7 +21,7 @@ import { parseArgs } from 'node:util';
 import { ensureAppium, screenshot, sleep, stopAppium } from '../lib/driver.js';
 import { unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
-import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
+import { createHvAdmin, soleRequestSince } from './hvAdmin.js';
 import { keepAlive, openDevice } from './hvDevices.js';
 
 const { values: a } = parseArgs({
@@ -87,12 +87,15 @@ try {
   const sent = (await join.awaitSent(d, { required: false })).value;
   row(`${p}-asked`, sent?.shown ? 'PASS' : 'FAIL', sent?.shown ? 'asked by the review way; the standing shows' : 'no standing after the ask');
 
-  let req;
-  for (let i = 0; i < 24 && !req; i++) { req = newestRequestSince(admin.joinRequests('pending'), since); if (!req) await sleep(5000); }
-  if (!req) throw new Error('no pending join request from this phone reached the community');
+  // Only this phone's request, and only when it is the one request since the ask (hvAdmin soleRequestSince: read twice,
+  // 5 s apart): the member DID this writes (--out) becomes the gate's HV_VETTER_DID / VETTER_DID, so another phone's
+  // request approved here would be a quiet, lasting error.
+  const sole = await soleRequestSince(() => admin.joinRequests('pending'), since, { wait: sleep });
+  if (!sole.req) throw new Error(sole.count ? `${sole.count} join requests appeared since this phone asked: another phone is joining, none approved` : 'no pending join request from this phone reached the community');
+  const req = sole.req;
   const decided = admin.decide(req.id, 'approved');
   let member;
-  for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
+  for (let i = 0; i < 24 && !member; i++) { member = admin.members().find((m) => m.did === req.applicantDid); if (!member) await sleep(5000); }
   row(`${p}-member`, member && member.did === req.applicantDid ? 'PASS' : 'FAIL', `request ${req.id} approved (${decided.status}); member ${member?.did ?? 'none listed'}`);
   if (!member) throw new Error('approved, but no member listed');
   if (a.out) writeFileSync(a.out, member.did + '\n');
