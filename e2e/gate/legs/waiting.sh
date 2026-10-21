@@ -42,22 +42,30 @@ E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4762 C_DID
   galarm 900 node run-join-waiting.mjs > "$LEG_DIR/waiting.out" 2>&1; drc=$?
 grep -E '^\[e2e\] [0-9]|^PERSONA-DID|^WAITING-STATUS|^JOIN-IDENTITY-NAME' "$LEG_DIR/waiting.out" | cut -c1-220
 take_rows "$LEG_DIR/waiting.out"   # flow B's rows (a)–(g) when approved
-# The request whose identity the phone must show: the newest pending one, or (approved) the one it came from.
-RDID=$(grep -oE '^ROW join-request-is-mine PASS — request [^ ]+ from did:[^ ]+' "$LEG_DIR/waiting.out" | awk '{print $NF}'); RID=-
-[ -n "$RDID" ] || read -r RID RDID < <(c_admin join-list pending | python3 -c "
-import sys,json; t=sys.stdin.read(); d=json.loads(t[t.index('{'):]) if '{' in t else {}
-items=sorted(d.get('items') or [], key=lambda r: str(r.get('submittedAt'))); r=items[-1] if items else {}
-print(r.get('id','-'), r.get('applicantDid','-'))")
+# The request whose identity the phone must show: the one join-request-is-mine attributed to this phone (its applicant
+# is the identity the phone showed). Without that row's PASS (a decline run, or the request not found) there is no
+# attributed request on C, which kk shares: "the newest pending one" could be another phone's, so the rows SKIP.
+RDID=$(grep -oE '^ROW join-request-is-mine PASS — request [^ ]+ from did:[^ ]+' "$LEG_DIR/waiting.out" | awk '{print $NF}')
 for shot in community-card-waiting join-standing-identity; do
   shown=$(grep -oE "^PERSONA-DID $shot did:[^ ]+" "$LEG_DIR/waiting.out" | awk '{print $3}')
-  if [ -n "$shown" ] && [ "$shown" = "$RDID" ]; then row "$shot" PASS "$shown is the newest pending request's applicant"
-  else row "$shot" FAIL "shows ${shown:-nothing}; the newest pending request ($RID) is from $RDID"; fi
+  if [ -z "$RDID" ]; then row "$shot" SKIP "no request attributed to this phone (join-request-is-mine did not PASS): the phone shows ${shown:-nothing}, not judged against another phone's"
+  elif [ -n "$shown" ] && [ "$shown" = "$RDID" ]; then row "$shot" PASS "$shown is this phone's own request's applicant (join-request-is-mine)"
+  else row "$shot" FAIL "shows ${shown:-nothing}; this phone's request is from $RDID"; fi
 done
 while read -r _ shot st rest; do
   case $st in clear) row "foot-$shot" PASS "$rest" ;; *) row "foot-$shot" FAIL "$st $rest" ;; esac
 done < <(grep -E '^FOOT ' "$LEG_DIR/waiting.out")
-if [ "$APPROVE" = 0 ] && [ "$RID" != - ]; then
-  echo "  decline $RID: $(JOIN_DECIDE_REASON='gate: a join left waiting on purpose' c_admin join-decide "$RID" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
+# A decline run (WAITING_DECLINE=1) declines this phone's own request: the pending one whose applicant is the identity
+# the phone showed, and only when there is exactly one. Never "the newest pending" on C, which may be another phone's.
+if [ "$APPROVE" = 0 ]; then
+  ME=$(grep -oE "^PERSONA-DID community-card-waiting did:[^ ]+" "$LEG_DIR/waiting.out" | awk '{print $3}')
+  RID=$(c_admin join-list pending | ME="$ME" python3 -c "
+import os,sys,json; t=sys.stdin.read(); d=json.loads(t[t.index('{'):]) if '{' in t else {}
+mine=[r for r in d.get('items') or [] if os.environ['ME'] and r.get('applicantDid') == os.environ['ME']]
+print(mine[0]['id'] if len(mine) == 1 else '-')")
+  if [ "$RID" != - ]; then
+    echo "  decline $RID (from ${ME: -24}): $(JOIN_DECIDE_REASON='gate: a join left waiting on purpose' c_admin join-decide "$RID" rejected | grep -oE -- '-> [0-9]+' | tail -1)"
+  else echo "  decline: no single pending request from this phone's identity (${ME:-none shown}); nothing declined"; fi
 fi
 driver_rc waiting-driver "$drc" "$LEG_DIR/waiting.out"
 # IN-149 (#363), read-only: an outside community's Join lists "Meet a vetter" among the usable ways. Nothing is tapped
