@@ -160,6 +160,8 @@
     "Message1048": "There was a problem with the proof request. (FR)",
     "Title1049": "Unable to change PIN. (FR)",
     "Message1049": "There was a problem while attempting to change your PIN. (FR)",
+    "Title1050": "Ce lien d'invitation est incomplet",
+    "Message1050": "Keyring n'a pas pu le lire, donc rien n'a été connecté. Demandez un nouveau lien, ou scannez plutôt son code.",
     "Title1050": "Unable to access biometrics (FR)",
     "Message1050": "There was a problem while attempting to access this device' biometrics (FR)",
     "GenericError": {
@@ -635,7 +637,6 @@
     "ShareLink": "Partager un lien",
     "ShareLinkNote": "Toute personne qui a le lien peut se connecter à vous, une seule fois. Ne l'envoyez qu'à la personne avec qui vous voulez vous connecter.",
     "ShareLinkTitle": "Connectons-nous sur Keyring",
-    "ShareLinkMessage": "Ouvrez ce lien sur votre téléphone pour vous connecter à moi sur Keyring :",
     "ShareLinkFailed": "Keyring n'a pas pu créer le lien. Réessayez dans un instant.",
     "YourIdentityTitle": "Votre identité pour {{community}}",
     "YourIdentityInstruction": "L'administrateur de la communauté le scanne pour vous inviter. Ce n'est pas une carte de contact.",

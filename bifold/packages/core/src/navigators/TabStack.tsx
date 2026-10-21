@@ -19,6 +19,7 @@ import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
 import { Screens, Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { invitationLinkError } from '../utils/invitationLink'
 import { appMessageWakeDeps, openMessageWake, type WakeNavigation } from '../utils/messageWake'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
@@ -225,6 +226,16 @@ const TabStack: React.FC = () => {
           type: DispatchAction.ACTIVE_DEEP_LINK,
           payload: [undefined],
         })
+        return
+      }
+
+      // An invitation cut or altered on its way is said for what it is, not
+      // as "Unable to handle deeplink" (share link, build 265).
+      const incomplete = invitationLinkError(deepLink, t)
+      if (incomplete) {
+        logger.warn(`deep link: ${incomplete.message}`)
+        DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, incomplete)
+        dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
         return
       }
 
