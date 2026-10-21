@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "13ff3c1a55173bb87c4032c9e2d30ca6e526c8ea",
+  "generatedFrom": "4c788a552c6894f38aed491bcccc8df4bfe3eaf3",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -185,6 +185,8 @@
     "AskMeLetThroughDismiss": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeReadOnly": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeTest": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
+    "AskMeTestHintClosed": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
+    "AskMeTestHintOpen": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AskMeTested": ["src/modules/trust-tasks/screens/VtaAskMe.tsx"],
     "AttachTourStep": ["src/components/tour/AttachTourStep.tsx"],
     "AttestationVerified": ["src/screens/CredentialOffer.tsx"],

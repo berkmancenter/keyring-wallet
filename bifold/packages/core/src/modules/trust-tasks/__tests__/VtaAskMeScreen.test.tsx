@@ -7,6 +7,7 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -73,6 +74,36 @@ describe('Ask me before…', () => {
     expect(set).toHaveBeenCalledWith({}, CREATE, true)
     expect(tree.getByTestId(id('AskMeSwitch_contextsCreate')).props.accessibilityState).toMatchObject({ checked: true })
     expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
+  })
+
+  // IN-309: the test request is made while Keyring is open, so its
+  // notification arrives then. iOS shows it as a banner now; Android does not
+  // yet show a notification while the app is open, so it is not promised there.
+  describe('what the test request says about notifications', () => {
+    const real = Platform.OS
+    afterEach(() => {
+      Platform.OS = real
+    })
+    const withTest = async () => {
+      const on = { ...withPhoneRule(EMPTY_APPROVALS, CREATE, true, ME), version: 1 }
+      jest.spyOn(vtaAgent, 'approvalRules').mockResolvedValue(stateOf(on))
+      return show()
+    }
+
+    test('on iOS: a notification even with Keyring open, and real requests when it is closed', async () => {
+      Platform.OS = 'ios'
+      const tree = await withTest()
+      expect(tree.getByTestId(id('AskMeTestHintOpen'))).toHaveTextContent('AskMe.TestHintOpen')
+      expect(tree.getByTestId(id('AskMeTestHintClosed'))).toHaveTextContent('AskMe.TestHintClosed')
+    })
+
+    test('on Android: nothing promised about notifications, open or closed', async () => {
+      Platform.OS = 'android'
+      const tree = await withTest()
+      expect(tree.getByTestId(id('AskMeTest'))).toBeTruthy()
+      expect(tree.queryByTestId(id('AskMeTestHintOpen'))).toBeNull()
+      expect(tree.queryByTestId(id('AskMeTestHintClosed'))).toBeNull()
+    })
   })
 
   test('the test request says the agent is asking', async () => {
@@ -237,6 +268,44 @@ describe('a test request the agent let through', () => {
     expect(tree.queryByTestId(id('AskMeLetThroughCard'))).toBeNull()
     expect(tree.queryByTestId(id('AskMeLastLetThrough'))).toBeNull()
     expect(tree.getByTestId(id('AskMeTested'))).toHaveTextContent('AskMe.TestHeld')
+  })
+
+  // IN-309 with #445: the notification hint sits beside "your agent didn't
+  // ask", so it promises a notification only for a request the agent asks about.
+  test('after a let-through, the notification hint still holds: it promises one only when the agent asks', async () => {
+    const real = Platform.OS
+    Platform.OS = 'ios'
+    try {
+      jest.spyOn(vtaAgent, 'sendTestRequest').mockResolvedValue({ kind: 'letThrough', cleanedUp: true })
+      const tree = await show()
+      await press(tree)
+      expect(tree.getByTestId(id('AskMeLastLetThrough'))).toHaveTextContent('AskMe.LastTestLetThrough')
+      expect(tree.getByTestId(id('AskMeTestHintOpen'))).toHaveTextContent('AskMe.TestHintOpen')
+    } finally {
+      Platform.OS = real
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const copies = ['en/en.json', 'fr/fr.json', 'pt-br/pt-br.json'].map(
+      (f) => require(`../../../localization/${f}`).AskMe
+    )
+    const [en, fr, ptBr] = copies.map((c) => c.TestHintOpen as string)
+    expect(en).toMatch(/^When your agent asks you, /)
+    expect(fr).toMatch(/^Quand votre agent vous demande, /)
+    expect(ptBr).toMatch(/^Quando o seu agente perguntar, /)
+  })
+
+  // The agent may let the request through and create the context (#445), so
+  // the hint before pressing never promises that nothing is created.
+  test('the hint says the agent should ask, never that nothing is created', () => {
+    const files = { en: 'en/en.json', fr: 'fr/fr.json', ptBr: 'pt-br/pt-br.json' }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const hint = (f: string) => require(`../../../localization/${f}`).AskMe.TestHint as string
+    expect(hint(files.en)).toMatch(/should ask you first/)
+    expect(hint(files.fr)).toMatch(/devrait vous demander d'abord/)
+    expect(hint(files.ptBr)).toMatch(/deveria perguntar a você primeiro/)
+    expect(hint(files.en)).not.toMatch(/nothing is created/i)
+    expect(hint(files.fr)).not.toMatch(/rien n'est créé/i)
+    expect(hint(files.ptBr)).not.toMatch(/nada é criado/i)
   })
 
   test('the words say what the agent did, never why', () => {

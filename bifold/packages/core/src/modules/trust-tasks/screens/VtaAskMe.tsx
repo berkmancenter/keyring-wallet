@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -245,6 +245,23 @@ const VtaAskMe: React.FC = () => {
         {state?.view.canTest ? (
           <View style={styles.card}>
             <ThemedText style={styles.muted}>{t('AskMe.TestHint')}</ThemedText>
+            {/* The request is made while Keyring is open, so its notification
+                arrives then, if the agent asks at all (it may let the request
+                through, said below and by the card above). iOS shows an
+                approval wake as a banner in the foreground (wallet #528), and
+                a consent wake as a visible alert with the app closed. Neither is
+                proven on Android, so nothing about notifications is promised
+                there (IN-309). */}
+            {Platform.OS === 'ios' ? (
+              <>
+                <ThemedText style={styles.muted} testID={testIdWithKey('AskMeTestHintOpen')}>
+                  {t('AskMe.TestHintOpen')}
+                </ThemedText>
+                <ThemedText style={styles.muted} testID={testIdWithKey('AskMeTestHintClosed')}>
+                  {t('AskMe.TestHintClosed')}
+                </ThemedText>
+              </>
+            ) : null}
             {lastTestLetThrough(outcome) ? (
               <ThemedText testID={testIdWithKey('AskMeLastLetThrough')}>{t('AskMe.LastTestLetThrough')}</ThemedText>
             ) : null}
