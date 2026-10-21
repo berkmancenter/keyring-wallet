@@ -24,3 +24,10 @@ test('newest request and member since a moment', () => {
   assert.equal(newestRequestSince([{ id: 'old', submittedAt: '2026-10-17T03:00:00Z' }, { id: 'a', submittedAt: '2026-10-17T04:01:00Z' }, { id: 'b', createdAt: '2026-10-17T04:02:00Z' }], since).id, 'b');
   assert.equal(newestMemberSince([{ did: 'x', joinedAt: '2026-10-17T03:59:59Z' }], since), undefined);
 });
+
+test('a vetters-list answer gives the vetter grants the seat reads (memberDid, live, revoked)', () => {
+  const out = '[ref-20] vtc/vetting/vetters/grants/list/0.1 -> 200\n{"vetters":[{"memberDid":"did:webvh:x:kk","live":true,"revoked":false,"validUntil":"2026-12-01T00:00:00Z"}]}\n';
+  const { status, body } = parseAdminOut(out);
+  assert.equal(status, 200);
+  assert.equal(body.vetters.filter((v) => v.memberDid === 'did:webvh:x:kk' && v.live && !v.revoked).length, 1);
+});
