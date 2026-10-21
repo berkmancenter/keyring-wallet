@@ -33,6 +33,8 @@ export function createHvAdmin({ vtcBase, communityDid, adminCredential }) {
     },
     decide: (id, decision = 'approved') => run('join-decide', id, decision),
     grantVetter: (memberDid) => run('vetter-grant', memberDid),
+    /** vtc/vetting/vetters/grants/list/0.1: [{ memberDid, live, revoked, validUntil, … }] (as run-phase2.mjs reads it). */
+    vetters: () => run('vetters-list').body?.vetters ?? [],
     removeMember: (did, reason = 'hv leg cleanup') => run('member-remove', did, reason),
     /** vtc/vetting/hidden/show/0.1 for the criterion: { enabled, enrolledVetters: { label: n } }. */
     async hiddenShow(criterionId) {

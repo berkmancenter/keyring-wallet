@@ -14,7 +14,8 @@
 //
 // --hidden false: a community without hidden vetting (the gate's community C, for kk's vetter). The same ask, approval
 // and vetter grant, then the desk opened once so the app takes the grant; there is no hidden-vetter count to wait on, so
-// the last row is kk-vetter-desk, and the rows are named kk-vetter-*.
+// the desk row is followed by kk-vetter-live (the community lists the member's vetter grant, live and not revoked, as
+// p2 checks it), and the rows are named kk-vetter-*.
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { ensureAppium, screenshot, sleep, stopAppium } from '../lib/driver.js';
@@ -46,7 +47,8 @@ const row = (name, status, detail) => {
   if (status === 'FAIL') process.exitCode = 1;
 };
 const admin = createHvAdmin({ vtcBase: a['vtc-base'], communityDid: a['community-did'], adminCredential: a['admin-credential'] });
-const hidden = a.hidden !== 'false';
+if (!['true', 'false'].includes(a.hidden)) throw new Error(`--hidden must be true or false, not "${a.hidden}"`);
+const hidden = a.hidden === 'true';
 const p = hidden ? 'hvk-vetter' : 'kk-vetter';
 const enrolled = async () => !hidden ? 0 : Object.values((await admin.hiddenShow(a.criterion)).enrolledVetters ?? {}).reduce((s, n) => s + Number(n), 0);
 
@@ -56,10 +58,17 @@ await ensureAppium();
 const d = await openDevice({ platform: a.platform, udid: a.udid, deviceName: a['device-name'], wdaPort: a['wda-port'], mjpegPort: a['mjpeg-port'] });
 const stop = keepAlive(d);
 /** The phone's desk opens; the community's count of hidden vetters under the live label grows by one. */
-async function awaitEnrolled() {
+async function awaitEnrolled(memberDid) {
   await vetterRole.openDesk(d);
   await screenshot(d, `${p}-desk`).catch(() => undefined);
-  if (!hidden) { row(`${p}-desk`, 'PASS', 'the vetter desk opened once, so the app takes the grant (no hidden vetting on this community)'); return; }
+  if (!hidden) {
+    row(`${p}-desk`, 'PASS', 'the vetter desk opened once, so the app takes the grant (no hidden vetting on this community)');
+    const live = admin.vetters().filter((v) => v.memberDid === memberDid && v.live && !v.revoked);
+    row(`${p}-live`, live.length ? 'PASS' : 'FAIL', live.length
+      ? `the community lists a live vetter grant for ${memberDid} until ${live[0].validUntil ?? '?'}`
+      : `the community lists no live vetter grant for ${memberDid}`);
+    return;
+  }
   let now = before;
   for (let i = 0; i < 24 && now <= before; i++) { await sleep(10000); now = await enrolled(); }
   row('hvk-vetter-enrolled', now > before ? 'PASS' : 'FAIL', `hidden vetters enrolled on ${a.criterion}: ${before} → ${now} (vtc/vetting/hidden/show)`);
@@ -71,7 +80,7 @@ try {
     const m = admin.members().find((x) => x.did === a['resume-member']);
     row(`${p}-member`, m ? 'PASS' : 'FAIL', m ? `already a member: ${m.did} (resumed)` : `${a['resume-member']} is not a member`);
     if (!m) throw new Error('the resumed vetter is not a member');
-    await awaitEnrolled();
+    await awaitEnrolled(m.did);
   } else {
   await join.openCommunity(d, { did: a['community-did'], name: '' });
   await join.ask(d, { tag: p });
@@ -91,7 +100,7 @@ try {
   const grant = admin.grantVetter(member.did);
   row(`${p}-granted`, grant.status === 200 ? 'PASS' : 'FAIL', `vetter-grant ${grant.status} ${grant.body?.credentialId ?? ''} until ${grant.body?.validUntil ?? '?'}`);
 
-  await awaitEnrolled();
+  await awaitEnrolled(member.did);
   }
 } catch (e) {
   console.log(`❌ seat-hv-keyring-vetter: ${String(e?.message || e).split('\n')[0]}`);
