@@ -166,6 +166,8 @@ jobs:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
       ANDROID_PACKAGE_NAME: "asml.bkc.harvard.wallet"
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -341,6 +343,25 @@ jobs:
       - name: Verify bifold linking
         run: |
           node scripts/verify-bifold-linking.js
+
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. It must not stop a release: a build that records nothing only
+      # means a later publish for it is refused.
+      - name: Record the native fingerprint
+        id: fingerprint
+        continue-on-error: true
+        run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-android
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
 
       - name: Create environment settings
         working-directory: app
@@ -748,6 +769,8 @@ jobs:
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -870,6 +893,25 @@ jobs:
           # Hermes, and otherwise depends on React-jsc, which RN 0.81 does not ship.
           export USE_HERMES=1
           yarn run ios:setup
+
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. It must not stop a release: a build that records nothing only
+      # means a later publish for it is refused.
+      - name: Record the native fingerprint
+        id: fingerprint
+        continue-on-error: true
+        run: bash scripts/ota/record-fingerprint.sh ios "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-ios
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
 
       - name: Bump Build No.
         id: ios-version
@@ -1175,11 +1217,25 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
+        env:
+          IOS_FINGERPRINT: ${{ needs.build-ios-staging.outputs.ota_fingerprint }}
+          ANDROID_FINGERPRINT: ${{ needs.build-android-staging.outputs.ota_fingerprint }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           TAG="staging-v${{ steps.get_version.outputs.version }}-${{ env.APP_BUILD_NUMBER }}"
-          git tag -a "$TAG" -m "Staging build ${{ env.APP_BUILD_NUMBER }}"
+          # The native fingerprints the builds recorded (record-fingerprint.sh), read by
+          # ota-publish.yml (check-fingerprint.mjs) before it publishes for this build.
+          {
+            echo "Staging build ${{ env.APP_BUILD_NUMBER }}"
+            echo
+            [ -n "$IOS_FINGERPRINT" ] && echo "OTA fingerprint ios: $IOS_FINGERPRINT"
+            [ -n "$ANDROID_FINGERPRINT" ] && echo "OTA fingerprint android: $ANDROID_FINGERPRINT"
+            # Load-bearing: as the group's last command, a false `[ -n "" ] && …`
+            # would end the group non-zero and bash -e would fail the tag step.
+            true
+          } > "$RUNNER_TEMP/tag-message"
+          git tag -a "$TAG" -F "$RUNNER_TEMP/tag-message"
           git push origin "$TAG"
 
   notify-team:

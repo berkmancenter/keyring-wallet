@@ -50,6 +50,10 @@ on:
         description: 'device-test disable only: the bundle to withdraw'
         type: string
         default: ''
+      expect_fingerprint:
+        description: "device-test publishes: the test app's native fingerprint for the platform (its build copy's app/fingerprint.json)"
+        type: string
+        default: ''
       platform:
         description: Which platform's bundle to publish
         type: choice
@@ -67,6 +71,8 @@ on:
 
 permissions:
   contents: read
+  # Reading the target store build's recorded fingerprint (an artifact of its staging run).
+  actions: read
 
 concurrency:
   group: ota-publish
@@ -84,9 +90,16 @@ jobs:
     needs: [approve]
     # Runs after an approval, or straight away for a dry run (approve is skipped).
     if: ${{ !cancelled() && (needs.approve.result == 'success' || inputs.dry_run) }}
-    runs-on: ubuntu-22.04
+    # One job per platform, on the runner its store build uses (staging.yaml):
+    # the native fingerprint depends on the host and on pod install, so a bundle
+    # is built where its store build was, or it is offered to no phone.
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platform == 'both' && '["ios","android"]' || format('["{0}"]', inputs.platform)) }}
+    runs-on: ${{ matrix.platform == 'ios' && 'macos-26' || 'ubuntu-22.04' }}
     environment: ota
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -120,6 +133,7 @@ jobs:
           BUILD: ${{ inputs.build }}
           BASE: ${{ inputs.base }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
+          EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
           STORE_CHANNEL: ${{ vars.OTA_CHANNEL }}
         run: |
           err() { echo "::error::$1"; exit 1; }
@@ -142,6 +156,10 @@ jobs:
               else
                 [ -z "$BUNDLE_ID" ] || err "bundle_id is for disable only"
               fi
+              case "$ACTION" in
+                disable | cleanup) ;;
+                *) [[ "$EXPECT_FINGERPRINT" =~ ^[0-9a-f]{40}$ ]] || err "device-test $ACTION needs expect_fingerprint: the test app's fingerprint (got '$EXPECT_FINGERPRINT')" ;;
+              esac
               echo "::warning::device-test: the tier check is skipped for this channel (the quick-install test app, base ${BASE:0:8}); nothing published here can reach a store build" ;;
             *) err "unknown channel $CHANNEL" ;;
           esac
@@ -196,6 +214,58 @@ jobs:
       - name: Verify bifold linking
         run: node scripts/verify-bifold-linking.js
 
+      # iOS: the store build's own steps before its fingerprint (staging.yaml,
+      # build-ios-staging). pod install rewrites a podspec inside node_modules
+      # (react-native-permissions' setup_permissions), and the fingerprint
+      # hashes it, so a bundle built without these steps matches no store build.
+      - name: Configure ruby (iOS)
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: ./app
+
+      - name: Select Xcode 26.3 (iOS)
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        run: sudo xcode-select --switch /Applications/Xcode_26.3.app
+
+      - name: Install iOS dependencies (iOS)
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        run: |
+          echo "export NODE_BINARY=$(which node)" > app/ios/.xcode.env.local
+          cd app && USE_HERMES=1 yarn run ios:setup
+
+      # The fingerprint the bundle must match. production/preview: the one the
+      # target store build recorded in its tag, and its source list when the
+      # staging artifact is still there (to name a difference). device-test: the
+      # test app's, given as expect_fingerprint. None found: the run stops.
+      - name: Expected fingerprint
+        id: expected
+        if: ${{ !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          BUILD: ${{ inputs.build }}
+          PLATFORM: ${{ matrix.platform }}
+          EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$CHANNEL" = device-test ]; then
+            echo "hash=$EXPECT_FINGERPRINT" >> "$GITHUB_OUTPUT"
+            echo "expected $PLATFORM fingerprint $EXPECT_FINGERPRINT (the test app's)"
+            exit 0
+          fi
+          hash=$(node scripts/ota/check-fingerprint.mjs recorded --build "$BUILD" --platform "$PLATFORM")
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "expected $PLATFORM fingerprint $hash (recorded by build $BUILD)"
+          tag=$(git tag --list "staging-v*-$BUILD")
+          sha=$(git rev-list -n 1 "$tag")
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow staging.yaml --commit "$sha" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
+          dir="$RUNNER_TEMP/recorded-$PLATFORM"
+          if [ -n "$run" ] && gh run download "$run" -R "$GITHUB_REPOSITORY" -n "ota-fingerprint-$PLATFORM" -D "$dir" 2>/dev/null; then
+            echo "recorded=$dir/fingerprint.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::build $BUILD's source list is not available (run ${run:-unknown}); a mismatch will be reported by hash only"
+          fi
+
       # production and preview: the store key, which must be OTA_PUBLIC_KEY's pair.
       # device-test: ONLY the test key, which must not be (no fallback). A dry
       # run checks the mapping with the real secrets and writes nothing.
@@ -244,9 +314,15 @@ jobs:
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
           CHANNEL: ${{ inputs.channel }}
           BUILD: ${{ inputs.build }}
-          PLATFORM: ${{ inputs.platform }}
+          PLATFORM: ${{ matrix.platform }}
           SCOPE: ${{ inputs.scope }}
-        run: node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" --after-native-config
+          EXPECTED: ${{ steps.expected.outputs.hash }}
+          RECORDED: ${{ steps.expected.outputs.recorded }}
+        run: |
+          recorded=()
+          [ -n "$RECORDED" ] && recorded=(--recorded-fingerprint "$RECORDED")
+          node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
+            --after-native-config --expect-fingerprint "$PLATFORM=$EXPECTED" "${recorded[@]}"
 
       # The trial's moves on the test app's channel. Each publish is a local,
       # never-pushed commit on top of the verified one (scripts/ota/device-test.sh).
@@ -258,10 +334,25 @@ jobs:
           OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
           OTA_BASE: ${{ inputs.base }}
-          PLATFORM: ${{ inputs.platform }}
+          PLATFORM: ${{ matrix.platform }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
+          EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
           ACTION: ${{ inputs.action }}
         run: bash scripts/ota/device-test.sh "$ACTION"
+
+      # A dry run checks the fingerprint too: what this run would build, against
+      # the expected one. A mismatch, or a target build that recorded none, fails.
+      - name: Fingerprint check (dry run)
+        if: ${{ inputs.dry_run && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        env:
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ matrix.platform }}
+          EXPECTED: ${{ steps.expected.outputs.hash }}
+          RECORDED: ${{ steps.expected.outputs.recorded }}
+        run: |
+          node scripts/ota/native-config.mjs
+          node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
       - name: Dry run
         if: ${{ inputs.dry_run && inputs.channel != 'device-test' }}

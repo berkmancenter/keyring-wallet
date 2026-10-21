@@ -11,7 +11,8 @@
 #   device-test.sh disable    withdraw BUNDLE_ID, which must be a device-test bundle
 #   device-test.sh cleanup    delete every device-test bundle from the server
 #
-# Publishing needs OTA_BASE (the test app's own build commit), OTA_PUBLIC_KEY_FILE (the test public key, from
+# Publishing needs OTA_BASE (the test app's own build commit), EXPECT_FINGERPRINT (its native fingerprint for
+# PLATFORM, one platform per run), OTA_PUBLIC_KEY_FILE (the test public key, from
 # scripts/ota/signing-key.mjs), OTA_SIGNING_KEY, PLATFORM. All need OTA_SERVER_URL and HOT_UPDATER_AUTH_TOKEN.
 # The tier check is skipped (ota-deploy --skip-tier, device-test only): the mismatch step must be able to carry a
 # native change, and nothing published here can reach a store build.
@@ -53,8 +54,11 @@ publish() { # publish MESSAGE
   # Native fingerprint, or its build copy's app/fingerprint.json), or no phone is offered the bundle.
   node -e 'const f = JSON.parse(require("fs").readFileSync("app/fingerprint.json", "utf8"));
     for (const p of ["ios", "android"]) console.log(`device-test: ${p} fingerprint ${f[p]?.hash ?? "?"}`)'
+  # The test app's own fingerprint (EXPECT_FINGERPRINT, from its build copy's app/fingerprint.json): there is
+  # no store build to look it up from. A bundle for any other fingerprint would be offered to no phone.
+  [[ "${EXPECT_FINGERPRINT:-}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::publishing needs EXPECT_FINGERPRINT, the test app's fingerprint"; exit 1; }
   (cd app && node scripts/ota-deploy.mjs --base "$OTA_BASE" --platform "$PLATFORM" --channel "$CHANNEL" \
-    --skip-tier --after-native-config --message "$1")
+    --skip-tier --after-native-config --expect-fingerprint "$PLATFORM=$EXPECT_FINGERPRINT" --message "$1")
 }
 
 stamp="${GITHUB_RUN_ID:-local}-$(date -u +%s)"
