@@ -9,8 +9,14 @@ L() { ( export GATE_HOME=$T/home; . "$here/../lib.sh" >/dev/null 2>&1; "$@" ) 2>
 [ "$(L rows_spec linkwait link-no-answer)" = "linkwait:link-no-answer rc=0" ] && ok "one leg: plain rows belong to it" || bad "one leg: $(L rows_spec linkwait link-no-answer)"
 [ "$(L rows_spec testreq,linkwait 'testreq:a,linkwait:b,linkwait:c')" = "testreq:a,linkwait:b,linkwait:c rc=0" ] && ok "several legs: leg:row pairs are kept" || bad "several legs: $(L rows_spec testreq,linkwait 'testreq:a,linkwait:b,linkwait:c')"
 case $(L rows_spec testreq,linkwait a) in *"name its leg"*" rc=1") ok "several legs: a plain row is refused (it could select in either)";; *) bad "plain row with two legs: $(L rows_spec testreq,linkwait a)";; esac
-case $(L rows_spec testreq smoke-android:x) in *"not among --legs"*" rc=1") ok "a row of a leg not named is refused";; *) bad "row of an unnamed leg: $(L rows_spec testreq smoke-android:x)";; esac
+[ "$(L rows_spec testreq smoke-android:x)" = "testreq:smoke-android:x rc=0" ] && ok "one leg: a colon prefix that is no named leg is part of the row name" || bad "prefix not a leg, one leg: $(L rows_spec testreq smoke-android:x)"
 case $(L rows_spec testreq "") in *"no rows given"*" rc=1") ok "an empty --rows is refused";; *) bad "empty rows: $(L rows_spec testreq '')";; esac
+# Real row names hold spaces and colons: split on commas only; "x:" is a leg prefix only when x is one of --legs.
+[ "$(L rows_spec testreq 'no lock: refusal shown,card in plain words')" = "testreq:no lock: refusal shown,testreq:card in plain words rc=0" ] && ok "one leg: rows with spaces and a colon are kept whole" || bad "spaces/colon, one leg: $(L rows_spec testreq 'no lock: refusal shown,card in plain words')"
+[ "$(L rows_spec testreq,linkwait 'testreq:no lock: refusal shown,linkwait:card in plain words')" = "testreq:no lock: refusal shown,linkwait:card in plain words rc=0" ] && ok "several legs: leg:row whose row holds a colon" || bad "leg:row with colon: $(L rows_spec testreq,linkwait 'testreq:no lock: refusal shown,linkwait:card in plain words')"
+case $(L rows_spec testreq,linkwait 'no lock: refusal shown') in *"name its leg"*" rc=1") ok "several legs: a colon row whose prefix is no leg is a plain row, refused";; *) bad "colon row, several legs: $(L rows_spec testreq,linkwait 'no lock: refusal shown')";; esac
+[ "$(L rows_for testreq 'testreq:no lock: refusal shown,linkwait:card in plain words')" = "no lock: refusal shown rc=0" ] && ok "rows_for keeps a row with spaces and a colon whole" || bad "rows_for colon row: $(L rows_for testreq 'testreq:no lock: refusal shown,linkwait:card in plain words')"
+case $(L rows_spec testreq 'a,,b') in *"empty entry"*" rc=1") ok "an empty entry is refused";; *) bad "empty entry: $(L rows_spec testreq 'a,,b')";; esac
 S='testreq:a,linkwait:b,linkwait:c'
 [ "$(L rows_for linkwait "$S")" = "b,c rc=0" ] && ok "a leg gets only its own rows" || bad "rows_for linkwait: $(L rows_for linkwait "$S")"
 [ "$(L rows_for smoke-android "$S")" = " rc=0" ] && ok "a leg with no rows named gets none (it runs in full)" || bad "rows_for smoke-android: $(L rows_for smoke-android "$S")"

@@ -165,18 +165,23 @@ turn_release() {
   turn_sh "d=\"$d\"; [ \"\$(cut -d' ' -f1-2 \"\$d/owner\" 2>/dev/null)\" = '$(hostname -s) $$' ] && rm -rf \"\$d\"" >/dev/null 2>&1
   TURN_HELD=
 }
-# Rows of named legs (gate.sh run --rows): "leg:row,leg:row", or plain "row,row" when exactly one leg is named. Prints
-# the normalised "leg:row,…" list; a row names one leg, so a row with the same name in another leg is never selected
-# there. Fails (with the reason on stderr) on a plain row with several legs, or a leg that is not among those named.
+# Rows of named legs (gate.sh run --rows). Row names may hold spaces and colons ("no lock: refusal shown") but no
+# comma, as E2E_ONLY_ROWS is a comma list: the list splits on commas only. "leg:row" names its leg only when the text
+# before the first colon is one of --legs; anything else is a plain row, accepted only when --legs names exactly one leg.
+# Prints the normalised "leg:row,…" list, so a row with the same name in another leg is never selected there. Fails
+# (the reason on stderr) on a plain row with several legs, an empty entry, or no rows.
 rows_spec() {
   local legs=$1 rows=$2 out="" r leg row n
+  local -a items
   n=$(printf '%s' "$legs" | tr ',' '\n' | grep -c .)
-  for r in ${rows//,/ }; do
-    if [[ $r == *:* ]]; then leg=${r%%:*}; row=${r#*:}
+  IFS=, read -ra items <<< "$rows"
+  for r in ${items[@]+"${items[@]}"}; do
+    [ -n "$r" ] || { echo "--rows: an empty entry" >&2; return 1; }
+    leg=${r%%:*}
+    if [[ $r == *:* ]] && [[ ",$legs," == *",$leg,"* ]]; then row=${r#*:}
     elif [ "$n" = 1 ]; then leg=$legs; row=$r
-    else echo "--rows $r: name its leg (leg:row) when --legs names several" >&2; return 1; fi
-    [[ ",$legs," == *",$leg,"* ]] || { echo "--rows $r: $leg is not among --legs $legs" >&2; return 1; }
-    [ -n "$row" ] || { echo "--rows $r: no row named" >&2; return 1; }
+    else echo "--rows \"$r\": name its leg (leg:row, leg one of $legs) when --legs names several" >&2; return 1; fi
+    [ -n "$row" ] || { echo "--rows \"$r\": no row named" >&2; return 1; }
     out="${out:+$out,}$leg:$row"
   done
   [ -n "$out" ] || { echo "--rows: no rows given" >&2; return 1; }
@@ -185,7 +190,9 @@ rows_spec() {
 # The rows of one leg from a rows_spec list, as the comma list E2E_ONLY_ROWS takes; empty: the whole leg.
 rows_for() {
   local leg=$1 spec=$2 r out=""
-  for r in ${spec//,/ }; do [ "${r%%:*}" = "$leg" ] && out="${out:+$out,}${r#*:}"; done
+  local -a items
+  IFS=, read -ra items <<< "$spec"
+  for r in ${items[@]+"${items[@]}"}; do [ "${r%%:*}" = "$leg" ] && out="${out:+$out,}${r#*:}"; done
   printf '%s' "$out"
 }
 need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "$GATE_ENV: $v is empty"; done; }
