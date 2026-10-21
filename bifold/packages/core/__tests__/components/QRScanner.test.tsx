@@ -1,7 +1,7 @@
 import { useAgent, useConnections } from '@bifold/react-hooks'
 import { act, render, fireEvent, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { Share } from 'react-native'
+import { Platform, Share } from 'react-native'
 
 import QRScanner from '../../src/components/misc/QRScanner'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
@@ -618,13 +618,28 @@ describe('QRScanner — the invitation as a link', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
     expect(mint).toHaveBeenCalledTimes(2)
     expect(share).toHaveBeenCalledTimes(1)
-    const sent = share.mock.calls[0][0] as { message: string; url?: string }
-    // The link alone, nothing written around it (build 265: Alberto wants it ready to tap).
-    expect(sent.message).toBe('https://wallet.example/invite?oob=2')
-    // Message only: iOS sends both when a url is given as well.
-    expect(sent.url).toBeUndefined()
+    const sent = share.mock.calls[0][0] as { message?: string; url?: string }
+    // On iOS a link, not text: AirDrop delivered text, and on build 265 the
+    // receiver had to select the link by hand, which cut it. No message beside
+    // it, or iOS sends both.
+    expect(sent.url).toBe('https://wallet.example/invite?oob=2')
+    expect(sent.message).toBeUndefined()
     expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('oob=2'))
+  })
+
+  test('on Android, the link alone as the message: it has no link item to share', async () => {
+    const real = Platform.OS
+    Platform.OS = 'android'
+    try {
+      const tree = await renderInvite()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+      const sent = share.mock.calls[0][0] as { message?: string; url?: string }
+      expect(sent.message).toBe('https://wallet.example/invite?oob=2')
+      expect(sent.url).toBeUndefined()
+    } finally {
+      Platform.OS = real
+    }
   })
 
   test('closing the share sheet is not an error, and the button is still there', async () => {

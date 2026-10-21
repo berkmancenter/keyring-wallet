@@ -7,7 +7,7 @@
 import { DidCommOutOfBandInvitation } from '@credo-ts/didcomm'
 
 import { domain } from '../../src/constants'
-import { invitationLinkError, invitationLinkIncomplete, invitationShareMessage } from '../../src/utils/invitationLink'
+import { invitationLinkError, invitationLinkIncomplete, invitationShareContent } from '../../src/utils/invitationLink'
 
 const t = ((key: string) => key) as never
 
@@ -23,17 +23,25 @@ const invitation = () =>
   })
 
 describe('the invitation link, as it is shared and as it arrives', () => {
-  test('round trip: the share message is the link alone, and the link it carries is the invitation', () => {
-    const sent = invitation()
-    const url = sent.toUrl({ domain })
-    const message = invitationShareMessage(url)
-    // Nothing before or after it: a messaging app shows a link, ready to tap.
-    expect(message).toBe(url)
-    expect(invitationLinkIncomplete(message)).toBe(false)
-    expect(invitationLinkError(message, t)).toBeUndefined()
-    const received = DidCommOutOfBandInvitation.fromUrl(message)
-    expect(received.toJSON()).toEqual(sent.toJSON())
-  })
+  test.each([
+    ['ios', 'url'],
+    ['android', 'message'],
+  ] as const)(
+    'round trip on %s: what is shared is the link alone, as %s, and it carries the invitation',
+    (os, field) => {
+      const sent = invitation()
+      const url = sent.toUrl({ domain })
+      const content = invitationShareContent(url, 'Connect', os) as { url?: string; message?: string; title?: string }
+      // One item, nothing written around it: a link the receiver taps, not text to select.
+      expect(content[field]).toBe(url)
+      expect(content[field === 'url' ? 'message' : 'url']).toBeUndefined()
+      expect(content.title).toBe('Connect')
+      const link = content[field] as string
+      expect(invitationLinkIncomplete(link)).toBe(false)
+      expect(invitationLinkError(link, t)).toBeUndefined()
+      expect(DidCommOutOfBandInvitation.fromUrl(link).toJSON()).toEqual(sent.toJSON())
+    }
+  )
 
   test('the same link cut on its way, as a receiver got it, is told as incomplete', () => {
     const url = invitation().toUrl({ domain })

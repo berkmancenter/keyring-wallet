@@ -1,7 +1,8 @@
 /**
  * An invitation link as it is shared and as it arrives.
  *
- * Shared: the link alone, ready to tap, with nothing written around it.
+ * Shared: the link alone, ready to tap, with nothing written around it, and
+ * as a link rather than text where the platform has one.
  *
  * Arrived: a link whose inline invitation (`oob`, `c_i`, `d_m`) cannot be read
  * was cut or altered on its way. On build 265 a receiver was handed one cut to
@@ -13,12 +14,19 @@
  */
 import { JsonEncoder } from '@credo-ts/core'
 import type { TFunction } from 'i18next'
+import type { ShareContent } from 'react-native'
 
 import { BifoldError } from '../types/error'
 
-/** What the share sheet sends: the link, and nothing else. */
-export function invitationShareMessage(invitationUrl: string): string {
-  return invitationUrl
+/**
+ * What the share sheet sends: the link, and nothing else. On iOS a link item
+ * (`url`), so AirDrop and Messages hand over a link to tap: shared as text,
+ * AirDrop delivered text, and the receiver on build 265 had to select the
+ * link by hand, which cut it. No message beside it, or iOS sends both. Android
+ * has no link item, so there the link is the message.
+ */
+export function invitationShareContent(invitationUrl: string, title: string, os: string): ShareContent {
+  return os === 'ios' ? { title, url: invitationUrl } : { title, message: invitationUrl }
 }
 
 const INLINE_INVITATION = /[?&](oob|c_i|d_m)=([^&#\s]*)/
