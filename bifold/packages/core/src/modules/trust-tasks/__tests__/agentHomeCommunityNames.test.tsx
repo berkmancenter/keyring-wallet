@@ -19,6 +19,7 @@ import {
   COMMUNITY_NAME_RETRY_MS,
   COMMUNITY_NAME_TTL_MS,
   forgetCommunityNameReads,
+  refreshPublishedNameThrottled,
 } from '../module/communityNameRefresh'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
@@ -120,8 +121,12 @@ const settle = async (ms = 10) => {
   })
 }
 
-const renderHome = async (records: Rec[]) => {
+const renderHome = async (records: Rec[], { storageFails = false } = {}) => {
   const fake = fakeAgent(records)
+  if (storageFails) {
+    const failing = async () => Promise.reject(new Error('storage full'))
+    Object.assign(fake.agent.genericRecords, { update: failing, save: failing })
+  }
   ;(useAgent as jest.Mock).mockReturnValue({ agent: fake.agent })
   const tree = render(
     <BasicAppContext>
@@ -252,7 +257,76 @@ describe("My Agent's community names, read again when old", () => {
     })
   })
 
+  // 7a on #460: the brake held only for a read that found nothing.
+  it('a name read but not stored (the record still reads old): not read again for ten minutes either', async () => {
+    mockProfileName.mockResolvedValue('Renamed community')
+    const home = await renderHome([persona(A), membership(A), storedName(A, 'Old', hoursAgo(30))], {
+      storageFails: true,
+    })
+    await settle()
+    expect(home.resolveDidDocument).toHaveBeenCalledTimes(1)
+    // Shown, though not stored.
+    expect(home.nameOf(A)).toHaveTextContent(/Renamed community/)
+    for (let i = 0; i < 3; i++) {
+      await act(async () => emitCommunityChanged(A, 'membership'))
+      await settle()
+    }
+    expect(home.resolveDidDocument).toHaveBeenCalledTimes(1)
+    await settle(COMMUNITY_NAME_RETRY_MS)
+    await act(async () => emitCommunityChanged(A, 'membership'))
+    await settle()
+    expect(home.resolveDidDocument).toHaveBeenCalledTimes(2)
+  })
+
   it('the day is the same one sign-in uses', () => {
     expect(COMMUNITY_NAME_TTL_MS).toBe(24 * 60 * 60 * 1000)
+  })
+})
+
+describe('the throttled read itself', () => {
+  const agentFor = () => {
+    const resolveDidDocument = jest.fn(async () => ({
+      service: [{ type: 'VTCRest', serviceEndpoint: 'https://vtc.example/api' }],
+    }))
+    return {
+      resolveDidDocument,
+      agent: {
+        dids: { resolveDidDocument },
+        genericRecords: {
+          findAllByQuery: async () => [],
+          save: async () => undefined,
+          update: async () => undefined,
+          delete: async () => undefined,
+        },
+      } as never,
+    }
+  }
+  beforeEach(() => {
+    forgetCommunityNameReads()
+    communityTarget.clear()
+    mockProfileName.mockReset()
+  })
+
+  it("one agent's read holds back only its own: another agent reads the same community at once", async () => {
+    mockProfileName.mockResolvedValue(undefined)
+    const { agent, resolveDidDocument } = agentFor()
+    await refreshPublishedNameThrottled(agent, A, { scope: 'did:webvh:vta-one', now: NOW })
+    await refreshPublishedNameThrottled(agent, A, { scope: 'did:webvh:vta-one', now: NOW + 1000 })
+    expect(resolveDidDocument).toHaveBeenCalledTimes(1)
+    await refreshPublishedNameThrottled(agent, A, { scope: 'did:webvh:vta-two', now: NOW + 1000 })
+    expect(resolveDidDocument).toHaveBeenCalledTimes(2)
+  })
+
+  it('never rejects: a read that throws counts as one that found nothing', async () => {
+    mockProfileName.mockResolvedValue('A name')
+    const spy = jest.spyOn(communityTarget, 'publishedName').mockImplementation(() => {
+      throw new Error('a listener threw')
+    })
+    const { agent, resolveDidDocument } = agentFor()
+    await expect(refreshPublishedNameThrottled(agent, A, { now: NOW })).resolves.toBeUndefined()
+    // And it is braked like one.
+    await refreshPublishedNameThrottled(agent, A, { now: NOW + 1000 })
+    expect(resolveDidDocument).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
   })
 })
