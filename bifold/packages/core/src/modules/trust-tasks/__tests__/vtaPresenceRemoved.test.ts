@@ -170,3 +170,37 @@ describe('this phone refused by its own agent, outside a heartbeat', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: 'did:webvh:bob' })
   })
 })
+
+// 7a on #454: the removal must not depend on which caller connects, nor on the refusal's other words, and must never
+// end a link still being set up.
+describe('the removal, whoever connects and however the agent words it', () => {
+  beforeAll(() => jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] }))
+  afterAll(() => jest.useRealTimers())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
+    mockClient.holdPersonaKeys.mockImplementation(async () => false)
+  })
+
+  it("a connect whose caller drops the throw (My Agent's own): the link is removed all the same", async () => {
+    const vta = await onlineController()
+    mockClient.isConnected = false
+    mockClient.whoAmI.mockRejectedValue(NOT_ON_ACL())
+    await vta.connect(appAgent as never, 'did:webvh:bob').catch(() => undefined)
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+  })
+
+  it('a bare "ACL entry expired", with no "forbidden" in it, is a removal on the connect path too', async () => {
+    mockClient.whoAmI.mockRejectedValue(new VtiRefusal('permissionDenied', 'ACL entry expired: did:peer:2.permanent'))
+    const vta = await onlineController({ expect: 'revoked' })
+    expect(vta.getState().link).toMatchObject({ kind: 'revoked' })
+  })
+
+  it('a link still being set up is never ended by its key not being on the ACL yet', async () => {
+    const vta = await onlineController()
+    const shown = { kind: 'showingKey', vtaDid: 'did:webvh:bob', label: 'bob', did: 'did:key:z6Mktemporary' }
+    ;(vta as unknown as { set(next: Record<string, unknown>): void }).set({ link: shown })
+    vta.presenceFailed(NOT_ON_ACL())
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey' })
+  })
+})
