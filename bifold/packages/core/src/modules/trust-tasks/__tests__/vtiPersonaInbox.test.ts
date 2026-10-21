@@ -210,22 +210,47 @@ describe('a persona whose borrowed key is not in memory (#422)', () => {
     startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
     await flush()
     expect(onError.mock.calls[0][0]).toBeInstanceOf(PersonaAgentUnreachable)
-    expect(onError.mock.calls[0][0].kind).not.toBe('refused')
+    expect(onError.mock.calls[0][0].kind).toBe('unreachable')
   })
 
   // A community's own refusal never reaches the agent state at all: only the
   // agent's answer to borrowing the key again is read for it.
-  it("a community's forbidden is not the agent's refusal", async () => {
-    connect.mockRejectedValueOnce(new Error('forbidden: DID not in ACL of the community'))
-    // The state is module-wide; this test only asserts it does not change it.
-    const before = personaAgentState(mockPersona.communityDid)
-    const onError = jest.fn()
-    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError })
+  it("a community's forbidden is not the agent's refusal; the agent's own, through the same inbox, is", async () => {
+    // Start from a cleared state: a sign-in that succeeds clears it, whatever
+    // an earlier test left in the module-wide map.
+    connect.mockImplementationOnce(async () => {
+      mockAgentState.isConnected = true
+    })
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
     await flush()
+    expect(personaAgentState(mockPersona.communityDid)).toBeUndefined()
+    mockAgentState.isConnected = false
+
+    // A community refuses the sign-in, in the same words the agent uses.
+    connect.mockRejectedValueOnce(new Error('forbidden: DID not in ACL of the community'))
+    const onCommunity = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError: onCommunity })
+    await flush()
+    expect(onCommunity).toHaveBeenCalledTimes(1)
+    expect(onCommunity.mock.calls[0][0]).not.toBeInstanceOf(PersonaAgentUnreachable)
     expect(mockRefetch).not.toHaveBeenCalled()
-    expect(onError).toHaveBeenCalledTimes(1)
-    expect(onError.mock.calls[0][0]).not.toBeInstanceOf(PersonaAgentUnreachable)
-    expect(personaAgentState(mockPersona.communityDid)).toBe(before)
+    expect(personaAgentState(mockPersona.communityDid)).toBeUndefined()
+
+    // Positive control: the agent's own refusal of the key, through the same
+    // inbox and the same assertion, does change the state.
+    connect.mockRejectedValueOnce(MISSING())
+    mockRefetch.mockRejectedValueOnce(new Error('permission denied: forbidden: DID not in ACL: did:peer:2.Vz6Mk'))
+    const onAgent = jest.fn()
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError: onAgent })
+    await flush()
+    expect(onAgent.mock.calls[0][0]).toBeInstanceOf(PersonaAgentUnreachable)
+    expect(personaAgentState(mockPersona.communityDid)?.kind).toBe('refused')
+
+    // …and a community's refusal after it does not overwrite the agent's.
+    connect.mockRejectedValueOnce(new Error('forbidden: DID not in ACL of the community'))
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000, onError: jest.fn() })
+    await flush()
+    expect(personaAgentState(mockPersona.communityDid)?.kind).toBe('refused')
   })
 
   it('any other sign-in failure is not taken for a missing key', async () => {
