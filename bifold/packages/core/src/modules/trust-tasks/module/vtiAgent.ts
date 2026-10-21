@@ -1065,6 +1065,11 @@ class VtiAgentController {
     return this.session?.isOpen === true
   }
 
+  /** Back in the foreground: the session asks its mediator for something, and reopens if nothing comes back. */
+  checkAlive(): void {
+    this.session?.checkAlive()
+  }
+
   /**
    * Run `guard` before every sign-in, with the DID about to sign in, and wait
    * for it: a listener holding its own connection for that DID closes it first.
