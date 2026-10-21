@@ -23,3 +23,17 @@ test('a changed hash and a source on one side only are both reported, per platfo
     { platform: 'ios', id: 'node_modules/only-a', a: '9', b: 'absent' },
   ])
 })
+
+test('sources sharing an id are each compared, not collapsed into one', () => {
+  const a = fp([
+    { type: 'dir', hash: 'a' },
+    { type: 'dir', hash: 'b' },
+    { type: 'dir', hash: 'c' },
+  ])
+  const b = fp([
+    { type: 'dir', hash: 'a' },
+    { type: 'dir', hash: 'X' },
+    { type: 'dir', hash: 'c' },
+  ])
+  assert.deepEqual(diffFingerprints(a, b), [{ platform: 'ios', id: 'dir#2', a: 'b', b: 'X' }])
+})

@@ -18,7 +18,19 @@ const PLATFORMS = ['ios', 'android']
 
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'))
 const sourceId = (s) => s.filePath ?? s.id ?? s.type
-const byId = (sources = []) => new Map(sources.map((s) => [sourceId(s), s]))
+// Keyed by id, with a repeated id numbered by occurrence (id#2, id#3, …), so two
+// sources sharing an id are both compared rather than one silently replacing the other.
+const byId = (sources = []) => {
+  const seen = new Map()
+  const out = new Map()
+  for (const s of sources) {
+    const id = sourceId(s)
+    const n = (seen.get(id) ?? 0) + 1
+    seen.set(id, n)
+    out.set(n === 1 ? id : `${id}#${n}`, s)
+  }
+  return out
+}
 
 export const diffFingerprints = (a, b) => {
   const out = []
