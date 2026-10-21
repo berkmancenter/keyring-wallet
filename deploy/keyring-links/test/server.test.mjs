@@ -305,7 +305,11 @@ describe('server', () => {
   })
 
   // As root, a read-only directory still accepts writes, so the failure can't be produced.
-  it('still serves a link when extending it fails (e.g. a full disk)', { skip: process.getuid?.() === 0 }, async () => {
+  // That may only be skipped on a laptop: in CI (CI is set) running as root fails here,
+  // so the case is never silently untested where it counts.
+  const asRoot = process.getuid?.() === 0
+  it('still serves a link when extending it fails (e.g. a full disk)', { skip: asRoot && !process.env.CI }, async () => {
+    assert.equal(asRoot, false, 'CI runs as root: this test cannot produce a write failure there')
     await listen()
     try {
       const invitation = await fixture('invitation-v1.json')
