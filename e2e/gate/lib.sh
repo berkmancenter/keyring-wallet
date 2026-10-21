@@ -298,10 +298,11 @@ use_build() {
   local m got=none want
   m=$(build_manifest "$CAND_APP" "$APK_OFF")
   CAND_WALLET=$(grep '^wallet=' "$m" 2>/dev/null | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" 2>/dev/null | cut -d= -f2)
-  # A release gate must name what it tested; other kinds (a dry run, changed legs) go on with a warning. $kind is the
-  # caller's (cmd_run's local, which bash scoping lets this function read); unset elsewhere.
+  # A release gate must name what it tested, and so must a rerun of one (it completes and counts toward that gate); other
+  # kinds (a dry run, changed legs) go on with a warning. $kind is the caller's local (cmd_run's, or cmd_rerun's from the
+  # rerun run's meta), which bash scoping lets this function read; unset elsewhere.
   if [ -z "$CAND_WALLET" ]; then
-    [ "${kind:-}" != gate ] || die "no build manifest under $dir/off: a release gate must name the wallet and bifold commits it tested"
+    case ${kind:-} in gate|rerun) die "no build manifest under $dir/off: a release gate must name the wallet and bifold commits it tested" ;; esac
     say "no build manifest found under $dir/off: the report will not name the wallet and bifold commits"
   fi
   if [ -n "$CAND_APP" ]; then

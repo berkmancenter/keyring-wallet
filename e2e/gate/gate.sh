@@ -198,6 +198,8 @@ cmd_rerun() {
   [ "$only" = --only-failed ] || usage
   local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
   local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
+  # The rerun finishes the run it reruns, so it is held to that run's kind (use_build stops a gate with no manifest).
+  local kind; kind=$(grep -m1 '^kind=' "$old/meta" | cut -d= -f2)
   gate_env
   ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"

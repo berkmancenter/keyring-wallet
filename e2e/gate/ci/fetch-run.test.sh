@@ -29,5 +29,8 @@ ub() { ( export GATE_HOME=$T/home2; mkdir -p "$T/home2/builds"; ln -sfn "$T/buil
   . "$here/../lib.sh" >/dev/null 2>&1; build_runs() { echo "1 -"; }; fetch_run() { :; }; gh() { :; }
   kind=$1; use_build eeee0000ffff; echo "rc=$?" ) 2>&1; }
 case $(ub gate) in *"must name the wallet and bifold"*) ok "a release gate with no build manifest stops";; *) bad "a gate went on without a manifest: $(ub gate | tail -2)";; esac
+case $(ub rerun) in *"must name the wallet and bifold"*) ok "a rerun (of a gate) with no build manifest stops";; *) bad "a rerun went on without a manifest: $(ub rerun | tail -2)";; esac
+# cmd_rerun holds the rerun to the kind recorded in the run it reruns.
+grep -q "kind=\$(grep -m1 '^kind=' \"\$old/meta\"" "$here/../gate.sh" && ok "cmd_rerun reads the rerun run's kind from its meta" || bad "cmd_rerun does not read kind from the old meta"
 case $(ub dry) in *"will not name the wallet"*rc=0) ok "a dry run with no build manifest warns and goes on";; *) bad "a dry run without a manifest: $(ub dry | tail -2)";; esac
 [ $fails = 0 ] && echo "fetch-run: all passed" || { echo "fetch-run: $fails failed"; exit 1; }
