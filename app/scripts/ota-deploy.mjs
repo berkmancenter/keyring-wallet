@@ -24,6 +24,12 @@
  *   npx hot-updater bundle update <id> --target-cohorts ring0,ring1,ring2 -y
  * Withdrawing: npx hot-updater bundle disable <id> -y (phones on it roll back).
  *
+ * --skip-tier: the device-test channel only (the quick-install test app, signed
+ * with its own throwaway key that no store build carries), with --base: skip the
+ * tier check, so the trial can publish a bundle built against a native change
+ * (the fingerprint-mismatch step). Refused for any other channel, and said in
+ * the log when used.
+ *
  * --after-native-config: the job has just run scripts/ota/native-config.mjs on a
  * checkout it verified clean, so exactly the files that script writes may differ
  * (both Info.plists, the Android manifest, app/fingerprint.json) and nothing else.
@@ -48,6 +54,7 @@ const { values: args } = parseArgs({
     scope: { type: 'string', default: 'fix' },
     message: { type: 'string' },
     'after-native-config': { type: 'boolean', default: false },
+    'skip-tier': { type: 'boolean', default: false },
   },
 })
 
@@ -62,6 +69,9 @@ const git = (...a) => execFileSync('git', a, { cwd: repoDir, encoding: 'utf8' })
 
 if (!args.build === !args.base) fail('give exactly one of --build <N> (the store build) or --base <commit>')
 if (!SCOPES.includes(args.scope)) fail(`--scope must be one of ${SCOPES.join(', ')}`)
+if (args['skip-tier'] && (args.channel !== 'device-test' || !args.base)) {
+  fail('--skip-tier is only for the device-test channel with --base (the quick-install test app)')
+}
 const platforms = args.platform === 'both' ? ['ios', 'android'] : [args.platform]
 if (!platforms.every((p) => p === 'ios' || p === 'android')) fail('--platform must be ios, android or both')
 
@@ -106,21 +116,28 @@ if (ancestor.status !== 0)
 
 // 2. JavaScript-only, and no held class.
 // Only exit 0 with tier "ota" permits a publish (tier.mjs's header).
-const tierScript = path.join(repoDir, 'scripts', 'release', 'tier.mjs')
-if (!existsSync(tierScript)) fail('scripts/release/tier.mjs is missing; refusing to publish without the tier check')
-const run = spawnSync('node', [tierScript, '--range', `${base}..${walletHead}`, '--json'], {
-  cwd: repoDir,
-  encoding: 'utf8',
-})
-let verdict
-try {
-  verdict = JSON.parse(run.stdout)
-} catch {
-  fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
-}
-if (run.status !== 0 || verdict.tier !== 'ota') {
-  const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
-  fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
+if (args['skip-tier']) {
+  console.log(
+    `ota-deploy: TIER CHECK SKIPPED (--skip-tier): channel device-test, base ${base.slice(0, 8)}. ` +
+      'This bundle is for the quick-install test app only.'
+  )
+} else {
+  const tierScript = path.join(repoDir, 'scripts', 'release', 'tier.mjs')
+  if (!existsSync(tierScript)) fail('scripts/release/tier.mjs is missing; refusing to publish without the tier check')
+  const run = spawnSync('node', [tierScript, '--range', `${base}..${walletHead}`, '--json'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  })
+  let verdict
+  try {
+    verdict = JSON.parse(run.stdout)
+  } catch {
+    fail(`tier.mjs gave no verdict (exit ${run.status}): ${run.stderr}`)
+  }
+  if (run.status !== 0 || verdict.tier !== 'ota') {
+    const held = verdict.held?.length ? `; held: ${verdict.held.join(', ')}` : ''
+    fail(`tier is "${verdict.tier}" (exit ${run.status})${held}: this change ships as a store build`)
+  }
 }
 
 // 3. The signing key must be there: with the public key in the binary, an

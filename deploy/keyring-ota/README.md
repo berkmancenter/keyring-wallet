@@ -145,9 +145,20 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 | `OTA_PUBLIC_KEY` | variable | the loader's RSA public key (PEM; public) | staging.yaml, ota-publish.yml |
 | `OTA_CHANNEL` | variable | the channel, default `production` | staging.yaml, ota-publish.yml |
 | `OTA_SERVER_URL` | variable | `https://<OTA_HOST>` for the publisher | ota-publish.yml |
-| `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the RSA private key | ota-publish.yml |
+| `OTA_SIGNING_KEY_PEM` | secret, environment `ota` | the store RSA private key (channels production and preview) | ota-publish.yml |
+| `OTA_TEST_SIGNING_KEY_PEM` | secret, environment `ota` | the quick-install test app's throwaway private key (channel device-test only); delete it after a trial | ota-publish.yml |
 | `HOT_UPDATER_AUTH_TOKEN` | secret, environment `ota` | the server's management token | ota-publish.yml |
 | environment `ota-approval` | required reviewers | the two approvers; holds no secrets | ota-publish.yml |
+
+**Channels and keys** (`ota-publish.yml`'s `channel` input; enforced by `scripts/ota/signing-key.mjs`):
+
+| Channel | Who has it | Signed with | Inputs |
+| --- | --- | --- | --- |
+| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | `build` (staging tag number); tier check |
+| `preview` | an early-access group (no app build yet) | the same store key: store builds carry only `OTA_PUBLIC_KEY` | `build`; tier check |
+| `device-test` | the quick-install test app only | **only** `OTA_TEST_SIGNING_KEY_PEM`, which must not be the store key; no fallback | `base` (the test app's build commit); tier check skipped; actions publish, tamper, crash, mismatch, disable, cleanup (`scripts/ota/device-test.sh`) |
+
+Every channel waits for the `ota-approval` reviewer.
 
 The key pair is generated offline (`npx hot-updater keys generate`). The public
 half goes into `OTA_PUBLIC_KEY`; the private half goes into the `ota` environment

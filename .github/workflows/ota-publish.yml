@@ -8,7 +8,18 @@ name: OTA publish (ring 0)
 # required reviewer on the "ota-approval" environment, which holds no secrets;
 # only then does the "ota" environment hand over the signing key.
 #
-# A dry run checks the commit and probes the server and token without uploading.
+# Channels (the "channel" input). production is what store builds carry.
+# preview is for an early-access group, and is signed with the same store key,
+# because store builds carry only that public key. device-test is the
+# quick-install test app's own channel, signed ONLY with its throwaway key
+# (OTA_TEST_SIGNING_KEY_PEM), never the store key. scripts/ota/signing-key.mjs
+# enforces that mapping and checks each key against OTA_PUBLIC_KEY. Every
+# channel waits for the ota-approval reviewer. Only device-test takes a base
+# commit instead of a build, skips the tier check, and has the trial's other
+# actions (scripts/ota/device-test.sh).
+#
+# A dry run checks the commit, the inputs and the signing-key mapping, and
+# probes the server and token, without uploading.
 # Not usable until both of these exist: the hosted update server (OTA_SERVER_URL)
 # and store builds that carry the public key, the channel and the native
 # fingerprint (a change to staging.yaml, in its own PR). Until then the spike
@@ -17,10 +28,28 @@ name: OTA publish (ring 0)
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: 'production (store builds), preview (early access, store key) or device-test (the quick-install test app, its own key)'
+        type: choice
+        options: [production, preview, device-test]
+        default: production
       build:
-        description: 'The store build the bundle targets, by number (its staging-v*-NNN tag)'
+        description: 'production/preview: the store build the bundle targets, by number (its staging-v*-NNN tag)'
         type: string
-        required: true
+        default: ''
+      base:
+        description: "device-test only: the test app's own build commit (full 40-character SHA)"
+        type: string
+        default: ''
+      action:
+        description: 'publish for production/preview; device-test also: tamper, crash, mismatch, disable (needs bundle_id), cleanup'
+        type: choice
+        options: [publish, tamper, crash, mismatch, disable, cleanup]
+        default: publish
+      bundle_id:
+        description: 'device-test disable only: the bundle to withdraw'
+        type: string
+        default: ''
       platform:
         description: Which platform's bundle to publish
         type: choice
@@ -49,7 +78,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - publish ${{ github.sha }} (for build ${{ inputs.build }}, ${{ inputs.platform }}, scope ${{ inputs.scope }}) to ring 0."
+      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ring 0."
 
   publish:
     needs: [approve]
@@ -83,6 +112,40 @@ jobs:
             exit 1
           fi
           echo "publishing $GITHUB_SHA from $REF (signature verified)"
+
+      - name: The inputs fit the channel
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          ACTION: ${{ inputs.action }}
+          BUILD: ${{ inputs.build }}
+          BASE: ${{ inputs.base }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          STORE_CHANNEL: ${{ vars.OTA_CHANNEL }}
+        run: |
+          err() { echo "::error::$1"; exit 1; }
+          case "$CHANNEL" in
+            production | preview)
+              [ "$ACTION" = publish ] || err "$CHANNEL takes only the publish action (got $ACTION)"
+              [[ "$BUILD" =~ ^[0-9]+$ ]] || err "$CHANNEL needs build: the store build number (got '$BUILD')"
+              [ -z "$BASE" ] || err "base is for device-test only"
+              [ -z "$BUNDLE_ID" ] || err "bundle_id is for device-test disable only"
+              # staging.yaml writes vars.OTA_CHANNEL (default production) into store builds.
+              if [ "$CHANNEL" = production ] && [ -n "$STORE_CHANNEL" ] && [ "$STORE_CHANNEL" != production ]; then
+                err "store builds carry channel '$STORE_CHANNEL' (vars.OTA_CHANNEL), not production"
+              fi ;;
+            device-test)
+              [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || err "device-test needs base: the test app's build commit as a full SHA (got '$BASE')"
+              git merge-base --is-ancestor "$BASE" "$GITHUB_SHA" || err "base $BASE is not an ancestor of $GITHUB_SHA"
+              [ -z "$BUILD" ] || err "device-test takes base, not build"
+              if [ "$ACTION" = disable ]; then
+                [ -n "$BUNDLE_ID" ] || err "disable needs bundle_id"
+              else
+                [ -z "$BUNDLE_ID" ] || err "bundle_id is for disable only"
+              fi
+              echo "::warning::device-test: the tier check is skipped for this channel (the quick-install test app, base ${BASE:0:8}); nothing published here can reach a store build" ;;
+            *) err "unknown channel $CHANNEL" ;;
+          esac
+          echo "channel $CHANNEL, action $ACTION"
 
       # Runs on a dry run too, and before the slow install: a dry run then proves
       # the server and the token, not only the build. Nothing is uploaded: one
@@ -133,13 +196,24 @@ jobs:
       - name: Verify bifold linking
         run: node scripts/verify-bifold-linking.js
 
+      # production and preview: the store key, which must be OTA_PUBLIC_KEY's pair.
+      # device-test: ONLY the test key, which must not be (no fallback). A dry
+      # run checks the mapping with the real secrets and writes nothing.
       - name: Signing key
-        if: ${{ !inputs.dry_run }}
+        if: ${{ inputs.dry_run || !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
         env:
           OTA_SIGNING_KEY_PEM: ${{ secrets.OTA_SIGNING_KEY_PEM }}
+          OTA_TEST_SIGNING_KEY_PEM: ${{ secrets.OTA_TEST_SIGNING_KEY_PEM }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          CHANNEL: ${{ inputs.channel }}
+          ACTION: ${{ inputs.action }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           umask 077
-          printf '%s\n' "$OTA_SIGNING_KEY_PEM" > "$RUNNER_TEMP/ota-private-key.pem"
+          flags=()
+          [ "$ACTION" = tamper ] && flags+=(--tamper)
+          [ "$DRY_RUN" = true ] && flags+=(--check)
+          node scripts/ota/signing-key.mjs --channel "$CHANNEL" --out "$RUNNER_TEMP" "${flags[@]}"
 
       # The same native settings the store build wrote (staging.yaml), from the
       # same repository variables: the CLI refuses to publish a signed bundle
@@ -155,26 +229,42 @@ jobs:
           fi
 
       - name: Native OTA settings
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' }}
         env:
           OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
-          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+          OTA_CHANNEL: ${{ inputs.channel }}
         run: node scripts/ota/native-config.mjs
 
       - name: Publish to ring 0
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' }}
         working-directory: app
         env:
           OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
           OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
           HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
           BUILD: ${{ inputs.build }}
           PLATFORM: ${{ inputs.platform }}
           SCOPE: ${{ inputs.scope }}
-        run: node scripts/ota-deploy.mjs --build "$BUILD" --platform "$PLATFORM" --scope "$SCOPE" --after-native-config
+        run: node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" --after-native-config
+
+      # The trial's moves on the test app's channel. Each publish is a local,
+      # never-pushed commit on top of the verified one (scripts/ota/device-test.sh).
+      - name: Device test (${{ inputs.action }})
+        if: ${{ !inputs.dry_run && inputs.channel == 'device-test' }}
+        env:
+          OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
+          OTA_PUBLIC_KEY_FILE: ${{ runner.temp }}/ota-public-key.pem
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          OTA_BASE: ${{ inputs.base }}
+          PLATFORM: ${{ inputs.platform }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          ACTION: ${{ inputs.action }}
+        run: bash scripts/ota/device-test.sh "$ACTION"
 
       - name: Dry run
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.dry_run && inputs.channel != 'device-test' }}
         env:
           BUILD: ${{ inputs.build }}
         run: |
@@ -187,4 +277,4 @@ jobs:
 
       - name: Remove the signing key
         if: ${{ always() }}
-        run: rm -f "$RUNNER_TEMP/ota-private-key.pem"
+        run: rm -f "$RUNNER_TEMP/ota-private-key.pem" "$RUNNER_TEMP/ota-public-key.pem"
