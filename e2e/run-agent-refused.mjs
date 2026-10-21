@@ -27,7 +27,7 @@ import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppi
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { join } from "./lib/pages/join.js";
 import { createRows } from "./lib/rows.js";
-import { createHvAdmin, newestMemberSince, newestRequestSince } from "./openvtc/hvAdmin.js";
+import { createHvAdmin, requestsSince } from "./openvtc/hvAdmin.js";
 
 const UDID = process.env.UDID;
 const C_DID = process.env.C_DID;
@@ -72,16 +72,20 @@ try {
     await join.openCommunity(d, { did: C_DID, name: "" });
     await join.ask(d, { tag: "refused" });
     await join.awaitSent(d, { required: true });
-    let req;
-    for (let i = 0; i < 24 && !req; i++) { req = newestRequestSince(admin.joinRequests("pending"), since); if (!req) await sleep(5000); }
-    if (!req) throw new Error("no pending join request from this phone reached the community");
+    // C is shared with other legs (kk, beside this one on the MacBook): approve only when this phone's request is the
+    // one new request, and remember only the member it made, so the cleanup never removes someone else's (review on #549).
+    let reqs = [];
+    for (let i = 0; i < 24 && !reqs.length; i++) { reqs = requestsSince(admin.joinRequests("pending"), since); if (!reqs.length) await sleep(5000); }
+    if (!reqs.length) throw new Error("no pending join request from this phone reached the community");
+    if (reqs.length > 1) return { ok: false, detail: `${reqs.length} join requests appeared on C since this step began: another run is joining, so none is approved here` };
+    const req = reqs[0];
     admin.decide(req.id, "approved");
     let member;
-    for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
+    for (let i = 0; i < 24 && !member; i++) { member = admin.members().find((m) => m.did === req.applicantDid); if (!member) await sleep(5000); }
     memberDid = member?.did;
     const done = await waitForTestId(d, "JoinDone", 240000).then(() => true, () => false);
     if (done) await join.done(d).catch(() => undefined);
-    return { ok: Boolean(member && member.did === req.applicantDid && done), detail: `request ${req.id} approved; member ${member?.did ?? "none listed"}; JoinDone ${done}` };
+    return { ok: Boolean(member && done), detail: `request ${req.id} approved; member ${member?.did ?? "not listed"} (its applicant); JoinDone ${done}` };
   });
   if (!memberDid) throw new Error("not a member: no community to show the notice");
 
@@ -96,6 +100,8 @@ try {
   // 3. The runner forgets this phone: its own entries only, as the end-of-leg cleanup would remove them.
   const mine = linkedPhoneEntries(listAcl({ slug: link.slug, pnmHome: link.pnmHome }), link);
   if (!mine.length) throw new Error(`driver: the link record names no entry on ${link.slug} (tempDid ${String(link.tempDid).slice(0, 24)}…)`);
+  // One phone holds its grant and perhaps a rotated key or two: more is not this phone's, so nothing is removed.
+  if (mine.length > 3) throw new Error(`driver: ${mine.length} entries chained to this phone on ${link.slug}, more than a phone holds: nothing removed`);
   adb("logcat", "-c");
   const removedAt = Date.now();
   for (const e of mine) {

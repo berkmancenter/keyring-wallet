@@ -45,6 +45,11 @@ export function createHvAdmin({ vtcBase, communityDid, adminCredential }) {
   };
 }
 
+/** Every join request made at or after `since` (ISO). More than one means another run asked meanwhile. */
+export function requestsSince(requests, since) {
+  return requests.filter((r) => String(r.createdAt ?? r.submittedAt ?? '') >= since);
+}
+
 /** The newest pending join request made at or after `since` (ISO): the one this run's phone sent. */
 export function newestRequestSince(requests, since) {
   return requests
