@@ -237,6 +237,11 @@ export async function unpackTrustTaskFromPeer(
   expectedReceiver: string
 ): Promise<{ plaintext: DidCommV2PlaintextMessage; unpacked: tsp.UnpackedMessage } | undefined> {
   let unpacked: tsp.UnpackedMessage
+  // Two constraints this relies on, both true of rev2 and rev3 today and worth keeping so:
+  //  - a codec never resolves again after the key was used (a resolve then would go unseen, read as unsealFailed);
+  //  - the resolver does not cache (createVtiVidResolver resolves in the call). rev2 opens with the sender's
+  //    encryption key from that resolve, so a stale cached key would fail after `agree` and read as lasting: a
+  //    frame from a sender who rotated would be dropped for good. Uncached, a rotation mid-call is a race, not a state.
   // Watch how far opening got: only two stages make a failure lasting. Reading the bytes, before anything is
   // resolved (malformed); and the receiver's key used, and still nothing opened (sealed to another key). In
   // between, the sender's DID is resolved over the network and its signature checked against that document: a
@@ -278,7 +283,10 @@ export async function unpackTrustTaskFromPeer(
     if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) return undefined
     const detail = String((error as Error)?.message ?? error).slice(0, 160)
     if (stage === 'keyUsed')
-      throw new TspFrameUnopenable('unsealFailed', `${LOG_PREFIX} frame did not open with this key: ${detail}`)
+      throw new TspFrameUnopenable(
+        'unsealFailed',
+        `${LOG_PREFIX} frame failed after this key was used (sealed to another key, or what it carries cannot be read): ${detail}`
+      )
     if (stage === 'reading')
       throw new TspFrameUnopenable('malformed', `${LOG_PREFIX} frame could not be read: ${detail}`)
     // Resolving its sender, checking its signature, or a key not usable yet: transient, left queued.

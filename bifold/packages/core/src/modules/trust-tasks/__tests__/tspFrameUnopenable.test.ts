@@ -12,7 +12,7 @@
  */
 import { tsp } from '@bifold/trust-tasks'
 
-import { isTspFrameUnopenable } from '../module/tspFrameUnopenable'
+import { isTspFrameUnopenable, TspFrameUnopenable } from '../module/tspFrameUnopenable'
 import { VtiMediatorSession, type VtiClientIdentity, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
 import { unpackTrustTaskFromPeer, type TspSessionIdentity } from '../module/vtiTsp'
 
@@ -166,6 +166,17 @@ describe('what the session does with each', () => {
     expect(consumer).toHaveBeenCalledTimes(2)
     expect(s.acknowledge).toHaveBeenCalledTimes(1)
     expect(s.acknowledge).toHaveBeenCalledWith([tsp.tspFrameQueueId(FRAME)])
+  })
+
+  // 7a on #456: the type allows a handler that answers synchronously; the drain must survive one throwing.
+  it('a handler that throws synchronously from a drain: the frame is still dropped, and the drain finishes', async () => {
+    const s = collecting(((_bytes: Uint8Array) => {
+      throw new TspFrameUnopenable('malformed', 'tsp: message too short')
+    }) as never)
+    await s.pickup()
+    expect(s.acknowledge).toHaveBeenCalledWith([tsp.tspFrameQueueId(FRAME)])
+    expect(s.onError).not.toHaveBeenCalled()
+    expect(said()).toMatch(/drained 1 queued .*: 1 taken, 1 dropped as never openable, 0 left queued/)
   })
 
   it('a backlog frame left queued is counted as left, not taken', async () => {

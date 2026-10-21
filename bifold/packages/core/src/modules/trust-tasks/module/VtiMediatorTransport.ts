@@ -1043,10 +1043,13 @@ export class VtiMediatorSession {
             acknowledged.push(attachment.id)
             continue
           }
-          await this.options.onTspFrame(tsp.fromBase64Url(tspText)).catch((error: unknown) => {
+          // As the live path: a handler may answer synchronously, so the call is awaited inside the try, never `.catch`ed.
+          try {
+            await this.options.onTspFrame(tsp.fromBase64Url(tspText))
+          } catch (error) {
             if (!isTspFrameUnopenable(error)) throw error
             this.dropped(attachment.id ?? '?', error.reason, error.message)
-          })
+          }
           if (attachment.id) {
             this.remember(attachment.id)
             acknowledged.push(attachment.id)
