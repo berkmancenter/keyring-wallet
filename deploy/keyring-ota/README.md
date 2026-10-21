@@ -147,6 +147,15 @@ hot-updater's own `bundle-store/metadata.json` (`verification_pending`,
 API for it. Check that the file and both keys still mean the same thing; if they
 don't, the watchdog never arms, which is safe but leaves the black screen it
 exists to close.
+The watchdog's `abort()` is safe only because the next launch rolls the update
+back, and two hot-updater internals make that happen
+(`ios/HotUpdater/Internal/BundleFileStorageService.swift` and
+`HotUpdaterImpl.swift`). Check both; if either changed, the abort no longer
+leads to a rollback. It leads to a crash on every launch of that update instead:
+- `prepareLaunch` rolls back the staging bundle when the previous process left
+  `verification_pending` and `launch_in_progress` both set (an unfinished launch);
+- `markLaunchStarted` sets `launch_in_progress` when the bundle URL is resolved
+  in the foreground, before anything renders, not at first render.
 Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 (the server's update-check routes and the app's loader are one protocol).
 
