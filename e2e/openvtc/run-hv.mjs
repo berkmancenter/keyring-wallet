@@ -186,7 +186,7 @@ try {
   // The one member since the run began, on two reads: the community is shared with legs beside this one (signin's
   // member joins keyring-hv-lab1 too), and "the newest member" could be theirs, a pass for an admission that is not ours.
   const { member, count: members } = await soleMemberSince(() => admin.members(), since);
-  mark('hv-admitted', member ? 'PASS' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt}), the one member since the run began` : members ? `${members} members joined since the run began (read twice): whose is not known, so no verdict of admission` : 'no member listed since the run began');
+  mark('hv-admitted', member ? 'PASS' : members ? 'SKIP' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt}), the one member since the run began` : members ? `${members} members joined since the run began (read twice) on this shared community: whose is not known, so this run cannot judge the admission` : 'no member listed since the run began');
   mark('hv-member-card', /member|joined|welcome|done/i.test(String(outcome)) ? 'PASS' : 'FAIL', `the app says "${String(outcome).slice(0, 120)}"`);
 
   // No vetter named where it would be a leak: in the app's own lines since the attestation and the page it ends on (the

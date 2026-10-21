@@ -76,7 +76,7 @@ try {
     // one new request, and remember only the member it made, so the cleanup never removes someone else's (review on #549).
     const { req, count } = await soleRequestSince(() => admin.joinRequests("pending"), since);
     if (!req && !count) throw new Error("no pending join request from this phone reached the community");
-    if (!req) return { ok: false, detail: `${count} join requests on C since this step began (read twice, 5 s apart): another run is joining, so none is approved here` };
+    if (!req) return { skip: `${count} join requests on C since this step began (read twice, 5 s apart): another run is joining, so none is approved and this run cannot judge the app` };
     admin.decide(req.id, "approved");
     let member;
     for (let i = 0; i < 24 && !member; i++) { member = admin.members().find((m) => m.did === req.applicantDid); if (!member) await sleep(5000); }
