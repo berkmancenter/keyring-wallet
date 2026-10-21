@@ -35,10 +35,13 @@ if selected swap-held; then
   echo "  rule off: $(pnm "$RUNNER_MAIN_SLUG" approvals remove "$TASK" | tail -1 | cut -c1-60)"; sleep 3
 fi
 
+# The deny module, written whichever rows run: swap-refused-no-try-again re-creates the policy from it when
+# swap-refused (which used to write it) is not selected, and a rerun of only the refused-scan rows found no file and
+# no policy, so the swap was accepted and both rows failed (1021-0328).
+printf '%s\n' 'package vta.policy' 'import rego.v1' \
+  "decision := {\"decision\": \"deny\", \"explanation\": \"gate: acl/swap-key refused on purpose (#325 row)\"} if {" \
+  "  input.request.typeUri == \"$TASK\"" '}' > "$LEG_DIR/deny-swap.rego"
 if selected swap-refused; then
-  printf '%s\n' 'package vta.policy' 'import rego.v1' \
-    "decision := {\"decision\": \"deny\", \"explanation\": \"gate: acl/swap-key refused on purpose (#325 row)\"} if {" \
-    "  input.request.typeUri == \"$TASK\"" '}' > "$LEG_DIR/deny-swap.rego"
   echo "  policy: $(pnm "$RUNNER_MAIN_SLUG" policy upsert --id "$POL" --name "$POL" --priority 1000 --module "$LEG_DIR/deny-swap.rego" | tail -1 | cut -c1-80)"; sleep 3
   L galarm 1200 env EXPECT_REFUSAL=swapRefused node run-vta-link.js > "$LEG_DIR/refused.out" 2>&1; rc=$?
   if [ $rc -eq 0 ]; then row swap-refused PASS "$(said "$LEG_DIR/refused.out")"; else row swap-refused FAIL "rc=$rc $(grep -E '❌|Error:' "$LEG_DIR/refused.out" | grep -v webdriver | head -1 | cut -c1-160)"; fi
