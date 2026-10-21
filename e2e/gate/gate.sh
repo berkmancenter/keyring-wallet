@@ -40,7 +40,7 @@ LEGS_SOLO="linkfail pnmlink"
 # not run, skipped every row, or passed only informationally is not green (run-summary.mjs coreMissing). Sign-in is
 # signin-ios alone: the Android `signin` leg runs by name only (the emulator's fingerprint HAL), so its absence is an
 # ordinary SKIP. journey:leg[,leg] entries.
-CORE_JOURNEYS="vetting-named:kk vetting-hidden:hv signin:signin-ios join:waiting"
+CORE_JOURNEYS="vetting-named:kk vetting-hidden:hv@hv-admitted signin:signin-ios join:waiting"
 # Rows reported apart and never a verdict, while their other side is behind: p1's TUI vetter against keyring-test's VTC
 # (it refuses openvtc 0.5.0's manifest/0.2). A leg can name more with an INFORMATIONAL rows=a,b line (hv's
 # VETTER=tui: the rows downstream of openvtc's attestation, which is not the published shape).

@@ -224,3 +224,20 @@ test("a leg's INFORMATIONAL line sets aside only the rows it names: its other FA
     assert.equal(s.overall, 'fail');
   } finally { r.done(); }
 });
+
+test('a core journey that names a row (hv@hv-admitted) is not proven while that row SKIPs, however many others pass', () => {
+  const CORE_ROW = 'core=vetting-named:kk vetting-hidden:hv@hv-admitted signin:signin-ios join:waiting\n';
+  const hv = (admitted) => pass('hv-link') + pass('hv-proof') + admitted;
+  const r = runs({
+    '1021-1000-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv('ROW hv-admitted SKIP — 2 members joined since the run began (read twice) on this shared community\n')], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+    '1021-1100-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv(pass('hv-admitted'))], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+  });
+  try {
+    const s = summarize(path.join(r.root, '1021-1000-cccc-gate'));
+    assert.equal(s.overall, 'incomplete');
+    assert.deepEqual(s.coreMissing.map((m) => [m.journey, m.why]), [['vetting-hidden', 'hv: hv-admitted did not PASS']]);
+    const ok = summarize(path.join(r.root, '1021-1100-cccc-gate'));
+    assert.equal(ok.overall, 'pass');
+    assert.deepEqual(ok.coreMissing, []);
+  } finally { r.done(); }
+});
