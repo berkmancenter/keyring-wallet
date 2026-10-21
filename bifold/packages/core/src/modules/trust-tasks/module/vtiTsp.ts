@@ -218,6 +218,9 @@ export function plaintextFromTrustTask(
   } as DidCommV2PlaintextMessage
 }
 
+/** How far opening a frame got: what makes its failure lasting or not (unpackTrustTaskFromPeer). */
+type OpenStage = 'reading' | 'resolving' | 'keyUsed' | 'keyUnavailable'
+
 /**
  * Open a TSP frame addressed to the persona and read the Trust Task in it.
  * Returns `undefined` for a frame that is TSP but not a Trust Task envelope.
@@ -246,7 +249,9 @@ export async function unpackTrustTaskFromPeer(
   // resolved (malformed); and the receiver's key used, and still nothing opened (sealed to another key). In
   // between, the sender's DID is resolved over the network and its signature checked against that document: a
   // failure there can be the network or a document just rotated, so it is not a verdict on the frame.
-  let stage: 'reading' | 'resolving' | 'keyUsed' | 'keyUnavailable' = 'reading'
+  // Cast, not annotated: the stage moves inside the resolver and key closures below, which control-flow narrowing
+  // does not follow, so an annotated `'reading'` would read as never anything else in the catch.
+  let stage = 'reading' as OpenStage
   const resolver: tsp.VidResolver = {
     ...session.resolver,
     resolve: async (vid: string) => {
