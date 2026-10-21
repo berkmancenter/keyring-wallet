@@ -111,6 +111,13 @@ ports, and neither container keeps an access log.
   `main` is a reviewed edit to ota-prod's `terraform.tfvars`, applied by the
   infrastructure owner. Only after that is the branch free to go.
 
+## The wallet host, on the same VM
+
+The compose file also runs **keyring-links** (`deploy/keyring-links`, the short invitation links at `/i`). The Caddyfile has a second site, `WALLET_HOST`, that serves the wallet host's static site from `app/universal-link-site` (universal-link files and the `/invite` install page) and proxies `/i` and `/i/*` to it.
+- **Link files:** they go to `LINKS_DATA_PATH`, a disk that is not snapshotted, so no backup outlives a link's 7 days.
+- **Defaults:** locally, `WALLET_HOST` defaults to `wallet.localhost` and `LINKS_DATA_PATH` to `./links-data` (gitignored).
+- **Moving the domain:** the wallet host's DNS record moves to this VM only at a planned cut-over (the infra repo's ota-prod README).
+
 ## Upgrading hot-updater
 
 OTA is dormant in a build without `OTA_UPDATE_URL`. One part of that depends on

@@ -3,3 +3,4 @@ data/
 # Filled-in configuration (management token, public URL).
 .env
 node_modules/
+links-data/
