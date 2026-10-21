@@ -27,7 +27,7 @@ import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppi
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { join } from "./lib/pages/join.js";
 import { createRows } from "./lib/rows.js";
-import { createHvAdmin, requestsSince } from "./openvtc/hvAdmin.js";
+import { createHvAdmin, soleRequestSince } from "./openvtc/hvAdmin.js";
 
 const UDID = process.env.UDID;
 const C_DID = process.env.C_DID;
@@ -74,11 +74,9 @@ try {
     await join.awaitSent(d, { required: true });
     // C is shared with other legs (kk, beside this one on the MacBook): approve only when this phone's request is the
     // one new request, and remember only the member it made, so the cleanup never removes someone else's (review on #549).
-    let reqs = [];
-    for (let i = 0; i < 24 && !reqs.length; i++) { reqs = requestsSince(admin.joinRequests("pending"), since); if (!reqs.length) await sleep(5000); }
-    if (!reqs.length) throw new Error("no pending join request from this phone reached the community");
-    if (reqs.length > 1) return { ok: false, detail: `${reqs.length} join requests appeared on C since this step began: another run is joining, so none is approved here` };
-    const req = reqs[0];
+    const { req, count } = await soleRequestSince(() => admin.joinRequests("pending"), since);
+    if (!req && !count) throw new Error("no pending join request from this phone reached the community");
+    if (!req) return { ok: false, detail: `${count} join requests on C since this step began (read twice, 5 s apart): another run is joining, so none is approved here` };
     admin.decide(req.id, "approved");
     let member;
     for (let i = 0; i < 24 && !member; i++) { member = admin.members().find((m) => m.did === req.applicantDid); if (!member) await sleep(5000); }

@@ -50,6 +50,21 @@ export function requestsSince(requests, since) {
   return requests.filter((r) => String(r.createdAt ?? r.submittedAt ?? '') >= since);
 }
 
+/**
+ * The one join request made since `since`, read twice: wait for a first request (up to `tries` reads), then read again
+ * after `settleMs` and accept only the same single id. A lone request seen once may be another run's that arrived before
+ * this phone's; the second read sees both. Returns { req } or { count } (0: none came; 2+: another run is joining).
+ * `read` and `wait` are injected, so it is testable without a community.
+ */
+export async function soleRequestSince(read, since, { tries = 24, everyMs = 5000, settleMs = 5000, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  let first = [];
+  for (let i = 0; i < tries && !first.length; i++) { first = requestsSince(read(), since); if (!first.length) await wait(everyMs); }
+  if (first.length !== 1) return { count: first.length };
+  await wait(settleMs);
+  const again = requestsSince(read(), since);
+  return again.length === 1 && again[0].id === first[0].id ? { req: again[0] } : { count: again.length };
+}
+
 /** The newest pending join request made at or after `since` (ISO): the one this run's phone sent. */
 export function newestRequestSince(requests, since) {
   return requests
