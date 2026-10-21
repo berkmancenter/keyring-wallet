@@ -152,6 +152,12 @@ describe('the short invitation link', () => {
     expect(deepLinkCarriesInvitation(link)).toBe(false)
   })
 
+  // The old router matched these anywhere in the link: a callback carrying "url=" went to connect.
+  test('a parameter that only ends in one of their names is not an invitation', () => {
+    expect(deepLinkCarriesInvitation('https://x.example/cb?return_url=https%3A%2F%2Fy')).toBe(false)
+    expect(deepLinkCarriesInvitation('https://x.example/cb?callback_oob=e30')).toBe(false)
+  })
+
   test('the long links still carry an invitation for the router', () => {
     expect(deepLinkCarriesInvitation(invitation().toUrl({ domain: `${LINKS_ORIGIN}/invite` }))).toBe(true)
     expect(deepLinkCarriesInvitation('https://x.example/?c_i=e30')).toBe(true)

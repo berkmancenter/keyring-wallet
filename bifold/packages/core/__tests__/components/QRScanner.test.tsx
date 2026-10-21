@@ -659,6 +659,19 @@ describe('QRScanner — the invitation as a link', () => {
     expect(tree.queryByTestId(testIdWithKey('MyQRShareLinkError'))).toBeNull()
   })
 
+  // A shape the share code does not expect is one more reason for no short link, never for sharing nothing.
+  test('an invitation of an unexpected shape: no short link, the long one shared, no error', async () => {
+    mint.mockImplementation(
+      async () =>
+        ({ record: { id: 'oob-x' }, invitation: {}, invitationUrl: 'https://wallet.example/invite?oob=x' }) as any
+    )
+    const tree = await renderInvite()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(shorten).not.toHaveBeenCalled()
+    expect((share.mock.calls[0][0] as { url?: string }).url).toBe('https://wallet.example/invite?oob=x')
+    expect(tree.queryByTestId(testIdWithKey('MyQRShareLinkError'))).toBeNull()
+  })
+
   test('on Android, the link alone as the message: it has no link item to share', async () => {
     const real = Platform.OS
     Platform.OS = 'android'

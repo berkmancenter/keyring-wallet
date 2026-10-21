@@ -31,7 +31,7 @@ import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
 import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
 import { invitationShareContent } from '../../utils/invitationLink'
-import { shortenInvitation } from '../../utils/shortInvitationLink'
+import { invitationJsonOf, shortenInvitation } from '../../utils/shortInvitationLink'
 import { testIdWithKey } from '../../utils/testable'
 import LoadingIndicator from '../animated/LoadingIndicator'
 import IconButton, { ButtonLocation } from '../buttons/IconButton'
@@ -248,10 +248,9 @@ const QRScanner: React.FC<Props> = ({
       if (!result) throw new Error('no invitation')
       // Short when the links service makes it (about 56 characters, which
       // survives being carried and selected); else the long link, as before.
-      const invitation = result.invitation as
-        | { toJSON: () => Record<string, unknown>; v2Invitation?: { toJSON: () => Record<string, unknown> } }
-        | undefined
-      const json = invitation?.v2Invitation?.toJSON() ?? invitation?.toJSON()
+      // An invitation of a shape not expected here is one more reason for no
+      // short link, like the service being down: never for sharing nothing.
+      const json = invitationJsonOf(result.invitation)
       const link = (json && (await shortenInvitation(json))) || result.invitationUrl
       releaseWarn(
         `[VRC] invitation link: made (${link === result.invitationUrl ? 'long' : 'short'}), share sheet opened`

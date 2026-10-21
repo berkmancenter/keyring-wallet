@@ -20,11 +20,29 @@ import { releaseWarn } from '../modules/trust-tasks/module/releaseLog'
 /** Where the links service lives: the host the long invitation links already use. */
 export const LINKS_ORIGIN = domain.replace(/^(https?:\/\/[^/]+).*$/, '$1')
 
-const shortLinkOf = (origin: string) => new RegExp(`^${origin.replace(/[.]/g, '\\.')}/i/[A-Za-z0-9_-]{16,64}$`)
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+const shortLinkOf = (origin: string) => new RegExp(`^${escaped(origin)}/i/[A-Za-z0-9_-]{16,64}$`)
 
 /** Whether `link` is one of our short invitation links (from `origin`, the links service by default). */
 export function isShortInvitationLink(link: string, origin: string = LINKS_ORIGIN): boolean {
   return shortLinkOf(origin).test(link.trim())
+}
+
+/**
+ * The invitation's JSON to store: its Out-of-Band 2.0 form when it has one.
+ * Undefined for anything without the shape, so the long link is shared.
+ */
+export function invitationJsonOf(invitation: unknown): Record<string, unknown> | undefined {
+  try {
+    const of = (x: unknown) =>
+      x && typeof (x as { toJSON?: unknown }).toJSON === 'function'
+        ? ((x as { toJSON: () => unknown }).toJSON() as Record<string, unknown>)
+        : undefined
+    const json = of((invitation as { v2Invitation?: unknown } | undefined)?.v2Invitation) ?? of(invitation)
+    return json && typeof json === 'object' ? json : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** Long enough for a phone on a slow network; short enough that the share sheet does not seem stuck. */
