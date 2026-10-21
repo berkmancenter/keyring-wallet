@@ -33,7 +33,9 @@ POST is anonymous, so the limits are what bound abuse:
 - the 24-hour lifetime of links nobody opens: a flood of unopened links is gone in a day. An attacker can extend their own links by fetching them, so against a deliberate flood the global rate is the real bound: about 35 hours to reach the cap;
 - the size caps.
 
-At the cap, `POST /i` answers `503`. **Keyring then shares the long link instead**, so a flood degrades sharing (long links, which some apps cut) but never breaks it. Links already shared keep working.
+At the cap, `POST /i` answers `503`. Links already shared keep working, even when the disk is full: a link whose 7-day extension can't be written is still served for the rest of its current lifetime.
+
+**Keyring doesn't call `/i` yet.** The app shares the long link today. When it does call `/i`, falling back to the long link on any answer other than `201` (including `503`, `429` and timeouts) is a **requirement** on that work, not a property of this service. With that fallback, a flood degrades sharing (long links, which some apps cut) but never breaks it; without it, a flood breaks sharing.
 
 A per-client cap on *stored* links would need client addresses on disk, so it isn't used.
 

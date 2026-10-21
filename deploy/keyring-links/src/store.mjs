@@ -93,9 +93,17 @@ export const createStore = ({ dir, unfetchedTtlMs, fetchedTtlMs, maxLinks, now =
         return null
       }
       if (record.fetched !== true) {
+        // Extend to the fetched lifetime. If that write fails (a full disk, the very
+        // case a flood produces), still serve the link: failing to extend costs it the
+        // 7-day life, not the rest of its current one.
         const createdAt = record.expiresAt - unfetchedTtlMs
-        record = { expiresAt: createdAt + fetchedTtlMs, invitation: record.invitation, fetched: true }
-        await write(id, record)
+        const extended = { expiresAt: createdAt + fetchedTtlMs, invitation: record.invitation, fetched: true }
+        try {
+          await write(id, extended)
+          record = extended
+        } catch {
+          // Keep the current record; the next fetch tries again.
+        }
       }
       return { invitation: record.invitation, expiresAt: record.expiresAt }
     },

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import { chmod, readFile, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { after, before, beforeEach, describe, it } from 'node:test'
@@ -299,6 +299,30 @@ describe('server', () => {
       assert.deepEqual(await res.json(), invitation)
       clock += 23 * 3600_000
       assert.equal((await getJson(`${base}/i/${idOf(url)}`)).status, 404, 'gone at 7 days')
+    } finally {
+      await close()
+    }
+  })
+
+  // As root, a read-only directory still accepts writes, so the failure can't be produced.
+  it('still serves a link when extending it fails (e.g. a full disk)', { skip: process.getuid?.() === 0 }, async () => {
+    await listen()
+    try {
+      const invitation = await fixture('invitation-v1.json')
+      const { url } = await (await post({ invitation })).json()
+      await chmod(dir, 0o500) // no new files: the extension's temp-file write fails
+      try {
+        const res = await getJson(`${base}/i/${idOf(url)}`)
+        assert.equal(res.status, 200)
+        assert.deepEqual(await res.json(), invitation)
+      } finally {
+        await chmod(dir, 0o700)
+      }
+      const record = JSON.parse(await readFile(path.join(dir, `${idOf(url)}.json`), 'utf8'))
+      assert.equal(record.fetched, undefined, 'not extended, so the next fetch tries again')
+      assert.equal((await getJson(`${base}/i/${idOf(url)}`)).status, 200)
+      const after = JSON.parse(await readFile(path.join(dir, `${idOf(url)}.json`), 'utf8'))
+      assert.equal(after.fetched, true, 'extended once writing works again')
     } finally {
       await close()
     }
