@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fromGrant, grantAfter, ownedBy } from "./aclCleanup.js";
+import { fromGrant, grantAfter, grantEntries, ownedBy } from "./aclCleanup.js";
 
 const ADMIN = "did:key:zRunnerAdmin";
 // 1015-1852's link-address-resume: this case granted its phone's temporary key; kk, beside it, linked its own phone to
@@ -52,4 +52,27 @@ test("grantAfter: rotated and another leg granted in the same moment, the oldest
 
 test("grantAfter: nothing new, no entry", () => {
   assert.equal(grantAfter(BEFORE, BEFORE, grant.subject).entry, undefined);
+});
+
+// 1021-0158's link-no-answer: the case granted its phone's key; smoke-ios, beside it, granted its own phone's key on the
+// same runner 25 s later (same admin, same label), inside the case's window.
+const caseGrant = { subject: "did:key:z6MknCase", createdBy: ADMIN, createdAt: "2026-10-21T02:15:24.000Z", label: "keyring-admin" };
+const smoke = { subject: "did:key:z6MkfQKSmoke", createdBy: ADMIN, createdAt: "2026-10-21T02:15:49.000Z", label: "keyring-admin" };
+
+test("grantEntries: another leg's grant inside the window is not the case's", () => {
+  assert.deepEqual(grantEntries([caseGrant, smoke], caseGrant).map((e) => e.subject), ["did:key:z6MknCase"]);
+});
+
+test("grantEntries: the grant is followed through its rotation", () => {
+  const rotated = { ...caseGrant, subject: "did:peer:2.zCaseLong" };
+  assert.deepEqual(grantEntries([rotated, smoke], caseGrant).map((e) => e.subject), ["did:peer:2.zCaseLong"]);
+});
+
+test("grantEntries: a second key the phone made still counts, so the row still fails on it", () => {
+  const second = { subject: "did:key:zCaseSecond", createdBy: caseGrant.subject, createdAt: "2026-10-21T02:16:30.000Z", label: "keyring-admin" };
+  assert.deepEqual(grantEntries([caseGrant, smoke, second], caseGrant).map((e) => e.subject), ["did:key:z6MknCase", "did:key:zCaseSecond"]);
+});
+
+test("grantEntries: no grant read, nothing counted", () => {
+  assert.deepEqual(grantEntries([smoke], undefined), []);
 });
