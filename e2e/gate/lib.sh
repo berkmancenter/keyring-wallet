@@ -244,18 +244,29 @@ build_runs() {
 # Download a run's artifacts into $2 once: a folder that already holds them is kept as it is.
 fetch_run() {
   local run=$1 dir=$2 try
-  if ls "$dir"/keyring-* >/dev/null 2>&1; then return 0; fi
-  mkdir -p "$dir"
-  # Five tries a minute apart: the 239 auto-start lost its gate to two "check your internet connection" failures.
-  for try in 1 2 3 4 5; do
-    gh run download "$run" -R $GH_REPO -D "$dir.part" >> "$dir.log" 2>&1 && { mv "$dir.part"/* "$dir"/ && rmdir "$dir.part"; break; }
-    say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 60
-  done
+  if ! ls "$dir"/keyring-* >/dev/null 2>&1; then
+    mkdir -p "$dir"
+    # Five tries a minute apart: the 239 auto-start lost its gate to two "check your internet connection" failures.
+    for try in 1 2 3 4 5; do
+      gh run download "$run" -R $GH_REPO -D "$dir.part" >> "$dir.log" 2>&1 && { mv "$dir.part"/* "$dir"/ && rmdir "$dir.part"; break; }
+      say "download $run try $try failed: $(tail -1 "$dir.log" | cut -c1-100)"; rm -rf "${dir:?}.part"; sleep 60
+    done
+  fi
+  # The simulator app is unzipped whoever filled the directory: a build downloaded by another script (the Mac mini's
+  # first gate, 10-21) was left zipped, so the gate had no app and no manifest (wallet= and bifold= empty).
   local z; for z in "$dir"/keyring-ios-sim-*/keyring-sim.zip; do [ -f "$z" ] && (cd "$(dirname "$z")" && [ -d KeyRing.app ] || unzip -q -o keyring-sim.zip); done
   ls "$dir"/keyring-* >/dev/null 2>&1
 }
 
 # Resolve, download and export one candidate: CAND_WALLET, CAND_BIFOLD, CAND_APP (iOS sim), APK_OFF, APK_ON.
+# The manifest of a build: beside the iOS app if there is one, else beside the APK. Prints nothing when neither has one.
+build_manifest() {
+  local app=$1 apk=$2 f
+  for f in "${app:+$(dirname "$app")/manifest.txt}" "${apk:+$(dirname "$apk")/manifest.txt}"; do
+    [ -n "$f" ] && [ -f "$f" ] && { printf '%s' "$f"; return 0; }
+  done
+  return 1
+}
 use_build() {
   local sha=$1 runs off on dir
   runs=$(build_runs "$sha"); off=${runs% *}; on=${runs#* }
@@ -283,10 +294,21 @@ use_build() {
   APK_ON=$(ls "$dir"/on/keyring-android-*/*.apk 2>/dev/null | head -1)
   APK_REAL=; [ -z "$real" ] || APK_REAL=$(ls "$dir/real-${GATE_REAL_SHA:0:8}"/keyring-android-*/*.apk 2>/dev/null | head -1)
   REAL_NOTE=; [ -z "$APK_REAL" ] || REAL_NOTE="$real of ${GATE_REAL_SHA:0:8}"
-  local m; m=$(dirname "$CAND_APP")/manifest.txt
-  CAND_WALLET=$(grep '^wallet=' "$m" | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" | cut -d= -f2)
-  local want got; want=$(grep '^main.jsbundle.sha256=' "$m" | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
-  [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
+  # The build's own record of what it is: the iOS app's manifest, else the APK's (both carry wallet= and bifold=).
+  local m got=none want
+  m=$(build_manifest "$CAND_APP" "$APK_OFF")
+  CAND_WALLET=$(grep '^wallet=' "$m" 2>/dev/null | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" 2>/dev/null | cut -d= -f2)
+  # A release gate must name what it tested, and so must a rerun of one (it completes and counts toward that gate); other
+  # kinds (a dry run, changed legs) go on with a warning. $kind is the caller's local (cmd_run's, or cmd_rerun's from the
+  # rerun run's meta), which bash scoping lets this function read; unset elsewhere.
+  if [ -z "$CAND_WALLET" ]; then
+    case ${kind:-} in gate|rerun) die "no build manifest under $dir/off: a release gate must name the wallet and bifold commits it tested" ;; esac
+    say "no build manifest found under $dir/off: the report will not name the wallet and bifold commits"
+  fi
+  if [ -n "$CAND_APP" ]; then
+    want=$(grep '^main.jsbundle.sha256=' "$(dirname "$CAND_APP")/manifest.txt" 2>/dev/null | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
+    [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"
+  else say "no iOS app in $dir/off: iOS legs have nothing to install"; fi
   export CAND_WALLET CAND_BIFOLD CAND_APP APK_OFF APK_ON APK_REAL REAL_NOTE PUSH_ON_NOTE BUILDS_NOTE
   say "build ${CAND_WALLET:0:8} / bifold ${CAND_BIFOLD:0:8}: app $got · APK off $(shasum -a 256 "$APK_OFF" | cut -c1-12) · APK on $([ -f "$APK_ON" ] && shasum -a 256 "$APK_ON" | cut -c1-12 || echo none)"
 }
