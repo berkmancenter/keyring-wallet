@@ -1,7 +1,7 @@
 # Mediator migration: Keyring ↔ Keyring onto the Affinidi mediator, and the Credo mediator retired
 
 **Status:** draft for review. **Owner:** product owner. **Implementing lanes:** gateway-infra, push, app/UI.
-**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft.
+**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft. [`mediator-migration-plan/2026-10-21-bam-extension-notes.md`](mediator-migration-plan/2026-10-21-bam-extension-notes.md) holds the notes behind the extension phases (§5.1).
 **Related plans:**
 - [`peer-message-notifications-plan.md`](peer-message-notifications-plan.md): the message-wake design this migration has to keep working.
 - [`push-notifications-plan.md`](push-notifications-plan.md): the push gateway.
@@ -25,6 +25,7 @@ The migration must not lose message notifications, approval notifications, exist
 | Credo mediator `375518d` | legacy dev host, hand-run, outside the infra repo | DIDComm v1 (Coordinate Mediation 1.0, Pickup 2.0), postgres pickup, `QueueOnly` | All phones' default mailbox (`MEDIATOR_URL`, app/.env.sample:8, staging.yaml:365); chat and the VRC exchange over v1 connections (bifold Chat.tsx:160; vrc-manager.ts:2701-2739). READ |
 | Affinidi messaging mediator `5558061` | push-gateway VM (managed) | DIDComm v2.1 (affinidi-messaging-mediator Cargo.toml:132), Pickup 3.0 over WebSocket, Routing 2.0, TSP | The gateway's own DID only: `explicit_allow`, public login refused (deploy/keyring-messaging/mediator.toml:20-26,91-92; Caddyfile:22-34; compose:9-14 "phones never talk to this mediator"). READ |
 | VTI mediator (`VTI_MEDIATOR_DID`) | VTI infra | DIDComm v2.1 + TSP, through bifold `VtiMediatorTransport.ts` | Wallet ↔ VTA/VTC traffic. READ |
+| Witness server (keyring-bifold `packages/witness-server`) | witness host; deployed mode UNVERIFIED | Direct HTTPS, or in mediator mode (`MEDIATOR_INVITATION_URL`) Credo `mediationRecipient` with PickUpV2 against the Credo mediator | Witnessed VRC exchanges. Not on Affinidi; see §5.1 M2a and companion E1. READ in keyring-bifold 783cadf |
 | Push gateway `-p4` | push-gateway VM | HTTPS + `push/wake/0.2` | Approval wakes from agents; message wakes from the Credo mediator's webhook (patches 0003/0004). READ |
 
 **Message wakes today:**
@@ -67,7 +68,7 @@ The Affinidi mediator can't ring by itself (D1), so one of these does it:
 
 **Rejected: the traffic monitor** (`src/monitor.rs`). It is live-only, rate-limited, dropped on lag and single-instance (:20-31), and a doorbell can't be lossy.
 
-**Proposed path, conditional:** ask Affinidi for W1 now; verify W2's feasibility in M2; build W4 only if neither is available by M3.
+**Proposed path, conditional:** ask Affinidi for W1 now; verify W2's feasibility in M2; build W4 only if neither is available by M3. **M3 does not start until D2 is chosen and its wake test passes on Affinidi (M2c).**
 
 ## 4. Workstreams
 
@@ -122,6 +123,26 @@ W4 (INFERRED): a small wrapper binary builds the mediator with a decorated `Medi
 | **M4** | App: v2 on by default, the new mailbox config, provisioning, and wake registration for v2 | **store build** | A fresh install uses v2 for new contacts; old contacts still chat on v1; both wake paths deliver |
 | **M5** | Retire v1: re-invite or migrate contacts, remove v1 provisioning, decommission the Credo mediator | **store build**, after a release cycle with no rollback | No v1 traffic for one cycle; the Credo mediator is shut down |
 
+### 5.1 Extension phases (review additions)
+
+Added after review of this draft. Detail, evidence and acceptance checks per row are in the [extension notes](mediator-migration-plan/2026-10-21-bam-extension-notes.md) (E1 to E16); owners are TBD. The "Runs" column gives the order: a row never starts before what it names, and a phase named under "blocks" does not start until the row is done.
+
+| Phase | What | Runs | Done when |
+|---|---|---|---|
+| **M0a** | Run the privacy control on the legacy host; set an owner and date for M1 (E15, E16) | first; blocks M0, M1 | Control passes and is recorded; M1 has a named owner and a date |
+| **M0b** | Redis-resubscribe fix `878301bd` for the gateway VM's mediator: pull forward as its own gateway-image change, or accept the risk in writing until M3 (E13) | before M1 | The fix is live (new `-pN` tag), or the accepted risk is recorded here with a date |
+| **M1a** | Credo mediator custody and cutover: dump and checksum postgres and askar state; keys via Secret Manager only; the two fixes as a built image patch, not bind mounts; restore test on a scratch host; DNS TTL lowered, legacy host frozen, downtime bound stated (E4) | part of M1, before the DNS flip | Restore test passes with the same mediator DID; measured downtime is within the stated bound; messages queued during the switch are accounted for |
+| **M1b** | Observability: dashboards and alerts per mediator (queue depth, connected sockets, error rate); a per-connection last-seen counter on the Credo mediator, defining "no v1 traffic" (E14, E2) | before M1 flip; M3 repeats it for Affinidi | The counter and alerts exist and a test message moves them |
+| **M2a** | Witness spike: verify the deployed witness mode; decide (a) an Affinidi or v2 mediation path for the witness, or (b) direct mode on a public HTTPS endpoint; rerun `yarn e2e:vrc:witnessed:android-only:mediator` against Affinidi (E1) | in M2; blocks M3 | Mode verified and recorded; (a) or (b) chosen with a passing witnessed exchange |
+| **M2b** | Scale and lifecycle evidence: offline pickup after hours, reconnect, queue-cap hit, many contacts (one socket per DID), battery and socket count under did:peer rotation; the did:peer and wake-handle lifecycle spec; W2 feasibility (E7 to E9) | in M2; blocks M3 | Measured results in a dated companion; lifecycle spec and test written; W2 passes only if `set_wake_device` accepts contact DIDs and the gateway's per-trigger cap stops one contact using the phone's 30 s budget, else W2 is dropped |
+| **M2c** | Decisions gate: D2 chosen with its wake test passing on Affinidi; mailbox placement (E5); minimum supported build and end-of-life date (E6); per-phase rollback table (E3) | M2 exit; blocks M3, M4 | Each decision recorded in this plan with a date |
+| **M3a** | Mailbox placement as decided in M2c: a separate mediator instance, or the gateway VM with sizing, alerts and backups; recorded as a security-posture change. Infra-repo rules apply: additive `kpush-*` resources, and any new patch gets a new `<commit>-pN` image tag (E5) | in M3 | Approvals and wakes still work with the mailbox load running; a mediator outage test shows the stated blast radius |
+| **M3b** | Queue limits for offline phones: per-peer and receive caps set, refusal versus drop defined at the hard cap, a user-visible sender error, a tested refusal path (E10) | in M3 | A phone offline N days (N set here: TBD) receives its mail on return, or the sender sees the defined error |
+| **M3c** | Affinidi-compatible local mediator for dev and CI (extend `scripts/openvtc/local-vti-stack`); witness acceptance check on Affinidi (E12, E1) | in M3, before M4 | Dev and CI can run a wallet-to-wallet exchange locally on Affinidi; the witnessed exchange passes on the M3 mailbox |
+| **M4a** | Make M4 reversible and bounded: ship behind a remote flag, or keep Credo `MEDIATOR_URL` as a fallback in the build until M5; build the in-app contact migration or re-invite flow; enforce the minimum supported build (E3, E2, E6) | in M4 | Flag or fallback proven by switching a test phone back; migration flow works on a two-phone test; old builds below the minimum see a forced-update screen |
+| **M5a** | Contact migration and sunset: dated, user-visible notice; policy for un-migrated contacts and in-flight messages; gate "no witness uses Credo"; gate "no v1 traffic" as defined in M1b for one full cycle (E2, E1) | before the Credo shutdown | Gates measured and recorded; notice live for the stated period |
+| **M5b** | Cleanup and retention: the config-sprawl checklist (E11); Credo DB and key backups kept for a stated period after shutdown (E3) | after the Credo shutdown | Checklist complete; backup retention period and deletion date recorded |
+
 ## 6. Blocked on
 
 | Item | Status | On whom |
@@ -129,7 +150,7 @@ W4 (INFERRED): a small wrapper binary builds the mediator with a decorated `Medi
 | D2 (who rings) | not decided | the product owner, after M2 |
 | W1: an upstream hook | not asked yet | the product owner's OK to ask Affinidi |
 | The privacy control | not run | the product owner (two phones, about 5 minutes); blocks M0 |
-| M1 scheduling | not scheduled | the infrastructure maintainer |
+| M1 scheduling | not scheduled; owner and date TBD (M0a) | the infrastructure maintainer |
 | W3 | waiting | VTI-Q52 upstream |
 | Upstream Credo changes (a) and (b) | drafted | the product owner's OK; they matter only until M5 |
 
@@ -138,4 +159,4 @@ W4 (INFERRED): a small wrapper binary builds the mediator with a decorated `Medi
 - **Positive:** a peer message to a backgrounded phone gives one notification within about 10 s, and the gateway's `wake delivered` counter moves.
 - **Privacy control:** a message to a connection or account with no registered handle sends **nothing** to the gateway (the mediator log, plus unchanged gateway wake counters).
 - **Approvals unchanged:** one shared notification, and the tap goes to approvals.
-- **Existing installs** keep working across every infra-only phase without a reinstall.
+- **Existing installs** keep working across every infra-only phase without a reinstall. M4 and M5 are store builds, so for them this holds only inside the minimum-supported-build policy (M4a, M5a).
