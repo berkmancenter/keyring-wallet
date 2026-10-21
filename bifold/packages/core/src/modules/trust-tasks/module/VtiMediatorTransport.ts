@@ -60,6 +60,7 @@ import { tsp } from '@bifold/trust-tasks'
 
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
+import { isTspFrameUnopenable } from './tspFrameUnopenable'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
 
@@ -690,6 +691,8 @@ export class VtiMediatorSession {
       await this.startLiveDelivery()
     }
     this.scheduleRenewal()
+    // Whether this phone is collecting its inbox, and where: a report could not say (D7FG-2Y9J).
+    releaseWarn(`${LOG_PREFIX} collecting for ${didPrefix(this.identity.did)} on ${this.where}: live delivery on`)
   }
 
   /**
@@ -707,6 +710,9 @@ export class VtiMediatorSession {
       this.renewTimer = undefined
       if (this.stopped) return
       this.accessToken = undefined
+      releaseWarn(
+        `${LOG_PREFIX} renewing the socket for ${didPrefix(this.identity.did)} on ${this.where} before its token expires`
+      )
       void this.reopen().catch((error) => this.options.onError?.(error as Error))
     }, inMs)
   }
@@ -762,6 +768,13 @@ export class VtiMediatorSession {
     socket.addEventListener('close', (event: unknown) => {
       const reason = String((event as { reason?: unknown } | undefined)?.reason ?? '')
       if (/token expired|expired/i.test(reason) && this.socket === socket) this.accessToken = undefined
+      // A socket that ends while the session wants it is the receive leg gone: said, so a report shows it.
+      if (!this.stopped && this.socket === socket) {
+        const code = (event as { code?: unknown } | undefined)?.code
+        releaseWarn(
+          `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} closed (${String(code ?? '?')}${reason ? ` ${reason.slice(0, 80)}` : ''}); it reopens on the next send`
+        )
+      }
     })
     this.socket = socket
   }
@@ -954,9 +967,38 @@ export class VtiMediatorSession {
       return
     }
     const bytes = tsp.fromBase64Url(text)
-    await this.options.onTspFrame(bytes)
+    try {
+      await this.options.onTspFrame(bytes)
+    } catch (error) {
+      if (!isTspFrameUnopenable(error)) throw error
+      this.dropped(queueId, error.reason, error.message)
+    }
     this.remember(queueId)
     await this.acknowledge([queueId])
+  }
+
+  /**
+   * A frame that can never be opened here (tspFrameUnopenable): acknowledged, so
+   * it stops coming back and filling the queue a peer's replies need, and said so.
+   * A key not usable yet is not one of these: that frame stays queued.
+   */
+  private dropped(queueId: string, reason: string, detail: string): void {
+    this.droppedCount += 1
+    releaseWarn(
+      `${LOG_PREFIX} dropped a TSP frame for ${didPrefix(this.identity.did)} that can never be opened here (${reason}); queue id ${queueId.slice(0, 12)}: ${detail.slice(0, 160)}`
+    )
+  }
+
+  /** Frames dropped as never openable, counted for a drain's line. */
+  private droppedCount = 0
+
+  /** The mediator this session collects on, by host: what a report has to show (D7FG-2Y9J). */
+  private get where(): string {
+    try {
+      return new URL(this.mediator.wsEndpoint).host
+    } catch {
+      return didPrefix(this.mediator.did)
+    }
   }
 
   /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
@@ -983,6 +1025,7 @@ export class VtiMediatorSession {
   private async handleDelivery(delivery: DeliveryMessage): Promise<void> {
     const attachments = delivery.attachments ?? []
     const acknowledged: string[] = []
+    const droppedBefore = this.droppedCount
     for (const attachment of attachments) {
       const data = attachment.data
       // A queued TSP frame comes as its base64url text in either slot; a JWE
@@ -1000,7 +1043,10 @@ export class VtiMediatorSession {
             acknowledged.push(attachment.id)
             continue
           }
-          await this.options.onTspFrame(tsp.fromBase64Url(tspText))
+          await this.options.onTspFrame(tsp.fromBase64Url(tspText)).catch((error: unknown) => {
+            if (!isTspFrameUnopenable(error)) throw error
+            this.dropped(attachment.id ?? '?', error.reason, error.message)
+          })
           if (attachment.id) {
             this.remember(attachment.id)
             acknowledged.push(attachment.id)
@@ -1034,6 +1080,11 @@ export class VtiMediatorSession {
       }
     }
     if (acknowledged.length > 0) await this.acknowledge(acknowledged)
+    // What a drain found: a report can then tell an inbox never collected from one full of frames left behind.
+    if (attachments.length > 0)
+      releaseWarn(
+        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length} taken, ${this.droppedCount - droppedBefore} dropped as never openable, ${attachments.length - acknowledged.length} left queued`
+      )
   }
 
   /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */

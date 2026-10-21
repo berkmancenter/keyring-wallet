@@ -29,6 +29,7 @@ import { tsp } from '@bifold/trust-tasks'
 import { keyAgreementFromAskarKey, signingKeyFromEd25519Key } from '@bifold/credo-tsp-adapter'
 
 import type { VtiPersona } from './VtiIdentityStore'
+import { TspFrameUnopenable } from './tspFrameUnopenable'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 
 export const LOG_PREFIX = '[TrustTasks:VtiTsp]'
@@ -132,7 +133,9 @@ export async function tspSessionForManager(agent: Agent, managerDid: string): Pr
   const { didDocument, keys } = await agent.dids.resolveCreatedDidDocumentWithKeys(managerDid)
   const signingRef = didDocument.assertionMethod?.[0] ?? didDocument.authentication?.[0]
   const signingVm =
-    typeof signingRef === 'string' ? didDocument.dereferenceKey(signingRef, ['assertionMethod', 'authentication']) : signingRef
+    typeof signingRef === 'string'
+      ? didDocument.dereferenceKey(signingRef, ['assertionMethod', 'authentication'])
+      : signingRef
   if (!signingVm) throw new Error(`${LOG_PREFIX} ${managerDid} has no signing verification method`)
   const kmsKey = (keys ?? []).find((key) => signingVm.id.endsWith(key.didDocumentRelativeKeyId))
   if (!kmsKey) throw new Error(`${LOG_PREFIX} no KMS key backs ${signingVm.id}`)
@@ -220,6 +223,13 @@ export function plaintextFromTrustTask(
  * Returns `undefined` for a frame that is TSP but not a Trust Task envelope.
  * The framework's identity rule (binding §3): a document naming an `issuer`
  * must name the VID TSP authenticated, and a `recipient` must be us.
+ *
+ * A frame that can never be opened here throws {@link TspFrameUnopenable}, so
+ * the session acknowledges and drops it. Whether its unsealing failed for a
+ * lasting reason is read from the key, not the error's words: the receiver's
+ * key agreement is watched, and only a failure after the key was used is one.
+ * A key that could not be used (not in memory yet, a fetch that failed) throws
+ * as it is, and the frame stays queued for when the key is there.
  */
 export async function unpackTrustTaskFromPeer(
   session: TspSessionIdentity,
@@ -227,8 +237,37 @@ export async function unpackTrustTaskFromPeer(
   expectedReceiver: string
 ): Promise<{ plaintext: DidCommV2PlaintextMessage; unpacked: tsp.UnpackedMessage } | undefined> {
   let unpacked: tsp.UnpackedMessage
+  // Watch how far opening got: only two stages make a failure lasting. Reading the bytes, before anything is
+  // resolved (malformed); and the receiver's key used, and still nothing opened (sealed to another key). In
+  // between, the sender's DID is resolved over the network and its signature checked against that document: a
+  // failure there can be the network or a document just rotated, so it is not a verdict on the frame.
+  let stage: 'reading' | 'resolving' | 'keyUsed' | 'keyUnavailable' = 'reading'
+  const resolver: tsp.VidResolver = {
+    ...session.resolver,
+    resolve: async (vid: string) => {
+      if (stage === 'reading') stage = 'resolving'
+      return session.resolver.resolve(vid)
+    },
+  }
+  const agreement = session.identity.keyAgreement
+  const identity: tsp.TspIdentity = {
+    ...session.identity,
+    keyAgreement: {
+      publicKey: agreement.publicKey,
+      agree: async (peerPublicKey) => {
+        try {
+          const secret = await agreement.agree(peerPublicKey)
+          stage = 'keyUsed'
+          return secret
+        } catch (error) {
+          stage = 'keyUnavailable'
+          throw error
+        }
+      },
+    },
+  }
   try {
-    unpacked = await session.codec.unpack(bytes, session.identity, session.resolver)
+    unpacked = await session.codec.unpack(bytes, identity, resolver)
   } catch (error) {
     // A relationship-forming control frame is not a Trust Task, and it is not
     // a failure either: it is the peer's ACCEPT to the invite we sent. Reported
@@ -237,20 +276,33 @@ export async function unpackTrustTaskFromPeer(
     // acknowledgement and stayed queued against the peer that sent it — one
     // stranded accept per applicant, charged to the community.
     if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) return undefined
+    const detail = String((error as Error)?.message ?? error).slice(0, 160)
+    if (stage === 'keyUsed')
+      throw new TspFrameUnopenable('unsealFailed', `${LOG_PREFIX} frame did not open with this key: ${detail}`)
+    if (stage === 'reading')
+      throw new TspFrameUnopenable('malformed', `${LOG_PREFIX} frame could not be read: ${detail}`)
+    // Resolving its sender, checking its signature, or a key not usable yet: transient, left queued.
     throw error
   }
   if (unpacked.receiver !== expectedReceiver) {
-    throw new Error(`${LOG_PREFIX} frame addressed to ${unpacked.receiver}, not this persona`)
+    throw new TspFrameUnopenable(
+      'otherReceiver',
+      `${LOG_PREFIX} frame addressed to ${unpacked.receiver}, not this persona`
+    )
   }
   const document = tsp.decodeTrustTaskEnvelope(unpacked.payload)
   if (!document) return undefined
   if (typeof document.issuer === 'string' && document.issuer !== unpacked.sender) {
-    throw new Error(
+    throw new TspFrameUnopenable(
+      'identityMismatch',
       `${LOG_PREFIX} identityMismatch: document issuer ${document.issuer} is not the TSP sender ${unpacked.sender}`
     )
   }
   if (typeof document.recipient === 'string' && document.recipient !== unpacked.receiver) {
-    throw new Error(`${LOG_PREFIX} identityMismatch: document recipient ${document.recipient} is not this persona`)
+    throw new TspFrameUnopenable(
+      'identityMismatch',
+      `${LOG_PREFIX} identityMismatch: document recipient ${document.recipient} is not this persona`
+    )
   }
   return { plaintext: plaintextFromTrustTask(document, unpacked.sender, unpacked.receiver), unpacked }
 }

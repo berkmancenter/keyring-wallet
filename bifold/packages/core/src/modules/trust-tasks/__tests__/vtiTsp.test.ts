@@ -358,7 +358,9 @@ describe('vtiAgent — the peer leg on TSP', () => {
     expect((vtiAgent.getState().peerRevisions ?? []).map((r) => r.vid)).toContain(vetter.vid)
   })
 
-  test('a frame the persona cannot open is said in Release and left on the mediator', async () => {
+  // D7FG-2Y9J: a frame left on the mediator for ever fills the queue a peer's replies need. Sealed to another key and
+  // opened with this one, it can never open here: it is dropped, and said so. A frame not opened YET stays (below).
+  test('a frame sealed to another persona is said in Release and dropped: it can never be opened here', async () => {
     // 227 gate: a push that failed to open left no trace a Release build shows.
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     try {
@@ -371,7 +373,13 @@ describe('vtiAgent — the peer leg on TSP', () => {
       })
       await expect(controller.receiveTspFrame(packed.bytes, applicant.vid)).rejects.toBeDefined()
       const said = warn.mock.calls.map((c) => String(c[0]))
-      expect(said.some((m) => /TSP frame to .* not opened \(.+\)/.test(m) && /left on the mediator/.test(m))).toBe(true)
+      expect(
+        said.some(
+          (m) =>
+            /TSP frame to .* not opened \(.+\)/.test(m) &&
+            /dropped: it can never be opened here \(unsealFailed\)/.test(m)
+        )
+      ).toBe(true)
     } finally {
       warn.mockRestore()
     }
