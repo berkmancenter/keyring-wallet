@@ -21,6 +21,7 @@ import { formInputFromTemplate } from '../../modules/vrc/types/rcard'
 import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
 import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
+import { invitationShareMessage } from '../../utils/invitationLink'
 import { testIdWithKey } from '../../utils/testable'
 import LoadingIndicator from '../animated/LoadingIndicator'
 import IconButton, { ButtonLocation } from '../buttons/IconButton'
@@ -236,11 +237,11 @@ const QRScanner: React.FC<Props> = ({
       const result = await mintInvitation()
       if (!result) throw new Error('no invitation')
       releaseWarn('[VRC] invitation link: made, share sheet opened')
-      // The words, then the link on its own line, as the message only: given a
-      // url as well, iOS sends both. A sheet closed without sharing is not an error.
+      // The link alone, ready to tap, as the message only: given a url as well,
+      // iOS sends both. A sheet closed without sharing is not an error.
       await Share.share({
         title: t('Scan.ShareLinkTitle'),
-        message: `${t('Scan.ShareLinkMessage')}\n${result.invitationUrl}`,
+        message: invitationShareMessage(result.invitationUrl),
       }).catch(() => undefined)
     } catch (e) {
       releaseWarn(`[VRC] invitation link: not made (${(e as Error)?.message ?? e})`)

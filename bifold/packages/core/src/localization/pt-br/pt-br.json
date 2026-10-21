@@ -151,6 +151,8 @@
     "Message1048": "There was a problem with the proof request. (PT-BR)",
     "Title1049": "Unable to change PIN. (PT-BR)",
     "Message1049": "There was a problem while attempting to change your PIN. (PT-BR)",
+    "Title1051": "Este link de convite está incompleto",
+    "Message1051": "O Keyring não conseguiu lê-lo, então nada foi conectado. Escaneie o código da pessoa ou peça um novo link.",
     "GenericError": {
       "Title": "Não foi possível abrir isso",
       "Message": "O Keyring não sabe o que fazer com isto. Fale com quem lhe deu o código, ou tente outro."
@@ -577,7 +579,6 @@
     "ShareLink": "Compartilhar como link",
     "ShareLinkNote": "Qualquer pessoa com o link pode se conectar com você, uma única vez. Envie-o só para a pessoa com quem você quer se conectar.",
     "ShareLinkTitle": "Conecte-se comigo no Keyring",
-    "ShareLinkMessage": "Abra este link no seu telefone para se conectar comigo no Keyring:",
     "ShareLinkFailed": "O Keyring não conseguiu criar o link. Tente de novo em instantes.",
     "YourIdentityTitle": "Sua identidade para {{community}}",
     "YourIdentityInstruction": "O administrador da comunidade escaneia este código para convidar você. Não é um cartão de contato.",

@@ -619,8 +619,8 @@ describe('QRScanner — the invitation as a link', () => {
     expect(mint).toHaveBeenCalledTimes(2)
     expect(share).toHaveBeenCalledTimes(1)
     const sent = share.mock.calls[0][0] as { message: string; url?: string }
-    expect(sent.message).toContain('https://wallet.example/invite?oob=2')
-    expect(sent.message).not.toContain('oob=1')
+    // The link alone, nothing written around it (build 265: Alberto wants it ready to tap).
+    expect(sent.message).toBe('https://wallet.example/invite?oob=2')
     // Message only: iOS sends both when a url is given as well.
     expect(sent.url).toBeUndefined()
     expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
