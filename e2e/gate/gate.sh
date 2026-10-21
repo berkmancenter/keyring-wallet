@@ -22,7 +22,7 @@ fi
 . "$(dirname "$0")/lib.sh"
 
 # Legs in the order they run on one platform, and which device each needs.
-LEGS_IOS="kk p2 smoke-ios update-ios signin-ios"
+LEGS_IOS="kk p2 smoke-ios update-ios signin-ios pair-ios"
 LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait hv signin"
 # Legs that run only when named (--legs signin), never in `all`: `signin` (Android), whose approval raises the UV key's
 # biometric-only prompt, and the emulator's fingerprint HAL token is read as expired (1019-1416, 1019-1514), so it cannot
