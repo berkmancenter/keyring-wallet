@@ -720,8 +720,6 @@ export const REPLY_TIMEOUT_BREAKER = 2
  * a quick recovery up to five minutes late; greeting every few seconds only adds to an inbox already full.
  */
 export const REPLIES_STALLED_STEPS_MS = [30_000, 60_000, 120_000, 300_000] as const
-/** The longest hold (the last step), kept for callers that named the old fixed window. */
-export const REPLIES_STALLED_WINDOW_MS = REPLIES_STALLED_STEPS_MS[REPLIES_STALLED_STEPS_MS.length - 1]
 
 /**
  * The reply breaker for one agent, kept across the clients the phone makes for it (D7FG-2Y9J: each reconnect built a

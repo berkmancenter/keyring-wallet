@@ -2936,10 +2936,6 @@ export class VtaAgentController {
   }
 
   /**
-   * Bring a linked phone back online: now, when the app returns to the
-   * foreground or the network changes, and on a backoff after a drop.
-   */
-  /**
    * Back in the foreground: the moment a receive leg iOS let die while suspended would otherwise go unnoticed — its
    * socket still reads open, and `ensureOnline` only looks at whether it is. The session proves itself, a held reply
    * breaker lets one probe go early, and then the link is brought online as before.
@@ -2956,6 +2952,10 @@ export class VtaAgentController {
     await this.ensureOnline(given)
   }
 
+  /**
+   * Bring a linked phone back online: now, when the app returns to the
+   * foreground or the network changes, and on a backoff after a drop.
+   */
   async ensureOnline(given: Agent, options: { reopen?: boolean } = {}): Promise<void> {
     // A retry scheduled before the app replaced its agent still carries the old one.
     const agent = this.agent ?? given
