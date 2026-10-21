@@ -115,9 +115,10 @@ gate_env() {
   export GATE_TARGET
   # A phone grant must not outlive the identity that writes it: a VTA 0.60 refuses an expiring admin's permanent
   # entry (VTI-ACL-053; the mini's run 1021-0258, testreq). An env file whose identity expires says so with
-  # GATE_GRANT_EXPIRES, and a lane's (E2E_LANE) defaults to 6h, as the CI lane's does (ci/gate-ci-leg.sh).
+  # GATE_GRANT_EXPIRES, and a lane's (E2E_LANE) defaults to 24h: a phone kept linked across a long serial run must
+  # outlive it (the CI lane's legs are short and use 6h, ci/gate-ci-leg.sh).
   # enrol-manager.sh reads EXPIRES; the enrolment page already grants for 1h. An EXPIRES the caller set is kept.
-  [ -z "${E2E_LANE:-}" ] || : "${GATE_GRANT_EXPIRES:=6h}"
+  [ -z "${E2E_LANE:-}" ] || : "${GATE_GRANT_EXPIRES:=24h}"
   [ -z "${GATE_GRANT_EXPIRES:-}" ] || export EXPIRES="${EXPIRES:-$GATE_GRANT_EXPIRES}"
 }
 
