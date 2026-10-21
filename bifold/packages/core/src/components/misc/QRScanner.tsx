@@ -3,7 +3,16 @@ import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Image, Pressable, Share, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import {
+  Image,
+  Platform,
+  Pressable,
+  Share,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -21,7 +30,7 @@ import { formInputFromTemplate } from '../../modules/vrc/types/rcard'
 import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
 import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
-import { invitationShareMessage } from '../../utils/invitationLink'
+import { invitationShareContent } from '../../utils/invitationLink'
 import { testIdWithKey } from '../../utils/testable'
 import LoadingIndicator from '../animated/LoadingIndicator'
 import IconButton, { ButtonLocation } from '../buttons/IconButton'
@@ -237,12 +246,11 @@ const QRScanner: React.FC<Props> = ({
       const result = await mintInvitation()
       if (!result) throw new Error('no invitation')
       releaseWarn('[VRC] invitation link: made, share sheet opened')
-      // The link alone, ready to tap, as the message only: given a url as well,
-      // iOS sends both. A sheet closed without sharing is not an error.
-      await Share.share({
-        title: t('Scan.ShareLinkTitle'),
-        message: invitationShareMessage(result.invitationUrl),
-      }).catch(() => undefined)
+      // The link alone, as a link where the platform has one (invitationShareContent).
+      // A sheet closed without sharing is not an error.
+      await Share.share(invitationShareContent(result.invitationUrl, t('Scan.ShareLinkTitle'), Platform.OS)).catch(
+        () => undefined
+      )
     } catch (e) {
       releaseWarn(`[VRC] invitation link: not made (${(e as Error)?.message ?? e})`)
       setShareLinkFailed(true)
