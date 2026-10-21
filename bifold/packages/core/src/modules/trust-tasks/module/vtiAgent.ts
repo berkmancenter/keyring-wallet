@@ -60,6 +60,7 @@ import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
+import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import { readManifest, type VtiManifest } from './joinManifest'
 import { classifyCredential } from './vtiInbox'
 import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
@@ -1029,7 +1030,7 @@ class VtiAgentController {
       // inside the frame, so only the error can name it.
       const error = e as Error
       releaseWarn(
-        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} not opened (${error?.name ?? 'Error'}: ${String(error?.message ?? e).slice(0, 160)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, left on the mediator`
+        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} not opened (${error?.name ?? 'Error'}: ${String(error?.message ?? e).slice(0, 160)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, ${isTspFrameUnopenable(e) ? `dropped: it can never be opened here (${e.reason})` : 'left on the mediator'}`
       )
       throw e
     }

@@ -36,6 +36,7 @@ import { AppState, DeviceEventEmitter } from 'react-native'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
+import { isTspFrameUnopenable } from './tspFrameUnopenable'
 import { vtaAgent } from './vtaAgent'
 import { unwrapBindingEnvelope, vtiAgent } from './vtiAgent'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
@@ -387,7 +388,7 @@ export function defaultListenerFactory(agent: Agent, configuredMediatorDid: stri
                 result = await unpackTrustTaskFromPeer(tspSession, bytes, persona.did)
               } catch (error) {
                 releaseWarn(
-                  `[VTI] listener for ${who}: TSP frame not opened (${error instanceof Error ? error.message.slice(0, 160) : String(error)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, left on the mediator`
+                  `[VTI] listener for ${who}: TSP frame not opened (${error instanceof Error ? error.message.slice(0, 160) : String(error)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, ${isTspFrameUnopenable(error) ? `dropped: it can never be opened here (${error.reason})` : 'left on the mediator'}`
                 )
                 throw error
               }
