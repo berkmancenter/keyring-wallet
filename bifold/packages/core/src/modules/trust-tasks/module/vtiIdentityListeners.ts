@@ -54,7 +54,7 @@ export interface ListenerSession {
   start(): Promise<void>
   stop(): Promise<void>
   /** Back in the foreground: ask the mediator for something, and reopen if nothing comes back. */
-  checkAlive?(): void
+  checkAlive(): void
 }
 
 /** Opens a listen-only session for one identity. */
@@ -312,7 +312,7 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   const appState = AppState.addEventListener('change', (state) => {
     if (state === 'active') {
       vtiAgent.checkAlive()
-      for (const entry of running.values()) entry.session?.checkAlive?.()
+      for (const entry of running.values()) entry.session?.checkAlive()
     }
     const wasPaused = paused
     paused = state === 'background'

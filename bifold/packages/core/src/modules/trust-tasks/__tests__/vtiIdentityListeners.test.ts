@@ -107,6 +107,7 @@ describe('the listeners', () => {
     return {
       start: async () => void rec.started++,
       stop: async () => void rec.stopped++,
+      checkAlive: () => undefined,
     }
   })
   const live = (did: string) => {
