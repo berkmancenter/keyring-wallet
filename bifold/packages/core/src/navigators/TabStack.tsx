@@ -19,7 +19,7 @@ import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
 import { Screens, Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
-import { invitationLinkError } from '../utils/invitationLink'
+import { deepLinkCarriesInvitation, invitationLinkError } from '../utils/invitationLink'
 import { appMessageWakeDeps, openMessageWake, type WakeNavigation } from '../utils/messageWake'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
@@ -221,7 +221,8 @@ const TabStack: React.FC = () => {
       // An OpenID credential offer carries none of these: it goes on to the
       // OpenID flow (an offer whose issuer is a community's DID was already
       // taken above, as ours).
-      if (deepLink.search(/oob=|c_i=|d_m=|url=/) < 0 && !isOpenIdCredentialOffer(deepLink)) {
+      // Our short invitation links (/i/<id>) carry none of these: Credo fetches them.
+      if (!deepLinkCarriesInvitation(deepLink) && !isOpenIdCredentialOffer(deepLink)) {
         dispatch({
           type: DispatchAction.ACTIVE_DEEP_LINK,
           payload: [undefined],

@@ -31,6 +31,7 @@ import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
 import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
 import { invitationShareContent } from '../../utils/invitationLink'
+import { shortenInvitation } from '../../utils/shortInvitationLink'
 import { testIdWithKey } from '../../utils/testable'
 import LoadingIndicator from '../animated/LoadingIndicator'
 import IconButton, { ButtonLocation } from '../buttons/IconButton'
@@ -245,12 +246,19 @@ const QRScanner: React.FC<Props> = ({
     try {
       const result = await mintInvitation()
       if (!result) throw new Error('no invitation')
-      releaseWarn('[VRC] invitation link: made, share sheet opened')
+      // Short when the links service makes it (about 56 characters, which
+      // survives being carried and selected); else the long link, as before.
+      const invitation = result.invitation as
+        | { toJSON: () => Record<string, unknown>; v2Invitation?: { toJSON: () => Record<string, unknown> } }
+        | undefined
+      const json = invitation?.v2Invitation?.toJSON() ?? invitation?.toJSON()
+      const link = (json && (await shortenInvitation(json))) || result.invitationUrl
+      releaseWarn(
+        `[VRC] invitation link: made (${link === result.invitationUrl ? 'long' : 'short'}), share sheet opened`
+      )
       // The link alone, as a link where the platform has one (invitationShareContent).
       // A sheet closed without sharing is not an error.
-      await Share.share(invitationShareContent(result.invitationUrl, t('Scan.ShareLinkTitle'), Platform.OS)).catch(
-        () => undefined
-      )
+      await Share.share(invitationShareContent(link, t('Scan.ShareLinkTitle'), Platform.OS)).catch(() => undefined)
     } catch (e) {
       releaseWarn(`[VRC] invitation link: not made (${(e as Error)?.message ?? e})`)
       setShareLinkFailed(true)

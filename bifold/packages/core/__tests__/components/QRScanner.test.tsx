@@ -12,6 +12,7 @@ import { setCurrentAgentDid } from '../../src/modules/trust-tasks/module/current
 import { buildRCardTemplate } from '../../src/modules/vrc/types/rcard'
 import * as vrcManager from '../../src/modules/vrc/vrc-manager'
 import * as rCardCredentialService from '../../src/modules/vrc/services/rCardCredential'
+import * as shortLink from '../../src/utils/shortInvitationLink'
 
 jest.mock('react-native-orientation-locker', () => {
   return require('../../__mocks__/custom/react-native-orientation-locker')
@@ -568,6 +569,7 @@ describe('QRScanner — the invitation as a link', () => {
   const navigation = useNavigation()
   let mint: jest.SpyInstance
   let share: jest.SpyInstance
+  let shorten: jest.SpyInstance
   let warn: jest.SpyInstance
 
   beforeAll(() => jest.useFakeTimers())
@@ -576,14 +578,23 @@ describe('QRScanner — the invitation as a link', () => {
     let n = 0
     mint = jest.spyOn(vrcManager, 'createRelationshipInvitation').mockImplementation(async () => {
       n += 1
-      return { record: { id: `oob-${n}` }, invitationUrl: `https://wallet.example/invite?oob=${n}` } as any
+      return {
+        record: { id: `oob-${n}` },
+        invitation: {
+          toJSON: () => ({ '@type': 'https://didcomm.org/out-of-band/1.1/invitation', '@id': `inv-${n}` }),
+        },
+        invitationUrl: `https://wallet.example/invite?oob=${n}`,
+      } as any
     })
     share = jest.spyOn(Share, 'share').mockResolvedValue({ action: Share.sharedAction } as any)
+    // No links service unless a test brings one: the long link, as before.
+    shorten = jest.spyOn(shortLink, 'shortenInvitation').mockResolvedValue(undefined)
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
   afterEach(() => {
     mint.mockRestore()
     share.mockRestore()
+    shorten.mockRestore()
     warn.mockRestore()
   })
 
@@ -626,6 +637,26 @@ describe('QRScanner — the invitation as a link', () => {
     expect(sent.message).toBeUndefined()
     expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('oob=2'))
+  })
+
+  // Build 265: a ~950-character link was cut on its way. A short one, when the links service makes it.
+  test('the short link is shared when the links service makes one, for the new invitation', async () => {
+    const SHORT = 'https://wallet.asml.berkmancenter.org/i/AbCdEfGhIjKlMnOpQrStUv'
+    shorten.mockResolvedValue(SHORT)
+    const tree = await renderInvite()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(shorten).toHaveBeenCalledWith({ '@type': 'https://didcomm.org/out-of-band/1.1/invitation', '@id': 'inv-2' })
+    expect((share.mock.calls[0][0] as { url?: string }).url).toBe(SHORT)
+    expect(tree.UNSAFE_getByProps({ value: 'https://wallet.example/invite?oob=1' })).toBeTruthy()
+  })
+
+  test('no short link (the service down or refusing): the long one, as before, and no error', async () => {
+    shorten.mockResolvedValue(undefined)
+    const tree = await renderInvite()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('MyQRShareLink'))))
+    expect(shorten).toHaveBeenCalledTimes(1)
+    expect((share.mock.calls[0][0] as { url?: string }).url).toBe('https://wallet.example/invite?oob=2')
+    expect(tree.queryByTestId(testIdWithKey('MyQRShareLinkError'))).toBeNull()
   })
 
   test('on Android, the link alone as the message: it has no link item to share', async () => {
