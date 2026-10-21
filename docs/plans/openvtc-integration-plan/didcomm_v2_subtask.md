@@ -728,7 +728,7 @@ Answering `2026-09-07-al.md` Finding 1 for the modes this plan owns:
 | Mode | Mediator | Why |
 |---|---|---|
 | Wallet ↔ wallet, v1 (today) | Keyring's Credo mediator | unchanged |
-| Wallet ↔ wallet, v2 (V2) | Keyring's Credo mediator in v2 mode | v2 routing without an ACL or ATM; ref-17 |
+| Wallet ↔ wallet, v2 (V2) | the Affinidi messaging mediator (decided in [`mediator-migration-plan.md`](../mediator-migration-plan.md) D1) | one mediator for every leg; the Credo mediator is retired ([`2026-10-20-al.md`](../mediator-migration-plan/2026-10-20-al.md) F3); its Credo-in-v2-mode alternative is kept there as rationale |
 | Wallet ↔ VTA (V3 / P1) | the VTI stack's Affinidi mediator | the VTA's `DIDCommMessaging` entry names it; ATM auth; TSP on the same socket |
 
 `vta-carriage_subtask.md`'s VTA-mediated `propose` is the third row.
