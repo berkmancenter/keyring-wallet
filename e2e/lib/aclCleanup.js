@@ -112,6 +112,18 @@ export function ownedBy(entries, tempDid, heirs = []) {
 }
 
 /**
+ * The entries a linked phone holds on its runner, from the link's own record (run-vta-link.js keepForNextStep,
+ * last-link.json: before, tempDid, heirs): new since `before`, and owned by the phone's temporary key or the key it
+ * rotated onto. The same selection the end-of-leg cleanup makes (removeRunKeys), so a step that removes them mid-run
+ * can only touch the harness's own phone grant, never another leg's or a person's entry. Pure.
+ */
+export function linkedPhoneEntries(entries, { before = [], tempDid, heirs = [] } = {}) {
+  if (!tempDid) return [];
+  const seen = new Set(before);
+  return ownedBy(entries.filter((e) => !seen.has(e.subject)), tempDid, heirs);
+}
+
+/**
  * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
  * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
  * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy

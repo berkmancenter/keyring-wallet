@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { newestMemberSince, newestRequestSince, parseAdminOut } from './hvAdmin.js';
+import { newestMemberSince, newestRequestSince, parseAdminOut, requestsSince, soleRequestSince } from './hvAdmin.js';
 
 const out = (status, json) =>
   `[ref-20] admin did:key:z6Mk\n[ref-20] signed Trust Tasks to https://vtc.example/v1/trust-tasks, no sign-in\n[ref-20] trust-task vtc/join-requests/list/0.1 -> ${status}\n${json}\n`;
@@ -30,4 +30,29 @@ test('a vetters-list answer gives the vetter grants the seat reads (memberDid, l
   const { status, body } = parseAdminOut(out);
   assert.equal(status, 200);
   assert.equal(body.vetters.filter((v) => v.memberDid === 'did:webvh:x:kk' && v.live && !v.revoked).length, 1);
+});
+
+test('requestsSince: every request since the step began, so a second one (another run) is seen', () => {
+  const rs = [{ id: 'old', createdAt: '2026-10-21T07:00:00Z' }, { id: 'mine', createdAt: '2026-10-21T08:00:05Z' }, { id: 'theirs', submittedAt: '2026-10-21T08:00:09Z' }];
+  assert.deepEqual(requestsSince(rs, '2026-10-21T08:00:00Z').map((r) => r.id), ['mine', 'theirs']);
+  assert.deepEqual(requestsSince(rs.slice(0, 2), '2026-10-21T08:00:00Z').map((r) => r.id), ['mine']);
+});
+
+const S = '2026-10-21T08:00:00Z';
+const mine = { id: 'mine', createdAt: '2026-10-21T08:00:05Z' };
+const theirs = { id: 'theirs', createdAt: '2026-10-21T08:00:03Z' };
+const reads = (...seq) => { let i = 0; return () => seq[Math.min(i++, seq.length - 1)]; };
+const wait = async () => {};
+
+test('soleRequestSince: one request on both reads is the one', async () => {
+  assert.deepEqual(await soleRequestSince(reads([], [mine], [mine]), S, { wait }), { req: mine });
+});
+
+test('soleRequestSince: another run\'s lone request seen first, then both: none is taken', async () => {
+  assert.deepEqual(await soleRequestSince(reads([theirs], [theirs, mine]), S, { wait }), { count: 2 });
+});
+
+test('soleRequestSince: two at once, or none at all', async () => {
+  assert.deepEqual(await soleRequestSince(reads([mine, theirs]), S, { wait }), { count: 2 });
+  assert.deepEqual(await soleRequestSince(reads([]), S, { wait, tries: 3 }), { count: 0 });
 });

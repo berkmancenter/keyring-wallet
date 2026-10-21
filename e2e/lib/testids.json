@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "783cadfb87e9d6a5991c284140606822aba484e4",
+  "generatedFrom": "f7cae8c057d810fd6df33200a73c2a236de50630",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -693,6 +693,9 @@
     "PasteRead": ["src/screens/PasteUrl.tsx"],
     "PasteUrlButton": ["src/components/misc/QRScanner.tsx"],
     "PastedUrl": ["src/screens/PasteUrl.tsx"],
+    "PersonaAgentNotice": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
+    "PersonaAgentNoticeLine": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
+    "PersonaAgentNoticeOpen": ["src/modules/trust-tasks/screens/PersonaAgentNotice.tsx"],
     "PredicateInput": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateName": ["src/components/misc/VerifierCredentialCard.tsx"],
     "PredicateValue": ["src/components/misc/VerifierCredentialCard.tsx"],
