@@ -9,6 +9,7 @@ import { BasicMessageMetadata } from '../../types/metadata'
 import {
   focusedRouteName,
   messageWakeFetching,
+  messageWakeHold,
   newestUnreadConnection,
   openMessageWake,
   type MessageWakeDeps,
@@ -155,6 +156,31 @@ describe('resolving a tap', () => {
     await expect(openMessageWake(handle.d)).resolves.toBe('moved')
     expect(handle.d.pickUpNow).not.toHaveBeenCalled()
     expect(messageWakeFetching.get()).toBe(false)
+  })
+
+  // A second tap within the window used to start a second run, whose end
+  // released the first one's hold on the toasts while it was still under way.
+  it('a second tap while one is under way joins it: one run, held until it settles', async () => {
+    let finish: () => void = () => undefined
+    const handle = deps()
+    handle.d.pickUpNow = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)))
+    // The long wait never ends by itself here: only the pickup ends this run.
+    handle.d.sleep = (ms: number) => (ms >= 1000 ? new Promise<void>(() => undefined) : Promise.resolve())
+    const first = openMessageWake(handle.d)
+    await Promise.resolve()
+    const second = openMessageWake({ ...handle.d, openList: jest.fn(), pickUpNow: jest.fn(async () => undefined) })
+    expect(second).toBe(first)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(messageWakeHold.isHolding()).toBe(true)
+    expect(handle.d.openList).toHaveBeenCalledTimes(1)
+    finish()
+    await expect(first).resolves.toBe('chat')
+    await expect(second).resolves.toBe('chat')
+    expect(messageWakeHold.isHolding()).toBe(false)
+    // And the next tap after it starts a run of its own.
+    const third = deps()
+    await expect(openMessageWake(third.d)).resolves.toBe('chat')
+    expect(third.d.openList).toHaveBeenCalledTimes(1)
   })
 
   it('a pickup that fails still settles, and on what is there', async () => {

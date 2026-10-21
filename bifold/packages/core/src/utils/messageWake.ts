@@ -23,6 +23,8 @@ import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
   type DidCommBasicMessageRecord,
+  type DidCommBasicMessageStateChangedEvent,
+  type DidCommBasicMessageV2StateChangedEvent,
 } from '@credo-ts/didcomm'
 
 import { isUnreadChatMessage } from '../hooks/useUnreadMessages'
@@ -120,16 +122,29 @@ export type MessageWakeOutcome = 'chat' | 'list' | 'moved'
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+// The tap being resolved now, if any. A second tap while one is under way
+// joins it: the messages it is for are the same ones, already on their way,
+// and a second run would end the first one's hold on the toasts early.
+let inFlight: Promise<MessageWakeOutcome> | undefined
+
 /** Resolve a tapped message notification: see the module's description. */
-export async function openMessageWake(deps: MessageWakeDeps): Promise<MessageWakeOutcome> {
-  startHold()
-  let opened: string | undefined
-  try {
-    const outcome = await resolveWake(deps, (id) => (opened = id))
-    return outcome
-  } finally {
-    releaseHold(opened)
+export function openMessageWake(deps: MessageWakeDeps): Promise<MessageWakeOutcome> {
+  if (inFlight) {
+    deps.log?.('message wake: a tap is already being resolved; joining it')
+    return inFlight
   }
+  inFlight = (async () => {
+    startHold()
+    let opened: string | undefined
+    try {
+      return await resolveWake(deps, (id) => (opened = id))
+    } finally {
+      releaseHold(opened)
+    }
+  })().finally(() => {
+    inFlight = undefined
+  })
+  return inFlight
 }
 
 async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void): Promise<MessageWakeOutcome> {
@@ -197,19 +212,22 @@ export async function pickUpNow(agent: Agent, timeoutMs: number = MESSAGE_WAKE_W
 export function nextReceivedMessage(agent: Agent): { arrived: Promise<void>; cancel(): void } {
   let cancel = () => undefined as void
   const arrived = new Promise<void>((resolve) => {
-    const types = [
-      DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
-      DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged,
-    ]
-    const subscriptions = types.map((type) =>
-      agent.events
-        .observable<{ type: string; payload: { basicMessageRecord: DidCommBasicMessageRecord } }>(type)
-        .subscribe((event) => {
-          const record = event.payload.basicMessageRecord
-          if (record.role === DidCommBasicMessageRole.Receiver && isUnreadChatMessage(record)) resolve()
-        })
-    )
-    cancel = () => subscriptions.forEach((subscription) => subscription.unsubscribe())
+    const received = (record: DidCommBasicMessageRecord) => {
+      if (record.role === DidCommBasicMessageRole.Receiver && isUnreadChatMessage(record)) resolve()
+    }
+    // Credo's own event types, one per DIDComm version.
+    const v1 = agent.events
+      .observable<DidCommBasicMessageStateChangedEvent>(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged)
+      .subscribe((event) => received(event.payload.basicMessageRecord))
+    const v2 = agent.events
+      .observable<DidCommBasicMessageV2StateChangedEvent>(
+        DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged
+      )
+      .subscribe((event) => received(event.payload.basicMessageRecord))
+    cancel = () => {
+      v1.unsubscribe()
+      v2.unsubscribe()
+    }
   })
   return { arrived, cancel: () => cancel() }
 }
