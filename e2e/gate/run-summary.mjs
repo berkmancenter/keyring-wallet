@@ -10,7 +10,7 @@
 // Informational rows (meta informational=, or the rows a leg names in INFORMATIONAL rows=a,b <why>): the openvtc/TUI rows
 // while keyring-test's VTC and openvtc's attestation shape are behind. Listed under informational; they never fail a
 // leg, and a leg passing only through them proves no core journey.
-// Core journeys (meta core= journey:leg[,leg]…, gate.sh CORE_JOURNEYS): what people use Keyring for, Keyring to
+// Core journeys (meta core= journey:leg[,leg][@row[+row]]…, gate.sh CORE_JOURNEYS; the rows after @ must PASS too): what people use Keyring for, Keyring to
 // Keyring. Each needs a leg that ran with an app pass and at least one PASS row; in a full gate (kind=gate) one that
 // did not makes overall incomplete, never pass, and coreMissing says which and why.
 // A tracked row (rows.js `tracked`: a SKIP until its fix passes) that PASSed in an earlier run and SKIPs again has
@@ -60,7 +60,7 @@ export function legRecord({ name, exit, start, end }, log, meta, passedBefore = 
   const count = (s) => rows.filter((r) => r.status === s).length;
   const broken = (log.match(/^LEG \S+ BROKEN — (.*)$/m) || [])[1];
   const env = [...log.matchAll(/^ENV (.*)$/gm)].map((m) => m[1]);
-  const rec = { name, exit, seconds: end && start ? end - start : null, pass: count('PASS'), fail: count('FAIL'), skip: count('SKIP') };
+  const rec = { name, exit, seconds: end && start ? end - start : null, pass: count('PASS'), fail: count('FAIL'), skip: count('SKIP'), passed: rows.filter((r) => r.status === 'PASS').map((r) => r.name) };
   const firstFail = rows.find((r) => r.status === 'FAIL');
   // Tracked rows that passed in an earlier run and skip now: regressions.
   const regressions = [], possible = [];
@@ -139,13 +139,18 @@ function defaultRepos() {
 export function coreJourneysMissing(meta, legs) {
   const missing = [];
   for (const entry of list(meta.core)) {
-    const [journey, legList = ''] = entry.split(':');
+    // journey:leg[,leg]@row[+row]: the rows after @ must each PASS in the proving leg, where one row is the journey
+    // itself (hv-admitted: a shared-community collision SKIPs it while the leg's other rows pass, and that is no proof).
+    const [journey, rest = ''] = entry.split(':');
+    const [legList = '', rowList = ''] = rest.split('@');
     const names = legList.split(',').filter(Boolean);
+    const required = rowList.split('+').filter(Boolean);
     const ran = legs.filter((l) => names.includes(l.name));
-    const proven = ran.some((l) => l.verdict === 'app' && l.result === 'pass' && l.pass > 0 && l.informationalLeg === undefined);
+    const lacks = (l) => required.filter((r) => !(l.passed ?? []).includes(r));
+    const proven = ran.some((l) => l.verdict === 'app' && l.result === 'pass' && l.pass > 0 && l.informationalLeg === undefined && !lacks(l).length);
     if (proven) continue;
     const why = !ran.length ? 'not run'
-      : ran.map((l) => `${l.name}: ${l.informationalLeg !== undefined ? `informational (${l.informationalLeg})` : l.result === 'pass' && !l.pass ? 'every row SKIP' : `${l.result} (${l.verdict})`}`).join('; ');
+      : ran.map((l) => `${l.name}: ${l.informationalLeg !== undefined ? `informational (${l.informationalLeg})` : l.result === 'pass' && !l.pass ? 'every row SKIP' : l.result === 'pass' && lacks(l).length ? `${lacks(l).join(', ')} did not PASS` : `${l.result} (${l.verdict})`}`).join('; ');
     missing.push({ journey, legs: names, why: why.slice(0, 300) });
   }
   return missing;

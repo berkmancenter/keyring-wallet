@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { newestMemberSince, newestRequestSince, parseAdminOut, requestsSince, soleRequestSince } from './hvAdmin.js';
+import { membersSince, newestMemberSince, newestRequestSince, parseAdminOut, requestsSince, soleMemberSince, soleRequestSince } from './hvAdmin.js';
 
 const out = (status, json) =>
   `[ref-20] admin did:key:z6Mk\n[ref-20] signed Trust Tasks to https://vtc.example/v1/trust-tasks, no sign-in\n[ref-20] trust-task vtc/join-requests/list/0.1 -> ${status}\n${json}\n`;
@@ -55,4 +55,13 @@ test('soleRequestSince: another run\'s lone request seen first, then both: none 
 test('soleRequestSince: two at once, or none at all', async () => {
   assert.deepEqual(await soleRequestSince(reads([mine, theirs]), S, { wait }), { count: 2 });
   assert.deepEqual(await soleRequestSince(reads([]), S, { wait, tries: 3 }), { count: 0 });
+});
+
+test('soleMemberSince: the one member on both reads; another run\'s member as well means none', async () => {
+  const ours = { did: 'did:webvh:x:ours', joinedAt: '2026-10-21T08:00:30Z' };
+  const other = { did: 'did:webvh:x:other', joinedAt: '2026-10-21T08:00:20Z' };
+  const old = { did: 'did:webvh:x:old', joinedAt: '2026-10-20T00:00:00Z' };
+  assert.deepEqual(await soleMemberSince(reads([old], [old, ours], [old, ours]), S, { wait }), { member: ours });
+  assert.deepEqual(await soleMemberSince(reads([old, other], [old, other, ours]), S, { wait }), { count: 2 });
+  assert.deepEqual(membersSince([old, ours], S).map((m) => m.did), ['did:webvh:x:ours']);
 });

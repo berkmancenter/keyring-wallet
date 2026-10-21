@@ -39,8 +39,10 @@ LEGS_SOLO="linkfail pnmlink"
 # legs, e.g. the smoke legs' link rows, stay ordinary verdicts). A full gate (kind=gate) in which one of them did
 # not run, skipped every row, or passed only informationally is not green (run-summary.mjs coreMissing). Sign-in is
 # signin-ios alone: the Android `signin` leg runs by name only (the emulator's fingerprint HAL), so its absence is an
-# ordinary SKIP. journey:leg[,leg] entries.
-CORE_JOURNEYS="vetting-named:kk vetting-hidden:hv signin:signin-ios join:waiting"
+# ordinary SKIP. journey:leg[,leg]@row entries: the row after @ decides the journey and must PASS, so a leg that
+# passes while that row SKIPs (or never ran) proves nothing; each journey names its own, so a future SKIP path cannot
+# silently turn it "proven".
+CORE_JOURNEYS="vetting-named:kk@kk-vetting vetting-hidden:hv@hv-admitted signin:signin-ios@signin-approved join:waiting@join-approved-listed"
 # Rows reported apart and never a verdict, while their other side is behind: p1's TUI vetter against keyring-test's VTC
 # (it refuses openvtc 0.5.0's manifest/0.2). A leg can name more with an INFORMATIONAL rows=a,b line (hv's
 # VETTER=tui: the rows downstream of openvtc's attestation, which is not the published shape).

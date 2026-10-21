@@ -233,3 +233,15 @@ test("tracked: a dependent of a tracked row that failed SKIPs on its need; a nee
   assert.equal(lines[2], "ROW built later SKIP — build lacks X");
   assert.equal(rows.exitCode(), EXIT_PASS);
 });
+
+test("a row that returns { skip } is a SKIP with its reason, not a FAIL, and the rows that need it SKIP", async () => {
+  const { rows, lines, captured } = leg({ needs: { "after join": ["joined"] } });
+  await rows.row("joined", async () => ({ skip: "2 join requests since this step began: not this run's to judge" }));
+  await rows.row("after join", async () => true);
+  assert.deepEqual(lines, [
+    "ROW joined SKIP — 2 join requests since this step began: not this run's to judge",
+    'ROW after join SKIP — needs "joined", which was SKIP',
+  ]);
+  assert.deepEqual(captured, [], "no failure capture for a skip");
+  assert.equal(rows.exitCode(), EXIT_PASS);
+});

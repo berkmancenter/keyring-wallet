@@ -34,7 +34,7 @@ import { pasteLinkFromHome } from "./lib/flows.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { join } from "./lib/pages/join.js";
 import { createRows } from "./lib/rows.js";
-import { createHvAdmin, newestMemberSince, newestRequestSince } from "./openvtc/hvAdmin.js";
+import { createHvAdmin, soleRequestSince } from "./openvtc/hvAdmin.js";
 import { createSigninPortal, originOf, signinConfig, triggerLink } from "./openvtc/signinPortal.js";
 
 const UDID = process.env.UDID;
@@ -75,17 +75,20 @@ try {
     await join.openCommunity(d, { did: C_DID, name: "" });
     await join.ask(d, { tag: "signin" });
     await join.awaitSent(d, { required: true });
-    let req;
-    for (let i = 0; i < 24 && !req; i++) { req = newestRequestSince(admin.joinRequests("pending"), since); if (!req) await sleep(5000); }
-    if (!req) throw new Error("no pending join request from this phone reached the community");
+    // The community is shared with legs beside this one (hv on keyring-hv-lab1 on the MacBook): approve only when this
+    // phone's request is the one new request on two reads, and remember only the member it made, so the cleanup never
+    // removes someone else's (as run-agent-refused.mjs, #549).
+    const { req, count } = await soleRequestSince(() => admin.joinRequests("pending"), since);
+    if (!req && !count) throw new Error("no pending join request from this phone reached the community");
+    if (!req) return { skip: `${count} join requests since this step began (read twice, 5 s apart): another run is joining on this shared community, so none is approved and this run cannot judge the app` };
     const decided = admin.decide(req.id, "approved");
     let member;
-    for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
+    for (let i = 0; i < 24 && !member; i++) { member = admin.members().find((m) => m.did === req.applicantDid); if (!member) await sleep(5000); }
     memberDid = member?.did;
     // The phone learns it from its own inbox: the join screen ends on JoinDone.
     const done = await waitForTestId(d, "JoinDone", 240000).then(() => true, () => false);
     if (done) await join.done(d).catch(() => undefined);
-    return { ok: Boolean(member && member.did === req.applicantDid && done), detail: `request ${req.id} approved (${decided.status}); member ${member?.did ?? "none listed"}; the phone reached JoinDone ${done}` };
+    return { ok: Boolean(member && done), detail: `request ${req.id} approved (${decided.status}); member ${member?.did ?? "not listed"} (its applicant); the phone reached JoinDone ${done}` };
   });
   if (!memberDid) throw new Error("not a member: nothing to sign in as");
 

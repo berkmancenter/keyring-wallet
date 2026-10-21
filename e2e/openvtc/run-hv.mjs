@@ -31,7 +31,7 @@ import { parseArgs } from 'node:util';
 import { byTestId, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId } from '../lib/driver.js';
 import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
-import { createHvAdmin, newestMemberSince, newestRequestSince } from './hvAdmin.js';
+import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
 import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard } from './hvVerdict.js';
 
@@ -183,9 +183,10 @@ try {
     prove = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/prove/0.1');
   }
   mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified in ${prove.seconds} s` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
-  let member;
-  for (let i = 0; i < 24 && !member; i++) { member = newestMemberSince(admin.members(), since); if (!member) await sleep(5000); }
-  mark('hv-admitted', member ? 'PASS' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt})` : 'no member listed since the run began');
+  // The one member since the run began, on two reads: the community is shared with legs beside this one (signin's
+  // member joins keyring-hv-lab1 too), and "the newest member" could be theirs, a pass for an admission that is not ours.
+  const { member, count: members } = await soleMemberSince(() => admin.members(), since);
+  mark('hv-admitted', member ? 'PASS' : members ? 'SKIP' : 'FAIL', member ? `the community lists ${member.did} (joined ${member.joinedAt}), the one member since the run began` : members ? `${members} members joined since the run began (read twice) on this shared community: whose is not known, so this run cannot judge the admission` : 'no member listed since the run began');
   mark('hv-member-card', /member|joined|welcome|done/i.test(String(outcome)) ? 'PASS' : 'FAIL', `the app says "${String(outcome).slice(0, 120)}"`);
 
   // No vetter named where it would be a leak: in the app's own lines since the attestation and the page it ends on (the
@@ -195,7 +196,9 @@ try {
   // is the attestation and what the community keeps (hv-keyring on 262: all ten mentions were transport lines).
   const vetterDid = a.vetter === 'keyring' ? a['vetter-did'] : a['tui-persona'];
   const shownToApplicant = appLevelLines(deviceLog(appDev, attestMs)) + withoutOwnRequestCard(await app.getPageSource().catch(() => ''));
-  const req = newestRequestSince([...admin.joinRequests('approved'), ...admin.joinRequests('pending')], since);
+  // The record of this applicant's join: the request whose applicant is the member above, not the newest on a shared
+  // community (no member, no record: the verdict below says the source was not read).
+  const req = member ? [...admin.joinRequests('approved'), ...admin.joinRequests('pending')].find((r) => r.applicantDid === member.did) : undefined;
   const record = JSON.stringify(req ?? {}) + JSON.stringify(member ?? {});
   // Each source must show it was read (the applicant side names the applicant, the record names the member) before an
   // absent vetter DID counts: an empty page source or log read fails as "source empty" (review on #500).
