@@ -70,6 +70,14 @@ const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-deliver
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
 const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request'
 const DELIVERY_POLL_MS = 15000
+/**
+ * Backstop polls in a row that heard nothing back before the socket is taken for dead and reopened. The mediator
+ * answers every delivery-request (a `delivery`, or a `status` for an empty queue), so silence means the socket reads
+ * open and is not: iOS suspends the app and its socket can keep reporting OPEN with no close ever arriving.
+ */
+export const SILENT_POLLS_BEFORE_REOPEN = 2
+/** How long a socket asked to prove itself (back in the foreground) has to answer before it is reopened. */
+export const ALIVE_CHECK_MS = 10_000
 const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
 const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
@@ -808,9 +816,47 @@ export class VtiMediatorSession {
     // resync signal (tdk-rs #830) makes a missed push visible sooner — see
     // `heardPickup`.
     if (this.pollTimer) clearInterval(this.pollTimer)
+    this.unansweredPolls = 0
     this.pollTimer = setInterval(() => {
-      if (this.socket?.readyState === 1) void this.requestDelivery().catch(() => undefined)
+      if (this.socket?.readyState !== 1) return
+      if (this.unansweredPolls >= SILENT_POLLS_BEFORE_REOPEN) {
+        this.silentReopen(`${this.unansweredPolls} delivery-requests in a row heard nothing back`)
+        return
+      }
+      this.unansweredPolls += 1
+      void this.requestDelivery().catch(() => undefined)
     }, DELIVERY_POLL_MS)
+  }
+
+  /** Backstop polls sent since the mediator last said anything at all on this socket. */
+  private unansweredPolls = 0
+  /** Whether anything came on the socket since the last {@link checkAlive}. */
+  private heardSinceCheck = true
+  private aliveTimer?: ReturnType<typeof setTimeout>
+
+  /**
+   * Prove the socket answers: a delivery-request now, and a reopen if nothing at all comes back within
+   * {@link ALIVE_CHECK_MS}. Called back in the foreground, where a socket iOS let die still reads open (D7FG-2Y9J).
+   */
+  checkAlive(): void {
+    if (this.stopped || !this.socket) return
+    this.heardSinceCheck = false
+    void this.requestDelivery().catch(() => undefined)
+    if (this.aliveTimer) clearTimeout(this.aliveTimer)
+    this.aliveTimer = setTimeout(() => {
+      this.aliveTimer = undefined
+      if (!this.heardSinceCheck && !this.stopped && this.socket?.readyState === 1)
+        this.silentReopen(`nothing back ${ALIVE_CHECK_MS / 1000} s after coming back to the foreground`)
+    }, ALIVE_CHECK_MS)
+  }
+
+  /** A socket that reads open and answers nothing: said, and replaced. */
+  private silentReopen(why: string): void {
+    releaseWarn(
+      `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} reads open but is silent (${why}); reopening it`
+    )
+    this.unansweredPolls = 0
+    void this.reopen().catch((error) => this.options.onError?.(error as Error))
   }
 
   /**
@@ -885,6 +931,9 @@ export class VtiMediatorSession {
 
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
   private async handleFrame(raw: string): Promise<void> {
+    // Anything at all from the mediator: the socket is alive.
+    this.unansweredPolls = 0
+    this.heardSinceCheck = true
     try {
       // TSP demux, before any JSON is parsed: the mediator delivers a stored
       // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
@@ -1227,6 +1276,8 @@ export class VtiMediatorSession {
     this.renewTimer = undefined
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = undefined
+    if (this.aliveTimer) clearTimeout(this.aliveTimer)
+    this.aliveTimer = undefined
     this.socket?.close()
     this.socket = undefined
   }

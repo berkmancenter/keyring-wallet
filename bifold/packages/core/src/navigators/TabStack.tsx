@@ -278,7 +278,7 @@ const TabStack: React.FC = () => {
     if (!agent || !store.authentication.didAuthenticate) return
     void vtaAgent.restore(agent)
     const subscription = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void vtaAgent.ensureOnline(agent)
+      if (next === 'active') void vtaAgent.foregrounded(agent)
     })
     return () => subscription.remove()
   }, [agent, store.authentication.didAuthenticate])

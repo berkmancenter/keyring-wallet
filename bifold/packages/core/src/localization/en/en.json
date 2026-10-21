@@ -1558,6 +1558,7 @@
     "DetailsPhoneKey": "This phone's key",
     "DetailsLinkedAt": "Linked",
     "BannerAway": "Your agent is away — {{status}}",
+    "BannerNotAnswering": "Your agent isn't answering this phone. Retrying.",
     "OpenYourAgent": "Your agent",
     "IWasInvited": "I was invited",
     "IWasInvitedHint": "A community's admin is inviting you. You'll send them who you are, then join.",

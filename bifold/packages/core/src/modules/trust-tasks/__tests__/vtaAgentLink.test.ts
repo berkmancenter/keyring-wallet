@@ -50,6 +50,7 @@ const mockClient = {
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
   refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
+  TspReplyBreaker: jest.requireActual('../module/VtaClient').TspReplyBreaker,
   consentPendingOf: jest.requireActual('../module/VtaClient').consentPendingOf,
   ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
   SwapDoneSignInFailed: jest.requireActual('../module/VtaClient').SwapDoneSignInFailed,
