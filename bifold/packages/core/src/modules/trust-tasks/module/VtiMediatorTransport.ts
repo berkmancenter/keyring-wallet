@@ -1083,11 +1083,14 @@ export class VtiMediatorSession {
       }
     }
     if (acknowledged.length > 0) await this.acknowledge(acknowledged)
-    // What a drain found: a report can then tell an inbox never collected from one full of frames left behind.
-    if (attachments.length > 0)
+    // What a drain found, as three counts that add up to it: opened and taken, dropped as never openable (also
+    // acknowledged, so they stop coming back), and left queued for another try.
+    if (attachments.length > 0) {
+      const dropped = this.droppedCount - droppedBefore
       releaseWarn(
-        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length} taken, ${this.droppedCount - droppedBefore} dropped as never openable, ${attachments.length - acknowledged.length} left queued`
+        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length - dropped} taken, ${dropped} dropped as never openable, ${attachments.length - acknowledged.length} left queued`
       )
+    }
   }
 
   /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */

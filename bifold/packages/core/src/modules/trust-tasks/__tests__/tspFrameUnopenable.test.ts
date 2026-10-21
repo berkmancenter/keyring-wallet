@@ -148,7 +148,7 @@ describe('what the session does with each', () => {
     await s.pickup()
     expect(s.acknowledge).toHaveBeenCalledWith([tsp.tspFrameQueueId(FRAME)])
     expect(said()).toMatch(/\(malformed\)/)
-    expect(said()).toMatch(/drained 1 queued .*: 1 taken, 1 dropped as never openable, 0 left queued/)
+    expect(said()).toMatch(/drained 1 queued .*: 0 taken, 1 dropped as never openable, 0 left queued/)
   })
 
   it('a frame whose key is not in memory yet: left queued, then taken once the key is there', async () => {
@@ -176,7 +176,7 @@ describe('what the session does with each', () => {
     await s.pickup()
     expect(s.acknowledge).toHaveBeenCalledWith([tsp.tspFrameQueueId(FRAME)])
     expect(s.onError).not.toHaveBeenCalled()
-    expect(said()).toMatch(/drained 1 queued .*: 1 taken, 1 dropped as never openable, 0 left queued/)
+    expect(said()).toMatch(/drained 1 queued .*: 0 taken, 1 dropped as never openable, 0 left queued/)
   })
 
   it('a backlog frame left queued is counted as left, not taken', async () => {
