@@ -60,7 +60,7 @@ const wakeOpening = (opened: string | undefined, during: () => Promise<void>): M
   nextMessage: () => ({ arrived: new Promise(() => undefined), cancel: () => undefined }),
   newestUnread: async () => opened,
   openChat: (id) => setActiveChatConnectionId(id),
-  onList: () => true,
+  listFocus: { focused: () => true, blurs: () => 0, subscribe: () => () => undefined },
   sleep: async () => undefined,
   graceMs: 0,
 })

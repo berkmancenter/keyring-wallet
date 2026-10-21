@@ -10,7 +10,7 @@ import EmptyListConnections from '../modules/vrc/components/EmptyListConnections
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { MessageStackParams, Screens, Stacks } from '../types/navigators'
-import { messageWakeFetching } from '../utils/messageWake'
+import { messageWakeFetching, useReportMessagesListFocus } from '../utils/messageWake'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
 
@@ -25,6 +25,9 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   // A tapped message notification is being resolved (utils/messageWake.ts):
   // said here, so the list is not a blank wait while the messages come in.
   const fetchingNew = useSyncExternalStore(messageWakeFetching.subscribe, messageWakeFetching.get)
+  // A tapped message notification waits for this list to have focus before
+  // it opens a chat, and stays put if the person leaves it (messageWake.ts).
+  useReportMessagesListFocus()
   const [store] = useStore()
   const [{ contactHideList }, ContactListItem, defaultScreenOptionsDict] = useServices([
     TOKENS.CONFIG,

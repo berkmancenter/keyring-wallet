@@ -19,6 +19,8 @@
  * @module utils/messageWake
  */
 import type { Agent } from '@credo-ts/core'
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback } from 'react'
 import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
@@ -31,9 +33,13 @@ import { isUnreadChatMessage } from '../hooks/useUnreadMessages'
 
 /** How long a tap waits for the waiting messages before it settles on the list. */
 export const MESSAGE_WAKE_WAIT_MS = 8_000
-/** How long the tap's own navigation to the Messages list may take to come to the front, and how often it is looked at. */
-const LANDING_WAIT_MS = 1_000
-const LANDING_STEP_MS = 25
+/**
+ * How long the tap's own navigation may take to bring the Messages list into
+ * focus. A cold start or a return from the background is slower than a warm
+ * tap: on an iPhone 11 a busy launch stretched a 1 s wait past its end while
+ * the list was already showing (build 265, report VTRM-RFH2).
+ */
+export const MESSAGE_WAKE_LANDING_MS = 5_000
 /** After the pickup has ended with nothing new, how long a message still in processing may take to land. */
 export const MESSAGE_WAKE_GRACE_MS = 1_000
 
@@ -94,6 +100,50 @@ const releaseHold = (opened: string | undefined) => {
   waiting.forEach((then) => then(opened))
 }
 
+/**
+ * Whether the Messages list is in focus, said by the list itself
+ * ({@link useReportMessagesListFocus}), the way Chat says which chat is open
+ * (activeChatTracker). Not read from navigation state: the app's state is
+ * nested under a root stack, and reading it for the focused route answered
+ * "not the list" while the list was on screen (VTRM-RFH2).
+ */
+export interface MessagesListFocus {
+  focused(): boolean
+  /** How many times the list has lost focus: a change since the tap landed means the person moved. */
+  blurs(): number
+  subscribe(listener: () => void): () => void
+}
+
+let listFocused = false
+let listBlurs = 0
+const listListeners = new Set<() => void>()
+const setListFocused = (next: boolean) => {
+  if (listFocused === next) return
+  if (!next) listBlurs += 1
+  listFocused = next
+  listListeners.forEach((listener) => listener())
+}
+export const messagesListFocus: MessagesListFocus = {
+  focused: () => listFocused,
+  blurs: () => listBlurs,
+  subscribe: (listener) => {
+    listListeners.add(listener)
+    return () => {
+      listListeners.delete(listener)
+    }
+  },
+}
+
+/** Say, from the Messages list, when it has focus and when it loses it. */
+export function useReportMessagesListFocus(): void {
+  useFocusEffect(
+    useCallback(() => {
+      setListFocused(true)
+      return () => setListFocused(false)
+    }, [])
+  )
+}
+
 export interface MessageWakeDeps {
   /** Show the Messages list. */
   openList(): void
@@ -105,20 +155,16 @@ export interface MessageWakeDeps {
   newestUnread(): Promise<string | undefined>
   /** Open that connection's chat. */
   openChat(connectionId: string): void
-  /**
-   * Whether the screen in front is the Messages list. Once the tap has brought
-   * the list to the front, anything else in front means the person moved. Not
-   * route keys: a navigator re-keys a nested route when it mounts, which reads
-   * as a move nobody made.
-   */
-  onList(): boolean
+  /** The Messages list's own report of its focus ({@link messagesListFocus}). */
+  listFocus: MessagesListFocus
   log?(message: string, data?: Record<string, unknown>): void
   waitMs?: number
   graceMs?: number
+  landingMs?: number
   sleep?(ms: number): Promise<void>
 }
 
-export type MessageWakeOutcome = 'chat' | 'list' | 'moved'
+export type MessageWakeOutcome = 'chat' | 'list' | 'moved' | 'notShown'
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -139,30 +185,45 @@ export function openMessageWake(deps: MessageWakeDeps): Promise<MessageWakeOutco
     try {
       return await resolveWake(deps, (id) => (opened = id))
     } finally {
+      // Together, so no tap can join a run whose hold has already gone.
+      inFlight = undefined
       releaseHold(opened)
     }
-  })().finally(() => {
-    inFlight = undefined
-  })
+  })()
   return inFlight
+}
+
+/** Resolves true once `focus` says the list has focus, false after `ms`. */
+function untilFocused(focus: MessagesListFocus, ms: number, sleep: (ms: number) => Promise<void>): Promise<boolean> {
+  if (focus.focused()) return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const done = (value: boolean) => {
+      if (settled) return
+      settled = true
+      unsubscribe()
+      resolve(value)
+    }
+    const unsubscribe = focus.subscribe(() => {
+      if (focus.focused()) done(true)
+    })
+    void sleep(ms).then(() => done(focus.focused()))
+  })
 }
 
 async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void): Promise<MessageWakeOutcome> {
   const sleep = deps.sleep ?? defaultSleep
   deps.openList()
   setFetching(true)
-  // The list lands a render after it is asked for: wait for it to be in
-  // front, or the screen the tap came from would read as the person moving.
-  let waited = 0
-  while (!deps.onList() && waited < LANDING_WAIT_MS) {
-    await sleep(LANDING_STEP_MS)
-    waited += LANDING_STEP_MS
-  }
-  if (!deps.onList()) {
+  // Wait for the list to say it has focus. Only a move the person makes after
+  // that counts: the list losing focus again before the messages are in.
+  const landed = await untilFocused(deps.listFocus, deps.landingMs ?? MESSAGE_WAKE_LANDING_MS, sleep)
+  if (!landed) {
     setFetching(false)
-    deps.log?.('message wake: the Messages list did not come to the front; staying where they are')
-    return 'moved'
+    deps.log?.('message wake: the Messages list never took focus; opening nothing')
+    return 'notShown'
   }
+  const blursAtLanding = deps.listFocus.blurs()
   const next = deps.nextMessage()
   try {
     await Promise.race([
@@ -179,7 +240,7 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
     next.cancel()
     setFetching(false)
   }
-  if (!deps.onList()) {
+  if (deps.listFocus.blurs() !== blursAtLanding || !deps.listFocus.focused()) {
     deps.log?.('message wake: the person moved on; staying where they are')
     return 'moved'
   }
@@ -232,22 +293,9 @@ export function nextReceivedMessage(agent: Agent): { arrived: Promise<void>; can
   return { arrived, cancel: () => cancel() }
 }
 
-/** The name of the screen in front in a navigation state, following the focused route down. */
-export function focusedRouteName(state: unknown): string | undefined {
-  let node = state as { index?: number; routes?: { name: string; state?: unknown }[] } | undefined
-  let name: string | undefined
-  while (node?.routes?.length) {
-    const route = node.routes[node.index ?? node.routes.length - 1]
-    name = route.name
-    node = route.state as typeof node
-  }
-  return name
-}
-
 /** The parts of a navigation object the app's wiring uses. */
 export interface WakeNavigation {
   navigate(name: string, params?: object): void
-  getState(): unknown
 }
 
 /**
@@ -259,7 +307,7 @@ export interface WakeNavigation {
 export function appMessageWakeDeps(options: {
   navigation: WakeNavigation
   agent: Agent
-  names: { tabStack: string; messageStack: string; messages: string; contactStack: string; chat: string }
+  names: { tabStack: string; messageStack: string; contactStack: string; chat: string }
   log?: (message: string, data?: Record<string, unknown>) => void
 }): MessageWakeDeps {
   const { navigation, agent, names, log } = options
@@ -274,7 +322,7 @@ export function appMessageWakeDeps(options: {
     },
     openChat: (connectionId) =>
       navigation.navigate(names.contactStack, { screen: names.chat, params: { connectionId } }),
-    onList: () => focusedRouteName(navigation.getState()) === names.messages,
+    listFocus: messagesListFocus,
     log,
   }
 }

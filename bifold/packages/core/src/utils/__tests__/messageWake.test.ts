@@ -7,12 +7,12 @@ import type { DidCommBasicMessageRecord } from '@credo-ts/didcomm'
 
 import { BasicMessageMetadata } from '../../types/metadata'
 import {
-  focusedRouteName,
   messageWakeFetching,
   messageWakeHold,
   newestUnreadConnection,
   openMessageWake,
   type MessageWakeDeps,
+  type MessagesListFocus,
 } from '../messageWake'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -53,32 +53,39 @@ describe('which chat a tap opens', () => {
   })
 })
 
-describe('the screen in front', () => {
-  it('follows the focused route down through nested navigators', () => {
-    const state = {
-      index: 0,
-      routes: [
-        {
-          name: 'TabStack',
-          state: {
-            index: 1,
-            routes: [
-              { name: 'Contacts' },
-              { name: 'MessageStack', state: { index: 0, routes: [{ name: 'Messages' }] } },
-            ],
-          },
-        },
-      ],
-    }
-    expect(focusedRouteName(state)).toBe('Messages')
-    expect(focusedRouteName(undefined)).toBeUndefined()
-  })
-})
-
 describe('resolving a tap', () => {
-  const deps = (over: Partial<MessageWakeDeps> = {}) => {
+  /** The Messages list's report of its own focus, driven by the test. */
+  const listFocus = (initially = true) => {
+    let focused = initially
+    let blurs = 0
+    const listeners = new Set<() => void>()
+    const notify = () => listeners.forEach((l) => l())
+    const focus: MessagesListFocus = {
+      focused: () => focused,
+      blurs: () => blurs,
+      subscribe: (l) => {
+        listeners.add(l)
+        return () => {
+          listeners.delete(l)
+        }
+      },
+    }
+    return {
+      focus,
+      take: () => {
+        focused = true
+        notify()
+      },
+      leave: () => {
+        focused = false
+        blurs += 1
+        notify()
+      },
+    }
+  }
+
+  const deps = (over: Partial<MessageWakeDeps> = {}, list = listFocus()) => {
     const calls: string[] = []
-    let key = 'messages'
     let arrive: () => void = () => undefined
     const d: MessageWakeDeps = {
       openList: jest.fn(() => calls.push('list')),
@@ -88,12 +95,12 @@ describe('resolving a tap', () => {
       nextMessage: jest.fn(() => ({ arrived: new Promise<void>((resolve) => (arrive = resolve)), cancel: jest.fn() })),
       newestUnread: jest.fn(async () => 'bob'),
       openChat: jest.fn((id: string) => calls.push(`chat:${id}`)),
-      onList: () => key === 'messages',
+      listFocus: list.focus,
       sleep: async () => undefined,
       graceMs: 0,
       ...over,
     }
-    return { d, calls, move: (to: string) => (key = to), arrive: () => arrive() }
+    return { d, calls, list, move: () => list.leave(), arrive: () => arrive() }
   }
 
   it('shows the list first, picks up, then opens the newest unread chat', async () => {
@@ -121,7 +128,7 @@ describe('resolving a tap', () => {
   it('does not move a person who went anywhere while the messages came in', async () => {
     const handle = deps()
     handle.d.pickUpNow = jest.fn(async () => {
-      handle.move('contacts')
+      handle.move()
     })
     await expect(openMessageWake(handle.d)).resolves.toBe('moved')
     expect(handle.d.openChat).not.toHaveBeenCalled()
@@ -136,26 +143,52 @@ describe('resolving a tap', () => {
     await expect(openMessageWake(handle.d)).resolves.toBe('chat')
   })
 
-  it('waits for the list to be in front before it judges a move, then sees one', async () => {
-    // The navigation to the list lands a little later than it is asked for.
-    let key = 'contacts'
-    const handle = deps({ onList: () => key === 'messages' })
+  // VTRM-RFH2 (build 265): on a cold or background tap the list took focus
+  // late, and the check that read navigation state never saw it.
+  it('waits for the list to say it has focus, however late, then opens the chat', async () => {
+    const list = listFocus(false)
+    const handle = deps(
+      { sleep: (ms: number) => (ms >= 1000 ? new Promise<void>(() => undefined) : Promise.resolve()) },
+      list
+    )
     handle.d.openList = jest.fn(() => {
-      setTimeout(() => (key = 'messages'), 30)
+      setTimeout(() => list.take(), 1500)
     })
-    handle.d.sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-    handle.d.pickUpNow = jest.fn(async () => {
-      key = 'contacts'
-    })
-    await expect(openMessageWake(handle.d)).resolves.toBe('moved')
-    expect(handle.d.openChat).not.toHaveBeenCalled()
+    jest.useFakeTimers()
+    try {
+      const run = openMessageWake(handle.d)
+      await jest.advanceTimersByTimeAsync(1500)
+      await expect(run).resolves.toBe('chat')
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
-  it('a list that never comes to the front: nothing is opened', async () => {
-    const handle = deps({ onList: () => false })
-    await expect(openMessageWake(handle.d)).resolves.toBe('moved')
+  it('only a move the person makes after the list took focus counts, not the focus arriving', async () => {
+    const list = listFocus(false)
+    const handle = deps({}, list)
+    handle.d.openList = jest.fn(() => {
+      // Mounting late: no focus, then focus. Not a move.
+      setTimeout(() => list.take(), 0)
+    })
+    handle.d.sleep = (ms: number) => (ms >= 1000 ? new Promise<void>(() => undefined) : Promise.resolve())
+    await expect(openMessageWake(handle.d)).resolves.toBe('chat')
+  })
+
+  it('a list that never takes focus: nothing opens, and the toasts are let go', async () => {
+    const list = listFocus(false)
+    const handle = deps({}, list)
+    let releasedWith: string | undefined = 'not released'
+    handle.d.openList = jest.fn(() => {
+      // A message lands while the tap is waiting for the list.
+      messageWakeHold.after((opened) => (releasedWith = opened))
+    })
+    await expect(openMessageWake(handle.d)).resolves.toBe('notShown')
     expect(handle.d.pickUpNow).not.toHaveBeenCalled()
+    expect(handle.d.openChat).not.toHaveBeenCalled()
     expect(messageWakeFetching.get()).toBe(false)
+    expect(messageWakeHold.isHolding()).toBe(false)
+    expect(releasedWith).toBeUndefined()
   })
 
   // A second tap within the window used to start a second run, whose end
