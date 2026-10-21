@@ -43,9 +43,9 @@ describe('the invitation link, as it is shared and as it arrives', () => {
     expect(() => DidCommOutOfBandInvitation.fromUrl(cut)).toThrow()
     expect(invitationLinkIncomplete(cut)).toBe(true)
     const error = invitationLinkError(cut, t)
-    expect(error?.code).toBe(1050)
-    expect(error?.title).toBe('Error.Title1050')
-    expect(error?.description).toBe('Error.Message1050')
+    expect(error?.code).toBe(1051)
+    expect(error?.title).toBe('Error.Title1051')
+    expect(error?.description).toBe('Error.Message1051')
     // Its detail says what was read, never the invitation itself.
     expect(error?.message).not.toContain(cut.slice(60))
   })
@@ -60,14 +60,32 @@ describe('the invitation link, as it is shared and as it arrives', () => {
     expect(invitationLinkError(link, t)).toBeUndefined()
   })
 
+  // 1050 is BiometryControl's: the invitation's words took it once, and a
+  // biometrics failure would have said an invitation link was incomplete.
+  test('its code and words are its own: 1051, once per locale, and 1050 left to biometrics', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readFileSync } = require('fs')
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('path')
+    for (const f of ['en/en.json', 'fr/fr.json', 'pt-br/pt-br.json']) {
+      const raw: string = readFileSync(path.join(__dirname, '../../src/localization', f), 'utf8')
+      // A duplicate key still parses, the last one winning; count the raw lines.
+      expect(raw.match(/"Title1051":/g)).toHaveLength(1)
+      expect(raw.match(/"Message1051":/g)).toHaveLength(1)
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const copy = require(`../../src/localization/${f}`).Error
+      expect(String(copy.Title1050 ?? '')).not.toMatch(/invitation|invitación|convite|lien/i)
+    }
+  })
+
   test('the words say what to do, and claim nothing about why it was cut', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     for (const f of ['en/en.json', 'fr/fr.json', 'pt-br/pt-br.json']) {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const copy = require(`../../src/localization/${f}`).Error
-      expect(typeof copy.Title1050).toBe('string')
-      expect(typeof copy.Message1050).toBe('string')
-      expect(copy.Message1050).not.toMatch(/Messages|Signal|WhatsApp|iMessage/)
+      expect(typeof copy.Title1051).toBe('string')
+      expect(typeof copy.Message1051).toBe('string')
+      expect(copy.Message1051).not.toMatch(/Messages|Signal|WhatsApp|iMessage/)
     }
   })
 })

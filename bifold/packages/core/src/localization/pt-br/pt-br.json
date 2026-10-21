@@ -151,8 +151,8 @@
     "Message1048": "There was a problem with the proof request. (PT-BR)",
     "Title1049": "Unable to change PIN. (PT-BR)",
     "Message1049": "There was a problem while attempting to change your PIN. (PT-BR)",
-    "Title1050": "Este link de convite está incompleto",
-    "Message1050": "O Keyring não conseguiu lê-lo, então nada foi conectado. Peça um novo link ou escaneie o código da pessoa.",
+    "Title1051": "Este link de convite está incompleto",
+    "Message1051": "O Keyring não conseguiu lê-lo, então nada foi conectado. Escaneie o código da pessoa ou peça um novo link.",
     "GenericError": {
       "Title": "Não foi possível abrir isso",
       "Message": "O Keyring não sabe o que fazer com isto. Fale com quem lhe deu o código, ou tente outro."

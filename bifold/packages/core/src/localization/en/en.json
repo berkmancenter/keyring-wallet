@@ -152,8 +152,8 @@
     "Message1048": "There was a problem with the proof request.",
     "Title1049": "Unable to change PIN.",
     "Message1049": "There was a problem while attempting to change your PIN.",
-    "Title1050": "This invitation link is incomplete",
-    "Message1050": "Keyring couldn't read it, so nothing was connected. Ask for a new link, or scan their code instead.",
+    "Title1051": "This invitation link is incomplete",
+    "Message1051": "Keyring couldn't read it, so nothing was connected. Scan their code instead, or ask for a new link.",
     "GenericError": {
       "Title": "That couldn't be opened",
       "Message": "Keyring doesn't know what to do with this. Check with whoever gave you the code, or try another one."

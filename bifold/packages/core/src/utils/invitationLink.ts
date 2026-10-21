@@ -41,9 +41,9 @@ export function invitationLinkIncomplete(link: string): boolean {
 export function invitationLinkError(link: string, t: TFunction): BifoldError | undefined {
   if (!invitationLinkIncomplete(link)) return undefined
   return new BifoldError(
-    t('Error.Title1050'),
-    t('Error.Message1050'),
+    t('Error.Title1051'),
+    t('Error.Message1051'),
     `an invitation link of ${link.length} characters could not be read`,
-    1050
+    1051
   )
 }
