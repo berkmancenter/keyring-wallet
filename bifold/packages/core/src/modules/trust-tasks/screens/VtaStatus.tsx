@@ -83,7 +83,11 @@ export const VtaOfflineBanner: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const { state, now } = useVtaLinkWithClock()
-  if (!showsOfflineBanner(state.link, now) || state.link.kind !== 'linked') return null
+  if (state.link.kind !== 'linked') return null
+  // Replies have stopped reaching this phone (the agent's reply breaker): said as that, socket up or not, since the
+  // phone reaching its mediator says nothing about the agent's answers getting back (D7FG-2Y9J read "away").
+  const notAnswering = Boolean(state.repliesStalled) && state.link.connection.kind !== 'gone'
+  if (!notAnswering && !showsOfflineBanner(state.link, now)) return null
   return (
     <View
       style={[styles.banner, { backgroundColor: ColorPalette.semantic.error }]}
@@ -92,10 +96,12 @@ export const VtaOfflineBanner: React.FC = () => {
       accessibilityLiveRegion="polite"
     >
       <ThemedText style={{ color: ColorPalette.grayscale.white }}>
-        {t('VtaLink.BannerAway', {
-          status: connectionText(connectionShown(state.link.connection, now), t),
-          interpolation: { escapeValue: false },
-        })}
+        {notAnswering
+          ? t('VtaLink.BannerNotAnswering')
+          : t('VtaLink.BannerAway', {
+              status: connectionText(connectionShown(state.link.connection, now), t),
+              interpolation: { escapeValue: false },
+            })}
       </ThemedText>
     </View>
   )

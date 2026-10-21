@@ -1497,6 +1497,7 @@
     "DetailsPhoneKey": "La clé de ce téléphone",
     "DetailsLinkedAt": "Relié",
     "BannerAway": "Votre agent est absent — {{status}}",
+    "BannerNotAnswering": "Votre agent ne répond pas à ce téléphone. Nouvelle tentative.",
     "OpenYourAgent": "Votre agent",
     "IWasInvited": "J'ai été invité",
     "IWasInvitedHint": "L'admin d'une communauté vous invite. Vous lui envoyez qui vous êtes, puis vous rejoignez.",

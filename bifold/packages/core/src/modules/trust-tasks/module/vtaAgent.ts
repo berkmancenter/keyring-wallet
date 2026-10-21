@@ -41,6 +41,7 @@ import {
   VtaClient,
   consentPendingOf,
   refusedAsNotOnAcl,
+  TspReplyBreaker,
   resolveVtaMediator,
   type KeySwapNotDone,
   type VtaAclEntry,
@@ -638,6 +639,8 @@ export class VtaAgentController {
   private readonly backedOut = new Set<string>()
   /** The look at the other agents under way, if any. */
   private looking?: Promise<void>
+  /** Each agent's reply breaker, kept across the clients made for it (D7FG-2Y9J: a client per reconnect forgot it). */
+  private readonly breakers = new Map<string, TspReplyBreaker>()
 
   /** Replace I/O for tests; production uses the defaults. */
   configure(deps: VtaAgentDeps) {
@@ -740,7 +743,10 @@ export class VtaAgentController {
     // one, and the old one's in-memory keys and session are gone with it.
     if (this.current?.vtaDid === vtaDid && this.current.agent === agent) return this.current.client
     const identityStore = store ?? this.identityStore(agent)
+    const breaker = this.breakers.get(vtaDid) ?? new TspReplyBreaker()
+    this.breakers.set(vtaDid, breaker)
     const client = new VtaClient(agent, vtaDid, identityStore, {
+      breaker,
       onError: (error) => {
         this.set({ error: error.message })
         // A socket that went away while linked is a drop, not a failure to
@@ -763,7 +769,7 @@ export class VtaAgentController {
     this.handedOver = undefined
     this.current = { client, vtaDid, store: identityStore, agent }
     if (handedOver !== vtaDid) this.set({ vtaDid, status: 'disconnected', approvals: [] })
-    this.set({ repliesStalled: false })
+    this.set({ repliesStalled: breaker.open })
     return client
   }
 
@@ -2927,6 +2933,23 @@ export class VtaAgentController {
       this.dispatch({ type: 'accessRevoked', reason: refusal.detail ?? refusal.message })
     }
     return refusal
+  }
+
+  /**
+   * Back in the foreground: the moment a receive leg iOS let die while suspended would otherwise go unnoticed — its
+   * socket still reads open, and `ensureOnline` only looks at whether it is. The session proves itself, a held reply
+   * breaker lets one probe go early, and then the link is brought online as before.
+   */
+  async foregrounded(given: Agent): Promise<void> {
+    const link = this.state.link
+    if (link.kind === 'linked') {
+      this.current?.client.checkAlive()
+      if (this.breakers.get(link.vtaDid)?.allowEarlyProbe(Date.now()))
+        (this.agent ?? given).config?.logger?.info?.(
+          `[VTA] back in the foreground: the next ask probes the agent early`
+        )
+    }
+    await this.ensureOnline(given)
   }
 
   /**

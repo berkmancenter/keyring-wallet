@@ -24,6 +24,7 @@ jest.mock('../module/VtaClient', () => ({
   VTA_TASK: { consentRequest: 'consent-request', consentGranted: 'consent-granted' },
   resolveVtaMediator: async () => Promise.reject(new Error('offline')),
   refusedAsNotOnAcl: jest.requireActual('../module/VtaClient').refusedAsNotOnAcl,
+  TspReplyBreaker: jest.requireActual('../module/VtaClient').TspReplyBreaker,
   consentPendingOf: jest.requireActual('../module/VtaClient').consentPendingOf,
   VtaClient: class {
     isConnected = true

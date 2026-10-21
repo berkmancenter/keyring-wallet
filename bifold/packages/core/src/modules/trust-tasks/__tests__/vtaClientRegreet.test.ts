@@ -28,7 +28,7 @@ jest.mock('../module/vtiTsp', () => ({
   })),
 }))
 
-import { REPLIES_STALLED_WINDOW_MS, VtaClient, VtaNoAnswer, VtaRepliesNotArriving } from '../module/VtaClient'
+import { REPLIES_STALLED_STEPS_MS, VtaClient, VtaNoAnswer, VtaRepliesNotArriving } from '../module/VtaClient'
 
 const HEARTBEAT = 'https://trusttasks.org/spec/vta/device/heartbeat/0.1'
 
@@ -200,7 +200,7 @@ describe('the breaker, when replies stop reaching this phone', () => {
     const { client, frames, answerLast } = tspClient({ onRepliesStalled: stalled })
     await silence(client)
     await silence(client)
-    jest.advanceTimersByTime(REPLIES_STALLED_WINDOW_MS)
+    jest.advanceTimersByTime(REPLIES_STALLED_STEPS_MS[0])
     const sentBefore = frames.length
     const probe = client.task('https://t/whoami', {}, 1_000)
     await flush()
@@ -222,8 +222,11 @@ describe('the breaker, when replies stop reaching this phone', () => {
     const { client } = tspClient()
     await silence(client)
     await silence(client)
-    jest.advanceTimersByTime(REPLIES_STALLED_WINDOW_MS)
+    jest.advanceTimersByTime(REPLIES_STALLED_STEPS_MS[0])
     await silence(client)
+    await expect(client.task(HEARTBEAT, {}, 1_000)).rejects.toBeInstanceOf(VtaRepliesNotArriving)
+    // The next step is longer: the first step's 30 s no longer clears it.
+    jest.advanceTimersByTime(REPLIES_STALLED_STEPS_MS[0])
     await expect(client.task(HEARTBEAT, {}, 1_000)).rejects.toBeInstanceOf(VtaRepliesNotArriving)
   })
 

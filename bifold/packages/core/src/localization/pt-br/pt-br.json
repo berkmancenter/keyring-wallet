@@ -1403,6 +1403,7 @@
     "DetailsPhoneKey": "A chave deste telefone",
     "DetailsLinkedAt": "Vinculado",
     "BannerAway": "Seu agente está ausente — {{status}}",
+    "BannerNotAnswering": "Seu agente não está respondendo a este telefone. Tentando de novo.",
     "OpenYourAgent": "Seu agente",
     "IWasInvited": "Fui convidado",
     "IWasInvitedHint": "O admin de uma comunidade está convidando você. Você envia quem você é e depois entra.",

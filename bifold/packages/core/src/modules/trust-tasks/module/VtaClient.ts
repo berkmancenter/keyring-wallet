@@ -84,6 +84,7 @@ import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
+import { releaseWarn } from './releaseLog'
 import {
   DECLARATIVE_POLICY_ID,
   DECLARATIVE_POLICY_NAME,
@@ -714,10 +715,68 @@ export class VtaNoAnswer extends Error {
 /** TSP no-answers in a row that open the breaker (vta-sdk `REPLY_TIMEOUT_BREAKER`). */
 export const REPLY_TIMEOUT_BREAKER = 2
 /**
- * How long the breaker stays open before one probe: the VTA's own window for a
- * peer it found not collecting its inbox (VTI #1978, `UncollectedPeers`).
+ * How long the breaker holds asks before one probe, step by step: 30 s, then 60, 120, and 300 s from then on, the VTA's
+ * own window for a peer it found not collecting its inbox (VTI #1978, `UncollectedPeers`). A fixed 300 s would notice
+ * a quick recovery up to five minutes late; greeting every few seconds only adds to an inbox already full.
  */
-export const REPLIES_STALLED_WINDOW_MS = 5 * 60_000
+export const REPLIES_STALLED_STEPS_MS = [30_000, 60_000, 120_000, 300_000] as const
+
+/**
+ * The reply breaker for one agent, kept across the clients the phone makes for it (D7FG-2Y9J: each reconnect built a
+ * new client, so a hold opened at 14:52:00 was forgotten four seconds later and the agent was greeted again every
+ * ~40 s). Opened by {@link REPLY_TIMEOUT_BREAKER} unanswered TSP asks in a row; each opening holds the next step of
+ * {@link REPLIES_STALLED_STEPS_MS}; any word from the agent closes it and starts the steps over.
+ */
+export class TspReplyBreaker {
+  /** TSP asks in a row that got no answer; any reply resets it. */
+  noAnswerInARow = 0
+  /** Set while open; asks wait until this time, then one goes as a probe. */
+  private stalledUntil?: number
+  private step = 0
+  private earlyProbeTaken = false
+
+  /** Open: replies have stopped reaching this phone. */
+  get open(): boolean {
+    return this.stalledUntil !== undefined
+  }
+
+  /** Whether an ask must wait now (open, and inside its hold). */
+  holding(now: number): boolean {
+    return this.stalledUntil !== undefined && now < this.stalledUntil
+  }
+
+  /** A reply came: closed, and the steps start over. Answers whether it had been open. */
+  replied(): boolean {
+    const was = this.open
+    this.noAnswerInARow = 0
+    this.stalledUntil = undefined
+    this.step = 0
+    this.earlyProbeTaken = false
+    return was
+  }
+
+  /** One more ask unanswered. Answers the hold just opened, in ms, when this one opened it. */
+  unanswered(now: number): number | undefined {
+    this.noAnswerInARow += 1
+    if (this.noAnswerInARow < REPLY_TIMEOUT_BREAKER) return undefined
+    const holdMs = REPLIES_STALLED_STEPS_MS[Math.min(this.step, REPLIES_STALLED_STEPS_MS.length - 1)]
+    this.step += 1
+    this.stalledUntil = now + holdMs
+    this.earlyProbeTaken = false
+    return holdMs
+  }
+
+  /**
+   * Back in the foreground, or on a new network: the moments a receive leg that died comes back, so the hold ends
+   * early once per step and the next ask goes as the probe. Answers whether it did.
+   */
+  allowEarlyProbe(now: number): boolean {
+    if (!this.holding(now) || this.earlyProbeTaken) return false
+    this.earlyProbeTaken = true
+    this.stalledUntil = now
+    return true
+  }
+}
 
 /**
  * Not sent: the last asks over TSP got no answer, so replies are not reaching
@@ -775,10 +834,8 @@ export class VtaClient {
   private readonly carriageByPeer = new Map<string, Carriage>()
   /** Whether the VTA has been greeted (§7.2.2) this session; cleared by an ask over TSP that got no answer. */
   private greeted = false
-  /** TSP asks in a row that got no answer; any reply resets it. */
-  private noAnswerInARow = 0
-  /** While set, asks over TSP fail at once, until this time; then one goes as a probe. */
-  private stalledUntil?: number
+  /** This agent's reply breaker: the caller's, shared by every client it makes for the agent, else this client's own. */
+  private readonly breaker: TspReplyBreaker
   private queue: Promise<unknown> = Promise.resolve()
   /** Each task's place in the queue; {@link dropQueued} drops those not yet sent. */
   private tickets = 0
@@ -811,17 +868,14 @@ export class VtaClient {
     }
   }
 
-  /** A reply came: the breaker closes and the count starts again. */
+  /** A reply came: the breaker closes and the steps start over. */
   private repliesArrived(): void {
-    const wasOpen = this.stalledUntil !== undefined
-    this.noAnswerInARow = 0
-    this.stalledUntil = undefined
-    if (wasOpen) this.options.onRepliesStalled?.(false)
+    if (this.breaker.replied()) this.options.onRepliesStalled?.(false)
   }
 
   /** Whether replies have stopped reaching this phone: the breaker is open. */
   get repliesStalled(): boolean {
-    return this.stalledUntil !== undefined
+    return this.breaker.open
   }
 
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
@@ -922,10 +976,14 @@ export class VtaClient {
       swapTimeoutMs?: number
       /** How long each `whoami` asked while settling a swap waits for its answer. */
       probeTimeoutMs?: number
+      /** The agent's reply breaker, shared across the clients made for it; a client of its own when absent. */
+      breaker?: TspReplyBreaker
       /** Replies stopped reaching this phone (the breaker opened), or came back. */
       onRepliesStalled?: (stalled: boolean) => void
     } = {}
-  ) {}
+  ) {
+    this.breaker = options.breaker ?? new TspReplyBreaker()
+  }
 
   /** The DID this phone presents to its VTA — enrolled on the VTA's ACL. */
   get managerDid(): string | undefined {
@@ -981,7 +1039,8 @@ export class VtaClient {
       ? undefined
       : await tspSessionForManager(this.agent, did).catch(() => undefined)
     this.greeted = false
-    this.repliesArrived()
+    // Not the breaker: a fresh socket is no evidence replies arrive, and the breaker is the agent's, not this
+    // session's (D7FG-2Y9J: resetting it here, at every reconnect, was half of why the hold never held).
     this.carriageByPeer.clear()
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
@@ -1006,6 +1065,11 @@ export class VtaClient {
     // earlier sessions. No reply to any request of ours can exist yet, so a
     // short drain with nothing pending discards the backlog before the first send.
     await new Promise((resolve) => setTimeout(resolve, this.options.connectDrainMs ?? 2000))
+  }
+
+  /** Ask the session to prove its socket answers (back in the foreground); one that does not is reopened. */
+  checkAlive(): void {
+    this.session?.checkAlive()
   }
 
   async disconnect(): Promise<void> {
@@ -1196,9 +1260,9 @@ export class VtaClient {
       // The breaker (vta-sdk's D4 breaker, VTI #1978): after two TSP asks in a
       // row went unanswered, nothing more is sent until the window passes; the
       // first ask after it goes as the probe, with a fresh greeting.
-      if (overTsp && this.stalledUntil !== undefined && Date.now() < this.stalledUntil) {
+      if (overTsp && this.breaker.holding(Date.now())) {
         this.pending = undefined
-        throw new VtaRepliesNotArriving(type, this.noAnswerInARow)
+        throw new VtaRepliesNotArriving(type, this.breaker.noAnswerInARow)
       }
       if (carriage === 'tsp' && this.tsp) {
         if (!this.greeted) {
@@ -1248,15 +1312,14 @@ export class VtaClient {
         // fails: resending it could run it twice.
         if (overTsp) {
           this.greeted = false
-          this.noAnswerInARow += 1
-          if (this.noAnswerInARow >= REPLY_TIMEOUT_BREAKER) {
+          const wasOpen = this.breaker.open
+          const holdMs = this.breaker.unanswered(Date.now())
+          if (holdMs !== undefined) {
             // A VTA that found this phone not collecting drops its replies and
             // sends no accept for 5 min (VTI #1978): greeting it at every ask
-            // only adds sends it ignores. Wait the window out, then probe.
-            const wasOpen = this.stalledUntil !== undefined
-            this.stalledUntil = Date.now() + REPLIES_STALLED_WINDOW_MS
-            this.agent.config.logger.warn(
-              `${LOG_PREFIX} ${this.noAnswerInARow} asks in a row got no answer over TSP; replies are not reaching this phone — holding asks to ${this.vtaDid} for ${REPLIES_STALLED_WINDOW_MS / 1000} s`
+            // only adds sends it ignores. Wait a step out, then probe.
+            releaseWarn(
+              `${LOG_PREFIX} ${this.breaker.noAnswerInARow} asks in a row got no answer over TSP; replies are not reaching this phone — holding asks to ${this.vtaDid} for ${holdMs / 1000} s`
             )
             if (!wasOpen) this.options.onRepliesStalled?.(true)
           } else
