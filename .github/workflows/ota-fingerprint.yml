@@ -1,0 +1,104 @@
+name: OTA fingerprint (diagnostic)
+
+# Computes the native fingerprint the way each side of an over-the-air update
+# does, and keeps both:
+# - store-ios: the store build's iOS steps on its runner (staging.yaml's
+#   build-ios-staging, up to and including pod install), then the same
+#   native-config.mjs its OTA step runs.
+# - publisher: ota-publish.yml's steps on its runner.
+# A phone is offered a bundle only when the two agree. Each job prints its
+# fingerprint and sources and uploads app/fingerprint.json. Compare them with
+#   node scripts/ota/fingerprint-report.mjs --diff <a.json> <b.json>
+# No secrets, no signing, nothing published. The public key and channel are
+# written so the steps are the real ones; the fingerprint ignores both.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  store-ios:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Configure ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: ./app
+
+      - name: Select Xcode 26.3
+        run: sudo xcode-select --switch /Applications/Xcode_26.3.app
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Create .xcode.env.local file
+        working-directory: app/ios
+        run: echo "export NODE_BINARY=$(which node)" > .xcode.env.local
+
+      - name: Install iOS dependencies
+        working-directory: app
+        run: |
+          export USE_HERMES=1
+          yarn run ios:setup
+
+      - name: Native fingerprint
+        env:
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: production
+        run: |
+          node scripts/ota/native-config.mjs
+          node scripts/ota/fingerprint-report.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fingerprint-store-ios
+          path: app/fingerprint.json
+
+  publisher:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Native fingerprint
+        env:
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: production
+        run: |
+          node scripts/ota/native-config.mjs
+          node scripts/ota/fingerprint-report.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fingerprint-publisher
+          path: app/fingerprint.json
