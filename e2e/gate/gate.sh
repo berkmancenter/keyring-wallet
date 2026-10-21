@@ -2,6 +2,7 @@
 # The release gate runner. See README.md beside it.
 #
 #   gate.sh run --pin <wallet-sha> [--legs a,b] [--serial]   every leg (or some), on that commit's CI builds
+#   gate.sh run --pin <sha> --legs a [--rows r1,a:r2]        only those rows of those legs (kind rows, never the gate)
 #   gate.sh rerun <run-id> --only-failed                      the rows that failed or never ran, same builds
 #   gate.sh dry --golden [--legs a,b]                         the drivers on the shipped build ($GATE_HOME/golden)
 #   gate.sh nightly [--pin <wallet-sha>]                      the nightly legs ($LEGS_NIGHTLY), on main's newest green build
@@ -105,7 +106,8 @@ run_leg() {
 }
 
 # run_group <run-dir> <legs...> one after another (one platform's devices).
-run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg"; done; }
+# GATE_ROWS (gate.sh run --rows): each leg gets only its own rows; a leg with none named runs in full.
+run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg" "$(rows_for "$leg" "${GATE_ROWS:-}")"; done; }
 
 # Whether leg $1 is among the wanted legs $2 ("all", or a comma list). "all" is every leg but the nightly-only ones.
 leg_wanted() {
@@ -164,11 +166,21 @@ new_run() {
 }
 
 cmd_run() {
-  local pin="" legs=all serial=0 kind=gate
+  local pin="" legs=all serial=0 kind="" rows=""
   while [ $# -gt 0 ]; do case $1 in
-    --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;; *) usage ;;
+    --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;;
+    --rows) rows=$2; shift 2 ;; *) usage ;;
   esac; done
   [ -n "$pin" ] || usage
+  # Some rows of named legs: one case from the road. Never a release gate (that runs whole legs), and recorded in the
+  # run's meta and report, so a partial run is never read as a full leg.
+  if [ -n "$rows" ]; then
+    [ "$legs" != all ] || die "--rows needs --legs: rows apply only to the legs named"
+    [ "$kind" != gate ] || die "--rows with --kind gate: a release gate runs whole legs"
+    GATE_ROWS=$(rows_spec "$legs" "$rows") || die "--rows $rows not accepted"
+    kind=${kind:-rows}
+  fi
+  kind=${kind:-gate}
   gate_env
   ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
   mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
@@ -185,6 +197,7 @@ cmd_run() {
   [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
   [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
   [ -z "${REAL_NOTE:-}" ] || echo "real-clocks=$REAL_NOTE" >> "$rd/meta"
+  [ -z "${GATE_ROWS:-}" ] || { echo "rows=$GATE_ROWS"; echo "scope=ROWS ONLY ($GATE_ROWS): a partial run of these legs, not the full legs and not the release gate"; } >> "$rd/meta"
   say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
   run_legs "$rd" "$legs" "$serial"
   echo "ended=$(stamp)Z" >> "$rd/meta"

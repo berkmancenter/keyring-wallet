@@ -165,6 +165,29 @@ turn_release() {
   turn_sh "d=\"$d\"; [ \"\$(cut -d' ' -f1-2 \"\$d/owner\" 2>/dev/null)\" = '$(hostname -s) $$' ] && rm -rf \"\$d\"" >/dev/null 2>&1
   TURN_HELD=
 }
+# Rows of named legs (gate.sh run --rows): "leg:row,leg:row", or plain "row,row" when exactly one leg is named. Prints
+# the normalised "leg:row,…" list; a row names one leg, so a row with the same name in another leg is never selected
+# there. Fails (with the reason on stderr) on a plain row with several legs, or a leg that is not among those named.
+rows_spec() {
+  local legs=$1 rows=$2 out="" r leg row n
+  n=$(printf '%s' "$legs" | tr ',' '\n' | grep -c .)
+  for r in ${rows//,/ }; do
+    if [[ $r == *:* ]]; then leg=${r%%:*}; row=${r#*:}
+    elif [ "$n" = 1 ]; then leg=$legs; row=$r
+    else echo "--rows $r: name its leg (leg:row) when --legs names several" >&2; return 1; fi
+    [[ ",$legs," == *",$leg,"* ]] || { echo "--rows $r: $leg is not among --legs $legs" >&2; return 1; }
+    [ -n "$row" ] || { echo "--rows $r: no row named" >&2; return 1; }
+    out="${out:+$out,}$leg:$row"
+  done
+  [ -n "$out" ] || { echo "--rows: no rows given" >&2; return 1; }
+  printf '%s' "$out"
+}
+# The rows of one leg from a rows_spec list, as the comma list E2E_ONLY_ROWS takes; empty: the whole leg.
+rows_for() {
+  local leg=$1 spec=$2 r out=""
+  for r in ${spec//,/ }; do [ "${r%%:*}" = "$leg" ] && out="${out:+$out,}${r#*:}"; done
+  printf '%s' "$out"
+}
 need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "$GATE_ENV: $v is empty"; done; }
 
 # The machine-share rules: free+inactive memory and pressure, and free disk.
