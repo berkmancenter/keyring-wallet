@@ -36,6 +36,7 @@ import { didPrefix } from './didPrefix'
 import { releaseWarn } from './releaseLog'
 import { vtiAgent } from './vtiAgent'
 import { vtaAgent } from './vtaAgent'
+import { refusedAsNotOnAcl } from './VtaClient'
 import { KeyCopyUnavailable } from './EphemeralKeyManagementService'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
@@ -379,13 +380,19 @@ export function isMissingKeyCopy(error: unknown): boolean {
 
 /**
  * A persona could not sign in because its borrowed key could not be fetched
- * again: its agent did not answer, or is no longer linked. What the person can
- * do is reconnect (or re-link) that agent, which is a different thing from a
- * persona that is broken, so it is said as its own state (#422).
+ * again: its agent refused this phone, did not answer, or is no longer linked.
+ * What the person can do depends on which, and none of them is a persona that
+ * is broken, so it is said as its own state (#422). A refusal is told apart
+ * by the VTA's own ACL words; the error only ever comes from this phone's
+ * agent (borrowing the key again), never from a community (IN-350).
  */
 export class PersonaAgentUnreachable extends Error {
-  /** `notLinked` when the persona's agent is no longer linked to this phone; else `unreachable`. */
-  readonly kind: 'unreachable' | 'notLinked'
+  /**
+   * `refused` when the agent no longer accepts this phone (not, or no longer,
+   * on its ACL); `notLinked` when it is no longer linked to this phone; else
+   * `unreachable`.
+   */
+  readonly kind: 'refused' | 'unreachable' | 'notLinked'
   constructor(
     readonly persona: Pick<VtiPersona, 'did' | 'communityDid'>,
     readonly fetchError: unknown
@@ -393,7 +400,11 @@ export class PersonaAgentUnreachable extends Error {
     const reason = fetchError instanceof Error ? fetchError.message : String(fetchError)
     super(`this identity's agent could not be reached to borrow its key again: ${reason}`)
     this.name = 'PersonaAgentUnreachable'
-    this.kind = /no longer linked/.test(reason) ? 'notLinked' : 'unreachable'
+    this.kind = refusedAsNotOnAcl(fetchError)
+      ? 'refused'
+      : /no longer linked/.test(reason)
+        ? 'notLinked'
+        : 'unreachable'
   }
 }
 

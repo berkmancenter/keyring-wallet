@@ -2,14 +2,13 @@ import { useAgent } from '@bifold/react-hooks'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppState, Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
-import { ToastType } from '../components/toast/BaseToast'
 import { AttachTourStep } from '../components/tour/AttachTourStep'
 import { EventTypes } from '../constants'
 import { TOKENS, useServices } from '../container-api'
@@ -36,7 +35,7 @@ import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 import { useCardAgentNames } from '../modules/trust-tasks/screens/cardAgentNames'
 // How a community's card reads in the Wallet (registers itself on import).
 import '../modules/trust-tasks/screens/communityCardDisplay'
-import { PersonaAgentUnreachable, useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
+import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { logHiddenVettingSeams } from '../modules/trust-tasks/hiddenVettingModules'
 import { useVtiIdentityListeners } from '../modules/trust-tasks/module/vtiIdentityListeners'
 import { useLookAtOtherAgents } from '../modules/trust-tasks/module/lookAtOtherAgents'
@@ -74,28 +73,15 @@ const TabStack: React.FC = () => {
   const [store, dispatch] = useStore()
   const { agent } = useAgent()
   // What a community sends this phone's persona — a vetter grant, a membership —
-  // is collected from unlock, not only while Vetting is open.
-  // A persona whose borrowed key could not be fetched again because its agent
-  // did not answer is told as "reconnect your agent", once per community and
-  // reason while the app runs, not as a failed sign-in in a log (#422).
-  const agentToldOf = useRef(new Set<string>())
+  // is collected from unlock, not only while Vetting is open. A persona whose
+  // agent refused this phone, did not answer, or is no longer linked is said
+  // where its community is (PersonaAgentNotice), not as a toast over whatever
+  // screen is open: one covered a contact's chat and its composer (IN-350).
   const onInboxError = useCallback(
     (e: unknown) => {
       logger.warn(`persona inbox: ${(e as Error)?.message ?? e}`)
-      if (!(e instanceof PersonaAgentUnreachable)) return
-      const key = `${e.persona.communityDid}|${e.kind}`
-      if (agentToldOf.current.has(key)) return
-      agentToldOf.current.add(key)
-      Toast.show({
-        type: ToastType.Warn,
-        text1: t('VtaLink.PersonaAgentUnreachableTitle'),
-        text2: t(e.kind === 'notLinked' ? 'VtaLink.PersonaAgentNotLinkedBody' : 'VtaLink.PersonaAgentUnreachableBody'),
-        visibilityTime: 10000,
-        position: 'bottom',
-        bottomOffset: toastBottomOffset,
-      })
     },
-    [logger, t, toastBottomOffset]
+    [logger]
   )
   // The community chosen by a link before this launch comes back first.
   useEffect(() => {

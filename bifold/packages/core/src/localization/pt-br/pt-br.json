@@ -1475,8 +1475,14 @@
     "UnlinkBody": "Este telefone não vai mais funcionar com seu agente.\n\nSuas identidades e participações em comunidades ficam com o agente. Vincule-o de novo para usá-las neste telefone.\n\nO agente ainda pode listar este telefone até que o admin dele o remova, mas essa entrada não pode ser usada: este telefone esquece a chave.",
     "UnlinkConfirm": "Desvincular",
     "PersonaAgentUnreachableTitle": "Reconecte seu agente",
-    "PersonaAgentUnreachableBody": "Seu agente não respondeu, então esta comunidade ainda não pode se conectar. Abra Meu agente para reconectá-lo.",
-    "PersonaAgentNotLinkedBody": "O agente que guarda a identidade desta comunidade não está mais conectado a este telefone. Abra Meu agente para conectá-lo novamente."
+    "PersonaAgentUnreachableBody": "Seu agente não respondeu, então {{community}} ainda não pode se conectar. Abra Meu agente para reconectá-lo.",
+    "PersonaAgentNotLinkedBody": "O agente que guarda sua identidade para {{community}} não está mais conectado a este telefone. Abra Meu agente para conectá-lo novamente.",
+    "PersonaAgentRefusedTitle": "Seu agente não aceita mais este telefone",
+    "PersonaAgentRefusedBody": "Seu agente não aceita mais este telefone, então {{community}} não pode se conectar. O administrador dele pode adicionar este telefone de novo, ou abra Meu agente e vincule este telefone de novo.",
+    "PersonaAgentRefusedLine": "Seu agente não aceita mais este telefone.",
+    "PersonaAgentUnreachableLine": "Seu agente não respondeu.",
+    "PersonaAgentNotLinkedLine": "Seu agente não está mais conectado a este telefone.",
+    "PersonaAgentOpen": "Abrir Meu agente"
   },
   "Invited": {
     "Withdraw": "Retirar meu pedido",

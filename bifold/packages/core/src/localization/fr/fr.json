@@ -1569,8 +1569,14 @@
     "UnlinkBody": "Ce téléphone ne fonctionnera plus avec votre agent.\n\nVos identités et adhésions aux communautés restent auprès de l'agent. Reliez-le à nouveau pour les utiliser sur ce téléphone.\n\nL'agent peut encore lister ce téléphone jusqu'à ce que son admin le retire, mais cette entrée ne peut pas servir : ce téléphone oublie sa clé.",
     "UnlinkConfirm": "Délier",
     "PersonaAgentUnreachableTitle": "Reconnectez votre agent",
-    "PersonaAgentUnreachableBody": "Votre agent n'a pas répondu, cette communauté ne peut donc pas encore se connecter. Ouvrez Mon agent pour le reconnecter.",
-    "PersonaAgentNotLinkedBody": "L'agent qui détient l'identité de cette communauté n'est plus connecté à ce téléphone. Ouvrez Mon agent pour le reconnecter."
+    "PersonaAgentUnreachableBody": "Votre agent n'a pas répondu, {{community}} ne peut donc pas encore se connecter. Ouvrez Mon agent pour le reconnecter.",
+    "PersonaAgentNotLinkedBody": "L'agent qui détient votre identité pour {{community}} n'est plus connecté à ce téléphone. Ouvrez Mon agent pour le reconnecter.",
+    "PersonaAgentRefusedTitle": "Votre agent n'accepte plus ce téléphone",
+    "PersonaAgentRefusedBody": "Votre agent n'accepte plus ce téléphone, {{community}} ne peut donc pas se connecter. Son administrateur peut ajouter ce téléphone à nouveau, ou ouvrez Mon agent et reliez ce téléphone à nouveau.",
+    "PersonaAgentRefusedLine": "Votre agent n'accepte plus ce téléphone.",
+    "PersonaAgentUnreachableLine": "Votre agent n'a pas répondu.",
+    "PersonaAgentNotLinkedLine": "Votre agent n'est plus connecté à ce téléphone.",
+    "PersonaAgentOpen": "Ouvrir Mon agent"
   },
   "Invited": {
     "Withdraw": "Retirer ma demande",

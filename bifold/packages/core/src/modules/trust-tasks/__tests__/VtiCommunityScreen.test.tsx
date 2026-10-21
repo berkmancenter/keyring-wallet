@@ -64,6 +64,13 @@ jest.mock('../module/communityJourney', () => ({
   useCommunityJourney: () => ({ journey: mockJourney, refresh: jest.fn() }),
 }))
 
+// What the persona inbox says of this community's agent, set per test (IN-350).
+let mockAgentState: unknown = undefined
+jest.mock('../module/vtiPersonaInbox', () => ({
+  ...jest.requireActual('../module/vtiPersonaInbox'),
+  usePersonaAgentState: () => mockAgentState,
+}))
+
 const communityDid = 'did:webvh:QmUsH14W1foRZyP9v7LtfxwFy7qWgzNBLSzhWhbMQeMPJB:keyring-vti-vtc.ngrok.app'
 
 const show = () => {
@@ -109,6 +116,34 @@ describe('the community screen', () => {
     const tree = show()
     expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent('Totally The Real One')
     expect(tree.getByTestId(testIdWithKey('CommunityNameClaimed'))).toHaveTextContent('Join.NameFromLink')
+  })
+})
+
+// IN-350: an app-wide toast covered a contact's chat; the community says it.
+describe('the community screen, when its identity cannot sign in because of its agent', () => {
+  beforeEach(() => communityTarget.clear())
+  afterEach(() => {
+    mockAgentState = undefined
+  })
+
+  it('says so first, by what the agent did, with the way to My Agent', () => {
+    mockAgentState = { kind: 'refused' }
+    communityTarget.publishedName(communityDid, 'Keyring Lab Community')
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent('Keyring Lab Community')
+    expect(tree.getByTestId(testIdWithKey('PersonaAgentNotice'))).toHaveTextContent(/VtaLink\.PersonaAgentRefusedBody/)
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('PersonaAgentNoticeOpen')))
+    expect(navigation.navigate).toHaveBeenCalledTimes(1)
+    expect([Screens.VtaAgent, Screens.MyAgent]).toContain(navigation.navigate.mock.calls[0][0])
+  })
+
+  it('says nothing while it signs in', () => {
+    communityTarget.publishedName(communityDid, 'Keyring Lab Community')
+    const tree = show()
+    expect(tree.getByTestId(testIdWithKey('CommunityName'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('PersonaAgentNotice'))).toBeNull()
   })
 })
 

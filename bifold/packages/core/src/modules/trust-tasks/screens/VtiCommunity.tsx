@@ -42,6 +42,8 @@ import { useToastAboveTabBar, useRoomAboveTabBar } from './aboveTabBar'
 import { PrivateVettingBadge } from './PrivateVettingBadge'
 import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
 import { VtiCommunityIds } from './VtiCommunity.ids'
+import { PersonaAgentNotice } from './PersonaAgentNotice'
+import { agentHomeScreen } from './agentHome'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
 const detailOf = (err: unknown): string => {
@@ -220,6 +222,13 @@ const VtiCommunity: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey(VtiCommunityIds.scroll)}>
+        {/* Its identity cannot sign in because of its agent: said first, with the way out (IN-350). */}
+        <PersonaAgentNotice
+          communityDid={communityDid}
+          onOpenAgent={() =>
+            (navigation as unknown as { navigate: (name: string) => void }).navigate(agentHomeScreen())
+          }
+        />
         {/* What it is called, not what it is keyed by. The DID was the
             headline here; it is the only checkable thing on the screen, so it
             stays — one tap away, in the same place as every other detail. */}
