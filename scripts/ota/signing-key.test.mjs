@@ -76,6 +76,19 @@ test('a test key that is the store key is refused', () => {
   )
 })
 
+test("the tamper key has the test key's own size, so only the key differs", () => {
+  const big = generateKeyPairSync('rsa', { modulusLength: 3072 })
+  const out = selectSigningKey({
+    channel: 'device-test',
+    signingKeyPem: store.priv,
+    testSigningKeyPem: big.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    publishedPublicKey: published,
+    tamper: true,
+  })
+  assert.equal(createPublicKey(out.privateKeyPem).asymmetricKeyDetails.modulusLength, 3072)
+  assert.ok(!samePublic(out.privateKeyPem, big.publicKey.export({ type: 'spki', format: 'pem' })))
+})
+
 test('tamper signs with a throwaway key but keeps the test public key, on device-test only', () => {
   const out = selectSigningKey({ channel: 'device-test', ...both, tamper: true })
   assert.ok(samePublic(out.publicKeyPem, testKey.pub))
