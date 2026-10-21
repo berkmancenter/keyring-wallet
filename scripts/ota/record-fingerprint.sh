@@ -8,7 +8,15 @@
 #   scripts/ota/record-fingerprint.sh <ios|android> <out-dir>
 #
 # Writes <out-dir>/fingerprint.json (every source, for naming a difference
-# later), prints the hash, and sets the step output `hash`. It changes nothing in
+# later), prints the hash, and sets the step output `hash`.
+#
+# Exit status (staging.yaml runs this without continue-on-error):
+#   0  recorded; or the fingerprint could not be computed, which is said as a
+#      warning and sets no `hash` (a later publish for this build is refused,
+#      and the release goes on)
+#   3  a file it touched could not be put back: the build would ship the OTA
+#      key, channel and fingerprint with OTA off, so the build job fails
+#      ("nothing baked into the shipped app") It changes nothing in
 # the build: `hot-updater fingerprint create` also writes the hash into
 # Info.plist and the Android manifest, so those files (and any fingerprint.json)
 # are put back exactly as they were. A build with OTA off ships unchanged; one
@@ -47,15 +55,21 @@ restore() {
     fi
   done
   [ "$bad" = 0 ] && rm -rf "$snap"
-  if [ "$bad" != 0 ]; then exit 1; fi
+  if [ "$bad" != 0 ]; then exit 3; fi
   exit "$rc"
 }
 trap restore EXIT
 
-(cd app && npx hot-updater fingerprint create >/dev/null)
-cp app/fingerprint.json "$out/fingerprint.json"
+# Not computable: a warning, no `hash`, exit 0 (the restore still runs and can
+# still turn this into exit 3).
+not_recorded() {
+  echo "::warning::record-fingerprint: no $platform fingerprint recorded ($1); an OTA publish for this build will be refused"
+  exit 0
+}
+(cd app && npx hot-updater fingerprint create >/dev/null) || not_recorded "fingerprint create failed"
+cp app/fingerprint.json "$out/fingerprint.json" || not_recorded "no app/fingerprint.json"
 hash=$(node -e 'const f = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(f[process.argv[2]].hash)' \
-  "$out/fingerprint.json" "$platform")
-[[ "$hash" =~ ^[0-9a-f]{40}$ ]] || { echo "record-fingerprint: no $platform hash in fingerprint.json" >&2; exit 1; }
+  "$out/fingerprint.json" "$platform" 2>/dev/null) || hash=
+[[ "$hash" =~ ^[0-9a-f]{40}$ ]] || not_recorded "no $platform hash in fingerprint.json"
 echo "record-fingerprint: $platform native fingerprint $hash"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "hash=$hash" >> "$GITHUB_OUTPUT"; fi

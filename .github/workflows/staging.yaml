@@ -348,15 +348,16 @@ jobs:
       # on or off, so a later over-the-air publish can refuse a bundle that no
       # phone on this build would be offered (ota-publish.yml). It changes
       # nothing in the build: record-fingerprint.sh puts back every file it
-      # touches. It must not stop a release: a build that records nothing only
-      # means a later publish for it is refused.
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
       - name: Record the native fingerprint
         id: fingerprint
-        continue-on-error: true
         run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/ota-fingerprint"
 
       - name: Keep the native fingerprint
-        if: ${{ steps.fingerprint.outcome == 'success' }}
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: ota-fingerprint-android
@@ -898,15 +899,16 @@ jobs:
       # on or off, so a later over-the-air publish can refuse a bundle that no
       # phone on this build would be offered (ota-publish.yml). It changes
       # nothing in the build: record-fingerprint.sh puts back every file it
-      # touches. It must not stop a release: a build that records nothing only
-      # means a later publish for it is refused.
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
       - name: Record the native fingerprint
         id: fingerprint
-        continue-on-error: true
         run: bash scripts/ota/record-fingerprint.sh ios "$RUNNER_TEMP/ota-fingerprint"
 
       - name: Keep the native fingerprint
-        if: ${{ steps.fingerprint.outcome == 'success' }}
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: ota-fingerprint-ios
