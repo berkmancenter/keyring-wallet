@@ -298,7 +298,12 @@ use_build() {
   local m got=none want
   m=$(build_manifest "$CAND_APP" "$APK_OFF")
   CAND_WALLET=$(grep '^wallet=' "$m" 2>/dev/null | cut -d= -f2); CAND_BIFOLD=$(grep '^bifold=' "$m" 2>/dev/null | cut -d= -f2)
-  [ -n "$CAND_WALLET" ] || say "no build manifest found under $dir/off: the report will not name the wallet and bifold commits"
+  # A release gate must name what it tested; other kinds (a dry run, changed legs) go on with a warning. $kind is the
+  # caller's (cmd_run's local, which bash scoping lets this function read); unset elsewhere.
+  if [ -z "$CAND_WALLET" ]; then
+    [ "${kind:-}" != gate ] || die "no build manifest under $dir/off: a release gate must name the wallet and bifold commits it tested"
+    say "no build manifest found under $dir/off: the report will not name the wallet and bifold commits"
+  fi
   if [ -n "$CAND_APP" ]; then
     want=$(grep '^main.jsbundle.sha256=' "$(dirname "$CAND_APP")/manifest.txt" 2>/dev/null | cut -d= -f2); got=$(shasum -a 256 "$CAND_APP/main.jsbundle" | cut -c1-12)
     [ -z "$want" ] || [ "$want" = "$got" ] || die "iOS bundle $got does not match its manifest ($want)"

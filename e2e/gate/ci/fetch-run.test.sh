@@ -22,4 +22,12 @@ bm() { ( export GATE_HOME=$T/home; . "$here/../lib.sh" >/dev/null 2>&1; build_ma
 case $(bm "$APP" "$APK") in *ios-sim*manifest.txt" rc=0") ok "with an iOS app, its manifest is the build's";; *) bad "iOS manifest not chosen: $(bm "$APP" "$APK")";; esac
 case $(bm "" "$APK") in *android*manifest.txt" rc=0") ok "with no iOS app, the APK's manifest names the build";; *) bad "APK manifest not chosen: $(bm "" "$APK")";; esac
 case $(bm "" "") in " rc=1") ok "with neither, no manifest is claimed";; *) bad "a manifest was claimed from nothing: $(bm "" "")";; esac
+# use_build with no manifest anywhere: a release gate stops; another kind warns and goes on. build_runs and fetch_run are
+# stubbed: only the manifest decision is under test.
+E=$T/builds/eeee0000/off; mkdir -p "$E/keyring-android-x"; echo apk > "$E/keyring-android-x/a.apk"
+ub() { ( export GATE_HOME=$T/home2; mkdir -p "$T/home2/builds"; ln -sfn "$T/builds/eeee0000" "$T/home2/builds/eeee0000"
+  . "$here/../lib.sh" >/dev/null 2>&1; build_runs() { echo "1 -"; }; fetch_run() { :; }; gh() { :; }
+  kind=$1; use_build eeee0000ffff; echo "rc=$?" ) 2>&1; }
+case $(ub gate) in *"must name the wallet and bifold"*) ok "a release gate with no build manifest stops";; *) bad "a gate went on without a manifest: $(ub gate | tail -2)";; esac
+case $(ub dry) in *"will not name the wallet"*rc=0) ok "a dry run with no build manifest warns and goes on";; *) bad "a dry run without a manifest: $(ub dry | tail -2)";; esac
 [ $fails = 0 ] && echo "fetch-run: all passed" || { echo "fetch-run: $fails failed"; exit 1; }
