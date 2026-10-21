@@ -37,10 +37,12 @@ describe('the invitation links Android opens in Keyring', () => {
 
   test('nothing broader: not the whole wallet host, and the witness host keeps only /connect', () => {
     const data = verifiedFilters().flat()
-    expect(data.filter((d) => d.host === 'wallet.asml.berkmancenter.org').map((d) => d.pathPrefix).sort()).toEqual([
-      '/i/',
-      '/invite',
-    ])
+    expect(
+      data
+        .filter((d) => d.host === 'wallet.asml.berkmancenter.org')
+        .map((d) => d.pathPrefix)
+        .sort()
+    ).toEqual(['/i/', '/invite'])
     expect(data.filter((d) => d.host === 'witness.asml.berkmancenter.org').map((d) => d.pathPrefix)).toEqual([
       '/connect',
     ])
