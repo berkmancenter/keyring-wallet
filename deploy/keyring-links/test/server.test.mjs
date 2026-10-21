@@ -187,6 +187,56 @@ describe('server', () => {
     }
   })
 
+  it('refuses an invitation whose long link would be too long, even under the body cap', async () => {
+    await listen({ maxBodyBytes: 8192, maxInvitationBytes: 6000 })
+    try {
+      const big = { ...(await fixture('invitation-v1.json')), label: 'x'.repeat(6500) }
+      const res = await post({ invitation: big })
+      assert.equal(res.status, 413)
+      assert.deepEqual(await res.json(), { error: 'too_large' })
+      const justFits = { ...(await fixture('invitation-v1.json')) }
+      justFits.label = 'x'.repeat(6000 - JSON.stringify({ ...justFits, label: '' }).length)
+      const created = await post({ invitation: justFits })
+      assert.equal(created.status, 201)
+      const { url } = await created.json()
+      const location = (await getHtml(`${base}/i/${idOf(url)}`)).headers.get('location')
+      assert.ok(location.length < 8192, `long link is ${location.length} characters`)
+    } finally {
+      await close()
+    }
+  })
+
+  it('sweeps expired links before refusing a full store', async () => {
+    await listen({ maxLinks: 2 })
+    try {
+      const invitation = await fixture('invitation-v1.json')
+      assert.equal((await post({ invitation })).status, 201)
+      assert.equal((await post({ invitation })).status, 201)
+      assert.equal((await post({ invitation })).status, 503, 'full of live links')
+      clock += 7 * 24 * 3600_000
+      assert.equal((await post({ invitation })).status, 201, 'the expired ones made room')
+      assert.equal(await links.store.count(), 1)
+    } finally {
+      await close()
+    }
+  })
+
+  it('counts the links already on disk at start', async () => {
+    await listen()
+    try {
+      await post({ invitation: await fixture('invitation-v1.json') })
+      await post({ invitation: await fixture('invitation-v2.json') })
+    } finally {
+      await close()
+    }
+    await listen()
+    try {
+      assert.equal(await links.store.count(), 2)
+    } finally {
+      await close()
+    }
+  })
+
   it('rate-limits POST per client, and answers 503 when the store is full', async () => {
     await listen({ burst: 2, perMinute: 1, maxLinks: 3 })
     try {

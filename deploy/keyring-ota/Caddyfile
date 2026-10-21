@@ -22,7 +22,7 @@
 	@links path /i /i/*
 	handle @links {
 		request_body {
-			max_size 16KB
+			max_size 8KB
 		}
 		reverse_proxy links:3090
 	}

@@ -11,8 +11,13 @@
  * invitation and its expiry are stored. No access log, no IPs on disk: the client
  * address is used for rate limiting in memory only.
  *
+ * Sizes: the request body is capped at 8 KB, and the invitation itself at 6,000
+ * bytes, so that the browser's long link (/invite/?oob=<base64url>, about 4/3 of
+ * that) stays under the ~8 KB that browsers and intermediaries reliably carry.
+ *
  * Environment: PORT (3090), PUBLIC_URL (https://wallet.asml.berkmancenter.org),
- * LINKS_DATA_DIR (./data), LINKS_TTL_SECONDS (604800), LINKS_MAX_BODY_BYTES (16384),
+ * LINKS_DATA_DIR (./data), LINKS_TTL_SECONDS (604800), LINKS_MAX_BODY_BYTES (8192),
+ * LINKS_MAX_INVITATION_BYTES (6000),
  * LINKS_MAX_LINKS (100000), LINKS_RATE_PER_MINUTE (10), LINKS_RATE_BURST (20),
  * LINKS_GLOBAL_PER_MINUTE (600).
  */
@@ -38,6 +43,9 @@ class HttpError extends Error {
   }
 }
 
+/** After a 413, at most this much more is read (and dropped) before the connection is cut. */
+const MAX_DRAIN_BYTES = 64 * 1024
+
 const readBody = (req, maxBytes) =>
   new Promise((resolve, reject) => {
     const declared = Number(req.headers['content-length'])
@@ -47,10 +55,16 @@ const readBody = (req, maxBytes) =>
     req.on('data', (chunk) => {
       size += chunk.length
       if (size > maxBytes) {
-        // Stop keeping it, drain the rest, answer 413, then close the connection.
+        // Stop keeping it and answer 413. Drain a bounded amount so the answer can be
+        // sent, and cut the connection after it (Caddy's own body cap is the first
+        // line; this holds if the service is ever reached some other way).
         reject(new HttpError(413, 'too_large'))
         req.removeAllListeners('data')
-        req.resume()
+        let drained = 0
+        req.on('data', (more) => {
+          drained += more.length
+          if (drained > MAX_DRAIN_BYTES) req.destroy()
+        })
         return
       }
       chunks.push(chunk)
@@ -74,7 +88,8 @@ export const createLinksServer = (options = {}) => {
     publicUrl: (options.publicUrl ?? env.PUBLIC_URL ?? 'https://wallet.asml.berkmancenter.org').replace(/\/+$/, ''),
     dataDir: options.dataDir ?? env.LINKS_DATA_DIR ?? './data',
     ttlMs: (options.ttlSeconds ?? num(env.LINKS_TTL_SECONDS, 604800)) * 1000,
-    maxBodyBytes: options.maxBodyBytes ?? num(env.LINKS_MAX_BODY_BYTES, 16384),
+    maxBodyBytes: options.maxBodyBytes ?? num(env.LINKS_MAX_BODY_BYTES, 8192),
+    maxInvitationBytes: options.maxInvitationBytes ?? num(env.LINKS_MAX_INVITATION_BYTES, 6000),
     maxLinks: options.maxLinks ?? num(env.LINKS_MAX_LINKS, 100000),
     perMinute: options.perMinute ?? num(env.LINKS_RATE_PER_MINUTE, 10),
     burst: options.burst ?? num(env.LINKS_RATE_BURST, 20),
@@ -99,7 +114,10 @@ export const createLinksServer = (options = {}) => {
     res.end(head ? undefined : body)
   }
   const fail = (req, res, status, code) => {
-    if (status === 413) res.setHeader('connection', 'close')
+    if (status === 413) {
+      res.setHeader('connection', 'close')
+      res.on('finish', () => req.socket.destroy())
+    }
     return failWith(req, res, status, code)
   }
   const failWith = (req, res, status, code) =>
@@ -122,8 +140,10 @@ export const createLinksServer = (options = {}) => {
       throw new HttpError(400, 'invalid_json')
     }
     if (!isInvitation(body?.invitation)) throw new HttpError(400, 'not_an_invitation')
+    const invitationText = JSON.stringify(body.invitation)
+    if (Buffer.byteLength(invitationText, 'utf8') > config.maxInvitationBytes) throw new HttpError(413, 'too_large')
     const id = newId()
-    const stored = await store.put(id, JSON.stringify(body.invitation))
+    const stored = await store.put(id, invitationText)
     if (!stored) throw new HttpError(503, 'store_full')
     json(res, 201, { url: `${config.publicUrl}/i/${id}`, expiresAt: new Date(stored.expiresAt).toISOString() })
   }

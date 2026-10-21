@@ -30,6 +30,11 @@ services:
   # Short invitation links for the wallet host (deploy/keyring-links). Its files
   # live at LINKS_DATA_PATH, which on a host is a disk that is NOT snapshotted, so
   # a backup never keeps an invitation past its 7 days (keyring-links README).
+  #
+  # NO `ports:`, on purpose. Caddy must be the only way in: its 8 KB body cap
+  # (Caddyfile) is the service's first size limit, and the rate limiter trusts the
+  # last X-Forwarded-For entry because Caddy sets it. Publishing a port, even for
+  # debugging, removes the cap and makes the rate limit spoofable.
   links:
     build: ../keyring-links
     image: keyring-ota/links:${LINKS_IMAGE_TAG:-local}
