@@ -109,7 +109,9 @@ try {
       const codeEl = (await existsTestId(a, "InvitationUrl", 5000)) ? await a.$("~InvitationUrl") : undefined;
       const code = codeEl ? await codeEl.getAttribute("label") : undefined;
       await tapTestId(a, "MyQRShareLink", 15000);
-      const copy = await a.$("~Copy");
+      // The share sheet's Copy is a cell named "actionGroupCell" whose label is "Copy" (iOS 26), so not "~Copy" by name
+      // (the RC rerun 1021-0328 stopped there with the sheet open).
+      const copy = await a.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
       await copy.waitForExist({ timeout: 15000 });
       await copy.click();
       await sleep(1000);
