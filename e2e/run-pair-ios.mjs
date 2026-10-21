@@ -131,6 +131,9 @@ try {
       };
     });
     await rows.row("pair-share-link-connects", async () => {
+      // The code screen is a stacked "Scan QR code" with no tab bar and a header back (testID Back), not the BackButton
+      // returnToContacts looks for (1021-0722: ten tries, never left it). Back out of the stack first.
+      for (let i = 0; i < 3 && (await existsTestId(a, "Back", 2000)); i++) { await tapTestId(a, "Back", 5000); await sleep(800); }
       await returnToContacts(a);
       simctl("openurl", B.udid, link);
       await acceptRelationshipProposalOnEitherSide(a, b);
