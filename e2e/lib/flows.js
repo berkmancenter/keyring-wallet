@@ -830,11 +830,17 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
     // count and poll for the Developer screen after each one, so a few
     // dropped taps just cost a few extra clicks instead of failing the run.
-    const versionEl = await scrollToTestId(driver, "Version");
+    await scrollToTestId(driver, "Version");
     const maxTaps = 20;
     let reachedDeveloperScreen = false;
+    // Each tap looks the footer up again: a handle taken once can go stale when
+    // the counter re-renders Settings, and its clicks would then be accepted and
+    // land nowhere. A failed click is counted and reported, not swallowed.
+    const clickErrors = [];
     for (let i = 0; i < maxTaps; i++) {
-      await versionEl.click().catch(() => {});
+      await byTestId(driver, "Version")
+        .click()
+        .catch((err) => clickErrors.push(String(err?.message ?? err).split("\n")[0]));
       if (await existsTestId(driver, "ToggleDeveloper", 300)) {
         reachedDeveloperScreen = true;
         console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
@@ -846,9 +852,20 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // for a Developer-screen-only element, not a Settings row. The VTA probe
     // (VTI_PROBE_ON_START) fires as the screen mounts and reports with an
     // alert, which hides the toggle from a lookup until it is dismissed.
+    if (clickErrors.length) {
+      console.log(
+        `[e2e] ${deviceTag(driver)}: ${clickErrors.length} Version tap(s) failed: ${[...new Set(clickErrors)].slice(0, 3).join(" | ")}`
+      );
+    }
     if (!reachedDeveloperScreen) {
       for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
-      await waitForTestId(driver, "ToggleDeveloper", 5000);
+      try {
+        await waitForTestId(driver, "ToggleDeveloper", 5000);
+      } catch (err) {
+        // What the screen showed decides it: something covering Settings, or not on Settings at all.
+        await screenshot(driver, "developer-trip-failed").catch(() => {});
+        throw err;
+      }
     }
   }
 }
