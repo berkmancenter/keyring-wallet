@@ -244,9 +244,14 @@ const VtaAgentHome: React.FC = () => {
       for (const communityDid of belongsTo) {
         const kept = names.find((n) => n.communityDid === communityDid)
         if (!communityNameIsStale(kept, now)) continue
-        void refreshPublishedNameThrottled(agent, communityDid, now).then((fresh) => {
-          if (fresh && fresh !== kept?.name) setNamesRead((n) => n + 1)
-        })
+        // The bump only re-renders: `load` depends on [agent, agentKey] and the
+        // effect that calls it on [load, isFocused], so it never reads again. A
+        // new dependency there that the bump changes would make it a read loop.
+        void refreshPublishedNameThrottled(agent, communityDid, { scope: agentKey, now })
+          .then((fresh) => {
+            if (fresh && fresh !== kept?.name) setNamesRead((n) => n + 1)
+          })
+          .catch(() => undefined)
       }
     } catch {
       // Keep what was shown; say it could not be refreshed.

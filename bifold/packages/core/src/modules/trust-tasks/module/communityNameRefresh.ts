@@ -19,7 +19,7 @@ import { communityTarget } from './vtiCommunityLink'
 /** How long a community's name on record is taken as it is, before it is read again (IN-340). */
 export const COMMUNITY_NAME_TTL_MS = 24 * 60 * 60 * 1000
 
-/** After a read that found nothing, how long before the same community is read again from a screen. */
+/** After a read from a screen, how long before the same community is read again from one. */
 export const COMMUNITY_NAME_RETRY_MS = 10 * 60 * 1000
 
 /** Whether the name on record, if any, is missing or old enough to read again. */
@@ -55,37 +55,38 @@ export async function refreshPublishedName(agent: Agent, vtcDid: string): Promis
 }
 
 const inFlight = new Map<string, Promise<string | undefined>>()
-const failedAt = new Map<string, number>()
+const lastReadAt = new Map<string, number>()
 
 /**
  * The same read for a screen that reloads often (on focus, on every store
  * change, on a timer): one read at a time per community, and none for ten
- * minutes after one that found nothing, so a community that does not answer
- * is not asked again on every reload. A read that finds a name stores it with
- * today's date, so the day-old rule covers it from then on.
+ * minutes after the last one, whatever it found. A read that found a name and
+ * stored it is covered by the day-old rule from then on; one that found
+ * nothing, or found a name it could not store (the record still reads old),
+ * would otherwise be asked again on every reload. Kept apart per `scope` (the
+ * linked agent), so one agent's reads never hold back another's. Never
+ * rejects: anything that fails counts as a read that found nothing.
  */
 export function refreshPublishedNameThrottled(
   agent: Agent,
   vtcDid: string,
-  now = Date.now()
+  { scope = '', now = Date.now() }: { scope?: string; now?: number } = {}
 ): Promise<string | undefined> {
-  const running = inFlight.get(vtcDid)
+  const key = `${scope}|${vtcDid}`
+  const running = inFlight.get(key)
   if (running) return running
-  const failed = failedAt.get(vtcDid)
-  if (failed !== undefined && now - failed < COMMUNITY_NAME_RETRY_MS) return Promise.resolve(undefined)
+  const last = lastReadAt.get(key)
+  if (last !== undefined && now - last < COMMUNITY_NAME_RETRY_MS) return Promise.resolve(undefined)
+  lastReadAt.set(key, now)
   const read = refreshPublishedName(agent, vtcDid)
-    .then((name) => {
-      if (name) failedAt.delete(vtcDid)
-      else failedAt.set(vtcDid, now)
-      return name
-    })
-    .finally(() => inFlight.delete(vtcDid))
-  inFlight.set(vtcDid, read)
+    .catch(() => undefined)
+    .finally(() => inFlight.delete(key))
+  inFlight.set(key, read)
   return read
 }
 
-/** For tests: forget the reads under way and the ones that failed. */
+/** For tests: forget the reads under way and when each was last made. */
 export function forgetCommunityNameReads(): void {
   inFlight.clear()
-  failedAt.clear()
+  lastReadAt.clear()
 }
