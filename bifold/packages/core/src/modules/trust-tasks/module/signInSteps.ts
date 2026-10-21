@@ -40,12 +40,12 @@ import {
   type ProvedSignIn,
   type SignInAgentDeps,
 } from './oobSignInAgent'
+import { communityNameIsStale, refreshPublishedName } from './communityNameRefresh'
 import { readTrigger, triggerAction } from './triggerLink'
 import type { VtaVaultEntry } from './VtaClient'
 import { vtaAgent } from './vtaAgent'
 import { GenericRecordsCommunityStore, isCurrentMembership } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
-import { readPublicProfileName } from './vtiAgent'
 import { communityTarget } from './vtiCommunityLink'
 
 export type { ProvedSignIn, SignInRequester } from './oobSignInAgent'
@@ -88,8 +88,8 @@ export type SignInSteps = {
   cancel: (claimed: ClaimedSignIn) => Promise<{ cancelled: boolean }>
 }
 
-/** How long a community's name on record is taken as it is, before a sign-in reads it again (IN-340). */
-export const COMMUNITY_NAME_TTL_MS = 24 * 60 * 60 * 1000
+// The rule is shared with My Agent's community list (communityNameRefresh); kept exported from here as before.
+export { COMMUNITY_NAME_TTL_MS } from './communityNameRefresh'
 
 /**
  * Whether this phone holds a current membership of `vtcDid`, and the name to
@@ -113,29 +113,12 @@ async function recordedCommunity(
   const memberships = await store.listMemberships()
   const member = memberships.some((m) => m.communityDid === vtcDid && isCurrentMembership(m))
   const kept = (await store.listCommunityNames().catch(() => [])).find((n) => n.communityDid === vtcDid)
-  const keptAt = kept?.at ? Date.parse(kept.at) : NaN
-  const stale = !kept || !(Date.now() - keptAt < COMMUNITY_NAME_TTL_MS)
+  const stale = communityNameIsStale(kept)
   // The agents are waited on only when they decide it: a name to read again, and no membership on this phone.
   const belongs = member || (stale && (await heldOnAgent()))
-  const fresh = belongs && stale ? await publishedName(agent, vtcDid) : undefined
-  if (fresh) {
-    communityTarget.publishedName(vtcDid, fresh)
-    await store.saveCommunityName(vtcDid, fresh).catch(() => undefined)
-  }
+  const fresh = belongs && stale ? await refreshPublishedName(agent, vtcDid) : undefined
   const name = fresh ?? communityTarget.publishedNameOf(vtcDid) ?? kept?.name
   return { member, name }
-}
-
-/** The name a community's public profile gives it, or undefined (unreachable, unnamed, not answered in 3 s). */
-async function publishedName(agent: Agent, vtcDid: string): Promise<string | undefined> {
-  try {
-    const doc = await agent.dids.resolveDidDocument(vtcDid)
-    const service = doc.service?.find((s) => s.type === 'VTCRest')
-    const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
-    return base ? await readPublicProfileName(base, vtcDid) : undefined
-  } catch {
-    return undefined
-  }
 }
 
 const isDidSelfIssued = (kind: unknown) => kind === 'did-self-issued' || kind === 'didSelfIssued'

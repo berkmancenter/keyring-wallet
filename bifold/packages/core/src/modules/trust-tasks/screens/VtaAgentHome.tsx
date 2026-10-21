@@ -32,6 +32,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { vtaAgent } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityChanged } from '../module/communityChanged'
+import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/communityNameRefresh'
 import { communityTarget } from '../module/vtiCommunityLink'
 
 import { DevicesCard } from './DevicesCard'
@@ -136,6 +137,8 @@ const VtaAgentHome: React.FC = () => {
     setHoldings(agentKey ? lastHoldings.get(agentKey) : undefined)
   }, [agentKey])
   const [holdingsError, setHoldingsError] = useState(false)
+  // Bumped when a community's name is read again, so the cards say it (the name lives in communityTarget).
+  const [, setNamesRead] = useState(0)
   const [introPanel, setIntroPanel] = useState(0)
   const otherWaiting = useOtherAgentsWaiting()
   const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
@@ -228,6 +231,23 @@ const VtaAgentHome: React.FC = () => {
       if (agentKey) lastHoldings.set(agentKey, read)
       setHoldings(read)
       setHoldingsError(false)
+      // A community this agent belongs to whose name on record is missing or
+      // over a day old: its published name is read again, after the stored one
+      // is shown, and never waited on (IN-340, as sign-in reads it). Only
+      // these: a stored name with no holding here, another agent's identity, or
+      // a membership that has ended sends nothing (VTI-LNK-050, 051).
+      const belongsTo = new Set([
+        ...memberships.filter(isCurrentMembership).map((m) => m.communityDid),
+        ...personas.map((p) => p.communityDid),
+      ])
+      const now = Date.now()
+      for (const communityDid of belongsTo) {
+        const kept = names.find((n) => n.communityDid === communityDid)
+        if (!communityNameIsStale(kept, now)) continue
+        void refreshPublishedNameThrottled(agent, communityDid, now).then((fresh) => {
+          if (fresh && fresh !== kept?.name) setNamesRead((n) => n + 1)
+        })
+      }
     } catch {
       // Keep what was shown; say it could not be refreshed.
       setHoldingsError(true)
