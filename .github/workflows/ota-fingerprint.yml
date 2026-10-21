@@ -1,16 +1,15 @@
 name: OTA fingerprint (diagnostic)
 
-# Computes the native fingerprint the way each side of an over-the-air update
-# does, and keeps both:
-# - store-ios: the store build's iOS steps on its runner (staging.yaml's
-#   build-ios-staging, up to and including pod install), then the same
-#   native-config.mjs its OTA step runs.
-# - publisher: ota-publish.yml's steps on its runner.
-# A phone is offered a bundle only when the two agree. Each job prints its
-# fingerprint and sources and uploads app/fingerprint.json. Compare them with
-#   node scripts/ota/fingerprint-report.mjs --diff <a.json> <b.json>
-# No secrets, no signing, nothing published. The public key and channel are
-# written so the steps are the real ones; the fingerprint ignores both.
+# Computes the native fingerprint as each side of an over-the-air update does,
+# and fails unless they agree:
+# - store-ios / store-android: the store builds' steps (staging.yaml) up to
+#   their record-fingerprint.sh step, which is what a store build records.
+# - publisher-ios / publisher-android: ota-publish.yml's steps for that
+#   platform, on the same runner, up to its native-config.mjs.
+# A phone is offered a bundle only when its build's fingerprint equals the
+# bundle's. Each job uploads its fingerprint.json; `compare` diffs them source
+# by source (scripts/ota/fingerprint-report.mjs). No secrets, nothing signed or
+# published.
 
 on:
   workflow_dispatch:
@@ -26,70 +25,78 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Setup NodeJS
-        uses: ./.github/workflows/actions/setup-node
-
-      - name: Configure ruby
-        uses: ruby/setup-ruby@v1
+      - uses: ./.github/workflows/actions/setup-node
+      - uses: ruby/setup-ruby@v1
         with:
           working-directory: ./app
-
-      - name: Select Xcode 26.3
-        run: sudo xcode-select --switch /Applications/Xcode_26.3.app
-
+      - run: sudo xcode-select --switch /Applications/Xcode_26.3.app
       - name: Build bifold packages
         working-directory: bifold
         run: |
           yarn install --immutable
           yarn build
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Create .xcode.env.local file
-        working-directory: app/ios
-        run: echo "export NODE_BINARY=$(which node)" > .xcode.env.local
-
+      - run: yarn install --immutable
       - name: Install iOS dependencies
-        working-directory: app
         run: |
-          export USE_HERMES=1
-          yarn run ios:setup
-
-      - name: Native fingerprint
-        env:
-          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
-          OTA_CHANNEL: production
-        run: |
-          node scripts/ota/native-config.mjs
-          node scripts/ota/fingerprint-report.mjs
-
+          echo "export NODE_BINARY=$(which node)" > app/ios/.xcode.env.local
+          cd app && USE_HERMES=1 yarn run ios:setup
+      - name: Record the native fingerprint
+        run: bash scripts/ota/record-fingerprint.sh ios "$RUNNER_TEMP/fp"
       - uses: actions/upload-artifact@v4
         with:
-          name: fingerprint-store-ios
-          path: app/fingerprint.json
+          name: fp-store-ios
+          path: ${{ runner.temp }}/fp/fingerprint.json
 
-  publisher:
+  store-android:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
-      - name: Setup NodeJS
-        uses: ./.github/workflows/actions/setup-node
-
+      - uses: ./.github/workflows/actions/setup-node
       - name: Build bifold packages
         working-directory: bifold
         run: |
           yarn install --immutable
           yarn build
+      - run: yarn install --immutable
+      - name: Record the native fingerprint
+        run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/fp"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fp-store-android
+          path: ${{ runner.temp }}/fp/fingerprint.json
 
-      - name: Install dependencies
-        run: yarn install --immutable
-
+  publisher:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, android]
+    runs-on: ${{ matrix.platform == 'ios' && 'macos-26' || 'ubuntu-22.04' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/workflows/actions/setup-node
+      - name: Build bifold packages
+        working-directory: bifold
+        run: |
+          yarn install --immutable
+          yarn build
+      - run: yarn install --immutable
+      - if: ${{ matrix.platform == 'ios' }}
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: ./app
+      - if: ${{ matrix.platform == 'ios' }}
+        run: sudo xcode-select --switch /Applications/Xcode_26.3.app
+      - name: Install iOS dependencies
+        if: ${{ matrix.platform == 'ios' }}
+        run: |
+          echo "export NODE_BINARY=$(which node)" > app/ios/.xcode.env.local
+          cd app && USE_HERMES=1 yarn run ios:setup
       - name: Native fingerprint
         env:
           OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
@@ -97,8 +104,31 @@ jobs:
         run: |
           node scripts/ota/native-config.mjs
           node scripts/ota/fingerprint-report.mjs
-
       - uses: actions/upload-artifact@v4
         with:
-          name: fingerprint-publisher
+          name: fp-publisher-${{ matrix.platform }}
           path: app/fingerprint.json
+
+  compare:
+    needs: [store-ios, store-android, publisher]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: fp
+      - name: Each publisher matches its store build
+        run: |
+          status=0
+          for p in ios android; do
+            echo "== $p: store vs publisher"
+            node -e '
+              const fs = require("fs");
+              const [s, q, p] = process.argv.slice(1);
+              const a = JSON.parse(fs.readFileSync(s, "utf8"))[p].hash;
+              const b = JSON.parse(fs.readFileSync(q, "utf8"))[p].hash;
+              console.log(`${p}: store ${a}, publisher ${b}: ${a === b ? "MATCH" : "MISMATCH"}`);
+              process.exit(a === b ? 0 : 1)' "fp/fp-store-$p/fingerprint.json" "fp/fp-publisher-$p/fingerprint.json" "$p" \
+              || { node scripts/ota/fingerprint-report.mjs --diff "fp/fp-store-$p/fingerprint.json" "fp/fp-publisher-$p/fingerprint.json" | grep -E "^DIFF $p " ; status=1; }
+          done
+          exit $status

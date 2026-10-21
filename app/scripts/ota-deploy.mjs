@@ -30,6 +30,15 @@
  * (the fingerprint-mismatch step). Refused for any other channel, and said in
  * the log when used.
  *
+ * --expect-fingerprint <platform>=<hash> (repeatable): the native fingerprint
+ * the target build carries. Each platform published must have one, and the
+ * bundle's own (app/fingerprint.json) must equal it, or nothing is deployed: a
+ * bundle for another fingerprint is offered to no phone. --recorded-fingerprint
+ * <file> (the target build's fingerprint.json) lets the refusal name the
+ * sources that differ (scripts/ota/check-fingerprint.mjs). ota-publish.yml
+ * always passes it; without the flag no check is made (the CI gate builds and
+ * publishes in one checkout).
+ *
  * --after-native-config: the job has just run scripts/ota/native-config.mjs on a
  * checkout it verified clean, so exactly the files that script writes may differ
  * (both Info.plists, the Android manifest, app/fingerprint.json) and nothing else.
@@ -38,9 +47,11 @@
  * requires an approver. Run locally only for the spike, with a throwaway key.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
+
+import { assertFingerprint } from '../../scripts/ota/check-fingerprint.mjs'
 
 const SCOPES = ['fix', 'within-purpose']
 const RING0 = 'ring0'
@@ -55,6 +66,8 @@ const { values: args } = parseArgs({
     message: { type: 'string' },
     'after-native-config': { type: 'boolean', default: false },
     'skip-tier': { type: 'boolean', default: false },
+    'expect-fingerprint': { type: 'string', multiple: true },
+    'recorded-fingerprint': { type: 'string' },
   },
 })
 
@@ -144,6 +157,32 @@ if (args['skip-tier']) {
 // unsigned bundle is refused by every phone, so publishing one helps nobody.
 const keyPath = process.env.OTA_SIGNING_KEY ?? path.join(appDir, 'keys', 'ota-private-key.pem')
 if (!existsSync(keyPath)) fail(`no signing key at ${keyPath} (OTA_SIGNING_KEY)`)
+
+// 4. Built for the target build's native fingerprint, when the caller names it.
+const expected = new Map()
+for (const pair of args['expect-fingerprint'] ?? []) {
+  const [platform, hash] = pair.split('=')
+  if (platform !== 'ios' && platform !== 'android')
+    fail(`--expect-fingerprint ${pair}: platform must be ios or android`)
+  expected.set(platform, hash)
+}
+if (expected.size) {
+  const fingerprintFile = path.join(appDir, 'fingerprint.json')
+  if (!existsSync(fingerprintFile))
+    fail('no app/fingerprint.json to check against the target build (run native-config first)')
+  const actual = JSON.parse(readFileSync(fingerprintFile, 'utf8'))
+  const recorded = args['recorded-fingerprint']
+    ? JSON.parse(readFileSync(args['recorded-fingerprint'], 'utf8'))
+    : undefined
+  for (const platform of platforms) {
+    try {
+      const hash = assertFingerprint({ platform, actual, expected: expected.get(platform), recorded })
+      console.log(`ota-deploy: ${platform} fingerprint ${hash} is the target build's`)
+    } catch (error) {
+      fail(error.message)
+    }
+  }
+}
 
 const message =
   args.message ??
