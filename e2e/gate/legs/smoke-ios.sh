@@ -41,5 +41,5 @@ ic=$(grep -m1 '^INTRO-CENTRE' $LEG_DIR/ios-link.out); if [ -n "$ic" ]; then st=F
 # (#384): a wrong PIN on the unlock screen empties the field and the right one unlocks. Each SKIPs on a build without its fix.
 (cd $E2E && export PLATFORM=ios IOS_APP=$APP UDID=$SIM IOS_DEVICE_NAME="$NAME" IOS_PLATFORM_VERSION=$IOS_VERSION APPIUM_PORT=4768 WDA_LOCAL_PORT=8167 MJPEG_PORT=9167 C_DID=${C_DID:-} C_NAME="${C_NAME:-}"
   galarm 420 node run-signin-unjoined.mjs > $LEG_DIR/ios-signin.out 2>&1; grc=$?; take_rows $LEG_DIR/ios-signin.out; driver_rc ios-signin-driver "$grc" $LEG_DIR/ios-signin.out
-  galarm 420 node run-wrong-pin.mjs > $LEG_DIR/ios-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-wrong-pin.out; driver_rc ios-wrong-pin-driver "$wrc" $LEG_DIR/ios-wrong-pin.out)
+  E2E_NO_AUTO_UNLOCK=1 galarm 420 node run-wrong-pin.mjs > $LEG_DIR/ios-wrong-pin.out 2>&1; wrc=$?; take_rows $LEG_DIR/ios-wrong-pin.out; driver_rc ios-wrong-pin-driver "$wrc" $LEG_DIR/ios-wrong-pin.out)
 wda_stop; xcrun simctl shutdown $SIM 2>/dev/null; echo "SMOKE iOS done $(date -u +%T)Z";
