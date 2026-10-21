@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { chmod, readFile, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { after, before, beforeEach, describe, it } from 'node:test'
@@ -89,7 +89,7 @@ describe('server', () => {
       assert.equal(created.status, 201)
       const { url, expiresAt } = await created.json()
       assert.match(url, /^https:\/\/wallet\.example\.org\/i\/[A-Za-z0-9_-]{22}$/)
-      assert.equal(expiresAt, new Date(clock + 7 * 24 * 3600_000).toISOString())
+      assert.equal(expiresAt, new Date(clock + 24 * 3600_000).toISOString(), 'a new link lasts 24 h until fetched')
       for (let i = 0; i < 3; i++) {
         const res = await getJson(`${base}/i/${idOf(url)}`)
         assert.equal(res.status, 200)
@@ -213,8 +213,8 @@ describe('server', () => {
       assert.equal((await post({ invitation })).status, 201)
       assert.equal((await post({ invitation })).status, 201)
       assert.equal((await post({ invitation })).status, 503, 'full of live links')
-      clock += 7 * 24 * 3600_000
-      assert.equal((await post({ invitation })).status, 201, 'the expired ones made room')
+      clock += 24 * 3600_000
+      assert.equal((await post({ invitation })).status, 201, 'the expired (never fetched) ones made room')
       assert.equal(await links.store.count(), 1)
     } finally {
       await close()
@@ -266,22 +266,87 @@ describe('server', () => {
       const files = await readdir(dir)
       assert.deepEqual(files, [`${idOf(url)}.json`])
       const record = JSON.parse(await readFile(path.join(dir, files[0]), 'utf8'))
-      assert.deepEqual(Object.keys(record).sort(), ['expiresAt', 'invitation'])
+      assert.deepEqual(Object.keys(record).sort(), ['expiresAt', 'invitation'], 'before any fetch')
       assert.equal((await readFile(path.join(dir, files[0]), 'utf8')).includes('198.51.100.7'), false)
     } finally {
       await close()
     }
   })
 
-  it('sweeps expired links', async () => {
+  it('expires a link nobody fetched after 24 h', async () => {
     await listen()
     try {
-      await post({ invitation: await fixture('invitation-v1.json') })
-      clock += 3 * 24 * 3600_000
-      await post({ invitation: await fixture('invitation-v2.json') })
-      clock += 5 * 24 * 3600_000
-      assert.equal(await links.store.sweep(), 1)
+      const { url } = await (await post({ invitation: await fixture('invitation-v1.json') })).json()
+      clock += 24 * 3600_000
+      assert.equal((await getJson(`${base}/i/${idOf(url)}`)).status, 404)
+    } finally {
+      await close()
+    }
+  })
+
+  it('keeps a fetched link 7 days from its creation, then expires it', async () => {
+    await listen()
+    try {
+      const invitation = await fixture('invitation-v1.json')
+      const { url } = await (await post({ invitation })).json()
+      clock += 3600_000
+      assert.equal((await getHtml(`${base}/i/${idOf(url)}`)).status, 302, 'a browser or preview fetch counts')
+      const record = JSON.parse(await readFile(path.join(dir, `${idOf(url)}.json`), 'utf8'))
+      assert.deepEqual(Object.keys(record).sort(), ['expiresAt', 'fetched', 'invitation'], 'only a fetched bit is added')
+      clock += 6 * 24 * 3600_000
+      const res = await getJson(`${base}/i/${idOf(url)}`)
+      assert.equal(res.status, 200, 'alive at 6 days 1 hour')
+      assert.deepEqual(await res.json(), invitation)
+      clock += 23 * 3600_000
+      assert.equal((await getJson(`${base}/i/${idOf(url)}`)).status, 404, 'gone at 7 days')
+    } finally {
+      await close()
+    }
+  })
+
+  // As root, a read-only directory still accepts writes, so the failure can't be produced.
+  // That may only be skipped on a laptop: in CI (CI is set) running as root fails here,
+  // so the case is never silently untested where it counts.
+  const asRoot = process.getuid?.() === 0
+  it('still serves a link when extending it fails (e.g. a full disk)', { skip: asRoot && !process.env.CI }, async () => {
+    assert.equal(asRoot, false, 'CI runs as root: this test cannot produce a write failure there')
+    await listen()
+    try {
+      const invitation = await fixture('invitation-v1.json')
+      const { url } = await (await post({ invitation })).json()
+      await chmod(dir, 0o500) // no new files: the extension's temp-file write fails
+      try {
+        const res = await getJson(`${base}/i/${idOf(url)}`)
+        assert.equal(res.status, 200)
+        assert.deepEqual(await res.json(), invitation)
+      } finally {
+        await chmod(dir, 0o700)
+      }
+      const record = JSON.parse(await readFile(path.join(dir, `${idOf(url)}.json`), 'utf8'))
+      assert.equal(record.fetched, undefined, 'not extended, so the next fetch tries again')
+      assert.equal((await getJson(`${base}/i/${idOf(url)}`)).status, 200)
+      const after = JSON.parse(await readFile(path.join(dir, `${idOf(url)}.json`), 'utf8'))
+      assert.equal(after.fetched, true, 'extended once writing works again')
+    } finally {
+      await close()
+    }
+  })
+
+  it('sweeps by file time, which is the expiry', async () => {
+    await listen()
+    try {
+      const a = await (await post({ invitation: await fixture('invitation-v1.json') })).json()
+      const b = await (await post({ invitation: await fixture('invitation-v2.json') })).json()
+      const info = await stat(path.join(dir, `${idOf(a.url)}.json`))
+      assert.equal(Math.round(info.mtimeMs / 1000), Math.round(Date.parse(a.expiresAt) / 1000))
+      clock += 3600_000
+      assert.equal((await getJson(`${base}/i/${idOf(b.url)}`)).status, 200, 'b is fetched, so it lives 7 days')
+      clock += 24 * 3600_000
+      assert.equal(await links.store.sweep(), 1, 'only the unfetched link is gone')
       assert.equal(await links.store.count(), 1)
+      clock += 7 * 24 * 3600_000
+      assert.equal(await links.store.sweep(), 1)
+      assert.equal(await links.store.count(), 0)
     } finally {
       await close()
     }
