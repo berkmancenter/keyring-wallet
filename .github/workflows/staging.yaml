@@ -1231,6 +1231,8 @@ jobs:
             echo
             [ -n "$IOS_FINGERPRINT" ] && echo "OTA fingerprint ios: $IOS_FINGERPRINT"
             [ -n "$ANDROID_FINGERPRINT" ] && echo "OTA fingerprint android: $ANDROID_FINGERPRINT"
+            # Load-bearing: as the group's last command, a false `[ -n "" ] && …`
+            # would end the group non-zero and bash -e would fail the tag step.
             true
           } > "$RUNNER_TEMP/tag-message"
           git tag -a "$TAG" -F "$RUNNER_TEMP/tag-message"

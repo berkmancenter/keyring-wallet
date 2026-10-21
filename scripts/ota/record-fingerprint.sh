@@ -27,12 +27,28 @@ snap=$(mktemp -d)
 for f in "${files[@]}"; do
   if [ -e "$f" ]; then cp -p "$f" "$snap/$(echo "$f" | tr / _)"; fi
 done
+# Puts every file back, attempting each one even if another fails, then checks
+# each against its snapshot. A store build continues past this step
+# (continue-on-error), so a partial restore must not pass quietly: it would ship
+# the public key, channel and fingerprint in a build with OTA off.
 restore() {
+  local rc=$? bad=0 f s
   for f in "${files[@]}"; do
     s="$snap/$(echo "$f" | tr / _)"
-    if [ -e "$s" ]; then cp -p "$s" "$f"; else rm -f "$f"; fi
+    if [ -e "$s" ]; then cp -p "$s" "$f" || bad=1; else rm -f "$f" || bad=1; fi
   done
-  rm -rf "$snap"
+  for f in "${files[@]}"; do
+    s="$snap/$(echo "$f" | tr / _)"
+    if [ -e "$s" ]; then
+      cmp -s "$s" "$f" || { echo "::error::record-fingerprint: $f was not restored" >&2; bad=1; }
+    elif [ -e "$f" ]; then
+      echo "::error::record-fingerprint: $f was left behind" >&2
+      bad=1
+    fi
+  done
+  [ "$bad" = 0 ] && rm -rf "$snap"
+  if [ "$bad" != 0 ]; then exit 1; fi
+  exit "$rc"
 }
 trap restore EXIT
 

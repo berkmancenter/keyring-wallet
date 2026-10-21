@@ -36,8 +36,9 @@
  * bundle for another fingerprint is offered to no phone. --recorded-fingerprint
  * <file> (the target build's fingerprint.json) lets the refusal name the
  * sources that differ (scripts/ota/check-fingerprint.mjs). ota-publish.yml
- * always passes it; without the flag no check is made (the CI gate builds and
- * publishes in one checkout).
+ * always passes it. Without the flag no check is made: the CI gate builds and
+ * publishes in one checkout, and a run by hand is for the spike only, by policy
+ * (bundles that reach phones go through ota-publish.yml).
  *
  * --after-native-config: the job has just run scripts/ota/native-config.mjs on a
  * checkout it verified clean, so exactly the files that script writes may differ
