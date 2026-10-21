@@ -7,7 +7,9 @@
  *                   install page's long link (/invite/?oob=…)
  *   GET /healthz    200 "ok"
  *
- * A link lives LINKS_TTL_SECONDS (7 days) and is not consumed on fetch. Only the
+ * A link lives LINKS_UNFETCHED_TTL_SECONDS (24 h) until its first fetch, then
+ * LINKS_FETCHED_TTL_SECONDS (7 days) from its creation; it is not consumed on fetch.
+ * A flood of links nobody opens is therefore gone in a day. Only the
  * invitation and its expiry are stored. No access log, no IPs on disk: the client
  * address is used for rate limiting in memory only.
  *
@@ -16,10 +18,11 @@
  * that) stays under the ~8 KB that browsers and intermediaries reliably carry.
  *
  * Environment: PORT (3090), PUBLIC_URL (https://wallet.asml.berkmancenter.org),
- * LINKS_DATA_DIR (./data), LINKS_TTL_SECONDS (604800), LINKS_MAX_BODY_BYTES (8192),
+ * LINKS_DATA_DIR (./data), LINKS_UNFETCHED_TTL_SECONDS (86400), LINKS_FETCHED_TTL_SECONDS
+ * (604800), LINKS_MAX_BODY_BYTES (8192),
  * LINKS_MAX_INVITATION_BYTES (6000),
- * LINKS_MAX_LINKS (100000), LINKS_RATE_PER_MINUTE (10), LINKS_RATE_BURST (20),
- * LINKS_GLOBAL_PER_MINUTE (600).
+ * LINKS_MAX_LINKS (250000), LINKS_RATE_PER_MINUTE (10), LINKS_RATE_BURST (20),
+ * LINKS_GLOBAL_PER_MINUTE (120).
  */
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
@@ -87,16 +90,23 @@ export const createLinksServer = (options = {}) => {
   const config = {
     publicUrl: (options.publicUrl ?? env.PUBLIC_URL ?? 'https://wallet.asml.berkmancenter.org').replace(/\/+$/, ''),
     dataDir: options.dataDir ?? env.LINKS_DATA_DIR ?? './data',
-    ttlMs: (options.ttlSeconds ?? num(env.LINKS_TTL_SECONDS, 604800)) * 1000,
+    unfetchedTtlMs: (options.unfetchedTtlSeconds ?? num(env.LINKS_UNFETCHED_TTL_SECONDS, 86400)) * 1000,
+    fetchedTtlMs: (options.fetchedTtlSeconds ?? num(env.LINKS_FETCHED_TTL_SECONDS, 604800)) * 1000,
     maxBodyBytes: options.maxBodyBytes ?? num(env.LINKS_MAX_BODY_BYTES, 8192),
     maxInvitationBytes: options.maxInvitationBytes ?? num(env.LINKS_MAX_INVITATION_BYTES, 6000),
-    maxLinks: options.maxLinks ?? num(env.LINKS_MAX_LINKS, 100000),
+    maxLinks: options.maxLinks ?? num(env.LINKS_MAX_LINKS, 250000),
     perMinute: options.perMinute ?? num(env.LINKS_RATE_PER_MINUTE, 10),
     burst: options.burst ?? num(env.LINKS_RATE_BURST, 20),
-    globalPerMinute: options.globalPerMinute ?? num(env.LINKS_GLOBAL_PER_MINUTE, 600),
+    globalPerMinute: options.globalPerMinute ?? num(env.LINKS_GLOBAL_PER_MINUTE, 120),
     now: options.now ?? (() => Date.now()),
   }
-  const store = createStore({ dir: config.dataDir, ttlMs: config.ttlMs, maxLinks: config.maxLinks, now: config.now })
+  const store = createStore({
+    dir: config.dataDir,
+    unfetchedTtlMs: config.unfetchedTtlMs,
+    fetchedTtlMs: config.fetchedTtlMs,
+    maxLinks: config.maxLinks,
+    now: config.now,
+  })
   const limiter = createRateLimiter({
     perMinute: config.perMinute,
     burst: config.burst,
@@ -149,7 +159,7 @@ export const createLinksServer = (options = {}) => {
   }
 
   const resolve = async (req, res, id) => {
-    const found = ID_RE.test(id) ? await store.get(id) : null
+    const found = ID_RE.test(id) ? await store.fetch(id) : null
     if (!found) throw new HttpError(404, 'not_found')
     if (wantsJson(req)) {
       res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': 'application/json' })
