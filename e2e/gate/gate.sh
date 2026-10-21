@@ -375,9 +375,11 @@ run_lock() {
   # The running shell's pid, written by a child through a plain redirection. Not $(sh -c 'echo $PPID'): a command
   # substitution forks first, so that pid is a shell that is already gone, and the lock would read as stale at once.
   sh -c 'echo $PPID' > "$d/pid"
-  trap 'rm -rf "$GATE_HOME/run.lock.d"' EXIT
+  trap gate_unlock EXIT
   trap stop_forward TERM INT HUP
+  turn_lock
 }
+gate_unlock() { rm -rf "$GATE_HOME/run.lock.d"; turn_release; }
 
 # A stop (launchctl bootout, a ctrl-C, a kill) reaches this shell: pass it to the whole process group (the legs, their
 # drivers, Appium), so each leg's trap runs its cleanup, then wait up to GATE_STOP_WAIT seconds (default 150) for the

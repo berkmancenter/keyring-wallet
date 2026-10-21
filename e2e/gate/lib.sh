@@ -113,6 +113,57 @@ gate_env() {
   # line, so a local pass is never read as a Farm pass.
   : "${GATE_TARGET:=$(basename "$GATE_ENV" .env)}"
   export GATE_TARGET
+  # A phone grant must not outlive the identity that writes it: a VTA 0.60 refuses an expiring admin's permanent
+  # entry (VTI-ACL-053; the mini's run 1021-0258, testreq). An env file whose identity expires says so with
+  # GATE_GRANT_EXPIRES, and a lane's (E2E_LANE) defaults to 24h: a phone kept linked across a long serial run must
+  # outlive it (the CI lane's legs are short and use 6h, ci/gate-ci-leg.sh).
+  # enrol-manager.sh reads EXPIRES; the enrolment page already grants for 1h. An EXPIRES the caller set is kept.
+  [ -z "${E2E_LANE:-}" ] || : "${GATE_GRANT_EXPIRES:=24h}"
+  [ -z "${GATE_GRANT_EXPIRES:-}" ] || export EXPIRES="${EXPIRES:-$GATE_GRANT_EXPIRES}"
+}
+
+# Turns. Two machines on the same runners (the MacBook and the Mac mini on the farm3 runners and community C) must
+# never gate at once: each run's gate_sweep and keys_since would clean the other's state. GATE_TURN_HOST names the
+# machine holding the turn lock: "local" on that machine, its ssh alias on the other (the MacBook: mini). Unset, no
+# turn is taken: a machine on runners of its own (the mini's lane-mini.env, keyring-runner-mini1). The turn host
+# unreachable is a refusal, not a pass: another machine may be gating. An owner that is gone is taken over; an owner on
+# a machine this one cannot see is treated as live, and the refusal names the lock to remove by hand.
+turn_sh() {
+  if [ "$GATE_TURN_HOST" = local ]; then bash -c "$1"
+  else ${GATE_TURN_SSH:-ssh -o BatchMode=yes -o ConnectTimeout=15} "$GATE_TURN_HOST" "$1"; fi
+}
+turn_dir() { printf '%s' "${GATE_TURN_DIR:-\$HOME/.keyring-fleet/gate/turn.lock.d}"; }
+turn_owner_live() {
+  local oh=$1 op=$2
+  [ "$op" != "?" ] || return 0
+  if [ "$oh" = "$(hostname -s)" ]; then kill -0 "$op" 2>/dev/null; return; fi
+  if [ "$GATE_TURN_HOST" != local ] && [ "$oh" = "$(turn_sh 'hostname -s' 2>/dev/null)" ]; then
+    turn_sh "kill -0 $op" >/dev/null 2>&1; return
+  fi
+  return 0
+}
+turn_lock() {
+  [ -n "${GATE_TURN_HOST:-}" ] || return 0
+  local d me out rc oh op os try
+  d=$(turn_dir); me=$(hostname -s)
+  for try in 1 2; do
+    out=$(turn_sh "d=\"$d\"; mkdir -p \"\$(dirname \"\$d\")\" || exit 3
+      if mkdir \"\$d\" 2>/dev/null; then echo '$me $$ $(stamp)Z' > \"\$d/owner\"; echo TAKEN
+      else cat \"\$d/owner\" 2>/dev/null || echo '? ? ?'; fi" 2>&1); rc=$?
+    [ $rc = 0 ] || die "the turn host $GATE_TURN_HOST did not answer ($(printf '%s' "$out" | tail -1 | cut -c1-160)): not started, since another machine may be gating on the shared runners"
+    [ "$out" != TAKEN ] || { TURN_HELD=1; say "gate turn taken on $GATE_TURN_HOST"; return 0; }
+    read -r oh op os <<< "$out"
+    turn_owner_live "$oh" "$op" && die "another machine holds the gate turn ($oh, pid $op, since $os): not started. Remove $d on $GATE_TURN_HOST only if that run is gone"
+    say "stale gate turn ($oh, pid $op) taken over"
+    turn_sh "d=\"$d\"; mv \"\$d\" \"\$d.stale.$$\" 2>/dev/null && rm -rf \"\$d.stale.$$\"" >/dev/null 2>&1
+  done
+  die "could not take the gate turn on $GATE_TURN_HOST"
+}
+turn_release() {
+  [ "${TURN_HELD:-}" = 1 ] || return 0
+  local d; d=$(turn_dir)
+  turn_sh "d=\"$d\"; [ \"\$(cut -d' ' -f1-2 \"\$d/owner\" 2>/dev/null)\" = '$(hostname -s) $$' ] && rm -rf \"\$d\"" >/dev/null 2>&1
+  TURN_HELD=
 }
 need() { local v; for v in "$@"; do [ -n "${!v:-}" ] || die "$GATE_ENV: $v is empty"; done; }
 

@@ -116,6 +116,10 @@ jobs:
           bash e2e/gate/ci/pnm-locked.test.sh || { echo "::error file=e2e/gate/ci/pnm-locked.test.sh::the pnm call cap test failed"; fail=1; }
           # The CI lane's configuration must name one runner, linkfail's approver DID and no admin credential (item 11).
           bash e2e/gate/ci/ci-env-check.test.sh || { echo "::error file=e2e/gate/ci/ci-env-check.test.sh::the CI configuration check test failed"; fail=1; }
+          # A phone grant under an expiring identity (a lane's, the mini's) carries an expiry: VTA 0.60 refuses a permanent
+          # one (VTI-ACL-053). And two gate machines on the same runners never gate at once (the turn lock).
+          bash e2e/gate/ci/grant-expiry.test.sh || { echo "::error file=e2e/gate/ci/grant-expiry.test.sh::the phone-grant expiry test failed"; fail=1; }
+          bash e2e/gate/ci/turns.test.sh || { echo "::error file=e2e/gate/ci/turns.test.sh::the gate turn test failed"; fail=1; }
           # The gate harness's own unit tests (node built-ins only, no install): a gate.sh / lib.sh / run-summary change
           # merged green while breaking two of them (#518, #522; fixed in #523), since nothing here ran them.
           # The release tier check too (scripts/release/tier.mjs decides what may go out over the air).
