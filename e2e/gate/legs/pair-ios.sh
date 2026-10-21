@@ -23,7 +23,8 @@ need IOS_VERSION
 # The gate's iOS build is the push-off one (the testers' configuration): its config carries MEDIATOR_URL and no
 # PUSH_GATEWAY_URL key, so the two wake rows are NOT RUN there. The config is never changed to make them run.
 PAIR_WAKE=on
-bin="$CAND_APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$CAND_APP/Info.plist" 2>/dev/null)"
+# The executable: Info.plist's CFBundleExecutable, or the app's own name (KeyRing.app/KeyRing) without PlistBuddy.
+exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$CAND_APP/Info.plist" 2>/dev/null); bin="$CAND_APP/${exe:-$(basename "$CAND_APP" .app)}"
 if strings "$bin" 2>/dev/null | grep -q '^MEDIATOR_URL$' && ! strings "$bin" | grep -q '^PUSH_GATEWAY_URL$'; then PAIR_WAKE=off; fi
 T0S=$(date +%s)
 wda_stop() { local p; for p in $(ps -axo pid,command | grep -E "xcodebuild.*WebDriverAgent" | grep "$1" | grep -v grep | awk '{print $1}'); do kill "$p"; done; }

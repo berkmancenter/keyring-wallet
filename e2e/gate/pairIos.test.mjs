@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,8 @@ test('the rows say what they do not prove, and the wake is judged by the screen'
 test('the wake rows are NOT RUN on a build that names no push gateway, and run on one that does', () => {
   const check = leg.match(/^PAIR_WAKE=on$[\s\S]*?PAIR_WAKE=off; fi$/m)[0];
   const run = (keys) => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'pair-'));
+    const dir = path.join(mkdtempSync(path.join(tmpdir(), 'pair-')), 'KeyRing.app');
+    mkdirSync(dir);
     writeFileSync(path.join(dir, 'Info.plist'), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>KeyRing</string></dict></plist>');
     writeFileSync(path.join(dir, 'KeyRing'), keys.map((k) => `\0${k}\0`).join('padding'));
     return execFileSync('bash', ['-c', `set -u; CAND_APP=${dir}; ${check}; echo $PAIR_WAKE`], { encoding: 'utf8' }).trim();
