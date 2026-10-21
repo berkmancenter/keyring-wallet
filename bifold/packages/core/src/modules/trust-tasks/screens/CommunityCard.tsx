@@ -28,6 +28,7 @@ import { DidDetails } from './DidDetails'
 import { shareIdentity } from './identityShare'
 import { didHashKey, didLabelKey } from './testIdKey'
 import { localDate } from './localTime'
+import { PersonaAgentNotice } from './PersonaAgentNotice'
 
 /**
  * A card's handle for tests and runners: `<label>-<hash>`, where the label is
@@ -150,6 +151,8 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
             {status}
             {vetter && membership && !removal ? ` · ${t('Vetting.SeatVetter')}` : ''}
           </ThemedText>
+          {/* Its identity cannot sign in because of its agent; the community says how (IN-350). */}
+          <PersonaAgentNotice communityDid={communityDid} compact />
         </View>
         <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
       </Pressable>

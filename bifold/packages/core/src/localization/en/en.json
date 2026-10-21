@@ -1630,8 +1630,14 @@
     "UnlinkBody": "This phone will no longer work with your agent.\n\nYour community identities and memberships stay with the agent. Link it again to use them on this phone.\n\nThe agent may still list this phone until its admin removes it, but that entry can't be used: this phone forgets its key.",
     "UnlinkConfirm": "Unlink",
     "PersonaAgentUnreachableTitle": "Reconnect your agent",
-    "PersonaAgentUnreachableBody": "Your agent didn't answer, so this community can't connect yet. Open My Agent to reconnect it.",
-    "PersonaAgentNotLinkedBody": "The agent that holds this community's identity is no longer connected to this phone. Open My Agent to connect it again."
+    "PersonaAgentUnreachableBody": "Your agent didn't answer, so {{community}} can't connect yet. Open My Agent to reconnect it.",
+    "PersonaAgentNotLinkedBody": "The agent that holds your identity for {{community}} is no longer connected to this phone. Open My Agent to connect it again.",
+    "PersonaAgentRefusedTitle": "Your agent no longer accepts this phone",
+    "PersonaAgentRefusedBody": "Your agent no longer accepts this phone, so {{community}} can't connect. Its admin can add this phone back, or open My Agent and link this phone again.",
+    "PersonaAgentRefusedLine": "Your agent no longer accepts this phone.",
+    "PersonaAgentUnreachableLine": "Your agent didn't answer.",
+    "PersonaAgentNotLinkedLine": "Your agent is no longer connected to this phone.",
+    "PersonaAgentOpen": "Open My Agent"
   },
   "Invited": {
     "Withdraw": "Withdraw my request",
