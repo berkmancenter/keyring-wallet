@@ -17,8 +17,10 @@ const mockShared = {
 }
 const mockSharedListeners = new Set<() => void>()
 const mockGuards = new Set<Guard>()
+const mockSharedCheckAlive = jest.fn()
 jest.mock('../module/vtiAgent', () => ({
   vtiAgent: {
+    checkAlive: () => mockSharedCheckAlive(),
     getState: () => ({
       did: mockShared.did,
       signingInAs: mockShared.signingInAs,
@@ -105,6 +107,7 @@ describe('the listeners', () => {
     return {
       start: async () => void rec.started++,
       stop: async () => void rec.stopped++,
+      checkAlive: () => undefined,
     }
   })
   const live = (did: string) => {
@@ -190,6 +193,48 @@ describe('the listeners', () => {
     handlers.forEach((h) => h('active'))
     await flush()
     expect(live(a.did)).toBe(true)
+    spy.mockRestore()
+  })
+
+  // Community inboxes carry join answers and approvals: a socket that reads open and hears nothing would hold them.
+  it('back in the foreground, every socket still open proves itself: each listener and the shared session', async () => {
+    const handlers: Array<(s: string) => void> = []
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+      handlers.push(h)
+      return { remove: () => undefined }
+    }) as never)
+    const checks = new Map<string, number>()
+    const proving = jest.fn(
+      async (p: VtiPersona): Promise<ListenerSession> => ({
+        ...(await open(p)),
+        checkAlive: () => void checks.set(p.did, (checks.get(p.did) ?? 0) + 1),
+      })
+    )
+    mockSharedCheckAlive.mockClear()
+    const a = persona('a')
+    const b = persona('b')
+    start([a, b], { open: proving })
+    await flush()
+    expect(live(a.did) && live(b.did)).toBe(true)
+
+    // Only inactive (a control centre pulled down, a call): the listeners stayed open, and each is asked.
+    handlers.forEach((h) => h('inactive'))
+    handlers.forEach((h) => h('active'))
+    await flush()
+    expect(Object.fromEntries(checks)).toEqual({ [a.did]: 1, [b.did]: 1 })
+    expect(mockSharedCheckAlive).toHaveBeenCalledTimes(1)
+    expect(proving).toHaveBeenCalledTimes(2)
+
+    // Back from the background: the listeners were closed and open fresh, which needs no proof; the shared session,
+    // never closed for the background, is asked again.
+    handlers.forEach((h) => h('background'))
+    await flush()
+    handlers.forEach((h) => h('active'))
+    await flush()
+    expect(live(a.did) && live(b.did)).toBe(true)
+    expect(proving).toHaveBeenCalledTimes(4)
+    expect(Object.fromEntries(checks)).toEqual({ [a.did]: 1, [b.did]: 1 })
+    expect(mockSharedCheckAlive).toHaveBeenCalledTimes(2)
     spy.mockRestore()
   })
 

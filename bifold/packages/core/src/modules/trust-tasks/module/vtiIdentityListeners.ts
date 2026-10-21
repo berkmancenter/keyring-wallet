@@ -53,6 +53,8 @@ import { frameForm, tspSessionForPersona, unpackTrustTaskFromPeer } from './vtiT
 export interface ListenerSession {
   start(): Promise<void>
   stop(): Promise<void>
+  /** Back in the foreground: ask the mediator for something, and reopen if nothing comes back. */
+  checkAlive(): void
 }
 
 /** Opens a listen-only session for one identity. */
@@ -302,7 +304,16 @@ export function startIdentityListeners(agent: Agent, options: IdentityListenersO
   })
   // A socket frozen in the background looks like a duplicate when it resumes:
   // close them all before the app suspends, and open them again when it is back.
+  // Back in the foreground, every socket still open proves itself: the shared
+  // session (never closed for the background) and any listener that only went
+  // inactive. Community inboxes carry join answers and approvals; a socket that
+  // reads open and hears nothing would hold them until the backstop noticed.
+  // Listeners closed for the background are opened fresh by the reconcile.
   const appState = AppState.addEventListener('change', (state) => {
+    if (state === 'active') {
+      vtiAgent.checkAlive()
+      for (const entry of running.values()) entry.session?.checkAlive()
+    }
     const wasPaused = paused
     paused = state === 'background'
     if (paused !== wasPaused) void reconcile()
