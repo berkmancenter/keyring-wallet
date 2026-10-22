@@ -25,7 +25,7 @@ import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { linkedPhoneEntries } from "./lib/aclCleanup.js";
+import { expiresWith, phoneOwnEntry } from "./lib/aclCleanup.js";
 import { generateKeyPairSync } from "node:crypto";
 import { dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
@@ -73,14 +73,13 @@ function aclEntry(subject) {
   return JSON.parse(out.slice(out.indexOf("["))).find((e) => e.subject === subject);
 }
 
-/** This phone's own entry on the runner, from its link record (run-vta-link.js last-link.json; linkedPhoneEntries). */
+/** This phone's own entry on the runner, from its link record (run-vta-link.js last-link.json; phoneOwnEntry). */
 function phoneEntry() {
   try {
     const link = JSON.parse(readFileSync(path.join(E.E2E_RUN_DIR || "artifacts", "last-link.json"), "utf8"));
     const out = execFileSync(PNM, ["--vta", SLUG, "acl", "list", "--json"], { encoding: "utf8", env: { ...E }, stdio: ["ignore", "pipe", "pipe"] });
-    const mine = linkedPhoneEntries(JSON.parse(out.slice(out.indexOf("["))), link);
-    // The key the phone holds now: the newest of its own entries (its rotated key, else the temporary one).
-    return mine.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1);
+    // The phone's own key only (its rotated heir, else the temporary one): never the device it just added.
+    return phoneOwnEntry(JSON.parse(out.slice(out.indexOf("["))), link);
   } catch (e) {
     log(`this phone's own entry not read: ${e.message}`);
     return undefined;
@@ -209,7 +208,7 @@ try {
     // The device's entry expires with the phone's own (bifold #467): a phone whose entry expires (the Mac mini's 24h
     // lane grants, VTI-ACL-053) cannot write a permanent one, and a permanent phone's device stays permanent.
     const phone = phoneEntry();
-    await row(DEVICE_EXPIRY, Boolean(added && phone) && (added.expiresAt ?? null) === (phone.expiresAt ?? null),
+    await row(DEVICE_EXPIRY, expiresWith(added, phone) && added.subject !== phone.subject,
       !phone ? "this phone's own entry was not found from its link record" : `device ${added?.expiresAt ?? "permanent"} · this phone ${phone.expiresAt ?? "permanent"}`,
       { needs: [ACL_LABEL] });
 

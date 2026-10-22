@@ -124,6 +124,21 @@ export function linkedPhoneEntries(entries, { before = [], tempDid, heirs = [] }
 }
 
 /**
+ * The entry this phone holds now, from its link record: the newest entry whose subject is one of the phone's OWN keys
+ * (a rotated heir, else the temporary key). Not linkedPhoneEntries' set, which also holds what the phone's key
+ * created (a device it added would then be "the phone"; review on #574). Pure.
+ */
+export function phoneOwnEntry(entries, { tempDid, heirs = [] } = {}) {
+  const own = new Set([...heirs, tempDid].filter(Boolean));
+  return entries.filter((e) => own.has(e.subject)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1);
+}
+
+/** A device the phone added expires with the phone: both permanent, or the same expiresAt. Pure. */
+export function expiresWith(device, phone) {
+  return Boolean(device && phone) && (device.expiresAt ?? null) === (phone.expiresAt ?? null);
+}
+
+/**
  * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
  * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
  * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy
