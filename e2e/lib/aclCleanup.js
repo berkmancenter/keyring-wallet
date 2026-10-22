@@ -126,7 +126,8 @@ export function linkedPhoneEntries(entries, { before = [], tempDid, heirs = [] }
 /**
  * The entry this phone holds now, from its link record: the newest entry whose subject is one of the phone's OWN keys
  * (a rotated heir, else the temporary key). Not linkedPhoneEntries' set, which also holds what the phone's key
- * created (a device it added would then be "the phone"; review on #574). Pure.
+ * created (a device it added would then be "the phone"; review on #574). It needs the heirs a manual link records
+ * (LINK_MODE=manual): after the swap removed tempDid's entry, a link without them finds nothing, which is said. Pure.
  */
 export function phoneOwnEntry(entries, { tempDid, heirs = [] } = {}) {
   const own = new Set([...heirs, tempDid].filter(Boolean));
