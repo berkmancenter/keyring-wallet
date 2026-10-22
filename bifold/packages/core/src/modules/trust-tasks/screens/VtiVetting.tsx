@@ -69,7 +69,7 @@ import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
-import { useCommunityJourney } from '../module/communityJourney'
+import { joinKnown, useCommunityJourney } from '../module/communityJourney'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { offeredProfileName, useJoinAsOptions } from './JoinAs'
 
@@ -302,8 +302,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // The membership lands here the moment it is stored (the apply's own wait,
   // the persona inbox), not on the seat's next 3 s read.
   const { journey } = useCommunityJourney(agent, communityDid)
+  // A join whose read failed is unknown, not "not a member" (joinKnown).
+  const knownJoin = joinKnown(journey)
   const memberRole =
-    membershipRole ?? (journey?.join.kind === 'member' ? (journey.join.membership.role ?? 'member') : undefined)
+    membershipRole ?? (knownJoin?.kind === 'member' ? (knownJoin.membership.role ?? 'member') : undefined)
 
   const stores = useMemo(
     () =>

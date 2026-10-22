@@ -33,7 +33,7 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { useCommunityChanged } from '../module/communityChanged'
-import { useCommunityJourney } from '../module/communityJourney'
+import { joinKnown, useCommunityJourney } from '../module/communityJourney'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
@@ -83,7 +83,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   // Another agent's membership or request is not this agent's: the person is
   // invited afresh, not shown "You're a member" a moment later (10-06).
   const holding = useAgentsHoldingIdentity(communityDid)
-  const held = holding.onlyOthers ? undefined : journey?.join
+  const held = holding.onlyOthers ? undefined : joinKnown(journey)
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 

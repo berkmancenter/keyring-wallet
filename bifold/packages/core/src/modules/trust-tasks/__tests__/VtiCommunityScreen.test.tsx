@@ -61,6 +61,8 @@ jest.mock('../module/VtiIdentityStore', () => ({
 // Where the phone stands with the community (the journey), set per test.
 let mockJourney: unknown = undefined
 jest.mock('../module/communityJourney', () => ({
+  // The real helpers (joinKnown, vetterGrantKnown); only the hook is faked.
+  ...jest.requireActual('../module/communityJourney'),
   useCommunityJourney: () => ({ journey: mockJourney, refresh: jest.fn() }),
 }))
 

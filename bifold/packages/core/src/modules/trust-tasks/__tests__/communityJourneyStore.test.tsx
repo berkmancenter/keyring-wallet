@@ -7,7 +7,14 @@
 import { act, renderHook } from '@testing-library/react-native'
 
 import { emitCommunityChanged } from '../module/communityChanged'
-import { communityJourneys, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
+import {
+  communityJourneys,
+  joinKnown,
+  mergeReading,
+  useCommunityJourney,
+  type CommunityJourney,
+  type CommunityJourneyReaders,
+} from '../module/communityJourney'
 import { setCurrentAgentDid } from '../module/currentAgent'
 import type { CommunityJoinState } from '../module/vtiJoin'
 
@@ -133,5 +140,57 @@ describe('one journey per community, shared and kept', () => {
     expect(communityJourneys.get(COMMUNITY)).toBeUndefined()
     setCurrentAgentDid('did:webvh:agent-a')
     expect(communityJourneys.get(COMMUNITY)?.join.kind).toBe('member')
+  })
+
+  // 7a on #489: a failed read stood in as "none" — and in a store every screen reads, a member whose read failed
+  // read as a non-member everywhere until something read again.
+  describe('a read that fails is unknown, never "not a member"', () => {
+    it('a member, then a read whose join part fails: still a member, for every screen', async () => {
+      let failing = false
+      const { r } = readers(() => {
+        if (failing) throw new Error('storage unavailable')
+        return stateOf('member')
+      })
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+      failing = true
+      await act(async () => result.current.refresh())
+      await settle()
+      expect(result.current.journey?.join.kind).toBe('member')
+      expect(result.current.journey?.unread).toBeUndefined()
+      expect(joinKnown(communityJourneys.get(COMMUNITY))?.kind).toBe('member')
+    })
+
+    it('a first read whose join part fails: unknown (joinKnown undefined), not "none"', async () => {
+      const { r } = readers(() => {
+        throw new Error('storage unavailable')
+      })
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      // The reading landed (the other parts were read) — but its join is marked unread.
+      expect(result.current.journey).toBeDefined()
+      expect(result.current.journey?.unread).toEqual(['join'])
+      expect(joinKnown(result.current.journey)).toBeUndefined()
+    })
+
+    it('a part never read stays unread through a merge; a part read before is kept', () => {
+      const before: CommunityJourney = {
+        join: stateOf('member'),
+        vetterGrant: { state: 'none' },
+        unread: ['application'],
+      }
+      const next: CommunityJourney = {
+        join: stateOf('none'),
+        vetterGrant: { state: 'none' },
+        unread: ['join', 'application'],
+      }
+      const merged = mergeReading(before, next)
+      expect(merged.join.kind).toBe('member')
+      expect(merged.unread).toEqual(['application'])
+      // A reading with nothing unread replaces the one before outright.
+      const clean: CommunityJourney = { join: stateOf('pending'), vetterGrant: { state: 'none' } }
+      expect(mergeReading(before, clean)).toBe(clean)
+    })
   })
 })

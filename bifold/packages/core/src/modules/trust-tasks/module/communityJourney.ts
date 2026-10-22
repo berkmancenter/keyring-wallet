@@ -31,6 +31,49 @@ export interface CommunityJourney {
   join: CommunityJoinState
   application?: VettingApplication
   vetterGrant: VetterGrantState
+  /**
+   * The parts that could not be read and hold a stand-in ("none") rather than
+   * an answer — absent when every part was read. A stand-in is not a "no": a
+   * member whose read failed is not thereby a non-member (UI-smoothness plan,
+   * Phase 2). Read the join through {@link joinKnown}.
+   */
+  unread?: ReadonlyArray<JourneyPart>
+}
+
+export type JourneyPart = 'join' | 'application' | 'vetterGrant'
+
+/** The join state when it was read; undefined when not read yet or when its read failed — unknown, never "none". */
+export function joinKnown(journey: CommunityJourney | undefined): CommunityJoinState | undefined {
+  return journey && !journey.unread?.includes('join') ? journey.join : undefined
+}
+
+/** The vetter grant when it was read; undefined when unknown. */
+export function vetterGrantKnown(journey: CommunityJourney | undefined): VetterGrantState | undefined {
+  return journey && !journey.unread?.includes('vetterGrant') ? journey.vetterGrant : undefined
+}
+
+/**
+ * A new reading over the one before: a part the new one could not read keeps
+ * the last value that was read, so a passing failure does not replace an
+ * answer with a stand-in for every screen. A part never read stays unread.
+ */
+export function mergeReading(before: CommunityJourney | undefined, next: CommunityJourney): CommunityJourney {
+  if (!next.unread?.length) return next
+  const merged: CommunityJourney = { ...next }
+  const unread: JourneyPart[] = []
+  for (const part of next.unread) {
+    const known = before && !before.unread?.includes(part)
+    if (!known) {
+      unread.push(part)
+      continue
+    }
+    if (part === 'join') merged.join = before.join
+    else if (part === 'application') merged.application = before.application
+    else merged.vetterGrant = before.vetterGrant
+  }
+  if (unread.length) merged.unread = unread
+  else delete merged.unread
+  return merged
 }
 
 /** How each part is read; the defaults read this phone's stores. Tests replace them. */
@@ -52,7 +95,7 @@ export const defaultJourneyReaders: CommunityJourneyReaders = {
   },
 }
 
-/** Read all three parts; a part that cannot be read reads as nothing, never as an error. */
+/** Read all three parts; a part that cannot be read holds a stand-in and is listed in `unread`, never thrown. */
 export async function readCommunityJourney(
   agent: Agent,
   communityDid: string,
@@ -60,18 +103,22 @@ export async function readCommunityJourney(
 ): Promise<CommunityJourney> {
   const readers = { ...defaultJourneyReaders, ...options.readers }
   // A reader that throws before it returns a promise is caught the same way.
-  const attempt = <T>(read: () => Promise<T>, fallback: T): Promise<T> =>
+  const unread: JourneyPart[] = []
+  const attempt = <T>(part: JourneyPart, read: () => Promise<T>, fallback: T): Promise<T> =>
     Promise.resolve()
       .then(read)
-      .catch(() => fallback)
+      .catch(() => {
+        unread.push(part)
+        return fallback
+      })
   const [join, application, vetterGrant] = await Promise.all([
-    attempt<CommunityJoinState>(() => readers.join(agent, communityDid, { poll: options.poll ?? false }), {
+    attempt<CommunityJoinState>('join', () => readers.join(agent, communityDid, { poll: options.poll ?? false }), {
       kind: 'none',
     }),
-    attempt<VettingApplication | undefined>(() => readers.application(agent, communityDid), undefined),
-    attempt<VetterGrantState>(() => readers.vetterGrant(agent, communityDid), { state: 'none' }),
+    attempt<VettingApplication | undefined>('application', () => readers.application(agent, communityDid), undefined),
+    attempt<VetterGrantState>('vetterGrant', () => readers.vetterGrant(agent, communityDid), { state: 'none' }),
   ])
-  return { join, application, vetterGrant }
+  return { join, application, vetterGrant, ...(unread.length ? { unread } : {}) }
 }
 
 /**
@@ -120,7 +167,7 @@ class CommunityJourneyStore {
     return readCommunityJourney(agent, communityDid, { poll: options.poll, readers: options.readers }).then(
       (journey) => {
         if (this.entries.get(key) !== entry || entry.seq !== seq) return
-        entry.journey = journey
+        entry.journey = mergeReading(entry.journey, journey)
         this.listeners.forEach((l) => l())
       }
     )

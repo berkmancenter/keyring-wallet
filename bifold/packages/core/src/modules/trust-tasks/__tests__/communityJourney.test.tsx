@@ -15,7 +15,12 @@ import {
   emitCommunityChanged,
   useCommunityChanged,
 } from '../module/communityChanged'
-import { useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
+import {
+  communityJourneys,
+  joinKnown,
+  useCommunityJourney,
+  type CommunityJourneyReaders,
+} from '../module/communityJourney'
 import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiCommunityStore'
 import type { CommunityJoinState } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
@@ -184,12 +189,14 @@ describe('listening for changes', () => {
 })
 
 describe('the journey hook', () => {
+  // One store for every screen (Phase 2a): each test starts from no reading.
+  beforeEach(() => communityJourneys.forget())
   const member: CommunityJoinState = { kind: 'member', membership: { communityDid: A } as VtiMembership }
   const none: CommunityJoinState = { kind: 'none' }
 
   const Journey: React.FC<{ readers: Partial<CommunityJourneyReaders>; poll?: boolean }> = ({ readers, poll }) => {
     const { journey } = useCommunityJourney(agent, A, { readers, poll })
-    return <Text testID="join">{journey ? journey.join.kind : 'loading'}</Text>
+    return <Text testID="join">{journey ? (joinKnown(journey)?.kind ?? 'unknown') : 'loading'}</Text>
   }
 
   const readersWith = (join: jest.Mock): Partial<CommunityJourneyReaders> => ({
@@ -239,11 +246,13 @@ describe('the journey hook', () => {
     expect(tree.getByTestId('join')).toHaveTextContent('member')
   })
 
-  test('a part that cannot be read reads as nothing', async () => {
+  // A stand-in is not an answer: a part that cannot be read is unknown, never "none" (7a on #489).
+  test('a part that cannot be read is unknown, not "none"', async () => {
     const join = jest.fn(async () => {
       throw new Error('store locked')
     })
     const tree = render(<Journey readers={readersWith(join)} />)
-    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('none'))
+    await waitFor(() => expect(tree.getByTestId('join')).toHaveTextContent('unknown'))
+    expect(tree.getByTestId('join')).not.toHaveTextContent('none')
   })
 })

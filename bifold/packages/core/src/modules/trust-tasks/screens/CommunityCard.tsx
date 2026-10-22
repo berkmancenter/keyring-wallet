@@ -16,7 +16,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import { useCommunityJourney } from '../module/communityJourney'
+import { joinKnown, useCommunityJourney } from '../module/communityJourney'
 import { isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { vtiAgent } from '../module/vtiAgent'
 import type { VtiPersona } from '../module/VtiIdentityStore'
@@ -95,8 +95,9 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   // Until the journey is read, a held membership already says "member".
   // A membership the community removed says so from the start (#166).
   const removal = membership && !isCurrentMembership(membership) ? membership.removal : undefined
+  // A join whose read failed is unknown too: the held membership stands in for it, never "none".
   const join =
-    journey?.join ??
+    joinKnown(journey) ??
     (membership
       ? removal
         ? { kind: 'removed' as const, membership, at: removal.decidedAt }

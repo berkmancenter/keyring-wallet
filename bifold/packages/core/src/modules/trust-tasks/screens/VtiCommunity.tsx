@@ -30,7 +30,7 @@ import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 import { communityTarget } from '../module/vtiCommunityLink'
-import { useCommunityJourney } from '../module/communityJourney'
+import { joinKnown, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { HeldByAnotherAgent } from './HeldByAnotherAgent'
@@ -76,8 +76,9 @@ const VtiCommunity: React.FC = () => {
   // membership. Then this agent is not a member and cannot leave (10-06).
   const holding = useAgentsHoldingIdentity(communityDid)
   const heldElsewhere = holding.onlyOthers ? holding.holders.find(Boolean) : undefined
-  const membership = !heldElsewhere && journey?.join.kind === 'member' ? journey.join.membership : undefined
-  const vetsHere = !heldElsewhere && journey?.vetterGrant.state === 'active'
+  const join = joinKnown(journey)
+  const membership = !heldElsewhere && join?.kind === 'member' ? join.membership : undefined
+  const vetsHere = !heldElsewhere && vetterGrantKnown(journey)?.state === 'active'
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
