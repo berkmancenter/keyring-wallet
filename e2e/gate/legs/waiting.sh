@@ -16,6 +16,7 @@ APK=$APK_OFF
 leg_begin waiting "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5572
 fin() {
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"
   local m; for m in $(grep -oE '^JOIN_MEMBER did:[^ ]+' "$LEG_DIR/waiting.out" 2>/dev/null | awk '{print $2}' | sort -u); do
     echo "  C member …${m: -24}: $(c_admin member-remove "$m" "gate: flow B member, removed after the leg" | grep -oE -- '-> [0-9]+' | tail -1)"
@@ -28,6 +29,9 @@ fin() {
 LEG_CLEANUP=fin
 emu_start 5572
 for pkg in $BID $BID.pushtest; do adb -s $E uninstall "$pkg" >/dev/null 2>&1; done
+# The app's own log for the whole leg, as agents and testreq keep it: the join is a core journey, and a release check
+# that reads the app's lines (268: every agent and community call over DIDComm, none "over rev3") had none from it.
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 cd "$E2E"
 # link_phone <output file>: install the APK on the emulator and link it to the main runner (a fresh install each time).
 link_phone() {
