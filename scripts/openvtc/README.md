@@ -105,9 +105,14 @@ about. Nothing failed; nothing warned. This exists so drift like that gets
 noticed on purpose.
 
 Only pinned builds reach `external/bin/`. A binary the local pinned snapshot
-carries (`FETCH_BINARIES_PINS_DIR`, by default `~/vti-stack/pins/nightly-2026-10-22`,
-the pnm and openvtc copies the gate runs, each listed with its sha256 in
-`MANIFEST.tsv`) is copied from there. Any other is downloaded and cached only if
+carries is copied from there. The snapshot is `FETCH_BINARIES_PINS_DIR`, by
+default `~/vti-stack/pins/current`, a symlink to the dated snapshot the gate
+runs (`nightly-2026-10-22` today; move the symlink, not the code). It holds the
+pnm and openvtc copies, each listed in `MANIFEST.tsv` with its sha256 and
+platform (`darwin-arm64`). An entry for another platform, or one that doesn't
+name its platform, is never used. A cached binary that already holds the
+pinned bytes is left alone, since a rewritten pnm makes macOS ask for its
+Keychain items again; any other is written beside it and renamed into place. Any other is downloaded and cached only if
 its sha256 equals `pinnedSha256`; the server has no versioned URLs, so that sha
 is the explicit version. A drifted or unpinned build is refused and the cache
 is left alone, because after upstream's TSP 1.0 cutover (2026-10-22) latest/main

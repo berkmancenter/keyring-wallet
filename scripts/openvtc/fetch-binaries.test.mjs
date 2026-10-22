@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { allowLatest, downloadVerdict, parseManifest } from './binaryPolicy.mjs';
+import { allowLatest, DEFAULT_PINS_DIR, downloadVerdict, parseManifest, runsHere } from './binaryPolicy.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const script = path.join(here, 'fetch-binaries.mjs');
@@ -16,6 +16,7 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
 // What the moving pointer serves today vs. what was verified.
 const SERVED = '#!/bin/sh\necho served\n';
 const PINNED = '#!/bin/sh\necho pinned\n';
+const HERE = `${process.platform}-${process.arch}`;
 
 async function withLab(fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'fetch-binaries-test-'));
@@ -120,7 +121,7 @@ test('a binary in the pinned snapshot is copied from it, with no download', () =
     writeFileSync(path.join(lab.snapshotDir, 'pnm'), PINNED);
     writeFileSync(
       path.join(lab.snapshotDir, 'MANIFEST.tsv'),
-      `# pinned 2026-10-22\npnm\t0.56.0\t${sha(PINNED)}\tsource tag v0.56.0\tfrom /x/pnm\n`,
+      `# pinned 2026-10-22\npnm\t0.56.0\t${sha(PINNED)}\tsource tag v0.56.0\tfrom /x/pnm\t${HERE}\n`,
     );
     lab.writePins({ 'pnm-client': { urlPathTemplate: 'releases/{channel}/{os}/pnm', pinnedSha256: null } });
     const { code, out } = await lab.run(['pnm-client']);
@@ -134,7 +135,7 @@ test('a snapshot binary whose bytes differ from its manifest is refused', () =>
   withLab(async (lab) => {
     mkdirSync(lab.snapshotDir);
     writeFileSync(path.join(lab.snapshotDir, 'pnm'), SERVED);
-    writeFileSync(path.join(lab.snapshotDir, 'MANIFEST.tsv'), `pnm\t0.56.0\t${sha(PINNED)}\tsrc\tfrom\n`);
+    writeFileSync(path.join(lab.snapshotDir, 'MANIFEST.tsv'), `pnm\t0.56.0\t${sha(PINNED)}\tsrc\tfrom\t${HERE}\n`);
     lab.writePins({ 'pnm-client': { urlPathTemplate: 'releases/{channel}/{os}/pnm', pinnedSha256: null } });
     const { code, out } = await lab.run(['pnm-client']);
     assert.equal(code, 1);
@@ -142,10 +143,66 @@ test('a snapshot binary whose bytes differ from its manifest is refused', () =>
     assert.equal(lab.cached('pnm-client'), null);
   }));
 
+const snapshotPnm = (lab, platformColumn) => {
+  mkdirSync(lab.snapshotDir);
+  writeFileSync(path.join(lab.snapshotDir, 'pnm'), PINNED);
+  writeFileSync(path.join(lab.snapshotDir, 'MANIFEST.tsv'), `pnm\t0.56.0\t${sha(PINNED)}\tsrc\tfrom${platformColumn}\n`);
+  lab.writePins({ 'pnm-client': { urlPathTemplate: 'releases/{channel}/{os}/pnm', pinnedSha256: null } });
+};
+
+for (const [what, column] of [['another platform', '\tlinux-x86_64'], ['no stated platform', '']]) {
+  test(`a snapshot entry for ${what} is not used`, () =>
+    withLab(async (lab) => {
+      snapshotPnm(lab, column);
+      const { code, out } = await lab.run(['pnm-client']);
+      assert.match(out, /pnm-client +pinned snapshot is for .*; not used/);
+      // Falls through to the download, which has no pin, so is refused.
+      assert.equal(code, 1);
+      assert.match(out, /REFUSED, not cached/);
+      assert.equal(lab.cached('pnm-client'), null);
+    }));
+}
+
+test('a cached binary already holding the pinned bytes is not rewritten, and no .part is left', () =>
+  withLab(async (lab) => {
+    snapshotPnm(lab, `\t${HERE}`);
+    assert.equal((await lab.run(['pnm-client'])).code, 0);
+    const before = statSync(path.join(lab.binDir, 'pnm-client'));
+    const { code, out } = await lab.run(['pnm-client']);
+    assert.equal(code, 0, out);
+    assert.match(out, /already cached, same as pinned/);
+    const after = statSync(path.join(lab.binDir, 'pnm-client'));
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.mtimeMs, before.mtimeMs);
+    assert.deepEqual(readdirSync(lab.binDir), ['pnm-client']);
+  }));
+
+test('a cached binary with other bytes is replaced by rename, not rewritten in place', () =>
+  withLab(async (lab) => {
+    lab.writePins(vta(sha(SERVED)));
+    mkdirSync(lab.binDir);
+    writeFileSync(path.join(lab.binDir, 'vta'), 'old');
+    const before = statSync(path.join(lab.binDir, 'vta')).ino;
+    assert.equal((await lab.run(['vta'])).code, 0);
+    assert.equal(lab.cached('vta'), SERVED);
+    assert.notEqual(statSync(path.join(lab.binDir, 'vta')).ino, before);
+    assert.deepEqual(readdirSync(lab.binDir), ['vta']);
+  }));
+
 test('parseManifest reads the snapshot format and skips comments and bad hashes', () => {
-  const m = parseManifest(`# header\npnm\t0.56.0\t${'a'.repeat(64)}\ttag v0.56.0\tfrom /p\nbad\tx\tnot-a-sha\n\n`);
-  assert.deepEqual([...m.keys()], ['pnm']);
-  assert.deepEqual(m.get('pnm'), { version: '0.56.0', sha256: 'a'.repeat(64), source: 'tag v0.56.0' });
+  const m = parseManifest(
+    `# header\npnm\t0.56.0\t${'a'.repeat(64)}\ttag v0.56.0\tfrom /p\tdarwin-arm64\nold\t1\t${'b'.repeat(64)}\ts\tf\nbad\tx\tnot-a-sha\n\n`,
+  );
+  assert.deepEqual([...m.keys()], ['pnm', 'old']);
+  assert.deepEqual(m.get('pnm'), { version: '0.56.0', sha256: 'a'.repeat(64), source: 'tag v0.56.0', platform: 'darwin-arm64' });
+  assert.equal(m.get('old').platform, null);
+  assert.equal(runsHere(m.get('pnm'), 'darwin-arm64'), true);
+  assert.equal(runsHere(m.get('pnm'), 'linux-x64'), false);
+  assert.equal(runsHere(m.get('old'), 'darwin-arm64'), false);
+});
+
+test('the default snapshot is the pins/current symlink, not a dated dir', () => {
+  assert.match(DEFAULT_PINS_DIR, /vti-stack\/pins\/current$/);
 });
 
 test('downloadVerdict caches only a match unless latest is opted in', () => {

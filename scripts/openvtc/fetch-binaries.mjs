@@ -30,12 +30,12 @@
 // fetch/verify — same convention as sync-external.mjs's tripwires.
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir, platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { allowLatest, DEFAULT_PINS_DIR, downloadVerdict, parseManifest, SNAPSHOT_NAMES } from "./binaryPolicy.mjs";
+import { allowLatest, DEFAULT_PINS_DIR, downloadVerdict, parseManifest, runsHere, SNAPSHOT_NAMES } from "./binaryPolicy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../..");
@@ -115,32 +115,53 @@ async function fetchAndVerify(name, def, { toCache }) {
     const sha256 = sha256Hex(buf);
     const version = readVersion(tmp);
     const cache = typeof toCache === "function" ? toCache(sha256) : toCache;
-    if (cache) copyFileSync(tmp, join(binDir, name));
+    if (cache) installCached(name, buf, sha256);
     return { url, sha256, version, cached: cache };
   } finally {
     rmSync(dirname(tmp), { recursive: true, force: true });
   }
 }
 
-/** The pinned snapshot's copy of `name`, or null when the snapshot doesn't carry it. */
+/**
+ * Puts `buf` at external/bin/<name>: written beside it and renamed into place, so
+ * a running binary is never overwritten mid-write. Identical bytes are left
+ * alone — a rewritten pnm makes macOS ask for its Keychain items again.
+ * Returns false when it was already there.
+ */
+function installCached(name, buf, sha256) {
+  const dest = join(binDir, name);
+  if (existsSync(dest) && sha256Hex(readFileSync(dest)) === sha256) return false;
+  const part = `${dest}.part`;
+  writeFileSync(part, buf);
+  chmodSync(part, 0o755);
+  renameSync(part, dest);
+  return true;
+}
+
+/** The pinned snapshot's copy of `name` for this platform, or null when the snapshot doesn't carry one. */
 function snapshotEntry(name) {
   const file = SNAPSHOT_NAMES[name];
   const manifest = join(snapshotDir, "MANIFEST.tsv");
   if (!file || !existsSync(manifest)) return null;
   const entry = parseManifest(readFileSync(manifest, "utf8")).get(file);
-  return entry ? { ...entry, path: join(snapshotDir, file) } : null;
+  if (!entry) return null;
+  if (!runsHere(entry)) {
+    console.log(`  - ${name.padEnd(20)} pinned snapshot is for ${entry.platform ?? "an unstated platform"}, not ${process.platform}-${process.arch}; not used`);
+    return null;
+  }
+  return { ...entry, path: join(snapshotDir, file) };
 }
 
 /** Copies a pinned snapshot binary into the cache once its bytes match the manifest. */
 function installFromSnapshot(name, entry) {
-  const sha256 = existsSync(entry.path) ? sha256Hex(readFileSync(entry.path)) : null;
+  const buf = existsSync(entry.path) ? readFileSync(entry.path) : null;
+  const sha256 = buf ? sha256Hex(buf) : null;
   if (sha256 !== entry.sha256) {
     console.log(`  ! ${name.padEnd(20)} REFUSED: ${entry.path} is ${sha256 ? `sha256:${sha256.slice(0, 12)}` : "missing"}, its manifest says ${entry.sha256.slice(0, 12)}`);
     return 1;
   }
-  copyFileSync(entry.path, join(binDir, name));
-  chmodSync(join(binDir, name), 0o755);
-  console.log(`  ✓ ${name.padEnd(20)} ${entry.version} (${sha256.slice(0, 12)}) from pinned ${snapshotDir}`);
+  const how = installCached(name, buf, sha256) ? "from pinned" : "already cached, same as pinned";
+  console.log(`  ✓ ${name.padEnd(20)} ${entry.version} (${sha256.slice(0, 12)}) ${how} ${snapshotDir}`);
   return 0;
 }
 
