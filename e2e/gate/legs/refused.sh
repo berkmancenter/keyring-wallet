@@ -16,9 +16,16 @@ if ! unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -aq PersonaA
 fi
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN C_DID C_REST C_ADMIN_CRED
 T0=$(stamp); E=emulator-5572
+# The phone's log so far into $LEG_DIR/logcat-$1.log, then cleared. Per path, since one dump at the end held only the
+# relaunch path: the driver clears the log at each removal (run-agent-refused.mjs), so the relaunch path's removal
+# wiped the heartbeat window, and 1022-1726 had no app line to read for it.
+# Only with the emulator there: adb waits for a missing device forever (1022-0149: a 53 min hang after a swap-guard broken).
+dump_logcat() {
+  adb devices | grep -q "^$E[[:space:]]" || return 0
+  adb -s $E logcat -d -v time > "$LEG_DIR/logcat-$1.log" 2>/dev/null; adb -s $E logcat -c >/dev/null 2>&1
+}
 fin() {
-  # Only with the emulator there: adb waits for a missing device forever (1022-0149: a 53 min hang after a swap-guard broken).
-  adb devices | grep -q "^$E[[:space:]]" && adb -s $E logcat -d -v time > "$LEG_DIR/logcat.log" 2>/dev/null
+  dump_logcat end
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
 }
@@ -29,7 +36,9 @@ adb -s $E logcat -G 16M >/dev/null 2>&1
 cd "$E2E"
 # Two paths, each on a fresh install and link (a link removed once is not removed again): heartbeat (stay open past
 # AgentPresence's 5 min tick) and relaunch (reopen, so the persona inbox asks the agent). run-agent-refused.mjs.
-for path in heartbeat relaunch; do
+# REFUSED_PATHS runs some of them only (a rerun of one path); a path not run leaves its rows out, never PASS.
+for path in ${REFUSED_PATHS:-heartbeat relaunch}; do
+  case $path in heartbeat|relaunch) ;; *) broken "REFUSED_PATHS: no path \"$path\" (heartbeat, relaunch)";; esac
   adb -s $E uninstall $BID >/dev/null 2>&1; rm -f "$LEG_DIR/last-link.json"   # each path's own record, never the last one's
   t=$(date +%s)
   E2E_APP_ID=$BID PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD UDID=$E APPIUM_PORT=4765 ENROL_PORT=8196 E2E_RELEASE=1 \
@@ -41,6 +50,7 @@ for path in heartbeat relaunch; do
   E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4765 C_DID=$C_DID C_REST=$C_REST C_ADMIN_CRED=$C_ADMIN_CRED \
     LINK_FILE="$LEG_DIR/last-link-$path.json" PNM_BIN=$PNM_BIN REFUSED_PATH=$path galarm 1500 node run-agent-refused.mjs > "$LEG_DIR/refused-$path.out" 2>&1; drc=$?
   grep -E '^\[e2e\] removed|^\[cleanup\]' "$LEG_DIR/refused-$path.out" | cut -c1-200
+  dump_logcat $path
   take_rows "$LEG_DIR/refused-$path.out"
   driver_rc refused-$path-driver "$drc" "$LEG_DIR/refused-$path.out"
 done
