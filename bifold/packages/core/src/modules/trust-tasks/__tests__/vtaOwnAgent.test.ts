@@ -245,7 +245,29 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           })
           return
         case ACL_GRANT: {
-          const entry = payload.entry as { subject: string; role: string; label?: string; scopes?: string[] }
+          const entry = payload.entry as {
+            subject: string
+            role: string
+            label?: string
+            scopes?: string[]
+            expiresAt?: string
+          }
+          // VTI-ACL-053 as the VTA words it, epoch seconds and all (vta-service operations/acl.rs:388-403).
+          const callerExpiry = mockVta.acl.get(from)?.expiresAt
+          if (callerExpiry) {
+            const mine = Math.floor(Date.parse(callerExpiry) / 1000)
+            const theirs = entry.expiresAt ? Math.floor(Date.parse(entry.expiresAt) / 1000) : undefined
+            if (theirs === undefined || theirs > mine) {
+              refuse({
+                code: 'permissionDenied',
+                message:
+                  theirs === undefined
+                    ? `your entry expires at ${mine}, so you cannot write a permanent one — give it an expiry no later than yours (VTI-ACL-053)`
+                    : `this entry would expire at ${theirs}, after your own (${mine}) — an entry you write cannot outlive your authority (VTI-ACL-053)`,
+              })
+              return
+            }
+          }
           if (mockVta.acl.has(entry.subject)) {
             refuse({
               code: 'taskFailed',
@@ -254,7 +276,12 @@ jest.mock('../module/VtiMediatorTransport', () => ({
             })
             return
           }
-          mockVta.acl.set(entry.subject, { role: entry.role, scopes: entry.scopes, label: entry.label })
+          mockVta.acl.set(entry.subject, {
+            role: entry.role,
+            scopes: entry.scopes,
+            label: entry.label,
+            ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
+          })
           mockAnswer(this.record, `${ACL_GRANT}#response`, {
             entry: mockWireEntry(entry.subject, mockVta.acl.get(entry.subject) as Row),
           })
@@ -334,8 +361,10 @@ import {
   DeviceCannotOwn,
   OwnerCheckNotConfigured,
   OwnerNotConfirmed,
+  ownExpiryFromRefusal,
   type OwnerConfirmation,
 } from '../module/vtaOwner'
+import { VtiRefusal } from '../module/vtiAgent'
 
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = {
@@ -680,6 +709,83 @@ describe('adding a backup device', () => {
     const { vta } = await linkedPhone()
     mockVta.acl.delete(PHONE)
     await expect(vta.addBackupDevice(agent, BACKUP)).rejects.toMatchObject({ reason: 'accessRevoked' })
+  })
+})
+
+// A phone whose own entry lapses may add a device only until then (VTI-ACL-053):
+// a permanent grant was refused, and the person read "Your agent doesn't let this
+// phone do that." The new device now gets this phone's own expiry.
+describe('adding a device from a phone whose own access lapses', () => {
+  const HOUR = '2026-10-22T13:00:00.000Z'
+  const MONTH = '2026-11-21T12:00:00.000Z'
+  const ownExpiry = (expiresAt: string) => mockVta.acl.set(PHONE, { role: 'admin', expiresAt })
+
+  it.each([
+    ['an hour', HOUR],
+    ['a month', MONTH],
+  ])('lapsing in %s: the device is added until the same moment, and says so', async (_, expiresAt) => {
+    const { vta } = await linkedPhone()
+    ownExpiry(expiresAt)
+    const added = await vta.addBackupDevice(agent, BACKUP, 'Pixel 8')
+    expect(sentOf(ACL_GRANT).map((a) => a.payload)).toEqual([
+      { entry: { subject: BACKUP, role: 'admin', label: 'Pixel 8', expiresAt } },
+    ])
+    expect(added.expiresAt).toBe(expiresAt)
+    expect(mockVta.acl.get(BACKUP)).toMatchObject({ role: 'admin', expiresAt })
+  })
+
+  it('a phone whose access never lapses still adds a permanent device', async () => {
+    const { vta } = await linkedPhone()
+    const added = await vta.addBackupDevice(agent, BACKUP, 'Pixel 8')
+    expect(sentOf(ACL_GRANT).map((a) => (a.payload as { entry: object }).entry)).toEqual([
+      { subject: BACKUP, role: 'admin', label: 'Pixel 8' },
+    ])
+    expect(added.expiresAt).toBeUndefined()
+  })
+
+  it("its own row unreadable: the agent's refusal names the expiry, and the grant goes once more with it", async () => {
+    const { vta } = await linkedPhone()
+    ownExpiry(HOUR)
+    mockVta.refuseNext.set(ACL_LIST, { code: 'permissionDenied', message: 'forbidden: list unavailable' })
+    const added = await vta.addBackupDevice(agent, BACKUP, 'Pixel 8')
+    const grants = sentOf(ACL_GRANT).map((a) => (a.payload as { entry: { expiresAt?: string } }).entry.expiresAt)
+    expect(grants).toEqual([undefined, HOUR])
+    expect(added.expiresAt).toBe(HOUR)
+  })
+
+  it('a second refusal is said in plain words, and nothing is sent a third time', async () => {
+    const { vta } = await linkedPhone()
+    ownExpiry(HOUR)
+    mockVta.refuseNext.set(ACL_LIST, { code: 'permissionDenied', message: 'forbidden: list unavailable' })
+    // A refusal naming a later moment than this phone's own: the retry with it is refused as outliving it.
+    const later = Math.floor(Date.parse(MONTH) / 1000)
+    mockVta.refuseNext.set(ACL_GRANT, {
+      code: 'permissionDenied',
+      message: `your entry expires at ${later}, so you cannot write a permanent one — give it an expiry no later than yours (VTI-ACL-053)`,
+    })
+    const failure = (await vta.addBackupDevice(agent, BACKUP).catch((e: unknown) => e)) as DeviceActionRefused
+    expect(failure).toBeInstanceOf(DeviceActionRefused)
+    expect(failure.reason).toBe('beyondOwnAccess')
+    expect(failure.message).not.toMatch(/ACL|VTA|DID|did:|053/)
+    expect(sentOf(ACL_GRANT)).toHaveLength(2)
+  })
+
+  it('reads the expiry out of the refusal, and nothing out of any other', () => {
+    const refusal = (message: string, code = 'permissionDenied') => new VtiRefusal(code as never, message)
+    expect(
+      ownExpiryFromRefusal(
+        refusal(
+          'your entry expires at 1792674000, so you cannot write a permanent one — give it an expiry no later than yours (VTI-ACL-053)'
+        )
+      )
+    ).toBe(new Date(1792674000 * 1000).toISOString())
+    expect(ownExpiryFromRefusal(refusal('forbidden: super admin role required'))).toBeUndefined()
+    expect(
+      ownExpiryFromRefusal(refusal('this entry would expire at 2, after your own (1) — (VTI-ACL-053)'))
+    ).toBeUndefined()
+    expect(
+      ownExpiryFromRefusal(new Error('your entry expires at 1792674000, so you cannot write a permanent one'))
+    ).toBeUndefined()
   })
 })
 

@@ -77,6 +77,8 @@ export class DeviceCannotOwn extends Error {
  * - `notFound` — the agent holds no such device.
  * - `notPermitted` — the agent will not let this phone do that (it is not the
  *   agent's full owner).
+ * - `beyondOwnAccess` — this phone's own access to the agent is narrower (it
+ *   lapses, or covers fewer keys) than what it asked to give (VTI-ACL-053).
  * - `accessRevoked` — the agent no longer knows this phone at all.
  * - `stepUpRequired` — the agent asked for an extra check (a step-up) that
  *   this phone could not answer.
@@ -96,6 +98,7 @@ export type DeviceRefusalReason =
   | 'alreadyAdded'
   | 'notFound'
   | 'notPermitted'
+  | 'beyondOwnAccess'
   | 'accessRevoked'
   | 'stepUpRequired'
   | 'stepUpDeclined'
@@ -114,6 +117,7 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   alreadyAdded: 'That device is already added.',
   notFound: "Your agent doesn't have that device.",
   notPermitted: "Your agent doesn't let this phone do that.",
+  beyondOwnAccess: "Your agent won't let this phone give more access than this phone has itself.",
   accessRevoked: "Your agent doesn't accept this phone any more.",
   stepUpRequired: "Your agent asked for an extra check this phone couldn't answer.",
   stepUpDeclined: 'You declined the extra check, so your agent did not do this.',
@@ -157,6 +161,21 @@ export function deviceCodeIn(text: string): string | undefined {
 
 /** `delete_acl`'s self-delete refusal (vta-service operations/acl.rs:792-796). */
 const SELF_DELETE = /cannot delete your own ACL entry/i
+/** Any of VTI-ACL-053's refusals: what the caller asked to write goes beyond its own entry (vta-service operations/acl.rs:340-403). */
+const OWN_ACCESS_BOUND = /VTI-ACL-053/
+/** VTI-ACL-053's refusal of a permanent entry from a caller whose own entry expires, with that expiry in epoch seconds (acl.rs:391-394). */
+const OWN_ENTRY_EXPIRES = /your entry expires at (\d+), so you cannot write a permanent one/
+
+/**
+ * When the agent refused a permanent entry because this phone's own entry
+ * expires (VTI-ACL-053), that expiry as RFC 3339; otherwise undefined.
+ */
+export function ownExpiryFromRefusal(error: unknown): string | undefined {
+  if (!(error instanceof VtiRefusal) || error.code !== 'permissionDenied') return undefined
+  const epoch = OWN_ENTRY_EXPIRES.exec(error.message)?.[1]
+  return epoch ? new Date(Number(epoch) * 1000).toISOString() : undefined
+}
+
 /** `create_acl`'s duplicate refusal (vta-service operations/acl.rs:391-395). */
 const ALREADY_EXISTS = /already exists/i
 /** Matches VtaClient's own "no answer in time". */
@@ -186,6 +205,7 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   if (SELF_DELETE.test(message)) return refusal('thisPhone')
   if (details.reason === 'conflict' && ALREADY_EXISTS.test(message)) return refusal('alreadyAdded')
   if (details.reason === 'not_found') return refusal('notFound')
+  if (error.code === 'permissionDenied' && OWN_ACCESS_BOUND.test(message)) return refusal('beyondOwnAccess')
   if (error.code === 'permissionDenied') return refusal('notPermitted')
   // A refusal that did arrive is never "didn't answer" (al-phone, 10-05: an
   // add refused 422 four times read as silence): said as a refusal, with its

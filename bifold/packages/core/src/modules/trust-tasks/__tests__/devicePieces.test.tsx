@@ -59,6 +59,23 @@ describe('a device row', () => {
     expect(tree.getByTestId(id(`AgentDevice_${k}`))).not.toHaveTextContent(/Devices\.Platform/)
   })
 
+  // VTI-ACL-053: a device this phone added lapses when this phone's own access does.
+  test('a device whose access lapses says until when; one that never lapses says nothing', () => {
+    const until = '2026-10-22T13:00:00.000Z'
+    const tree = row({ ...oldPhone, expiresAt: until })
+    // This suite's i18n mock shows keys only; the date's wording is VtaCreateAgentScreen's to check.
+    expect(tree.getByTestId(id(`AgentDeviceUntil_${k}`))).toHaveTextContent('Devices.Until')
+    // Only this phone's row explains it: another device's lapse is this phone's doing, not the host's.
+    expect(tree.queryByTestId(id('AgentDeviceUntilNote'))).toBeNull()
+    expect(row(oldPhone).queryByTestId(id(`AgentDeviceUntil_${k}`))).toBeNull()
+  })
+
+  test("this phone's own access lapsing: until when, and what that means and who can lift it", () => {
+    const tree = row({ ...oldPhone, thisPhone: true, expiresAt: '2026-10-22T13:00:00.000Z' })
+    expect(tree.getByTestId(id(`AgentDeviceUntil_${k}`))).toBeTruthy()
+    expect(tree.getByTestId(id('AgentDeviceUntilNote'))).toHaveTextContent('Devices.ThisPhoneUntilNote')
+  })
+
   test('a device never seen says nothing about when', () => {
     const tree = row({ ...oldPhone, lastSeenAt: undefined })
     expect(tree.getByTestId(id(`AgentDevice_${k}`))).not.toHaveTextContent(/Devices\.Seen/)
