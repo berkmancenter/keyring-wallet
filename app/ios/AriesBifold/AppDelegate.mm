@@ -68,6 +68,26 @@ static NSString *KeyringWakeLink(NSDictionary *userInfo)
 // iPhone 16 (10-21); 20 s leaves room for older phones until one is measured.
 static const NSTimeInterval KeyringOtaWatchdogSeconds = 20;
 
+// The key hot-updater files this phone's downloaded update under. Its default,
+// hotupdater_{fingerprint}_{appVersion}_{channel}_, has no build number, and
+// every store build has the same version (0.2.0). So a store build with only
+// JavaScript changes would find the previous build's update, launch it instead
+// of its own bundle, and the server would offer neither an update nor a
+// rollback (the update is older than this build). With the build number in the
+// key, each store build starts on its own bundle. This is the default
+// composition with the version read as {version}+{build}; keep it in step with
+// MainApplication.kt.
+static NSString *KeyringOtaIsolationKey(void)
+{
+  NSDictionary *info = [NSBundle mainBundle].infoDictionary;
+  NSString *fingerprint = info[@"HOT_UPDATER_FINGERPRINT_HASH"];
+  NSString *channel = info[@"HOT_UPDATER_CHANNEL"];
+  NSString *version = [NSString stringWithFormat:@"%@+%@", info[@"CFBundleShortVersionString"] ?: @"unknown",
+                                                 info[@"CFBundleVersion"] ?: @"unknown"];
+  NSString *base = fingerprint.length ? [NSString stringWithFormat:@"%@_%@", fingerprint, version] : version;
+  return [NSString stringWithFormat:@"hotupdater_%@_%@_", base, channel.length ? channel : @"production"];
+}
+
 // The staged bundle id when this launch is hot-updater's trial of it, else nil.
 // Reads hot-updater's own bundle-store/metadata.json (verification_pending,
 // staging_bundle_id): there is no public API for it in 0.36.18. A hot-updater
@@ -80,6 +100,8 @@ static NSString *KeyringOtaTrialBundleId(NSURL *bundleURL)
   if (!data) return nil;
   id metadata = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   if (![metadata isKindOfClass:[NSDictionary class]]) return nil;
+  // Metadata a previous build wrote under another key, which hot-updater ignores too.
+  if (![metadata[@"isolation_key"] isEqual:KeyringOtaIsolationKey()]) return nil;
   id pending = metadata[@"verification_pending"];
   id staging = metadata[@"staging_bundle_id"];
   if (![pending respondsToSelector:@selector(boolValue)] || ![pending boolValue]) return nil;
@@ -106,6 +128,8 @@ static NSString *KeyringOtaTrialBundleId(NSURL *bundleURL)
   [WebRTCModuleOptions sharedInstance].enableMultitaskingCameraAccess = YES;
 
   [FIRApp configure];
+  // Before React Native asks for the bundle URL (see KeyringOtaIsolationKey).
+  [HotUpdater configureWithFingerprintHash:nil publicKey:nil channel:nil isolationKey:KeyringOtaIsolationKey()];
   self.moduleName = @"KeyRing";
   // RN 0.77+: third-party Fabric components/modules are resolved through this provider
   self.dependencyProvider = [RCTAppDependencyProvider new];
