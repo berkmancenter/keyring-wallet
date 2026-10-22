@@ -14,8 +14,11 @@
  *   refused-no-toast           no app-wide toast (Toast) on Contacts while the refusal lands; a verdict only when the
  *                              phone's log shows the refusal in that window, else SKIP
  *   refused-link-removed       My Agent shows the link removed (RemovedPhone) with the way to link again (VtaLinkScanAgain)
- *   refused-community-notice   C's screen: PersonaAgentNotice saying the agent no longer accepts this phone, never "didn't
- *                              answer", and Open My Agent (PersonaAgentNoticeOpen) leads there
+ *   refused-community-notice   after a refusal that unlinked the phone (RemovedPhone, the end state: My Agent's "removed,
+ *                              link again"), C's route asks to link first (JoinNeedsAgent) and never says "didn't
+ *                              answer". A refusal that left the link (a persona-only one): C's screen shows
+ *                              PersonaAgentNotice saying the agent no longer accepts this phone, never "didn't answer",
+ *                              and Open My Agent (PersonaAgentNoticeOpen) leads there
  * Cleanup removes the member this run made; the leg removes the phone's keys.
  *
  *   UDID=emulator-5572 APPIUM_PORT=4765 C_DID=… C_REST=… C_ADMIN_CRED=… LINK_FILE=…/last-link.json node run-agent-refused.mjs
@@ -154,6 +157,15 @@ try {
   else await rows.row(N("refused-community-notice"), async () => {
     const n = await communityNotice(d);
     await screenshot(d, N("refused-community")).catch(() => undefined);
+    if (removedShown) {
+      // The refusal unlinked the phone: the person is told on My Agent (refused-link-removed). An unlinked phone has no
+      // community screen to carry a notice, so C's route asks to link first, and must never blame the agent's silence.
+      // Pre-fix: a Join branch that says the agent no longer accepts this phone is coming; this row expects it once a
+      // build carries it.
+      const needsAgent = await existsTestId(d, "JoinNeedsAgent", 5000);
+      const unreachable = UNREACHABLE_LINE.test(n.line);
+      return { ok: needsAgent && !unreachable, detail: `unlinked, expected: Link your agent first (pre-fix) · JoinNeedsAgent ${needsAgent} · PersonaAgentNotice ${n.shown} · "didn't answer" ${unreachable}` };
+    }
     let opened = false;
     if (n.shown && (await existsTestId(d, "PersonaAgentNoticeOpen", 3000))) {
       await tapTestId(d, "PersonaAgentNoticeOpen", 10000);
