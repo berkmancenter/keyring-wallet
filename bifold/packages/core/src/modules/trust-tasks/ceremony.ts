@@ -967,6 +967,37 @@ function askForConsent(
 const PROPOSE_AWAITING_CONSENT = 'keyring.vrc-propose-awaiting-consent'
 
 /**
+ * Forget a connection's asked proposes once its pending prompt is resolved:
+ * every marker up to and including the answered exchange's. By connection,
+ * not by exchange, since the restore reads only the newest marker per
+ * connection: deleting just the answered one would let an older, superseded
+ * propose become the newest and be asked again. The answered exchange's own
+ * markers go, and every marker made strictly before it; any other (a propose
+ * that arrived while the answer was being sent) is kept. Best effort: a marker left behind is skipped at restore as answered.
+ */
+async function forgetAskedProposes(agent: Agent, connectionId: string, answeredExchangeId: string): Promise<void> {
+  try {
+    const markers = await agent.genericRecords.findAllByQuery({ recordType: PROPOSE_AWAITING_CONSENT, connectionId })
+    // The cutoff is the answered exchange's LATEST mark: the last ask the
+    // person saw. Every propose marked before it was replaced on screen by
+    // that ask, so is superseded; only one marked after it was never replaced.
+    const answeredAt = markers
+      .filter((m) => m.getTag('exchangeId') === answeredExchangeId)
+      .reduce((latest, m) => Math.max(latest, new Date(m.createdAt).getTime()), Number.NEGATIVE_INFINITY)
+    for (const marker of markers) {
+      // With no marker of its own (its save failed), the answered propose was
+      // the newest asked, so every marker on the connection is older.
+      const older = !Number.isFinite(answeredAt) || new Date(marker.createdAt).getTime() < answeredAt
+      if (older || marker.getTag('exchangeId') === answeredExchangeId) await agent.genericRecords.delete(marker)
+    }
+  } catch (e) {
+    agent.config.logger.warn(
+      `${LOG_PREFIX} could not forget asked proposes on ${connectionId}: ${(e as Error).message}`
+    )
+  }
+}
+
+/**
  * Ask again, after a restart, for consent to proposes that were asked and
  * never answered. The prompt lived only in memory, and the proposer does not
  * resend, so a phone killed before its user answered lost the request for
@@ -1005,11 +1036,18 @@ export async function restorePendingProposals(agent: Agent): Promise<number> {
           threadOf(r) === exchangeId
       )?.document
       if (!document) continue
-      if (docs.some((d) => threadOf(d) === exchangeId && String(d.document.type ?? '').endsWith('#response'))) continue
       const onExchange = (await documentRepository.findByQuery(agent.context, { exchangeId, connectionId })) as {
         document: Record<string, unknown>
       }[]
-      if (onExchange.some((d) => String(d.document.type ?? '').includes('trust-task-error'))) continue
+      const answered =
+        docs.some((d) => threadOf(d) === exchangeId && String(d.document.type ?? '').endsWith('#response')) ||
+        onExchange.some((d) => String(d.document.type ?? '').includes('trust-task-error'))
+      if (answered) {
+        // Resolved already: clear the backlog, including marks left before
+        // answers forgot them.
+        await forgetAskedProposes(agent, connectionId, exchangeId)
+        continue
+      }
 
       const upgrade = await isUpgradeExchange(agent, connectionId, exchangeId)
       askForConsent(
@@ -1061,6 +1099,7 @@ export async function respondToRelationshipProposal(
       retryable: false,
     })
     await service.retain(agent.context, error as never, 'error', connectionId)
+    await forgetAskedProposes(agent, connectionId, exchangeId)
     await sendTrustTaskDocument(agent, connectionId, error as unknown as Record<string, unknown>)
     vrcFlowStore.clearFlow(connectionId)
     logger.info(`${LOG_PREFIX} propose declined by user (exchange ${exchangeId})`)
@@ -1092,6 +1131,7 @@ export async function respondToRelationshipProposal(
     () => new Date().toISOString()
   )
   await service.retain(agent.context, response as never, 'response', connectionId)
+  await forgetAskedProposes(agent, connectionId, exchangeId)
   await sendTrustTaskDocument(agent, connectionId, response as unknown as Record<string, unknown>)
   logger.info(`${LOG_PREFIX} propose accepted; response sent (exchange ${exchangeId})`)
 

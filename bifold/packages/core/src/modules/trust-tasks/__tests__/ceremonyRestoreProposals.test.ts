@@ -42,7 +42,7 @@ interface Disk {
 const newDisk = (): Disk => ({ documents: [], genericRecords: [], clock: Date.parse('2026-10-22T10:00:00Z') })
 
 /** One run of the app: fresh modules, the same disk. */
-function boot(disk: Disk) {
+function boot(disk: Disk, options: { oldBuild?: boolean } = {}) {
   let mods!: {
     ceremony: typeof import('../ceremony')
     core: typeof import('@credo-ts/core')
@@ -129,6 +129,11 @@ function boot(disk: Disk) {
       findAllByQuery: jest.fn(async (query: Record<string, string>) =>
         disk.genericRecords.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
       ),
+      delete: jest.fn(async (record: unknown) => {
+        if (options.oldBuild) return // a build before markers were forgotten
+        const i = disk.genericRecords.indexOf(record as Disk['genericRecords'][number])
+        if (i >= 0) disk.genericRecords.splice(i, 1)
+      }),
     },
     w3cCredentials: {
       signCredential: jest.fn(async () => ({})),
@@ -292,5 +297,103 @@ describe('an upgrade request, asked then killed', () => {
     const after = boot(disk)
     await after.ceremony.resumeInterruptedExchanges(after.agent)
     expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
+  })
+})
+
+describe('asked proposes are forgotten once answered', () => {
+  const marks = (disk: Disk) => disk.genericRecords.map((r) => r.tags.exchangeId)
+
+  test('accepting or declining forgets the mark', async () => {
+    for (const accept of [true, false]) {
+      const disk = newDisk()
+      const phone = boot(disk)
+      await phone.receive(proposeDoc(FIRST))
+      expect(marks(disk)).toEqual([FIRST])
+      await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, accept)
+      await flush()
+      expect(marks(disk)).toEqual([])
+    }
+  })
+
+  test('a superseded propose is not promoted: A asked, B asked and accepted, nothing asked after a restart', async () => {
+    const disk = newDisk()
+    const before = boot(disk)
+    await before.receive(proposeDoc(FIRST))
+    await before.receive(proposeDoc(SECOND))
+    await before.ceremony.respondToRelationshipProposal(before.agent, CONNECTION_ID, true)
+    await flush()
+    expect(marks(disk)).toEqual([])
+
+    const after = boot(disk)
+    await after.ceremony.resumeInterruptedExchanges(after.agent)
+    expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
+  })
+
+  test('a propose asked between two asks of the answered one was superseded too, and is not asked again', async () => {
+    const THIRD = 'aaaa3333-3333-4333-8333-333333333333'
+    const disk = newDisk()
+    const before = boot(disk)
+    await before.receive(proposeDoc(SECOND))
+    await before.receive(proposeDoc(THIRD))
+    await before.receive(proposeDoc(SECOND)) // redelivered: asked again, replacing THIRD's prompt
+    expect(before.store.getProposalPrompt(CONNECTION_ID)?.exchangeId).toBe(SECOND)
+    await before.ceremony.respondToRelationshipProposal(before.agent, CONNECTION_ID, true)
+    await flush()
+    expect(marks(disk)).toEqual([])
+
+    const after = boot(disk)
+    await after.ceremony.resumeInterruptedExchanges(after.agent)
+    expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
+  })
+
+  test('a propose that arrives while an answer is sent keeps its mark', async () => {
+    const disk = newDisk()
+    const phone = boot(disk)
+    await phone.receive(proposeDoc(FIRST))
+    // Marked after FIRST's, as a propose arriving mid-answer would be.
+    disk.clock += 1000
+    const tags = { recordType: 'keyring.vrc-propose-awaiting-consent', connectionId: CONNECTION_ID, exchangeId: SECOND }
+    disk.genericRecords.push({
+      content: {},
+      tags,
+      createdAt: new Date(disk.clock),
+      getTag: (k) => tags[k as keyof typeof tags],
+    })
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    expect(marks(disk)).toEqual([SECOND])
+  })
+
+  test('a propose asked but left unmarked (its save failed) still clears the older marks when answered', async () => {
+    const disk = newDisk()
+    const before = boot(disk)
+    await before.receive(proposeDoc(FIRST))
+    const save = (before.agent as unknown as { genericRecords: { save: jest.Mock } }).genericRecords.save
+    save.mockRejectedValueOnce(new Error('storage busy'))
+    await before.receive(proposeDoc(SECOND))
+    expect(before.store.getProposalPrompt(CONNECTION_ID)?.exchangeId).toBe(SECOND) // asked all the same
+    expect(marks(disk)).toEqual([FIRST])
+    await before.ceremony.respondToRelationshipProposal(before.agent, CONNECTION_ID, true)
+    await flush()
+    expect(marks(disk)).toEqual([])
+
+    const after = boot(disk)
+    await after.ceremony.resumeInterruptedExchanges(after.agent)
+    expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
+  })
+
+  test('marks left by a build that never forgot them are cleared by the next restart, nothing asked', async () => {
+    const disk = newDisk()
+    const old = boot(disk, { oldBuild: true })
+    await old.receive(proposeDoc(FIRST))
+    await old.receive(proposeDoc(SECOND))
+    await old.ceremony.respondToRelationshipProposal(old.agent, CONNECTION_ID, true)
+    await flush()
+    expect(marks(disk)).toEqual([FIRST, SECOND])
+
+    const after = boot(disk)
+    await after.ceremony.resumeInterruptedExchanges(after.agent)
+    expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
+    expect(marks(disk)).toEqual([])
   })
 })
