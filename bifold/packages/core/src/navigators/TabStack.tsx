@@ -116,7 +116,8 @@ const TabStack: React.FC = () => {
   // A removed phone learns it from its next refused heartbeat, not only at its next sign-in.
   const presenceFailed = useCallback((error: unknown) => vtaAgent.presenceFailed(error), [])
   const presenceLog = useCallback((message: string) => agent?.config.logger.warn(message), [agent])
-  useAgentPresence(presencePort, presenceFailed, presenceLog)
+  const presenceLink = useCallback(() => vtaAgent.getState().link, [])
+  useAgentPresence(presencePort, presenceFailed, presenceLog, presenceLink)
   // A community's removal notice is said in plain words when it arrives.
   useVtiRemovedNotice()
   // …and a community making this phone a member.

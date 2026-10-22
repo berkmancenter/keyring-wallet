@@ -18,10 +18,12 @@
  *
  * @module trust-tasks/module/vtaPresence
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { DeviceEventEmitter, Platform } from 'react-native'
 
 import type { VtaLinkState } from './vtaLinkMachine'
+import { deviceRefusalOf } from './vtaOwner'
+import { releaseWarn } from './releaseLog'
 
 import {
   defaultDeviceName,
@@ -43,6 +45,12 @@ export function isLinkOnline(link: VtaLinkState): boolean {
   return link.kind === 'linked' && link.connection.kind === 'online'
 }
 
+/** The link as one word or two, for a Release line: `linked/online`, `linked/reconnecting`, `notLinked`. */
+export function linkSummary(link: VtaLinkState | undefined): string {
+  if (!link) return 'unknown'
+  return link.kind === 'linked' ? `linked/${link.connection.kind}` : link.kind
+}
+
 /** Emitted with the {@link AgentDevice} when another device starts acting as this agent. */
 export const SIBLING_SEEN_EVENT = 'keyring/agent-sibling-seen'
 
@@ -55,14 +63,37 @@ export interface AgentPresenceDeps {
   /** A tick that failed, for the controller to read (a removed phone's refusal). */
   onFailed?: (error: unknown) => void
   log?: (message: string) => void
+  /** The link now, said on the tick's Release lines (IN-350: a removal the heartbeat never reported). */
+  link?: () => VtaLinkState | undefined
 }
+
+/** How many healthy ticks in a row before an "ok" is said again with no change: once an hour at five minutes. */
+export const PRESENCE_OK_EVERY = 12
 
 export class AgentPresence {
   private registered = false
   private announced = new Set<string>()
   private running = false
+  /** The last healthy line said ("ok (…)" or "skipped, …"), and how many ticks have read the same since. */
+  private quiet?: { line: string; since: number }
 
   constructor(private readonly deps: AgentPresenceDeps) {}
+
+  private linkNow(): string {
+    return linkSummary(this.deps.link?.())
+  }
+
+  /**
+   * A healthy outcome is said when it changes — the first after a start or a failure, or a new link state — and
+   * once every {@link PRESENCE_OK_EVERY} ticks, so a log shows the loop alive without a line every five minutes in a
+   * channel kept for the few that matter. A failure is always said (below).
+   */
+  private sayHealthy(line: string): void {
+    if (this.quiet?.line === line && ++this.quiet.since < PRESENCE_OK_EVERY) return
+    const again = this.quiet?.line === line
+    releaseWarn(`[VTA] presence tick: ${line}${again ? `, ${PRESENCE_OK_EVERY} in a row` : ''}`)
+    this.quiet = { line, since: 0 }
+  }
 
   /** One round: register once, beat, and announce newly live siblings. Never throws. */
   async tick(): Promise<void> {
@@ -70,7 +101,10 @@ export class AgentPresence {
     this.running = true
     try {
       const port = await this.deps.port()
-      if (!port) return
+      if (!port) {
+        this.sayHealthy(`skipped, no signed-in agent (${this.linkNow()})`)
+        return
+      }
       const now = this.deps.now?.() ?? new Date()
       if (!this.registered) {
         // A failed claim does not stop the beat: a phone the agent already
@@ -90,7 +124,12 @@ export class AgentPresence {
       const liveNow = new Set(live.map((d) => d.did))
       for (const device of live) if (!this.announced.has(device.did)) this.deps.onSiblingSeen(device)
       this.announced = liveNow
+      this.sayHealthy(`ok (${this.linkNow()})`)
     } catch (e) {
+      // Said in Release with its reason class, so a run can tell a removal the agent refused (accessRevoked) from
+      // an agent that did not answer (noAnswer) — only the first ends the link.
+      releaseWarn(`[VTA] presence tick: failed, ${deviceRefusalOf(e).reason} (${this.linkNow()})`)
+      this.quiet = undefined
       this.deps.log?.(`[VTA] telling the agent this phone is here: ${(e as Error)?.message ?? e}`)
       this.deps.onFailed?.(e)
     } finally {
@@ -108,9 +147,14 @@ export class AgentPresence {
 export function useAgentPresence(
   port: (() => Promise<AgentDevicePort | undefined>) | undefined,
   onFailed?: (error: unknown) => void,
-  log?: (message: string) => void
+  log?: (message: string) => void,
+  link?: () => VtaLinkState
 ): void {
+  // Read through a ref, not a dependency: an inline getter would otherwise restart the heartbeat on every render.
+  const linkRef = useRef(link)
+  linkRef.current = link
   useEffect(() => {
+    const linkNow = () => linkRef.current?.()
     if (!port) return
     const presence = new AgentPresence({
       port,
@@ -118,9 +162,16 @@ export function useAgentPresence(
       onSiblingSeen: (device) => DeviceEventEmitter.emit(SIBLING_SEEN_EVENT, device),
       onFailed,
       log,
+      link: linkNow,
     })
+    // Started and stopped are said in Release: the heartbeat runs only while the link is online, and a removal it
+    // never reported could not be told from a loop that was not running (IN-350).
+    releaseWarn(`[VTA] presence: started, every ${HEARTBEAT_INTERVAL_MS / 1000} s (${linkSummary(linkNow())})`)
     void presence.tick()
     const timer = setInterval(() => void presence.tick(), HEARTBEAT_INTERVAL_MS)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      releaseWarn(`[VTA] presence: stopped (${linkSummary(linkNow())})`)
+    }
   }, [port, onFailed, log])
 }
