@@ -102,5 +102,7 @@ test('with bifold #473 in the build the unlinked row expects JoinAgentRefused an
   assert.match(withLine, /existsTestId\(d, "JoinAgentRefused", 15000\)/, 'waited for: the identity is read async');
   assert.match(withLine, /ok: shown && refused && !silent && !needsAgent && opened/);
   assert.match(withLine, /tapTestId\(d, "JoinOpenMyAgent"/);
+  // #473 shows a spinner (JoinCheckingAgent) first, with neither ID on screen: an absence read before the wait passes trivially.
+  assert.ok(withLine.indexOf('existsTestId(d, "JoinNeedsAgent"') > withLine.indexOf('existsTestId(d, "JoinAgentRefused", 15000)'), 'JoinNeedsAgent absence is read after JoinAgentRefused is up');
   assert.match(branch.slice(branch.lastIndexOf('const needsAgent')), /ok: needsAgent && !unreachable[\s\S]*\(pre-fix\)/);
 });
