@@ -36,6 +36,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { TEST_ID_PREFIX } from "../config.js";
+import { typeExact } from "../typeExact.js";
 import {
   autoUnlockIfLocked,
   acceptSystemAlertIfPresent,
@@ -667,7 +668,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
     enterAddress: (did) =>
       step("enterAddress", async () => {
         const address = await io.waitForTestId(d, "AgentCreateAddressInput", 30000);
-        await address.setValue(did);
+        // Typed and read back (typeExact): a keystroke out of place on a headless iOS simulator made the app refuse
+        // a mangled address (the mini's vetter seat, 10-22), which is the harness's fault, not the app's.
+        await typeExact(address, did, { platform: d.e2ePlatform });
         await (await io.scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => io.byTestId(d, "AgentCreateAddressContinue"))).click();
         const on = await awaitStep(["AgentCreateOwnerCode", "AgentCreateError"], 60000);
         if (on === "AgentCreateError") {
@@ -760,8 +763,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
           // there to tap: ask for the goal first, and treat the waypoint as optional (candidate tree 2026-09-23).
           if (!(await io.existsTestId(d, "VtaLinkAgentAddress", 2000))) await io.tapTestId(d, "VtaLinkWithoutQr", 15000).catch(() => undefined);
           const address = await io.waitForTestId(d, "VtaLinkAgentAddress", 15000);
-          // Return on the keyboard submits the address, as a person would — on iOS.
-          await address.setValue(`${did}\n`);
+          // Typed and read back (typeExact), then Return on the keyboard submits it, as a person would — on iOS.
+          await typeExact(address, did, { platform: d.e2ePlatform });
+          await address.addValue("\n");
         }
         await awaitStep(["VtaLinkManualDid", "VtaLinkShowTheCode", "VtaLinkShowMyCode", "VtaLinkAgentAddress"], 15000);
         return { value: { knewAgent: knowsAgent } };
