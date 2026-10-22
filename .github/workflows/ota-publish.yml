@@ -16,7 +16,9 @@ name: OTA publish (ring 0)
 # enforces that mapping and checks each key against OTA_PUBLIC_KEY. Every
 # channel waits for the ota-approval reviewer. Only device-test takes a base
 # commit instead of a build, skips the tier check, and has the trial's other
-# actions (scripts/ota/device-test.sh).
+# actions (scripts/ota/device-test.sh). production and preview also take
+# disable, which withdraws one bundle (scripts/ota/withdraw.mjs). Nothing here
+# widens a bundle past ring 0.
 #
 # A dry run checks the commit, the inputs and the signing-key mapping, and
 # probes the server and token, without uploading.
@@ -42,12 +44,12 @@ on:
         type: string
         default: ''
       action:
-        description: 'publish for production/preview; device-test also: tamper, crash, mismatch, disable (needs bundle_id), cleanup'
+        description: 'publish or disable (needs bundle_id) for production/preview; device-test also: tamper, crash, mismatch, cleanup'
         type: choice
         options: [publish, tamper, crash, mismatch, disable, cleanup]
         default: publish
       bundle_id:
-        description: 'device-test disable only: the bundle to withdraw'
+        description: 'disable only: the bundle to withdraw'
         type: string
         default: ''
       expect_fingerprint:
@@ -84,7 +86,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ring 0."
+      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ring 0."
 
   publish:
     needs: [approve]
@@ -134,15 +136,25 @@ jobs:
           BASE: ${{ inputs.base }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           EXPECT_FINGERPRINT: ${{ inputs.expect_fingerprint }}
+          PLATFORM: ${{ inputs.platform }}
           STORE_CHANNEL: ${{ vars.OTA_CHANNEL }}
         run: |
           err() { echo "::error::$1"; exit 1; }
           case "$CHANNEL" in
             production | preview)
-              [ "$ACTION" = publish ] || err "$CHANNEL takes only the publish action (got $ACTION)"
-              [[ "$BUILD" =~ ^[0-9]+$ ]] || err "$CHANNEL needs build: the store build number (got '$BUILD')"
               [ -z "$BASE" ] || err "base is for device-test only"
-              [ -z "$BUNDLE_ID" ] || err "bundle_id is for device-test disable only"
+              case "$ACTION" in
+                publish)
+                  [[ "$BUILD" =~ ^[0-9]+$ ]] || err "$CHANNEL needs build: the store build number (got '$BUILD')"
+                  [ -z "$BUNDLE_ID" ] || err "bundle_id is for disable only" ;;
+                # Withdrawing only narrows: scripts/ota/withdraw.mjs checks the bundle
+                # is this channel's and this platform's, then disables it.
+                disable)
+                  [ -n "$BUNDLE_ID" ] || err "disable needs bundle_id"
+                  [ -z "$BUILD" ] || err "disable takes bundle_id, not build"
+                  [ "$PLATFORM" != both ] || err "disable needs the bundle's own platform (ios or android), not both" ;;
+                *) err "$CHANNEL takes only the publish and disable actions (got $ACTION)" ;;
+              esac
               # staging.yaml writes vars.OTA_CHANNEL (default production) into store builds.
               if [ "$CHANNEL" = production ] && [ -n "$STORE_CHANNEL" ] && [ "$STORE_CHANNEL" != production ]; then
                 err "store builds carry channel '$STORE_CHANNEL' (vars.OTA_CHANNEL), not production"
@@ -299,14 +311,14 @@ jobs:
           fi
 
       - name: Native OTA settings
-        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' }}
+        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
           OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
           OTA_CHANNEL: ${{ inputs.channel }}
         run: node scripts/ota/native-config.mjs
 
       - name: Publish to ring 0
-        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' }}
+        if: ${{ !inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         working-directory: app
         env:
           OTA_SIGNING_KEY: ${{ runner.temp }}/ota-private-key.pem
@@ -323,6 +335,21 @@ jobs:
           [ -n "$RECORDED" ] && recorded=(--recorded-fingerprint "$RECORDED")
           node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
             --after-native-config --expect-fingerprint "$PLATFORM=$EXPECTED" "${recorded[@]}"
+
+      # production/preview: withdraw one bundle. A dry run checks it is there.
+      - name: Withdraw (${{ inputs.channel }})
+        if: ${{ inputs.channel != 'device-test' && inputs.action == 'disable' }}
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ matrix.platform }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          check=()
+          [ "$DRY_RUN" = true ] && check=(--check)
+          node scripts/ota/withdraw.mjs --channel "$CHANNEL" --platform "$PLATFORM" --bundle-id "$BUNDLE_ID" "${check[@]}"
 
       # The trial's moves on the test app's channel. Each publish is a local,
       # never-pushed commit on top of the verified one (scripts/ota/device-test.sh).
@@ -355,7 +382,7 @@ jobs:
           node scripts/ota/check-fingerprint.mjs verify --platform "$PLATFORM" --expected "$EXPECTED" --recorded "${RECORDED:-none}"
 
       - name: Dry run
-        if: ${{ inputs.dry_run && inputs.channel != 'device-test' }}
+        if: ${{ inputs.dry_run && inputs.channel != 'device-test' && inputs.action == 'publish' }}
         env:
           BUILD: ${{ inputs.build }}
         run: |
