@@ -23,6 +23,9 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { expiresWith, phoneOwnEntry } from "./lib/aclCleanup.js";
 import { generateKeyPairSync } from "node:crypto";
 import { dumpSource, ensureAppium, existsTestId, screenshot as rawScreenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
@@ -39,6 +42,7 @@ const ROWS = (E.ROWS || "in124 devices identity scanbeside").split(/\s+/);
 const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
 const rows = createRows({ label: "release-235" });
 const ACL_LABEL = "devices ACL label is the name";
+const DEVICE_EXPIRY = "devices new device expires with the phone";
 const row = (name, ok, detail, opts) => rows.row(name, () => ({ ok, detail }), opts);
 const adb = (...a) => execFileSync("adb", ["-s", UDID, ...a], { encoding: "utf8", timeout: 30000 });
 const shot = (d, name) => rawScreenshot(d, name).catch(() => undefined);
@@ -67,6 +71,19 @@ async function owner(tag) {
 function aclEntry(subject) {
   const out = execFileSync(PNM, ["--vta", SLUG, "acl", "list", "--json"], { encoding: "utf8", env: { ...E }, stdio: ["ignore", "pipe", "pipe"] });
   return JSON.parse(out.slice(out.indexOf("["))).find((e) => e.subject === subject);
+}
+
+/** This phone's own entry on the runner, from its link record (run-vta-link.js last-link.json; phoneOwnEntry). */
+function phoneEntry() {
+  try {
+    const link = JSON.parse(readFileSync(path.join(E.E2E_RUN_DIR || "artifacts", "last-link.json"), "utf8"));
+    const out = execFileSync(PNM, ["--vta", SLUG, "acl", "list", "--json"], { encoding: "utf8", env: { ...E }, stdio: ["ignore", "pipe", "pipe"] });
+    // The phone's own key only (its rotated heir, else the temporary one): never the device it just added.
+    return phoneOwnEntry(JSON.parse(out.slice(out.indexOf("["))), link);
+  } catch (e) {
+    log(`this phone's own entry not read: ${e.message}`);
+    return undefined;
+  }
 }
 
 /** A fresh did:key (Ed25519): another device's code, never used to sign anything. */
@@ -188,6 +205,12 @@ try {
       added = aclEntry(code);
     }
     await row(ACL_LABEL, added?.label === defaultName, added ? `label "${added.label}"` : "the code never reached the ACL");
+    // The device's entry expires with the phone's own (bifold #467): a phone whose entry expires (the Mac mini's 24h
+    // lane grants, VTI-ACL-053) cannot write a permanent one, and a permanent phone's device stays permanent.
+    const phone = phoneEntry();
+    await row(DEVICE_EXPIRY, expiresWith(added, phone) && added.subject !== phone.subject,
+      !phone ? "this phone's own entry was not found from its link record" : `device ${added?.expiresAt ?? "permanent"} · this phone ${phone.expiresAt ?? "permanent"}`,
+      { needs: [ACL_LABEL] });
 
     // Rename it beside Remove: the newest row named like it.
     await waitForTestId(d, "AgentDeviceList", 30000);
