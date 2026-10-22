@@ -424,8 +424,8 @@ jobs:
 
       # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
       # ota_updates_subtask.md): off unless the repository variable
-      # OTA_UPDATE_URL names the update server. Unset is what testers get today:
-      # the app never contacts an update server. When set, the build also carries
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
       # the loader's public key and channel (repository variables; both public)
       # and the native fingerprint, written by the same script the publish job
       # runs, so a bundle published later matches this build.
@@ -979,8 +979,8 @@ jobs:
 
       # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
       # ota_updates_subtask.md): off unless the repository variable
-      # OTA_UPDATE_URL names the update server. Unset is what testers get today:
-      # the app never contacts an update server. When set, the build also carries
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
       # the loader's public key and channel (repository variables; both public)
       # and the native fingerprint, written by the same script the publish job
       # runs, so a bundle published later matches this build.

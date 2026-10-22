@@ -69,7 +69,10 @@ Pass criteria (OTA plan, phase 0):
 ## Rings
 
 A bundle is deployed at 0% rollout and then targeted at `ring0` only. Widening
-and withdrawing:
+is a separate step, run by hand with the server's management token; no
+workflow widens. **Nothing is widened past `ring0` until the conditions in
+docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md hold.**
+Widening and withdrawing:
 
 ```sh
 npx hot-updater bundle update <id> --target-cohorts ring0,ring1 -y
@@ -163,7 +166,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 | Name | Kind | Holds | Used by |
 | --- | --- | --- | --- |
-| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off**. It stays unset until a bad update recovers without a force-quit (today an iOS update that crashes at load leaves a black screen) and a store build has recorded a fingerprint a publish matches (docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md) | staging.yaml (both store builds) |
+| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off**. Set for store builds from 267 on. Until a bad update recovers without a force-quit on a device (today an iOS update that crashes at load leaves a black screen), no bundle is widened past ring 0 (docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md) | staging.yaml (both store builds) |
 | `OTA_PUBLIC_KEY` | variable | the loader's RSA public key (PEM; public) | staging.yaml, ota-publish.yml |
 | `OTA_CHANNEL` | variable | the channel, default `production` | staging.yaml, ota-publish.yml |
 | `OTA_SERVER_URL` | variable | `https://<OTA_HOST>` for the publisher | ota-publish.yml |
