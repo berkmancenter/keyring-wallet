@@ -13,6 +13,10 @@
 # then runs check-testids.mjs, so an id a driver names that the app no longer
 # has shows up here, before CI. Commit both json files with the driver change.
 #
+# check-testids.mjs also fails when e2e/lib/testids.json is not bifold's at the
+# pinned submodule commit (ids added or dropped upstream), so a PR that bumps
+# the bifold pin runs `e2e/scripts/sync-testids.sh bifold` and commits the result.
+#
 # The bifold checkout needs its dependencies installed (the generator imports
 # `typescript` from there). A checkout from before the generator landed has
 # neither file: this script says so and leaves the manifests as they are.

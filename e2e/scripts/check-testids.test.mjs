@@ -1,12 +1,27 @@
 // node --test e2e/scripts/check-testids.test.mjs
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 
-import { checkReferences, coverageGaps, extractReferences, isKnownKey, isKnownStem, knownIds, listDriverFiles, runCheck, tokenize } from './check-testids.mjs'
+import {
+  checkReferences,
+  coverageGaps,
+  driftLines,
+  extractReferences,
+  isKnownKey,
+  isKnownStem,
+  knownIds,
+  listDriverFiles,
+  manifestDrift,
+  pinnedManifest,
+  runCheck,
+  SYNC_COMMAND,
+  tokenize,
+} from './check-testids.mjs'
 
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'check-testids')
 
@@ -296,6 +311,71 @@ test('a driver the tokenizer cannot cover fails with its reason, and the other d
     assert.equal(result.totals.files, 2)
     assert.equal(result.totals.checked, 1) // run-fine.js
     assert.equal(result.totals.unknown, 0)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+// ---------------------------------------------------------------- Drift against the pinned bifold
+
+const manifest = (keys, extra = {}) => ({ generatedFrom: 'a'.repeat(40), prefix: 'com.ariesbifold:id/', keys, stems: {}, raw: {}, derived: [], ...extra })
+
+test('drift: the same ids under a newer pin are in step; ids bifold added or dropped are named, per section', () => {
+  const same = manifestDrift(manifest({ A: ['a.tsx'] }), { ...manifest({ A: ['a.tsx'] }), generatedFrom: 'b'.repeat(40) })
+  assert.deepEqual(same, { ok: true, added: [], removed: [], changed: false })
+  const d = manifestDrift(
+    manifest({ A: ['a.tsx'], ConfigureMediator: ['m.tsx'] }, { stems: { Old_: ['o.tsx'] } }),
+    manifest({ A: ['a.tsx'], JoinAgentRefused: ['j.tsx'] }, { stems: { New_: ['n.tsx'] } }),
+  )
+  assert.equal(d.ok, false)
+  assert.deepEqual(d.added, ['JoinAgentRefused', 'stems:New_'])
+  assert.deepEqual(d.removed, ['ConfigureMediator', 'stems:Old_'])
+})
+
+test('drift: the same ids with other differences (a key\'s files, derived) still fail', () => {
+  const d = manifestDrift(manifest({ A: ['a.tsx'] }), manifest({ A: ['a.tsx', 'b.tsx'] }))
+  assert.deepEqual(d, { ok: false, added: [], removed: [], changed: true })
+  assert.match(driftLines(d, 'c'.repeat(40)).join('\n'), /the same ids, with other differences/)
+})
+
+test('drift: the message names the pin, the ids, and ends with the exact sync command', () => {
+  const lines = driftLines(manifestDrift(manifest({ Gone: [] }), manifest({ Added: [] })), '821c5f96bd77c1107d590d7ab7496768b9ebd35f')
+  assert.match(lines[0], /out of step with bifold 821c5f96 \(the pinned submodule\)/)
+  assert.match(lines.join('\n'), /1 id\(s\) bifold has that the copy lacks: Added/)
+  assert.match(lines.join('\n'), /1 id\(s\) the copy keeps that bifold dropped: Gone/)
+  assert.equal(lines.at(-1), '  run: e2e/scripts/sync-testids.sh bifold')
+  assert.equal(SYNC_COMMAND, 'e2e/scripts/sync-testids.sh bifold')
+  assert.deepEqual(driftLines({ ok: true, added: [], removed: [], changed: false }, 'x'), [])
+})
+
+test('pinnedManifest reads bifold\'s manifest at the gitlink, not the submodule\'s working tree; skips when it cannot', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'testids-drift-'))
+  const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim()
+  try {
+    const wallet = path.join(root, 'wallet'), bifold = path.join(wallet, 'bifold')
+    fs.mkdirSync(path.join(bifold, 'packages', 'core'), { recursive: true })
+    git(wallet, 'init', '-q')
+    git(bifold, 'init', '-q')
+    fs.writeFileSync(path.join(bifold, 'packages', 'core', 'testids.json'), JSON.stringify(manifest({ Pinned: [] })))
+    git(bifold, 'add', '-A'); git(bifold, 'commit', '-qm', 'pin')
+    const pin = git(bifold, 'rev-parse', 'HEAD')
+    // The working tree moves on past the pin: the check must still read the pin.
+    fs.writeFileSync(path.join(bifold, 'packages', 'core', 'testids.json'), JSON.stringify(manifest({ Later: [] })))
+    git(bifold, 'commit', '-qam', 'later')
+    git(wallet, 'update-index', '--add', '--cacheinfo', `160000,${pin},bifold`)
+    git(wallet, 'commit', '-qm', 'wallet')
+    const got = pinnedManifest(wallet)
+    assert.equal(got.sha, pin)
+    assert.deepEqual(Object.keys(got.manifest.keys), ['Pinned'])
+
+    // A pin the submodule has not fetched: skipped, with the reason, never a silent pass.
+    git(wallet, 'update-index', '--cacheinfo', `160000,${'d'.repeat(40)},bifold`)
+    git(wallet, 'commit', '-qm', 'unfetched pin')
+    assert.match(pinnedManifest(wallet).skipped, /bifold dddddddd \(the pin\) has no packages\/core\/testids\.json readable here/)
+
+    const plain = path.join(root, 'plain')
+    fs.mkdirSync(plain); git(plain, 'init', '-q'); fs.writeFileSync(path.join(plain, 'f'), 'x'); git(plain, 'add', 'f'); git(plain, 'commit', '-qm', 'x')
+    assert.equal(pinnedManifest(plain).skipped, 'no bifold submodule pinned here')
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

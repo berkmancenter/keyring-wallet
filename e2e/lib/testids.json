@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f7cae8c057d810fd6df33200a73c2a236de50630",
+  "generatedFrom": "18ac04991474ae54017e91017e814a0d6a3a1328",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -80,12 +80,17 @@
     "AgentDeviceOnlyThis": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRemoved": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRename": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
+    "AgentDeviceUntilNote": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevices": [
       "src/modules/trust-tasks/screens/DevicesCard.tsx",
       "src/modules/trust-tasks/screens/MyAgent.ids.ts"
     ],
     "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGetAgentHelp": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentHosted": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentSelfHost": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentToggle": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "AgentGetCards": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsButton": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsHint": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
@@ -542,6 +547,7 @@
     "JSONDetails.ScrollView": ["src/screens/JSONDetails.tsx"],
     "JoinActions": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinAgentRefused": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAs": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
     "JoinAsContinue": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinAsCreateProfile": ["src/modules/trust-tasks/screens/JoinAs.tsx"],
@@ -551,6 +557,7 @@
     "JoinAsks": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinChanged": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinCheckAgain": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinCheckingAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinCommunityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "JoinContinueVetting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinDirectoryUnreadable": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
@@ -569,6 +576,7 @@
     "JoinNoVetting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinNotAccepting": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinOpenCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinOpenMyAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinPrivateVettingRefused": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinRememberedUnreachable": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinRequestLost": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
@@ -748,6 +756,18 @@
     "RCardSubmit": ["src/modules/vrc/screens/RCardForm.tsx"],
     "RecordLoading": ["src/components/animated/RecordLoading.tsx"],
     "ReenterPIN": ["src/screens/PINChange.tsx", "src/screens/PINCreate.tsx"],
+    "RelationshipLayer": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipLayers": ["src/modules/vrc/components/RelationshipLayers.tsx"],
+    "RelationshipUpgrade": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeCancel": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeConfirm": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeDismiss": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeHardwareDone": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeNote": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeResign": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeSend": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeWaiting": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
+    "RelationshipUpgradeWitness": ["src/modules/vrc/components/RelationshipUpgradeSection.tsx"],
     "RemoveFromWallet": ["src/components/record/RecordRemove.tsx"],
     "RemovedPhone": ["src/modules/trust-tasks/screens/RemovedPhoneCard.tsx"],
     "RequestAsks": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
@@ -1106,6 +1126,7 @@
     "AgentDeviceRemove_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceRename_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceState_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
+    "AgentDeviceUntil_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentGetCardsRefused_": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],
@@ -1257,6 +1278,18 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.enrolCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentHelp"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentHosted"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentSelfHost"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentToggle"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.host"
@@ -1943,6 +1976,9 @@
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.again"
     },
     {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.agentRefused"
+    },
+    {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.asContinue"
     },
     {
@@ -1956,6 +1992,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.checkAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.checkingAgent"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.continueVetting"
@@ -2007,6 +2046,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.openCommunity"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.openMyAgent"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.preparingSlow"
