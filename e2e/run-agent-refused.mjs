@@ -6,7 +6,8 @@
  *   2. checks C's own screen shows no agent notice while the grant stands: the positive control for row 4;
  *   3. removes this phone's own grant from the runner, the entries the link record names (lib/aclCleanup.js
  *      linkedPhoneEntries: the selection the end-of-leg cleanup makes, so never another leg's or a person's entry);
- *   4. waits on another screen (Contacts) through three of the persona inbox's 30 s sign-in rounds.
+ *   4. relaunches the app (the persona's key leaves memory, so the inbox asks the agent again) and waits on another
+ *      screen (Contacts) through three of the persona inbox's 30 s rounds.
  * Rows (lib/rows.js):
  *   refused-member-joined      C lists the phone after its review-way request is approved
  *   refused-before             control: C's screen shows no PersonaAgentNotice while the agent still accepts the phone
@@ -25,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { deleteAcl, linkedPhoneEntries, listAcl } from "./lib/aclCleanup.js";
 import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { restartApp } from "./lib/flows.js";
 import { join } from "./lib/pages/join.js";
 import { createRows } from "./lib/rows.js";
 import { createHvAdmin, soleRequestSince } from "./openvtc/hvAdmin.js";
@@ -36,13 +38,18 @@ const REFUSED_LINE = /no longer accepts this phone/i;
 const UNREACHABLE_LINE = /didn't answer/i;
 /** The persona inbox's own line for a refusal (vtiPersonaInbox.ts releaseWarn "[VTI] persona inbox (…): <why>"). */
 const REFUSAL_LOG = /\[VTI\] persona inbox[^\n]*(refus|not in ACL|no longer accepts|permission ?denied)/i;
+// REFUSED_PATH: "relaunch" (default) reopens the app, so the persona inbox asks the agent again (refetchPersonaKeys);
+// "heartbeat" keeps it open past AgentPresence's 5 min tick, which also meets NOT_ON_ACL (bifold #454). Rows of the
+// heartbeat path are named refused-heartbeat-*.
+const HEARTBEAT = process.env.REFUSED_PATH === "heartbeat";
+const N = (name) => (HEARTBEAT ? name.replace(/^refused-/, "refused-heartbeat-") : name);
 const rows = createRows({
   label: "refused",
   needs: {
-    "refused-before": ["refused-member-joined"],
-    "refused-no-toast": ["refused-before"],
-    "refused-link-removed": ["refused-before"],
-    "refused-community-notice": ["refused-before"],
+    [N("refused-before")]: [N("refused-member-joined")],
+    [N("refused-no-toast")]: [N("refused-before")],
+    [N("refused-link-removed")]: [N("refused-before")],
+    [N("refused-community-notice")]: [N("refused-before")],
   },
 });
 const adb = (...args) => execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8", timeout: 30000, maxBuffer: 256 * 1024 * 1024 });
@@ -68,7 +75,7 @@ try {
 
   // 1. Join C by the review way; the harness admin approves the request this phone made.
   const since = new Date().toISOString();
-  await rows.row("refused-member-joined", async () => {
+  await rows.row(N("refused-member-joined"), async () => {
     await join.openCommunity(d, { did: C_DID, name: "" });
     await join.ask(d, { tag: "refused" });
     await join.awaitSent(d, { required: true });
@@ -88,7 +95,7 @@ try {
   if (!memberDid) throw new Error("not a member: no community to show the notice");
 
   // 2. The control: while the agent still accepts the phone, C says nothing about it.
-  await rows.row("refused-before", async () => {
+  await rows.row(N("refused-before"), async () => {
     await sleep(35000); // one inbox round, so a notice that would show without a refusal has had its chance
     const n = await communityNotice(d);
     await screenshot(d, "refused-before").catch(() => undefined);
@@ -107,34 +114,46 @@ try {
     console.log(`[e2e] removed this phone's entry ${e.subject.slice(0, 32)}… (${e.label ?? "-"}) from ${link.slug}`);
   }
 
-  // 4. On another screen through three sign-in rounds: no toast, while the refusal lands.
+  // 4a. relaunch: the person opens the app again. A live session never asks the agent again: the persona inbox only
+  // "listens" while connected, and asks the agent (refetchPersonaKeys, where the refusal comes back) only when the
+  // persona's borrowed key is not in memory: after an install, a restart or a lock (vtiPersonaInbox.ts; 1022-0523 waited
+  // on a live session for ~3 min and nothing could refuse). So relaunch, unlock, and watch another screen 95 s.
+  // 4b. heartbeat: stay open, no relaunch, past AgentPresence's 5 min tick (bifold #454), on another screen.
+  if (!HEARTBEAT) { await restartApp(d); await unlockToHome(d); }
+  const from = HEARTBEAT ? removedAt : Date.now();
+  const windowMs = HEARTBEAT ? 330000 : 95000;
   await tapTestId(d, "Contacts", 15000).catch(() => undefined);
   let toast = "";
-  for (const until = removedAt + 95000; Date.now() < until && !toast; await sleep(2000)) {
+  for (const until = from + windowMs; Date.now() < until && !toast; await sleep(2000)) {
     if (await existsTestId(d, "Toast", 500)) toast = (await textOf(d, "ToastTitle").catch(() => "")) || "(a toast)";
   }
-  if (toast) await screenshot(d, "refused-toast").catch(() => undefined);
+  if (toast) await screenshot(d, N("refused-toast")).catch(() => undefined);
   const lines = adb("logcat", "-d", "-v", "time").split("\n").filter((l) => REFUSAL_LOG.test(l));
-  const evidence = lines.length > 0;
-  // No toast proves nothing unless the refusal happened in the window: without its line the row is no verdict.
-  if (!toast && !evidence) rows.skip("refused-no-toast", "no verdict: no refusal line from the persona inbox in the 95 s window");
-  else await rows.row("refused-no-toast", () => toast
-    ? { ok: false, detail: `a toast showed on Contacts: "${toast}" (${evidence ? "with the refusal in the log" : "no refusal line yet"})` }
-    : { ok: true, detail: `no toast on Contacts for 95 s; the refusal landed: ${lines[0].trim().slice(0, 140)}` });
+  // The refusal's evidence: the persona inbox's line (relaunch), or the link itself removed (heartbeat, read below).
+  let evidence = lines.length > 0;
+  const secs = Math.round(windowMs / 1000);
 
   // 5. My Agent: the link is removed, with the way to link again.
-  await rows.row("refused-link-removed", async () => {
+  let removedShown = false;
+  await rows.row(N("refused-link-removed"), async () => {
     await tapTestId(d, "MyAgent", 15000);
-    const removed = await existsTestId(d, "RemovedPhone", 30000);
-    const again = removed && Boolean(await scrollToTestId(d, "VtaLinkScanAgain", 4).catch(() => false));
-    await screenshot(d, "refused-my-agent").catch(() => undefined);
-    return { ok: removed && again, detail: `RemovedPhone ${removed} · link again (VtaLinkScanAgain) ${again}` };
+    removedShown = await existsTestId(d, "RemovedPhone", 30000);
+    const again = removedShown && Boolean(await scrollToTestId(d, "VtaLinkScanAgain", 4).catch(() => false));
+    await screenshot(d, N("refused-my-agent")).catch(() => undefined);
+    return { ok: removedShown && again, detail: `${HEARTBEAT ? `open ${Math.round((Date.now() - removedAt) / 1000)} s after the removal, no relaunch` : "after a relaunch"} · RemovedPhone ${removedShown} · link again (VtaLinkScanAgain) ${again}` };
   });
+  if (HEARTBEAT) evidence = evidence || removedShown;
+  // No toast proves nothing unless the refusal happened in the window: without its evidence the row is no verdict.
+  if (!toast && !evidence) rows.skip(N("refused-no-toast"), `no verdict: no sign of the refusal (no persona inbox line${HEARTBEAT ? ", no RemovedPhone" : ""}) in the ${secs} s window`);
+  else await rows.row(N("refused-no-toast"), () => toast
+    ? { ok: false, detail: `a toast showed on Contacts: "${toast}" (${evidence ? "with the refusal seen" : "no refusal seen yet"})` }
+    : { ok: true, detail: `no toast on Contacts for ${secs} s; the refusal landed: ${lines[0]?.trim().slice(0, 140) ?? "the link shows removed (RemovedPhone)"}` });
 
-  // 6. C's screen says the agent refused this phone, never that it didn't answer, and leads to My Agent.
-  await rows.row("refused-community-notice", async () => {
+  // 6. (relaunch only: the heartbeat path does not ask the persona inbox) C's screen says the agent refused this phone, never that it didn't answer, and leads to My Agent.
+  if (HEARTBEAT) rows.skip(N("refused-community-notice"), "the heartbeat path: the persona inbox is not asked until the app reopens (the relaunch path checks this)");
+  else await rows.row(N("refused-community-notice"), async () => {
     const n = await communityNotice(d);
-    await screenshot(d, "refused-community").catch(() => undefined);
+    await screenshot(d, N("refused-community")).catch(() => undefined);
     let opened = false;
     if (n.shown && (await existsTestId(d, "PersonaAgentNoticeOpen", 3000))) {
       await tapTestId(d, "PersonaAgentNoticeOpen", 10000);
