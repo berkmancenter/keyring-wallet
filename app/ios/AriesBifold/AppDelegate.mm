@@ -213,7 +213,7 @@ static NSString *KeyringOtaTrialBundleId(NSURL *bundleURL)
   if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) return;
 
   __weak AppDelegate *weakSelf = self;
-  _otaWatchdog = dispatch_block_create(0, ^{
+  _otaWatchdog = dispatch_block_create((dispatch_block_flags_t)0, ^{
     NSLog(@"[OtaWatchdog] no first screen %.0f s after launching update %@; closing so the next launch "
            "opens the previous bundle",
           KeyringOtaWatchdogSeconds, bundleId);
