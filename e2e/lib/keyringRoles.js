@@ -1076,11 +1076,9 @@ export const community = {
   leave(d, { keep = "purge" } = {}, opts = {}) {
     return runStep(d, "member", "leave", opts, async () => {
       await (await waitForTestId(d, "MyAgent", 30000)).click();
-      await sleep(1500);
-      if (!(await existsTestId(d, "AgentHome", 3000))) {
-        const open = await scrollToTestId(d, "OpenYourAgentButton", 4).catch(() => undefined);
-        if (open) await open.click();
-      }
+      // A linked phone's My Agent hands over to the agent home by itself (bifold #484, and on focus since 09-29);
+      // "Open your agent" is gone (bifold #485).
+      await waitForTestId(d, "AgentHome", 30000).catch(() => undefined);
       const row = await scrollToTestId(d, "AgentMembershipRow", 6).catch(() => undefined);
       if (!row) throw failWith("the agent screen lists no community membership", {});
       await row.click();
