@@ -352,18 +352,23 @@ use_build() {
 # emu_net_ready <serial>: wait (60 s at most) until the emulator can reach the network, before a leg onboards. A fresh
 # userdata boots cold and its network can come up after the app starts: 1022-1709's link failed "couldn't reach its
 # message service" at onboarding on a just-reset AVD (inferred: a cold-boot network race). Probes GATE_NET_PROBE_HOST
-# (default RUNNER_MEDIATOR_HOST) from inside the emulator: TCP 443 by nc, else the name resolved by ping. Logged; a
-# timeout is said and does not stop the leg (its own rows say what failed).
+# (default RUNNER_MEDIATOR_HOST; set it to the app's own mediator) from inside the emulator: TCP 443 by nc until the
+# deadline, then the name alone as a weaker "dns only". Logged; a timeout is said and does not stop the leg.
 emu_net_ready() {
-  local serial=$1 host=${GATE_NET_PROBE_HOST:-${RUNNER_MEDIATOR_HOST:-}} t0 how
+  local serial=$1 host=${GATE_NET_PROBE_HOST:-${RUNNER_MEDIATOR_HOST:-}} t0 how dns=
   [ -n "$host" ] || { echo "emulator network: no probe host (GATE_NET_PROBE_HOST / RUNNER_MEDIATOR_HOST), not checked"; return 0; }
+  # nc is the proof (the port, not only the name): say so when the image lacks it, so a DNS-only result is not mistaken.
+  adb -s "$serial" shell "command -v nc >/dev/null 2>&1" 2>/dev/null || echo "emulator network: no nc in the image: only the name can be checked"
   t0=$(date +%s)
   while [ $(( $(date +%s) - t0 )) -lt "${GATE_NET_WAIT_S:-60}" ]; do
     how=$(adb -s "$serial" shell "echo | nc -w 3 $host 443 >/dev/null 2>&1 && echo tcp || { ping -c 1 -W 3 $host 2>&1 | grep -q '^PING $host (' && echo dns; }" 2>/dev/null | tr -d '\r')
-    [ -n "$how" ] && { echo "emulator network: $host reached ($how) after $(( $(date +%s) - t0 )) s"; return 0; }
+    [ "$how" = tcp ] && { echo "emulator network: $host reached (tcp 443) after $(( $(date +%s) - t0 )) s"; return 0; }
+    [ "$how" = dns ] && dns=1
     sleep "${GATE_NET_STEP_S:-3}"
   done
-  echo "emulator network: $host NOT reached in ${GATE_NET_WAIT_S:-60} s (the leg goes on; onboarding may fail on it)"
+  # TCP never answered: the name alone is a weaker sign, said as such; nothing at all is NOT reached.
+  if [ -n "$dns" ]; then echo "emulator network: $host resolved but tcp 443 not reached in ${GATE_NET_WAIT_S:-60} s (dns only; the leg goes on)"
+  else echo "emulator network: $host NOT reached in ${GATE_NET_WAIT_S:-60} s (the leg goes on; onboarding may fail on it)"; fi
 }
 emu_start() {
   local port=$1 out rc why t0; t0=$(date +%s)

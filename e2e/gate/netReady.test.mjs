@@ -23,9 +23,11 @@ const ready = (answer, env = {}) => {
   }).trim();
 };
 
-test('reached over TCP 443, or by its name at least, is said with how', () => {
-  assert.match(ready('tcp', { RUNNER_MEDIATOR_HOST: 'mediator.example' }), /mediator\.example reached \(tcp\)/);
-  assert.match(ready('dns', { RUNNER_MEDIATOR_HOST: 'mediator.example' }), /reached \(dns\)/);
+test('reached over TCP 443 at once; the name alone waits out the window and is said as weaker "dns only"', () => {
+  assert.match(ready('tcp', { RUNNER_MEDIATOR_HOST: 'mediator.example' }), /mediator\.example reached \(tcp 443\)/);
+  const dnsOnly = ready('dns', { RUNNER_MEDIATOR_HOST: 'mediator.example' });
+  assert.match(dnsOnly, /resolved but tcp 443 not reached in 2 s \(dns only/);
+  assert.doesNotMatch(dnsOnly, /reached \(tcp/);
 });
 
 test('never reached: said at the end of the window, and the leg goes on (status 0)', () => {
