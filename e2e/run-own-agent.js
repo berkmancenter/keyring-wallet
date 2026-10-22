@@ -265,8 +265,11 @@ async function readyPhone(d, name) {
   }
   await dismissTourIfPresent(d);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
+  // A linked phone's My Agent hands over to the agent home by itself (on focus since 09-29, before paint since
+  // bifold #484), so the agent home alone tells a phone that has an agent; "Open your agent" is gone (bifold #485).
+  // Looked for as long as the two old probes together, so a slow hand-over is not read as a fresh phone.
   await sleep(1500);
-  if ((await existsTestId(d, "AgentHome", 2000)) || (await existsTestId(d, "OpenYourAgentButton", 2000))) {
+  if (await existsTestId(d, "AgentHome", 4000)) {
     throw new Error(`NOT FRESH: the ${name} phone already has an agent — unlink it (or E2E_FRESH_INSTALL=1) and run reset.sh`);
   }
 }
