@@ -106,3 +106,14 @@ test('with bifold #473 in the build the unlinked row expects JoinAgentRefused an
   assert.ok(withLine.indexOf('existsTestId(d, "JoinNeedsAgent"') > withLine.indexOf('existsTestId(d, "JoinAgentRefused", 15000)'), 'JoinNeedsAgent absence is read after JoinAgentRefused is up');
   assert.match(branch.slice(branch.lastIndexOf('const needsAgent')), /ok: needsAgent && !unreachable[\s\S]*\(pre-fix\)/);
 });
+
+test('a failed status read loses one minute, never the run; My Agent visits look for the toast too', () => {
+  assert.match(driver, /const status = await linkStatus\(\)\.catch\(\(e\) => `\(read failed:/);
+  const fn = driver.slice(driver.indexOf('const linkStatus = async () => {'), driver.indexOf('const statusBefore'));
+  assert.ok((fn.match(/await lookForToast\(\);/g) ?? []).length >= 1, 'the toast is looked for while on My Agent');
+});
+
+test('the heartbeat link-removed row is a verdict only when the link was Online before the removal', () => {
+  assert.match(driver, /const onlineBefore = statusBefore === "Online";/);
+  assert.match(driver, /if \(HEARTBEAT && !onlineBefore\) \{[\s\S]*?rows\.skip\(N\("refused-link-removed"\), `no verdict: the link was/);
+});

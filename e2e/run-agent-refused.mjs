@@ -119,9 +119,17 @@ try {
   // The link's connection as My Agent shows it (VtaStatusText: online, connecting, reconnecting, offline, gone), or
   // "removed" once the link is: presence ticks only while the link is online (vtaPresence.ts isLinkOnline), so a link
   // that was not online never meets the refusal. On 267 presence logs only failures, so this is the tick's only witness.
+  // A visit to My Agent reads local records only, never the VTA, so it cannot stand in for the tick. A toast is app-wide:
+  // looked for there too, so the minute's visit is not a blind spot for refused-no-toast.
+  let toast = "";
+  const lookForToast = async () => {
+    if (!toast && (await existsTestId(d, "Toast", 500))) toast = (await textOf(d, "ToastTitle").catch(() => "")) || "(a toast)";
+  };
   const linkStatus = async () => {
     await tapTestId(d, "MyAgent", 15000);
+    await lookForToast();
     const status = (await existsTestId(d, "RemovedPhone", 3000)) ? "removed" : await textOf(d, "VtaStatusText").catch(() => "(no status line)");
+    await lookForToast();
     await tapTestId(d, "Contacts", 15000).catch(() => undefined);
     return status;
   };
@@ -143,15 +151,15 @@ try {
   const from = HEARTBEAT ? removedAt : Date.now();
   const windowMs = HEARTBEAT ? HEARTBEAT_S * 1000 : 95000;
   await tapTestId(d, "Contacts", 15000).catch(() => undefined);
-  let toast = "";
   // heartbeat: the link's status each minute, kept as its changes ("+Ns status"); the watch ends 30 s after the removal shows.
   const statuses = [];
   let nextSample = Date.now(), removedSeenAt = 0;
   for (let until = from + windowMs; Date.now() < until && !toast; await sleep(2000)) {
-    if (await existsTestId(d, "Toast", 500)) toast = (await textOf(d, "ToastTitle").catch(() => "")) || "(a toast)";
+    await lookForToast();
     if (!HEARTBEAT || removedSeenAt || Date.now() < nextSample) continue;
     nextSample = Date.now() + 60000;
-    const status = await linkStatus();
+    // A tap that times out is one minute's reading lost, never the run.
+    const status = await linkStatus().catch((e) => `(read failed: ${String(e?.message ?? e).slice(0, 60)})`);
     const at = `+${Math.round((Date.now() - removedAt) / 1000)}s ${status}`;
     console.log(`[e2e] link status ${at}`);
     if (statuses.at(-1)?.replace(/^\+\d+s /, "") !== status) statuses.push(at);
@@ -165,7 +173,13 @@ try {
 
   // 5. My Agent: the link is removed, with the way to link again.
   let removedShown = false;
-  await rows.row(N("refused-link-removed"), async () => {
+  // Presence ticks only while the link is online: one that was not before the removal never asks the agent, so the
+  // heartbeat path has nothing to judge (its rows say what the link was instead).
+  const onlineBefore = statusBefore === "Online";
+  if (HEARTBEAT && !onlineBefore) {
+    removedShown = await (async () => { await tapTestId(d, "MyAgent", 15000); return existsTestId(d, "RemovedPhone", 5000); })().catch(() => false);
+    rows.skip(N("refused-link-removed"), `no verdict: the link was "${statusBefore}" before the removal, not Online, so presence had no tick to make · after: ${statuses.join(", ") || "(not sampled)"} · RemovedPhone ${removedShown}`);
+  } else await rows.row(N("refused-link-removed"), async () => {
     await tapTestId(d, "MyAgent", 15000);
     removedShown = await existsTestId(d, "RemovedPhone", 30000);
     const again = removedShown && Boolean(await scrollToTestId(d, "VtaLinkScanAgain", 4).catch(() => false));
