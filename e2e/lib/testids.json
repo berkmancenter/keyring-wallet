@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "821c5f96bd77c1107d590d7ab7496768b9ebd35f",
+  "generatedFrom": "4023ff1b1d1e20a78e6b415061de8ec6ca69180a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -81,10 +81,7 @@
     "AgentDeviceRemoved": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRename": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceUntilNote": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
-    "AgentDevices": [
-      "src/modules/trust-tasks/screens/DevicesCard.tsx",
-      "src/modules/trust-tasks/screens/MyAgent.ids.ts"
-    ],
+    "AgentDevices": ["src/modules/trust-tasks/screens/DevicesCard.tsx"],
     "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGetAgentHelp": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -101,7 +98,9 @@
     "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneWhy": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHolds": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHoldsRetry": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHoldsStale": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHoldsUnread": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHome": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHomeLeaving": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHomeLink": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
@@ -655,6 +654,7 @@
     "MyAgentDid": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentEnrolCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentHandingOver": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentHoldingError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentHost": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentIdentityCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -694,7 +694,6 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
-    "OpenYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "PasteFromClipboard": ["src/screens/PasteUrl.tsx"],
     "PasteNothing": ["src/screens/PasteUrl.tsx"],
     "PasteRead": ["src/screens/PasteUrl.tsx"],
@@ -1270,9 +1269,6 @@
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.denyConsentButton"
     },
     {
-      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.devices"
-    },
-    {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.did"
     },
     {
@@ -1289,6 +1285,9 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.handingOver"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.host"
@@ -1331,9 +1330,6 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openCommunity"
-    },
-    {
-      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openYourAgentButton"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.peerLeg"
@@ -1420,7 +1416,13 @@
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holds"
     },
     {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsRetry"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsStale"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsUnread"
     },
     {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.home"
