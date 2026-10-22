@@ -143,8 +143,8 @@ code changing, and nothing in this tree would notice. **Any bump of
 Record the result in the bump PR. Also run the OTA gate leg (`gate-ota.yml`).
 The iOS update watchdog in `app/ios/AriesBifold/AppDelegate.mm` reads
 hot-updater's own `bundle-store/metadata.json` (`verification_pending`,
-`staging_bundle_id`) to tell a trial launch apart, since 0.36.18 has no public
-API for it. Check that the file and both keys still mean the same thing; if they
+`staging_bundle_id`, `isolation_key`) to tell a trial launch apart, since
+0.36.18 has no public API for it. Check that the file and both keys still mean the same thing; if they
 don't, the watchdog never arms, which is safe but leaves the black screen it
 exists to close.
 The watchdog's `abort()` is safe only because the next launch rolls the update
@@ -156,6 +156,13 @@ leads to a rollback. It leads to a crash on every launch of that update instead:
   `verification_pending` and `launch_in_progress` both set (an unfinished launch);
 - `markLaunchStarted` sets `launch_in_progress` when the bundle URL is resolved
   in the foreground, before anything renders, not at first render.
+Both apps set hot-updater's isolation key themselves (`KeyringOtaIsolationKey` in
+`AppDelegate.mm`, `otaIsolationKey` in `MainApplication.kt`): the default
+composition with the build number added, so that each store build starts on
+its own bundle even though every store build has the same version. Check that
+the override (`configureWithFingerprintHash:…isolationKey:` on iOS,
+`HotUpdaterConfig.isolationKey` on Android) is still read before the first
+bundle lookup, and that the default composition it copies hasn't changed.
 Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 (the server's update-check routes and the app's loader are one protocol).
 

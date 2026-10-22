@@ -15,6 +15,8 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 
 import com.hotupdater.HotUpdater
+import com.hotupdater.HotUpdaterConfig
+import com.hotupdater.HotUpdaterImpl
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import org.wonday.orientation.OrientationActivityLifecycle
@@ -57,8 +59,26 @@ class MainApplication : Application(), ReactApplication {
         registerActivityLifecycleCallbacks(OrientationActivityLifecycle.getInstance())
         super.onCreate()
         createWakeChannel()
+        // Before React Native asks for the bundle file (see otaIsolationKey).
+        HotUpdaterConfig.isolationKey = otaIsolationKey()
         loadReactNative(this)
         ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    }
+
+    // The key hot-updater files this phone's downloaded update under. Its
+    // default, HotUpdaterPrefs_{fingerprint}_{appVersion}_{channel}, has no build
+    // number, and every store build has the same version (0.2.0). So a store
+    // build with only JavaScript changes would find the previous build's update,
+    // launch it instead of its own bundle, and the server would offer neither an
+    // update nor a rollback (the update is older than this build). With the
+    // build number in the key, each store build starts on its own bundle. This
+    // is the default composition with the version read as {version}+{build};
+    // keep it in step with AppDelegate.mm.
+    private fun otaIsolationKey(): String {
+        val version = "${HotUpdaterImpl.getAppVersion(this) ?: "unknown"}+${BuildConfig.VERSION_CODE}"
+        val fingerprint = HotUpdaterImpl.getFingerprintHash(this)
+        val base = if (fingerprint.isNullOrEmpty()) version else "${fingerprint}_$version"
+        return "HotUpdaterPrefs_${base}_${HotUpdaterImpl.getChannel(this)}"
     }
 
     // High importance: a wake is something waiting for the person (an approval or
