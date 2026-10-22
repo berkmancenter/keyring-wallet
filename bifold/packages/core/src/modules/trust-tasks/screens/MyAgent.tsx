@@ -41,7 +41,6 @@ import {
 } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { ApprovalDetails } from './ApprovalDetails'
-import { DevicesCard } from './DevicesCard'
 import { MyAgentIds } from './MyAgent.ids'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { vtaAgent } from '../module/vtaAgent'
@@ -654,23 +653,9 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          {vta.link.kind === 'linked' ? (
-            <Button
-              title={t('VtaLink.OpenYourAgent')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => navigation.navigate(Screens.VtaAgent)}
-              testID={testIdWithKey(MyAgentIds.openYourAgentButton)}
-            />
-          ) : null}
-          {/* My devices, one tap from here: where the owner adds another device
-              or removes a lost one (own_agent_subtask.md §4). Also on the agent
-              screen; this is where "Claim your agent" returns to. */}
-          {vta.link.kind === 'linked' ? (
-            <DevicesCard
-              onPress={() => navigation.navigate(Screens.VtaDevices)}
-              testID={testIdWithKey(MyAgentIds.devices)}
-            />
-          ) : null}
+          {/* A linked phone never reaches this panel: it hands over to the agent
+              home before paint (above), which has "Open your agent"'s
+              destination and My devices itself (#484). */}
           <View style={styles.card} testID={testIdWithKey(MyAgentIds.card)}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f611cbecc723a76f425ae15b2cac369118ca6ee0",
+  "generatedFrom": "4023ff1b1d1e20a78e6b415061de8ec6ca69180a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -81,10 +81,7 @@
     "AgentDeviceRemoved": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRename": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceUntilNote": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
-    "AgentDevices": [
-      "src/modules/trust-tasks/screens/DevicesCard.tsx",
-      "src/modules/trust-tasks/screens/MyAgent.ids.ts"
-    ],
+    "AgentDevices": ["src/modules/trust-tasks/screens/DevicesCard.tsx"],
     "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGetAgentHelp": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -697,7 +694,6 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
-    "OpenYourAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "PasteFromClipboard": ["src/screens/PasteUrl.tsx"],
     "PasteNothing": ["src/screens/PasteUrl.tsx"],
     "PasteRead": ["src/screens/PasteUrl.tsx"],
@@ -1273,9 +1269,6 @@
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.denyConsentButton"
     },
     {
-      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.devices"
-    },
-    {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.did"
     },
     {
@@ -1337,9 +1330,6 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openCommunity"
-    },
-    {
-      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.openYourAgentButton"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.peerLeg"

@@ -850,6 +850,9 @@ const VtaAgentHome: React.FC = () => {
                 title={t('VtaLink.TryAgain')}
                 buttonType={ButtonType.Secondary}
                 onPress={() => {
+                  // Only a read that will run clears the error: with no agent, load() returns at once and the
+                  // spinner would never stop — the hung screen this card replaces (7a, #483).
+                  if (!agent) return
                   setHoldingsError(false)
                   void load()
                 }}

@@ -211,6 +211,26 @@ describe('the agent home paints only the state it is in', () => {
       expect(tree.queryByTestId(id('AgentHoldsUnread'))).toBeNull()
     })
 
+    // 7a on #483: load() returns at once with no agent, so a Try again then cleared the error and left a spinner.
+    it('Try again with no agent at that moment: the error stays, and no spinner starts', async () => {
+      ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], undefined, () => true))
+      const { tree } = renderWithFrames(() => false)
+      await settle()
+      expect(tree.getByTestId(id('AgentHoldsUnread'))).toBeTruthy()
+      ;(useAgent as jest.Mock).mockReturnValue({ agent: undefined })
+      tree.rerender(
+        <BasicAppContext>
+          <VtaAgentHome />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id('AgentHoldsRetry')))
+      })
+      await settle()
+      expect(tree.getByTestId(id('AgentHoldsUnread'))).toBeTruthy()
+      expect(spinning(tree)).toBe(false)
+    })
+
     it('Try again that succeeds: the page as it is (here, a phone with no community: the ways in)', async () => {
       let failing = true
       ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], undefined, () => failing))
