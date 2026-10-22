@@ -2560,5 +2560,8 @@
   },
   "MessageWake": {
     "Fetching": "Fetching new messages…"
+  },
+  "Relationship": {
+    "WaitingForAnswer": "Waiting for {{name}} to answer."
   }
 }

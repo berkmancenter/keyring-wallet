@@ -2,6 +2,7 @@ import { renderHook, act } from '@testing-library/react-native'
 
 import {
   useVrcFlowInProgress,
+  FLOW_HARD_TIMEOUT_MS,
   FLOW_TIMEOUT_MS_NON_WITNESSED,
   FLOW_TIMEOUT_MS_WITNESSED,
 } from '../../src/hooks/chat-messages'
@@ -38,11 +39,11 @@ describe('useVrcFlowInProgress - timeout behavior', () => {
     expect(result.current.statusText).toBe('Establishing connection...')
   })
 
-  it('should set timedOut after 60s for non-witnessed flow', () => {
+  it('should set timedOut after 60s of our own work in a non-witnessed flow', () => {
     const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
 
     act(() => {
-      vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
     })
 
     expect(result.current.timedOut).toBe(false)
@@ -152,7 +153,7 @@ describe('useVrcFlowInProgress - timeout behavior', () => {
     const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
 
     act(() => {
-      vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
     })
 
     act(() => {
@@ -189,7 +190,7 @@ describe('useVrcFlowInProgress - timeout behavior', () => {
     const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
 
     act(() => {
-      vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
     })
 
     act(() => {
@@ -387,7 +388,6 @@ describe('vrcFlowStore.clearFlow - error event emission', () => {
   })
 })
 
-
 describe('useVrcFlowInProgress - success confirmation beat', () => {
   beforeEach(() => {
     jest.useFakeTimers()
@@ -447,7 +447,7 @@ describe('useVrcFlowInProgress - success confirmation beat', () => {
     const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
 
     act(() => {
-      vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
     })
     act(() => {
       jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
@@ -455,5 +455,129 @@ describe('useVrcFlowInProgress - success confirmation beat', () => {
 
     expect(result.current.timedOut).toBe(true)
     expect(result.current.confirmed).toBe(false)
+  })
+})
+
+describe('useVrcFlowInProgress - waiting on the other phone', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    vrcFlowStore.clearFlow('conn-1')
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it.each(['connecting', 'discovering', 'proposed', 'offer-sent'] as const)(
+    'a long wait in %s says we are waiting, never that the exchange failed',
+    (status) => {
+      const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+      act(() => {
+        vrcFlowStore.setStatus('conn-1', status, false)
+      })
+      expect(result.current.inProgress).toBe(true)
+      expect(result.current.waitingOnPeer).toBe(false)
+
+      act(() => {
+        jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+      })
+
+      expect(result.current.waitingOnPeer).toBe(true)
+      expect(result.current.timedOut).toBe(false)
+      expect(result.current.inProgress).toBe(true)
+    }
+  )
+
+  it('waits past the hard timeout, and the hard timeout counts only our own work after it', () => {
+    const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'proposed', false)
+    })
+    act(() => {
+      jest.advanceTimersByTime(FLOW_HARD_TIMEOUT_MS * 3)
+    })
+    // An unrelated store update re-runs the status check mid-wait.
+    act(() => {
+      vrcFlowStore.setStatus('conn-2', 'connecting', false)
+    })
+    expect(result.current.timedOut).toBe(false)
+    expect(result.current.waitingOnPeer).toBe(true)
+
+    // They answer: our own work starts now, with a fresh clock.
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
+    })
+    expect(result.current.timedOut).toBe(false)
+    expect(result.current.waitingOnPeer).toBe(false)
+    expect(result.current.statusText).toBe('Preparing credential offer...')
+    vrcFlowStore.clearFlow('conn-2')
+  })
+
+  it('dismissing the wait hides the dialog but keeps the flow, and the next step brings it back', () => {
+    const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'proposed', false)
+    })
+    act(() => {
+      jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+    })
+    expect(result.current.waitingOnPeer).toBe(true)
+
+    act(() => {
+      result.current.onDismissWaiting()
+    })
+    expect(result.current.inProgress).toBe(false)
+    expect(result.current.waitingOnPeer).toBe(false)
+    expect(vrcFlowStore.getStatus('conn-1')).toBe('proposed')
+
+    // Re-checks while still waiting keep it hidden.
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'proposed', false)
+      jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+    })
+    expect(result.current.inProgress).toBe(false)
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'preparing-offer', false)
+    })
+    expect(result.current.inProgress).toBe(true)
+    expect(result.current.statusText).toBe('Preparing credential offer...')
+  })
+
+  it('a dismissed wait that ends in success shows the confirmation', () => {
+    const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'offer-sent', false)
+    })
+    act(() => {
+      jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+    })
+    act(() => {
+      result.current.onDismissWaiting()
+    })
+    expect(result.current.inProgress).toBe(false)
+
+    act(() => {
+      vrcFlowStore.markRcardReceiveComplete('conn-1')
+      vrcFlowStore.setStatus('conn-1', 'offer-received', false)
+    })
+    expect(result.current.confirmed).toBe(true)
+    expect(result.current.inProgress).toBe(true)
+  })
+
+  it('onDismissWaiting does nothing outside a wait on the other phone', () => {
+    const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'witness-active', false)
+    })
+    act(() => {
+      result.current.onDismissWaiting()
+    })
+    expect(result.current.inProgress).toBe(true)
   })
 })

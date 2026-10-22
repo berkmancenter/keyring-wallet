@@ -1,5 +1,14 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
-import { DidCommBasicMessageRecord, DidCommConnectionRecord, DidCommCredentialEventTypes, DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState, DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
+import {
+  DidCommBasicMessageRecord,
+  DidCommConnectionRecord,
+  DidCommCredentialEventTypes,
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialRole,
+  DidCommCredentialState,
+  DidCommProofExchangeRecord,
+  DidCommProofState,
+} from '@credo-ts/didcomm'
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { useBasicMessagesByConnectionId, useAgent } from '@bifold/react-hooks'
 import { isPresentationReceived } from '@bifold/verifier'
@@ -22,15 +31,16 @@ import { OpenIDCredentialType } from '../modules/openid/types'
 import { isDTGCredential, isRCardTemplate, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
-import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore, type VrcFlowStatus } from '../modules/vrc/witnessStatusStore'
+import {
+  witnessStatusStore,
+  WitnessStatusMessage,
+  vrcFlowStore,
+  type VrcFlowStatus,
+} from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
 import { Role } from '../types/chat'
 import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
-import {
-  getMessageEventRole,
-  getProofEventLabel,
-  getProofEventRole,
-} from '../utils/helpers'
+import { getMessageEventRole, getProofEventLabel, getProofEventRole } from '../utils/helpers'
 import { ThemedText } from '../components/texts/ThemedText'
 import { BIOMETRIC_STATUS_MESSAGE_PREFIX } from '../modules/vrc/vrc-biometric'
 import { derivePseudonym } from '../utils/pseudonym'
@@ -38,15 +48,12 @@ import { derivePseudonym } from '../utils/pseudonym'
 /**
  * Transforms VRC biometric status messages into user-friendly text
  * Raw format: vrc:biometric-status:{status}:{timestamp}:{reason}
- * 
+ *
  * @param content The raw message content
  * @param t Translation function
  * @returns User-friendly message or null if not a biometric status message
  */
-const transformBiometricStatusMessage = (
-  content: string,
-  t: (key: string) => string
-): string | null => {
+const transformBiometricStatusMessage = (content: string, t: (key: string) => string): string | null => {
   if (!content.startsWith(BIOMETRIC_STATUS_MESSAGE_PREFIX)) {
     return null
   }
@@ -72,33 +79,33 @@ const transformBiometricStatusMessage = (
 export const useRoutedWitnessCredentials = (connectionId: string): W3cCredentialRecord[] => {
   const { agent } = useAgent()
   const [routedCreds, setRoutedCreds] = useState<W3cCredentialRecord[]>([])
-  
+
   useEffect(() => {
     if (!agent || !connectionId) return
-    
+
     const loadRoutedCredentials = async () => {
       try {
         const allW3cRecords = await agent.w3cCredentials.getAll()
-        
+
         // Filter for credentials with routing metadata pointing to this connection
-        const filtered = allW3cRecords.filter(record => {
+        const filtered = allW3cRecords.filter((record) => {
           const routing = record.metadata.get('witnessCredentialRouting') as any
           return routing?.displayInConnectionId === connectionId
         })
-        
+
         setRoutedCreds(filtered)
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('[VRC] Error loading routed witness credentials:', error)
       }
     }
-    
+
     loadRoutedCredentials()
-    
+
     // Listen for credential state changes to update
     const handleCredentialChange = () => loadRoutedCredentials()
     agent.events.on(DidCommCredentialEventTypes.DidCommCredentialStateChanged, handleCredentialChange)
-    
+
     // Also listen for witness status updates (routing metadata is added after credential arrives)
     const handleWitnessStatusUpdate = ({ connectionId: statusConnectionId }: { connectionId: string }) => {
       // Reload when witness-complete status is emitted for this connection
@@ -108,13 +115,13 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
       }
     }
     witnessStatusStore.on('statusUpdate', handleWitnessStatusUpdate)
-    
+
     return () => {
       agent.events.off(DidCommCredentialEventTypes.DidCommCredentialStateChanged, handleCredentialChange)
       witnessStatusStore.off('statusUpdate', handleWitnessStatusUpdate)
     }
   }, [agent, connectionId])
-  
+
   return routedCreds
 }
 
@@ -124,26 +131,26 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
  */
 export const useWitnessStatusMessages = (connectionId: string): WitnessStatusMessage[] => {
   const [messages, setMessages] = useState<WitnessStatusMessage[]>([])
-  
+
   useEffect(() => {
     if (!connectionId) return
-    
+
     const updateMessages = () => {
       const statuses = witnessStatusStore.getStatuses(connectionId)
       setMessages(statuses)
     }
-    
+
     // Initial load
     updateMessages()
-    
+
     // Subscribe to updates
     witnessStatusStore.on('statusUpdate', updateMessages)
-    
+
     return () => {
       witnessStatusStore.off('statusUpdate', updateMessages)
     }
   }, [connectionId])
-  
+
   return messages
 }
 
@@ -179,9 +186,21 @@ export interface VrcFlowOverlayState {
    * rather than just vanishing and leaving the user wondering.
    */
   confirmed: boolean
+  /**
+   * True once a wait on the OTHER phone has outlasted the flow timeout. That
+   * is not a failure: their phone may simply be closed, and the exchange
+   * finishes when they open Keyring and answer. Chat says so instead of
+   * declaring the exchange failed.
+   */
+  waitingOnPeer: boolean
   onDismissTimeout: () => void
   /** Dismiss the confirmation beat early (e.g. the user tapped through). */
   onDismissConfirmation: () => void
+  /**
+   * Hide the waiting dialog without ending the flow: it comes back when the
+   * other phone moves the exchange on.
+   */
+  onDismissWaiting: () => void
 }
 
 // Milestones: how far along the exchange each flow status represents. The
@@ -222,10 +241,29 @@ export const FLOW_HARD_TIMEOUT_MS = 180000
 export const RCARD_TRAILING_GRACE_MS = 30000
 // How long the success beat stays up before the dialog clears itself.
 
+/**
+ * Statuses that wait on a message from the other phone rather than on our
+ * own work. A peer whose app is closed answers only when they open it, so a
+ * timeout here means "still waiting", never "failed"; and the hard timeout
+ * counts only our own work, not time spent here.
+ */
+const PEER_WAIT_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
+  'connecting',
+  'discovering',
+  'proposed',
+  'offer-sent',
+])
+export const isPeerWaitStatus = (status: VrcFlowStatus): boolean => PEER_WAIT_STATUSES.has(status)
+
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
   const [inProgress, setInProgress] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [timedOut, setTimedOut] = useState(false)
+  const [waitingOnPeer, setWaitingOnPeer] = useState(false)
+  // The status the user dismissed the waiting dialog at; the dialog stays
+  // hidden until the flow leaves it.
+  const waitDismissedAtRef = useRef<VrcFlowStatus | null>(null)
+  const lastStatusRef = useRef<VrcFlowStatus>('idle')
   const [progressFraction, setProgressFraction] = useState(0)
   const [progressComplete, setProgressComplete] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
@@ -254,6 +292,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     setConfirmed(false)
     rcardGraceExpiredRef.current = false
     setTimedOut(false)
+    setWaitingOnPeer(false)
+    waitDismissedAtRef.current = null
     setInProgress(false)
     setStatusText('')
     setProgressFraction(0)
@@ -263,7 +303,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     flowStartedAtRef.current = null
     vrcFlowStore.clearFlow(connectionId)
   }, [connectionId])
-  
+
   useEffect(() => {
     if (!connectionId) {
       setInProgress(false)
@@ -272,15 +312,15 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       flowStartedAtRef.current = null
       return
     }
-    
+
     let timeoutId: NodeJS.Timeout | null = null
-    
+
     const checkStatus = () => {
       const flowStatus = vrcFlowStore.getStatus(connectionId)
       const isWitnessed = vrcFlowStore.isWitnessedFlow(connectionId)
       const hasReceivedOffer = vrcFlowStore.hasReceivedOfferFlag(connectionId)
       const isComplete = vrcFlowStore.isExchangeComplete(connectionId)
-      
+
       // Determine if overlay should show
       // Clear overlay when:
       // - 'idle': No active flow
@@ -308,17 +348,39 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         vrcFlowStore.isRcardReceivePending(connectionId) &&
         !rcardGraceExpiredRef.current
 
-      if (shouldShowOverlay) {
-        if (!flowStartedAtRef.current) {
-          flowStartedAtRef.current = Date.now()
-        }
+      // A new status ends any wait the user was told about or dismissed.
+      if (flowStatus !== lastStatusRef.current) {
+        lastStatusRef.current = flowStatus
+        setWaitingOnPeer(false)
+        if (waitDismissedAtRef.current !== flowStatus) waitDismissedAtRef.current = null
+      }
+      const peerWait = isPeerWaitStatus(flowStatus)
 
-        const elapsedMs = Date.now() - flowStartedAtRef.current
-        if (elapsedMs >= FLOW_HARD_TIMEOUT_MS) {
-          setInProgress(true)
-          setTimedOut(true)
-          setStatusText("The exchange took too long. You may need to reconnect and try again.")
-          return
+      if (shouldShowOverlay && peerWait && waitDismissedAtRef.current === flowStatus) {
+        // Dismissed while waiting on the other phone: stay hidden, keep the
+        // flow, and arm no timer — nothing here can fail.
+        if (timeoutId) clearTimeout(timeoutId)
+        setInProgress(false)
+        return
+      }
+
+      if (shouldShowOverlay) {
+        if (peerWait) {
+          // The hard timeout counts our own work only; a wait on a closed
+          // phone can last hours and must not count against what follows.
+          flowStartedAtRef.current = null
+        } else {
+          if (!flowStartedAtRef.current) {
+            flowStartedAtRef.current = Date.now()
+          }
+
+          const elapsedMs = Date.now() - flowStartedAtRef.current
+          if (elapsedMs >= FLOW_HARD_TIMEOUT_MS) {
+            setInProgress(true)
+            setTimedOut(true)
+            setStatusText('The exchange took too long. You may need to reconnect and try again.')
+            return
+          }
         }
 
         // Cancel any pending completion animation
@@ -353,7 +415,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             setStatusText('Checking what your contact supports...')
             break
           case 'proposed':
-            setStatusText("Waiting for your contact to accept...")
+            setStatusText('Waiting for your contact to accept...')
             break
           case 'preparing-offer':
             // Trust-task dialect: there is no "offer" — the first pass prepares
@@ -419,6 +481,9 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           setTimedOut(false)
           setStatusText('')
           setConfirmed(true)
+          // A waiting dialog the user dismissed hid the overlay; the success
+          // beat shows it again.
+          setInProgress(true)
           // No auto-dismiss. The confirmation is the one moment the user is
           // asked to act — it offers a way through to Contacts — and a timer
           // was yanking it away mid-reach (device 2026-08-29). It now waits
@@ -436,7 +501,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           rcardGraceExpiredRef.current = false
         }
       }
-      
+
       // Set up timeout to show error state if stuck.
       // Witnessed flows need more time (attestation + witness round-trip),
       // so use 120s for witnessed, 60s for non-witnessed.
@@ -447,27 +512,34 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           const currentStatus = vrcFlowStore.getStatus(connectionId)
           const currentComplete = vrcFlowStore.isExchangeComplete(connectionId)
           const currentHasReceived = vrcFlowStore.hasReceivedOfferFlag(connectionId)
-          const shouldStillBeActive = 
-            currentStatus !== 'idle' && 
+          const shouldStillBeActive =
+            currentStatus !== 'idle' &&
             currentStatus !== 'offer-received' &&
             !(currentStatus === 'offer-sent' && currentHasReceived) &&
             !currentComplete
-          if (shouldStillBeActive) {
+          if (shouldStillBeActive && isPeerWaitStatus(currentStatus)) {
+            // Their phone has not answered yet. Nothing has failed and
+            // nothing is resent (a resend would only tell the network we are
+            // still trying); Chat says who we are waiting for.
+            setWaitingOnPeer(true)
+          } else if (shouldStillBeActive) {
             // eslint-disable-next-line no-console
-            console.warn(`[VRC Flow] Timeout after ${timeoutMs / 1000}s | Status: ${currentStatus} — showing timeout UI`)
+            console.warn(
+              `[VRC Flow] Timeout after ${timeoutMs / 1000}s | Status: ${currentStatus} — showing timeout UI`
+            )
             setTimedOut(true)
             setStatusText("The exchange didn't complete. You may need to try connecting again.")
           }
         }, timeoutMs)
       }
     }
-    
+
     // Initial check
     checkStatus()
-    
+
     // Subscribe to updates
     vrcFlowStore.on('flowUpdate', checkStatus)
-    
+
     return () => {
       vrcFlowStore.off('flowUpdate', checkStatus)
       if (timeoutId) clearTimeout(timeoutId)
@@ -485,7 +557,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       }
     }
   }, [connectionId])
-  
+
   const onDismissConfirmation = useCallback(() => {
     if (completionTimerRef.current) {
       clearTimeout(completionTimerRef.current)
@@ -503,14 +575,24 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     if (connectionId) vrcFlowStore.clearFlow(connectionId)
   }, [connectionId])
 
+  const onDismissWaiting = useCallback(() => {
+    const status = vrcFlowStore.getStatus(connectionId)
+    if (!isPeerWaitStatus(status)) return
+    waitDismissedAtRef.current = status
+    setWaitingOnPeer(false)
+    setInProgress(false)
+  }, [connectionId])
+
   return {
     inProgress,
     statusText,
     timedOut,
+    waitingOnPeer,
     progressFraction,
     progressComplete,
     confirmed,
     onDismissTimeout,
+    onDismissWaiting,
     onDismissConfirmation,
   }
 }
@@ -520,7 +602,6 @@ export const useWitnessFlowInProgress = (connectionId: string): boolean => {
   const { inProgress } = useVrcFlowInProgress(connectionId)
   return inProgress
 }
-
 
 /**
  * Determines the callback to be called when the button below a given chat message is pressed, if it exists.
@@ -669,181 +750,178 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
   } = useOpenIDCredentials()
 
   useEffect(() => {
-    const transformedMessages: Array<ExtendedChatMessage> = (basicMessages.map((record: DidCommBasicMessageRecord) => {
-      const role = getMessageEventRole(record)
+    const transformedMessages: Array<ExtendedChatMessage> = (
+      basicMessages.map((record: DidCommBasicMessageRecord) => {
+        const role = getMessageEventRole(record)
 
-      // Hide all JSON protocol messages (witness-announcement, session-challenge,
-      // reporting-did-registration, etc.) from the chat UI — they are verbose protocol noise.
-      try {
-        const parsed = JSON.parse(record.content)
-        if (parsed && typeof parsed === 'object' && parsed.type) {
-          // Reporting Pseudonym registration — show as a styled event message
-          if (parsed.type === 'reporting-did-registration' && typeof parsed.reportingDid === 'string') {
-            const baseTextStyle = role === Role.me ? theme.rightText : theme.leftText
-            const textStyle = { ...baseTextStyle, color: '#333333' }
-            const dotColor = reportingEnabled ? ColorPalette.semantic.success : ColorPalette.grayscale.mediumGrey
-            const statusLabel = reportingEnabled ? t('Chat.ReportingStatusOn') : t('Chat.ReportingStatusOff')
-            const capturedDid: string = parsed.reportingDid
-            const pseudonym = derivePseudonym(capturedDid)
+        // Hide all JSON protocol messages (witness-announcement, session-challenge,
+        // reporting-did-registration, etc.) from the chat UI — they are verbose protocol noise.
+        try {
+          const parsed = JSON.parse(record.content)
+          if (parsed && typeof parsed === 'object' && parsed.type) {
+            // Reporting Pseudonym registration — show as a styled event message
+            if (parsed.type === 'reporting-did-registration' && typeof parsed.reportingDid === 'string') {
+              const baseTextStyle = role === Role.me ? theme.rightText : theme.leftText
+              const textStyle = { ...baseTextStyle, color: '#333333' }
+              const dotColor = reportingEnabled ? ColorPalette.semantic.success : ColorPalette.grayscale.mediumGrey
+              const statusLabel = reportingEnabled ? t('Chat.ReportingStatusOn') : t('Chat.ReportingStatusOff')
+              const capturedDid: string = parsed.reportingDid
+              const pseudonym = derivePseudonym(capturedDid)
 
-            const renderStatusBadge = () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: dotColor,
-                    marginRight: 6,
-                  }}
-                />
-                <ThemedText style={[textStyle, { fontSize: 14 }]}>{statusLabel}</ThemedText>
-              </View>
-            )
-
-            return {
-              _id: record.id,
-              text: `${t('Chat.ReportingPseudonymTitle')}|${statusLabel}`,
-              // Collapsed: bold title + pseudonym + live status badge
-              collapsedContent: () => (
-                <View>
-                  <ThemedText style={[textStyle, { fontWeight: 'bold' }]}>
-                    {t('Chat.ReportingPseudonymTitle')}
-                  </ThemedText>
-                  <ThemedText style={[textStyle, { fontStyle: 'italic' }]}>
-                    {pseudonym}
-                  </ThemedText>
-                  {renderStatusBadge()}
+              const renderStatusBadge = () => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: dotColor,
+                      marginRight: 6,
+                    }}
+                  />
+                  <ThemedText style={[textStyle, { fontSize: 14 }]}>{statusLabel}</ThemedText>
                 </View>
-              ),
-              renderEvent: () => (
-                <View>
-                  <ThemedText style={[textStyle, { fontWeight: 'bold' }]}>
-                    {t('Chat.ReportingPseudonymTitle')}
-                  </ThemedText>
-                  <ThemedText style={[textStyle, { fontStyle: 'italic' }]}>
-                    {pseudonym}
-                  </ThemedText>
-                  <ThemedText style={textStyle}>
-                    {t('Chat.ReportingPseudonymRegisteredSuffix', { name: theirLabel })}
-                  </ThemedText>
-                  {renderStatusBadge()}
-                </View>
-              ),
-              createdAt: record.createdAt,
-              type: record.type,
-              user: { _id: role },
-              iconType: MessageIconType.ReportingDID,
-              relationshipDid: capturedDid,
-            } as ExtendedChatMessage
+              )
+
+              return {
+                _id: record.id,
+                text: `${t('Chat.ReportingPseudonymTitle')}|${statusLabel}`,
+                // Collapsed: bold title + pseudonym + live status badge
+                collapsedContent: () => (
+                  <View>
+                    <ThemedText style={[textStyle, { fontWeight: 'bold' }]}>
+                      {t('Chat.ReportingPseudonymTitle')}
+                    </ThemedText>
+                    <ThemedText style={[textStyle, { fontStyle: 'italic' }]}>{pseudonym}</ThemedText>
+                    {renderStatusBadge()}
+                  </View>
+                ),
+                renderEvent: () => (
+                  <View>
+                    <ThemedText style={[textStyle, { fontWeight: 'bold' }]}>
+                      {t('Chat.ReportingPseudonymTitle')}
+                    </ThemedText>
+                    <ThemedText style={[textStyle, { fontStyle: 'italic' }]}>{pseudonym}</ThemedText>
+                    <ThemedText style={textStyle}>
+                      {t('Chat.ReportingPseudonymRegisteredSuffix', { name: theirLabel })}
+                    </ThemedText>
+                    {renderStatusBadge()}
+                  </View>
+                ),
+                createdAt: record.createdAt,
+                type: record.type,
+                user: { _id: role },
+                iconType: MessageIconType.ReportingDID,
+                relationshipDid: capturedDid,
+              } as ExtendedChatMessage
+            }
+
+            // All other JSON protocol messages are hidden
+            return null
           }
+        } catch {
+          // Not JSON — continue to regular message handling below
+        }
 
-          // All other JSON protocol messages are hidden
+        // Hide VRC relationship DID exchange messages — verbose protocol noise
+        if (record.content.includes('vrc:relationshipDid:')) {
           return null
         }
-      } catch {
-        // Not JSON — continue to regular message handling below
-      }
 
-      // Hide VRC relationship DID exchange messages — verbose protocol noise
-      if (record.content.includes('vrc:relationshipDid:')) {
-        return null
-      }
+        // Check if this is a VRC biometric status message and transform it
+        const biometricMessage = transformBiometricStatusMessage(record.content, t)
+        const displayContent = biometricMessage || record.content
 
-      // Check if this is a VRC biometric status message and transform it
-      const biometricMessage = transformBiometricStatusMessage(record.content, t)
-      const displayContent = biometricMessage || record.content
-
-      // Regular text message handling
-      // eslint-disable-next-line
-      const linkRegex = /(?:https?\:\/\/\w+(?:\.\w+)+\S*)|(?:[\w\d\.\_\-]+@\w+(?:\.\w+)+)/gim
-      // eslint-disable-next-line
-      const mailRegex = /^[\w\d\.\_\-]+@\w+(?:\.\w+)+$/gim
-      const links = displayContent.match(linkRegex) ?? []
-      const handleLinkPress = (link: string) => {
-        if (link.match(mailRegex)) {
-          link = 'mailto:' + link
+        // Regular text message handling
+        // eslint-disable-next-line
+        const linkRegex = /(?:https?\:\/\/\w+(?:\.\w+)+\S*)|(?:[\w\d\.\_\-]+@\w+(?:\.\w+)+)/gim
+        // eslint-disable-next-line
+        const mailRegex = /^[\w\d\.\_\-]+@\w+(?:\.\w+)+$/gim
+        const links = displayContent.match(linkRegex) ?? []
+        const handleLinkPress = (link: string) => {
+          if (link.match(mailRegex)) {
+            link = 'mailto:' + link
+          }
+          Linking.openURL(link)
         }
-        Linking.openURL(link)
-      }
-      const textStyle = role === Role.me ? theme.rightText : theme.leftText
-      const msgText = (
-        <ThemedText style={textStyle}>
-          {displayContent.split(linkRegex).map((split, i) => {
-            if (i < links.length) {
-              const link = links[i]
+        const textStyle = role === Role.me ? theme.rightText : theme.leftText
+        const msgText = (
+          <ThemedText style={textStyle}>
+            {displayContent.split(linkRegex).map((split, i) => {
+              if (i < links.length) {
+                const link = links[i]
+                return (
+                  <Fragment key={`${record.id}-${i}`}>
+                    <ThemedText style={textStyle}>{split}</ThemedText>
+                    <ThemedText
+                      onPress={() => handleLinkPress(link)}
+                      style={{ color: ColorPalette.brand.link, textDecorationLine: 'underline' }}
+                      accessibilityRole={'link'}
+                    >
+                      {link}
+                    </ThemedText>
+                  </Fragment>
+                )
+              }
               return (
-                <Fragment key={`${record.id}-${i}`}>
-                  <ThemedText style={textStyle}>{split}</ThemedText>
-                  <ThemedText
-                    onPress={() => handleLinkPress(link)}
-                    style={{ color: ColorPalette.brand.link, textDecorationLine: 'underline' }}
-                    accessibilityRole={'link'}
-                  >
-                    {link}
-                  </ThemedText>
-                </Fragment>
+                <ThemedText key={`${record.id}-${i}`} style={textStyle}>
+                  {split}
+                </ThemedText>
               )
-            }
-            return (
-              <ThemedText key={`${record.id}-${i}`} style={textStyle}>
-                {split}
-              </ThemedText>
-            )
-          })}
-        </ThemedText>
-      )
+            })}
+          </ThemedText>
+        )
 
-      return {
-        _id: record.id,
-        text: displayContent,
-        renderEvent: () => msgText,
-        createdAt: record.createdAt,
-        type: record.type,
-        user: { _id: role },
-      }
-    }) as Array<ExtendedChatMessage | null>).filter((msg): msg is ExtendedChatMessage => msg !== null)
+        return {
+          _id: record.id,
+          text: displayContent,
+          renderEvent: () => msgText,
+          createdAt: record.createdAt,
+          type: record.type,
+          user: { _id: role },
+        }
+      }) as Array<ExtendedChatMessage | null>
+    ).filter((msg): msg is ExtendedChatMessage => msg !== null)
 
     // Filter credentials: show OfferReceived (needs action) and Done (completed) states
     // Only show where user is HOLDER. Handles both AnonCreds and W3C/JSON-LD credentials.
     // Witness connection credentials get simplified display (full details in Contact Details).
-    const actionableCredentials = credentials.filter(
-      (record: DidCommCredentialExchangeRecord) => {
-        // Base filter: only show actionable states where user is HOLDER
-        const isActionableState = record.state === DidCommCredentialState.Done || record.state === DidCommCredentialState.OfferReceived
-        const isHolder = record.role === DidCommCredentialRole.Holder
-        
-        if (!isActionableState || !isHolder) {
-          return false
-        }
+    const actionableCredentials = credentials.filter((record: DidCommCredentialExchangeRecord) => {
+      // Base filter: only show actionable states where user is HOLDER
+      const isActionableState =
+        record.state === DidCommCredentialState.Done || record.state === DidCommCredentialState.OfferReceived
+      const isHolder = record.role === DidCommCredentialRole.Holder
 
-        // Hide RelationshipCard (contact card) exchanges — they are auto-accepted
-        // protocol plumbing alongside the VRC, not user-facing chat events.
-        // Detected via the metadata tag set by the auto-accept handler, or via
-        // the bound W3C credential's type once the exchange is Done.
-        if (record.metadata.get('rcardExchange')) {
-          return false
-        }
-        // Held while the auto-accept handler classifies a fresh offer (an
-        // R-Card would otherwise flash as an actionable offer for ~1 s).
-        if (record.metadata.get('offerClassifying')) {
-          return false
-        }
-        const w3cBinding = record.credentials.find((cred) => cred.credentialRecordType === 'w3c')
-        if (w3cBinding) {
-          const w3cRecord = w3cCredentialRecords.find((cred) => cred.id === w3cBinding.credentialRecordId)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const typeValue = (w3cRecord as any)?.credential?.type
-          const types = Array.isArray(typeValue) ? typeValue : typeValue ? [typeValue] : []
-          if (types.some((t: unknown) => t === 'RelationshipCard')) {
-            return false
-          }
-        }
-
-        // All credentials pass through - witness connection credentials get special handling below
-        return true
+      if (!isActionableState || !isHolder) {
+        return false
       }
-    )
+
+      // Hide RelationshipCard (contact card) exchanges — they are auto-accepted
+      // protocol plumbing alongside the VRC, not user-facing chat events.
+      // Detected via the metadata tag set by the auto-accept handler, or via
+      // the bound W3C credential's type once the exchange is Done.
+      if (record.metadata.get('rcardExchange')) {
+        return false
+      }
+      // Held while the auto-accept handler classifies a fresh offer (an
+      // R-Card would otherwise flash as an actionable offer for ~1 s).
+      if (record.metadata.get('offerClassifying')) {
+        return false
+      }
+      const w3cBinding = record.credentials.find((cred) => cred.credentialRecordType === 'w3c')
+      if (w3cBinding) {
+        const w3cRecord = w3cCredentialRecords.find((cred) => cred.id === w3cBinding.credentialRecordId)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const typeValue = (w3cRecord as any)?.credential?.type
+        const types = Array.isArray(typeValue) ? typeValue : typeValue ? [typeValue] : []
+        if (types.some((t: unknown) => t === 'RelationshipCard')) {
+          return false
+        }
+      }
+
+      // All credentials pass through - witness connection credentials get special handling below
+      return true
+    })
 
     transformedMessages.push(
       ...actionableCredentials.map((record: DidCommCredentialExchangeRecord) => {
@@ -934,17 +1012,13 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
 
         return {
           _id: record.id,
-          text: record.state === DidCommCredentialState.OfferReceived
-            ? `${theirLabel} — ${t(chatOfferTitleKey as any)}`
-            : `${t(chatReceivedTitleKey as any)} ${t('Chat.CredentialFromSuffix', { name: theirLabel })}`,
+          text:
+            record.state === DidCommCredentialState.OfferReceived
+              ? `${theirLabel} — ${t(chatOfferTitleKey as any)}`
+              : `${t(chatReceivedTitleKey as any)} ${t('Chat.CredentialFromSuffix', { name: theirLabel })}`,
           renderEvent: () => (
             <View>
-              <ChatEvent
-                role={Role.them}
-                prefix=""
-                title={eventTitle}
-                subtitle={eventSubtitle}
-              />
+              <ChatEvent role={Role.them} prefix="" title={eventTitle} subtitle={eventSubtitle} />
               {record.state === DidCommCredentialState.Done && (
                 <TouchableOpacity onPress={handleViewDetails} style={{ marginTop: 8 }}>
                   <Text style={{ color: 'black', fontSize: 14, textDecorationLine: 'underline' }}>
@@ -960,37 +1034,43 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
           iconType: MessageIconType.Credential,
           messageOpensCallbackType: callbackTypeForMessage(record),
           // Only set onDetails for OfferReceived — the Done state link is now inside renderEvent
-          onDetails: record.state === DidCommCredentialState.OfferReceived ? () => {
-            if (navigation.getParent()) {
-              navigation.getParent()?.navigate(Stacks.ConnectionStack, {
-                screen: Screens.Connection,
-                params: { credentialId: record.id },
-              })
-            } else {
-              navigation.navigate(Stacks.ConnectionStack as any, {
-                screen: Screens.Connection,
-                params: { credentialId: record.id },
-              })
-            }
-          } : undefined,
-          onDecline: record.state === DidCommCredentialState.OfferReceived ? async () => {
-            try {
-              if (agent) {
-                const connectionId = record.connectionId ?? ''
-                const connection = await agent.modules.didcomm.connections.findById(connectionId)
-                await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: record.id })
-                if (connection) {
-                  await agent.modules.didcomm.credentials.sendProblemReport({
-                    credentialExchangeRecordId: record.id,
-                    description: t('CredentialOffer.Declined'),
-                  })
+          onDetails:
+            record.state === DidCommCredentialState.OfferReceived
+              ? () => {
+                  if (navigation.getParent()) {
+                    navigation.getParent()?.navigate(Stacks.ConnectionStack, {
+                      screen: Screens.Connection,
+                      params: { credentialId: record.id },
+                    })
+                  } else {
+                    navigation.navigate(Stacks.ConnectionStack as any, {
+                      screen: Screens.Connection,
+                      params: { credentialId: record.id },
+                    })
+                  }
                 }
-              }
-            } catch (err: unknown) {
-              // eslint-disable-next-line no-console
-              console.warn('Failed to decline credential offer:', err)
-            }
-          } : undefined,
+              : undefined,
+          onDecline:
+            record.state === DidCommCredentialState.OfferReceived
+              ? async () => {
+                  try {
+                    if (agent) {
+                      const connectionId = record.connectionId ?? ''
+                      const connection = await agent.modules.didcomm.connections.findById(connectionId)
+                      await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: record.id })
+                      if (connection) {
+                        await agent.modules.didcomm.credentials.sendProblemReport({
+                          credentialExchangeRecordId: record.id,
+                          description: t('CredentialOffer.Declined'),
+                        })
+                      }
+                    }
+                  } catch (err: unknown) {
+                    // eslint-disable-next-line no-console
+                    console.warn('Failed to decline credential offer:', err)
+                  }
+                }
+              : undefined,
         }
       })
     )
@@ -1077,8 +1157,9 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
     // Regular chats: show everything including credential/proof events.
     const isWitnessConnection = store.witness?.activeWitnessConnectionId === connection?.id
     const displayMessages = isWitnessConnection
-      ? finalMessages.filter((msg: ExtendedChatMessage) =>
-          msg.iconType !== MessageIconType.Credential && msg.iconType !== MessageIconType.Proof
+      ? finalMessages.filter(
+          (msg: ExtendedChatMessage) =>
+            msg.iconType !== MessageIconType.Credential && msg.iconType !== MessageIconType.Proof
         )
       : finalMessages
 

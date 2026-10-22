@@ -1,15 +1,17 @@
 import { useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
-import { 
+import {
   DidCommBasicMessageRecord,
   DidCommBasicMessageRole,
   DidCommConnectionRecord,
   DidCommDidExchangeRole,
-  DidCommDidExchangeState
+  DidCommDidExchangeState,
 } from '@credo-ts/didcomm'
-import { render } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import * as network from '../../src/contexts/network'
+import { FLOW_TIMEOUT_MS_NON_WITNESSED } from '../../src/hooks/chat-messages'
+import { vrcFlowStore } from '../../src/modules/vrc/witnessStatusStore'
 import Chat from '../../src/screens/Chat'
 import { BasicMessageMetadata } from '../../src/types/metadata'
 import navigationContext from '../contexts/navigation'
@@ -129,5 +131,54 @@ describe('Chat screen with messages', () => {
 
     expect(unseenMessage.metadata.set).toBeCalled()
     expect(seenMessage.metadata.set).not.toBeCalled()
+  })
+})
+
+describe('Chat screen while an exchange waits on the other phone', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.useFakeTimers()
+    vrcFlowStore.clearFlow('1')
+    // @ts-expect-error useConnectionById will be replaced with a mock which will have this method
+    useConnectionById.mockReturnValue(connection)
+    // @ts-expect-error useBasicMessagesByConnectionId will be replaced with a mock which will have this method
+    useBasicMessagesByConnectionId.mockReturnValue(testBasicMessages)
+    jest.spyOn(network, 'useNetwork').mockImplementation(() => ({
+      silentAssertConnectedNetwork: () => true,
+      assertNetworkConnected: () => true,
+      assertInternetReachable: jest.fn(),
+      assertMediatorReachable: jest.fn(),
+      displayNetInfoModal: jest.fn(),
+      hideNetInfoModal: jest.fn(),
+    }))
+  })
+
+  afterEach(() => {
+    vrcFlowStore.clearFlow('1')
+    jest.useRealTimers()
+  })
+
+  test('says who it is waiting for, never that the exchange failed, and can be dismissed', () => {
+    const tree = render(
+      <BasicAppContext>
+        <Chat navigation={navigationContext} route={props as any} />
+      </BasicAppContext>
+    )
+
+    act(() => {
+      vrcFlowStore.setStatus('1', 'proposed', false)
+    })
+    expect(tree.getByText('Waiting for your contact to accept...')).toBeTruthy()
+
+    act(() => {
+      jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
+    })
+    // Translations render as their keys here.
+    expect(tree.getByText('Relationship.WaitingForAnswer')).toBeTruthy()
+    expect(tree.queryByText(/didn't complete/)).toBeNull()
+
+    fireEvent.press(tree.getByText('Global.Dismiss'))
+    expect(tree.queryByText('Relationship.WaitingForAnswer')).toBeNull()
+    expect(vrcFlowStore.getStatus('1')).toBe('proposed')
   })
 })

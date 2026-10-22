@@ -2491,5 +2491,8 @@
   },
   "MessageWake": {
     "Fetching": "Récupération des nouveaux messages…"
+  },
+  "Relationship": {
+    "WaitingForAnswer": "En attente de la réponse de {{name}}."
   }
 }

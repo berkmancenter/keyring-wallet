@@ -29,7 +29,11 @@ import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'reac
 
 const PROGRESS_BAR_WIDTH = 200
 
-const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: boolean }> = ({ fraction, color, complete }) => {
+const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: boolean }> = ({
+  fraction,
+  color,
+  complete,
+}) => {
   const progress = useRef(new Animated.Value(0)).current
 
   // Milestone-driven with creep: snap toward the flow's actual milestone,
@@ -119,9 +123,20 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const theirLabel = useConnectionDisplayName(connectionId)
   const headerHeight = useHeaderHeight()
   const { connectedWitness } = useWitnessConnection()
-  
+
   // Track VRC flow in progress to show loading overlay during exchanges
-  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressFraction, progressComplete, confirmed: vrcConfirmed, onDismissTimeout, onDismissConfirmation } = useVrcFlowInProgress(connectionId)
+  const {
+    inProgress: vrcFlowInProgress,
+    statusText: vrcStatusText,
+    timedOut: vrcTimedOut,
+    waitingOnPeer: vrcWaitingOnPeer,
+    progressFraction,
+    progressComplete,
+    confirmed: vrcConfirmed,
+    onDismissTimeout,
+    onDismissConfirmation,
+    onDismissWaiting,
+  } = useVrcFlowInProgress(connectionId)
 
   // Check if this connection is a witness connection by matching connectionId
   const _isWitnessConnection = connectedWitness?.connectionId === connectionId
@@ -237,7 +252,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           }}
         />
         {showActionSlider && <ActionSlider onDismiss={onDismiss} actions={actions} />}
-        
+
         {/* VRC exchange flow loading overlay */}
         {vrcFlowInProgress && (
           <View style={styles.flowOverlay} pointerEvents="auto">
@@ -279,11 +294,27 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
                     <Text style={styles.flowOverlayDismissText}>{t('Global.Dismiss')}</Text>
                   </TouchableOpacity>
                 </>
+              ) : vrcWaitingOnPeer ? (
+                <>
+                  <Text style={styles.flowOverlayText}>{t('Relationship.WaitingForAnswer', { name: theirLabel })}</Text>
+                  <TouchableOpacity
+                    style={[styles.flowOverlayDismissButton, { backgroundColor: ColorPalette.brand.primary }]}
+                    onPress={onDismissWaiting}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Global.Dismiss')}
+                  >
+                    <Text style={styles.flowOverlayDismissText}>{t('Global.Dismiss')}</Text>
+                  </TouchableOpacity>
+                </>
               ) : (
                 <>
                   <Text style={styles.flowOverlayText}>{vrcStatusText}</Text>
                   {progressFraction > 0 && (
-                    <FlowProgressBar fraction={progressFraction} color={ColorPalette.brand.primary} complete={progressComplete} />
+                    <FlowProgressBar
+                      fraction={progressFraction}
+                      color={ColorPalette.brand.primary}
+                      complete={progressComplete}
+                    />
                   )}
                 </>
               )}
