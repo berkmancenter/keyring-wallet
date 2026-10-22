@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -126,16 +126,14 @@ const VtaAgentHome: React.FC = () => {
   const { state, now } = useVtaLinkWithClock()
   const { link } = state
   const agentKey = link.kind === 'linked' ? link.vtaDid : undefined
-  const [holdings, setHoldings] = useState<Holdings | undefined>(() =>
-    agentKey ? lastHoldings.get(agentKey) : undefined
-  )
-  // Another agent linked while this screen stays mounted: its own reading, or none.
-  const shownFor = useRef(agentKey)
-  useEffect(() => {
-    if (shownFor.current === agentKey) return
-    shownFor.current = agentKey
-    setHoldings(agentKey ? lastHoldings.get(agentKey) : undefined)
-  }, [agentKey])
+  // What this page shows is worked out in render, for the agent current now:
+  // the reading this screen made for it, else the last one kept for it, else
+  // none yet. An effect that swapped the reading after paint showed the agent
+  // before's holdings, or a member's page as a non-member's, for a frame
+  // (UI-smoothness plan, Phase 1b).
+  const [reading, setReading] = useState<{ agentKey: string | undefined; holdings: Holdings }>()
+  const holdings: Holdings | undefined =
+    reading && reading.agentKey === agentKey ? reading.holdings : agentKey ? lastHoldings.get(agentKey) : undefined
   const [holdingsError, setHoldingsError] = useState(false)
   // Bumped when a community's name is read again, so the cards say it (the name lives in communityTarget).
   const [, setNamesRead] = useState(0)
@@ -229,7 +227,7 @@ const VtaAgentHome: React.FC = () => {
         ),
       }
       if (agentKey) lastHoldings.set(agentKey, read)
-      setHoldings(read)
+      setReading({ agentKey, holdings: read })
       setHoldingsError(false)
       // A community this agent belongs to whose name on record is missing or
       // over a day old: its published name is read again, after the stored one
@@ -804,8 +802,10 @@ const VtaAgentHome: React.FC = () => {
           </View>
         ) : null}
 
-        {/* Before joining, the two ways in lead; after, one row at the page's end. */}
-        {!isMember ? (
+        {/* Before joining, the two ways in lead; after, one row at the page's end.
+            Not before the holdings are known: a member saw the ways in until
+            the first read came back (Phase 1b). */}
+        {holdings && !isMember ? (
           <>
             <SectionRule />
             {doorsCard}
