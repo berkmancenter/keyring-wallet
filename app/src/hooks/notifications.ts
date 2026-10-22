@@ -9,6 +9,7 @@ import {
 import { useCredentialByState, useProofByState, useBasicMessages } from '@bifold/react-hooks'
 import {
   useStore,
+  isProtocolMessage,
   BasicMessageMetadata,
   CredentialMetadata,
   basicMessageCustomMetadata,
@@ -19,15 +20,6 @@ import { useEffect, useState } from 'react'
 
 import { showPersonCredentialSelector } from '@/keyring-theme/features/person-flow/utils/BCIDHelper'
 import { BCState } from '@/store'
-
-function isProtocolMessage(content: string): boolean {
-  try {
-    const parsed = JSON.parse(content)
-    return typeof parsed === 'object' && parsed !== null && ('type' in parsed || '@type' in parsed)
-  } catch {
-    return false
-  }
-}
 
 export const useNotifications = (): Array<
   DidCommBasicMessageRecord | DidCommCredentialExchangeRecord | DidCommProofExchangeRecord
