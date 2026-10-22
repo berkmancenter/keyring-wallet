@@ -1429,6 +1429,7 @@
     "SwitcherCurrent": "Atual",
     "SwitcherNotConnected": "Não conectado agora",
     "Switching": "Mudando para {{agent}}…",
+    "Unlinking": "Desvinculando este agente deste telefone…",
     "SwitcherAdd": "Adicionar outro agente",
     "CatchingUp": "Seu agente está se atualizando: as respostas ainda não chegam a este telefone.",
     "ChipUnnamed": "Agente {{n}}",

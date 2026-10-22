@@ -7,6 +7,7 @@ import {
   SESSION_CONNECT_DEADLINE_MS,
   UNLINK_TELL_DEADLINE_MS,
   UNLINK_TELL_QUEUE_MS,
+  agentTransition,
   VtaAgentController,
   keepManagerMessage,
 } from '../module/vtaAgent'
@@ -1289,6 +1290,45 @@ describe('several agents', () => {
     expect(vta.getState().switchingTo).toBeUndefined()
     expect(seen).toContain(WORK.vtaDid)
     expect(seen).not.toContain(HOME.vtaDid)
+  })
+
+  // UI-smoothness plan, Phase 1: every state the store publishes is one a screen paints. A switch, an unlink and an
+  // add each pass through "not linked"; while they do, the store must say which, or the screen paints "Link your
+  // agent" — for a whole sign-in, on a switch.
+  it('a switch, an unlink and an add never publish a bare "not linked": each says the change under way', async () => {
+    const bare = (s: ReturnType<VtaAgentController['getState']>) => s.link.kind === 'notLinked' && !agentTransition(s)
+    const watch = (vta: VtaAgentController) => {
+      const states: ReturnType<VtaAgentController['getState']>[] = []
+      const stop = vta.subscribe(() => states.push(vta.getState()))
+      return { states, stop }
+    }
+
+    const switching = twoAgents()
+    await switching.vta.restore({} as never)
+    const s1 = watch(switching.vta)
+    await switching.vta.useAgent({} as never, WORK.vtaDid)
+    s1.stop()
+    // The passage was seen (the control), and never bare.
+    expect(s1.states.some((s) => s.link.kind === 'notLinked')).toBe(true)
+    expect(s1.states.filter(bare)).toEqual([])
+    expect(switching.vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
+
+    const unlinking = twoAgents()
+    await unlinking.vta.restore({} as never)
+    const s2 = watch(unlinking.vta)
+    await unlinking.vta.unlink({} as never)
+    s2.stop()
+    expect(s2.states.some((s) => s.link.kind === 'notLinked')).toBe(true)
+    expect(s2.states.filter(bare)).toEqual([])
+    expect(unlinking.vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: WORK.vtaDid })
+
+    const adding = twoAgents()
+    await adding.vta.restore({} as never)
+    const s3 = watch(adding.vta)
+    await adding.vta.startAddingAgent()
+    s3.stop()
+    expect(s3.states.some((s) => s.link.kind === 'notLinked')).toBe(true)
+    expect(s3.states.filter(bare)).toEqual([])
   })
 
   it('unlinking the current agent brings up the next one, not "no agent"', async () => {

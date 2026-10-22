@@ -200,6 +200,12 @@ export interface VtaAgentState {
    */
   switchingTo?: string
   /**
+   * An unlink is under way: the current agent is being forgotten and the next
+   * (if any) brought up. Between the two the link reads "not linked" for a
+   * moment, which is not a phone with no agent (UI-smoothness plan, Phase 1).
+   */
+  unlinking?: boolean
+  /**
    * Requests for this phone's decision from the agents that are not current,
    * as last seen by a look at each (several agents, step 3), with whether the
    * look reached it. Carried into `approvals` when the person switches to it.
@@ -587,6 +593,20 @@ function withSwapReason(failure: VtaLinkFailure, error: unknown): VtaLinkFailure
   // By name, not `instanceof`: a test that stands in for VtaClient need not provide the class.
   const swap = error instanceof Error && error.name === 'KeySwapNotDone' ? (error as KeySwapNotDone).why : undefined
   return swap ? { ...failure, swap } : failure
+}
+
+/**
+ * The agent change under way, if any: a switch, an unlink, or an add. While
+ * one runs the link passes through "not linked", and a screen shows the change
+ * rather than "Link your agent" (UI-smoothness plan, Phase 1).
+ */
+export function agentTransition(
+  state: Pick<VtaAgentState, 'link' | 'switchingTo' | 'unlinking' | 'addingAgent'>
+): 'switching' | 'unlinking' | 'adding' | undefined {
+  if (state.switchingTo) return 'switching'
+  if (state.unlinking) return 'unlinking'
+  if (state.addingAgent && state.link.kind === 'notLinked') return 'adding'
+  return undefined
 }
 
 export class VtaAgentController {
@@ -1103,8 +1123,10 @@ export class VtaAgentController {
     const link = this.state.link
     if (link.kind !== 'linked' && link.kind !== 'revoked') return
     this.addingFrom = link.vtaDid
-    await this.leaveCurrent()
+    // Said before the agent is left, never after: every state a screen can see
+    // while it goes is an add under way, not a phone with no agent (Phase 1).
     this.set({ addingAgent: true, addedAgent: undefined })
+    await this.leaveCurrent()
   }
 
   /**
@@ -1264,6 +1286,17 @@ export class VtaAgentController {
    */
   async unlink(agent: Agent): Promise<void> {
     const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    // Every state published until the next agent is up says an unlink is under
+    // way, so no screen draws "Link your agent" in between (Phase 1).
+    this.set({ unlinking: true })
+    try {
+      await this.unlinkCurrent(agent, vtaDid)
+    } finally {
+      this.set({ unlinking: false })
+    }
+  }
+
+  private async unlinkCurrent(agent: Agent, vtaDid: string | undefined): Promise<void> {
     this.cancelResumeRetry()
     await this.tellAgentBeforeUnlink()
     this.attemptToken++

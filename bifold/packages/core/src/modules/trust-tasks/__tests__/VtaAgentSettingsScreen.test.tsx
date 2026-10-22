@@ -154,7 +154,9 @@ describe('Agent settings', () => {
       expect(unlink).not.toHaveBeenCalled()
     })
 
-    it('unlinks on confirm and lands on linking an agent', async () => {
+    // Phase 1: the link screen opened on the next agent's state and said "Linked ✓" for an agent nobody had just
+    // linked. The agent home shows the next agent, or the way to link when none is left.
+    it('unlinks on confirm and lands on the agent home: the next agent when there is one', async () => {
       const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
       const navigate = useNavigation().navigate as jest.Mock
       navigate.mockClear()
@@ -162,7 +164,40 @@ describe('Agent settings', () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
       expect(unlink).toHaveBeenCalledTimes(1)
-      expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+      expect(navigate).toHaveBeenCalledWith(Screens.VtaAgent)
+      expect(navigate).not.toHaveBeenCalledWith(Screens.VtaLink)
+    })
+
+    it('…and the panel that offers a link when no agent is left', async () => {
+      const before = vtaAgent.getState().link
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockImplementation(async () => {
+        controller.set({ link: { kind: 'notLinked' } })
+      })
+      const navigate = useNavigation().navigate as jest.Mock
+      navigate.mockClear()
+      const tree = await show()
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
+      expect(unlink).toHaveBeenCalledTimes(1)
+      expect(navigate).toHaveBeenCalledWith(Screens.MyAgent)
+      controller.set({ link: before })
+    })
+
+    // 7a on #481: telling the agent can hold an unlink up to ten seconds; a blank page that long reads as frozen.
+    it('while an unlink passes through "not linked", it says so, and never that there is nothing to link', async () => {
+      const before = vtaAgent.getState().link
+      const tree = await show()
+      await act(async () => {
+        controller.set({ unlinking: true, link: { kind: 'notLinked' } })
+      })
+      expect(tree.getByTestId(testIdWithKey('AgentSettingsScreen'))).not.toHaveTextContent(/VtaLink\.NothingToLink/)
+      expect(tree.getByTestId(testIdWithKey('AgentSettingsScreen'))).toHaveTextContent(/VtaLink\.Unlinking/)
+      // The control: done, and nothing left, it does.
+      await act(async () => {
+        controller.set({ unlinking: false })
+      })
+      expect(tree.getByTestId(testIdWithKey('AgentSettingsScreen'))).toHaveTextContent(/VtaLink\.NothingToLink/)
+      controller.set({ link: before })
     })
 
     it('brings the card into view when it opens, at the foot of the screen', async () => {

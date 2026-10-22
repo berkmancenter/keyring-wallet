@@ -1019,8 +1019,9 @@ describe('Your agent — several agents', () => {
   // this page drew "Link your agent" for an instant. Nothing is drawn.
   it('"Add" draws no "Link your agent" while it leaves for the link screen', async () => {
     const before = vtaAgent.getState().link
+    // As the store publishes it now: the add is said before the agent is left (Phase 1).
     jest.spyOn(vtaAgent, 'startAddingAgent').mockImplementation(async () => {
-      controller.set({ link: { kind: 'notLinked' } })
+      controller.set({ addingAgent: true, link: { kind: 'notLinked' } })
     })
     const tree = await renderHome()
     await act(async () => {
@@ -1028,6 +1029,24 @@ describe('Your agent — several agents', () => {
     })
     expect(tree.getByTestId(testIdWithKey('AgentHomeLeaving'))).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('AgentHomeLink'))).toBeNull()
+    controller.set({ addingAgent: false, link: before })
+  })
+
+  // UI-smoothness plan, Phase 1: a switch passes through "not linked" for the whole sign-in to the next agent, and
+  // this page drew "Link your agent" for all of it.
+  it('a switch under way shows where it is going, never "Link your agent"; a plain unlinked phone still does', async () => {
+    const before = vtaAgent.getState().link
+    const tree = await renderHome()
+    await act(async () => {
+      controller.set({ switchingTo: 'did:webvh:QmWork:agents.example:work', link: { kind: 'notLinked' } })
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentHomeLeaving'))).toHaveTextContent(/VtaLink\.Switching/)
+    expect(tree.queryByTestId(testIdWithKey('AgentHomeLink'))).toBeNull()
+    // The control: with no change under way, the same state is a phone with no agent.
+    await act(async () => {
+      controller.set({ switchingTo: undefined })
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentHomeLink'))).toBeTruthy()
     controller.set({ link: before })
   })
 
