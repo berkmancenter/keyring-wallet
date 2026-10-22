@@ -1538,6 +1538,7 @@
     "CardsBackUnreadable_other": "{{count}} cards couldn't be read.",
     "MemberOf": "Member of {{community}}",
     "HoldsStale": "Could not refresh just now — showing what was last read.",
+    "HoldsUnread": "Couldn't read what your agent holds just now.",
     "Did": "What your agent did",
     "DidNothing": "Nothing yet in this session.",
     "Activity": {
@@ -1584,6 +1585,7 @@
     "SwitcherCurrent": "Current",
     "SwitcherNotConnected": "Not connected now",
     "Switching": "Switching to {{agent}}…",
+    "AddingAgent": "Adding another agent…",
     "Unlinking": "Unlinking this agent from this phone…",
     "SwitcherAdd": "Add another agent",
     "CatchingUp": "Your agent is catching up — replies aren't reaching this phone yet.",

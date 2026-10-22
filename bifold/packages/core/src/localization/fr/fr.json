@@ -1477,6 +1477,7 @@
     "CardsBackUnreadable_other": "{{count}} cartes n’ont pas pu être lues.",
     "MemberOf": "Membre de {{community}}",
     "HoldsStale": "Actualisation impossible pour l'instant — affichage des dernières données lues.",
+    "HoldsUnread": "Impossible de lire ce que détient votre agent pour le moment.",
     "Did": "Ce que votre agent a fait",
     "DidNothing": "Rien encore pendant cette session.",
     "Activity": {
@@ -1523,6 +1524,7 @@
     "SwitcherCurrent": "Actuel",
     "SwitcherNotConnected": "Non connecté pour le moment",
     "Switching": "Passage à {{agent}}…",
+    "AddingAgent": "Ajout d'un autre agent…",
     "Unlinking": "Dissociation de cet agent de ce téléphone…",
     "SwitcherAdd": "Ajouter un autre agent",
     "CatchingUp": "Votre agent rattrape son retard : ses réponses n'arrivent pas encore sur ce téléphone.",

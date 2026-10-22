@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "821c5f96bd77c1107d590d7ab7496768b9ebd35f",
+  "generatedFrom": "f611cbecc723a76f425ae15b2cac369118ca6ee0",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -101,7 +101,9 @@
     "AgentGoneTryAgain": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGoneWhy": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHolds": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHoldsRetry": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHoldsStale": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentHoldsUnread": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHome": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHomeLeaving": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentHomeLink": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
@@ -1420,7 +1422,13 @@
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holds"
     },
     {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsRetry"
+    },
+    {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsStale"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.holdsUnread"
     },
     {
       "src/modules/trust-tasks/screens/VtaAgentHome.tsx": "VtaAgentHomeIds.home"

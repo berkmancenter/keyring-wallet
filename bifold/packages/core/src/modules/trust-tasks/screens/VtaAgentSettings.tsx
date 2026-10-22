@@ -120,7 +120,9 @@ const VtaAgentSettings: React.FC = () => {
                       agent: agentDisplayName(withAgentName({ vtaDid: state.switchingTo }, state.agentNames), t),
                       interpolation: { escapeValue: false },
                     })
-                  : t('VtaLink.Unlinking')}
+                  : changing === 'adding'
+                    ? t('VtaLink.AddingAgent')
+                    : t('VtaLink.Unlinking')}
               </ThemedText>
             </>
           ) : (

@@ -838,7 +838,25 @@ const VtaAgentHome: React.FC = () => {
           <ThemedText variant="labelTitle" accessibilityRole="header">
             {t('VtaLink.Holds')}
           </ThemedText>
-          {!holdings ? (
+          {/* Waiting and broken are told apart: the spinner only while a first
+              read is out; a first read that failed, with nothing kept, says so
+              and offers to try again — not "showing what was last read" (nothing
+              was), and not the ways in either, since nobody knows yet whether
+              this phone is a member. */}
+          {!holdings && holdingsError ? (
+            <>
+              <ThemedText testID={testIdWithKey(VtaAgentHomeIds.holdsUnread)}>{t('VtaLink.HoldsUnread')}</ThemedText>
+              <Button
+                title={t('VtaLink.TryAgain')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => {
+                  setHoldingsError(false)
+                  void load()
+                }}
+                testID={testIdWithKey(VtaAgentHomeIds.holdsRetry)}
+              />
+            </>
+          ) : !holdings ? (
             <ActivityIndicator color={ColorPalette.brand.primary} />
           ) : communitiesHeld(holdings).length === 0 ? (
             <ThemedText style={styles.muted}>{t('VtaLink.HoldsNothing')}</ThemedText>
@@ -871,7 +889,7 @@ const VtaAgentHome: React.FC = () => {
               </View>
             ))
           )}
-          {holdingsError ? (
+          {holdings && holdingsError ? (
             <ThemedText style={styles.muted} testID={testIdWithKey(VtaAgentHomeIds.holdsStale)}>
               {t('VtaLink.HoldsStale')}
             </ThemedText>

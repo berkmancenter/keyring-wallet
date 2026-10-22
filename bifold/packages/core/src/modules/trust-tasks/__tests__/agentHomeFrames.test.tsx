@@ -8,13 +8,15 @@
  * records the committed tree in a layout effect, which runs right after each commit the store change causes —
  * before any passive effect could correct it.
  */
-import { act, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React, { useLayoutEffect, useSyncExternalStore } from 'react'
+import { ActivityIndicator } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
+import { emitCommunityChanged } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityCardKey } from '../screens/CommunityCard'
@@ -61,19 +63,21 @@ const membership = (communityDid: string): Rec => ({
   },
 })
 
-/** An agent whose records answer at once, or never (`hang`): a read still out. */
-function fakeAgent(records: Rec[], hang = () => false) {
+/** An agent whose records answer at once, never (`hang`: a read still out), or with an error (`fail`). */
+function fakeAgent(records: Rec[], hang = () => false, fail = () => false) {
   return {
     agent: {
       genericRecords: {
         findAllByQuery: (query: Record<string, string>) =>
-          hang()
-            ? new Promise(() => undefined)
-            : Promise.resolve(
-                records
-                  .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
-                  .map((r) => ({ ...r, id: r.tags.key }))
-              ),
+          fail()
+            ? Promise.reject(new Error('storage unavailable'))
+            : hang()
+              ? new Promise(() => undefined)
+              : Promise.resolve(
+                  records
+                    .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
+                    .map((r) => ({ ...r, id: r.tags.key }))
+                ),
       },
       config: { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
     },
@@ -162,5 +166,63 @@ describe('the agent home paints only the state it is in', () => {
     const { tree } = renderWithFrames(() => false)
     await settle()
     expect(tree.getByTestId(id('AgentDoors'))).toBeTruthy()
+  })
+
+  // 7a on #482: a first read that failed, with nothing kept, showed a spinner that never stopped beside "showing what
+  // was last read" — nothing was — and no way in. Waiting and broken now read differently.
+  describe('what the holdings card says while they are not known', () => {
+    const holds = (tree: ReturnType<typeof render>) => within(tree.getByTestId(id('AgentHolds')))
+    const spinning = (tree: ReturnType<typeof render>) =>
+      holds(tree).UNSAFE_queryAllByType(ActivityIndicator).length > 0
+
+    it('a first read that failed, nothing kept: says so, offers Try again — no spinner, no "last read", no ways in', async () => {
+      ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], undefined, () => true))
+      const { tree } = renderWithFrames(() => false)
+      await settle()
+      expect(tree.getByTestId(id('AgentHoldsUnread'))).toHaveTextContent('VtaLink.HoldsUnread')
+      expect(tree.getByTestId(id('AgentHoldsRetry'))).toBeTruthy()
+      expect(spinning(tree)).toBe(false)
+      expect(tree.queryByTestId(id('AgentHoldsStale'))).toBeNull()
+      expect(tree.queryByTestId(id('AgentDoors'))).toBeNull()
+    })
+
+    it('a first read still out: the spinner, and none of the rest', async () => {
+      ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], () => true))
+      const { tree } = renderWithFrames(() => false)
+      await settle()
+      expect(spinning(tree)).toBe(true)
+      expect(tree.queryByTestId(id('AgentHoldsUnread'))).toBeNull()
+      expect(tree.queryByTestId(id('AgentHoldsStale'))).toBeNull()
+    })
+
+    it('a later read that failed, with a reading kept: "showing what was last read", as before (the control)', async () => {
+      let failing = false
+      ;(useAgent as jest.Mock).mockReturnValue(
+        fakeAgent([persona(COMMUNITY, VTA_A), membership(COMMUNITY)], undefined, () => failing)
+      )
+      const { tree } = renderWithFrames(() => false)
+      await settle()
+      expect(tree.getByTestId(cardOf(COMMUNITY))).toBeTruthy()
+      failing = true
+      await act(async () => emitCommunityChanged(COMMUNITY, 'membership'))
+      await settle()
+      expect(tree.getByTestId(id('AgentHoldsStale'))).toHaveTextContent('VtaLink.HoldsStale')
+      expect(tree.getByTestId(cardOf(COMMUNITY))).toBeTruthy()
+      expect(tree.queryByTestId(id('AgentHoldsUnread'))).toBeNull()
+    })
+
+    it('Try again that succeeds: the page as it is (here, a phone with no community: the ways in)', async () => {
+      let failing = true
+      ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], undefined, () => failing))
+      const { tree } = renderWithFrames(() => false)
+      await settle()
+      failing = false
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(id('AgentHoldsRetry')))
+      })
+      await settle()
+      expect(tree.queryByTestId(id('AgentHoldsUnread'))).toBeNull()
+      expect(tree.getByTestId(id('AgentDoors'))).toBeTruthy()
+    })
   })
 })

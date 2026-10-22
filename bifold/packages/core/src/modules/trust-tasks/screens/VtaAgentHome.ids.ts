@@ -37,6 +37,8 @@ export const VtaAgentHomeIds = {
   holds: 'AgentHolds',
   communityHighlighted: 'AgentCommunityHighlighted',
   holdsStale: 'AgentHoldsStale',
+  holdsUnread: 'AgentHoldsUnread',
+  holdsRetry: 'AgentHoldsRetry',
   joinAnother: 'AgentJoinAnother',
 } as const
 export type VtaAgentHomeId = (typeof VtaAgentHomeIds)[keyof typeof VtaAgentHomeIds]

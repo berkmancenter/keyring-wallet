@@ -184,6 +184,18 @@ describe('Agent settings', () => {
     })
 
     // 7a on #481: telling the agent can hold an unlink up to ten seconds; a blank page that long reads as frozen.
+    // 7a on #481: an add can start while Settings is open (a link, another agent's screen); it read as an unlink.
+    it('an add under way reads as an add, not an unlink', async () => {
+      const before = vtaAgent.getState().link
+      const tree = await show()
+      await act(async () => {
+        controller.set({ addingAgent: true, link: { kind: 'notLinked' } })
+      })
+      expect(tree.getByTestId(testIdWithKey('AgentSettingsScreen'))).toHaveTextContent(/VtaLink\.AddingAgent/)
+      expect(tree.getByTestId(testIdWithKey('AgentSettingsScreen'))).not.toHaveTextContent(/VtaLink\.Unlinking/)
+      controller.set({ addingAgent: false, link: before })
+    })
+
     it('while an unlink passes through "not linked", it says so, and never that there is nothing to link', async () => {
       const before = vtaAgent.getState().link
       const tree = await show()
