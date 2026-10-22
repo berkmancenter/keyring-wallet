@@ -14,6 +14,9 @@ leg_begin refused "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 if ! unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -aq PersonaAgentNotice; then
   for r in $REFUSED_ROWS; do row "$r" SKIP "the build lacks PersonaAgentNotice (before bifold #455)"; done; exit 0
 fi
+# bifold #473: a revoked phone's community says the agent no longer accepts it (JoinAgentRefused) on the Join route.
+# A build without it still asks to link first, and the community row expects that (pre-fix).
+JOIN_REFUSED=0; unzip -p "$APK" assets/index.android.bundle 2>/dev/null | grep -aq JoinAgentRefused && JOIN_REFUSED=1
 need RUNNER_MAIN_SLUG RUNNER_MAIN_DID RUNNER_MAIN_URL PNM_BIN C_DID C_REST C_ADMIN_CRED
 T0=$(stamp); E=emulator-5572
 # The phone's log so far into $LEG_DIR/logcat-$1.log, then cleared. Per path, since one dump at the end held only the
@@ -47,8 +50,13 @@ for path in ${REFUSED_PATHS:-heartbeat relaunch}; do
   [ -f "$LEG_DIR/last-link.json" ] || broken "the $path link left no record (last-link.json): nothing names this phone's grant"
   mv "$LEG_DIR/last-link.json" "$LEG_DIR/last-link-$path.json"
   [ $path = relaunch ] && row refused-link PASS "$(( $(date +%s) - t ))s"
+  # The whole window, streamed: the driver clears the log at the removal, and a dump at the end can lose lines to the ring.
+  adb -s $E logcat -v time > "$LEG_DIR/logcat-stream-$path.log" 2>/dev/null & lc=$!
+  # heartbeat stays open two presence ticks (the driver's REFUSED_HEARTBEAT_S, 660 s) on top of the join.
   E2E_APP_ID=$BID UDID=$E ANDROID_UDID=$E ANDROID_SERIAL=$E APPIUM_PORT=4765 C_DID=$C_DID C_REST=$C_REST C_ADMIN_CRED=$C_ADMIN_CRED \
-    LINK_FILE="$LEG_DIR/last-link-$path.json" PNM_BIN=$PNM_BIN REFUSED_PATH=$path galarm 1500 node run-agent-refused.mjs > "$LEG_DIR/refused-$path.out" 2>&1; drc=$?
+    LINK_FILE="$LEG_DIR/last-link-$path.json" PNM_BIN=$PNM_BIN REFUSED_PATH=$path REFUSED_JOIN_LINE=$JOIN_REFUSED galarm $([ $path = heartbeat ] && echo 2100 || echo 1500) node run-agent-refused.mjs > "$LEG_DIR/refused-$path.out" 2>&1; drc=$?
+  kill $lc 2>/dev/null; wait $lc 2>/dev/null
+  grep -E '^\[e2e\] link status' "$LEG_DIR/refused-$path.out"
   grep -E '^\[e2e\] removed|^\[cleanup\]' "$LEG_DIR/refused-$path.out" | cut -c1-200
   dump_logcat $path
   take_rows "$LEG_DIR/refused-$path.out"

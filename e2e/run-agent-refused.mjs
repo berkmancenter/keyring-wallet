@@ -7,7 +7,8 @@
  *   3. removes this phone's own grant from the runner, the entries the link record names (lib/aclCleanup.js
  *      linkedPhoneEntries: the selection the end-of-leg cleanup makes, so never another leg's or a person's entry);
  *   4. relaunches the app (the persona's key leaves memory, so the inbox asks the agent again) and waits on another
- *      screen (Contacts) through three of the persona inbox's 30 s rounds.
+ *      screen (Contacts) through three of the persona inbox's 30 s rounds; or (REFUSED_PATH=heartbeat) stays open two
+ *      presence ticks (REFUSED_HEARTBEAT_S, 660), reading the link's status on My Agent each minute.
  * Rows (lib/rows.js):
  *   refused-member-joined      C lists the phone after its review-way request is approved
  *   refused-before             control: C's screen shows no PersonaAgentNotice while the agent still accepts the phone
@@ -45,6 +46,11 @@ const REFUSAL_LOG = /\[VTI\] persona inbox[^\n]*(refus|not in ACL|no longer acce
 // "heartbeat" keeps it open past AgentPresence's 5 min tick, which also meets NOT_ON_ACL (bifold #454). Rows of the
 // heartbeat path are named refused-heartbeat-*.
 const HEARTBEAT = process.env.REFUSED_PATH === "heartbeat";
+// Two of AgentPresence's 5 min ticks after the removal, so a window that starts just after a tick still holds one (362 s
+// could miss it: 1022-1726). REFUSED_HEARTBEAT_S overrides it.
+const HEARTBEAT_S = Number(process.env.REFUSED_HEARTBEAT_S || 660);
+// The build says, on C's Join route, that the agent no longer accepts this phone (bifold #473; the leg reads the bundle).
+const JOIN_LINE = process.env.REFUSED_JOIN_LINE === "1";
 const N = (name) => (HEARTBEAT ? name.replace(/^refused-/, "refused-heartbeat-") : name);
 const rows = createRows({
   label: "refused",
@@ -110,6 +116,17 @@ try {
   if (!mine.length) throw new Error(`driver: the link record names no entry on ${link.slug} (tempDid ${String(link.tempDid).slice(0, 24)}…)`);
   // One phone holds its grant and perhaps a rotated key or two: more is not this phone's, so nothing is removed.
   if (mine.length > 3) throw new Error(`driver: ${mine.length} entries chained to this phone on ${link.slug}, more than a phone holds: nothing removed`);
+  // The link's connection as My Agent shows it (VtaStatusText: online, connecting, reconnecting, offline, gone), or
+  // "removed" once the link is: presence ticks only while the link is online (vtaPresence.ts isLinkOnline), so a link
+  // that was not online never meets the refusal. On 267 presence logs only failures, so this is the tick's only witness.
+  const linkStatus = async () => {
+    await tapTestId(d, "MyAgent", 15000);
+    const status = (await existsTestId(d, "RemovedPhone", 3000)) ? "removed" : await textOf(d, "VtaStatusText").catch(() => "(no status line)");
+    await tapTestId(d, "Contacts", 15000).catch(() => undefined);
+    return status;
+  };
+  const statusBefore = await linkStatus();
+  console.log(`[e2e] link status before the removal: ${statusBefore}`);
   adb("logcat", "-c");
   const removedAt = Date.now();
   for (const e of mine) {
@@ -124,11 +141,21 @@ try {
   // 4b. heartbeat: stay open, no relaunch, past AgentPresence's 5 min tick (bifold #454), on another screen.
   if (!HEARTBEAT) { await restartApp(d); await unlockToHome(d); }
   const from = HEARTBEAT ? removedAt : Date.now();
-  const windowMs = HEARTBEAT ? 330000 : 95000;
+  const windowMs = HEARTBEAT ? HEARTBEAT_S * 1000 : 95000;
   await tapTestId(d, "Contacts", 15000).catch(() => undefined);
   let toast = "";
-  for (const until = from + windowMs; Date.now() < until && !toast; await sleep(2000)) {
+  // heartbeat: the link's status each minute, kept as its changes ("+Ns status"); the watch ends 30 s after the removal shows.
+  const statuses = [];
+  let nextSample = Date.now(), removedSeenAt = 0;
+  for (let until = from + windowMs; Date.now() < until && !toast; await sleep(2000)) {
     if (await existsTestId(d, "Toast", 500)) toast = (await textOf(d, "ToastTitle").catch(() => "")) || "(a toast)";
+    if (!HEARTBEAT || removedSeenAt || Date.now() < nextSample) continue;
+    nextSample = Date.now() + 60000;
+    const status = await linkStatus();
+    const at = `+${Math.round((Date.now() - removedAt) / 1000)}s ${status}`;
+    console.log(`[e2e] link status ${at}`);
+    if (statuses.at(-1)?.replace(/^\+\d+s /, "") !== status) statuses.push(at);
+    if (status === "removed") { removedSeenAt = Date.now(); until = Math.min(until, removedSeenAt + 30000); }
   }
   if (toast) await screenshot(d, N("refused-toast")).catch(() => undefined);
   const lines = adb("logcat", "-d", "-v", "time").split("\n").filter((l) => REFUSAL_LOG.test(l));
@@ -143,7 +170,8 @@ try {
     removedShown = await existsTestId(d, "RemovedPhone", 30000);
     const again = removedShown && Boolean(await scrollToTestId(d, "VtaLinkScanAgain", 4).catch(() => false));
     await screenshot(d, N("refused-my-agent")).catch(() => undefined);
-    return { ok: removedShown && again, detail: `${HEARTBEAT ? `open ${Math.round((Date.now() - removedAt) / 1000)} s after the removal, no relaunch` : "after a relaunch"} · RemovedPhone ${removedShown} · link again (VtaLinkScanAgain) ${again}` };
+    const link = HEARTBEAT ? ` · link before: ${statusBefore} · after: ${statuses.join(", ") || "(not sampled)"}` : ` · link before: ${statusBefore}`;
+    return { ok: removedShown && again, detail: `${HEARTBEAT ? `open ${Math.round((Date.now() - removedAt) / 1000)} s after the removal, no relaunch` : "after a relaunch"} · RemovedPhone ${removedShown} · link again (VtaLinkScanAgain) ${again}${link}` };
   });
   if (HEARTBEAT) evidence = evidence || removedShown;
   // No toast proves nothing unless the refusal happened in the window: without its evidence the row is no verdict.
@@ -160,10 +188,22 @@ try {
     if (removedShown) {
       // The refusal unlinked the phone: the person is told on My Agent (refused-link-removed). An unlinked phone has no
       // community screen to carry a notice, so C's route asks to link first, and must never blame the agent's silence.
-      // Pre-fix: a Join branch that says the agent no longer accepts this phone is coming; this row expects it once a
-      // build carries it.
-      const needsAgent = await existsTestId(d, "JoinNeedsAgent", 5000);
+      // With bifold #473 the route says why instead (JoinAgentRefused, read a beat after the screen: the identity is read
+      // async) and leads to My Agent; before it, it asks to link first (pre-fix).
       const unreachable = UNREACHABLE_LINE.test(n.line);
+      if (JOIN_LINE) {
+        const shown = await existsTestId(d, "JoinAgentRefused", 15000);
+        const line = shown ? await textOf(d, "JoinAgentRefused").catch(() => "") : "";
+        const needsAgent = await existsTestId(d, "JoinNeedsAgent", 1000);
+        let opened = false;
+        if (shown && (await existsTestId(d, "JoinOpenMyAgent", 3000))) {
+          await tapTestId(d, "JoinOpenMyAgent", 10000);
+          opened = await existsTestId(d, "RemovedPhone", 15000);
+        }
+        const refused = REFUSED_LINE.test(line), silent = UNREACHABLE_LINE.test(line) || unreachable;
+        return { ok: shown && refused && !silent && !needsAgent && opened, detail: `unlinked: JoinAgentRefused ${shown} · line "${line.slice(0, 90)}" · refused wording ${refused} · "didn't answer" ${silent} · JoinNeedsAgent ${needsAgent} (expected absent) · Open My Agent lands there ${opened}` };
+      }
+      const needsAgent = await existsTestId(d, "JoinNeedsAgent", 5000);
       return { ok: needsAgent && !unreachable, detail: `unlinked, expected: Link your agent first (pre-fix) · JoinNeedsAgent ${needsAgent} · PersonaAgentNotice ${n.shown} · "didn't answer" ${unreachable}` };
     }
     let opened = false;
