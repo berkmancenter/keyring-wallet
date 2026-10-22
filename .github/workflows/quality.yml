@@ -107,7 +107,9 @@ jobs:
               || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
           # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
-          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate.
+          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
+          # bifold's packages/core/testids.json at the pinned submodule, both ways: a pin bump carries its resync
+          # (e2e/scripts/sync-testids.sh bifold), and a check that cannot read the pin fails here (CI is set).
           node e2e/scripts/check-testids.mjs || fail=1
           # The leg cleanup (lib.sh keys_since) finds and deletes this leg's phone keys through the CI guard, and says
           # so loudly when the runner's ACL cannot be read (a fake VTA; no secrets, no network).
@@ -131,7 +133,7 @@ jobs:
           # a native module this job does not install): the shared-community request and member picks (hvAdmin), the hv
           # verdicts, and the runner-slug guard of setup-fixture.mjs among them. And fetch-binaries.mjs's refusal of a
           # moving latest/main build that is not pinned (upstream's TSP 1.0 cutover, 2026-10-22).
-          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs e2e/openvtc/{hvAdmin,hvVerdict,listWalk,runnerSlug,signinPortal,ticketSweep}.test.mjs e2e/lib/typeExact.test.mjs scripts/openvtc/fetch-binaries.test.mjs; do
+          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs e2e/openvtc/{hvAdmin,hvVerdict,listWalk,runnerSlug,signinPortal,ticketSweep}.test.mjs e2e/lib/typeExact.test.mjs scripts/openvtc/fetch-binaries.test.mjs e2e/scripts/check-testids.test.mjs; do
             node --test "$t" || { echo "::error file=$t::$t failed"; fail=1; }
           done
           exit $fail
