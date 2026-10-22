@@ -245,7 +245,9 @@ export async function maybeOpenRelationshipExchange(
  *
  * Keyed off persisted state only: RelationshipDidRecord carries the peer's
  * announced rceVersion and its connectionId. Every step it reaches is
- * idempotent, so a sweep on a fully-settled wallet is a no-op.
+ * idempotent, so a sweep on a fully-settled wallet is a no-op. The responder's
+ * half, a propose asked for consent and never answered, is asked again by
+ * restorePendingProposals.
  */
 export async function resumeInterruptedExchanges(agent: Agent): Promise<void> {
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
@@ -264,6 +266,14 @@ export async function resumeInterruptedExchanges(agent: Agent): Promise<void> {
     }
   }
   agent.config.logger.info(`${LOG_PREFIX} resume sweep checked ${resumed} v4+ connection(s)`)
+
+  // The responder's half: proposes asked for consent and never answered.
+  try {
+    const asked = await restorePendingProposals(agent)
+    if (asked > 0) agent.config.logger.info(`${LOG_PREFIX} resume sweep asked again for ${asked} pending propose(s)`)
+  } catch (e) {
+    agent.config.logger.warn(`${LOG_PREFIX} pending-propose restore failed: ${(e as Error).message}`)
+  }
 }
 
 /**
@@ -918,17 +928,105 @@ async function handleInboundPropose(
     }
   }
 
+  // Mark the propose as asked, so a restart can ask again: the retained
+  // propose alone does not say so, since consume() retains rejected ones too.
+  // A failed mark costs only the ask after a restart, never this ask.
+  try {
+    await agent.genericRecords.save({
+      content: { exchangeId },
+      tags: { recordType: PROPOSE_AWAITING_CONSENT, connectionId: context.connectionId, exchangeId },
+    })
+  } catch (e) {
+    agent.config.logger.warn(`${LOG_PREFIX} could not mark propose as asked: ${(e as Error).message}`)
+  }
   const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
-  pendingProposals.set(context.connectionId, { document, context })
-  vrcFlowStore.setProposalPrompt({
-    connectionId: context.connectionId,
-    exchangeId,
-    counterpartyLabel: connection.theirLabel ?? 'Unknown Contact',
-    ...(upgrade ? { upgrade: proposed?.witnessed === true ? ('witness' as const) : ('resign' as const) } : {}),
-  })
+  askForConsent(connection.theirLabel, document, context, upgrade)
   agent.config.logger.info(
     `${LOG_PREFIX} propose received — awaiting user consent (exchange ${document.threadId ?? document.id})`
   )
+}
+
+/** Surface a propose for the user's consent; the one path a live and a restored prompt share. */
+function askForConsent(
+  counterpartyLabel: string | undefined,
+  document: Record<string, unknown>,
+  context: InboundContext,
+  upgrade: boolean
+): void {
+  const witnessed = (document as { payload?: { witnessed?: boolean } }).payload?.witnessed === true
+  pendingProposals.set(context.connectionId, { document, context })
+  vrcFlowStore.setProposalPrompt({
+    connectionId: context.connectionId,
+    exchangeId: String(document.threadId ?? document.id),
+    counterpartyLabel: counterpartyLabel ?? 'Unknown Contact',
+    ...(upgrade ? { upgrade: witnessed ? ('witness' as const) : ('resign' as const) } : {}),
+  })
+}
+
+/** A propose this phone surfaced for consent (genericRecords recordType). */
+const PROPOSE_AWAITING_CONSENT = 'keyring.vrc-propose-awaiting-consent'
+
+/**
+ * Ask again, after a restart, for consent to proposes that were asked and
+ * never answered. The prompt lived only in memory, and the proposer does not
+ * resend, so a phone killed before its user answered lost the request for
+ * good (only the proposer side resumed).
+ *
+ * Per connection, only the newest propose asked counts, as live: a newer
+ * propose replaces an older pending one. It is asked again only when nothing
+ * answered it: no response retained on its exchange (an accept), no
+ * trust-task-error (a decline or a refusal), and no answer pending in this
+ * process. Proposes asked before this marker existed are not restored.
+ */
+export async function restorePendingProposals(agent: Agent): Promise<number> {
+  const markers = await agent.genericRecords.findAllByQuery({ recordType: PROPOSE_AWAITING_CONSENT })
+  const newest = new Map<string, { exchangeId: string; at: number }>()
+  for (const marker of markers) {
+    const connectionId = marker.getTag('connectionId') as string | undefined
+    const exchangeId = marker.getTag('exchangeId') as string | undefined
+    if (!connectionId || !exchangeId) continue
+    const at = new Date(marker.createdAt).getTime()
+    const current = newest.get(connectionId)
+    if (!current || at > current.at) newest.set(connectionId, { exchangeId, at })
+  }
+
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  let restored = 0
+  for (const [connectionId, { exchangeId }] of newest) {
+    try {
+      if (pendingProposals.has(connectionId)) continue
+      const connection = await agent.modules.didcomm.connections.findById(connectionId)
+      if (!connection?.did || !connection.theirDid) continue
+      const docs = await proposeThreadDocs(agent, connectionId)
+      const document = docs.find(
+        (r) =>
+          r.document.type === propose.TYPE_URI &&
+          r.document.issuer === connection.theirDid &&
+          threadOf(r) === exchangeId
+      )?.document
+      if (!document) continue
+      if (docs.some((d) => threadOf(d) === exchangeId && String(d.document.type ?? '').endsWith('#response'))) continue
+      const onExchange = (await documentRepository.findByQuery(agent.context, { exchangeId, connectionId })) as {
+        document: Record<string, unknown>
+      }[]
+      if (onExchange.some((d) => String(d.document.type ?? '').includes('trust-task-error'))) continue
+
+      const upgrade = await isUpgradeExchange(agent, connectionId, exchangeId)
+      askForConsent(
+        connection.theirLabel,
+        document,
+        { connectionId, senderDid: connection.theirDid, recipientDid: connection.did },
+        upgrade
+      )
+      restored += 1
+      agent.config.logger.info(`${LOG_PREFIX} propose asked again after restart (exchange ${exchangeId})`)
+    } catch (e) {
+      agent.config.logger.warn(
+        `${LOG_PREFIX} could not restore a pending propose on ${connectionId}: ${(e as Error).message}`
+      )
+    }
+  }
+  return restored
 }
 
 /**
