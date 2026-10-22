@@ -25,6 +25,7 @@ import {
   setupTrustTasksInbound,
   upgradeRelationship,
 } from '../ceremony'
+import { extendedCode } from '../services/TrustTasksService'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
@@ -403,6 +404,8 @@ describe('upgrading a relationship on its existing connection', () => {
     expect(docsOfType(fake, issue.TYPE_URI)).toHaveLength(1)
     // …and no longer, once its acceptance is refused: nothing is left waiting.
     expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('idle')
+    // Stood down as an error, so the overlay never reads it as a confirmation (Phase 0).
+    expect(vrcFlowStore.flowEndedWith(fake.connectionId)).toBe('error')
   })
 
   test('the receiver is asked as an upgrade, and accepting sends a fresh card but no profile', async () => {
@@ -431,6 +434,58 @@ describe('upgrading a relationship on its existing connection', () => {
     expect(response.payload).toEqual(expect.objectContaining({ accept: true, relationshipDid: 'did:peer:0zMyRel' }))
     expect(docsOfType(fake, issue.TYPE_URI).map((d) => d.threadId)).toContain('aaaa2222-2222-4222-8222-222222222222')
     expect(rcard()).toHaveBeenCalledTimes(1)
+  })
+
+  // Phase 0: a decline, by either person, ends the flow as declined — never as a confirmation.
+  test('declining the upgrade here: the flow ends as declined', async () => {
+    const fake = makeFakeAgent({ myDid: PEER, theirDid: ME })
+    await firstExchangeAsResponder(fake)
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'aaaa5555-5555-4555-8555-555555555555',
+        type: propose.TYPE_URI,
+        threadId: 'aaaa5555-5555-4555-8555-555555555555',
+        issuer: ME,
+        recipient: PEER,
+        issuedAt: new Date().toISOString(),
+        payload: { relationshipDid: 'did:peer:0zPeerRel', witnessed: false },
+      },
+      conn(fake, PEER, ME)
+    )
+    expect(vrcFlowStore.getAnyProposalPrompt()).toEqual(expect.objectContaining({ connectionId: fake.connectionId }))
+    await respondToRelationshipProposal(fake.agent, fake.connectionId, false)
+    expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('idle')
+    expect(vrcFlowStore.flowEndedWith(fake.connectionId)).toBe('declined')
+  })
+
+  test('the other person declines the upgrade: the flow ends as declined; another refusal ends as an error', async () => {
+    const declinedWith = async (code: string) => {
+      const fake = makeFakeAgent({ myDid: ME, theirDid: PEER })
+      await firstExchangeAsProposer(fake)
+      const up = await upgradeRelationship(fake.agent, fake.connectionId, { witnessed: false })
+      if (up.kind !== 'sent') throw new Error('not sent')
+      // Waiting first: the control for the outcome below.
+      expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('proposed')
+      await deliver(
+        fake.capturedHandlerRef,
+        {
+          id: `bbbb6666-0000-4000-8000-${code.length.toString().padStart(12, '0')}`,
+          type: 'https://trusttasks.org/spec/trust-task-error/0.5',
+          threadId: up.exchangeId,
+          issuer: PEER,
+          recipient: ME,
+          issuedAt: new Date().toISOString(),
+          payload: { code, message: 'no', retryable: false },
+        },
+        conn(fake, ME, PEER)
+      )
+      await flushDelivery()
+      return vrcFlowStore.flowEndedWith(fake.connectionId)
+    }
+    // The code exactly as a declining phone sends it (respondToRelationshipProposal's rejectWith).
+    expect(await declinedWith(extendedCode(propose.TYPE_URI, 'declined'))).toBe('declined')
+    expect(await declinedWith(extendedCode(propose.TYPE_URI, 'relationshipMismatch'))).toBe('error')
   })
 
   test('a first exchange is still asked as one, not as an upgrade', async () => {
@@ -485,6 +540,7 @@ describe('upgrading a relationship on its existing connection', () => {
     if (up.kind !== 'sent') throw new Error('not sent')
     await cancelRelationshipUpgrade(fake.agent, fake.connectionId, up.exchangeId)
     expect(await pendingUpgradeOf(fake.agent, fake.connectionId)).toBeUndefined()
+    expect(vrcFlowStore.flowEndedWith(fake.connectionId)).toBe('cancelled')
     const before = fake.sentMessages.length
     await deliver(
       fake.capturedHandlerRef,

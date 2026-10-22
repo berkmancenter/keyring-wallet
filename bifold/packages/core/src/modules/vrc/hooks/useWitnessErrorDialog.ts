@@ -112,7 +112,7 @@ export function useWitnessErrorDialog(): UseWitnessErrorDialogResult {
       // Clear error state
       vrcFlowStore.clearError(connectionId)
       // Also clear flow state so user can try again later
-      vrcFlowStore.clearFlow(connectionId)
+      vrcFlowStore.clearFlow(connectionId, 'cancelled')
     }
     setError(null)
     setConnectionId(null)

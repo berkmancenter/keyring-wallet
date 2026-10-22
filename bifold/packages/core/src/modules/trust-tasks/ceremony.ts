@@ -602,7 +602,7 @@ export async function cancelRelationshipUpgrade(agent: Agent, connectionId: stri
     content: { exchangeId },
     tags: { recordType: UPGRADE_CANCELLED, connectionId, exchangeId },
   })
-  vrcFlowStore.clearFlow(connectionId)
+  vrcFlowStore.clearFlow(connectionId, 'cancelled')
   agent.config.logger.info(`${LOG_PREFIX} upgrade withdrawn locally (exchange ${exchangeId})`)
 }
 
@@ -750,7 +750,8 @@ export function setupTrustTasksInbound(agent: Agent): void {
       await service.retain(agent.context, document, 'error', context.connectionId)
       const code = (document as { payload?: { code?: string } }).payload?.code ?? 'unknown'
       logger.warn(`${LOG_PREFIX} trust-task-error received (${code}) on exchange ${document.threadId ?? document.id}`)
-      vrcFlowStore.clearFlow(context.connectionId)
+      // A declined proposal is the other person's no; any other refusal is an error. Neither is a confirmation.
+      vrcFlowStore.clearFlow(context.connectionId, /declined$/.test(code) ? 'declined' : 'error')
       return
     }
 
@@ -1101,7 +1102,7 @@ export async function respondToRelationshipProposal(
     await service.retain(agent.context, error as never, 'error', connectionId)
     await forgetAskedProposes(agent, connectionId, exchangeId)
     await sendTrustTaskDocument(agent, connectionId, error as unknown as Record<string, unknown>)
-    vrcFlowStore.clearFlow(connectionId)
+    vrcFlowStore.clearFlow(connectionId, 'declined')
     logger.info(`${LOG_PREFIX} propose declined by user (exchange ${exchangeId})`)
     return
   }
@@ -1826,7 +1827,7 @@ async function handleInboundProposeResponse(
 
   if (outcome.kind === 'handled') {
     // Either way nothing is waiting any more: no state lingers as 'proposed'.
-    if (mismatch || cancelled) vrcFlowStore.clearFlow(context.connectionId)
+    if (mismatch || cancelled) vrcFlowStore.clearFlow(context.connectionId, mismatch ? 'error' : 'cancelled')
     if (mismatch) {
       agent.config.logger.warn(
         `${LOG_PREFIX} upgrade acceptance refused: not this connection's relationship (exchange ${document.threadId ?? document.id})`

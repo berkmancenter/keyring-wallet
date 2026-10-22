@@ -97,6 +97,14 @@ export type VrcFlowStatus =
  */
 export type VrcFlowDialect = 'legacy' | 'trust-tasks'
 
+/**
+ * Why a flow was stood down without completing: declined (by either person),
+ * cancelled (a withdrawn request, a dismissed error), or an error. A flow
+ * cleared with none of these ended because it completed. The overlay reads it
+ * so a decline never says "Relationship confirmed".
+ */
+export type VrcFlowEnd = 'declined' | 'cancelled' | 'error'
+
 // The statuses in which this phone, not the other one, is doing the work.
 const LOCAL_WORK_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
   'preparing-offer',
@@ -128,6 +136,8 @@ class VrcFlowStore extends EventEmitter {
   private hasSentOffer: Map<string, boolean> = new Map()
   private flowErrors: Map<string, VrcFlowError> = new Map()
   private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
+  /** How the last flow on a connection ended, when it did not complete; forgotten when a new one starts. */
+  private flowEnds: Map<string, VrcFlowEnd> = new Map()
   private dialects: Map<string, VrcFlowDialect> = new Map()
   // The inbound R-Card (the peer's contact card, what names them locally).
   // Fired/tracked separately from the VRC completion flags above: the R-Card
@@ -166,6 +176,7 @@ class VrcFlowStore extends EventEmitter {
 
   setStatus(connectionId: string, status: VrcFlowStatus, witnessed: boolean = false): void {
     this.flowStatus.set(connectionId, status)
+    this.flowEnds.delete(connectionId)
     if (witnessed || status === 'witness-active') {
       this.isWitnessed.set(connectionId, true)
     }
@@ -310,7 +321,14 @@ class VrcFlowStore extends EventEmitter {
     this.emit('flowErrorCleared', { connectionId })
   }
 
-  clearFlow(connectionId: string): void {
+  /**
+   * Stand a connection's flow down. `ended` says why when it did not complete
+   * (see {@link VrcFlowEnd}); leave it out only for a flow that completed, or a
+   * reset whose overlay has already cleared itself.
+   */
+  clearFlow(connectionId: string, ended?: VrcFlowEnd): void {
+    if (ended) this.flowEnds.set(connectionId, ended)
+    else this.flowEnds.delete(connectionId)
     this.flowStatus.delete(connectionId)
     this.isWitnessed.delete(connectionId)
     this.dialects.delete(connectionId)
@@ -322,7 +340,12 @@ class VrcFlowStore extends EventEmitter {
     if (hadError) {
       this.emit('flowErrorCleared', { connectionId })
     }
-    this.emit('flowUpdate', { connectionId, status: 'idle' })
+    this.emit('flowUpdate', { connectionId, status: 'idle', ...(ended ? { ended } : {}) })
+  }
+
+  /** How the last flow on this connection ended, when it was stood down without completing. */
+  flowEndedWith(connectionId: string): VrcFlowEnd | undefined {
+    return this.flowEnds.get(connectionId)
   }
 }
 

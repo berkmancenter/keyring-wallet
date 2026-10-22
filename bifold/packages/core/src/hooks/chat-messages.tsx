@@ -365,6 +365,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       }
 
       if (shouldShowOverlay) {
+        // A new overlay session never opens on the last one's confirmation.
+        if (!progressStartedRef.current) setConfirmed(false)
         if (peerWait) {
           // The hard timeout counts our own work only; a wait on a closed
           // phone can last hours and must not count against what follows.
@@ -473,7 +475,12 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           clearTimeout(rcardGraceTimerRef.current)
           rcardGraceTimerRef.current = null
         }
-        if (progressStartedRef.current) {
+        // A flow stood down without completing — declined by either person,
+        // cancelled, or an error (clearFlow's `ended`) — is never a success,
+        // however far the bar had got: a decline read as "Relationship
+        // confirmed", and stayed (UI-smoothness plan, Phase 0).
+        const ended = vrcFlowStore.flowEndedWith(connectionId)
+        if (progressStartedRef.current && !ended) {
           // Success beat: snap the bar to 100%, then hold briefly with the
           // confirmation (Chat renders the wording + a way through to
           // Contacts) so the dialog does not simply vanish.
@@ -490,6 +497,9 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           // for onDismissConfirmation(), i.e. the button or an explicit
           // dismissal.
         } else {
+          setConfirmed(false)
+          setWaitingOnPeer(false)
+          waitDismissedAtRef.current = null
           setInProgress(false)
           setStatusText('')
           setProgressFraction(0)

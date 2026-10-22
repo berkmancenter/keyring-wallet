@@ -1375,6 +1375,7 @@ async function handleSessionChallenge(
 
             logger.info(`User chose to proceed without witness for ${vrcData.connectionId}`)
 
+            let issued = true
             try {
               const connection = await agent.modules.didcomm.connections.getById(vrcData.connectionId)
               const pendingIssuance = pendingVrcIssuanceAfterWitness.get(vrcData.connectionId)
@@ -1389,13 +1390,15 @@ async function handleSessionChallenge(
                 pendingIssuance?.biometricSkipped
               )
             } catch (issueError) {
+              issued = false
               logger.error(`Failed to issue VRC directly: ${(issueError as Error).message}`)
             } finally {
               // Clean up any residual flow state after issuance attempt.
               // By this point the overlay has already cleared via offer-sent +
               // hasReceivedOffer (if the counterparty's credential was received),
               // or will clear via the normal offer-received path when it arrives.
-              vrcFlowStore.clearFlow(vrcData.connectionId)
+              // An issuance that failed is said as one, never as a confirmation.
+              vrcFlowStore.clearFlow(vrcData.connectionId, issued ? undefined : 'error')
             }
           },
         })
@@ -1589,6 +1592,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
                   witnessLogger.info(
                     `User chose to proceed without witness (${errorCode}) for ${pendingVrc.connectionId}`
                   )
+                  let issued = true
                   try {
                     const connection = await agent.modules.didcomm.connections.getById(pendingVrc.connectionId)
                     vrcFlowStore.setStatus(pendingVrc.connectionId, 'preparing-offer', false)
@@ -1601,9 +1605,11 @@ export function setupVrcConnectionHandler(agent: Agent) {
                       pendingIssuance?.biometricSkipped
                     )
                   } catch (issueError) {
+                    issued = false
                     witnessLogger.error(`Failed to issue VRC without witness: ${(issueError as Error).message}`)
                   } finally {
-                    vrcFlowStore.clearFlow(pendingVrc.connectionId)
+                    // An issuance that failed is said as one, never as a confirmation.
+                    vrcFlowStore.clearFlow(pendingVrc.connectionId, issued ? undefined : 'error')
                   }
                 },
               })
