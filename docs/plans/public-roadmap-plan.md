@@ -1,6 +1,6 @@
 # Public Roadmap — Plan
 
-**Status:** Proposed. Decisions D1–D18 are taken or carry a proposed default (§10). Step 1 is blocked on data access (§9). Items marked *proposed default, owner to confirm* are the product owner's call and stand until answered.
+**Status:** Proposed. Decisions D1–D18 are taken (§10). **Step 1 and launch are blocked** until the product owner names the triage owner, the moderation owner and the holder of the claude.ai account that owns the Command Center (§8.1, §9).
 **Scope:** Make Keyring's work visible in public: what we are building, what testers and the community asked for, and what shipped in which release. It is delivered as one public GitHub Project over GitHub issues in `keyring-wallet` and `keyring-bifold`. Each plan in `docs/plans/` on `main` becomes an epic. Fixes and requests from the community become public issues, and the issue number is the reporter's receipt. Every card reads in plain language, with technical detail one click away.
 **Companions:**
 - [`public-roadmap-plan/2026-10-21-al.md`](./public-roadmap-plan/2026-10-21-al.md) — research findings (what the internal board and the tester-report ledger held on 2026-10-21, what GitHub offers as of October 2026, how other open-source projects run public roadmaps), the options weighed, and the first decisions.
@@ -149,6 +149,7 @@ A **project README** covers:
 - what Keyring is;
 - "this is not a commitment, and there are no dates";
 - how to take part: Signal, a bug or feature issue form, and the private security link;
+- the response aim ("we aim to respond within about a week", D15);
 - what each status means, and that declined items stay visible under *Closed without shipping*;
 - the automation's bot identity (§8) and the moderation contact (§8.1);
 - one line on how we work: much of the building is done with AI coding agents, overseen by the maintainers.
@@ -206,7 +207,7 @@ Plan / spec link, affected areas, PRs, acceptance criteria, agent notes.
 ### 7.2 Security and embargo
 
 - **Default-deny.** An item is public only if its triage record says *public-safe*. A *security* flag is an exclusion that fails closed: a missing, unknown or conflicting flag means not public.
-- **Disclosure approver.** The product owner approves any disclosure (*proposed default, owner to confirm*, D14).
+- **Disclosure approver.** The product owner approves any disclosure, with a **named backup role** for when the approver is unavailable (D14).
 - **Fixes.** Security fixes are developed in the repository's private advisory fork. No public branch or PR exists before the release. `keyring-bifold` follows the same rule, and a bifold security fix's merge and the wallet's submodule-pointer bump are timed to the same release, since a public pointer bump reveals the fix.
 - **Discovered late.** If a security-sensitive item turns out to be on the board, it is **deleted** (org owner), not closed: closing leaves the content and its history visible.
 - **Reporting channel.** Private vulnerability reporting is enabled on both repositories, including the `keyring-bifold` fork, and the issue forms point to it. Step 0 verifies it by submitting a test report on each.
@@ -225,15 +226,15 @@ Plan / spec link, affected areas, PRs, acceptance criteria, agent notes.
 
 Everything here that can create or edit public text passes through the scan (§7.1).
 
-- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation uses a **GitHub App** installed on the org with Projects (read/write) and Issues (write) on both repositories (*proposed default, owner to confirm*, D10). It is held by the triage owner role (§8.1), who also owns rotation. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
+- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation uses a **GitHub App** installed on the org with Projects (read/write) and Issues (write) on both repositories (D10). It is held by the triage owner role (§8.1), who also owns rotation. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
 - **Signal → issue (idempotent upsert):**
   1. When a report is accepted **and the reporter has said yes to a public issue**, find the issue the ledger maps the `IN-` number to. Opt-in is per report and is recorded in the ledger. A report without opt-in stays in Signal.
   2. If there is none, create one in `keyring-wallet` from the card template; otherwise update it.
   3. Add it to the project (`addProjectV2ItemById` is idempotent), then set the fields in a separate call.
   4. The ledger stores `IN-` → issue number, and the bot replies to the reporter with the link. The public issue number is the receipt.
 
-  Writes are published in **batches**, not in real time, so a public issue's creation time does not line up with a Signal message (*proposed default: one batch a day, owner to confirm*, D13). Each batch writes one at a time, at least one second apart, inside GitHub's content-creation limits (["no more than 80 content-generating requests per minute"](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), 500 an hour).
-- **Issue forms.** Both repos get two forms, *Report a problem* and *Ask for a feature*, each setting its type, `needs-triage` and `community` labels. Each form carries a warning: "This page is public and its edit history is kept. Do not paste names, keys, addresses or private messages," and links the Code of Conduct and contributing guide. A `config.yml` disables blank issues and links to Signal and the security form. In `keyring-bifold`, the upstream Aries Bifold templates are replaced.
+  For the first few weeks after launch, writes are published in **daily batches**, not in real time, so a public issue's creation time does not line up with a Signal message. The cadence is **provisional** and is reviewed after about a month (D13). Each batch writes one at a time, at least one second apart, inside GitHub's content-creation limits (["no more than 80 content-generating requests per minute"](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), 500 an hour).
+- **Issue forms.** Both repos get two forms, *Report a problem* and *Ask for a feature*, each setting its type, `needs-triage` and `community` labels. Each form states the response aim ("we aim to respond within about a week") and carries a warning: "This page is public and its edit history is kept. Do not paste names, keys, addresses or private messages," and links the Code of Conduct and contributing guide. A `config.yml` disables blank issues and links to Signal and the security form. In `keyring-bifold`, the upstream Aries Bifold templates are replaced.
 - **Project workflows.** On the project: auto-add one workflow per repository, setting Status = Requested; the built-in *Item closed* and *Pull request merged* workflows disabled (§4.4). Step 0 verifies the org's plan allows two auto-add workflows. Auto-add does not backfill, so the existing issues in `keyring-wallet` are added by hand in Step 1.
 - **PRs and releases:**
   - PRs say `Refs #N` (same repository) or `Refs berkmancenter/keyring-wallet#N` (cross-repository). Never `Closes`.
@@ -251,9 +252,9 @@ Everything here that can create or edit public text passes through the scan (§7
 
 ### 8.1 Ownership and cadence
 
-- **Triage owner** (a named role, *owner to confirm who*): moves cards out of Requested, holds the App credential and its rotation, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. "The coordinator" elsewhere in Keyring's processes means this role.
-- **Acknowledgement target:** a maintainer comment on a Requested issue within 3 working days (*provisional, owner to confirm*, D15). The comment may only say it is seen.
-- **Moderation owner** (*owner to confirm who*): handles community issues and comments under the Code of Conduct, reviews community-filed attachments, takes down leaks (§7.3), and may lock an issue that has stopped being useful. Locking is for conduct and for finished threads, never for disagreement.
+- **Triage owner** (a named role; **who is not yet named, and Step 1 and launch wait on it**): moves cards out of Requested, holds the App credential and its rotation, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. "The coordinator" elsewhere in Keyring's processes means this role.
+- **Acknowledgement.** The public statement, in the project README and the issue forms, is "we aim to respond within about a week". Internally the triage owner tracks a tighter target of 3 working days, which the weekly check reports against and which is never published (*provisional*, D15). The response may only say the item is seen.
+- **Moderation owner** (**not yet named; Step 1 and launch wait on it**): handles community issues and comments under the Code of Conduct, reviews community-filed attachments, takes down leaks (§7.3), and may lock an issue that has stopped being useful. Locking is for conduct and for finished threads, never for disagreement.
 - **Where jobs run:** the weekly check runs as a scheduled workflow in `keyring-wallet`; the Signal sync runs where the Signal bot runs. Both use the App credential.
 
 ---
@@ -289,7 +290,7 @@ Everything here that can create or edit public text passes through the scan (§7
   | Plan marked Draft | Off the board, unless the plan's owner opts in to an *Exploring* epic (D6) |
 
 - *Done when:* the product owner has approved the list (each row: publish / keep private / drop), keep-private rows are in the private holding project, the scan finds nothing in the approved rows, and every canary is rejected.
-- **Blocked:** the Command Center and Backlog page databases are readable only from the claude.ai account that owns them, so this step runs from a session signed in there. Decided, waiting on someone else: *owner to confirm who holds that account and runs it*.
+- **Blocked:** the Command Center and Backlog page databases are readable only from the claude.ai account that owns them, so this step runs from a session signed in there. Decided, waiting on someone else: the product owner has not yet named who holds that account and runs the step.
 
 **Step 2 — Build the project, seed the epics**
 - Create Keyring Roadmap (kept **private** until Step 4), its fields, the six views and README. Create one Epic per plan in the D6 scope, with sub-issues for phases. Write the epic numbers back into the plan headers.
@@ -316,28 +317,28 @@ Everything here that can create or edit public text passes through the scan (§7
 
 ## 10. Decisions
 
-**Taken** (2026-10-21, reasoning in the companions) and **proposed defaults** (2026-10-22, *owner to confirm*):
+**Taken** (reasoning in the companions). D13 and D15 are **provisional**:
 
 | # | Question | Decision | Because |
 |---|---|---|---|
 | D1 | Source of truth for backlog work items | GitHub. The Command Center reads its backlog from it | A published page can be linked and contributed to; an artifact outside the repo cannot. Publishing the Command Center directly would mix gates, sessions and releases with the backlog and cannot be filtered per audience |
 | D2 | Repositories | `keyring-wallet` and `keyring-bifold`, on one project. Epics and community reports in the wallet; implementation issues where the code changes | Readers do not care which submodule holds the code, but code changes live in one repository or the other. Wallet-only issues would force bifold work to be tracked elsewhere |
-| D3 | `IN-` numbers and the board | `IN-` stays in the private ledger. The public issue number is the reporter's receipt, and the bot replies with the link. Many `IN-` numbers can map to one issue. *Proposed default, owner to confirm.* Alternative: a separate public token per report | An `IN-` number plus the issue's creation time and the report's text lets someone who knows when a person wrote to the bot link them to the report. The issue number carries the same function with no cross-reference |
+| D3 | `IN-` numbers and the board | `IN-` stays in the private ledger. The public issue number is the reporter's receipt, and the bot replies with the link. Many `IN-` numbers can map to one issue. Alternative not taken: a separate public token per report | An `IN-` number plus the issue's creation time and the report's text lets someone who knows when a person wrote to the bot link them to the report. The issue number carries the same function with no cross-reference |
 | D4 | Which Signal reports reach the board | Only accepted bugs and requests, and only with the reporter's per-report opt-in | One `IN-` per message means most are chatter or follow-ups; one issue per number fills the board with noise and duplicates |
 | D5 | Status names | Requested · Under review · Planned · In progress · Testing · Shipped · Not planned · Duplicate | Not planned and Duplicate are Status values, not only close reasons, so views and automation key on one field (D12) |
 | D6 | Which plans become epics | Plans on `main` marked Active or Proposed. Drafts stay off unless the plan's owner opts in to an *Exploring* epic. Dated companions never | An epic for a plan that may never be built reads as a promise |
-| D7 | Internal view | No second board. Internal coordination stays in Signal and the Command Center. Withheld items sit in one private holding project of draft items (§4.1) | A second board would be a second source of truth. But keep-private and embargoed items must live somewhere that is not the public board, and draft items have no issue history to leak. *Holding project: proposed default, owner to confirm* |
+| D7 | Internal view | No second board. Internal coordination stays in Signal and the Command Center. Withheld items sit in one private holding project of draft items (§4.1) | A second board would be a second source of truth. But keep-private and embargoed items must live somewhere that is not the public board, and draft items have no issue history to leak. |
 | D8 | Filing on GitHub | Anyone can file bugs **and** feature requests as issues, through forms. No Discussions; 👍 shows interest | One place to look, and one status for each request. Feature requests in Discussions would need a second status system |
 | D9 | Dates | None on the board. Releases only, plus an *Up next* marker | A small team's dates slip and become broken promises in public |
-| D10 | Credentials | A GitHub App with org Projects write and Issues write on both repositories, held by the triage owner role, bot identity documented publicly. *Proposed default, owner to confirm* | The workflow token cannot write to projects (§8), and an App is not tied to one person's account |
+| D10 | Credentials | A GitHub App with org Projects write and Issues write on both repositories, held by the triage owner role, bot identity documented publicly | The workflow token cannot write to projects (§8), and an App is not tied to one person's account |
 | D11 | Project | A new public project. The existing private org project #9 "Keyring" is left to its owner | #9 holds older items, mostly from private repositories, which outsiders would see as redacted rows |
 | D12 | Declined items | Not planned and Duplicate are Status options, shown in *Closed without shipping*, each with a one-line reason comment, and a link to the original for Duplicate | A close reason alone is not a project field, so a view would have to filter on issue state, which also contains shipped items |
-| D13 | Publication cadence | Reports are published in batches, one a day. *Proposed default, owner to confirm* | Real-time publication ties an issue's creation time to a message's arrival |
-| D14 | Disclosure approver | The product owner. *Proposed default, owner to confirm* | Disclosure is a product decision with legal and reputational weight |
-| D15 | Acknowledgement target | 3 working days, comment only. *Provisional; proposed default, owner to confirm* | A public request with no reply reads as ignored; the number has no data behind it |
+| D13 | Publication cadence | For the first few public weeks, reports are published in daily batches. Cadence may loosen afterwards; provisional, reviewed after about a month | Real-time publication ties an issue's creation time to a message's arrival. Once opt-in and summary scrubbing exist, batching adds little privacy and slows G2 (the reporter sees the item change state), so it is a launch precaution, not a permanent rule |
+| D14 | Disclosure approver | The product owner, with a named backup role | Disclosure is a product decision with legal and reputational weight |
+| D15 | Acknowledgement target | Public: "we aim to respond within about a week". Internal, tracked by the triage owner: 3 working days. Provisional | A public request with no reply reads as ignored, but a public number is a promise; the tighter internal target keeps the public one safe. Neither has data behind it |
 | D16 | Closure | Only release automation sets Shipped and closes a shipped issue. PRs use `Refs`. Built-in close and merge workflows are off (§4.4) | `Closes` closes at merge, before Testing or release |
 | D17 | Stale items | The weekly check reports, never closes | Real tester reports would be closed; a public tracker that auto-closes is widely resented |
-| D18 | Reporter opt-in | Per report, recorded in the ledger. *Proposed default, owner to confirm* | A public issue is a different disclosure from a Signal message, so consent for one is not consent for the other |
+| D18 | Reporter opt-in | Per report, recorded in the ledger | A public issue is a different disclosure from a Signal message, so consent for one is not consent for the other |
 
 **Rejected alternatives**
 
