@@ -179,6 +179,10 @@ const FIRST = 'aaaa1111-1111-4111-8111-111111111111'
 const SECOND = 'aaaa2222-2222-4222-8222-222222222222'
 const flush = () => new Promise((resolve) => setTimeout(resolve, 50))
 
+// Every boot() reloads the ceremony's whole module graph (a real restart, in
+// effect): a few seconds each on a loaded CI runner, and most tests boot twice.
+jest.setTimeout(45_000)
+
 describe('a proposal asked, then the app killed before an answer', () => {
   test('on restart it is asked again, the same exchange, and accepting answers it', async () => {
     const disk = newDisk()
@@ -211,18 +215,19 @@ describe('a proposal asked, then the app killed before an answer', () => {
     )
   })
 
-  test('answered before the kill — accepted or declined — it is not asked again', async () => {
-    for (const accept of [true, false]) {
-      const disk = newDisk()
-      const before = boot(disk)
-      await before.receive(proposeDoc(FIRST))
-      await before.ceremony.respondToRelationshipProposal(before.agent, CONNECTION_ID, accept)
-      await flush()
+  test.each([
+    ['accepted', true],
+    ['declined', false],
+  ])('%s before the kill, it is not asked again', async (_answer, accept) => {
+    const disk = newDisk()
+    const before = boot(disk)
+    await before.receive(proposeDoc(FIRST))
+    await before.ceremony.respondToRelationshipProposal(before.agent, CONNECTION_ID, accept)
+    await flush()
 
-      const after = boot(disk)
-      await after.ceremony.resumeInterruptedExchanges(after.agent)
-      expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
-    }
+    const after = boot(disk)
+    await after.ceremony.resumeInterruptedExchanges(after.agent)
+    expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
   })
 
   test('a propose the pipeline rejected was never asked, so is not asked after a restart either', async () => {
@@ -303,16 +308,17 @@ describe('an upgrade request, asked then killed', () => {
 describe('asked proposes are forgotten once answered', () => {
   const marks = (disk: Disk) => disk.genericRecords.map((r) => r.tags.exchangeId)
 
-  test('accepting or declining forgets the mark', async () => {
-    for (const accept of [true, false]) {
-      const disk = newDisk()
-      const phone = boot(disk)
-      await phone.receive(proposeDoc(FIRST))
-      expect(marks(disk)).toEqual([FIRST])
-      await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, accept)
-      await flush()
-      expect(marks(disk)).toEqual([])
-    }
+  test.each([
+    ['accepting', true],
+    ['declining', false],
+  ])('%s forgets the mark', async (_answer, accept) => {
+    const disk = newDisk()
+    const phone = boot(disk)
+    await phone.receive(proposeDoc(FIRST))
+    expect(marks(disk)).toEqual([FIRST])
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, accept)
+    await flush()
+    expect(marks(disk)).toEqual([])
   })
 
   test('a superseded propose is not promoted: A asked, B asked and accepted, nothing asked after a restart', async () => {
