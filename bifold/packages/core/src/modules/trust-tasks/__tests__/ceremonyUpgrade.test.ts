@@ -383,6 +383,8 @@ describe('upgrading a relationship on its existing connection', () => {
     const up = await upgradeRelationship(fake.agent, fake.connectionId, { witnessed: false })
     if (up.kind !== 'sent') throw new Error('not sent')
     fake.relationshipRepo.updateCounterpartyRelationshipDid.mockClear()
+    // Waiting, while the request is out (the control the next line needs).
+    expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('proposed')
     await deliver(
       fake.capturedHandlerRef,
       {
@@ -399,6 +401,8 @@ describe('upgrading a relationship on its existing connection', () => {
     await flushDelivery()
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).not.toHaveBeenCalled()
     expect(docsOfType(fake, issue.TYPE_URI)).toHaveLength(1)
+    // …and no longer, once its acceptance is refused: nothing is left waiting.
+    expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('idle')
   })
 
   test('the receiver is asked as an upgrade, and accepting sends a fresh card but no profile', async () => {
