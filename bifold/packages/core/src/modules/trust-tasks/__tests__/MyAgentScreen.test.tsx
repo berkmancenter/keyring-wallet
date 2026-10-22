@@ -22,7 +22,7 @@ import { emitCommunityChanged } from '../module/communityChanged'
 import { DisclosureNotShown } from '../module/directoryDisclosure'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { vtaAgent } from '../module/vtaAgent'
-import { vtiAgent } from '../module/vtiAgent'
+import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 const mockJoin = jest.fn()
@@ -43,6 +43,7 @@ jest.mock('../module/VtaClient', () => ({
     isConnected = true
     managerDid = 'did:key:z6MkManager'
     async connect() {}
+    async disconnect() {}
     async whoAmI() {
       return {}
     }
@@ -266,6 +267,62 @@ describe('My Agent — the connected gate', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('MyAgentContinueLink')))
     expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
     setVta({ link: { kind: 'notLinked' } })
+  })
+
+  // IN-350, run 1022-1822: the heartbeat removed the link while this panel showed "Connected", and it kept showing
+  // it — with the refused phone's DID and its membership — until a relaunch.
+  describe('a phone removed while My Agent is open', () => {
+    const id = (key: string) => testIdWithKey(key)
+    const linked = {
+      kind: 'linked',
+      vtaDid: config.vtaDid,
+      label: 'bob',
+      linkedAt: '2026-09-29T21:36:00Z',
+      connection: { kind: 'online' },
+    }
+    const showConnected = async () => {
+      const agent = fakeAgent([])
+      mockUseAgent.mockReturnValue(agent)
+      // As connectedTo below: the client exists before the state, so mounting does not reset it.
+      vtaAgent.client(agent.agent as never, config.vtaDid)
+      setVta({ status: 'connected', managerDid: 'did:key:z6MkManager', approvals: [], link: linked })
+      const tree = render(
+        <BasicAppContext>
+          <MyAgent config={config} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      // The positive control: the screen is showing the connected agent before anything happens.
+      expect(tree.getByTestId(id('MyAgentCard'))).toHaveTextContent(/MyAgent\.Connected/)
+      expect(tree.queryByTestId(id('RemovedPhone'))).toBeNull()
+      return tree
+    }
+    afterEach(() => setVta({ status: 'disconnected', link: { kind: 'notLinked' } }))
+
+    test('the agent refuses its heartbeat: the same screen, still mounted, says it was removed', async () => {
+      const tree = await showConnected()
+      // The live path: the presence loop hands the agent's refusal to the controller.
+      await act(async () => {
+        vtaAgent.presenceFailed(new VtiRefusal('permissionDenied', `DID not in ACL: did:peer:2.phone`))
+      })
+      expect(tree.getByTestId(id('RemovedPhone'))).toBeTruthy()
+      expect(tree.queryByTestId(id('MyAgentCard'))).toBeNull()
+      expect(vtaAgent.getState().status).toBe('disconnected')
+    })
+
+    test('even with a session status left at "connected", a removed link wins', async () => {
+      const tree = await showConnected()
+      await act(async () => {
+        setVta({
+          status: 'connected',
+          link: { ...linked, kind: 'revoked', reason: 'DID not in ACL', cause: 'notInAcl' },
+        })
+      })
+      expect(tree.getByTestId(id('RemovedPhone'))).toBeTruthy()
+      expect(tree.queryByTestId(id('MyAgentCard'))).toBeNull()
+    })
   })
 
   // Alberto, 10-22: a person with no agent yet is told where one comes from —

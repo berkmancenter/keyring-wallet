@@ -696,10 +696,15 @@ export class VtaAgentController {
       this.note('revoked')
       // Seen in a report, not only on screen (IN-350: a refused key read as "didn't answer", and nothing said the
       // link had gone).
-      if (next.kind === 'revoked')
+      if (next.kind === 'revoked') {
         this.agent?.config?.logger?.warn?.(
           `[VTA] the agent no longer accepts this phone; the link is removed: ${event.reason}`
         )
+        // The session the agent no longer accepts is closed, and no screen reads it as connected (IN-350, run
+        // 1022-1822: the link moved to revoked while the status stayed 'connected').
+        this.set({ status: 'disconnected' })
+        void this.reset().catch(() => undefined)
+      }
     } else if (wasOnline && !isOnline) this.note('wentOffline')
     else if (!wasOnline && isOnline && previous.kind === 'linked') this.note('reconnected')
   }

@@ -87,6 +87,19 @@ describe('a heartbeat the agent refused', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'revoked', vtaDid: 'did:webvh:bob', cause: 'notInAcl' })
   })
 
+  // IN-350, run 1022-1822: the link moved to removed while the session status stayed "connected", so My Agent kept
+  // showing "Connected" until a relaunch.
+  it('the session the agent no longer accepts is closed, and reads as disconnected', async () => {
+    const vta = await onlineController()
+    expect(vta.getState().status).toBe('connected')
+    mockClient.disconnect.mockClear()
+    vta.presenceFailed(new VtiRefusal('permissionDenied', 'DID not in ACL: did:peer:2.permanent'))
+    await settle()
+    expect(vta.getState().link.kind).toBe('revoked')
+    expect(vta.getState().status).toBe('disconnected')
+    expect(mockClient.disconnect).toHaveBeenCalled()
+  })
+
   it('with an expired entry: the same', async () => {
     const vta = await onlineController()
     vta.presenceFailed(new VtiRefusal('permissionDenied', 'ACL entry expired: did:peer:2.permanent'))

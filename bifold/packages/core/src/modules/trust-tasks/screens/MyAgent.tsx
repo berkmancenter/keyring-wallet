@@ -353,8 +353,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   }, [agent, mediatorDid, vtaDid, communityDid, refresh, t])
 
   // The agent is "connected" when the phone's own VTA session is up; a build
-  // with no VTA falls back to the community session being up.
-  const agentConnected = vtaDid ? vta.status === 'connected' : state.status === 'connected'
+  // with no VTA falls back to the community session being up. A removed phone
+  // is never connected, whatever its last session said: the removal is the
+  // screen (IN-350, run 1022-1822: the heartbeat removed the link and this
+  // panel kept showing "Connected" until a relaunch).
+  const agentConnected =
+    vta.link.kind !== 'revoked' && (vtaDid ? vta.status === 'connected' : state.status === 'connected')
 
   const viaText = (via: VtiMembership['via']) =>
     via === 'invitation'
