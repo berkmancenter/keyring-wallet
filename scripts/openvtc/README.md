@@ -104,9 +104,20 @@ file was written was **0.23.3** — six point-releases the tutorial doesn't know
 about. Nothing failed; nothing warned. This exists so drift like that gets
 noticed on purpose.
 
+Only pinned builds reach `external/bin/`. A binary the local pinned snapshot
+carries (`FETCH_BINARIES_PINS_DIR`, by default `~/vti-stack/pins/nightly-2026-10-22`,
+the pnm and openvtc copies the gate runs, each listed with its sha256 in
+`MANIFEST.tsv`) is copied from there. Any other is downloaded and cached only if
+its sha256 equals `pinnedSha256`; the server has no versioned URLs, so that sha
+is the explicit version. A drifted or unpinned build is refused and the cache
+is left alone, because after upstream's TSP 1.0 cutover (2026-10-22) latest/main
+may no longer talk to our stack. `--latest` (or `FETCH_BINARIES_ALLOW_LATEST=1`)
+takes the moving build anyway, with drift still reported.
+
 ```sh
 node scripts/openvtc/fetch-binaries.mjs                # fetch + verify every pinned binary into external/bin/
 node scripts/openvtc/fetch-binaries.mjs vta pnm-server  # just the named ones
+node scripts/openvtc/fetch-binaries.mjs --latest vta    # take whatever latest/main serves (opt-in)
 node scripts/openvtc/fetch-binaries.mjs --status        # report the cache's state, no network
 node scripts/openvtc/fetch-binaries.mjs --check          # probe current upstream without touching the cache
 node scripts/openvtc/fetch-binaries.mjs --advance vta --why "reason"   # re-fetch, update the pin, log it

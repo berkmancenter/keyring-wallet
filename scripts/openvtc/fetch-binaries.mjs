@@ -10,37 +10,47 @@
 // drift detection, not freezing a re-fetchable historical URL — advancing a
 // pin means "we verified a newer build", never "roll back to an old one".
 //
-// Policy (same spirit as sync-external.mjs): fetching into the cache is the
-// default action; the pin file only changes on an explicit --advance.
+// Policy: only pinned builds reach the cache (see binaryPolicy.mjs). A binary
+// in the local pinned snapshot is copied from there; any other is downloaded
+// and cached only if its sha256 equals the pin. A moving latest/main build is
+// refused unless --latest (or FETCH_BINARIES_ALLOW_LATEST=1) opts in. The pin
+// file only changes on an explicit --advance.
 //
 //   node scripts/openvtc/fetch-binaries.mjs                 → fetch + verify every pinned binary into external/bin/
 //   node scripts/openvtc/fetch-binaries.mjs vta pnm-server   → fetch + verify only the named binaries
+//   node scripts/openvtc/fetch-binaries.mjs --latest         → cache whatever latest/main serves, drift reported
 //   node scripts/openvtc/fetch-binaries.mjs --check          → probe latest/current without touching the cache
 //   node scripts/openvtc/fetch-binaries.mjs --status         → report the cache's state, no network
 //   node scripts/openvtc/fetch-binaries.mjs --advance vta --why "reason"
 //                                                             → re-fetch, update BINARY_PINS.json, append the log
 //
-// Exit code 1 if any binary drifted from its pin (or failed to fetch/verify)
-// — usable in CI later, same convention as sync-external.mjs's tripwires.
+// FETCH_BINARIES_PINS_DIR names the pinned snapshot (default DEFAULT_PINS_DIR).
+//
+// Exit code 1 if any binary drifted from its pin, was refused, or failed to
+// fetch/verify — same convention as sync-external.mjs's tripwires.
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir, platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { allowLatest, DEFAULT_PINS_DIR, downloadVerdict, parseManifest, SNAPSHOT_NAMES } from "./binaryPolicy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../..");
-const binDir = join(repoRoot, "external", "bin");
-const pinsPath = join(here, "BINARY_PINS.json");
+// The overrides exist for fetch-binaries.test.mjs.
+const binDir = process.env.FETCH_BINARIES_BIN_DIR || join(repoRoot, "external", "bin");
+const pinsPath = process.env.FETCH_BINARIES_PINS_FILE || join(here, "BINARY_PINS.json");
 const logPath = join(here, "BINARY_PINS_LOG.md");
 
-const DOWNLOAD_ORIGIN = "https://download.firstperson.dev";
+const DOWNLOAD_ORIGIN = process.env.FETCH_BINARIES_ORIGIN || "https://download.firstperson.dev";
 
 const args = process.argv.slice(2);
 const STATUS_ONLY = args.includes("--status");
 const CHECK_ONLY = args.includes("--check");
+const LATEST = allowLatest(args, process.env);
+const snapshotDir = process.env.FETCH_BINARIES_PINS_DIR || DEFAULT_PINS_DIR;
 const advanceIdx = args.indexOf("--advance");
 const advanceName = advanceIdx >= 0 ? args[advanceIdx + 1] : null;
 const whyIdx = args.indexOf("--why");
@@ -99,26 +109,54 @@ function readVersion(binaryPath) {
  */
 async function fetchAndVerify(name, def, { toCache }) {
   const url = resolveUrl(name, def);
-  const dest = toCache ? join(binDir, name) : join(mkdtempSync(join(tmpdir(), "fetch-binaries-")), name);
-  const buf = await downloadTo(url, dest);
-  const sha256 = sha256Hex(buf);
-  const version = readVersion(dest);
-  if (!toCache) rmSync(dirname(dest), { recursive: true, force: true });
-  return { url, sha256, version };
+  const tmp = join(mkdtempSync(join(tmpdir(), "fetch-binaries-")), name);
+  try {
+    const buf = await downloadTo(url, tmp);
+    const sha256 = sha256Hex(buf);
+    const version = readVersion(tmp);
+    const cache = typeof toCache === "function" ? toCache(sha256) : toCache;
+    if (cache) copyFileSync(tmp, join(binDir, name));
+    return { url, sha256, version, cached: cache };
+  } finally {
+    rmSync(dirname(tmp), { recursive: true, force: true });
+  }
 }
 
-function report(name, def, { url, sha256, version }) {
-  const label = version ? `${version} (${sha256.slice(0, 12)})` : `sha256:${sha256.slice(0, 12)}`;
-  const pinned = def.pinnedSha256;
-  if (pinned === null || pinned === undefined) {
-    console.log(`  ? ${name.padEnd(20)} fetched ${label} — no pin recorded yet (never verified)`);
-    return 0;
+/** The pinned snapshot's copy of `name`, or null when the snapshot doesn't carry it. */
+function snapshotEntry(name) {
+  const file = SNAPSHOT_NAMES[name];
+  const manifest = join(snapshotDir, "MANIFEST.tsv");
+  if (!file || !existsSync(manifest)) return null;
+  const entry = parseManifest(readFileSync(manifest, "utf8")).get(file);
+  return entry ? { ...entry, path: join(snapshotDir, file) } : null;
+}
+
+/** Copies a pinned snapshot binary into the cache once its bytes match the manifest. */
+function installFromSnapshot(name, entry) {
+  const sha256 = existsSync(entry.path) ? sha256Hex(readFileSync(entry.path)) : null;
+  if (sha256 !== entry.sha256) {
+    console.log(`  ! ${name.padEnd(20)} REFUSED: ${entry.path} is ${sha256 ? `sha256:${sha256.slice(0, 12)}` : "missing"}, its manifest says ${entry.sha256.slice(0, 12)}`);
+    return 1;
   }
-  if (sha256 === pinned) {
+  copyFileSync(entry.path, join(binDir, name));
+  chmodSync(join(binDir, name), 0o755);
+  console.log(`  ✓ ${name.padEnd(20)} ${entry.version} (${sha256.slice(0, 12)}) from pinned ${snapshotDir}`);
+  return 0;
+}
+
+function report(name, def, { url, sha256, version, cached }) {
+  const label = version ? `${version} (${sha256.slice(0, 12)})` : `sha256:${sha256.slice(0, 12)}`;
+  const { status } = downloadVerdict({ sha256, pinnedSha256: def.pinnedSha256, latest: LATEST });
+  const refused = CHECK_ONLY || cached ? "" : " — REFUSED, not cached (--latest to take it anyway)";
+  if (status === "unpinned") {
+    console.log(`  ? ${name.padEnd(20)} fetched ${label} — no pin recorded yet (never verified)${refused}`);
+    return refused ? 1 : 0;
+  }
+  if (status === "match") {
     console.log(`  ✓ ${name.padEnd(20)} ${label} (matches pin, ${def.pinnedOn})`);
     return 0;
   }
-  console.log(`  ▲ ${name.padEnd(20)} pin ${(def.pinnedVersion ?? pinned.slice(0, 12))} (${def.pinnedOn}) → latest ${label}  DRIFT`);
+  console.log(`  ▲ ${name.padEnd(20)} pin ${(def.pinnedVersion ?? def.pinnedSha256.slice(0, 12))} (${def.pinnedOn}) → latest ${label}  DRIFT${refused}`);
   console.log(`      url: ${url}`);
   return 1;
 }
@@ -188,11 +226,20 @@ async function main() {
   }
 
   mkdirSync(binDir, { recursive: true });
+  if (!CHECK_ONLY) console.log(LATEST ? "LATEST opted in: moving builds are cached even when they drift.\n" : `pinned only · snapshot ${snapshotDir}\n`);
   let problems = 0;
   for (const name of names) {
     const def = pins.binaries[name];
     try {
-      const result = await fetchAndVerify(name, def, { toCache: !CHECK_ONLY });
+      const snap = CHECK_ONLY || LATEST ? null : snapshotEntry(name);
+      if (snap) {
+        problems += installFromSnapshot(name, snap);
+        continue;
+      }
+      const toCache = CHECK_ONLY
+        ? false
+        : (sha256) => downloadVerdict({ sha256, pinnedSha256: def.pinnedSha256, latest: LATEST }).cache;
+      const result = await fetchAndVerify(name, def, { toCache });
       problems += report(name, def, result);
     } catch (e) {
       console.log(`  ! ${name.padEnd(20)} FAILED: ${e.message}`);
