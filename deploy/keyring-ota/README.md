@@ -72,13 +72,19 @@ A bundle is deployed at 0% rollout and then targeted at `ring0` only. Widening
 is a separate step, run by hand with the server's management token; no
 workflow widens. **Nothing is widened past `ring0` until the conditions in
 docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md hold.**
-Widening and withdrawing:
+Widening:
 
 ```sh
 npx hot-updater bundle update <id> --target-cohorts ring0,ring1 -y
 npx hot-updater bundle update <id> --target-cohorts ring0,ring1,ring2 -y
-npx hot-updater bundle disable <id> -y    # phones on it go back to the previous bundle
 ```
+
+Withdrawing a production or preview bundle doesn't need the token by hand:
+ota-publish.yml's `disable` action, with `bundle_id` and the bundle's own
+`platform`, does it after the same approval. It checks that the bundle is on
+that channel and platform, disables it, and checks that it now reads disabled
+(`scripts/ota/withdraw.mjs`). Phones on the bundle go back to the previous one,
+or to the build's own. A dry run checks only that the bundle is there.
 
 ## Tests
 
@@ -179,8 +185,8 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 | Channel | Who has it | Signed with | Inputs |
 | --- | --- | --- | --- |
-| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | `build` (staging tag number); tier check |
-| `preview` | an early-access group (no app build yet) | the same store key: store builds carry only `OTA_PUBLIC_KEY` | `build`; tier check |
+| `production` | store builds | `OTA_SIGNING_KEY_PEM`, which must be `OTA_PUBLIC_KEY`'s pair | publish: `build` (staging tag number), tier check; disable: `bundle_id` and its platform |
+| `preview` | an early-access group (no app build yet) | the same store key: store builds carry only `OTA_PUBLIC_KEY` | as production |
 | `device-test` | the quick-install test app only | **only** `OTA_TEST_SIGNING_KEY_PEM`, which must not be the store key; no fallback | `base` (the test app's build commit); tier check skipped; actions publish, tamper, crash, mismatch, disable, cleanup (`scripts/ota/device-test.sh`) |
 
 Every channel waits for the `ota-approval` reviewer.
