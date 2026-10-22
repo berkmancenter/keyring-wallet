@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "783cadfb87e9d6a5991c284140606822aba484e4",
+  "generatedFrom": "7d668cd0468db71da7e32cea4f9e1b4469aeb465",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -80,6 +80,7 @@
     "AgentDeviceOnlyThis": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRemoved": ["src/modules/trust-tasks/screens/VtaDevices.tsx"],
     "AgentDeviceRename": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
+    "AgentDeviceUntilNote": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevices": [
       "src/modules/trust-tasks/screens/DevicesCard.tsx",
       "src/modules/trust-tasks/screens/MyAgent.ids.ts"
@@ -1106,6 +1107,7 @@
     "AgentDeviceRemove_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceRename_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDeviceState_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
+    "AgentDeviceUntil_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentDevice_": ["src/modules/trust-tasks/screens/DeviceRow.tsx"],
     "AgentGetCardsRefused_": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentJourney": ["src/modules/trust-tasks/screens/VtaAgentHome.tsx"],

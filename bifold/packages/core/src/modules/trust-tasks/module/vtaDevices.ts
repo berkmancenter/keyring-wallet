@@ -75,6 +75,8 @@ export interface AgentDevice {
   label?: string
   /** RFC 3339, when the agent added the entry. */
   createdAt?: string
+  /** RFC 3339, when the entry lapses; absent when it never does. */
+  expiresAt?: string
   deviceId?: string
   displayName?: string
   platform?: string
@@ -133,6 +135,7 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
       isThisPhone: did === port.managerDid,
       label: str(entry.label),
       createdAt: str(entry.createdAt),
+      expiresAt: str(entry.expiresAt),
       ...(b
         ? {
             deviceId: str(b.deviceId),

@@ -1704,8 +1704,14 @@ export class VtaClient {
    * admin (vti-common acl/mod.rs:1081-1112), and a subject already on the list
    * is refused as a conflict (vta-service operations/acl.rs:391-395). Answers
    * the entry the VTA now holds.
+   *
+   * `expiresAt` (RFC 3339, the entry's wire form in both 0.1 and 0.2:
+   * acl/_shared acl-entry.schema.json, vta-sdk acl_management/entry.rs) makes
+   * the entry lapse then. A caller whose own entry expires may write only an
+   * entry that expires no later than its own (VTI-ACL-053, vta-service
+   * operations/acl.rs:388-403).
    */
-  async grantAdmin(did: string, options: { label?: string } = {}): Promise<VtaAclEntry> {
+  async grantAdmin(did: string, options: { label?: string; expiresAt?: string } = {}): Promise<VtaAclEntry> {
     const label = options.label?.trim().slice(0, ACL_LABEL_MAX)
     const { uri, answer } = await this.versions.ask('aclGrant', VTA_TASK_VERSIONS.aclGrant, (type) =>
       this.task(type, {
@@ -1713,6 +1719,7 @@ export class VtaClient {
           subject: did,
           role: 'admin',
           ...(label ? { label } : {}),
+          ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
           ...(isAcl02(type) ? FULL_ADMIN_AUTHORITY_02 : {}),
         },
       })

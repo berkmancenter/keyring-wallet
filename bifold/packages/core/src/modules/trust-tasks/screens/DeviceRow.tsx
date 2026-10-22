@@ -17,6 +17,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 
 import { type DeviceStatus, lastSeenOf, platformKeyOf } from './deviceWords'
+import { localDateTime } from './localTime'
 import { didHashKey } from './testIdKey'
 
 /** A device as the row shows it: its name already worded, its state already read. */
@@ -33,6 +34,8 @@ export interface DeviceView {
   phone: boolean
   /** It can use the agent for some tasks but not manage it: not an admin (IN-200b). */
   limited?: boolean
+  /** RFC 3339, when its access to the agent lapses (VTI-ACL-053 bounds what this phone adds by its own). */
+  expiresAt?: string
 }
 
 export const DeviceRow: React.FC<{
@@ -81,6 +84,16 @@ export const DeviceRow: React.FC<{
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentDeviceAccess_${key}`)}>
             {t('Devices.LimitedAccess')}
           </ThemedText>
+        ) : null}
+        {device.expiresAt ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey(`AgentDeviceUntil_${key}`)}>
+            {t('Devices.Until', { date: localDateTime(device.expiresAt) })}
+          </ThemedText>
+        ) : null}
+        {/* This phone's own access lapses: so does everything it adds, and
+            only the agent's host can lift it (VTI-ACL-052, 053). */}
+        {device.expiresAt && device.thisPhone ? (
+          <ThemedText testID={testIdWithKey('AgentDeviceUntilNote')}>{t('Devices.ThisPhoneUntilNote')}</ThemedText>
         ) : null}
         {removed ? (
           <ThemedText testID={testIdWithKey(`AgentDeviceState_${key}`)}>{t('Devices.RemovedErasePending')}</ThemedText>

@@ -100,6 +100,8 @@ export interface AgentDeviceLike {
   wipePending: boolean
   kind?: 'keyring'
   limitedAccess?: boolean
+  /** RFC 3339, when its access lapses; absent when it never does. */
+  expiresAt?: string
 }
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
@@ -128,6 +130,7 @@ export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView 
     // only one that does not is renamed from here (IN-123).
     namesItself: Boolean(readable(device.displayName)),
     ...(device.limitedAccess ? { limited: true } : {}),
+    ...(device.expiresAt ? { expiresAt: device.expiresAt } : {}),
   }
 }
 

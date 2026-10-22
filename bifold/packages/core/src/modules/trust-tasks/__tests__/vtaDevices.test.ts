@@ -106,6 +106,20 @@ describe('the devices that run your agent', () => {
     expect(devices[2].deviceId).toBeUndefined()
   })
 
+  // VTI-ACL-053: a phone whose own access lapses adds devices only until then, so My devices says when.
+  it("carries each entry's expiry, and none for an entry that never lapses", async () => {
+    const until = '2026-10-22T13:00:00.000Z'
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.aclList]: () => ({
+        entries: [{ ...acl[0], expiresAt: until }, acl[1]],
+        truncated: false,
+      }),
+    })
+    const [me, old] = await listAgentDevices(port)
+    expect(me.expiresAt).toBe(until)
+    expect(old.expiresAt).toBeUndefined()
+  })
+
   it('keeps a wiped device listed, with its access gone and the wipe pending', async () => {
     const wiped = [bindings[0], { ...bindings[1], wipedAt: '2026-09-28T09:55:00Z' }]
     // As the agent does (vta-service operations/device.rs:239-244): a wiped or

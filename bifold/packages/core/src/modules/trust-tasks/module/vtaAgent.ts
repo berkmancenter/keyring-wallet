@@ -97,6 +97,7 @@ import {
   OwnerNotConfirmed,
   deviceRefusalOf,
   looksLikeDid,
+  ownExpiryFromRefusal,
   type ConfirmOwner,
   type DeviceCanOwn,
   type DeviceRefusalReason,
@@ -2234,6 +2235,13 @@ export class VtaAgentController {
    * anything that is not a DID before asking anyone; then asks the person to
    * confirm ({@link OwnerNotConfirmed} if not, nothing sent); then sends
    * `acl/grant/0.1`. Answers the device as the agent now holds it.
+   *
+   * A phone whose own entry lapses may add a device only until then
+   * (VTI-ACL-053): a permanent one is refused, and the person read "Your agent
+   * doesn't let this phone do that." The new device is given this phone's own
+   * expiry, read from the access list; the device answered carries it, for the
+   * screen to say. When the list cannot be read, the agent's refusal names the
+   * expiry, and the grant is sent once more with it.
    */
   async addBackupDevice(agent: Agent, did: string, label?: string): Promise<VtaDevice> {
     const vtaDid = this.linkedAgent()
@@ -2245,9 +2253,20 @@ export class VtaAgentController {
       const client = await this.signedIn(agent, vtaDid)
       mine = await this.phoneKeys(agent, vtaDid)
       if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
-      const entry = await client.grantAdmin(did, { label }).catch((error: unknown) => {
-        throw this.refused(error)
-      })
+      const own = await client
+        .listAcl()
+        .then((entries) => entries.find((e) => mine.includes(e.subject)))
+        .catch(() => undefined)
+      const grant = (expiresAt?: string) => client.grantAdmin(did, { label, ...(expiresAt ? { expiresAt } : {}) })
+      const entry = await grant(own?.expiresAt)
+        .catch((error: unknown) => {
+          const expiresAt = own?.expiresAt ? undefined : ownExpiryFromRefusal(error)
+          if (!expiresAt) throw error
+          return grant(expiresAt)
+        })
+        .catch((error: unknown) => {
+          throw this.refused(error)
+        })
       return deviceFrom(entry, mine)
     })
   }

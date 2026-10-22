@@ -514,6 +514,19 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(tree.getByTestId(id('AgentCreateErrorDetail'))).toHaveTextContent(/authority/)
   })
 
+  // VTI-ACL-053: an add the agent bounds by this phone's own access is said as that, not "doesn't let this phone".
+  test("an add beyond this phone's own access is said as that", async () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    jest.spyOn(vtaAgent, 'addBackupDevice').mockRejectedValue(new DeviceActionRefused('beyondOwnAccess'))
+    const tree = await toBackupCode()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
+    })
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.Device.beyondOwnAccess')
+  })
+
   // #30: the other phone now shows its code as a QR; this phone scans it.
   // IN-125: a scanned code is added straight away; the owner check (inside
   // addBackupDevice) is the only stop, with no Add to press.
