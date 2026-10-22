@@ -1643,6 +1643,11 @@
   "MyAgent": {
     "Title": "Seu agente",
     "WhatItIs": "Um agente guarda sua identidade em uma comunidade e leva suas mensagens até ela. Você precisa de um antes de entrar ou ser verificado.",
+    "GetAgentToggle": "Ainda não tem um agente?",
+    "GetAgentBody": "Um agente precisa de um provedor, como um e-mail: use um serviço de hospedagem ou rode o seu próprio.",
+    "GetAgentHosted": "Um serviço de hospedagem, por exemplo vta.farm",
+    "GetAgentHostedNote": "Operado por terceiros, não pela Keyring.",
+    "GetAgentSelfHost": "Rode o seu próprio: instruções em openvtc.net",
     "Connect": "Conectar meu agente",
     "TryAgain": "Tentar novamente",
     "Resolving": "Localizando seu agente…",

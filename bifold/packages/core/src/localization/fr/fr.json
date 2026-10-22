@@ -1737,6 +1737,11 @@
   "MyAgent": {
     "Title": "Votre agent",
     "WhatItIs": "Un agent détient votre identité auprès d'une communauté et lui transmet vos messages. Il en faut un avant de pouvoir adhérer ou être vérifié.",
+    "GetAgentToggle": "Pas encore d'agent ?",
+    "GetAgentBody": "Un agent a besoin d'un hébergeur, comme un e-mail : utilisez un service d'hébergement, ou hébergez le vôtre.",
+    "GetAgentHosted": "Un service d'hébergement, par exemple vta.farm",
+    "GetAgentHostedNote": "Géré par un tiers, pas par Keyring.",
+    "GetAgentSelfHost": "Hébergez le vôtre : instructions sur openvtc.net",
     "Connect": "Connecter mon agent",
     "TryAgain": "Réessayer",
     "Resolving": "Recherche de votre agent…",

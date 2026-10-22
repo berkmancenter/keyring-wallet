@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "7d668cd0468db71da7e32cea4f9e1b4469aeb465",
+  "generatedFrom": "5a3376c6523976dc010754113e22c9a139942fac",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -87,6 +87,10 @@
     ],
     "AgentDoors": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentGaveUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentGetAgentHelp": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentHosted": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentSelfHost": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "AgentGetAgentToggle": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "AgentGetCards": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsButton": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
     "AgentGetCardsHint": ["src/modules/trust-tasks/screens/GetCardsFromAgent.tsx"],
@@ -1259,6 +1263,18 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.enrolCard"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentHelp"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentHosted"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentSelfHost"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentToggle"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.host"

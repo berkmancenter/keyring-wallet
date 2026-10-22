@@ -24,7 +24,7 @@ import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -57,6 +57,16 @@ import { useVtaDid } from './VtaStatus'
 import { sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
 import { localDate, localDateTime } from './localTime'
+
+/**
+ * Where an agent comes from, for a person with none yet: a hosting service
+ * (one example, run by a third party) or running your own. Links only, opened
+ * in the browser; neither is a default anywhere in the app.
+ */
+export const GET_AGENT_LINKS = {
+  hosted: 'https://vta.farm/',
+  selfHost: 'https://openvtc.net/',
+} as const
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
 type VettingSeat = 'vetter' | 'applicant'
@@ -98,6 +108,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   // minted for this community, the invitations it was handed, the memberships
   // it earned. Read from the stores; refreshed after anything that writes.
   const [persona, setPersona] = useState<VtiPersona>()
+  const [getAgentShown, setGetAgentShown] = useState(false)
   const [invitations, setInvitations] = useState<VtiInvitation[]>([])
   const [memberships, setMemberships] = useState<VtiMembership[]>([])
   const [seat, setSeat] = useState<VettingSeat>('applicant')
@@ -264,6 +275,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       gap: 8,
     },
     label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
+    link: { ...TextTheme.normal, color: ColorPalette.brand.link, textDecorationLine: 'underline' },
     value: { ...TextTheme.normal, color: TextTheme.normal.color },
     button: {
       backgroundColor: ColorPalette.brand.primary,
@@ -745,6 +757,42 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.label} testID={testIdWithKey(MyAgentIds.linkOtherPhoneHint)}>
               {t('VtaLink.OtherPhoneHint')}
             </Text>
+            {/* No agent yet: where one comes from. Generic first, like email (a
+                service or your own); a hosting service is named only in this
+                help, as an example, with who runs it (09-25 rule). Only links:
+                nothing becomes a default. */}
+            {vta.link.kind === 'notLinked' ? (
+              <>
+                <Pressable
+                  onPress={() => setGetAgentShown(!getAgentShown)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: getAgentShown }}
+                  testID={testIdWithKey(MyAgentIds.getAgentToggle)}
+                >
+                  <Text style={styles.link}>{t('MyAgent.GetAgentToggle')}</Text>
+                </Pressable>
+                {getAgentShown ? (
+                  <View style={{ gap: 8 }} testID={testIdWithKey(MyAgentIds.getAgentHelp)}>
+                    <Text style={styles.value}>{t('MyAgent.GetAgentBody')}</Text>
+                    <Pressable
+                      onPress={() => void Linking.openURL(GET_AGENT_LINKS.hosted)}
+                      accessibilityRole="link"
+                      testID={testIdWithKey(MyAgentIds.getAgentHosted)}
+                    >
+                      <Text style={styles.link}>{t('MyAgent.GetAgentHosted')}</Text>
+                      <Text style={styles.label}>{t('MyAgent.GetAgentHostedNote')}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void Linking.openURL(GET_AGENT_LINKS.selfHost)}
+                      accessibilityRole="link"
+                      testID={testIdWithKey(MyAgentIds.getAgentSelfHost)}
+                    >
+                      <Text style={styles.link}>{t('MyAgent.GetAgentSelfHost')}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
           </View>
         ) : null}
         {vtaDid ? (

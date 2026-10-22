@@ -1798,6 +1798,11 @@
   "MyAgent": {
     "Title": "Your agent",
     "WhatItIs": "An agent holds your identity for a community and carries messages to it. You need one before you can join or be vetted.",
+    "GetAgentToggle": "Don't have an agent yet?",
+    "GetAgentBody": "An agent needs a host, like email: use a hosting service, or run your own.",
+    "GetAgentHosted": "A hosting service, for example vta.farm",
+    "GetAgentHostedNote": "Run by a third party, not by Keyring.",
+    "GetAgentSelfHost": "Run your own: instructions at openvtc.net",
     "Connect": "Connect my agent",
     "TryAgain": "Try again",
     "Resolving": "Finding your agent…",

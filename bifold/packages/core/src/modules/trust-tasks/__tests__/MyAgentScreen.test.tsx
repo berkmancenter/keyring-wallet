@@ -6,6 +6,7 @@
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Linking } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
@@ -16,7 +17,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import enCopy from '../../../localization/en/en.json'
 import frCopy from '../../../localization/fr/fr.json'
 import ptBrCopy from '../../../localization/pt-br/pt-br.json'
-import MyAgent from '../screens/MyAgent'
+import MyAgent, { GET_AGENT_LINKS } from '../screens/MyAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { DisclosureNotShown } from '../module/directoryDisclosure'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -265,6 +266,89 @@ describe('My Agent — the connected gate', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('MyAgentContinueLink')))
     expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
     setVta({ link: { kind: 'notLinked' } })
+  })
+
+  // Alberto, 10-22: a person with no agent yet is told where one comes from —
+  // generic first (a host, like email), a hosting service named only in this
+  // help, as an example, with who runs it (the 09-25 provider-generic rule).
+  describe("don't have an agent yet?", () => {
+    const id = (key: string) => testIdWithKey(key)
+    const showWith = async (link: Record<string, unknown>) => {
+      mockUseAgent.mockReturnValue(fakeAgent([]))
+      setVta({ link })
+      const tree = render(
+        <BasicAppContext>
+          <MyAgent config={{}} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+    afterEach(() => setVta({ link: { kind: 'notLinked' } }))
+
+    test('no agent linked: a closed help, and opened, both ways with their links', async () => {
+      const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+      const tree = await showWith({ kind: 'notLinked' })
+      expect(tree.getByTestId(id('AgentGetAgentToggle'))).toHaveTextContent('MyAgent.GetAgentToggle')
+      expect(tree.queryByTestId(id('AgentGetAgentHelp'))).toBeNull()
+      fireEvent.press(tree.getByTestId(id('AgentGetAgentToggle')))
+      expect(tree.getByTestId(id('AgentGetAgentHelp'))).toHaveTextContent(/MyAgent\.GetAgentBody/)
+      // The hosting service says who runs it.
+      expect(tree.getByTestId(id('AgentGetAgentHosted'))).toHaveTextContent(
+        /MyAgent\.GetAgentHosted.*MyAgent\.GetAgentHostedNote/
+      )
+      expect(tree.getByTestId(id('AgentGetAgentSelfHost'))).toHaveTextContent('MyAgent.GetAgentSelfHost')
+      fireEvent.press(tree.getByTestId(id('AgentGetAgentHosted')))
+      fireEvent.press(tree.getByTestId(id('AgentGetAgentSelfHost')))
+      expect(open.mock.calls.map(([url]) => url)).toEqual(['https://vta.farm/', 'https://openvtc.net/'])
+      expect(GET_AGENT_LINKS).toEqual({ hosted: 'https://vta.farm/', selfHost: 'https://openvtc.net/' })
+      open.mockRestore()
+    })
+
+    test('a link part-way (a code showing again): the way in is there, the help is not', async () => {
+      const tree = await showWith({
+        kind: 'showingKey',
+        vtaDid: 'did:webvh:x',
+        label: 'x',
+        did: 'did:key:z6Mk',
+        checking: false,
+        resumed: true,
+      })
+      expect(tree.getByTestId(id('MyAgentContinueLink'))).toBeTruthy()
+      expect(tree.queryByTestId(id('AgentGetAgentToggle'))).toBeNull()
+    })
+
+    test('a linked phone: handed to its agent home, and no help', async () => {
+      const replace = (useNavigation() as unknown as { replace: jest.Mock }).replace
+      replace.mockClear()
+      const tree = await showWith({
+        kind: 'linked',
+        vtaDid: config.vtaDid,
+        label: 'bob',
+        linkedAt: '2026-09-29T21:36:00Z',
+        connection: { kind: 'online' },
+      })
+      // The screen did read the link: it hands over to the agent home, as a linked phone does.
+      expect(replace).toHaveBeenCalledWith(Screens.VtaAgent)
+      expect(tree.queryByTestId(id('AgentGetAgentToggle'))).toBeNull()
+    })
+
+    test('the words, in every language; the main copy never names a hosting service', () => {
+      for (const words of [enCopy, frCopy, ptBrCopy] as unknown as Record<string, Record<string, string>>[]) {
+        for (const key of [
+          'GetAgentToggle',
+          'GetAgentBody',
+          'GetAgentHosted',
+          'GetAgentHostedNote',
+          'GetAgentSelfHost',
+        ])
+          expect(words.MyAgent[key]).toEqual(expect.any(String))
+        expect(words.MyAgent.GetAgentBody).not.toMatch(/farm|vta\.|openvtc/i)
+        expect(words.MyAgent.GetAgentToggle).not.toMatch(/farm|vta\.|openvtc/i)
+      }
+    })
   })
 
   test('the words for the ways in, in every language, and the steps that name them', () => {
