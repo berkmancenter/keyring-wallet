@@ -117,3 +117,19 @@ test('the heartbeat link-removed row is a verdict only when the link was Online 
   assert.match(driver, /const onlineBefore = statusBefore === "Online";/);
   assert.match(driver, /if \(HEARTBEAT && !onlineBefore\) \{[\s\S]*?rows\.skip\(N\("refused-link-removed"\), `no verdict: the link was/);
 });
+
+test('the refusal evidence is the persona inbox\'s line or presence\'s own, never a heartbeat that went through', () => {
+  const REFUSAL_LOG = eval(driver.match(/^const REFUSAL_LOG = (\/.*\/i);$/m)[1]);
+  // Lines as 1022-1726 (relaunch) and 1022-1822 (heartbeat) logged them.
+  for (const line of [
+    "W/ReactNativeJS( 7524): [VTI] persona inbox (latest persona): sign-in failed: this identity's agent could not be reached to borrow its key again: permission denied: forbidden: DID not in ACL: did:peer:2.Vz6Mku89",
+    'W/ReactNativeJS( 5030): [VTA] telling the agent this phone is here: permission denied: forbidden: DID not in ACL: did:peer:2.Vz6MkovkMjF',
+    'W/ReactNativeJS( 5030): [VTA] the agent no longer accepts this phone; the link is removed: permission denied: forbidden: DID not in ACL',
+  ]) assert.match(line, REFUSAL_LOG, line.slice(0, 60));
+  for (const line of [
+    'I/ReactNativeJS( 5030): [TrustTasks:VtaClient] asked did:webvh:Qme6u2:dids.ic3.dev:keyring-runner-prague-vta https://trusttasks.org/spec/device/heartbeat/0.2 over rev3',
+    'I/ReactNativeJS( 5030): [TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/device/heartbeat/0.2',
+    'W/ReactNativeJS( 5030): [VTI] persona inbox (did:webvh:Qmf9RX…): listening (the session is this persona); status connected',
+    'W/ReactNativeJS( 5030): [VTA] registering this phone with its agent: timeout',
+  ]) assert.doesNotMatch(line, REFUSAL_LOG, line.slice(0, 60));
+});
