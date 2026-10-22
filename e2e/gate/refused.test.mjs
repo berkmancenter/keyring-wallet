@@ -44,3 +44,9 @@ test('both paths run, each on a fresh link: heartbeat (open past the 5 min tick)
 test('the cleanup dumps logcat only with the emulator there (a missing one hung adb 53 min)', () => {
   assert.match(leg, /adb devices \| grep -q "\^\$E\[\[:space:\]\]" && adb -s \$E logcat -d/);
 });
+
+test('each path reads its own link record, never the other path\'s', () => {
+  assert.match(leg, /rm -f "\$LEG_DIR\/last-link.json"/);
+  assert.match(leg, /mv "\$LEG_DIR\/last-link.json" "\$LEG_DIR\/last-link-\$path.json"/);
+  assert.match(leg, /LINK_FILE="\$LEG_DIR\/last-link-\$path.json"/);
+});
