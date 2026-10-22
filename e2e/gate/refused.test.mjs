@@ -38,7 +38,9 @@ test('both paths run, each on a fresh link: heartbeat (open past the 5 min tick)
   assert.match(leg, /for path in \$\{REFUSED_PATHS:-heartbeat relaunch\}; do/, 'both by default');
   assert.match(leg, /case \$path in heartbeat\|relaunch\) ;; \*\) broken/, 'an unknown path is broken, not skipped');
   assert.match(leg, /REFUSED_PATH=\$path/);
-  assert.match(driver, /const windowMs = HEARTBEAT \? 330000 : 95000;/);
+  assert.match(driver, /const windowMs = HEARTBEAT \? HEARTBEAT_S \* 1000 : 95000;/);
+  const heartbeatS = Number(driver.match(/REFUSED_HEARTBEAT_S \|\| (\d+)\)/)[1]);
+  assert.ok(heartbeatS >= 2 * 300, `two 5 min presence ticks, not one (362 s missed it): ${heartbeatS}`);
   assert.match(driver, /if \(!HEARTBEAT\) \{ await restartApp\(d\); await unlockToHome\(d\); \}/);
 });
 
@@ -69,8 +71,49 @@ test('after a refusal that unlinked the phone, C\'s route asks to link first; th
   const unlinked = row.indexOf('if (removedShown) {');
   assert.ok(unlinked > 0, 'the unlinked case is its own branch');
   assert.ok(unlinked < row.indexOf('PersonaAgentNoticeOpen'), 'decided before the notice\'s own checks');
-  const branch = row.slice(unlinked, row.indexOf('let opened'));
+  const branch = row.slice(unlinked, row.indexOf('let opened = false;\n    if (n.shown'));
+  assert.ok(branch.length < row.length, 'the branch ends before the notice\'s own checks');
   assert.match(branch, /existsTestId\(d, "JoinNeedsAgent"/);
   assert.match(branch, /ok: needsAgent && !unreachable/, 'and never "didn\'t answer"');
   assert.ok(driver.indexOf('removedShown = await existsTestId(d, "RemovedPhone"') < driver.indexOf(row), 'RemovedPhone is read first (refused-link-removed)');
+});
+
+test('the link status is read before the removal, and each minute of the heartbeat window', () => {
+  const before = driver.indexOf('const statusBefore = await linkStatus();');
+  assert.ok(before > 0 && before < driver.indexOf('const removedAt = Date.now();'), 'before the removal');
+  assert.match(driver, /existsTestId\(d, "RemovedPhone", 3000\)\) \? "removed" : await textOf\(d, "VtaStatusText"\)/);
+  assert.match(driver, /if \(!HEARTBEAT \|\| removedSeenAt \|\| Date\.now\(\) < nextSample\) continue;\s*nextSample = Date\.now\(\) \+ 60000;/);
+  assert.match(driver, /link before: \$\{statusBefore\} · after: \$\{statuses\.join/, 'the row says both');
+});
+
+test('each path streams logcat across the driver, stopped after it; heartbeat gets the longer alarm', () => {
+  const loop = leg.slice(leg.indexOf('for path in ${REFUSED_PATHS:-heartbeat relaunch}; do'));
+  const start = loop.indexOf('logcat -v time > "$LEG_DIR/logcat-stream-$path.log" 2>/dev/null & lc=$!');
+  assert.ok(start > 0 && start < loop.indexOf('node run-agent-refused.mjs'), 'started before the driver');
+  assert.ok(loop.indexOf('kill $lc') > loop.indexOf('node run-agent-refused.mjs'), 'stopped after it');
+  assert.match(loop, /galarm \$\(\[ \$path = heartbeat \] && echo 2100 \|\| echo 1500\) node run-agent-refused\.mjs/);
+});
+
+test('with bifold #473 in the build the unlinked row expects JoinAgentRefused and Open My Agent; without it, link first', () => {
+  assert.match(leg, /grep -aq JoinAgentRefused && JOIN_REFUSED=1/);
+  assert.match(leg, /REFUSED_JOIN_LINE=\$JOIN_REFUSED/);
+  const branch = driver.slice(driver.indexOf('if (removedShown) {'), driver.indexOf('let opened = false;\n    if (n.shown'));
+  const withLine = branch.slice(branch.indexOf('if (JOIN_LINE) {'));
+  assert.match(withLine, /existsTestId\(d, "JoinAgentRefused", 15000\)/, 'waited for: the identity is read async');
+  assert.match(withLine, /ok: shown && refused && !silent && !needsAgent && opened/);
+  assert.match(withLine, /tapTestId\(d, "JoinOpenMyAgent"/);
+  // #473 shows a spinner (JoinCheckingAgent) first, with neither ID on screen: an absence read before the wait passes trivially.
+  assert.ok(withLine.indexOf('existsTestId(d, "JoinNeedsAgent"') > withLine.indexOf('existsTestId(d, "JoinAgentRefused", 15000)'), 'JoinNeedsAgent absence is read after JoinAgentRefused is up');
+  assert.match(branch.slice(branch.lastIndexOf('const needsAgent')), /ok: needsAgent && !unreachable[\s\S]*\(pre-fix\)/);
+});
+
+test('a failed status read loses one minute, never the run; My Agent visits look for the toast too', () => {
+  assert.match(driver, /const status = await linkStatus\(\)\.catch\(\(e\) => `\(read failed:/);
+  const fn = driver.slice(driver.indexOf('const linkStatus = async () => {'), driver.indexOf('const statusBefore'));
+  assert.ok((fn.match(/await lookForToast\(\);/g) ?? []).length >= 1, 'the toast is looked for while on My Agent');
+});
+
+test('the heartbeat link-removed row is a verdict only when the link was Online before the removal', () => {
+  assert.match(driver, /const onlineBefore = statusBefore === "Online";/);
+  assert.match(driver, /if \(HEARTBEAT && !onlineBefore\) \{[\s\S]*?rows\.skip\(N\("refused-link-removed"\), `no verdict: the link was/);
 });
