@@ -30,6 +30,17 @@ test('the mid-run removal is the phone\'s own grant only, chosen as the cleanup 
 
 test('the control comes first, and no toast is a verdict only with the refusal in the log', () => {
   assert.ok(driver.indexOf('"refused-before"') < driver.indexOf('linkedPhoneEntries(listAcl('), 'the control runs before the grant goes');
-  assert.match(driver, /if \(!toast && !evidence\) rows\.skip\("refused-no-toast", "no verdict/);
+  assert.match(driver, /if \(!toast && !evidence\) rows\.skip\(N\("refused-no-toast"\), `no verdict/);
   assert.match(driver, /never "didn't\s+answer"|UNREACHABLE_LINE/);
+});
+
+test('both paths run, each on a fresh link: heartbeat (open past the 5 min tick) and relaunch (the inbox asks again)', () => {
+  assert.match(leg, /for path in heartbeat relaunch; do/);
+  assert.match(leg, /REFUSED_PATH=\$path/);
+  assert.match(driver, /const windowMs = HEARTBEAT \? 330000 : 95000;/);
+  assert.match(driver, /if \(!HEARTBEAT\) \{ await restartApp\(d\); await unlockToHome\(d\); \}/);
+});
+
+test('the cleanup dumps logcat only with the emulator there (a missing one hung adb 53 min)', () => {
+  assert.match(leg, /adb devices \| grep -q "\^\$E\[\[:space:\]\]" && adb -s \$E logcat -d/);
 });
