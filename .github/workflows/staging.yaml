@@ -448,6 +448,15 @@ jobs:
           node scripts/ota/native-config.mjs
           echo "- Over-the-air updates (Android): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
 
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh android
+          echo "- Over-the-air updates (Android): **off**" >>"$GITHUB_STEP_SUMMARY"
+
       - name: Create release keystore
         working-directory: app/android/app
         env:
@@ -1002,6 +1011,15 @@ jobs:
           echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
           node scripts/ota/native-config.mjs
           echo "- Over-the-air updates (iOS): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh ios
+          echo "- Over-the-air updates (iOS): **off**" >>"$GITHUB_STEP_SUMMARY"
 
       # The store target carries no push entitlement, so a tester's build asks
       # Apple for nothing. A build that names a push gateway adds it here. The
