@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "18ac04991474ae54017e91017e814a0d6a3a1328",
+  "generatedFrom": "821c5f96bd77c1107d590d7ab7496768b9ebd35f",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -286,7 +286,6 @@
     "CommunityScroll": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityUseHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
     "CommunityVouchPrivately": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
-    "ConfigureMediator": ["src/screens/Settings.tsx"],
     "ConfirmBiometric": ["src/components/modals/BiometricConfirmationModal.tsx"],
     "ConfirmButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "ConfirmDeclineButton": ["src/components/modals/CommonRemoveModal.tsx"],

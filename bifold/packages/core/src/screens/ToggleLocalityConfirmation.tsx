@@ -11,7 +11,7 @@ import { useTheme } from '../contexts/theme'
 import { testIdWithKey } from '../utils/testable'
 
 /**
- * Settings → Secure Exchanges toggle for locality confirmation
+ * Menu → App Settings → Secure Exchanges toggle for locality confirmation
  * (docs/plans/locality-plan.md §8.1, §8.4). Deliberately no PIN gate — §8.4
  * frames this as a single, low-friction toggle beside `useWitnessing`'s own
  * (no-PIN) pattern, not `useHardwareAttestation`'s (which gates a

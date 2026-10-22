@@ -96,13 +96,6 @@ exports[`Settings Screen Renders correctly 1`] = `
               "title": "Settings.Developer",
             },
             Object {
-              "accessibilityLabel": "Settings.ConfigureMediator",
-              "onPress": [Function],
-              "testID": "com.ariesbifold:id/ConfigureMediator",
-              "title": "Settings.ConfigureMediator",
-              "value": "",
-            },
-            Object {
               "accessibilityLabel": "Settings.Logout",
               "onPress": [Function],
               "testID": "com.ariesbifold:id/Logout",
@@ -1155,6 +1148,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
@@ -1299,11 +1293,14 @@ exports[`Settings Screen Renders correctly 1`] = `
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
                 <Text
+                  ellipsizeMode="middle"
                   maxFontSizeMultiplier={2}
+                  numberOfLines={1}
                   style={
                     Array [
                       Object {
@@ -1319,6 +1316,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                         },
                         Object {
                           "color": "#42803E",
+                          "flexShrink": 1,
                         },
                       ],
                     ]
@@ -1467,11 +1465,14 @@ exports[`Settings Screen Renders correctly 1`] = `
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
                 <Text
+                  ellipsizeMode="middle"
                   maxFontSizeMultiplier={2}
+                  numberOfLines={1}
                   style={
                     Array [
                       Object {
@@ -1487,6 +1488,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                         },
                         Object {
                           "color": "#42803E",
+                          "flexShrink": 1,
                         },
                       ],
                     ]
@@ -1635,6 +1637,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
@@ -1699,7 +1702,7 @@ exports[`Settings Screen Renders correctly 1`] = `
             }
           >
             <View
-              accessibilityLabel="Settings.ConfigureMediator"
+              accessibilityLabel="Settings.Logout"
               accessibilityRole="button"
               accessibilityState={
                 Object {
@@ -1738,7 +1741,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                   "paddingHorizontal": 25,
                 }
               }
-              testID="com.ariesbifold:id/ConfigureMediator"
+              testID="com.ariesbifold:id/Logout"
             >
               <View
                 style={
@@ -1771,7 +1774,7 @@ exports[`Settings Screen Renders correctly 1`] = `
                     ]
                   }
                 >
-                  Settings.ConfigureMediator
+                  Settings.Logout
                 </Text>
               </View>
               <View
@@ -1779,31 +1782,10 @@ exports[`Settings Screen Renders correctly 1`] = `
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "color": "#42803E",
-                        },
-                      ],
-                    ]
-                  }
-                />
                 <Text
                   allowFontScaling={false}
                   selectable={false}
@@ -1834,20 +1816,10 @@ exports[`Settings Screen Renders correctly 1`] = `
         <View
           style={
             Object {
-              "backgroundColor": "#313132",
+              "marginBottom": 10,
             }
           }
-        >
-          <View
-            style={
-              Object {
-                "borderBottomColor": "#000000",
-                "borderBottomWidth": 1,
-                "marginHorizontal": 25,
-              }
-            }
-          />
-        </View>
+        />
       </View>
       <View
         style={
@@ -2014,13 +1986,6 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               "onPress": [Function],
               "testID": "com.ariesbifold:id/DeveloperOptions",
               "title": "Settings.Developer",
-            },
-            Object {
-              "accessibilityLabel": "Settings.ConfigureMediator",
-              "onPress": [Function],
-              "testID": "com.ariesbifold:id/ConfigureMediator",
-              "title": "Settings.ConfigureMediator",
-              "value": "",
             },
             Object {
               "accessibilityLabel": "Settings.Logout",
@@ -3092,6 +3057,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
@@ -3236,11 +3202,14 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
                 <Text
+                  ellipsizeMode="middle"
                   maxFontSizeMultiplier={2}
+                  numberOfLines={1}
                   style={
                     Array [
                       Object {
@@ -3256,6 +3225,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                         },
                         Object {
                           "color": "#42803E",
+                          "flexShrink": 1,
                         },
                       ],
                     ]
@@ -3404,11 +3374,14 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
                 <Text
+                  ellipsizeMode="middle"
                   maxFontSizeMultiplier={2}
+                  numberOfLines={1}
                   style={
                     Array [
                       Object {
@@ -3424,6 +3397,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                         },
                         Object {
                           "color": "#42803E",
+                          "flexShrink": 1,
                         },
                       ],
                     ]
@@ -3572,6 +3546,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
@@ -3636,7 +3611,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
             }
           >
             <View
-              accessibilityLabel="Settings.ConfigureMediator"
+              accessibilityLabel="Settings.Logout"
               accessibilityRole="button"
               accessibilityState={
                 Object {
@@ -3675,7 +3650,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   "paddingHorizontal": 25,
                 }
               }
-              testID="com.ariesbifold:id/ConfigureMediator"
+              testID="com.ariesbifold:id/Logout"
             >
               <View
                 style={
@@ -3708,7 +3683,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                     ]
                   }
                 >
-                  Settings.ConfigureMediator
+                  Settings.Logout
                 </Text>
               </View>
               <View
@@ -3716,31 +3691,10 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                   Object {
                     "alignItems": "center",
                     "flexDirection": "row",
+                    "flexShrink": 1,
                   }
                 }
               >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "color": "#42803E",
-                        },
-                      ],
-                    ]
-                  }
-                />
                 <Text
                   allowFontScaling={false}
                   selectable={false}
@@ -3771,20 +3725,10 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
         <View
           style={
             Object {
-              "backgroundColor": "#313132",
+              "marginBottom": 10,
             }
           }
-        >
-          <View
-            style={
-              Object {
-                "borderBottomColor": "#000000",
-                "borderBottomWidth": 1,
-                "marginHorizontal": 25,
-              }
-            }
-          />
-        </View>
+        />
       </View>
       <View
         style={

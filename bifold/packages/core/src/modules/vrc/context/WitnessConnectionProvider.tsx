@@ -538,7 +538,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
 
   /**
    * The pre-flight sheet's answer (§10.3 item 8). Declining reuses the SAME
-   * `useLocalityConfirmation` setting Settings → Secure Exchanges exposes —
+   * `useLocalityConfirmation` setting Menu → App Settings → Secure Exchanges exposes —
    * there is no separate "advertise for this session" flag to invent; the
    * existing gate in `witnessCeremony.ts`/`ceremony.ts` (`isLocalityConfirmationPreferred`)
    * already reads that one setting, so flipping it here is the whole effect.

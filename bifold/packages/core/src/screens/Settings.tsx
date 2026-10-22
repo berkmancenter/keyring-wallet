@@ -323,13 +323,8 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
           testID: testIdWithKey('DeveloperOptions'),
           onPress: () => navigation.navigate(Screens.Developer),
         },
-        {
-          title: t('Settings.ConfigureMediator'),
-          value: store.preferences.selectedMediator,
-          accessibilityLabel: t('Settings.ConfigureMediator'),
-          testID: testIdWithKey('ConfigureMediator'),
-          onPress: () => navigation.navigate(Screens.ConfigureMediator),
-        },
+        // The mediator is in Developer options: its value is a whole invitation
+        // URL, and beside a title here it wrapped over many lines.
         {
           title: t('Settings.Logout'),
           accessibilityLabel: t('Settings.Logout'),
@@ -602,9 +597,16 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
             onValueChange={toggle.onValueChange}
           />
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+            {/* One line, shortened in the middle: a long value must never wrap the row. */}
             {value !== undefined && (
-              <ThemedText style={[TextTheme.settingsText, { color: ColorPalette.brand.link }]}>{value}</ThemedText>
+              <ThemedText
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={[TextTheme.settingsText, { color: ColorPalette.brand.link, flexShrink: 1 }]}
+              >
+                {value}
+              </ThemedText>
             )}
             {onPress && (
               <Icon
