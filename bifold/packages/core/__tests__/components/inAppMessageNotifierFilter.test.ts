@@ -5,9 +5,10 @@
  * screen hides/transforms the same content — this keeps the two in step.
  */
 
-// The one predicate the toast, the Messages badge and a tapped notification
-// share (hooks/useUnreadMessages.ts).
-import { isProtocolMessage as isVrcProtocolMessage } from '../../src/hooks/useUnreadMessages'
+// The one predicate the toast, the Messages badge, a tapped notification and
+// the notification cards share, imported from the package index as the wallet
+// imports it.
+import { isProtocolMessage as isVrcProtocolMessage } from '../../src'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 

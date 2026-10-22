@@ -6,12 +6,12 @@ import Toast from 'react-native-toast-message'
 
 import { LocalStorageKeys } from '../constants'
 import { isConnectionExcludedFromNotifications } from '../hooks/notifications'
-import { isProtocolMessage } from '../hooks/useUnreadMessages'
 import { getVrcNameForConnection } from '../modules/vrc/utils/vrcNameHelper'
 import { PersistentStorage } from '../services/storage'
 import { Preferences } from '../types/state'
 import { getActiveChatConnectionId } from '../utils/activeChatTracker'
 import { messageWakeHold } from '../utils/messageWake'
+import { isProtocolMessage } from '../utils/protocolMessage'
 import { Screens, Stacks } from '../types/navigators'
 
 /**

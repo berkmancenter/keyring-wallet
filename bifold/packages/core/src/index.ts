@@ -129,6 +129,7 @@ export {
   useCredentialConnectionLabel,
 } from './utils/helpers'
 export { FileCache } from './utils/fileCache'
+export { isProtocolMessage } from './utils/protocolMessage'
 export type { CacheDataFile } from './utils/fileCache'
 export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'
 export {

@@ -17,6 +17,7 @@ import {
   credentialCustomMetadata,
 } from '../types/metadata'
 import { useOpenID } from '../modules/openid/hooks/openid'
+import { isProtocolMessage } from '../utils/protocolMessage'
 import { CustomNotification } from '../types/notification'
 import { OpenIDNotificationData } from '../modules/openid/features/notifications/types'
 import { OpenId4VPRequestRecord } from '../modules/openid/types'
@@ -146,7 +147,10 @@ export const useNotifications = ({
   openIDUri,
   openIDPresentationUri,
 }: NotificationsInputProps): NotificationReturnType => {
-  const doneStates = useMemo(() => [DidCommProofState.Done, DidCommProofState.PresentationReceived] as DidCommProofState[], [])
+  const doneStates = useMemo(
+    () => [DidCommProofState.Done, DidCommProofState.PresentationReceived] as DidCommProofState[],
+    []
+  )
 
   const [notifications, setNotifications] = useState<NotificationReturnType>([])
   const { records: basicMessages } = useBasicMessages()
@@ -169,9 +173,12 @@ export const useNotifications = ({
       return excludedConnectionIds.has(connectionId)
     }
 
-    // get all unseen messages
+    // get all unseen messages, leaving out protocol traffic carried as basic messages
     const unseenMessages: DidCommBasicMessageRecord[] = basicMessages.filter((msg) => {
       if (isExcluded(msg.connectionId)) {
+        return false
+      }
+      if (isProtocolMessage(msg.content)) {
         return false
       }
       const meta = msg.metadata.get(BasicMessageMetadata.customMetadata) as basicMessageCustomMetadata
