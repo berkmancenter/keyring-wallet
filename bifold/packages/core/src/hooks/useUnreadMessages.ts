@@ -5,7 +5,15 @@ import { useMemo } from 'react'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { isConnectionExcludedFromNotifications, useExclusionVersion } from './notifications'
 
-function isProtocolMessage(content: string): boolean {
+/**
+ * Whether a basic message's content is protocol traffic rather than chat: a
+ * JSON payload, or the plain-text relationship-DID announcement
+ * ("This is my relationship DID: vrc:relationshipDid:… vrc:rceVersion:N") and
+ * other `vrc:` pings. The chat screen hides these; the badge, the tapped
+ * notification and the in-app toast must not count them either.
+ */
+export function isProtocolMessage(content: string): boolean {
+  if (content.includes('vrc:relationshipDid:') || content.startsWith('vrc:')) return true
   try {
     const parsed = JSON.parse(content)
     return typeof parsed === 'object' && parsed !== null && ('type' in parsed || '@type' in parsed)

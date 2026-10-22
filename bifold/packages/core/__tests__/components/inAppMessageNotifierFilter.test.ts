@@ -5,20 +5,11 @@
  * screen hides/transforms the same content — this keeps the two in step.
  */
 
-// Mirrors isVrcProtocolMessage in src/components/InAppMessageNotifier.tsx.
-// Kept as a local copy because the predicate is module-private and the
-// component itself needs the full RN + agent context to render.
-const isVrcProtocolMessage = (content: string): boolean => {
-  if (content.includes('vrc:relationshipDid:') || content.startsWith('vrc:')) {
-    return true
-  }
-  try {
-    const parsed = JSON.parse(content)
-    return typeof parsed === 'object' && parsed !== null && ('type' in parsed || '@type' in parsed)
-  } catch {
-    return false
-  }
-}
+// The one predicate the toast, the Messages badge and a tapped notification
+// share (hooks/useUnreadMessages.ts).
+import { isProtocolMessage as isVrcProtocolMessage } from '../../src/hooks/useUnreadMessages'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 describe('in-app notifier: protocol messages are suppressed', () => {
   test('the plain-text relationship-DID announcement (the leak seen on device)', () => {

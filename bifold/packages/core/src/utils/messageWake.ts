@@ -9,9 +9,17 @@
  *    nothing on screen is blank while it does;
  * 2. picks up from the mediator now, rather than at the polling loop's next
  *    round (its first round comes one polling interval after a restart);
- * 3. when the first new message lands, or the pickup ends, opens the chat with
- *    the newest unread message — the rule the Messages badge counts by — or
- *    stays on the list when nothing is unread.
+ * 3. when the first new message or connection request lands, or the pickup
+ *    ends, settles where the person is needed, in this order:
+ *    - a relationship proposal waits for their consent: stay, and let the
+ *      consent sheet (RelationshipProposalModal) show over the list;
+ *    - an exchange is signing, witnessing or sending on this phone: stay, so
+ *      nothing is pushed over its biometric prompt or witness session;
+ *    - someone has just answered one of this phone's invitations (a shared
+ *      link opened later): open that new contact's chat, where the exchange
+ *      shows its progress;
+ *    - otherwise the chat with the newest unread message — the rule the
+ *      Messages badge counts by — or the list when nothing is unread.
  *
  * A person who has gone anywhere by then is not moved: the tap brought them to
  * the list, and what they did next wins.
@@ -24,12 +32,17 @@ import { useCallback } from 'react'
 import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRole,
+  DidCommConnectionEventTypes,
+  DidCommDidExchangeRole,
+  DidCommDidExchangeState,
   type DidCommBasicMessageRecord,
   type DidCommBasicMessageStateChangedEvent,
   type DidCommBasicMessageV2StateChangedEvent,
+  type DidCommConnectionStateChangedEvent,
 } from '@credo-ts/didcomm'
 
 import { isUnreadChatMessage } from '../hooks/useUnreadMessages'
+import { vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 
 /** How long a tap waits for the waiting messages before it settles on the list. */
 export const MESSAGE_WAKE_WAIT_MS = 8_000
@@ -151,6 +164,15 @@ export interface MessageWakeDeps {
   pickUpNow(): Promise<void>
   /** Resolves when the next chat message is received; `cancel` stops listening. */
   nextMessage(): { arrived: Promise<void>; cancel(): void }
+  /**
+   * Resolves when someone answers one of this phone's invitations; `latest`
+   * is the newest such connection seen since this was called.
+   */
+  nextConnection?(): { arrived: Promise<void>; latest(): string | undefined; cancel(): void }
+  /** Whether a relationship proposal is waiting for this person's consent. */
+  consentPending?(): boolean
+  /** Whether an exchange is doing its own work on this phone (signing, witnessing, sending). */
+  exchangeWorking?(): boolean
   /** The connection to open, read once the messages are in. */
   newestUnread(): Promise<string | undefined>
   /** Open that connection's chat. */
@@ -164,7 +186,7 @@ export interface MessageWakeDeps {
   sleep?(ms: number): Promise<void>
 }
 
-export type MessageWakeOutcome = 'chat' | 'list' | 'moved' | 'notShown'
+export type MessageWakeOutcome = 'chat' | 'newContact' | 'consent' | 'exchange' | 'list' | 'moved' | 'notShown'
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -225,9 +247,11 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
   }
   const blursAtLanding = deps.listFocus.blurs()
   const next = deps.nextMessage()
+  const connection = deps.nextConnection?.()
   try {
     await Promise.race([
       next.arrived,
+      ...(connection ? [connection.arrived] : []),
       deps
         .pickUpNow()
         .catch((error: unknown) => {
@@ -238,11 +262,26 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
     ])
   } finally {
     next.cancel()
+    connection?.cancel()
     setFetching(false)
   }
   if (deps.listFocus.blurs() !== blursAtLanding || !deps.listFocus.focused()) {
     deps.log?.('message wake: the person moved on; staying where they are')
     return 'moved'
+  }
+  if (deps.consentPending?.()) {
+    deps.log?.('message wake: a relationship proposal is waiting for consent; staying on the list')
+    return 'consent'
+  }
+  if (deps.exchangeWorking?.()) {
+    deps.log?.('message wake: an exchange is working on this phone; staying on the list')
+    return 'exchange'
+  }
+  const newContact = connection?.latest()
+  if (newContact) {
+    opening(newContact)
+    deps.openChat(newContact)
+    return 'newContact'
   }
   const connectionId = await deps.newestUnread().catch(() => undefined)
   if (!connectionId) return 'list'
@@ -293,6 +332,39 @@ export function nextReceivedMessage(agent: Agent): { arrived: Promise<void>; can
   return { arrived, cancel: () => cancel() }
 }
 
+/**
+ * The next answer to one of this phone's invitations: a connection on which
+ * this phone is the responder (it made the invitation) moving through the DID
+ * exchange. A witness connection is not a contact and is left out.
+ */
+export function nextAnsweredInvitation(agent: Agent): {
+  arrived: Promise<void>
+  latest(): string | undefined
+  cancel(): void
+} {
+  let latest: string | undefined
+  let cancel = () => undefined as void
+  const arrived = new Promise<void>((resolve) => {
+    const subscription = agent.events
+      .observable<DidCommConnectionStateChangedEvent>(DidCommConnectionEventTypes.DidCommConnectionStateChanged)
+      .subscribe((event) => {
+        const record = event.payload?.connectionRecord
+        if (!record || record.role !== DidCommDidExchangeRole.Responder) return
+        if (
+          record.state !== DidCommDidExchangeState.RequestReceived &&
+          record.state !== DidCommDidExchangeState.ResponseSent &&
+          record.state !== DidCommDidExchangeState.Completed
+        )
+          return
+        if (record.metadata.get('witnessConnection') != null) return
+        latest = record.id
+        resolve()
+      })
+    cancel = () => subscription.unsubscribe()
+  })
+  return { arrived, latest: () => latest, cancel: () => cancel() }
+}
+
 /** The parts of a navigation object the app's wiring uses. */
 export interface WakeNavigation {
   navigate(name: string, params?: object): void
@@ -315,6 +387,9 @@ export function appMessageWakeDeps(options: {
     openList: () => navigation.navigate(names.tabStack, { screen: names.messageStack }),
     pickUpNow: () => pickUpNow(agent),
     nextMessage: () => nextReceivedMessage(agent),
+    nextConnection: () => nextAnsweredInvitation(agent),
+    consentPending: () => vrcFlowStore.getAnyProposalPrompt() !== undefined,
+    exchangeWorking: () => vrcFlowStore.isWorkingOnThisPhone(),
     newestUnread: async () => {
       const basicMessages = (agent.modules as { didcomm?: any }).didcomm?.basicMessages
       const records: DidCommBasicMessageRecord[] = (await basicMessages?.findAllByQuery?.({})) ?? []

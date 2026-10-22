@@ -97,6 +97,15 @@ export type VrcFlowStatus =
  */
 export type VrcFlowDialect = 'legacy' | 'trust-tasks'
 
+// The statuses in which this phone, not the other one, is doing the work.
+const LOCAL_WORK_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
+  'preparing-offer',
+  'biometric-fallback',
+  'witness-active',
+  'witness-fallback',
+  'sharing-witness-record',
+])
+
 /**
  * A pending relationship proposal awaiting the user's consent (the trust-task
  * dialect's consent moment: accepting the proposal, not each credential).
@@ -184,6 +193,19 @@ class VrcFlowStore extends EventEmitter {
    */
   isExchangeComplete(connectionId: string): boolean {
     return this.hasReceivedOffer.get(connectionId) === true && this.hasSentOffer.get(connectionId) === true
+  }
+
+  /**
+   * Whether an exchange is doing its own work on this phone right now: signing
+   * (the biometric prompt), a witness session, or sending a record. A flow
+   * only waiting on the other phone does not count; nothing on screen depends
+   * on it.
+   */
+  isWorkingOnThisPhone(): boolean {
+    for (const [connectionId, status] of this.flowStatus) {
+      if (LOCAL_WORK_STATUSES.has(status) && !this.isExchangeComplete(connectionId)) return true
+    }
+    return false
   }
 
   /**

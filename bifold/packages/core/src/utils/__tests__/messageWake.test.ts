@@ -47,6 +47,16 @@ describe('which chat a tap opens', () => {
     expect(newestUnreadConnection(messages)).toBe('ada')
   })
 
+  it('the relationship-DID announcement a new contact sends is not unread chat', () => {
+    const messages = [
+      message('ada', '2026-10-20T10:00:00Z'),
+      message('new', '2026-10-20T10:07:00Z', {
+        content: 'This is my relationship DID: vrc:relationshipDid:did:peer:2.abc vrc:rceVersion:4',
+      }),
+    ]
+    expect(newestUnreadConnection(messages)).toBe('ada')
+  })
+
   it('none when nothing is unread', () => {
     expect(newestUnreadConnection([message('ada', '2026-10-20T10:00:00Z', { seen: true })])).toBeUndefined()
     expect(newestUnreadConnection([])).toBeUndefined()
@@ -117,6 +127,93 @@ describe('resolving a tap', () => {
     unsubscribe()
     expect(seen).toEqual([true, false])
     expect(messageWakeFetching.get()).toBe(false)
+  })
+
+  /** Someone answering one of this phone's invitations, driven by the test. */
+  const invitations = () => {
+    let answer: () => void = () => undefined
+    let latest: string | undefined
+    return {
+      nextConnection: jest.fn(() => ({
+        arrived: new Promise<void>((resolve) => (answer = resolve)),
+        latest: () => latest,
+        cancel: jest.fn(),
+      })),
+      answer: (connectionId: string) => {
+        latest = connectionId
+        answer()
+      },
+    }
+  }
+
+  describe('with a relationship exchange in play (a shared link opened later)', () => {
+    it('a proposal waiting for consent: stays on the list for the consent sheet, opens no chat', async () => {
+      const { d, calls } = deps({ consentPending: () => true })
+      await expect(openMessageWake(d)).resolves.toBe('consent')
+      expect(calls).toEqual(['list', 'pickup'])
+      expect(d.newestUnread).not.toHaveBeenCalled()
+    })
+
+    it('an exchange signing or witnessing on this phone: pushes nothing over it', async () => {
+      const { d, calls } = deps({ exchangeWorking: () => true })
+      await expect(openMessageWake(d)).resolves.toBe('exchange')
+      expect(calls).toEqual(['list', 'pickup'])
+    })
+
+    it('someone answers an invitation: their chat opens at once, ahead of older unread chat', async () => {
+      const invites = invitations()
+      const handle = deps({ nextConnection: invites.nextConnection })
+      handle.d.pickUpNow = jest.fn(() => {
+        invites.answer('new-contact')
+        return new Promise<void>(() => undefined)
+      })
+      await expect(openMessageWake(handle.d)).resolves.toBe('newContact')
+      expect(handle.d.openChat).toHaveBeenCalledWith('new-contact')
+      expect(handle.d.newestUnread).not.toHaveBeenCalled()
+    })
+
+    it('the chat it opened for a new contact gets no toast', async () => {
+      const invites = invitations()
+      const handle = deps({ nextConnection: invites.nextConnection })
+      let releasedWith: string | undefined = 'not released'
+      handle.d.pickUpNow = jest.fn(async () => {
+        messageWakeHold.after((opened) => (releasedWith = opened))
+        invites.answer('new-contact')
+      })
+      await openMessageWake(handle.d)
+      expect(releasedWith).toBe('new-contact')
+    })
+
+    it('their proposal arriving with the answer: consent comes first, no chat is pushed over it', async () => {
+      const invites = invitations()
+      let consent = false
+      const handle = deps({ nextConnection: invites.nextConnection, consentPending: () => consent })
+      handle.d.pickUpNow = jest.fn(async () => {
+        invites.answer('new-contact')
+        consent = true
+      })
+      await expect(openMessageWake(handle.d)).resolves.toBe('consent')
+      expect(handle.d.openChat).not.toHaveBeenCalled()
+    })
+
+    it('a person who moved on is still not moved, whatever arrived', async () => {
+      const invites = invitations()
+      const handle = deps({ nextConnection: invites.nextConnection, consentPending: () => true })
+      handle.d.pickUpNow = jest.fn(async () => {
+        invites.answer('new-contact')
+        handle.move()
+      })
+      await expect(openMessageWake(handle.d)).resolves.toBe('moved')
+      expect(handle.d.openChat).not.toHaveBeenCalled()
+    })
+
+    it('stops listening for answers once the tap is resolved', async () => {
+      const invites = invitations()
+      const { d } = deps({ nextConnection: invites.nextConnection })
+      await openMessageWake(d)
+      const listening = invites.nextConnection.mock.results[0].value
+      expect(listening.cancel).toHaveBeenCalled()
+    })
   })
 
   it('stays on the list when nothing is unread', async () => {

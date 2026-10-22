@@ -6,31 +6,13 @@ import Toast from 'react-native-toast-message'
 
 import { LocalStorageKeys } from '../constants'
 import { isConnectionExcludedFromNotifications } from '../hooks/notifications'
+import { isProtocolMessage } from '../hooks/useUnreadMessages'
 import { getVrcNameForConnection } from '../modules/vrc/utils/vrcNameHelper'
 import { PersistentStorage } from '../services/storage'
 import { Preferences } from '../types/state'
 import { getActiveChatConnectionId } from '../utils/activeChatTracker'
 import { messageWakeHold } from '../utils/messageWake'
 import { Screens, Stacks } from '../types/navigators'
-
-const isVrcProtocolMessage = (content: string): boolean => {
-  // Plain-text protocol traffic. The relationship-DID announcement
-  // ("This is my relationship DID: vrc:relationshipDid:… vrc:rceVersion:N")
-  // and the biometric-status ping are basic messages carrying protocol
-  // payloads, not anything a user should be toasted about. The chat screen
-  // already hides/transforms these (see chat-messages.tsx); this guard was
-  // JSON-only, so the plain-text ones leaked into the notification as raw
-  // protocol text (seen on device, 2026-08-26).
-  if (content.includes('vrc:relationshipDid:') || content.startsWith('vrc:')) {
-    return true
-  }
-  try {
-    const parsed = JSON.parse(content)
-    return typeof parsed === 'object' && parsed !== null && ('type' in parsed || '@type' in parsed)
-  } catch {
-    return false
-  }
-}
 
 /**
  * Resolves the best display name for a connection following the same priority
@@ -77,7 +59,7 @@ const InAppMessageNotifier: React.FC = () => {
     const handleMessage = async ({ payload }: any) => {
       const record = payload.basicMessageRecord as DidCommBasicMessageRecord
       if (record.role !== DidCommBasicMessageRole.Receiver) return
-      if (isVrcProtocolMessage(record.content)) return
+      if (isProtocolMessage(record.content)) return
       if (isConnectionExcludedFromNotifications(record.connectionId)) return
       if (getActiveChatConnectionId() === record.connectionId) return
       // A tapped message notification is being resolved: wait for it. If it

@@ -1,6 +1,6 @@
 /**
  * Tests for VrcFlowStore error management functionality
- * 
+ *
  * The VrcFlowStore class extends EventEmitter and manages:
  * - flowErrors: Map<string, VrcFlowError> - errors keyed by connectionId
  * - Error lifecycle: set, get, clear, and query methods
@@ -20,7 +20,7 @@ class TestableVrcFlowStore extends EventEmitter {
   private hasReceivedOffer: Map<string, boolean> = new Map()
   private hasSentOffer: Map<string, boolean> = new Map()
   private flowErrors: Map<string, VrcFlowError> = new Map()
-  
+
   setStatus(connectionId: string, status: string, witnessed: boolean = false): void {
     this.flowStatus.set(connectionId, status)
     if (witnessed || status === 'witness-active') {
@@ -47,14 +47,13 @@ class TestableVrcFlowStore extends EventEmitter {
   }
 
   isExchangeComplete(connectionId: string): boolean {
-    return this.hasReceivedOffer.get(connectionId) === true &&
-           this.hasSentOffer.get(connectionId) === true
+    return this.hasReceivedOffer.get(connectionId) === true && this.hasSentOffer.get(connectionId) === true
   }
-  
+
   getStatus(connectionId: string): string {
     return this.flowStatus.get(connectionId) || 'idle'
   }
-  
+
   setError(connectionId: string, error: Omit<VrcFlowError, 'timestamp'>): void {
     const fullError: VrcFlowError = {
       ...error,
@@ -63,24 +62,24 @@ class TestableVrcFlowStore extends EventEmitter {
     this.flowErrors.set(connectionId, fullError)
     this.emit('flowError', { connectionId, error: fullError })
   }
-  
+
   getError(connectionId: string): VrcFlowError | undefined {
     return this.flowErrors.get(connectionId)
   }
-  
+
   hasAnyError(): boolean {
     return this.flowErrors.size > 0
   }
-  
+
   getErrorConnections(): string[] {
     return Array.from(this.flowErrors.keys())
   }
-  
+
   clearError(connectionId: string): void {
     this.flowErrors.delete(connectionId)
     this.emit('flowErrorCleared', { connectionId })
   }
-  
+
   clearFlow(connectionId: string): void {
     this.flowStatus.delete(connectionId)
     this.isWitnessed.delete(connectionId)
@@ -93,7 +92,7 @@ class TestableVrcFlowStore extends EventEmitter {
 
 describe('VrcFlowStore Error Management', () => {
   let store: TestableVrcFlowStore
-  
+
   // Sample error data for tests
   const sampleError: Omit<VrcFlowError, 'timestamp'> = {
     type: 'witness-timeout' as VrcFlowErrorType,
@@ -101,7 +100,7 @@ describe('VrcFlowStore Error Management', () => {
     witnessName: 'Test Witness',
     contactName: 'Test Contact',
   }
-  
+
   const connectionId1 = 'connection-123'
   const connectionId2 = 'connection-456'
   const connectionId3 = 'connection-789'
@@ -113,7 +112,7 @@ describe('VrcFlowStore Error Management', () => {
   describe('setError', () => {
     it('should store error in flowErrors map', () => {
       store.setError(connectionId1, sampleError)
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError).toBeDefined()
       expect(storedError?.type).toBe('witness-timeout')
@@ -130,7 +129,7 @@ describe('VrcFlowStore Error Management', () => {
         expect(data.error.timestamp).toBeInstanceOf(Date)
         done()
       })
-      
+
       store.setError(connectionId1, sampleError)
     })
 
@@ -138,7 +137,7 @@ describe('VrcFlowStore Error Management', () => {
       const beforeTime = new Date()
       store.setError(connectionId1, sampleError)
       const afterTime = new Date()
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.timestamp).toBeDefined()
       expect(storedError?.timestamp.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime())
@@ -158,11 +157,11 @@ describe('VrcFlowStore Error Management', () => {
         type: 'biometric-failed' as VrcFlowErrorType,
         message: 'Biometric failed',
       }
-      
+
       store.setError(connectionId1, error1)
       store.setError(connectionId2, error2)
       store.setError(connectionId3, error3)
-      
+
       expect(store.getError(connectionId1)?.type).toBe('witness-timeout')
       expect(store.getError(connectionId2)?.type).toBe('network-error')
       expect(store.getError(connectionId3)?.type).toBe('biometric-failed')
@@ -177,10 +176,10 @@ describe('VrcFlowStore Error Management', () => {
         type: 'network-error' as VrcFlowErrorType,
         message: 'Second error',
       }
-      
+
       store.setError(connectionId1, error1)
       store.setError(connectionId1, error2)
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.type).toBe('network-error')
       expect(storedError?.message).toBe('Second error')
@@ -194,12 +193,12 @@ describe('VrcFlowStore Error Management', () => {
           retryCallCount++
         },
       }
-      
+
       store.setError(connectionId1, errorWithRetry)
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.onRetry).toBeDefined()
-      
+
       await storedError?.onRetry?.()
       expect(retryCallCount).toBe(1)
     })
@@ -212,12 +211,12 @@ describe('VrcFlowStore Error Management', () => {
           proceedCallCount++
         },
       }
-      
+
       store.setError(connectionId1, errorWithProceed)
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.onProceedWithout).toBeDefined()
-      
+
       await storedError?.onProceedWithout?.()
       expect(proceedCallCount).toBe(1)
     })
@@ -233,7 +232,7 @@ describe('VrcFlowStore Error Management', () => {
         'counterparty-not-connected',
         'network-error',
       ]
-      
+
       errorTypes.forEach((errorType, index) => {
         const connId = `connection-${index}`
         store.setError(connId, { type: errorType })
@@ -245,7 +244,7 @@ describe('VrcFlowStore Error Management', () => {
   describe('getError', () => {
     it('should return error for given connectionId', () => {
       store.setError(connectionId1, sampleError)
-      
+
       const error = store.getError(connectionId1)
       expect(error).toBeDefined()
       expect(error?.type).toBe('witness-timeout')
@@ -259,10 +258,10 @@ describe('VrcFlowStore Error Management', () => {
     it('should return correct error when multiple errors exist', () => {
       const error1: Omit<VrcFlowError, 'timestamp'> = { type: 'witness-timeout' as VrcFlowErrorType }
       const error2: Omit<VrcFlowError, 'timestamp'> = { type: 'network-error' as VrcFlowErrorType }
-      
+
       store.setError(connectionId1, error1)
       store.setError(connectionId2, error2)
-      
+
       expect(store.getError(connectionId1)?.type).toBe('witness-timeout')
       expect(store.getError(connectionId2)?.type).toBe('network-error')
     })
@@ -270,7 +269,7 @@ describe('VrcFlowStore Error Management', () => {
     it('should return undefined after error is cleared', () => {
       store.setError(connectionId1, sampleError)
       expect(store.getError(connectionId1)).toBeDefined()
-      
+
       store.clearError(connectionId1)
       expect(store.getError(connectionId1)).toBeUndefined()
     })
@@ -280,19 +279,19 @@ describe('VrcFlowStore Error Management', () => {
     it('should remove error from flowErrors map', () => {
       store.setError(connectionId1, sampleError)
       expect(store.getError(connectionId1)).toBeDefined()
-      
+
       store.clearError(connectionId1)
       expect(store.getError(connectionId1)).toBeUndefined()
     })
 
     it('should emit flowErrorCleared event with connectionId', (done) => {
       store.setError(connectionId1, sampleError)
-      
+
       store.on('flowErrorCleared', (data) => {
         expect(data.connectionId).toBe(connectionId1)
         done()
       })
-      
+
       store.clearError(connectionId1)
     })
 
@@ -308,19 +307,19 @@ describe('VrcFlowStore Error Management', () => {
         expect(data.connectionId).toBe('non-existent-connection')
         done()
       })
-      
+
       store.clearError('non-existent-connection')
     })
 
     it('should only clear error for specified connectionId', () => {
       const error1: Omit<VrcFlowError, 'timestamp'> = { type: 'witness-timeout' as VrcFlowErrorType }
       const error2: Omit<VrcFlowError, 'timestamp'> = { type: 'network-error' as VrcFlowErrorType }
-      
+
       store.setError(connectionId1, error1)
       store.setError(connectionId2, error2)
-      
+
       store.clearError(connectionId1)
-      
+
       expect(store.getError(connectionId1)).toBeUndefined()
       expect(store.getError(connectionId2)).toBeDefined()
     })
@@ -339,19 +338,19 @@ describe('VrcFlowStore Error Management', () => {
     it('should return true when multiple errors exist', () => {
       store.setError(connectionId1, { type: 'witness-timeout' as VrcFlowErrorType })
       store.setError(connectionId2, { type: 'network-error' as VrcFlowErrorType })
-      
+
       expect(store.hasAnyError()).toBe(true)
     })
 
     it('should return false after all errors are cleared', () => {
       store.setError(connectionId1, { type: 'witness-timeout' as VrcFlowErrorType })
       store.setError(connectionId2, { type: 'network-error' as VrcFlowErrorType })
-      
+
       expect(store.hasAnyError()).toBe(true)
-      
+
       store.clearError(connectionId1)
       expect(store.hasAnyError()).toBe(true) // Still has one error
-      
+
       store.clearError(connectionId2)
       expect(store.hasAnyError()).toBe(false) // No more errors
     })
@@ -359,7 +358,7 @@ describe('VrcFlowStore Error Management', () => {
     it('should return false after clearFlow removes error', () => {
       store.setError(connectionId1, sampleError)
       expect(store.hasAnyError()).toBe(true)
-      
+
       store.clearFlow(connectionId1)
       expect(store.hasAnyError()).toBe(false)
     })
@@ -374,7 +373,7 @@ describe('VrcFlowStore Error Management', () => {
     it('should return array of connectionIds that have errors', () => {
       store.setError(connectionId1, { type: 'witness-timeout' as VrcFlowErrorType })
       store.setError(connectionId2, { type: 'network-error' as VrcFlowErrorType })
-      
+
       const connections = store.getErrorConnections()
       expect(connections).toHaveLength(2)
       expect(connections).toContain(connectionId1)
@@ -383,20 +382,20 @@ describe('VrcFlowStore Error Management', () => {
 
     it('should return single connectionId when one error exists', () => {
       store.setError(connectionId1, sampleError)
-      
+
       const connections = store.getErrorConnections()
       expect(connections).toEqual([connectionId1])
     })
 
     it('should update when errors are added or removed', () => {
       expect(store.getErrorConnections()).toEqual([])
-      
+
       store.setError(connectionId1, { type: 'witness-timeout' as VrcFlowErrorType })
       expect(store.getErrorConnections()).toContain(connectionId1)
-      
+
       store.setError(connectionId2, { type: 'network-error' as VrcFlowErrorType })
       expect(store.getErrorConnections()).toHaveLength(2)
-      
+
       store.clearError(connectionId1)
       expect(store.getErrorConnections()).toEqual([connectionId2])
     })
@@ -406,7 +405,7 @@ describe('VrcFlowStore Error Management', () => {
     it('should clear associated error when clearFlow is called', () => {
       store.setError(connectionId1, sampleError)
       expect(store.getError(connectionId1)).toBeDefined()
-      
+
       store.clearFlow(connectionId1)
       expect(store.getError(connectionId1)).toBeUndefined()
     })
@@ -414,23 +413,23 @@ describe('VrcFlowStore Error Management', () => {
     it('should emit flowUpdate event with idle status', (done) => {
       store.setStatus(connectionId1, 'connecting')
       store.setError(connectionId1, sampleError)
-      
+
       store.on('flowUpdate', (data) => {
         if (data.status === 'idle') {
           expect(data.connectionId).toBe(connectionId1)
           done()
         }
       })
-      
+
       store.clearFlow(connectionId1)
     })
 
     it('should only clear error for specified connectionId', () => {
       store.setError(connectionId1, { type: 'witness-timeout' as VrcFlowErrorType })
       store.setError(connectionId2, { type: 'network-error' as VrcFlowErrorType })
-      
+
       store.clearFlow(connectionId1)
-      
+
       expect(store.getError(connectionId1)).toBeUndefined()
       expect(store.getError(connectionId2)).toBeDefined()
     })
@@ -446,18 +445,18 @@ describe('VrcFlowStore Error Management', () => {
     it('should clear error when status is changed', () => {
       store.setError(connectionId1, sampleError)
       expect(store.getError(connectionId1)).toBeDefined()
-      
+
       store.setStatus(connectionId1, 'connecting')
       expect(store.getError(connectionId1)).toBeUndefined()
     })
 
     it('should clear error for any status change', () => {
       const statuses = ['connecting', 'witness-active', 'preparing-offer', 'offer-sent', 'offer-received', 'idle']
-      
+
       statuses.forEach((status) => {
         store.setError(connectionId1, sampleError)
         expect(store.getError(connectionId1)).toBeDefined()
-        
+
         store.setStatus(connectionId1, status)
         expect(store.getError(connectionId1)).toBeUndefined()
       })
@@ -472,7 +471,7 @@ describe('VrcFlowStore Error Management', () => {
         witnessName: 'Witness One',
         contactName: 'Contact One',
       }
-      
+
       store.on('flowError', (data) => {
         expect(data).toHaveProperty('connectionId')
         expect(data).toHaveProperty('error')
@@ -484,35 +483,35 @@ describe('VrcFlowStore Error Management', () => {
         expect(data.error).toHaveProperty('timestamp')
         done()
       })
-      
+
       store.setError(connectionId1, testError)
     })
 
     it('should emit flowErrorCleared event with correct data structure', (done) => {
       store.setError(connectionId1, sampleError)
-      
+
       store.on('flowErrorCleared', (data) => {
         expect(data).toHaveProperty('connectionId')
         expect(data.connectionId).toBe(connectionId1)
         done()
       })
-      
+
       store.clearError(connectionId1)
     })
 
     it('should allow multiple listeners for flowError event', () => {
       let listener1Called = false
       let listener2Called = false
-      
+
       store.on('flowError', () => {
         listener1Called = true
       })
       store.on('flowError', () => {
         listener2Called = true
       })
-      
+
       store.setError(connectionId1, sampleError)
-      
+
       expect(listener1Called).toBe(true)
       expect(listener2Called).toBe(true)
     })
@@ -522,11 +521,11 @@ describe('VrcFlowStore Error Management', () => {
       const listener = () => {
         callCount++
       }
-      
+
       store.on('flowError', listener)
       store.setError(connectionId1, sampleError)
       expect(callCount).toBe(1)
-      
+
       store.removeListener('flowError', listener)
       store.setError(connectionId2, sampleError)
       expect(callCount).toBe(1) // Should not have increased
@@ -534,25 +533,20 @@ describe('VrcFlowStore Error Management', () => {
 
     it('should emit events in correct order for setError and clearError sequence', () => {
       const eventLog: string[] = []
-      
+
       store.on('flowError', () => {
         eventLog.push('flowError')
       })
       store.on('flowErrorCleared', () => {
         eventLog.push('flowErrorCleared')
       })
-      
+
       store.setError(connectionId1, sampleError)
       store.clearError(connectionId1)
       store.setError(connectionId1, { type: 'network-error' as VrcFlowErrorType })
       store.clearError(connectionId1)
-      
-      expect(eventLog).toEqual([
-        'flowError',
-        'flowErrorCleared',
-        'flowError',
-        'flowErrorCleared',
-      ])
+
+      expect(eventLog).toEqual(['flowError', 'flowErrorCleared', 'flowError', 'flowErrorCleared'])
     })
   })
 
@@ -568,9 +562,9 @@ describe('VrcFlowStore Error Management', () => {
       const minimalError: Omit<VrcFlowError, 'timestamp'> = {
         type: 'network-error' as VrcFlowErrorType,
       }
-      
+
       store.setError(connectionId1, minimalError)
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.type).toBe('network-error')
       expect(storedError?.message).toBeUndefined()
@@ -582,29 +576,29 @@ describe('VrcFlowStore Error Management', () => {
 
     it('should handle rapid successive setError calls', () => {
       for (let i = 0; i < 100; i++) {
-        store.setError(connectionId1, { 
+        store.setError(connectionId1, {
           type: 'network-error' as VrcFlowErrorType,
           message: `Error ${i}`,
         })
       }
-      
+
       const storedError = store.getError(connectionId1)
       expect(storedError?.message).toBe('Error 99') // Last one wins
     })
 
     it('should handle many concurrent connections with errors', () => {
       const connectionCount = 50
-      
+
       for (let i = 0; i < connectionCount; i++) {
         store.setError(`connection-${i}`, {
           type: 'witness-timeout' as VrcFlowErrorType,
           message: `Error for connection ${i}`,
         })
       }
-      
+
       expect(store.hasAnyError()).toBe(true)
       expect(store.getErrorConnections()).toHaveLength(connectionCount)
-      
+
       // Verify each error is retrievable
       for (let i = 0; i < connectionCount; i++) {
         const error = store.getError(`connection-${i}`)
@@ -617,9 +611,9 @@ describe('VrcFlowStore Error Management', () => {
     it('should set hasReceivedOffer without changing flow status', () => {
       store.setStatus(connectionId1, 'witness-active', true)
       expect(store.getStatus(connectionId1)).toBe('witness-active')
-      
+
       store.markOfferReceived(connectionId1)
-      
+
       expect(store.getStatus(connectionId1)).toBe('witness-active')
       expect(store.hasReceivedOfferFlag(connectionId1)).toBe(true)
     })
@@ -639,7 +633,7 @@ describe('VrcFlowStore Error Management', () => {
     it('should not clear existing errors', () => {
       store.setError(connectionId1, { type: 'vp-submission-failed' as VrcFlowErrorType, message: 'fail' })
       store.markOfferReceived(connectionId1)
-      
+
       expect(store.getError(connectionId1)).toBeDefined()
       expect(store.hasReceivedOfferFlag(connectionId1)).toBe(true)
     })
@@ -685,11 +679,11 @@ describe('VrcFlowStore Error Management', () => {
 describe('WitnessStatusStore', () => {
   // Import the actual store to test the WitnessStatusStore class
   // Note: This tests the exported singleton behavior
-  
+
   describe('Integration with vrcFlowStore', () => {
     // These tests verify the stores work together correctly
     // The vrcFlowStore handles errors while witnessStatusStore handles status messages
-    
+
     it('should be able to import vrcFlowStore from witnessStatusStore module', () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { vrcFlowStore } = require('../../../src/modules/vrc/witnessStatusStore')
@@ -767,5 +761,50 @@ describe('VrcFlowStore R-Card receive tracking', () => {
     vrcFlowStore.markRcardReceiveComplete('rc-1')
     vrcFlowStore.clearFlow('rc-1')
     expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(false)
+  })
+})
+
+describe('VrcFlowStore: is an exchange working on this phone?', () => {
+  // The real singleton, as a tapped message notification asks it.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { vrcFlowStore } = require('../../../src/modules/vrc/witnessStatusStore')
+
+  afterEach(() => {
+    vrcFlowStore.clearFlow('w-1')
+    vrcFlowStore.clearFlow('w-2')
+  })
+
+  it('no flow: no', () => {
+    expect(vrcFlowStore.isWorkingOnThisPhone()).toBe(false)
+  })
+
+  it.each(['preparing-offer', 'biometric-fallback', 'witness-active', 'witness-fallback', 'sharing-witness-record'])(
+    '%s: yes, this phone is signing, witnessing or sending',
+    (status) => {
+      vrcFlowStore.setStatus('w-1', status)
+      expect(vrcFlowStore.isWorkingOnThisPhone()).toBe(true)
+    }
+  )
+
+  it.each(['connecting', 'discovering', 'proposed', 'offer-sent', 'offer-received'])(
+    '%s: no, it waits on the other phone or is done',
+    (status) => {
+      vrcFlowStore.setStatus('w-1', status)
+      expect(vrcFlowStore.isWorkingOnThisPhone()).toBe(false)
+    }
+  )
+
+  it('one connection working among others waiting: yes', () => {
+    vrcFlowStore.setStatus('w-1', 'proposed')
+    vrcFlowStore.setStatus('w-2', 'witness-active')
+    expect(vrcFlowStore.isWorkingOnThisPhone()).toBe(true)
+  })
+
+  it('a finished exchange still showing its last status: no', () => {
+    vrcFlowStore.setStatus('w-1', 'offer-sent')
+    vrcFlowStore.markOfferReceived('w-1')
+    vrcFlowStore.setStatus('w-1', 'sharing-witness-record')
+    expect(vrcFlowStore.isExchangeComplete('w-1')).toBe(true)
+    expect(vrcFlowStore.isWorkingOnThisPhone()).toBe(false)
   })
 })

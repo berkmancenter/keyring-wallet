@@ -10,6 +10,7 @@
  * while the list was on screen. The test before this one drove the wake from
  * the container's root ref, and so never ran the app's path.
  */
+import { DidCommBasicMessageEventTypes, DidCommConnectionEventTypes } from '@credo-ts/didcomm'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { NavigationContainer, useNavigation, useRoute } from '@react-navigation/native'
 import { createStackNavigator } from '@react-navigation/stack'
@@ -17,6 +18,7 @@ import { act, render } from '@testing-library/react-native'
 import React, { useEffect, useState } from 'react'
 import { Text } from 'react-native'
 
+import { vrcFlowStore } from '../../modules/vrc/witnessStatusStore'
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { setActiveChatConnectionId } from '../activeChatTracker'
 import {
@@ -106,18 +108,30 @@ const record = (connectionId: string, at: string) => ({
   metadata: { get: () => undefined },
 })
 
+/** A connection on which this phone made the invitation, as the DID exchange moves it. */
+const answered = (id: string, state = 'request-received', metadata: Record<string, unknown> = {}) => ({
+  id,
+  role: 'responder',
+  state,
+  metadata: { get: (key: string) => metadata[key] },
+})
+
 function agentWith(
   stored: ReturnType<typeof record>[],
   waiting: ReturnType<typeof record>[],
-  duringPickup?: () => Promise<void>
+  duringPickup?: () => Promise<void>,
+  connections: ReturnType<typeof answered>[] = []
 ) {
-  const listeners = new Set<(event: unknown) => void>()
+  // One listener set per event type, as Credo's event emitter keeps them.
+  const listeners = new Map<string, Set<(event: unknown) => void>>()
+  const emit = (type: string, event: unknown) => listeners.get(type)?.forEach((fn) => fn(event))
   return {
     events: {
-      observable: () => ({
+      observable: (type: string) => ({
         subscribe: (fn: (event: unknown) => void) => {
-          listeners.add(fn)
-          return { unsubscribe: () => listeners.delete(fn) }
+          if (!listeners.has(type)) listeners.set(type, new Set())
+          listeners.get(type)!.add(fn)
+          return { unsubscribe: () => listeners.get(type)!.delete(fn) }
         },
       }),
     },
@@ -127,9 +141,14 @@ function agentWith(
         messagePickup: {
           pickupMessages: jest.fn(async () => {
             await duringPickup?.()
+            for (const connectionRecord of connections) {
+              emit(DidCommConnectionEventTypes.DidCommConnectionStateChanged, { payload: { connectionRecord } })
+            }
             for (const message of waiting) {
               stored.push(message)
-              listeners.forEach((fn) => fn({ payload: { basicMessageRecord: message } }))
+              emit(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, {
+                payload: { basicMessageRecord: message },
+              })
             }
           }),
         },
@@ -177,6 +196,11 @@ beforeEach(() => {
   mainNavigation = undefined
 })
 
+afterEach(() => {
+  vrcFlowStore.clearProposalPrompt('new')
+  vrcFlowStore.clearFlow('ada')
+})
+
 describe('a tapped message notification, driven as the app drives it', () => {
   it('two contacts with unread messages: the chat with the newest one opens', async () => {
     const tree = render(<App />)
@@ -210,6 +234,56 @@ describe('a tapped message notification, driven as the app drives it', () => {
     const tree = render(<App />)
     expect(await settle(tap(agentWith([], [])))).toBe('list')
     expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+  })
+})
+
+/**
+ * A shared link opened later: B's answer, and maybe B's proposal, wait at the
+ * mediator until A taps the wake. Where A lands decides whether A can carry
+ * the exchange on.
+ */
+describe('a tap that brings in an answer to a shared invitation', () => {
+  it("B answered the link: B's chat opens, ahead of an older unread chat", async () => {
+    const tree = render(<App />)
+    const agent = agentWith([record('ada', '2026-10-20T10:00:00Z')], [], undefined, [answered('new')])
+    expect(await settle(tap(agent))).toBe('newContact')
+    expect(await tree.findByTestId('Chat_new')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_ada')).toBeNull()
+  })
+
+  it("B's proposal came in with the answer: it stays on the list for the consent sheet", async () => {
+    const tree = render(<App />)
+    const agent = agentWith(
+      [record('ada', '2026-10-20T10:00:00Z')],
+      [],
+      async () => {
+        vrcFlowStore.setProposalPrompt({ connectionId: 'new', exchangeId: 'x1', counterpartyLabel: 'B' })
+      },
+      [answered('new')]
+    )
+    expect(await settle(tap(agent))).toBe('consent')
+    expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_new')).toBeNull()
+    expect(tree.queryByTestId('Chat_ada')).toBeNull()
+  })
+
+  it('an exchange signing on this phone: nothing is pushed over its prompt', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], async () => {
+      vrcFlowStore.setStatus('ada', 'preparing-offer')
+    })
+    expect(await settle(tap(agent))).toBe('exchange')
+    expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_bob')).toBeNull()
+  })
+
+  it('a witness connection moving is not a new contact: the unread chat opens', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], undefined, [
+      answered('witness', 'completed', { witnessConnection: { url: 'w' } }),
+    ])
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
   })
 })
 
