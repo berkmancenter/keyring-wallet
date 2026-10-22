@@ -33,6 +33,7 @@ import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
+import { vtaAgent } from '../module/vtaAgent'
 import { useCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
@@ -53,6 +54,7 @@ import { REFUSAL_KEY } from './PrivateVettingStart'
 import type { HiddenVettingRefusal } from './hiddenVettingSeam'
 import { useAgentsHoldingIdentity } from './agentsHoldingIdentity'
 import { useCommunity } from './useCommunity'
+import { agentHomeScreen } from './agentHome'
 import { useVtaDid } from './VtaStatus'
 
 export { identityWord } from './communityName'
@@ -418,6 +420,59 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     config?.mediatorDid,
     manifest?.directoryDisclosure?.statementDigest,
   ])
+
+  // A link the agent ended (it no longer accepts this phone) still names the
+  // agent: whether it held an identity in THIS community decides what Join says.
+  const link = useSyncExternalStore(vtaAgent.subscribe, () => vtaAgent.getState().link)
+  const revokedAgent = link.kind === 'revoked' ? link.vtaDid : undefined
+  // Known per agent and community, and unknown until the lookup answers: the
+  // first paint said "Link your agent first" (the sentence IN-350 is about)
+  // until it did. Only a revoked link waits; any other decides at once.
+  const lookup = !vtaDid && revokedAgent && agent && communityDid ? `${revokedAgent}|${communityDid}` : undefined
+  const [heldFor, setHeldFor] = useState<{ key: string; held: boolean }>()
+  useEffect(() => {
+    if (!lookup || !agent || !communityDid || !revokedAgent) return
+    let live = true
+    new GenericRecordsIdentityStore(agent)
+      .getPersona(communityDid, revokedAgent)
+      .then((persona) => live && setHeldFor({ key: lookup, held: Boolean(persona) }))
+      .catch(() => live && setHeldFor({ key: lookup, held: false }))
+    return () => {
+      live = false
+    }
+  }, [lookup, agent, communityDid, revokedAgent])
+  const heldHereRefused: boolean | undefined = lookup ? (heldFor?.key === lookup ? heldFor.held : undefined) : false
+
+  if (!vtaDid && heldHereRefused === undefined) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content} testID={testIdWithKey(VtiJoinIds.checkingAgent)}>
+          <ActivityIndicator color={ColorPalette.brand.primary} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!vtaDid && heldHereRefused) {
+    // The agent stopped accepting this phone, and this community is one it
+    // holds an identity in: say that, not "link your agent first" as if it had
+    // never been linked (IN-350). My Agent has the removed card and its way back.
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content}>
+          <ThemedText testID={testIdWithKey(VtiJoinIds.agentRefused)}>
+            {t('VtaLink.PersonaAgentRefusedBody', { community: name, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          <Button
+            title={t('VtaLink.PersonaAgentOpen')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(agentHomeScreen())}
+            testID={testIdWithKey(VtiJoinIds.openMyAgent)}
+          />
+        </View>
+      </SafeAreaView>
+    )
+  }
 
   if (!vtaDid) {
     return (

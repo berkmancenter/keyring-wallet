@@ -14,6 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent } from '../module/vtiAgent'
 import { emitCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -119,6 +120,69 @@ describe('I want to join a community', () => {
     expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinLinkAgent'))))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaLink)
+  })
+
+  // IN-350 (Glenn's community-side report): after the agent refused this phone,
+  // its link to a community it already holds an identity in said "Link your
+  // agent first", as if it had never been linked.
+  describe('when the agent no longer accepts this phone', () => {
+    const revoked = {
+      kind: 'revoked',
+      vtaDid: 'did:webvh:example:vta',
+      label: 'bob',
+      reason: 'forbidden: DID not in ACL',
+      cause: 'notInAcl',
+    }
+
+    it('a community it holds an identity in says so, and the way out is My Agent', async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      const getPersona = jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockResolvedValue({ did: 'did:webvh:QmPersona:p', communityDid: suggested } as never)
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      const tree = await renderJoin()
+      expect(getPersona).toHaveBeenCalledWith(suggested, 'did:webvh:example:vta')
+      expect(tree.getByTestId(testIdWithKey('JoinAgentRefused'))).toHaveTextContent(/VtaLink\.PersonaAgentRefusedBody/)
+      expect(tree.queryByTestId(testIdWithKey('JoinNeedsAgent'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenMyAgent'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.MyAgent)
+    })
+
+    // 7a's #473 review: the first paint said "Link your agent first" (the
+    // sentence IN-350 is about) until the identity lookup resolved.
+    it('while it is not yet known whether it holds an identity here, neither sentence is said', async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      let answer: (v: unknown) => void = () => undefined
+      jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockReturnValue(new Promise((resolve) => (answer = resolve)) as never)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinCheckingAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinNeedsAgent'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+      await act(async () => answer({ did: 'did:webvh:QmPersona:p', communityDid: suggested }))
+      expect(tree.getByTestId(testIdWithKey('JoinAgentRefused'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinCheckingAgent'))).toBeNull()
+    })
+
+    it("a community it holds no identity in: today's words, to link an agent", async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      jest.spyOn(GenericRecordsIdentityStore.prototype, 'getPersona').mockResolvedValue(undefined)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+    })
+
+    it("a phone never linked keeps today's words, whatever it holds", async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked' } })
+      jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockResolvedValue({ did: 'did:webvh:QmPersona:p', communityDid: suggested } as never)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+    })
   })
 
   it('offers the suggested community, then what it asks, then the identity → vetting', async () => {
