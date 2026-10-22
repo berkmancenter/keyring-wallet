@@ -380,3 +380,51 @@ test('pinnedManifest reads bifold\'s manifest at the gitlink, not the submodule\
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('sync-testids.sh copies the wallet submodule\'s manifest at the pin, not its working tree: the bytes the check reads', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'testids-sync-'))
+  const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim()
+  const scripts = path.dirname(fileURLToPath(import.meta.url))
+  try {
+    const wallet = path.join(root, 'wallet'), bifold = path.join(wallet, 'bifold'), e2eScripts = path.join(wallet, 'e2e', 'scripts')
+    fs.mkdirSync(e2eScripts, { recursive: true })
+    fs.mkdirSync(path.join(wallet, 'e2e', 'lib'))
+    fs.mkdirSync(path.join(wallet, 'app'))
+    for (const f of ['sync-testids.sh', 'check-testids.mjs', 'gen-app-testids.mjs']) fs.copyFileSync(path.join(scripts, f), path.join(e2eScripts, f))
+    fs.writeFileSync(path.join(wallet, 'e2e', 'lib', 'testids.allow.json'), '{}')
+    git(wallet, 'init', '-q')
+    fs.mkdirSync(path.join(bifold, 'packages', 'core', 'src'), { recursive: true })
+    git(bifold, 'init', '-q')
+    const pinned = JSON.stringify(manifest({ Pinned: [] }))
+    fs.writeFileSync(path.join(bifold, 'packages', 'core', 'testids.json'), pinned)
+    git(bifold, 'add', '-A'); git(bifold, 'commit', '-qm', 'pin')
+    const pin = git(bifold, 'rev-parse', 'HEAD')
+    // Right after a pin bump, before `git submodule update`: the working tree is somewhere else.
+    fs.writeFileSync(path.join(bifold, 'packages', 'core', 'testids.json'), JSON.stringify(manifest({ Later: [] })))
+    git(bifold, 'commit', '-qam', 'later')
+    git(wallet, 'update-index', '--add', '--cacheinfo', `160000,${pin},bifold`)
+    git(wallet, 'commit', '-qm', 'wallet')
+    const run = () => {
+      try {
+        return { code: 0, out: execFileSync('bash', [path.join(e2eScripts, 'sync-testids.sh'), 'bifold'], { cwd: wallet, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '' } }) }
+      } catch (e) {
+        return { code: e.status, out: `${e.stdout}${e.stderr}` }
+      }
+    }
+    const ok = run()
+    assert.equal(ok.code, 0, ok.out)
+    assert.match(ok.out, /copied bifold [0-9a-f]{8} \(the pin\):packages\/core\/testids\.json/)
+    assert.equal(fs.readFileSync(path.join(wallet, 'e2e', 'lib', 'testids.json'), 'utf8'), pinned, 'the pin\'s bytes, not the working tree\'s')
+    assert.match(ok.out, /testids: all known/, 'and the check it runs then agrees')
+
+    // A pin the submodule has not fetched: a clear stop, the copy left alone.
+    git(wallet, 'update-index', '--cacheinfo', `160000,${'e'.repeat(40)},bifold`)
+    git(wallet, 'commit', '-qm', 'unfetched')
+    const stop = run()
+    assert.equal(stop.code, 1)
+    assert.match(stop.out, /bifold eeeeeeee \(the pin\) has no packages\/core\/testids\.json here: fetch it first/)
+    assert.equal(fs.readFileSync(path.join(wallet, 'e2e', 'lib', 'testids.json'), 'utf8'), pinned)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})

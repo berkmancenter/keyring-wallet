@@ -133,7 +133,7 @@ jobs:
           # a native module this job does not install): the shared-community request and member picks (hvAdmin), the hv
           # verdicts, and the runner-slug guard of setup-fixture.mjs among them. And fetch-binaries.mjs's refusal of a
           # moving latest/main build that is not pinned (upstream's TSP 1.0 cutover, 2026-10-22).
-          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs e2e/openvtc/{hvAdmin,hvVerdict,listWalk,runnerSlug,signinPortal,ticketSweep}.test.mjs e2e/lib/typeExact.test.mjs scripts/openvtc/fetch-binaries.test.mjs; do
+          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs e2e/openvtc/{hvAdmin,hvVerdict,listWalk,runnerSlug,signinPortal,ticketSweep}.test.mjs e2e/lib/typeExact.test.mjs scripts/openvtc/fetch-binaries.test.mjs e2e/scripts/check-testids.test.mjs; do
             node --test "$t" || { echo "::error file=$t::$t failed"; fail=1; }
           done
           exit $fail
