@@ -127,7 +127,10 @@ jobs:
           # The gate harness's own unit tests (node built-ins only, no install): a gate.sh / lib.sh / run-summary change
           # merged green while breaking two of them (#518, #522; fixed in #523), since nothing here ran them.
           # The release tier check too (scripts/release/tier.mjs decides what may go out over the air).
-          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs; do
+          # The openvtc helpers' own tests that need no install (deskRows, joinRoute, panelRows and style import node-pty,
+          # a native module this job does not install): the shared-community request and member picks (hvAdmin), the hv
+          # verdicts, and the runner-slug guard of setup-fixture.mjs among them.
+          for t in e2e/gate/*.test.mjs scripts/release/*.test.mjs e2e/openvtc/{hvAdmin,hvVerdict,listWalk,runnerSlug,signinPortal,ticketSweep}.test.mjs; do
             node --test "$t" || { echo "::error file=$t::$t failed"; fail=1; }
           done
           exit $fail

@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { OpenvtcTui } from '../lib/openvtcTui.js';
+import { isRunnerSlug } from './runnerSlug.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -45,8 +46,8 @@ const { values: a } = parseArgs({
   },
 });
 for (const k of ['bin', 'version', 'slug', 'vta-did', 'profile', 'dir']) if (!a[k]) throw new Error(`--${k} is required`);
-// Runner agents only: the Farm runners, or the lab's runner bob. Never alice, a person's own agent.
-if (!/^(farm\d*-runner-(prague|openvtc)|bob)$/.test(a.slug)) throw new Error(`refusing slug ${a.slug}: the fixture lives on a runner agent (farm-runner-openvtc, farm-runner-prague, or the lab's bob) only`);
+// Runner agents only (runnerSlug.js): the Farm runners, the lab's bob, or the Mac mini's keyring-mini-gate- slug for one.
+if (!isRunnerSlug(a.slug)) throw new Error(`refusing slug ${a.slug}: the fixture lives on a runner agent (farm-runner-openvtc, farm-runner-prague, the lab's bob, or the Mac mini's keyring-mini-gate- slug for one of them) only`);
 if (existsSync(path.join(a.dir, `config-${a.profile}.json`))) throw new Error(`a fixture already exists at ${a.dir} for ${a.profile}; remove it first (farm-test-resources.md)`);
 mkdirSync(a.dir, { recursive: true });
 
