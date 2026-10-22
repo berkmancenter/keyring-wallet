@@ -162,7 +162,7 @@ exports[`Developer Screen screen renders correctly 1`] = `
             ]
           }
         >
-          
+          
         </Text>
         <Text
           style={
@@ -179,7 +179,7 @@ exports[`Developer Screen screen renders correctly 1`] = `
             ]
           }
         >
-          IAS
+          Connection
         </Text>
       </View>
       <View
@@ -209,10 +209,10 @@ exports[`Developer Screen screen renders correctly 1`] = `
               }
             }
           >
-            Developer.Environment
+            Developer.Mediator
           </Text>
           <View
-            accessibilityLabel="Developer.Environment"
+            accessibilityLabel="Developer.Mediator"
             accessibilityState={
               {
                 "busy": undefined,
@@ -249,26 +249,322 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
-            testID="com.ariesbifold:id/environment"
+            testID="com.ariesbifold:id/DeveloperMediator"
           >
             <Text
+              allowFontScaling={false}
+              selectable={false}
               style={
                 [
                   {
                     "color": "#4A4A4A",
-                    "fontFamily": "SourceSans3-Regular",
-                    "fontSize": 21,
-                    "fontWeight": "bold",
+                    "fontSize": 24,
                   },
+                  undefined,
                   {
-                    "color": "#4D7A8B",
+                    "fontFamily": "Material Icons",
+                    "fontStyle": "normal",
                     "fontWeight": "normal",
                   },
+                  {},
                 ]
               }
             >
-              Production
+              
             </Text>
+          </View>
+        </View>
+        <View
+          style={
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "marginTop": 10,
+            }
+          }
+        >
+          <Text
+            ellipsizeMode="middle"
+            numberOfLines={1}
+            style={
+              {
+                "color": "#4D7A8B",
+                "flexShrink": 1,
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 18,
+                "fontWeight": "normal",
+                "marginRight": 16,
+              }
+            }
+            testID="com.ariesbifold:id/DeveloperMediatorValue"
+          />
+          <View
+            accessibilityLabel="Developer.CopyValue"
+            accessibilityRole="button"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            hitSlop={8}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            testID="com.ariesbifold:id/DeveloperMediatorCopy"
+          >
+            <Text
+              style={
+                {
+                  "color": "#4D7A8B",
+                  "fontFamily": "SourceSans3-Regular",
+                  "fontSize": 18,
+                  "fontWeight": "bold",
+                }
+              }
+            >
+              Developer.CopyValue
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "borderBottomColor": "#F5F5F5",
+              "borderBottomWidth": 1,
+              "marginHorizontal": 24,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "flexDirection": "row",
+            }
+          }
+        >
+          <Text
+            style={
+              {
+                "color": "#4A4A4A",
+                "flex": 1,
+                "flexWrap": "wrap",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 21,
+                "fontWeight": "normal",
+              }
+            }
+          >
+            Developer.EnableDidCommV2
+          </Text>
+          <View
+            accessibilityLabel="Developer.EnableDidCommV2"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "justifyContent": "space-between",
+              }
+            }
+            testID="com.ariesbifold:id/ToggleEnableDidCommV2"
+          >
+            <RCTSwitch
+              accessibilityRole="switch"
+              onChange={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              onTintColor="rgba(98, 44, 98, 0.7)"
+              style={
+                [
+                  {
+                    "alignSelf": "flex-start",
+                  },
+                  {
+                    "backgroundColor": "#D3D3D3",
+                    "borderRadius": 16,
+                  },
+                ]
+              }
+              thumbTintColor="#666666"
+              tintColor="#D3D3D3"
+              value={false}
+            />
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "borderBottomColor": "#F5F5F5",
+              "borderBottomWidth": 1,
+              "marginHorizontal": 24,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "flexDirection": "row",
+            }
+          }
+        >
+          <Text
+            style={
+              {
+                "color": "#4A4A4A",
+                "flex": 1,
+                "flexWrap": "wrap",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 21,
+                "fontWeight": "normal",
+              }
+            }
+          >
+            Developer.EnableTspCarriage
+          </Text>
+          <View
+            accessibilityLabel="Developer.EnableTspCarriage"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "justifyContent": "space-between",
+              }
+            }
+            testID="com.ariesbifold:id/ToggleEnableTspCarriage"
+          >
+            <RCTSwitch
+              accessibilityRole="switch"
+              onChange={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              onTintColor="rgba(98, 44, 98, 0.7)"
+              style={
+                [
+                  {
+                    "alignSelf": "flex-start",
+                  },
+                  {
+                    "backgroundColor": "#D3D3D3",
+                    "borderRadius": 16,
+                  },
+                ]
+              }
+              thumbTintColor="#666666"
+              tintColor="#D3D3D3"
+              value={false}
+            />
           </View>
         </View>
       </View>
@@ -279,6 +575,862 @@ exports[`Developer Screen screen renders correctly 1`] = `
           }
         }
       />
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Diagnostics
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "flexDirection": "row",
+            }
+          }
+        >
+          <Text
+            style={
+              {
+                "color": "#4A4A4A",
+                "flex": 1,
+                "flexWrap": "wrap",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 21,
+                "fontWeight": "normal",
+              }
+            }
+          >
+            Remote Logging
+          </Text>
+          <View
+            accessibilityLabel="Remote Logging"
+            accessibilityState={
+              {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "justifyContent": "space-between",
+              }
+            }
+            testID="com.ariesbifold:id/ToggleRemoteLoggingSwitch"
+          >
+            <RCTSwitch
+              accessibilityRole="switch"
+              onChange={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              onTintColor="rgba(98, 44, 98, 0.7)"
+              style={
+                [
+                  {
+                    "alignSelf": "flex-start",
+                  },
+                  {
+                    "backgroundColor": "#D3D3D3",
+                    "borderRadius": 16,
+                  },
+                ]
+              }
+              thumbTintColor="#666666"
+              tintColor="#D3D3D3"
+              value={false}
+            />
+          </View>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "marginBottom": 10,
+          }
+        }
+      />
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Agent tools (test)
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "marginBottom": 10,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ProbeVtaMediatorButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            Probe VTA mediator (sends a join request)
+          </Text>
+        </View>
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "marginTop": 12,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/ShowManagerIdentityButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            My VTA: show manager identity
+          </Text>
+        </View>
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "marginTop": 12,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/ForgetCommunityButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            My VTA: forget this community
+          </Text>
+        </View>
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "marginTop": 8,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ProbeVtaManagerButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            My VTA: connect and mint a persona
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "marginBottom": 10,
+          }
+        }
+      />
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Test data
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "marginBottom": 10,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#666666",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          {
+            "marginBottom": 10,
+          }
+        }
+      />
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Over-the-air updates
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+            "padding": 24,
+          }
+        }
+      >
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          State: off (this build names no update server)
+        </Text>
+        <Text
+          accessibilityLabel="embedded (00000000-0000-0000-0000-000000000000)"
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+          testID="com.ariesbifold:id/OtaBundleId"
+        >
+          Running: embedded (00000000-0000-0000-0000-000000000000)
+        </Text>
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          Channel: production
+        </Text>
+        <Text
+          accessibilityLabel="ring2"
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+          testID="com.ariesbifold:id/OtaRing"
+        >
+          Ring: ring2
+        </Text>
+        <Text
+          style={
+            {
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
+              "fontSize": 14,
+              "fontWeight": "normal",
+              "marginTop": 6,
+            }
+          }
+        >
+          Native fingerprint: none
+        </Text>
+      </View>
+      <View
+        style={
+          {
+            "marginBottom": 10,
+          }
+        }
+      />
+      <View
+        style={
+          [
+            {
+              "backgroundColor": "#F5F5F5",
+              "padding": 24,
+            },
+            {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "paddingBottom": 0,
+            },
+          ]
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            [
+              {
+                "color": undefined,
+                "fontSize": 24,
+              },
+              {
+                "color": "#4A4A4A",
+                "marginRight": 10,
+              },
+              {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              {},
+            ]
+          }
+        >
+          
+        </Text>
+        <Text
+          style={
+            [
+              {
+                "color": "#4A4A4A",
+                "fontFamily": "SourceSans3-Regular",
+                "fontSize": 26,
+                "fontWeight": "bold",
+              },
+              {
+                "flexShrink": 1,
+              },
+            ]
+          }
+        >
+          Credentials and verifier
+        </Text>
+      </View>
       <View
         style={
           {
@@ -856,209 +2008,6 @@ exports[`Developer Screen screen renders correctly 1`] = `
               }
             }
           >
-            Settings.PreventAutoLock
-          </Text>
-          <View
-            accessibilityLabel="Settings.TogglePreventAutoLock"
-            accessibilityState={
-              {
-                "busy": undefined,
-                "checked": undefined,
-                "disabled": undefined,
-                "expanded": undefined,
-                "selected": undefined,
-              }
-            }
-            accessibilityValue={
-              {
-                "max": undefined,
-                "min": undefined,
-                "now": undefined,
-                "text": undefined,
-              }
-            }
-            accessible={true}
-            collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
-            onClick={[Function]}
-            onFocus={[Function]}
-            onResponderGrant={[Function]}
-            onResponderMove={[Function]}
-            onResponderRelease={[Function]}
-            onResponderTerminate={[Function]}
-            onResponderTerminationRequest={[Function]}
-            onStartShouldSetResponder={[Function]}
-            style={
-              {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "space-between",
-              }
-            }
-            testID="com.ariesbifold:id/TogglePreventAutoLockSwitch"
-          >
-            <RCTSwitch
-              accessibilityRole="switch"
-              onChange={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              onTintColor="rgba(98, 44, 98, 0.7)"
-              style={
-                [
-                  {
-                    "alignSelf": "flex-start",
-                  },
-                  {
-                    "backgroundColor": "#D3D3D3",
-                    "borderRadius": 16,
-                  },
-                ]
-              }
-              thumbTintColor="#666666"
-              tintColor="#D3D3D3"
-              value={false}
-            />
-          </View>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-          }
-        }
-      >
-        <View
-          style={
-            {
-              "borderBottomColor": "#F5F5F5",
-              "borderBottomWidth": 1,
-              "marginHorizontal": 24,
-            }
-          }
-        />
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          style={
-            {
-              "flexDirection": "row",
-            }
-          }
-        >
-          <Text
-            style={
-              {
-                "color": "#4A4A4A",
-                "flex": 1,
-                "flexWrap": "wrap",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 21,
-                "fontWeight": "normal",
-              }
-            }
-          >
-            Remote Logging
-          </Text>
-          <View
-            accessibilityLabel="Remote Logging"
-            accessibilityState={
-              {
-                "busy": undefined,
-                "checked": undefined,
-                "disabled": undefined,
-                "expanded": undefined,
-                "selected": undefined,
-              }
-            }
-            accessibilityValue={
-              {
-                "max": undefined,
-                "min": undefined,
-                "now": undefined,
-                "text": undefined,
-              }
-            }
-            accessible={true}
-            collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
-            onClick={[Function]}
-            onFocus={[Function]}
-            onResponderGrant={[Function]}
-            onResponderMove={[Function]}
-            onResponderRelease={[Function]}
-            onResponderTerminate={[Function]}
-            onResponderTerminationRequest={[Function]}
-            onStartShouldSetResponder={[Function]}
-            style={
-              {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "space-between",
-              }
-            }
-            testID="com.ariesbifold:id/ToggleRemoteLoggingSwitch"
-          >
-            <RCTSwitch
-              accessibilityRole="switch"
-              onChange={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              onTintColor="rgba(98, 44, 98, 0.7)"
-              style={
-                [
-                  {
-                    "alignSelf": "flex-start",
-                  },
-                  {
-                    "backgroundColor": "#D3D3D3",
-                    "borderRadius": 16,
-                  },
-                ]
-              }
-              thumbTintColor="#666666"
-              tintColor="#D3D3D3"
-              value={false}
-            />
-          </View>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          style={
-            {
-              "flexDirection": "row",
-            }
-          }
-        >
-          <Text
-            style={
-              {
-                "color": "#4A4A4A",
-                "flex": 1,
-                "flexWrap": "wrap",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 21,
-                "fontWeight": "normal",
-              }
-            }
-          >
             PasteUrl.UseShareableLink
           </Text>
           <View
@@ -1130,6 +2079,23 @@ exports[`Developer Screen screen renders correctly 1`] = `
         style={
           {
             "backgroundColor": "#F5F5F5",
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "borderBottomColor": "#F5F5F5",
+              "borderBottomWidth": 1,
+              "marginHorizontal": 24,
+            }
+          }
+        />
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
             "padding": 24,
           }
         }
@@ -1153,10 +2119,10 @@ exports[`Developer Screen screen renders correctly 1`] = `
               }
             }
           >
-            Developer.EnableProxy
+            Developer.Environment
           </Text>
           <View
-            accessibilityLabel="Developer.EnableProxy"
+            accessibilityLabel="Developer.Environment"
             accessibilityState={
               {
                 "busy": undefined,
@@ -1193,31 +2159,45 @@ exports[`Developer Screen screen renders correctly 1`] = `
                 "justifyContent": "space-between",
               }
             }
-            testID="com.ariesbifold:id/ToggleEnableProxy"
+            testID="com.ariesbifold:id/environment"
           >
-            <RCTSwitch
-              accessibilityRole="switch"
-              onChange={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              onTintColor="rgba(98, 44, 98, 0.7)"
+            <Text
               style={
                 [
                   {
-                    "alignSelf": "flex-start",
+                    "color": "#4A4A4A",
+                    "fontFamily": "SourceSans3-Regular",
+                    "fontSize": 21,
+                    "fontWeight": "bold",
                   },
                   {
-                    "backgroundColor": "#D3D3D3",
-                    "borderRadius": 16,
+                    "color": "#4D7A8B",
+                    "fontWeight": "normal",
                   },
                 ]
               }
-              thumbTintColor="#666666"
-              tintColor="#D3D3D3"
-              value={false}
-            />
+            >
+              Production
+            </Text>
           </View>
         </View>
+      </View>
+      <View
+        style={
+          {
+            "backgroundColor": "#F5F5F5",
+          }
+        }
+      >
+        <View
+          style={
+            {
+              "borderBottomColor": "#F5F5F5",
+              "borderBottomWidth": 1,
+              "marginHorizontal": 24,
+            }
+          }
+        />
       </View>
       <View
         style={
@@ -1311,770 +2291,6 @@ exports[`Developer Screen screen renders correctly 1`] = `
             />
           </View>
         </View>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          style={
-            {
-              "flexDirection": "row",
-            }
-          }
-        >
-          <Text
-            style={
-              {
-                "color": "#4A4A4A",
-                "flex": 1,
-                "flexWrap": "wrap",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 21,
-                "fontWeight": "normal",
-              }
-            }
-          >
-            Developer.EnableTspCarriage
-          </Text>
-          <View
-            accessibilityLabel="Developer.EnableTspCarriage"
-            accessibilityState={
-              {
-                "busy": undefined,
-                "checked": undefined,
-                "disabled": undefined,
-                "expanded": undefined,
-                "selected": undefined,
-              }
-            }
-            accessibilityValue={
-              {
-                "max": undefined,
-                "min": undefined,
-                "now": undefined,
-                "text": undefined,
-              }
-            }
-            accessible={true}
-            collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
-            onClick={[Function]}
-            onFocus={[Function]}
-            onResponderGrant={[Function]}
-            onResponderMove={[Function]}
-            onResponderRelease={[Function]}
-            onResponderTerminate={[Function]}
-            onResponderTerminationRequest={[Function]}
-            onStartShouldSetResponder={[Function]}
-            style={
-              {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "space-between",
-              }
-            }
-            testID="com.ariesbifold:id/ToggleEnableTspCarriage"
-          >
-            <RCTSwitch
-              accessibilityRole="switch"
-              onChange={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              onTintColor="rgba(98, 44, 98, 0.7)"
-              style={
-                [
-                  {
-                    "alignSelf": "flex-start",
-                  },
-                  {
-                    "backgroundColor": "#D3D3D3",
-                    "borderRadius": 16,
-                  },
-                ]
-              }
-              thumbTintColor="#666666"
-              tintColor="#D3D3D3"
-              value={false}
-            />
-          </View>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "marginBottom": 10,
-          }
-        }
-      />
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          style={
-            {
-              "flexDirection": "row",
-            }
-          }
-        >
-          <Text
-            style={
-              {
-                "color": "#4A4A4A",
-                "flex": 1,
-                "flexWrap": "wrap",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 21,
-                "fontWeight": "normal",
-              }
-            }
-          >
-            Developer.EnableDidCommV2
-          </Text>
-          <View
-            accessibilityLabel="Developer.EnableDidCommV2"
-            accessibilityState={
-              {
-                "busy": undefined,
-                "checked": undefined,
-                "disabled": undefined,
-                "expanded": undefined,
-                "selected": undefined,
-              }
-            }
-            accessibilityValue={
-              {
-                "max": undefined,
-                "min": undefined,
-                "now": undefined,
-                "text": undefined,
-              }
-            }
-            accessible={true}
-            collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
-            onClick={[Function]}
-            onFocus={[Function]}
-            onResponderGrant={[Function]}
-            onResponderMove={[Function]}
-            onResponderRelease={[Function]}
-            onResponderTerminate={[Function]}
-            onResponderTerminationRequest={[Function]}
-            onStartShouldSetResponder={[Function]}
-            style={
-              {
-                "alignItems": "center",
-                "flexDirection": "row",
-                "justifyContent": "space-between",
-              }
-            }
-            testID="com.ariesbifold:id/ToggleEnableDidCommV2"
-          >
-            <RCTSwitch
-              accessibilityRole="switch"
-              onChange={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              onTintColor="rgba(98, 44, 98, 0.7)"
-              style={
-                [
-                  {
-                    "alignSelf": "flex-start",
-                  },
-                  {
-                    "backgroundColor": "#D3D3D3",
-                    "borderRadius": 16,
-                  },
-                ]
-              }
-              thumbTintColor="#666666"
-              tintColor="#D3D3D3"
-              value={false}
-            />
-          </View>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "marginBottom": 10,
-          }
-        }
-      />
-      <View
-        style={
-          [
-            {
-              "backgroundColor": "#F5F5F5",
-              "padding": 24,
-            },
-            {
-              "alignItems": "center",
-              "flexDirection": "row",
-              "paddingBottom": 0,
-            },
-          ]
-        }
-      >
-        <Text
-          allowFontScaling={false}
-          selectable={false}
-          style={
-            [
-              {
-                "color": undefined,
-                "fontSize": 24,
-              },
-              {
-                "color": "#4A4A4A",
-                "marginRight": 10,
-              },
-              {
-                "fontFamily": "Material Icons",
-                "fontStyle": "normal",
-                "fontWeight": "normal",
-              },
-              {},
-            ]
-          }
-        >
-          
-        </Text>
-        <Text
-          style={
-            [
-              {
-                "color": "#4A4A4A",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 26,
-                "fontWeight": "bold",
-              },
-              {
-                "flexShrink": 1,
-              },
-            ]
-          }
-        >
-          Test Data
-        </Text>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": false,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#622C62",
-                "borderRadius": 8,
-                "flexDirection": "row",
-                "justifyContent": "center",
-                "marginBottom": 10,
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-              false,
-            ]
-          }
-          testID="com.ariesbifold:id/SeedTestContactsButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            Seed Test Contacts
-          </Text>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": false,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#622C62",
-                "borderRadius": 8,
-                "flexDirection": "row",
-                "justifyContent": "center",
-                "marginBottom": 10,
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-              false,
-            ]
-          }
-          testID="com.ariesbifold:id/ProbeVtaMediatorButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            Probe VTA mediator
-          </Text>
-        </View>
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": undefined,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#622C62",
-                "borderRadius": 8,
-                "marginTop": 12,
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-            ]
-          }
-          testID="com.ariesbifold:id/ShowManagerIdentityButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            My VTA: show manager identity
-          </Text>
-        </View>
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": undefined,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#622C62",
-                "borderRadius": 8,
-                "marginTop": 12,
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-            ]
-          }
-          testID="com.ariesbifold:id/ForgetCommunityButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            My VTA: forget this community
-          </Text>
-        </View>
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": false,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#622C62",
-                "borderRadius": 8,
-                "marginTop": 8,
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-              false,
-            ]
-          }
-          testID="com.ariesbifold:id/ProbeVtaManagerButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            My VTA: connect and mint a persona
-          </Text>
-        </View>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <View
-          accessibilityState={
-            {
-              "busy": undefined,
-              "checked": undefined,
-              "disabled": false,
-              "expanded": undefined,
-              "selected": undefined,
-            }
-          }
-          accessibilityValue={
-            {
-              "max": undefined,
-              "min": undefined,
-              "now": undefined,
-              "text": undefined,
-            }
-          }
-          accessible={true}
-          collapsable={false}
-          focusable={true}
-          onBlur={[Function]}
-          onClick={[Function]}
-          onFocus={[Function]}
-          onResponderGrant={[Function]}
-          onResponderMove={[Function]}
-          onResponderRelease={[Function]}
-          onResponderTerminate={[Function]}
-          onResponderTerminationRequest={[Function]}
-          onStartShouldSetResponder={[Function]}
-          style={
-            [
-              {
-                "alignItems": "center",
-                "backgroundColor": "#666666",
-                "borderRadius": 8,
-                "flexDirection": "row",
-                "justifyContent": "center",
-                "paddingHorizontal": 20,
-                "paddingVertical": 12,
-              },
-              false,
-            ]
-          }
-          testID="com.ariesbifold:id/ClearTestContactsButton"
-        >
-          <Text
-            style={
-              {
-                "color": "#FFFFFF",
-                "fontSize": 16,
-                "fontWeight": "600",
-              }
-            }
-          >
-            Clear Test Contacts
-          </Text>
-        </View>
-      </View>
-      <View
-        style={
-          [
-            {
-              "backgroundColor": "#F5F5F5",
-              "padding": 24,
-            },
-            {
-              "alignItems": "center",
-              "flexDirection": "row",
-              "paddingBottom": 0,
-            },
-          ]
-        }
-      >
-        <Text
-          allowFontScaling={false}
-          selectable={false}
-          style={
-            [
-              {
-                "color": undefined,
-                "fontSize": 24,
-              },
-              {
-                "color": "#4A4A4A",
-                "marginRight": 10,
-              },
-              {
-                "fontFamily": "Material Icons",
-                "fontStyle": "normal",
-                "fontWeight": "normal",
-              },
-              {},
-            ]
-          }
-        >
-          
-        </Text>
-        <Text
-          style={
-            [
-              {
-                "color": "#4A4A4A",
-                "fontFamily": "SourceSans3-Regular",
-                "fontSize": 26,
-                "fontWeight": "bold",
-              },
-              {
-                "flexShrink": 1,
-              },
-            ]
-          }
-        >
-          Over-the-air updates
-        </Text>
-      </View>
-      <View
-        style={
-          {
-            "backgroundColor": "#F5F5F5",
-            "padding": 24,
-          }
-        }
-      >
-        <Text
-          style={
-            {
-              "color": "#4A4A4A",
-              "fontFamily": "SourceSans3-Regular",
-              "fontSize": 14,
-              "fontWeight": "normal",
-              "marginTop": 6,
-            }
-          }
-        >
-          State: off (this build names no update server)
-        </Text>
-        <Text
-          accessibilityLabel="embedded (00000000-0000-0000-0000-000000000000)"
-          style={
-            {
-              "color": "#4A4A4A",
-              "fontFamily": "SourceSans3-Regular",
-              "fontSize": 14,
-              "fontWeight": "normal",
-              "marginTop": 6,
-            }
-          }
-          testID="com.ariesbifold:id/OtaBundleId"
-        >
-          Running: embedded (00000000-0000-0000-0000-000000000000)
-        </Text>
-        <Text
-          style={
-            {
-              "color": "#4A4A4A",
-              "fontFamily": "SourceSans3-Regular",
-              "fontSize": 14,
-              "fontWeight": "normal",
-              "marginTop": 6,
-            }
-          }
-        >
-          Channel: production
-        </Text>
-        <Text
-          accessibilityLabel="ring2"
-          style={
-            {
-              "color": "#4A4A4A",
-              "fontFamily": "SourceSans3-Regular",
-              "fontSize": 14,
-              "fontWeight": "normal",
-              "marginTop": 6,
-            }
-          }
-          testID="com.ariesbifold:id/OtaRing"
-        >
-          Ring: ring2
-        </Text>
-        <Text
-          style={
-            {
-              "color": "#4A4A4A",
-              "fontFamily": "SourceSans3-Regular",
-              "fontSize": 14,
-              "fontWeight": "normal",
-              "marginTop": 6,
-            }
-          }
-        >
-          Native fingerprint: none
-        </Text>
       </View>
     </View>
   </RCTScrollView>

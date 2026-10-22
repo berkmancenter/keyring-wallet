@@ -197,6 +197,9 @@ const translation = {
     "EnableAppToAppPersonFlow": "App-to-app Person flow (FR)",
     "EnableTspCarriage": "Enable TSP envelope carriage (FR)",
     "EnableDidCommV2": "Activer DIDComm v2 (expérimental)",
+    "Mediator": "Médiateur",
+    "CopyValue": "Copier",
+    "Copied": "Copié",
   },
   "Tips": {
     "Header": "Conseils",
