@@ -41,7 +41,10 @@ const C_DID = process.env.C_DID;
 const REFUSED_LINE = /no longer accepts this phone/i;
 const UNREACHABLE_LINE = /didn't answer/i;
 /** The persona inbox's own line for a refusal (vtiPersonaInbox.ts releaseWarn "[VTI] persona inbox (…): <why>"). */
-const REFUSAL_LOG = /\[VTI\] persona inbox[^\n]*(refus|not in ACL|no longer accepts|permission ?denied)/i;
+// The refusal in the phone's log: the persona inbox's sign-in (relaunch), or presence's own lines when its tick is refused
+// (heartbeat: "[VTA] telling the agent this phone is here: … not in ACL", "[VTA] the agent no longer accepts this phone";
+// 1022-1822 SKIPped no-toast on the heartbeat path with the refusal in the log, since only the inbox's line counted).
+const REFUSAL_LOG = /\[(VTI\] persona inbox|VTA\])[^\n]*(refus|not in ACL|no longer accepts|permission ?denied)/i;
 // REFUSED_PATH: "relaunch" (default) reopens the app, so the persona inbox asks the agent again (refetchPersonaKeys);
 // "heartbeat" keeps it open past AgentPresence's 5 min tick, which also meets NOT_ON_ACL (bifold #454). Rows of the
 // heartbeat path are named refused-heartbeat-*.
@@ -189,7 +192,7 @@ try {
   });
   if (HEARTBEAT) evidence = evidence || removedShown;
   // No toast proves nothing unless the refusal happened in the window: without its evidence the row is no verdict.
-  if (!toast && !evidence) rows.skip(N("refused-no-toast"), `no verdict: no sign of the refusal (no persona inbox line${HEARTBEAT ? ", no RemovedPhone" : ""}) in the ${secs} s window`);
+  if (!toast && !evidence) rows.skip(N("refused-no-toast"), `no verdict: no sign of the refusal (no persona inbox or presence line${HEARTBEAT ? ", no RemovedPhone" : ""}) in the ${secs} s window`);
   else await rows.row(N("refused-no-toast"), () => toast
     ? { ok: false, detail: `a toast showed on Contacts: "${toast}" (${evidence ? "with the refusal seen" : "no refusal seen yet"})` }
     : { ok: true, detail: `no toast on Contacts for ${secs} s; the refusal landed: ${lines[0]?.trim().slice(0, 140) ?? "the link shows removed (RemovedPhone)"}` });
