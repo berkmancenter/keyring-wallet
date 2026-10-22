@@ -40,6 +40,7 @@ export const MyAgentIds = {
   enrolCard: 'MyAgentEnrolCard',
   connectMyAgentButton: 'ConnectMyAgentButton',
   devices: 'AgentDevices',
+  handingOver: 'MyAgentHandingOver',
   error: 'MyAgentError',
   holdingError: 'MyAgentHoldingError',
 } as const

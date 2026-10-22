@@ -19,10 +19,10 @@
  * @module trust-tasks/screens/MyAgent
  */
 
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -90,12 +90,16 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   // chose this screen as its first while the phone was not linked. Once it is
   // linked, the agent home is the screen (#11); hand over to it rather than
   // leave the phone on this older panel (two-phone gate trial, 09-29).
+  //
+  // Before paint (a layout effect), and with nothing of this panel drawn while
+  // linked (below): a focus effect ran after paint, so the old panel showed
+  // "Connected", the host and the DIDs for a frame, then slid away
+  // (UI-smoothness plan, Phase 1c).
   const linked = vta.link.kind === 'linked'
-  useFocusEffect(
-    useCallback(() => {
-      if (linked) navigation.replace(Screens.VtaAgent)
-    }, [linked, navigation])
-  )
+  const isFocused = useIsFocused()
+  useLayoutEffect(() => {
+    if (linked && isFocused) navigation.replace(Screens.VtaAgent)
+  }, [linked, isFocused, navigation])
 
   const mediatorDid = config?.mediatorDid
   // The phone's community — not one a link is only showing.
@@ -635,6 +639,13 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           ) : null}
         </View>
       </SafeAreaView>
+    )
+  }
+
+  // Linked: the agent home is the screen, and the hand-over above is on its way.
+  if (linked) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey(MyAgentIds.handingOver)} />
     )
   }
 

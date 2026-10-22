@@ -657,6 +657,7 @@
     "MyAgentDid": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentEnrolCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
+    "MyAgentHandingOver": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentHoldingError": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentHost": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "MyAgentIdentityCard": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
@@ -1291,6 +1292,9 @@
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.getAgentToggle"
+    },
+    {
+      "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.handingOver"
     },
     {
       "src/modules/trust-tasks/screens/MyAgent.tsx": "MyAgentIds.host"

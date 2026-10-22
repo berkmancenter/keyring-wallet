@@ -5,7 +5,7 @@
  * by the vetting entry that names the seat this phone takes.
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
-import React from 'react'
+import React, { useLayoutEffect, useSyncExternalStore } from 'react'
 import { Linking } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -269,6 +269,57 @@ describe('My Agent — the connected gate', () => {
     setVta({ link: { kind: 'notLinked' } })
   })
 
+  // UI-smoothness plan, Phase 1c: the hand-over ran in a focus effect, after paint, so a phone that became linked
+  // while this panel was open drew the old "Connected" panel for a frame before the agent home slid in. A probe after
+  // the screen records each committed frame (a layout effect runs before any passive effect could correct it).
+  test('a link that arrives while the panel is open: no frame draws the old connected panel, and it hands over', async () => {
+    const agent = fakeAgent([])
+    mockUseAgent.mockReturnValue(agent)
+    setVta({ status: 'disconnected', approvals: [], link: { kind: 'notLinked' } })
+    const replace = (useNavigation() as unknown as { replace: jest.Mock }).replace
+    replace.mockClear()
+    const frames: boolean[] = []
+    const box: { tree?: ReturnType<typeof render> } = {}
+    const Probe = () => {
+      useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+      useLayoutEffect(() => {
+        if (box.tree) frames.push(Boolean(box.tree.queryByTestId(testIdWithKey('MyAgentCard'))))
+      })
+      return null
+    }
+    box.tree = render(
+      <BasicAppContext>
+        <MyAgent config={config} />
+        <Probe />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    // The control: not linked, the panel offers the way in.
+    expect(box.tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
+    frames.length = 0
+    vtaAgent.client(agent.agent as never, config.vtaDid)
+    await act(async () => {
+      setVta({
+        status: 'connected',
+        managerDid: 'did:key:z6MkManager',
+        link: {
+          kind: 'linked',
+          vtaDid: config.vtaDid,
+          label: 'bob',
+          linkedAt: '2026-09-29T21:36:00Z',
+          connection: { kind: 'online' },
+        },
+      })
+    })
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames).not.toContain(true)
+    expect(box.tree.getByTestId(testIdWithKey('MyAgentHandingOver'))).toBeTruthy()
+    expect(replace).toHaveBeenCalledWith(Screens.VtaAgent)
+    setVta({ status: 'disconnected', link: { kind: 'notLinked' } })
+  })
+
   // IN-350, run 1022-1822: the heartbeat removed the link while this panel showed "Connected", and it kept showing
   // it — with the refused phone's DID and its membership — until a relaunch.
   describe('a phone removed while My Agent is open', () => {
@@ -294,8 +345,10 @@ describe('My Agent — the connected gate', () => {
       await act(async () => {
         jest.advanceTimersByTime(10)
       })
-      // The positive control: the screen is showing the connected agent before anything happens.
-      expect(tree.getByTestId(id('MyAgentCard'))).toHaveTextContent(/MyAgent\.Connected/)
+      // The positive control: a linked phone's panel is handing over to the agent home (Phase 1c: it never draws the
+      // old "Connected" panel), and says nothing of a removal yet.
+      expect(tree.getByTestId(id('MyAgentHandingOver'))).toBeTruthy()
+      expect(tree.queryByTestId(id('MyAgentCard'))).toBeNull()
       expect(tree.queryByTestId(id('RemovedPhone'))).toBeNull()
       return tree
     }
