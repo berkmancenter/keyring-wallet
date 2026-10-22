@@ -4,6 +4,7 @@ import {
   clearTspCapabilityCache,
   documentAdvertisesTsp,
   peerAdvertisesTsp,
+  setPreferDidcommForUpstream,
 } from '../module/tspCapability'
 
 // §4.2: the envelope format is chosen from the peer's DID document, cached with
@@ -83,7 +84,44 @@ describe('caching', () => {
   })
 })
 
+// TSP 1.0 cutover stopgap: upstream services move to TSP 1.0, which this build's Rev 3 codec cannot speak. A peer
+// that advertises TSPTransport is spoken to over DIDComm v2 until the 1.0 codec ships.
+describe('the TSP 1.0 stopgap: upstream services over DIDComm v2', () => {
+  let warn: jest.SpyInstance
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => warn.mockRestore())
+
+  it('a VTA or VTC that offers TSP, and a session that could speak it: DIDComm, said in Release', async () => {
+    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE }] })
+    expect(await chooseCarriage(agent, 'did:example:vta', true)).toBe('didcomm')
+    expect(warn.mock.calls.map(([l]) => String(l)).join('\n')).toMatch(
+      /did:example:vta advertises TSPTransport — using DIDComm v2 until this build speaks TSP 1\.0/
+    )
+    expect(logs.some((l) => l.message.includes('using TSP for this session'))).toBe(false)
+  })
+
+  it('kept for the session, like any decision: no TSP on a later ask', async () => {
+    const decided = new Map<string, 'tsp' | 'didcomm'>()
+    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE }] })
+    expect(await chooseCarriage(agent, 'did:example:vtc', true, { decided })).toBe('didcomm')
+    expect(await chooseCarriage(agent, 'did:example:vtc', true, { decided })).toBe('didcomm')
+    expect(decided.get('did:example:vtc')).toBe('didcomm')
+  })
+
+  it('a peer that offers nothing is unchanged: DIDComm, with no stopgap line', async () => {
+    const agent = agentWith({ service: [{ type: 'DIDCommMessaging' }] })
+    expect(await chooseCarriage(agent, 'did:example:plain', true)).toBe('didcomm')
+    expect(warn.mock.calls.map(([l]) => String(l)).join('\n')).not.toMatch(/until this build speaks TSP 1\.0/)
+  })
+})
+
+// The TSP path itself, for when the stopgap is lifted: the rule as it stands without it.
 describe('choosing, and saying so', () => {
+  beforeEach(() => setPreferDidcommForUpstream(false))
+  afterEach(() => setPreferDidcommForUpstream(true))
+
   it('uses TSP when the peer offers it and we can speak it', async () => {
     const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE }] })
     expect(await chooseCarriage(agent, 'did:example:c', true)).toBe('tsp')

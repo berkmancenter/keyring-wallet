@@ -1,6 +1,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
+import { releaseWarn } from './releaseLog'
 
 /**
  * §4.2 — choose the envelope format from the peer's DID document.
@@ -66,11 +67,7 @@ export function documentAdvertisesTsp(doc: { service?: Array<{ type?: unknown }>
  * keeps a session working is DIDComm. The resolution failure itself surfaces on
  * the send that follows, where it belongs.
  */
-export async function peerAdvertisesTsp(
-  agent: Agent,
-  did: string,
-  options: { ttlMs?: number } = {}
-): Promise<boolean> {
+export async function peerAdvertisesTsp(agent: Agent, did: string, options: { ttlMs?: number } = {}): Promise<boolean> {
   const now = Date.now()
   const hit = cache.get(did)
   if (hit && hit.expiresAt > now) return hit.advertises
@@ -88,6 +85,23 @@ export async function peerAdvertisesTsp(
 }
 
 export type Carriage = 'tsp' | 'didcomm'
+
+/**
+ * Stopgap for the TSP 1.0 cutover (upstream, 2026-10-22): every upstream
+ * service (VTA, VTC) moves to TSP 1.0 (YTSP-BAA), which this build's Rev 3
+ * codec refuses both ways — a 1.0 reply is dropped as malformed, and a Rev 3
+ * ask is refused upstream, so the agent reads as "not answering". Until the
+ * 1.0 codec ships, a peer that advertises TSPTransport in its document is
+ * spoken to over DIDComm v2, which those services keep supporting. Wallet
+ * peers (Keyring↔Keyring) are not decided here: their did:peer documents
+ * advertise no transports, and they reach TSP through the peer-leg setting.
+ * Tests that exercise the TSP path turn it off with {@link setPreferDidcommForUpstream}.
+ */
+let preferDidcommForUpstream = true
+
+export function setPreferDidcommForUpstream(prefer: boolean): void {
+  preferDidcommForUpstream = prefer
+}
 
 /**
  * The session-scoped decision, made once per peer and logged once.
@@ -109,7 +123,12 @@ export async function chooseCarriage(
 
   const advertises = await peerAdvertisesTsp(agent, peerDid, options)
   let carriage: Carriage = 'didcomm'
-  if (advertises && canSpeakTsp) {
+  if (advertises && preferDidcommForUpstream) {
+    // Said in Release, once a peer a session: a report shows the stopgap is what chose DIDComm.
+    releaseWarn(
+      `${LOG_PREFIX} ${peerDid} advertises ${TSP_SERVICE_TYPE} — using DIDComm v2 until this build speaks TSP 1.0`
+    )
+  } else if (advertises && canSpeakTsp) {
     carriage = 'tsp'
     agent.config.logger.info(`${LOG_PREFIX} ${peerDid} advertises ${TSP_SERVICE_TYPE} — using TSP for this session`)
   } else if (advertises) {
