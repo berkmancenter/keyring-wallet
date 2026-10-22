@@ -38,6 +38,23 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+  # A pull request that changes what the native compilers see gets both builds
+  # before it merges. No required check compiles Objective-C, Swift or Kotlin,
+  # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
+  # These two jobs are not required checks (a path-filtered check would stay
+  # pending on every other PR), so the reviewer waits for them by name. A pull
+  # request from a fork skips them: they need the MEDIATOR_URL secret.
+  pull_request:
+    paths:
+      - "app/ios/**"
+      - "app/android/**"
+      - "app/package.json"
+      - "yarn.lock"
+      - "app/patches/**"
+      - ".yarn/patches/**"
+      # The submodule pin: a bifold bump can carry native code (react-native-attestation).
+      - "bifold"
+      - ".github/workflows/test-builds.yml"
   workflow_dispatch:
     inputs:
       platform:
@@ -74,8 +91,9 @@ permissions:
 # commit is in the group so that a later merge to main cannot cancel a pinned
 # release's build (238 lost its build that way and had to be re-dispatched on
 # a cut branch). (inputs.push is empty on a push to main, a push-off build.)
+# A pull request is grouped by its number, so a new push replaces its older run.
 concurrency:
-  group: test-builds-${{ github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
+  group: test-builds-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.sha }}-push-${{ inputs.push || 'off' }}-clocks-${{ inputs.clocks || 'short' }}
   cancel-in-progress: true
 
 jobs:
@@ -107,7 +125,7 @@ jobs:
 
   ios-simulator:
     needs: heads
-    if: inputs.platform != 'android'
+    if: inputs.platform != 'android' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: macos-26
     environment: test-builds
     timeout-minutes: 90
@@ -264,7 +282,7 @@ jobs:
 
   android-apk:
     needs: heads
-    if: inputs.platform != 'ios'
+    if: inputs.platform != 'ios' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-22.04
     environment: test-builds
     timeout-minutes: 90
