@@ -446,6 +446,156 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
   vrcFlowStore.setStatus(connectionId, 'proposed', vrcFlowStore.isWitnessedFlow(connectionId))
 }
 
+// ---- upgrading a relationship on its existing connection --------------------
+//
+// The automatic first exchange is once per connection (maybeOpen/open above,
+// and restart recovery depends on it). An UPGRADE is an explicit request from
+// either person, on the connection they already exchanged on, to sign the
+// relationship cards again — with secure hardware now, or with a witness. It
+// reuses the relationship DIDs already stored for that connection and never
+// introduces a new identifier: a propose or response naming another is
+// refused. The other person consents as to any proposal; no profile (R-Card)
+// is re-sent; one send per request, never retried; the initiator may cancel
+// a pending one locally.
+
+/** A retained document's exchange: its thread. */
+const threadOf = (r: { document: Record<string, unknown> }): string => String(r.document.threadId ?? r.document.id)
+
+/**
+ * Whether one of `issuer`'s retained documents belongs to `exchangeId`: the
+ * issue and witness-share guards, once per EXCHANGE (an upgrade is another
+ * exchange on the same connection; redelivery within one stays a no-op).
+ */
+export function priorForExchange(
+  priors: { document: Record<string, unknown> }[],
+  issuer: string,
+  exchangeId: string
+): boolean {
+  return priors.some((r) => r.document.issuer === issuer && threadOf(r) === exchangeId)
+}
+
+/** The propose-thread documents (proposes, responses) retained on a connection. */
+async function proposeThreadDocs(
+  agent: Agent,
+  connectionId: string
+): Promise<{ document: Record<string, unknown>; role?: string }[]> {
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  return (await documentRepository.findByQuery(agent.context, { typeUri: propose.TYPE_URI, connectionId })) as never
+}
+
+/**
+ * Whether `exchangeId` (if given) upgrades a relationship: another exchange on
+ * this connection was already accepted. Read from retained documents, so it
+ * holds across a restart, and from no clock.
+ */
+export async function isUpgradeExchange(agent: Agent, connectionId: string, exchangeId?: string): Promise<boolean> {
+  const docs = await proposeThreadDocs(agent, connectionId)
+  return docs.some(
+    (r) =>
+      String(r.document.type ?? '').endsWith('#response') &&
+      (r.document.payload as { accept?: boolean } | undefined)?.accept === true &&
+      threadOf(r) !== exchangeId
+  )
+}
+
+const UPGRADE_CANCELLED = 'keyring.vrc-upgrade-cancelled'
+
+async function isUpgradeCancelled(agent: Agent, connectionId: string, exchangeId: string): Promise<boolean> {
+  const found = await agent.genericRecords.findAllByQuery({ recordType: UPGRADE_CANCELLED, connectionId, exchangeId })
+  return found.length > 0
+}
+
+export type RelationshipUpgradeResult =
+  | { kind: 'sent'; exchangeId: string }
+  | { kind: 'noRelationship' }
+  | { kind: 'noWitness' }
+  | { kind: 'peerUnsupported' }
+
+/**
+ * Ask the other person to sign the relationship cards again, on the existing
+ * connection: `witnessed` asks for it in front of a witness (this phone must
+ * have one connected). One propose per call; nothing is retried.
+ */
+export async function upgradeRelationship(
+  agent: Agent,
+  connectionId: string,
+  options: { witnessed: boolean }
+): Promise<RelationshipUpgradeResult> {
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) return { kind: 'noRelationship' }
+  const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+  const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
+  if (!record?.myRelationshipDid || !record.counterpartyRelationshipDid) return { kind: 'noRelationship' }
+  if (!(await isUpgradeExchange(agent, connectionId))) return { kind: 'noRelationship' }
+  if (options.witnessed && !getConnectedWitnessConnectionId()) return { kind: 'noWitness' }
+  if ((await peerSupportsTaskType(agent, connectionId, propose.TYPE_URI)) !== true) return { kind: 'peerUnsupported' }
+
+  const exchangeId = utils.uuid()
+  const document: Record<string, unknown> = {
+    id: exchangeId,
+    type: propose.TYPE_URI,
+    threadId: exchangeId,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    // The relationship DID already stored for this connection: an upgrade adds
+    // fresh cards, never a new identifier.
+    payload: { relationshipDid: record.myRelationshipDid, witnessed: options.witnessed },
+  }
+  await getTrustTasksService(agent).retain(agent.context, document, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, document)
+  agent.config.logger.info(
+    `${LOG_PREFIX} upgrade propose sent (exchange ${exchangeId}, ${options.witnessed ? 'witnessed' : 'resign'}) on ${connectionId}`
+  )
+  vrcFlowStore.setDialect(connectionId, 'trust-tasks')
+  vrcFlowStore.setStatus(connectionId, 'proposed', options.witnessed)
+  return { kind: 'sent', exchangeId }
+}
+
+/** This phone's upgrade request on a connection still waiting for the other person, if any. */
+export async function pendingUpgradeOf(
+  agent: Agent,
+  connectionId: string
+): Promise<{ exchangeId: string; witnessed: boolean } | undefined> {
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did) return undefined
+  const docs = await proposeThreadDocs(agent, connectionId)
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const ours = docs
+    .filter((r) => r.document.type === propose.TYPE_URI && r.document.issuer === connection.did)
+    .sort((a, b) => String(b.document.issuedAt ?? '').localeCompare(String(a.document.issuedAt ?? '')))
+  for (const r of ours) {
+    const exchangeId = threadOf(r)
+    if (!(await isUpgradeExchange(agent, connectionId, exchangeId))) continue
+    const answered = docs.some((d) => threadOf(d) === exchangeId && String(d.document.type ?? '').endsWith('#response'))
+    if (answered) continue
+    const errors = (await documentRepository.findByQuery(agent.context, { exchangeId, connectionId })) as {
+      document: Record<string, unknown>
+    }[]
+    if (errors.some((d) => String(d.document.type ?? '').includes('trust-task-error'))) continue
+    if (await isUpgradeCancelled(agent, connectionId, exchangeId)) continue
+    return {
+      exchangeId,
+      witnessed: (r.document.payload as { witnessed?: boolean } | undefined)?.witnessed === true,
+    }
+  }
+  return undefined
+}
+
+/**
+ * Withdraw this phone's pending upgrade, locally: a later acceptance of it
+ * sends no card. Nothing goes on the wire, so it reveals nothing to the other
+ * person either.
+ */
+export async function cancelRelationshipUpgrade(agent: Agent, connectionId: string, exchangeId: string): Promise<void> {
+  await agent.genericRecords.save({
+    content: { exchangeId },
+    tags: { recordType: UPGRADE_CANCELLED, connectionId, exchangeId },
+  })
+  vrcFlowStore.clearFlow(connectionId)
+  agent.config.logger.info(`${LOG_PREFIX} upgrade withdrawn locally (exchange ${exchangeId})`)
+}
+
 /**
  * Build a signed Verifiable Presentation wrapping the signed VRC, bound to a
  * witness session's {challenge, domain}. Mirrors the legacy witnessed flow's
@@ -744,12 +894,37 @@ async function handleInboundPropose(
     return
   }
 
+  const exchangeId = String(document.threadId ?? document.id)
+  const proposed = (document as { payload?: { relationshipDid?: string; witnessed?: boolean } }).payload
+  // An upgrade of a relationship this connection already exchanged on must
+  // name the relationship DID already stored for it: an upgrade never brings
+  // a new identifier, so one that does is refused, never asked.
+  const upgrade = await isUpgradeExchange(agent, context.connectionId, exchangeId)
+  if (upgrade) {
+    const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+    const record = await repository.findByConnectionDid(agent.context, context.senderDid)
+    if (!record?.counterpartyRelationshipDid || proposed?.relationshipDid !== record.counterpartyRelationshipDid) {
+      const error = rejectWith(document as never, utils.uuid(), {
+        code: extendedCode(propose.TYPE_URI, 'relationshipMismatch'),
+        message: 'An upgrade must name the relationship already exchanged on this connection',
+        retryable: false,
+      })
+      await service.retain(agent.context, error as never, 'error', context.connectionId)
+      await sendTrustTaskDocument(agent, context.connectionId, error as unknown as Record<string, unknown>)
+      agent.config.logger.warn(
+        `${LOG_PREFIX} upgrade propose refused: not this connection's relationship (exchange ${exchangeId})`
+      )
+      return
+    }
+  }
+
   const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
   pendingProposals.set(context.connectionId, { document, context })
   vrcFlowStore.setProposalPrompt({
     connectionId: context.connectionId,
-    exchangeId: String(document.threadId ?? document.id),
+    exchangeId,
     counterpartyLabel: connection.theirLabel ?? 'Unknown Contact',
+    ...(upgrade ? { upgrade: proposed?.witnessed === true ? ('witness' as const) : ('resign' as const) } : {}),
   })
   agent.config.logger.info(
     `${LOG_PREFIX} propose received — awaiting user consent (exchange ${document.threadId ?? document.id})`
@@ -796,13 +971,17 @@ export async function respondToRelationshipProposal(
 
   vrcFlowStore.setDialect(connectionId, 'trust-tasks')
   const payload = (document as { payload: { relationshipDid: string; witnessed?: boolean } }).payload
+  // An upgrade's DID was checked equal to the stored one when it arrived.
+  const upgrade = await isUpgradeExchange(agent, connectionId, exchangeId)
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
-  await repository.updateCounterpartyRelationshipDid(
-    agent.context,
-    context.senderDid,
-    payload.relationshipDid,
-    TRUST_TASKS_MIN_RCE_VERSION
-  )
+  if (!upgrade) {
+    await repository.updateCounterpartyRelationshipDid(
+      agent.context,
+      context.senderDid,
+      payload.relationshipDid,
+      TRUST_TASKS_MIN_RCE_VERSION
+    )
+  }
   const myRelationshipDid = await getOrCreateRelationshipDid(agent, context.senderDid, connectionId)
   const response = respondWith(
     document as never,
@@ -832,9 +1011,12 @@ export async function respondToRelationshipProposal(
   )
   // The R-Card (still on the legacy leg) rides this acceptance as its trigger
   // too — the basic-message announcement it used to depend on can be lost.
-  void issueRCardForAcceptedExchange(agent, connectionId).catch((e: Error) =>
-    logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
-  )
+  // Not on an upgrade: the profile was shared already, and is not re-sent.
+  if (!upgrade) {
+    void issueRCardForAcceptedExchange(agent, connectionId).catch((e: Error) =>
+      logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
+    )
+  }
 }
 
 /**
@@ -892,7 +1074,7 @@ async function deliverVrcViaTrustTaskForExchangeInner(
     connectionId,
     role: 'request',
   })
-  if (priorIssues.some((r) => r.document.issuer === connection.did)) return
+  if (priorForExchange(priorIssues as never, connection.did, exchangeId)) return
 
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
   const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
@@ -1270,7 +1452,7 @@ async function sendWitnessShareForExchange(
     connectionId,
     role: 'request',
   })
-  if (prior.some((r) => r.document.issuer === connection.did)) return
+  if (priorForExchange(prior as never, connection.did, exchangeId)) return
 
   const service = getTrustTasksService(agent)
   const document: Record<string, unknown> = {
@@ -1469,6 +1651,9 @@ async function handleInboundProposeResponse(
   document: Record<string, unknown>,
   context: InboundContext
 ): Promise<void> {
+  let upgrade = false
+  let mismatch = false
+  let cancelled = false
   const outcome = await service.consume(agent.context, {
     spec: propose.RESPONSE_SPEC as never,
     document,
@@ -1478,6 +1663,19 @@ async function handleInboundProposeResponse(
     handler: async (doc) => {
       const payload = (doc as { payload: { relationshipDid: string; accept: boolean } }).payload
       const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+      const exchangeId = String((doc as { threadId?: string }).threadId ?? (doc as { id?: string }).id)
+      if (await isUpgradeExchange(agent, context.connectionId, exchangeId)) {
+        upgrade = true
+        // The acceptance of an upgrade names the relationship DID already
+        // stored, or it is not acted on; a withdrawn upgrade is not either.
+        const record = await repository.findByConnectionDid(agent.context, context.senderDid)
+        if (!record?.counterpartyRelationshipDid || payload.relationshipDid !== record.counterpartyRelationshipDid) {
+          mismatch = true
+        } else if (await isUpgradeCancelled(agent, context.connectionId, exchangeId)) {
+          cancelled = true
+        }
+        return doc
+      }
       await repository.updateCounterpartyRelationshipDid(
         agent.context,
         context.senderDid,
@@ -1489,6 +1687,18 @@ async function handleInboundProposeResponse(
   })
 
   if (outcome.kind === 'handled') {
+    if (mismatch) {
+      agent.config.logger.warn(
+        `${LOG_PREFIX} upgrade acceptance refused: not this connection's relationship (exchange ${document.threadId ?? document.id})`
+      )
+      return
+    }
+    if (cancelled) {
+      agent.config.logger.info(
+        `${LOG_PREFIX} upgrade acceptance after it was withdrawn: no card (exchange ${document.threadId ?? document.id})`
+      )
+      return
+    }
     agent.config.logger.info(
       `${LOG_PREFIX} propose#response consumed; relationship established (exchange ${document.threadId ?? document.id})`
     )
@@ -1502,9 +1712,12 @@ async function handleInboundProposeResponse(
       (e: Error) => agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
     )
     // And the R-Card, on the legacy leg, with the acceptance as its trigger.
-    void issueRCardForAcceptedExchange(agent, context.connectionId).catch((e: Error) =>
-      agent.config.logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
-    )
+    // Not on an upgrade: the profile was shared already.
+    if (!upgrade) {
+      void issueRCardForAcceptedExchange(agent, context.connectionId).catch((e: Error) =>
+        agent.config.logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
+      )
+    }
   }
 }
 

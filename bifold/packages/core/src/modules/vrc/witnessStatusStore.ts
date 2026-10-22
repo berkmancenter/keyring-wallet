@@ -114,6 +114,11 @@ export interface RelationshipProposalPrompt {
   connectionId: string
   exchangeId: string
   counterpartyLabel: string
+  /**
+   * Set when the connection already exchanged: the other person asks to sign
+   * the relationship cards again (`resign`), or again with a witness (`witness`).
+   */
+  upgrade?: 'resign' | 'witness'
 }
 
 class VrcFlowStore extends EventEmitter {

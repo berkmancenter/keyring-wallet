@@ -16,6 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -30,6 +31,7 @@ import { vrcFlowStore, RelationshipProposalPrompt } from '../witnessStatusStore'
 const RelationshipProposalModal: React.FC = () => {
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
+  const { t } = useTranslation()
   const [prompt, setPrompt] = useState<RelationshipProposalPrompt | undefined>(() =>
     vrcFlowStore.getAnyProposalPrompt()
   )
@@ -94,13 +96,30 @@ const RelationshipProposalModal: React.FC = () => {
       <View style={styles.overlay}>
         <SafeAreaView style={styles.safeAreaView} edges={['bottom']}>
           <View style={styles.container}>
-            <ThemedText variant="headingThree" style={styles.title}>
-              Relationship request
-            </ThemedText>
-            <ThemedText style={styles.body}>
-              {prompt.counterpartyLabel} wants to form a relationship with you. Accepting exchanges relationship
-              credentials in both directions.
-            </ThemedText>
+            {prompt.upgrade ? (
+              // An existing relationship asking to sign again: says what it adds, and nothing more.
+              <>
+                <ThemedText variant="headingThree" style={styles.title}>
+                  {t('Relationship.RequestTitle')}
+                </ThemedText>
+                <ThemedText style={styles.body}>
+                  {t(prompt.upgrade === 'witness' ? 'Relationship.RequestWitness' : 'Relationship.RequestResign', {
+                    name: prompt.counterpartyLabel,
+                    interpolation: { escapeValue: false },
+                  })}
+                </ThemedText>
+              </>
+            ) : (
+              <>
+                <ThemedText variant="headingThree" style={styles.title}>
+                  Relationship request
+                </ThemedText>
+                <ThemedText style={styles.body}>
+                  {prompt.counterpartyLabel} wants to form a relationship with you. Accepting exchanges relationship
+                  credentials in both directions.
+                </ThemedText>
+              </>
+            )}
             <Button
               title="Accept"
               accessibilityLabel="Accept"

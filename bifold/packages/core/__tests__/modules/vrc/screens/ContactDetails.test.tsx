@@ -202,6 +202,48 @@ describe('ContactDetails Screen', () => {
     })
   })
 
+  // Upgrading a relationship in place: offered on a contact with a connection,
+  // and the layers it has so far, from the records on this phone.
+  test('offers adding to the relationship when a connection exists, and lists its layers', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({
+      connectionId: 'test-connection-123',
+      myRelationshipDid: generateTestDid('myrel'),
+      counterpartyRelationshipDid: generateTestDid('theirrel'),
+    })
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [
+          {
+            encoded: {
+              '@context': ['https://www.w3.org/ns/credentials/v2'],
+              type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+              issuer: TEST_CONTACTS.alice.issuer.id,
+              validFrom: '2026-10-01T00:00:00Z',
+              credentialSubject: { id: generateTestDid('myrel') },
+            },
+          },
+        ],
+      },
+    } as any)
+    const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+    const { findByTestId, getByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
+    expect(await findByTestId(testIdWithKey('RelationshipUpgrade'))).toBeTruthy()
+    expect(getByTestId(testIdWithKey('RelationshipUpgradeResign'))).toBeTruthy()
+    expect(getByTestId(testIdWithKey('RelationshipLayers'))).toHaveTextContent(/Relationship\.LayerCards/)
+  })
+
+  test('offers nothing to add to without a connection', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+    const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+    const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(queryByTestId(testIdWithKey('RelationshipUpgrade'))).toBeNull()
+  })
+
   test('Disables View Messages button when no connection exists', async () => {
     mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
 

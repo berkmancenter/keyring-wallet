@@ -2493,6 +2493,33 @@
     "Fetching": "Récupération des nouveaux messages…"
   },
   "Relationship": {
-    "WaitingForAnswer": "En attente de la réponse de {{name}}."
+    "WaitingForAnswer": "En attente de la réponse de {{name}}.",
+    "UpgradeTitle": "Ajouter à cette relation",
+    "Resign": "Signer à nouveau",
+    "ResignSubtitle": "Demande à {{name}} de signer à nouveau vos cartes de relation. Si son téléphone signe avec du matériel sécurisé, un bouclier apparaît.",
+    "HardwareDone": "Signé avec du matériel sécurisé",
+    "Witness": "Ajouter un témoin",
+    "WitnessSubtitle": "Quand vous êtes ensemble avec un témoin, vous signez tous les deux à nouveau devant lui.",
+    "NoWitness": "Connectez-vous d'abord à un témoin : touchez le bouclier en haut de Contacts.",
+    "ConfirmResignTitle": "Signer à nouveau avec {{name}} ?",
+    "ConfirmResignBody": "Keyring demande à {{name}} de signer à nouveau vos cartes de relation, sur la relation que vous avez déjà. Aucun nouvel identifiant n'est créé, et votre profil n'est pas renvoyé.",
+    "ConfirmWitnessTitle": "Ajouter un témoin avec {{name}} ?",
+    "ConfirmWitnessBody": "Vous signez tous les deux à nouveau devant votre témoin. Le témoin voit les deux identifiants de cette relation et les nouvelles cartes, et rien de vos échanges précédents.",
+    "Send": "Envoyer la demande",
+    "Back": "Pas maintenant",
+    "CancelRequest": "Annuler la demande",
+    "PeerUnsupported": "Le Keyring de {{name}} ne peut pas encore le faire.",
+    "NoRelationship": "Il n'y a pas encore d'échange avec {{name}} auquel ajouter.",
+    "RequestTitle": "Signer à nouveau ?",
+    "RequestResign": "{{name}} demande à signer à nouveau vos cartes de relation. Rien de nouveau n'est partagé : la même relation, de nouvelles cartes.",
+    "RequestWitness": "{{name}} demande à signer à nouveau vos cartes de relation, devant un témoin. Un témoin auquel vous êtes connecté voit les identifiants de cette relation et votre nouvelle carte.",
+    "Accept": "Accepter",
+    "Decline": "Refuser",
+    "LayersTitle": "Comment vous connaissez {{name}}",
+    "LayerCards": "Cartes échangées · {{date}}",
+    "LayerCardsHardware": "Cartes échangées, signées avec du matériel sécurisé · {{date}}",
+    "LayerWitnessed": "Témoin : {{witness}} · {{date}}",
+    "LayerWitnessedUnnamed": "Avec témoin · {{date}}",
+    "LayerInPerson": "En personne : le témoin a confirmé que vous étiez proches."
   }
 }

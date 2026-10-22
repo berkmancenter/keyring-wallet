@@ -2562,6 +2562,33 @@
     "Fetching": "Fetching new messages…"
   },
   "Relationship": {
-    "WaitingForAnswer": "Waiting for {{name}} to answer."
+    "WaitingForAnswer": "Waiting for {{name}} to answer.",
+    "UpgradeTitle": "Add to this relationship",
+    "Resign": "Sign again",
+    "ResignSubtitle": "Asks {{name}} to sign your relationship cards again. If their phone signs with secure hardware, a shield appears.",
+    "HardwareDone": "Signed with secure hardware",
+    "Witness": "Add a witness",
+    "WitnessSubtitle": "When you're together with a witness, you both sign again in front of it.",
+    "NoWitness": "Connect to a witness first: tap the shield at the top of Contacts.",
+    "ConfirmResignTitle": "Sign again with {{name}}?",
+    "ConfirmResignBody": "Keyring asks {{name}} to sign your relationship cards again, on the relationship you already have. No new identifier is created, and your profile isn't sent again.",
+    "ConfirmWitnessTitle": "Add a witness with {{name}}?",
+    "ConfirmWitnessBody": "You both sign again in front of your witness. The witness sees the two identifiers for this relationship and the new cards, and nothing about your earlier exchanges.",
+    "Send": "Send request",
+    "Back": "Not now",
+    "CancelRequest": "Cancel request",
+    "PeerUnsupported": "{{name}}'s Keyring can't do this yet.",
+    "NoRelationship": "There's no exchange with {{name}} to add to yet.",
+    "RequestTitle": "Sign again?",
+    "RequestResign": "{{name}} asks to sign your relationship cards again. Nothing new is shared: the same relationship, fresh cards.",
+    "RequestWitness": "{{name}} asks to sign your relationship cards again, in front of a witness. A witness you have connected sees the identifiers for this relationship and your new card.",
+    "Accept": "Accept",
+    "Decline": "Decline",
+    "LayersTitle": "How you know {{name}}",
+    "LayerCards": "Cards exchanged · {{date}}",
+    "LayerCardsHardware": "Cards exchanged, signed with secure hardware · {{date}}",
+    "LayerWitnessed": "Witnessed by {{witness}} · {{date}}",
+    "LayerWitnessedUnnamed": "Witnessed · {{date}}",
+    "LayerInPerson": "In person: the witness confirmed you were near."
   }
 }

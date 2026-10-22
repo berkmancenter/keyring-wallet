@@ -22,6 +22,9 @@ import {
   WitnessRecord,
 } from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
+import RelationshipLayers from '../components/RelationshipLayers'
+import RelationshipUpgradeSection from '../components/RelationshipUpgradeSection'
+import { relationshipLayers } from '../utils/relationshipLayers'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { useRCardCredential } from '../hooks/useRCardCredential'
 import { formInputFromTemplate } from '../types/rcard'
@@ -94,6 +97,12 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   )
 
   const [hwVerified, setHwVerified] = useState(false)
+
+  // The relationship's layers, as the records on this phone show them.
+  const layers = useMemo(
+    () => relationshipLayers(w3cCredentialRecords, contact.issuer.id, witnessRecords),
+    [w3cCredentialRecords, contact.issuer.id, witnessRecords]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -464,6 +473,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           </View>
         </View>
 
+        {/* How you know them: cards and witness records, newest first. */}
+        <RelationshipLayers name={displayName} layers={layers} />
+
         {/* Witness Records */}
         {witnessRecords.length > 0 && (
           <View style={styles.witnessSection} testID="WitnessSection">
@@ -518,6 +530,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
             ))}
           </View>
         )}
+
+        {/* Add to this relationship, on its existing connection: sign again, or with a witness. */}
+        {connectionId ? (
+          <RelationshipUpgradeSection connectionId={connectionId} name={displayName} hardwareSigned={hwVerified} />
+        ) : null}
 
         {/* View Messages */}
         <TouchableOpacity

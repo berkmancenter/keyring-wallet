@@ -2402,6 +2402,33 @@
     "Fetching": "Buscando novas mensagens…"
   },
   "Relationship": {
-    "WaitingForAnswer": "Aguardando a resposta de {{name}}."
+    "WaitingForAnswer": "Aguardando a resposta de {{name}}.",
+    "UpgradeTitle": "Adicionar a esta relação",
+    "Resign": "Assinar de novo",
+    "ResignSubtitle": "Pede a {{name}} para assinar de novo seus cartões de relação. Se o telefone da pessoa assinar com hardware seguro, um escudo aparece.",
+    "HardwareDone": "Assinado com hardware seguro",
+    "Witness": "Adicionar uma testemunha",
+    "WitnessSubtitle": "Quando vocês estiverem juntos com uma testemunha, os dois assinam de novo na frente dela.",
+    "NoWitness": "Conecte-se primeiro a uma testemunha: toque no escudo no topo de Contatos.",
+    "ConfirmResignTitle": "Assinar de novo com {{name}}?",
+    "ConfirmResignBody": "O Keyring pede a {{name}} para assinar de novo seus cartões de relação, na relação que vocês já têm. Nenhum novo identificador é criado, e seu perfil não é enviado de novo.",
+    "ConfirmWitnessTitle": "Adicionar uma testemunha com {{name}}?",
+    "ConfirmWitnessBody": "Vocês dois assinam de novo na frente da sua testemunha. A testemunha vê os dois identificadores desta relação e os novos cartões, e nada das trocas anteriores.",
+    "Send": "Enviar pedido",
+    "Back": "Agora não",
+    "CancelRequest": "Cancelar pedido",
+    "PeerUnsupported": "O Keyring de {{name}} ainda não consegue fazer isso.",
+    "NoRelationship": "Ainda não há uma troca com {{name}} à qual adicionar.",
+    "RequestTitle": "Assinar de novo?",
+    "RequestResign": "{{name}} pede para assinar de novo seus cartões de relação. Nada novo é compartilhado: a mesma relação, cartões novos.",
+    "RequestWitness": "{{name}} pede para assinar de novo seus cartões de relação, na frente de uma testemunha. Uma testemunha conectada a você vê os identificadores desta relação e seu novo cartão.",
+    "Accept": "Aceitar",
+    "Decline": "Recusar",
+    "LayersTitle": "Como você conhece {{name}}",
+    "LayerCards": "Cartões trocados · {{date}}",
+    "LayerCardsHardware": "Cartões trocados, assinados com hardware seguro · {{date}}",
+    "LayerWitnessed": "Testemunha: {{witness}} · {{date}}",
+    "LayerWitnessedUnnamed": "Com testemunha · {{date}}",
+    "LayerInPerson": "Pessoalmente: a testemunha confirmou que vocês estavam perto."
   }
 }
