@@ -6,10 +6,11 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
-• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
-• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
-• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
-• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
-• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
-
+• Keeps working with agents and communities as they move to TSP 1.0: until Keyring speaks it, it talks to them over DIDComm instead. Keyring-to-Keyring is unchanged.
+• Strengthen a relationship you already have: on a contact, "Add to this relationship" → "Sign again" asks the other person to sign again, and shows the secure-hardware shield if their phone signs with it. "Add a witness" does the same in front of a witness, when you're together. It stays one contact.
+• Relationship links opened later: if the other phone is closed, Keyring says "Waiting for {name} to answer." instead of saying the exchange failed. Tapping the notification brings you back to the exchange, and a request left unanswered when the app closed is asked again the next time you open it.
+• An exchange that ends without completing no longer shows as confirmed.
+• My Agent and the agent home no longer flash "Link your agent" or the wrong state while they load, and they tell "waiting" from "something's wrong". Two buttons that did nothing are gone.
+• If your agent removes this phone, My Agent says so straight away, and so does a community you're already in, with how to link again.
+• No agent yet? My Agent now has "Don't have an agent yet?", saying where one comes from.
+• Also includes everything in build 268.
