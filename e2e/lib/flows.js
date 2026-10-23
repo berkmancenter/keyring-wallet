@@ -1092,7 +1092,9 @@ export async function shareLinkFromSheet(driver) {
     await copy.click();
   }
   await sleep(1000);
-  const clip = Buffer.from((await driver.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+  // Plain text first, then the URL type (iOS can put the shared link on the pasteboard as a URL only; 270's pair-ios).
+  const read = async (type) => Buffer.from((await driver.getClipboard(type).catch(() => "")) || "", "base64").toString("utf8").trim();
+  const clip = (await read("plaintext")) || (await read("url"));
   const url = clip.split(/\s+/).pop() || "";
   if (!/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(url)) {
     await screenshot(driver, "share-link-missing").catch(() => undefined);
