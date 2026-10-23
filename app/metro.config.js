@@ -1,3 +1,4 @@
+// Throwaway: proving test-builds.yml's new app/metro.config.js path fires. This PR is closed, not merged.
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
 const fs = require('fs')
 const path = require('path')
