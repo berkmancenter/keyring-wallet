@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const leg = (name) => readFileSync(path.join(here, 'legs', `${name}.sh`), 'utf8');
 const finOf = (src) => src.match(/^fin\(\) \{\n([\s\S]*?)\n\}/m)?.[1] ?? '';
 
-for (const name of ['waiting', 'agents', 'testreq']) {
+for (const name of ['waiting', 'agents', 'testreq', 'p1']) {
   test(`${name} streams the phone's logcat for the whole leg and stops it in its cleanup`, () => {
     const src = leg(name);
     const start = src.indexOf('adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!');

@@ -1029,10 +1029,16 @@ export async function showRelationshipInvitation(driver) {
   await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
 
   // QR view renders; the invitation URL is exposed via the __DEV__-only hidden text.
+  // A Release build (the CI test builds) has no such text (bifold QRScanner.tsx, `__DEV__ && invitation`): read the
+  // invitation the way a person shares it instead, the "Share as a link" sheet's Copy (shareLinkFromSheet).
+  if (process.env.E2E_RELEASE === "1" && (await existsTestId(driver, "MyQRShareLink", 20000))) return shareLinkFromSheet(driver);
   // The Scan screen occasionally comes up blank on iOS (camera-disclosure Modal
   // fails to present when mounted mid animation) — back out and re-enter.
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await existsTestId(driver, "InvitationUrl", 20000)) break;
+    // No invitation text but the share link is there: a Release build run without E2E_RELEASE (269: "QR view blank"
+    // three times, then a 60 s failure, on a working screen).
+    if (await existsTestId(driver, "MyQRShareLink", 1000)) return shareLinkFromSheet(driver);
     if (await existsTestId(driver, "Continue", 3000)) {
       await tapTestId(driver, "Continue");
       continue;
@@ -1060,6 +1066,37 @@ export async function showRelationshipInvitation(driver) {
   console.log(
     `[e2e] ${driver.e2ePlatform}: invitation URL captured (${url.length} chars)`
   );
+  return url;
+}
+
+/**
+ * The invitation as a person shares it: "Share as a link" (MyQRShareLink), the share sheet's Copy, then the clipboard
+ * read through the driver (WebDriverAgent / UiAutomator2), not simctl pbpaste, which came back empty on the MacBook
+ * while WDA had the link (10-23). The copied message is words, then the link on its own line (QRScanner.tsx).
+ * iOS: the Copy cell is an XCUIElementTypeCell labelled "Copy" (iOS 26; run-pair-ios.mjs). Android: the chooser's
+ * copy button (android:id/chooser_copy_button), else a "Copy" text. The Android path is not yet proven on a device.
+ */
+export async function shareLinkFromSheet(driver) {
+  await scrollToTestId(driver, "MyQRShareLink", 4).catch(() => undefined);
+  await tapTestId(driver, "MyQRShareLink", 15000);
+  if (driver.e2ePlatform === "android") {
+    let copy = await driver.$('android=new UiSelector().resourceId("android:id/chooser_copy_button")');
+    if (!(await copy.waitForExist({ timeout: 10000 }).catch(() => false))) copy = await driver.$('android=new UiSelector().text("Copy")');
+    await copy.waitForExist({ timeout: 10000 });
+    await copy.click();
+  } else {
+    const copy = await driver.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
+    await copy.waitForExist({ timeout: 15000 });
+    await copy.click();
+  }
+  await sleep(1000);
+  const clip = Buffer.from((await driver.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+  const url = clip.split(/\s+/).pop() || "";
+  if (!/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(url)) {
+    await screenshot(driver, "share-link-missing").catch(() => undefined);
+    throw new Error(`the share sheet's Copy left no link on the clipboard (got: ${clip.slice(0, 80)})`);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: invitation link copied from the share sheet (${url.length} chars)`);
   return url;
 }
 

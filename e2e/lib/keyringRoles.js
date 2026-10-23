@@ -423,6 +423,8 @@ export function installedHash({ platform, udid, bundleId = "asml.bkc.harvard.wal
   if (platform === "android") {
     const p = execFileSync("adb", ["-s", udid, "shell", "pm", "path", bundleId], { encoding: "utf8" }).split("\n")[0].replace("package:", "").trim();
     const local = path.join(ARTIFACTS, `installed-${Date.now()}.apk`);
+    // A fresh checkout has no artifacts folder (gitignored): 269's p1 on a new worktree lost p1-tui-vets to the pull.
+    mkdirSync(ARTIFACTS, { recursive: true });
     execFileSync("adb", ["-s", udid, "pull", p, local], { stdio: "ignore" });
     return execFileSync("shasum", ["-a", "256", local], { encoding: "utf8" }).slice(0, 12);
   }
