@@ -208,6 +208,27 @@ describe('My Agent — the connected gate', () => {
   })
 
   /**
+   * 269 gate, agents R4: after the last agent was unlinked, a community's
+   * session was still up, and with no agent to name the panel took it for the
+   * agent: "Connected", the host, the communities, and no way to link.
+   */
+  test('no agent linked, a community\'s session up: the way to link, never "Connected"', async () => {
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    setVta({ status: 'disconnected', link: { kind: 'notLinked' } })
+    setVti({ status: 'connected', did: 'did:webvh:QmPersona:vtc.example:p', host: 'mediator.example' })
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(testIdWithKey('MyAgentCard'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
+  })
+
+  /**
    * Alberto, 239: three buttons for two flows ("Set up a new agent", "Add this
    * phone to my agent", "Link without a QR code") read as a puzzle. One
    * sentence, the scanner, the way without a code, and where adding this

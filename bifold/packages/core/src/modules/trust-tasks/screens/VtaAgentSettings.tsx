@@ -158,9 +158,13 @@ const VtaAgentSettings: React.FC = () => {
     if (!agent) return
     setUnlinkOpen(false)
     forgetAgentHoldings()
-    // To the agent home, which shows the next agent, or the way to link when none is left: the link screen opened
-    // on the next agent's state and said "Linked ✓" for an agent nobody had just linked (Phase 1).
-    void vtaAgent.unlink(agent).then(() => go(agentHomeScreen()))
+    // To the agent home when another agent is now current: the link screen opened on the next agent's state and
+    // said "Linked ✓" for an agent nobody had just linked (Phase 1). With none left, to the link screen, which offers
+    // the way to link one, as before Phase 1: the old panel it went to instead said "Connected" over a community's
+    // session (269 gate, agents R4).
+    void vtaAgent
+      .unlink(agent)
+      .then(() => go(vtaAgent.getState().link.kind === 'linked' ? agentHomeScreen() : Screens.VtaLink))
   }
 
   return (

@@ -168,7 +168,8 @@ describe('Agent settings', () => {
       expect(navigate).not.toHaveBeenCalledWith(Screens.VtaLink)
     })
 
-    it('…and the panel that offers a link when no agent is left', async () => {
+    // 269 gate, agents R4: it went to the old panel, which said "Connected" over a community's session.
+    it('…and the link screen, which offers the way to link, when no agent is left', async () => {
       const before = vtaAgent.getState().link
       const unlink = jest.spyOn(vtaAgent, 'unlink').mockImplementation(async () => {
         controller.set({ link: { kind: 'notLinked' } })
@@ -179,7 +180,8 @@ describe('Agent settings', () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
       await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
       expect(unlink).toHaveBeenCalledTimes(1)
-      expect(navigate).toHaveBeenCalledWith(Screens.MyAgent)
+      expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+      expect(navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
       controller.set({ link: before })
     })
 
