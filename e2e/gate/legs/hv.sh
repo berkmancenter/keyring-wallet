@@ -65,6 +65,10 @@ row hv-link PASS "$(( $(date +%s) - t ))s, admin grant on $RUNNER_MAIN_SLUG"
 VK=()
 if [ "$VETTER" = keyring ]; then
   sim_boot "$HV_VETTER_UDID"
+  # The seated vetter keeps its data; the build under test goes over it, as kk's does (simctl install keeps the app
+  # container). Without it the vetter ran whatever build it was seated with: 268's hv (1023-0240) passed with a 267
+  # vetter, whose TSP asks the carriage check then read as 268's.
+  xcrun simctl install "$HV_VETTER_UDID" "$CAND_APP" || broken "could not install the build on the hv vetter simulator"
   VK=(--vetter-platform ios --vetter-udid "$HV_VETTER_UDID" --vetter-device-name "${HV_VETTER_NAME:-iPhone 17 HV Vetter}" --vetter-wda-port 8132 --vetter-mjpeg-port 9132 --vetter-did "$HV_VETTER_DID")
 fi
 (cd "$REPO" && galarm 1500 node e2e/openvtc/run-hv.mjs --udid $E "${VK[@]}" --log-dir "$LEG_DIR" --community-did "$HV_C_DID" --criterion "${HV_CRITERION:-hv-vetted}" \
