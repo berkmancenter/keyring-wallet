@@ -2114,6 +2114,7 @@ __metadata:
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
     "@openvtc/trust-tasks": "npm:^0.9.0"
+    "@openvtc/vti-tsp-js-v1": "npm:@openvtc/vti-tsp-js@0.4.0"
     "@openwallet-foundation/askar-react-native": "npm:0.6.0"
     "@openwallet-foundation/askar-shared": "npm:0.6.0"
     "@react-native-async-storage/async-storage": "npm:~2.2.0"
@@ -5148,6 +5149,17 @@ __metadata:
   version: 0.9.0
   resolution: "@openvtc/trust-tasks@npm:0.9.0"
   checksum: 10c0/ee6b4aa1c3c3709e4262922cdacb2d2063bdcc3a871bce678694800d5e6fc11c237e151ca0740ad9b31ba1093659d204f3bcc0c32bb7c150d0754e7254b7e343
+  languageName: node
+  linkType: hard
+
+"@openvtc/vti-tsp-js-v1@npm:@openvtc/vti-tsp-js@0.4.0":
+  version: 0.4.0
+  resolution: "@openvtc/vti-tsp-js@npm:0.4.0"
+  dependencies:
+    "@noble/ciphers": "npm:^2.0.0"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.0"
+  checksum: 10c0/5a5c1129025fe790e2c8ccc1b724398ce592d4f9dff0e761fdfafb80e2ca9c21bcf14070b1c8d54e6a124c24a307983f9c37a6357885ef52653a0c601de749ba
   languageName: node
   linkType: hard
 

@@ -87,6 +87,7 @@
     "@hyperledger/anoncreds-react-native": "0.4.0",
     "@hyperledger/indy-vdr-react-native": "0.3.0",
     "@hyperledger/indy-vdr-shared": "0.3.0",
+    "@openvtc/vti-tsp-js-v1": "npm:@openvtc/vti-tsp-js@0.4.0",
     "@openwallet-foundation/askar-react-native": "0.6.0",
     "@react-native-async-storage/async-storage": "~2.2.0",
     "@react-native-clipboard/clipboard": "~1.16.3",

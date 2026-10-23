@@ -59,6 +59,10 @@ describe('the version marker', () => {
     expect(hex(tsp.tspVersionBytes(tsp.TSP_REV3))).toBe('61 34 8f f8 00 02')
   })
 
+  // Expected to FAIL when the tsp-js dependency moves to 0.4.0, whose
+  // TSP_VERSION is 1.0 and which drops REV2_MINOR. That failure is the signal:
+  // at that bump, decide consciously what this package packs, rather than let
+  // it drift with the dependency. It is not breakage to silence.
   test("Rev 3 is what tsp-js 0.3.0's encodeVersion writes, so nothing we pack changes", () => {
     const theirs: number[] = []
     cesr.encodeVersion(theirs)
@@ -95,7 +99,7 @@ describe('the published Rev 3 vectors', () => {
   })
 })
 
-describe("the peek agrees with tsp-js 0.3.0's, which it replaces", () => {
+describe("the peek agrees with tsp-js 0.3.0's, which it replaces, except that it reads 1.0", () => {
   const keys = {
     senderSigningKey: ed25519.utils.randomSecretKey(),
     receiverEncryptionKey: x25519.getPublicKey(x25519.utils.randomSecretKey()),
@@ -130,17 +134,26 @@ describe("the peek agrees with tsp-js 0.3.0's, which it replaces", () => {
     expect(upstreamPeek(rev2).revision).toBe('rev2')
   })
 
-  test('a 1.0 frame: readTspVersion reports MAJOR 1; the peek refuses it exactly as tsp-js did', async () => {
+  test('a 1.0 frame: our peek reads it as v1, where tsp-js 0.3.0 refused it', async () => {
     const v1 = withVersion(await rev3Frame(), tsp.TSP_V1)
     expect(tsp.readTspVersion(v1)).toEqual({ major: 1, minor: 0 })
-    const ours = refusal(() => tsp.peekRevision(v1))
-    const theirs = refusal(() => upstreamPeek(v1))
-    expect(ours).toEqual(theirs)
+    expect(tsp.peekRevision(v1)).toEqual({ revision: 'v1', major: 1, minor: 0, recognised: true })
+    expect(refusal(() => upstreamPeek(v1)).code).toBe('E_TSP_REVISION')
+  })
+
+  test('a MAJOR neither reads is refused by both with the same error code, MAJOR and MINOR', async () => {
+    const v2 = withVersion(await rev3Frame(), { major: 2, minor: 0 })
+    const ours = refusal(() => tsp.peekRevision(v2))
+    const theirs = refusal(() => upstreamPeek(v2))
+    expect({ code: ours.code, major: ours.major, minor: ours.minor }).toEqual({
+      code: theirs.code,
+      major: theirs.major,
+      minor: theirs.minor,
+    })
     expect(ours.code).toBe('E_TSP_REVISION')
-    expect(ours).toEqual(expect.objectContaining({ major: 1, minor: 0 }))
     let thrown: unknown
     try {
-      tsp.peekRevision(v1)
+      tsp.peekRevision(v2)
     } catch (e) {
       thrown = e
     }

@@ -9,8 +9,9 @@ import type { MessageType } from '@openvtc/vti-tsp-js'
 
 export type { MessageType }
 
-/** The wire revision a message was framed with. */
-export type TspRevision = 'rev2' | 'rev3'
+/** The wire revision a message was framed with: Rev 2 (`YTSP-AAB`), Rev 3
+ *  (`YTSP-AAC`) or TSP 1.0 (`YTSP-BAA`). */
+export type TspRevision = 'rev2' | 'rev3' | 'v1'
 
 /** The application layouts this package packs. A relationship-forming
  *  control message (`XRFI`/`XRFA`/`XRFD`) is not one of them. */

@@ -27,15 +27,21 @@ import type { TspIdentity, VidResolver } from './ports'
 import { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 import {
   packAcceptRev3,
+  packAcceptV1,
   packCancelRev3,
+  packCancelV1,
   packInviteRev3,
+  packInviteV1,
   packRev3,
+  packV1,
   packWithHopsRev3,
+  packWithHopsV1,
   unpackRev3,
+  unpackV1,
   type UnsafeDeterministicPack,
 } from './rev3'
 import { type ApplicationKind, type PackedMessage, type TspRevision, type UnpackedMessage } from './shared'
-import { readTspVersion, TSP_REV2, TSP_REV3 } from './version'
+import { readTspVersion, TSP_REV2, TSP_REV3, TSP_V1 } from './version'
 
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
@@ -46,6 +52,13 @@ export {
   packRev3,
   packWithHopsRev3,
   unpackRev3,
+  packV1,
+  packWithHopsV1,
+  packInviteV1,
+  packAcceptV1,
+  packCancelV1,
+  unpackV1,
+  revisionOf,
   encodeFieldsRev3,
   finalizeFrameRev3,
   decodeEnvelopeRev3,
@@ -75,18 +88,24 @@ export interface PeekedRevision {
  * process — the honest error, in place of a crypto-layer failure further on.
  */
 export function peekRevision(wireBytes: Uint8Array): PeekedRevision {
-  // Read without judging (`./version`), then judge here: the MAJOR this codec
-  // processes is Rev 3's. Same refusal, same error and code as tsp-js 0.3.0's
-  // peek, which this replaces, so callers that test `code === 'E_TSP_REVISION'`
-  // see no difference.
+  // Read without judging (`./version`), then judge here. MAJOR 0 is Rev 2 or
+  // Rev 3 by MINOR; MAJOR 1 is TSP 1.0. Any other MAJOR is refused with the
+  // error and code tsp-js uses (`E_TSP_REVISION`), so callers that branch on
+  // the code see one shape.
   const { major, minor } = readTspVersion(wireBytes)
+  if (major === TSP_V1.major) {
+    return { revision: 'v1', major, minor, recognised: minor === TSP_V1.minor }
+  }
   if (major !== TSP_REV3.major) {
     throw new TspRevisionError(
-      `tsp: message declares MAJOR ${major}; this implementation speaks MAJOR ${TSP_REV3.major}`,
+      `tsp: message declares MAJOR ${major}; this implementation reads MAJOR ${TSP_REV3.major} and ${TSP_V1.major}`,
       major,
       minor
     )
   }
+  // An unknown MAJOR-0 MINOR is read as Rev 3 on purpose, not refused: only
+  // MAJOR gates (spec §9.1), and neither affinidi-tsp nor tsp-js refuses on
+  // MINOR. `recognised: false` is for the error text a later failure cites.
   return {
     revision: minor === TSP_REV2.minor ? 'rev2' : 'rev3',
     major,
@@ -128,9 +147,9 @@ export async function packWithHops(
 }
 
 /**
- * Unpack a message of either revision. A Rev 2 message is read by the frozen
- * Rev 2 codec and reported as `revision: 'rev2'` rather than dying in the
- * Rev 3 ciphertext selector.
+ * Unpack a message of any revision this package reads: Rev 2 (by the frozen
+ * Rev 2 codec), Rev 3, or TSP 1.0 (the Rev 3 layout with the sender rule),
+ * dispatched on the version marker and reported on `revision`.
  */
 export async function unpack(
   wireBytes: Uint8Array,
@@ -139,6 +158,7 @@ export async function unpack(
 ): Promise<UnpackedMessage> {
   const peeked = peekRevision(wireBytes)
   if (peeked.revision === 'rev2') return unpackRev2(wireBytes, receiverIdentity, resolver)
+  if (peeked.revision === 'v1') return unpackV1(wireBytes, receiverIdentity, resolver)
   return unpackRev3(wireBytes, receiverIdentity, resolver)
 }
 
@@ -177,12 +197,13 @@ export interface TspCodec {
  */
 export function createTspCodec(options: { packs: TspRevision } = { packs: 'rev3' }): TspCodec {
   const packs = options.packs
-  return {
-    packs,
-    pack: packs === 'rev2' ? packRev2 : packRev3,
-    packWithHops: packs === 'rev2' ? packWithHopsRev2 : packWithHopsRev3,
-    unpack,
-  }
+  const packers = {
+    rev2: { pack: packRev2, packWithHops: packWithHopsRev2 },
+    rev3: { pack: packRev3, packWithHops: packWithHopsRev3 },
+    v1: { pack: packV1, packWithHops: packWithHopsV1 },
+  }[packs]
+  if (!packers) throw new Error(`tsp: no packer for revision "${packs}"`)
+  return { packs, ...packers, unpack }
 }
 
 /** Test-only deterministic Rev 3 invite packing, for checking our `XRFI`
@@ -220,6 +241,54 @@ export function __unsafeDeterministicPackCancelRev3(
   unsafe: UnsafeDeterministicPack
 ): Promise<PackedMessage> {
   return packCancelRev3(relationshipDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe)
+}
+
+/** Test-only deterministic TSP 1.0 packing, for reproducing the 1.0 vectors. */
+export function __unsafeDeterministicPackV1(
+  body: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packV1(body, senderVid, receiverVid, senderIdentity, resolver, unsafe)
+}
+
+/** Test-only deterministic TSP 1.0 invite (`XRFI`). */
+export function __unsafeDeterministicPackInviteV1(
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  options: { route?: string[]; nonce: Uint8Array },
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packInviteV1(senderVid, receiverVid, senderIdentity, resolver, options, unsafe)
+}
+
+/** Test-only deterministic TSP 1.0 accept (`XRFA`). */
+export function __unsafeDeterministicPackAcceptV1(
+  inviteDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packAcceptV1(inviteDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe)
+}
+
+/** Test-only deterministic TSP 1.0 cancel (`XRFD`). */
+export function __unsafeDeterministicPackCancelV1(
+  relationshipDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packCancelV1(relationshipDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe)
 }
 
 /** Test-only deterministic Rev 3 packing, for reproducing published vectors. */

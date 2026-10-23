@@ -41,6 +41,11 @@ module.exports = {
     // Only @bifold/trust-tasks depends on it, so yarn hoists it to the bifold
     // workspace root rather than into this package's own node_modules.
     '^@openvtc/vti-tsp-js$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/index.js',
+    // tsp-js 0.4.0 (TSP 1.0) under a test-only alias: the 1.0 codec is
+    // cross-checked against upstream's 1.0 packer and unpacker. A devDependency
+    // of this package only; nothing the app bundles imports it.
+    '^@openvtc/vti-tsp-js-v1$': '<rootDir>/node_modules/@openvtc/vti-tsp-js-v1/dist/index.js',
+    '^@openvtc/vti-tsp-js-v1/unsafe-testing$': '<rootDir>/node_modules/@openvtc/vti-tsp-js-v1/dist/unsafe-testing.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
