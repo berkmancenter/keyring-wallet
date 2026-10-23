@@ -7,3 +7,4 @@
 • My Agent loads without flashing the wrong state.
 • A removed phone is shown as removed at once.
 • "Don't have an agent yet?" help in My Agent.
+• Known issue: exchanging again with a contact adds a second row; use "Add to this relationship" instead.

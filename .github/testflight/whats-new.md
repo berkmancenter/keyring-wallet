@@ -13,4 +13,5 @@
 • My Agent and the agent home no longer flash "Link your agent" or the wrong state while they load, and they tell "waiting" from "something's wrong". Two buttons that did nothing are gone.
 • If your agent removes this phone, My Agent says so straight away, and so does a community you're already in, with how to link again.
 • No agent yet? My Agent now has "Don't have an agent yet?", saying where one comes from.
+• Known issue: exchanging again with someone already in your contacts adds a second row for them. To strengthen a relationship you have, use "Add to this relationship" on their contact instead. Merging duplicates is coming.
 • Also includes everything in build 268.
