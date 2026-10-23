@@ -18,6 +18,13 @@ module.exports = {
     // import of class-transformer has to land on one copy (Metro does the same via its
     // singleton list; see didcomm_v2_subtask.md C10).
     '^class-transformer$': '<rootDir>/../../node_modules/class-transformer',
+    // askar-shared defines AskarError, and @credo-ts/askar decides whether a store must be provisioned with
+    // `instanceof AskarError`. This tree nests a copy of @credo-ts/askar under core while askar-nodejs (the Node binding
+    // a real-agent test loads) uses the root copy of askar-shared, so the check failed across copies and a new store
+    // was opened instead of provisioned ("database path was not found"). One copy, as for class-transformer above.
+    // The app's bundle has pinned the same package for the same reason since 2026-08-26 (singletonPrefixes in the
+    // wallet's app/metro.config.js); a native-backed dependency added to one list belongs in the other too.
+    '^@openwallet-foundation/askar-shared$': '<rootDir>/../../node_modules/@openwallet-foundation/askar-shared',
     // @openvtc/vti-tsp-js ships its test-vector helpers behind an exports-map
     // subpath with only `import`/`types` conditions, which jest (CJS) will not
     // resolve. They are how the relationship-forming invite is checked against

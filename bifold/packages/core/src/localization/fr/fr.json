@@ -543,7 +543,10 @@
     "MergedRemoveSeparate": "Les séparer plutôt",
     "MergedRemoveConfirm": "Tout supprimer ({{count}})",
     "MergedRemoveConfirm_one": "Supprimer ({{count}})",
-    "MergedRemoveConfirm_other": "Tout supprimer ({{count}})"
+    "MergedRemoveConfirm_other": "Tout supprimer ({{count}})",
+    "MergeAskPhone": "Demander au téléphone de {{name}} de confirmer",
+    "MergeAsked": "Demandé au téléphone de {{name}}. Si cette personne confirme, ceci change.",
+    "MergeConfirmedByPhone": "Fusionné par vous, et confirmé par le téléphone de {{name}}"
   },
   "WhatAreContacts": {
     "Title": "Que sont les Contacts?",
@@ -2543,6 +2546,10 @@
     "LayerCardsHardware": "Cartes échangées, signées avec du matériel sécurisé · {{date}}",
     "LayerWitnessed": "Témoin : {{witness}} · {{date}}",
     "LayerWitnessedUnnamed": "Avec témoin · {{date}}",
-    "LayerInPerson": "En personne : le témoin a confirmé que vous étiez proches."
+    "LayerInPerson": "En personne : le témoin a confirmé que vous étiez proches.",
+    "ContinuityTitle": "Est-ce vous ?",
+    "ContinuityBody": "{{asker}} vous demande de confirmer que vous êtes la même personne que votre contact précédent {{earlier}}. Si vous confirmez, son téléphone affiche les deux comme un seul contact. Rien d'autre n'est partagé.",
+    "ContinuityConfirm": "Confirmer",
+    "ContinuityNotNow": "Pas maintenant"
   }
 }

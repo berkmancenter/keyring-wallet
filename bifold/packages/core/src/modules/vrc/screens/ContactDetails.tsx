@@ -612,6 +612,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           relationships={relationships}
           records={w3cCredentialRecords}
           links={contactLinks}
+          connectionId={connectionId}
           onChanged={() => setLinksVersion((version) => version + 1)}
         />
 

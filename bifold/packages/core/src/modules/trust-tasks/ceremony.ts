@@ -65,6 +65,8 @@ import { createDeviceLocalityProvider } from './BleDeviceLocalityProvider'
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
+import * as continuitySpec from '../vrc/contacts/continuitySpec'
+import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
@@ -1919,6 +1921,16 @@ function registerBuiltinTrustTasks(): void {
     orchestration: { minRceVersion: TRUST_TASKS_MIN_RCE_VERSION },
     handleRequest: handleInboundWitnessShare,
     handleResponse: handleInboundWitnessShareReceipt,
+  })
+
+  // Keyring's own type (private authority): one phone asks the other to confirm two relationships are one person.
+  trustTaskRegistry.register({
+    typeUri: continuitySpec.TYPE_URI,
+    spec: continuitySpec.SPEC as never,
+    responseSpec: continuitySpec.RESPONSE_SPEC as never,
+    orchestration: { requiresDiscovery: false },
+    handleRequest: handleContinuityRequest,
+    handleResponse: handleContinuityResponse,
   })
 }
 

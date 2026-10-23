@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "b70cf5242d52f332a90c5201fec84004e9aacf0d",
+  "generatedFrom": "df3363179ea67b581c885dab7aa41e3b0926b5c5",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -306,8 +306,11 @@
     "ContactMenuRemoveContact": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuViewContact": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMerge": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactMergeAskPhone": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactMergeAsked": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergeBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergeConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactMergeConfirmedByPhone": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergeFailed": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergeOffer": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergeYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
@@ -332,6 +335,10 @@
       "src/screens/Terms.tsx"
     ],
     "ContinueCreatePIN": ["src/screens/PINExplainer.tsx"],
+    "ContinuityCheck": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
+    "ContinuityCheckBody": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
+    "ContinuityConfirm": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
+    "ContinuityNotNow": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
     "CopyToClipboard": ["src/screens/JSONDetails.tsx"],
     "CreateIdentityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "CreatePIN": ["src/screens/PINCreate.tsx"],

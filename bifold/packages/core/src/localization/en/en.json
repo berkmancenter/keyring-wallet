@@ -577,7 +577,10 @@
     "MergedRemoveSeparate": "Separate them instead",
     "MergedRemoveConfirm": "Remove all {{count}}",
     "MergedRemoveConfirm_one": "Remove {{count}}",
-    "MergedRemoveConfirm_other": "Remove all {{count}}"
+    "MergedRemoveConfirm_other": "Remove all {{count}}",
+    "MergeAskPhone": "Ask {{name}}'s phone to confirm",
+    "MergeAsked": "Asked {{name}}'s phone. If they confirm, this changes.",
+    "MergeConfirmedByPhone": "Merged by you, and confirmed by {{name}}'s phone"
   },
   "WhatAreContacts": {
     "Title": "What are Contacts?",
@@ -2612,6 +2615,10 @@
     "LayerCardsHardware": "Cards exchanged, signed with secure hardware · {{date}}",
     "LayerWitnessed": "Witnessed by {{witness}} · {{date}}",
     "LayerWitnessedUnnamed": "Witnessed · {{date}}",
-    "LayerInPerson": "In person: the witness confirmed you were near."
+    "LayerInPerson": "In person: the witness confirmed you were near.",
+    "ContinuityTitle": "Is this you?",
+    "ContinuityBody": "{{asker}} asks you to confirm that you are the same person as your earlier contact {{earlier}}. If you confirm, their phone shows the two as one contact. Nothing else is shared.",
+    "ContinuityConfirm": "Confirm",
+    "ContinuityNotNow": "Not now"
   }
 }

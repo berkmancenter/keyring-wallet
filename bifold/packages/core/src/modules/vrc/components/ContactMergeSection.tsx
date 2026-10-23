@@ -8,7 +8,7 @@
  */
 import { useAgent } from '@bifold/react-hooks'
 import type { W3cCredentialRecord } from '@credo-ts/core'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, View } from 'react-native'
 
@@ -19,6 +19,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { ContactLinks } from '../contacts/contactLinks'
 import { findMergeCandidates, mergeContacts, separateContact, type MergeCandidate } from '../contacts/mergeContacts'
+import { askToConfirm, askedRecently, continuityEvents, isConfirmedByPeer } from '../contacts/continuity'
 
 export interface ContactMergeSectionProps {
   /** The relationship the contact screen opened. */
@@ -28,6 +29,8 @@ export interface ContactMergeSectionProps {
   relationships: string[]
   records: W3cCredentialRecord[]
   links: ContactLinks
+  /** The connection of the relationship the screen opened, once known: a confirmation is asked over it. */
+  connectionId?: string | null
   /** Called after a merge or a separation, so the screen reads the links again. */
   onChanged: () => void
 }
@@ -38,6 +41,7 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
   relationships,
   records,
   links,
+  connectionId,
   onChanged,
 }) => {
   const { t } = useTranslation()
@@ -52,6 +56,35 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
     [merged, records, links, issuerId]
   )
   const words = { name, interpolation: { escapeValue: false } }
+  // A merge is the person's word until the other phone confirms it (continuity.ts); until then it can be asked to.
+  const [confirmedByPhone, setConfirmedByPhone] = useState(false)
+  const [asked, setAsked] = useState(false)
+  const [checks, setChecks] = useState(0)
+
+  useEffect(() => {
+    if (!merged || !agent) return
+    let cancelled = false
+    void (async () => {
+      const confirmed = await isConfirmedByPeer(agent, links, issuerId).catch(() => false)
+      // An ask shows as asked for a day: a Not now is silent, so it may never be answered.
+      const recent = connectionId ? await askedRecently(agent, connectionId).catch(() => false) : false
+      if (!cancelled) {
+        setConfirmedByPhone(confirmed)
+        setAsked(recent)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [merged, agent, links, issuerId, connectionId, checks])
+
+  useEffect(() => {
+    const recheck = () => setChecks((count) => count + 1)
+    continuityEvents.on('confirmed', recheck)
+    return () => {
+      continuityEvents.off('confirmed', recheck)
+    }
+  }, [])
 
   const styles = StyleSheet.create({
     section: { gap: 10, marginTop: 16 },
@@ -89,9 +122,37 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
     <View style={styles.section} testID={testIdWithKey('ContactMerge')}>
       {merged ? (
         <>
-          <ThemedText style={styles.muted} testID={testIdWithKey('ContactMergedByYou')}>
-            {t('ContactDetails.MergedByYou', words)}
-          </ThemedText>
+          {confirmedByPhone ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey('ContactMergeConfirmedByPhone')}>
+              {t('ContactDetails.MergeConfirmedByPhone', words)}
+            </ThemedText>
+          ) : (
+            <>
+              <ThemedText style={styles.muted} testID={testIdWithKey('ContactMergedByYou')}>
+                {t('ContactDetails.MergedByYou', words)}
+              </ThemedText>
+              {asked ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey('ContactMergeAsked')}>
+                  {t('ContactDetails.MergeAsked', words)}
+                </ThemedText>
+              ) : (
+                <Button
+                  title={t('ContactDetails.MergeAskPhone', words)}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() =>
+                    void run(async () => {
+                      if ((await askToConfirm(agent, links, issuerId)) !== 'sent') {
+                        throw new Error('the other phone cannot be asked from here')
+                      }
+                      setAsked(true)
+                    })
+                  }
+                  disabled={busy || !connectionId}
+                  testID={testIdWithKey('ContactMergeAskPhone')}
+                />
+              )}
+            </>
+          )}
           <Button
             title={t('ContactDetails.Separate')}
             buttonType={ButtonType.Secondary}

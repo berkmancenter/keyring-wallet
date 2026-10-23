@@ -16,8 +16,8 @@ import { resolveContactDisplayInfo, toRawCredential } from '../utils/rcardDispla
 
 import { CONTACT_LINK, ContactLinkStore, ContactLinks, contactIdOf, relationshipsOfContact } from './contactLinks'
 
-/** How a merge was confirmed: by the person only, so far (a confirmation by the other phone is a later step). */
-export type MergeConfirmation = 'user'
+/** How a merge was confirmed: by the person ('user'), or also by the other phone ('peer', continuity.ts). */
+export type MergeConfirmation = 'user' | 'peer'
 
 export interface MergeCandidate {
   /** A relationship of the other contact (its newest), to merge with. */
@@ -101,8 +101,8 @@ export async function mergeContacts(
     for (const old of await linkRecordsOf(agent, { issuerDid: member })) await agent.genericRecords.deleteById(old.id)
     if (member === contactId) continue
     await agent.genericRecords.save({
-      content: { issuerDid: member, contactId },
-      tags: { recordType: CONTACT_LINK, issuerDid: member, contactId, confirmation },
+      content: { issuerDid: member, contactId, confirmation },
+      tags: { recordType: CONTACT_LINK, issuerDid: member, contactId },
     })
   }
 }

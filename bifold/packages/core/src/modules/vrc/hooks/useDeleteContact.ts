@@ -13,6 +13,8 @@ import { ToastType } from '../../../components/toast/BaseToast'
 /**
  * A record that is already gone is what removal wants, so it is not a failure. Anything else (a store that cannot be
  * read or written) is: it is rethrown so the removal reports failure instead of success over what it never deleted.
+ * The name check is not redundant with instanceof: this tree nests more than one copy of @credo-ts/core, and an error
+ * thrown by another copy's RecordNotFoundError is not an instance of the class imported here.
  */
 function unlessAlreadyGone(error: unknown): void {
   if (error instanceof RecordNotFoundError || (error as Error | undefined)?.name === 'RecordNotFoundError') return
