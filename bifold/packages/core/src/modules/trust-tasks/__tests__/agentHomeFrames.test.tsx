@@ -9,7 +9,7 @@
  * before any passive effect could correct it.
  */
 import { act, fireEvent, render, within } from '@testing-library/react-native'
-import React, { useLayoutEffect, useSyncExternalStore } from 'react'
+import React, { Profiler, useLayoutEffect, useSyncExternalStore } from 'react'
 import { ActivityIndicator } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -17,6 +17,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { emitCommunityChanged } from '../module/communityChanged'
+import { communityJourneys } from '../module/communityJourney'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityCardKey } from '../screens/CommunityCard'
@@ -244,5 +245,70 @@ describe('the agent home paints only the state it is in', () => {
       expect(tree.queryByTestId(id('AgentHoldsUnread'))).toBeNull()
       expect(tree.getByTestId(id('AgentDoors'))).toBeTruthy()
     })
+  })
+})
+
+// Phase 2: the card's next step reached the page through an effect, a render after the card showed it; and with the
+// join not read yet, an applicant whose request was already sent was offered "Continue vetting" until it was.
+describe("the agent home's next step", () => {
+  const submission = (communityDid: string): Rec => ({
+    tags: { recordType: 'keyring/vti-community', kind: 'submission', key: communityDid },
+    content: { communityDid, sentAt: '2026-09-23T00:00:00Z', withInvitation: false, via: 'join' },
+  })
+  const primaryOf = (did: string) => id(`AgentCommunityPrimary_${communityCardKey(did)}`)
+  type Frame = { page: boolean; card: boolean }
+  /**
+   * Each committed frame: whether the page leads with Continue vetting, and whether the card offers it. A Profiler's
+   * onRender runs in every commit of the screen, whatever caused it — the holdings landing in its own state as much
+   * as a store change (a probe re-rendered by the stores alone never saw the frame the card first appeared in).
+   */
+  function renderSteps() {
+    const frames: Frame[] = []
+    const box: { tree?: ReturnType<typeof render> } = {}
+    const record = () => {
+      const t = box.tree
+      if (!t) return
+      const card = t.queryByTestId(primaryOf(COMMUNITY))
+      frames.push({
+        page: Boolean(t.queryByTestId(id('AgentContinueVetting'))),
+        card: Boolean(card && within(card).queryByText('VtaLink.ContinueVetting')),
+      })
+    }
+    box.tree = render(
+      <BasicAppContext>
+        <Profiler id="home" onRender={record}>
+          <VtaAgentHome />
+        </Profiler>
+      </BasicAppContext>
+    )
+    return { tree: box.tree, frames }
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    forgetAgentHoldings()
+    communityJourneys.forget()
+    communityTarget.clear()
+    controller.set({ introSeen: true, activity: [], approvals: [], switchingTo: undefined, link: linkedTo(VTA_A) })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  it('an identity with nothing sent: the page leads with the step in the same frame the card offers it', async () => {
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([persona(COMMUNITY, VTA_A)]))
+    const { frames } = renderSteps()
+    await settle()
+    // The control: both end up offering it.
+    expect(frames[frames.length - 1]).toEqual({ page: true, card: true })
+    expect(frames.filter((f) => f.page !== f.card)).toEqual([])
+  })
+
+  it('a request already sent: no frame offers Continue vetting, before the join is read or after', async () => {
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([persona(COMMUNITY, VTA_A), submission(COMMUNITY)]))
+    const { tree, frames } = renderSteps()
+    await settle()
+    // The control: the card is there, saying it was sent.
+    expect(tree.getByTestId(cardOf(COMMUNITY))).toHaveTextContent(/Join\.StandingSent/)
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames.filter((f) => f.page || f.card)).toEqual([])
   })
 })

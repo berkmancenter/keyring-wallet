@@ -330,3 +330,26 @@ export function useCommunityJourney(
 
   return { journey, refresh, check }
 }
+
+/**
+ * The readings of several communities, from the store, without reading them:
+ * a screen listing communities (whose cards read each) works out from the
+ * same readings what the cards show, in render, rather than being told by
+ * each card after it painted. The same array until one of them changes.
+ */
+export function useCommunityJourneysOf(communityDids: readonly string[]): ReadonlyArray<CommunityJourney | undefined> {
+  const last = useRef<{ dids: readonly string[]; journeys: ReadonlyArray<CommunityJourney | undefined> }>(undefined)
+  const snapshot = () => {
+    const journeys = communityDids.map((did) => communityJourneys.get(did))
+    const before = last.current
+    if (
+      before &&
+      before.dids.length === communityDids.length &&
+      communityDids.every((did, i) => did === before.dids[i] && journeys[i] === before.journeys[i])
+    )
+      return before.journeys
+    last.current = { dids: communityDids, journeys }
+    return journeys
+  }
+  return useSyncExternalStore(communityJourneys.subscribe, snapshot)
+}

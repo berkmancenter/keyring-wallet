@@ -8,7 +8,25 @@
  * @module trust-tasks/screens/communityCardModel
  */
 
+import { joinKnown, type CommunityJourney } from '../module/communityJourney'
+import { isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import type { CommunityJoinState } from '../module/vtiJoin'
+
+/**
+ * Where a card's join stands: the journey's reading, else — until it is read,
+ * or when its read failed — the membership this phone holds, never "none". A
+ * membership the community removed says so from the start (#166). One rule
+ * for the card and for "Your agent", which leads with the card's next step.
+ */
+export function cardJoinOf(
+  journey: CommunityJourney | undefined,
+  membership: VtiMembership | undefined
+): CommunityJoinState | undefined {
+  const known = joinKnown(journey)
+  if (known || !membership) return known
+  const removal = !isCurrentMembership(membership) ? membership.removal : undefined
+  return removal ? { kind: 'removed', membership, at: removal.decidedAt } : { kind: 'member', membership }
+}
 
 export interface CommunityCardFacts {
   /** From the community journey; undefined until it is read. */
@@ -60,8 +78,10 @@ function standing(facts: CommunityCardFacts): CommunityCardModel {
       return { statusKey: 'Join.StandingLeft' }
     default:
       // An identity made for the community, and nothing sent yet: the way on
-      // is the vetting that makes the application.
-      return facts.hasIdentity
+      // is the vetting that makes the application. Not while the join is
+      // unknown: a request already sent offered "Continue vetting" until the
+      // read came back (UI-smoothness plan, Phase 2).
+      return facts.hasIdentity && facts.join
         ? { statusKey: 'VtaLink.IdentityFor', primary: 'continueVetting' }
         : { statusKey: 'VtaLink.IdentityFor' }
   }

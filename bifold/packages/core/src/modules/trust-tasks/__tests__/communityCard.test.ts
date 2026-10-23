@@ -2,7 +2,8 @@
  * "Your agent", one card per community (IN-20c): each card's status line and
  * its one next step, as a table; and the communities, each once.
  */
-import { communityCardModel } from '../screens/communityCardModel'
+import { cardJoinOf, communityCardModel } from '../screens/communityCardModel'
+import type { VtiMembership } from '../module/VtiCommunityStore'
 import { communitiesHeld, ownHoldings } from '../screens/VtaAgentHome'
 import type { CommunityJoinState } from '../module/vtiJoin'
 
@@ -17,6 +18,15 @@ describe('a community card: where the phone stands, and one next step', () => {
     ['a member who vets', { ...base, join: at('member'), vetter: true }, 'Join.StandingMember', 'openDesk'],
     ['invited', { ...base, invited: true, join: at('none') }, 'VtaLink.InvitationWaiting', 'acceptInvitation'],
     ['an identity, nothing sent', { ...base, join: at('none') }, 'VtaLink.IdentityFor', 'continueVetting'],
+    // Unknown is not "nothing sent": a request already sent offered Continue vetting until the read came back.
+    ['an identity, the join not read yet', { ...base, join: undefined }, 'VtaLink.IdentityFor', undefined],
+    [
+      'invited, the join not read yet',
+      { ...base, join: undefined, invited: true },
+      'VtaLink.InvitationWaiting',
+      'acceptInvitation',
+    ],
+    ['a vetter, the join not read yet', { ...base, join: undefined, vetter: true }, 'VtaLink.IdentityFor', 'openDesk'],
     ['sent', { ...base, join: at('sent') }, 'Join.StandingSent', undefined],
     ['pending', { ...base, join: at('pending') }, 'Join.StandingPending', undefined],
     ['asked for more', { ...base, join: at('deferred') }, 'Join.StandingDeferred', 'continueVetting'],
@@ -38,6 +48,18 @@ describe('a community card: where the phone stands, and one next step', () => {
     ],
   ] as const)('%s', (_name, facts, statusKey, primary) => {
     expect(communityCardModel(facts)).toEqual(primary ? { statusKey, primary } : { statusKey })
+  })
+
+  test("the card's join: the reading, else the membership held (removed if the community removed it), else unknown", () => {
+    const held = { communityDid: 'c', role: 'member', grantedAt: 't0' } as unknown as VtiMembership
+    const removed = { ...held, removal: { decidedAt: 'r', code: 'adminRemoved' } } as unknown as VtiMembership
+    const read = { join: at('sent'), vetterGrant: { state: 'none' as const } }
+    expect(cardJoinOf(read, held)?.kind).toBe('sent')
+    expect(cardJoinOf(undefined, held)).toEqual({ kind: 'member', membership: held })
+    expect(cardJoinOf(undefined, removed)).toEqual({ kind: 'removed', membership: removed, at: 'r' })
+    // A join whose read failed is unknown too: the membership stands in.
+    expect(cardJoinOf({ ...read, unread: ['join'] }, held)?.kind).toBe('member')
+    expect(cardJoinOf(undefined, undefined)).toBeUndefined()
   })
 
   test('a member is a member, even with an old invitation lying about', () => {

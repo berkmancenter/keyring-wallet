@@ -31,6 +31,7 @@ import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership }
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
+import { useCommunityJourneysOf } from '../module/communityJourney'
 import { useCommunityChanged } from '../module/communityChanged'
 import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/communityNameRefresh'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -45,7 +46,7 @@ import { AgentChips } from './AgentChips'
 import { AgentSettingsButton } from './AgentHeaderButtons'
 import { SectionRule } from './SectionRule'
 import { RequestsSection } from './RequestsSection'
-import type { CommunityCardPrimary } from './communityCardModel'
+import { cardJoinOf, communityCardModel, type CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityLabelOf } from './communityName'
 import { communityCardKey as communityKeyOf } from './CommunityCard'
 import { VtaAgentHomeIds } from './VtaAgentHome.ids'
@@ -139,10 +140,11 @@ const VtaAgentHome: React.FC = () => {
   const [, setNamesRead] = useState(0)
   const [introPanel, setIntroPanel] = useState(0)
   const otherWaiting = useOtherAgentsWaiting()
-  const [cardSteps, setCardSteps] = useState<Record<string, CommunityCardPrimary | undefined>>({})
-  const onCardStep = useCallback((communityDid: string, primary: CommunityCardPrimary | undefined) => {
-    setCardSteps((prev) => (prev[communityDid] === primary ? prev : { ...prev, [communityDid]: primary }))
-  }, [])
+  // The communities' cards read each one's journey; this page reads the same
+  // readings, so it leads with a card's next step in the same render as the
+  // card shows it. Each card told it after painting, one render late.
+  const held = holdings ? communitiesHeld(holdings) : []
+  const journeys = useCommunityJourneysOf(held)
 
   // Only what still waits: a decided or expired request is not listed. The
   // same rule as the badge on the My Agent tab (waitingRequests.ts).
@@ -465,8 +467,20 @@ const VtaAgentHome: React.FC = () => {
   const memberOf = Array.from(new Set(currentMemberships.map((m) => m.communityDid)))
   // The next step is the one a community's card offers (its model knows where
   // a join stands), led with here: an invitation first, then a vetting.
-  const held = holdings ? communitiesHeld(holdings) : []
-  const stepOf = (kind: CommunityCardPrimary) => held.find((did) => cardSteps[did] === kind)
+  const stepOf = (kind: CommunityCardPrimary) =>
+    held.find(
+      (did, i) =>
+        holdings &&
+        communityCardModel({
+          join: cardJoinOf(
+            journeys[i],
+            holdings.memberships.find((m) => m.communityDid === did)
+          ),
+          hasIdentity: holdings.personas.some((p) => p.communityDid === did),
+          invited: holdings.invited.includes(did),
+          vetter: holdings.vetterFor.includes(did),
+        }).primary === kind
+    )
   const invitationFor = stepOf('acceptInvitation')
   const vettingFor = stepOf('continueVetting')
   const nextStep: { kind: 'invitation' | 'vetting'; communityDid: string } | undefined = invitationFor
@@ -882,7 +896,6 @@ const VtaAgentHome: React.FC = () => {
                   deskShownAbove={holdings.vetterFor.includes(communityDid)}
                   linkedAt={link.linkedAt}
                   onOpen={goToCommunity}
-                  onNextStep={onCardStep}
                   onPrimary={(action, did) => {
                     // The vetting and invitation screens work on the chosen community.
                     communityTarget.choose(did)

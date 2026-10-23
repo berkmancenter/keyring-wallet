@@ -7,7 +7,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -16,13 +16,13 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import { joinKnown, useCommunityJourney } from '../module/communityJourney'
+import { useCommunityJourney } from '../module/communityJourney'
 import { isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { vtiAgent } from '../module/vtiAgent'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { CardKeptRow } from './CardKeptRow'
-import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
+import { cardJoinOf, communityCardModel, type CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf, communityTitle } from './communityName'
 import { DidDetails } from './DidDetails'
 import { shareIdentity } from './identityShare'
@@ -53,8 +53,6 @@ export interface CommunityCardProps {
   linkedAt?: string
   onOpen: (communityDid: string) => void
   onPrimary: (action: CommunityCardPrimary, communityDid: string) => void
-  /** Told the card's next step whenever it changes, so "Your agent" can lead with it. */
-  onNextStep?: (communityDid: string, primary: CommunityCardPrimary | undefined) => void
   /**
    * "Your agent" shows this community's vetting desk at the top of the page:
    * the card does not offer it a second time (Alberto, 10-06).
@@ -78,7 +76,6 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   linkedAt,
   onOpen,
   onPrimary,
-  onNextStep,
   deskShownAbove = false,
 }) => {
   const { t } = useTranslation()
@@ -92,23 +89,13 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   const heldByShared = Boolean(persona && sharedDid === persona.did)
   const { journey, check } = useCommunityJourney(agent, communityDid, { poll: heldByShared })
   const [checking, setChecking] = useState(false)
-  // Until the journey is read, a held membership already says "member".
   // A membership the community removed says so from the start (#166).
   const removal = membership && !isCurrentMembership(membership) ? membership.removal : undefined
-  // A join whose read failed is unknown too: the held membership stands in for it, never "none".
-  const join =
-    joinKnown(journey) ??
-    (membership
-      ? removal
-        ? { kind: 'removed' as const, membership, at: removal.decidedAt }
-        : { kind: 'member' as const, membership }
-      : undefined)
+  // Until the journey is read, or when its read failed, the held membership stands in for it, never "none".
+  const join = cardJoinOf(journey, membership)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
   const key = communityCardKey(communityDid)
   const shownPrimary = deskShownAbove && model.primary === 'openDesk' ? undefined : model.primary
-  useEffect(() => {
-    onNextStep?.(communityDid, model.primary)
-  }, [onNextStep, communityDid, model.primary])
   // Named, or at least told apart from the other cards — never a host.
   const community = communityHeadingOf(communityDid, t)
   const words = (k: string) => t(k, { community, interpolation: { escapeValue: false } })
