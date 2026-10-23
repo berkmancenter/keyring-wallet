@@ -159,3 +159,14 @@ test('anonymityVerdict: both sources read, the vetter absent passes; present fai
   assert.equal(leak.ok, false);
   assert.match(leak.detail, /appears in the applicant side/);
 });
+
+test('taskRound: a reply before its ask is not verified (the ordering is vi\'s own `i > ai`)', () => {
+  // Since #594 `verified` is `vi >= 0`; the ask-then-reply order rests only on vi's search starting after the ask.
+  // A tidy-up to a plain findIndex there would read as harmless and break this.
+  const r = taskRound([
+    L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/prove/0.1'),
+    L('[TrustTasks:VtaClient] asked its agent https://trusttasks.org/spec/vta/pcs/prove/0.1 over rev3'),
+  ].join('\n'), '/vta/pcs/prove/0.1');
+  assert.equal(r.asked, true);
+  assert.equal(r.verified, false);
+});
