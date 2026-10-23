@@ -60,11 +60,14 @@ jest.mock('../module/VtiIdentityStore', () => ({
 
 // Where the phone stands with the community (the journey), set per test.
 let mockJourney: unknown = undefined
+const mockRefresh = jest.fn(async () => undefined)
 jest.mock('../module/communityJourney', () => ({
-  // The real helpers (joinKnown, vetterGrantKnown); only the hook is faked.
+  // The real helpers (joinKnown, vetterGrantKnown, readFailed); only the hook is faked.
   ...jest.requireActual('../module/communityJourney'),
-  useCommunityJourney: () => ({ journey: mockJourney, refresh: jest.fn() }),
+  useCommunityJourney: () => ({ journey: mockJourney, refresh: mockRefresh }),
 }))
+/** Read, and not a member. */
+const notMember = { join: { kind: 'none' }, vetterGrant: { state: 'none' } }
 
 // What the persona inbox says of this community's agent, set per test (IN-350).
 let mockAgentState: unknown = undefined
@@ -234,7 +237,10 @@ describe('leaving a community (220)', () => {
 
 /** A member is not asked to apply (the journey-state audit, E). */
 describe('the community screen, before joining: its directory statement (manifest/0.4)', () => {
-  beforeEach(() => communityTarget.clear())
+  beforeEach(() => {
+    communityTarget.clear()
+    mockJourney = notMember
+  })
   afterEach(() => {
     mockJourney = undefined
   })
@@ -466,5 +472,55 @@ describe("a community known only through another agent's identity", () => {
     expect(tree.queryByTestId(testIdWithKey('CommunityHeldElsewhere'))).toBeNull()
     expect(tree.getByTestId(testIdWithKey('CommunityMember'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('LeaveCommunityButton'))).toBeTruthy()
+  })
+})
+
+// Phase 2b: a member saw the criteria and "How to join" until the journey read came back.
+describe('the community screen, before it knows whether this phone is a member', () => {
+  beforeEach(() => communityTarget.clear())
+  afterEach(() => {
+    mockJourney = undefined
+  })
+  const mocked = () =>
+    (jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }).vtiAgent.fetchManifest
+  const asks = () => ({
+    criteria: [{ id: 'c1', description: 'Be kind' }],
+    directoryDisclosure: readDirectoryDisclosure(statement()),
+  })
+  const shown = (tree: ReturnType<typeof show>) =>
+    ['CommunityCriteria', 'ApplyToCommunityButton', 'DirectoryDisclosure'].filter((id) =>
+      tree.queryByTestId(testIdWithKey(id))
+    )
+
+  it('shows neither the criteria nor the way to apply, only that it is reading', async () => {
+    mockJourney = undefined
+    mocked().mockResolvedValueOnce(asks())
+    const tree = show()
+    await act(async () => undefined)
+    expect(shown(tree)).toEqual([])
+    expect(tree.queryByText('MyAgent.WhatIsAsked')).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('CommunityReading'))).toBeTruthy()
+  })
+
+  it('once read, and not a member: the criteria and the way to apply', async () => {
+    mockJourney = notMember
+    mocked().mockResolvedValueOnce(asks())
+    const tree = show()
+    await act(async () => undefined)
+    expect(shown(tree)).toEqual(['CommunityCriteria', 'ApplyToCommunityButton', 'DirectoryDisclosure'])
+    expect(tree.queryByTestId(testIdWithKey('CommunityReading'))).toBeNull()
+  })
+
+  it('one that could not be read: said, with Check again, which reads it again', async () => {
+    mockJourney = { ...notMember, unread: ['join', 'application', 'vetterGrant'], failed: ['join'] }
+    mocked().mockResolvedValueOnce(asks())
+    mockRefresh.mockClear()
+    const tree = show()
+    await act(async () => undefined)
+    expect(shown(tree)).toEqual([])
+    expect(tree.queryByTestId(testIdWithKey('CommunityReading'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('CommunityReadFailed'))).toHaveTextContent(/Join\.StandingUnread/)
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('CommunityReadAgain'))))
+    expect(mockRefresh).toHaveBeenCalledTimes(1)
   })
 })

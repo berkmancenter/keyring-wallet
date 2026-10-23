@@ -30,7 +30,7 @@ import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
 import { communityTarget } from '../module/vtiCommunityLink'
-import { joinKnown, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
+import { joinKnown, readFailed, useCommunityJourney, vetterGrantKnown } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { HeldByAnotherAgent } from './HeldByAnotherAgent'
@@ -71,7 +71,7 @@ const VtiCommunity: React.FC = () => {
   const { agent } = useAgent()
   const navigation = useNavigation()
   // Where this phone stands with the community: a member is not asked to apply.
-  const { journey } = useCommunityJourney(agent, communityDid)
+  const { journey, refresh } = useCommunityJourney(agent, communityDid)
   // What the phone knows here may be another agent's: its identity, its
   // membership. Then this agent is not a member and cannot leave (10-06).
   const holding = useAgentsHoldingIdentity(communityDid)
@@ -79,6 +79,21 @@ const VtiCommunity: React.FC = () => {
   const join = joinKnown(journey)
   const membership = !heldElsewhere && join?.kind === 'member' ? join.membership : undefined
   const vetsHere = !heldElsewhere && vetterGrantKnown(journey)?.state === 'active'
+  // Not known yet whether this is a member: neither the criteria nor the way
+  // to apply — a member saw the non-member page until the read came back
+  // (UI-smoothness plan, Phase 2b). One that could not be read is said, with
+  // a way to read it again.
+  const standingUnknown = !heldElsewhere && join === undefined
+  const standingFailed = standingUnknown && readFailed(journey, 'join')
+  const [rereading, setRereading] = useState(false)
+  const readAgain = useCallback(async () => {
+    setRereading(true)
+    try {
+      await refresh()
+    } finally {
+      setRereading(false)
+    }
+  }, [refresh])
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -299,11 +314,26 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {membership || heldElsewhere ? null : (
+        {membership || heldElsewhere || standingUnknown ? null : (
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>
         )}
-        {busy && !manifest && !membership ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-        {manifest && !membership ? (
+        {standingFailed ? (
+          <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.readFailed)}>
+            <Text style={styles.value}>{t('Join.StandingUnread')}</Text>
+            <Pressable
+              style={styles.button}
+              testID={testIdWithKey(VtiCommunityIds.readAgain)}
+              accessibilityRole="button"
+              disabled={rereading}
+              onPress={() => void readAgain()}
+            >
+              <Text style={styles.buttonText}>{t('Join.CheckAgain')}</Text>
+            </Pressable>
+          </View>
+        ) : !membership && ((busy && !manifest) || standingUnknown) ? (
+          <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey(VtiCommunityIds.reading)} />
+        ) : null}
+        {manifest && !membership && !standingUnknown ? (
           <View style={styles.card} testID={testIdWithKey(VtiCommunityIds.criteria)}>
             {manifest.criteria.map((criterion, index) => (
               <View style={styles.row} key={criterion.id ?? String(index)}>
@@ -314,7 +344,7 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
         {/* What its directory would show about a member, read before deciding to apply (manifest/0.4). */}
-        {manifest?.directoryDisclosure && !membership ? (
+        {manifest?.directoryDisclosure && !membership && !standingUnknown ? (
           <DirectoryDisclosureCard
             disclosure={manifest.directoryDisclosure}
             community={called.name ?? communityLabelOf(communityDid, t)}
@@ -343,7 +373,7 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {manifest && !membership && !heldElsewhere ? (
+        {manifest && !membership && !heldElsewhere && !standingUnknown ? (
           <Pressable
             style={styles.button}
             testID={testIdWithKey(VtiCommunityIds.applyToCommunityButton)}

@@ -10,6 +10,11 @@ export const VtiCommunityIds = {
   openDesk: 'CommunityOpenDesk',
   vouchPrivately: 'CommunityVouchPrivately',
   criteria: 'CommunityCriteria',
+  /** Whether this phone is a member is not known yet: nothing to apply with, only that it is being read. */
+  reading: 'CommunityReading',
+  /** It could not be read: said, with Check again. */
+  readFailed: 'CommunityReadFailed',
+  readAgain: 'CommunityReadAgain',
   error: 'CommunityError',
   refusalDetails: 'CommunityRefusalDetails',
   refusalCode: 'CommunityRefusalCode',

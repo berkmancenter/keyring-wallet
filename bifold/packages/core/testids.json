@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "c200a90d0e997819c1dae996fc6df393ab17fe23",
+  "generatedFrom": "5a91a53c293a790bceb0d1f514797d0807cf5ab4",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -276,6 +276,9 @@
     "CommunityName": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityNameClaimed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityOpenDesk": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityReadAgain": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityReadFailed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityReading": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityRefusalCode": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityRefusalDetails": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityRemoveHere": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
@@ -1864,6 +1867,15 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.openDesk"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.readAgain"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.readFailed"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.reading"
     },
     {
       "src/modules/trust-tasks/screens/VtiCommunity.tsx": "VtiCommunityIds.refusalCode"
