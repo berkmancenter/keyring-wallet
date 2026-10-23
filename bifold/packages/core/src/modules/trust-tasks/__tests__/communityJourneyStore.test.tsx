@@ -72,6 +72,32 @@ describe('one journey per community, shared and kept', () => {
     expect(b.result.current.journey?.join.kind).toBe('member')
   })
 
+  // An unlink forgets the agent's readings: nothing else did, and they lived for as long as the app did.
+  it("forgetting an agent drops its readings and keeps another agent's", async () => {
+    const { r } = readers(() => stateOf('member'))
+    renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+    await settle()
+    setCurrentAgentDid('did:webvh:agent-b')
+    renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+    await settle()
+    expect(communityJourneys.get(COMMUNITY)?.join.kind).toBe('member')
+    communityJourneys.forget('did:webvh:agent-a')
+    // B's stays.
+    expect(communityJourneys.get(COMMUNITY)?.join.kind).toBe('member')
+    setCurrentAgentDid('did:webvh:agent-a')
+    expect(communityJourneys.get(COMMUNITY)).toBeUndefined()
+    // Read with no agent current, and forgotten as such: the empty prefix, and nothing else.
+    setCurrentAgentDid(undefined)
+    renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+    await settle()
+    expect(communityJourneys.get(COMMUNITY)?.join.kind).toBe('member')
+    communityJourneys.forget('')
+    expect(communityJourneys.get(COMMUNITY)).toBeUndefined()
+    setCurrentAgentDid('did:webvh:agent-b')
+    expect(communityJourneys.get(COMMUNITY)?.join.kind).toBe('member')
+    setCurrentAgentDid('did:webvh:agent-a')
+  })
+
   it('a screen that mounts after a reading shows it on its first render, not nothing', async () => {
     const { r } = readers(() => stateOf('member'))
     const first = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))

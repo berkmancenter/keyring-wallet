@@ -28,6 +28,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { communityJourneys } from '../module/communityJourney'
 import { AGENT_NICKNAME_MAX, agentTransition, vtaAgent, type VtaActivity } from '../module/vtaAgent'
 
 import { agentDisplayName, withAgentName } from './agentName'
@@ -158,6 +159,10 @@ const VtaAgentSettings: React.FC = () => {
     if (!agent) return
     setUnlinkOpen(false)
     forgetAgentHoldings()
+    // Its communities' readings too: kept, they lived for as long as the app did. And those read with no agent
+    // current (kept under no agent): a later stretch with none would be shown them, read for whoever it was then.
+    communityJourneys.forget(link.vtaDid)
+    communityJourneys.forget('')
     // To the agent home when another agent is now current: the link screen opened on the next agent's state and
     // said "Linked ✓" for an agent nobody had just linked (Phase 1). With none left, to the link screen, which offers
     // the way to link one, as before Phase 1: the old panel it went to instead said "Connected" over a community's

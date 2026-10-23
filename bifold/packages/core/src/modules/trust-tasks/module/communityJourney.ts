@@ -274,9 +274,15 @@ class CommunityJourneyStore {
     DeviceEventEmitter.addListener(VTI_PERSONA_DELIVERIES_EVENT, onChange)
   }
 
-  /** For tests: forget every reading. */
-  forget(): void {
-    this.entries.clear()
+  /**
+   * Forget one agent's readings (an unlink: its communities are not this
+   * phone's any more), or every reading (tests). Another agent's stay, so its
+   * screens do not start again from nothing. `''` is the readings made with
+   * no agent current. A read still out for a forgotten reading does not land.
+   */
+  forget(agentDid?: string): void {
+    if (agentDid === undefined) return this.entries.clear()
+    for (const key of [...this.entries.keys()]) if (key.startsWith(`${agentDid}|`)) this.entries.delete(key)
   }
 }
 

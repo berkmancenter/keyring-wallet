@@ -56,11 +56,14 @@ export function communityCardModel(facts: CommunityCardFacts): CommunityCardMode
 }
 
 function standing(facts: CommunityCardFacts): CommunityCardModel {
-  const kind = facts.join?.kind ?? 'none'
+  const kind = facts.join?.kind
   if (kind === 'member') {
     return { statusKey: 'Join.StandingMember', primary: facts.vetter ? 'openDesk' : undefined }
   }
   if (facts.invited) return { statusKey: 'VtaLink.InvitationWaiting', primary: 'acceptInvitation' }
+  // Unknown is not "nothing sent": no next step until the join is read (#498).
+  // Returned here, so no case below can take it for "none".
+  if (!kind) return { statusKey: 'VtaLink.IdentityFor' }
   switch (kind) {
     case 'sent':
       return { statusKey: 'Join.StandingSent' }
@@ -78,10 +81,9 @@ function standing(facts: CommunityCardFacts): CommunityCardModel {
       return { statusKey: 'Join.StandingLeft' }
     default:
       // An identity made for the community, and nothing sent yet: the way on
-      // is the vetting that makes the application. Not while the join is
-      // unknown: a request already sent offered "Continue vetting" until the
-      // read came back (UI-smoothness plan, Phase 2).
-      return facts.hasIdentity && facts.join
+      // is the vetting that makes the application (an unknown join returned
+      // above, with none).
+      return facts.hasIdentity
         ? { statusKey: 'VtaLink.IdentityFor', primary: 'continueVetting' }
         : { statusKey: 'VtaLink.IdentityFor' }
   }

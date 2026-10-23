@@ -15,6 +15,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import { communityJourneys } from '../module/communityJourney'
 import { vtaAgent } from '../module/vtaAgent'
 import VtaAgentSettings from '../screens/VtaAgentSettings'
 
@@ -156,6 +157,18 @@ describe('Agent settings', () => {
 
     // Phase 1: the link screen opened on the next agent's state and said "Linked ✓" for an agent nobody had just
     // linked. The agent home shows the next agent, or the way to link when none is left.
+    it("forgets the unlinked agent's community readings", async () => {
+      jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const forget = jest.spyOn(communityJourneys, 'forget')
+      const tree = await show()
+      const linkedDid = (vtaAgent.getState().link as { vtaDid: string }).vtaDid
+      fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
+      expect(forget).toHaveBeenCalledWith(linkedDid)
+      // And those read with no agent current.
+      expect(forget).toHaveBeenCalledWith('')
+    })
+
     it('unlinks on confirm and lands on the agent home: the next agent when there is one', async () => {
       const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
       const navigate = useNavigation().navigate as jest.Mock
