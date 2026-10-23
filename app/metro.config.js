@@ -187,7 +187,12 @@ module.exports = (async () => {
         // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
         // dedupes within a single tree, so pinning has to happen here. Keep
         // this list in sync when a new native-backed dependency reaches
-        // bifold/packages/*.
+        // bifold/packages/*. bifold core's jest has the same pin for its own
+        // tests (moduleNameMapper for askar-shared in
+        // bifold/packages/core/jest.config.js); a dependency added here may
+        // belong there too. Changing this file runs the android-apk and
+        // ios-simulator builds (paths in .github/workflows/test-builds.yml),
+        // so a resolution mistake here is caught before merge.
         const singletonPrefixes = [
           'react',
           'react-native',
