@@ -26,6 +26,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 
 import * as hpke from './hpke'
 import type { TspIdentity, VidResolver } from './ports'
+import { encodeTspVersion, TSP_REV2 } from './version'
 import {
   bytesEqual,
   concat,
@@ -44,8 +45,7 @@ const EMPTY = new Uint8Array(0)
 
 /** `YTSP` + the Rev 2 version count (`YTSP-AAB`). */
 function encodeVersionRev2(out: number[]): void {
-  for (const b of cesr.YTSP) out.push(b)
-  cesr.encodeCount(cesr.TSP_VERSION.major, cesr.REV2_MINOR, out)
+  encodeTspVersion(TSP_REV2, out)
 }
 
 /** The Rev 2 `-E` frame: version, sender VID, receiver VID, `X 00 00`. The
@@ -69,7 +69,7 @@ export function decodeEnvelopeRev2(data: Uint8Array): { sender: string; receiver
   const quadlets = cesr.decodeCount(cesr.TSP_ETS_WRAPPER, data, cur, cesr.LONG_COUNT_REV2)
   if (quadlets === undefined) throw new Error('tsp: missing -E envelope wrapper')
   const version = cesr.readVersion(data, cur)
-  if (!version || version.major !== cesr.TSP_VERSION.major || version.minor !== cesr.REV2_MINOR) {
+  if (!version || version.major !== TSP_REV2.major || version.minor !== TSP_REV2.minor) {
     throw new Error('tsp: not a Rev 2 version marker')
   }
   const senderBytes = cesr.decodeVariableData(cesr.TSP_VID, data, cur)

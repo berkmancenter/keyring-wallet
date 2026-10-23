@@ -52,6 +52,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 
 import * as hpke from './hpke'
 import type { TspIdentity, VidResolver } from './ports'
+import { encodeTspVersion, TSP_REV3, type TspVersion } from './version'
 import {
   bytesEqual,
   decodeUtf8Strict,
@@ -109,10 +110,12 @@ export interface DecodedEnvelopeRev3 {
 }
 
 /** The envelope *fields* — version, sender VID, receiver VID — without the
- *  enclosing `-E` count code. These bytes are the HPKE-Base AAD. */
-export function encodeFieldsRev3(sender: string, receiver: string): Uint8Array {
+ *  enclosing `-E` count code. These bytes are the HPKE-Base AAD. `version` is
+ *  Rev 3's unless a caller names another; it exists so a test can show the
+ *  marker is what the vectors pin, and so TSP 1.0 can share this layout. */
+export function encodeFieldsRev3(sender: string, receiver: string, version: TspVersion = TSP_REV3): Uint8Array {
   const body: number[] = []
-  cesr.encodeVersion(body)
+  encodeTspVersion(version, body)
   cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(sender), body)
   cesr.encodeVariableData(cesr.TSP_VID, utf8.encode(receiver), body)
   if (body.length % 3 !== 0) throw new Error('tsp: envelope fields not a multiple of 3 bytes')
@@ -142,7 +145,7 @@ export function decodeEnvelopeRev3(data: Uint8Array): DecodedEnvelopeRev3 {
 
   const version = cesr.readVersion(data, cur)
   if (version === undefined) throw new Error('tsp: missing or malformed version marker')
-  if (version.major !== cesr.TSP_VERSION.major) throw new Error(`tsp: unsupported TSP major version ${version.major}`)
+  if (version.major !== TSP_REV3.major) throw new Error(`tsp: unsupported TSP major version ${version.major}`)
 
   const senderBytes = cesr.decodeVariableData(cesr.TSP_VID, data, cur)
   if (senderBytes === undefined) throw new Error('tsp: missing sender VID')

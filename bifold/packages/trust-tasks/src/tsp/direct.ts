@@ -21,7 +21,7 @@
  * @module trust-tasks/tsp/direct
  */
 
-import { peekRevision as peekRevisionUpstream, sha256 } from '@openvtc/vti-tsp-js'
+import { sha256, TspRevisionError } from '@openvtc/vti-tsp-js'
 
 import type { TspIdentity, VidResolver } from './ports'
 import { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
@@ -35,6 +35,7 @@ import {
   type UnsafeDeterministicPack,
 } from './rev3'
 import { type ApplicationKind, type PackedMessage, type TspRevision, type UnpackedMessage } from './shared'
+import { readTspVersion, TSP_REV2, TSP_REV3 } from './version'
 
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
@@ -74,9 +75,33 @@ export interface PeekedRevision {
  * process — the honest error, in place of a crypto-layer failure further on.
  */
 export function peekRevision(wireBytes: Uint8Array): PeekedRevision {
-  const peeked = peekRevisionUpstream(wireBytes)
-  return { revision: peeked.revision, major: peeked.major, minor: peeked.minor, recognised: peeked.recognised }
+  // Read without judging (`./version`), then judge here: the MAJOR this codec
+  // processes is Rev 3's. Same refusal, same error and code as tsp-js 0.3.0's
+  // peek, which this replaces, so callers that test `code === 'E_TSP_REVISION'`
+  // see no difference.
+  const { major, minor } = readTspVersion(wireBytes)
+  if (major !== TSP_REV3.major) {
+    throw new TspRevisionError(
+      `tsp: message declares MAJOR ${major}; this implementation speaks MAJOR ${TSP_REV3.major}`,
+      major,
+      minor
+    )
+  }
+  return {
+    revision: minor === TSP_REV2.minor ? 'rev2' : 'rev3',
+    major,
+    minor,
+    recognised: Object.prototype.hasOwnProperty.call(KNOWN_MINORS, minor),
+  }
 }
+
+/** MAJOR-0 MINORs this codec can name, for diagnostics only, never admission
+ *  (as tsp-js 0.3.0's `KNOWN_MINORS`): `YTSP-ABA` is the pre-merge Rev 3. */
+const KNOWN_MINORS: Readonly<Record<number, string>> = Object.freeze({
+  1: 'Rev 2 (YTSP-AAB)',
+  2: 'Rev 3 (YTSP-AAC)',
+  64: 'Rev 3 as published upstream (YTSP-ABA)',
+})
 
 /** Pack a direct message with the revision this build wires (Rev 3). */
 export async function pack(
