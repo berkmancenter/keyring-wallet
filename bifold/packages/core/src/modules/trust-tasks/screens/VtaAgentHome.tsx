@@ -15,10 +15,11 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
+import type { Agent } from '@credo-ts/core'
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -32,7 +33,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityJourneysOf } from '../module/communityJourney'
-import { useCommunityChanged } from '../module/communityChanged'
+import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from '../module/communityChanged'
 import { communityNameIsStale, refreshPublishedNameThrottled } from '../module/communityNameRefresh'
 import { communityTarget } from '../module/vtiCommunityLink'
 
@@ -104,18 +105,156 @@ const PAGE_PADDING = 20
 const CARD_PADDING = 16
 
 /**
- * What the agent holds, as last read, kept across remounts and keyed by the
- * linked agent. Every tab unmounts when it loses focus (TabStack,
- * `unmountOnBlur`), so a return rebuilt this screen with nothing read: for a
- * frame "Holds" spun, the seat line was missing and Join looked like the next
- * step (219). A return now shows the last reading at once and refreshes it.
- * Unlinking forgets it, and a different agent never sees another's.
+ * What the agent holds, read from this phone's stores (and its vetter grants'
+ * status lists), with the names the communities published as kept.
  */
-const lastHoldings = new Map<string, Holdings>()
-/** Forget every reading (unlink does; tests start clean with it). */
-export const forgetAgentHoldings = () => {
-  lastHoldings.clear()
+async function readHoldings(agent: Agent, agentKey: string | undefined) {
+  const communities = new GenericRecordsCommunityStore(agent)
+  const [allPersonas, allMemberships, invitations, names] = await Promise.all([
+    new GenericRecordsIdentityStore(agent).listPersonas(),
+    communities.listMemberships(),
+    communities.listInvitations(),
+    communities.listCommunityNames().catch(() => []),
+  ])
+  const { personas, memberships } = ownHoldings(allPersonas, allMemberships, agentKey)
+  // Names the communities published, kept from their manifests, so a
+  // relaunch still says what each is called (IN-26).
+  for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)
+  // An invitation that is waiting for this phone — one issued to an
+  // identity it holds, not yet acted on. The panel listed every
+  // invitation and said "none" when there were none; here it is a line
+  // that appears only when there is one, and it hands over to the door
+  // that knows how to accept it rather than growing a second way in.
+  const waiting = invitations.filter(
+    (i) => i.status === 'pending' && personas.some((p) => p.did === i.subjectDid && p.communityDid === i.communityDid)
+  )
+  // A vetter is one whose grant still stands — in its window and not
+  // revoked — not one who was ever granted.
+  const grants = await Promise.all(
+    personas.map(async (p) => {
+      const held = await communities.listHeldCredentials('vetter-grant', p.communityDid)
+      const own = held.filter((g) => g.subjectDid === p.did)
+      return {
+        communityDid: p.communityDid,
+        grant: await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ }),
+      }
+    })
+  )
+  const read: Holdings = {
+    personas,
+    memberships,
+    invited: waiting.map((i) => i.communityDid),
+    vetterFor: grants.filter((g) => g.grant.state === 'active').map((g) => g.communityDid),
+    lapsed: grants.flatMap((g) =>
+      g.grant.state === 'revoked' || g.grant.state === 'expired' || g.grant.state === 'notYetValid'
+        ? [{ communityDid: g.communityDid, grant: g.grant }]
+        : []
+    ),
+  }
+  return { holdings: read, names }
 }
+
+/** What the agent holds as last read, and whether the last read failed (the reading is kept). */
+interface HoldingsSnapshot {
+  holdings?: Holdings
+  /** The names the communities published, as kept when the holdings were read. */
+  names?: Awaited<ReturnType<typeof readHoldings>>['names']
+  failed: boolean
+}
+const NOT_READ: HoldingsSnapshot = Object.freeze({ failed: false })
+
+/**
+ * What each agent holds, as last read, kept at module level and keyed by the
+ * agent. Every tab unmounts when it loses focus (TabStack, `unmountOnBlur`),
+ * so a return rebuilt this screen with nothing read: for a frame "Holds" spun,
+ * the seat line was missing and Join looked like the next step (219). A return
+ * shows the last reading at once and refreshes it. And a change this phone
+ * stores (an approval that arrives, a join, a leave) is read again here even
+ * with the screen unmounted, so the return shows today's page, not the one
+ * before the join (UI-smoothness plan, Phase 2). Only the newest read of an
+ * agent lands. Unlinking forgets it, and a different agent never sees another's.
+ */
+class AgentHoldingsStore {
+  private readonly entries = new Map<string, { snapshot: HoldingsSnapshot; seq: number; agent?: Agent }>()
+  private readonly listeners = new Set<() => void>()
+  private watching = false
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    this.watch()
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  get(agentKey: string | undefined): HoldingsSnapshot {
+    return this.entries.get(agentKey ?? '')?.snapshot ?? NOT_READ
+  }
+
+  private set(key: string, snapshot: HoldingsSnapshot) {
+    const entry = this.entries.get(key)
+    if (!entry) return
+    entry.snapshot = snapshot
+    this.listeners.forEach((l) => l())
+  }
+
+  /** Try again: the failure is not said while the read is out. */
+  clearFailed(agentKey: string | undefined) {
+    const before = this.get(agentKey)
+    if (before.failed) this.set(agentKey ?? '', { ...before, failed: false })
+  }
+
+  /** Read; resolves with the reading when it lands, undefined when a newer read landed first. Rejects when it fails. */
+  async read(
+    agent: Agent,
+    agentKey: string | undefined
+  ): Promise<Awaited<ReturnType<typeof readHoldings>> | undefined> {
+    const key = agentKey ?? ''
+    const entry = this.entries.get(key) ?? { snapshot: NOT_READ, seq: 0 }
+    entry.agent = agent
+    const seq = ++entry.seq
+    this.entries.set(key, entry)
+    try {
+      const read = await readHoldings(agent, agentKey)
+      if (this.entries.get(key) !== entry || seq !== entry.seq) return undefined
+      this.set(key, { holdings: read.holdings, names: read.names, failed: false })
+      return read
+    } catch (e) {
+      // Keep what was shown; say it could not be refreshed.
+      if (this.entries.get(key) === entry && seq === entry.seq) this.set(key, { ...entry.snapshot, failed: true })
+      throw e
+    }
+  }
+
+  /** A change this phone stores is read again for the agent current now; changes that land together, once. */
+  private watch(): void {
+    if (this.watching) return
+    this.watching = true
+    let queued = false
+    const onChange = () => {
+      if (queued) return
+      queued = true
+      setTimeout(() => {
+        queued = false
+        const { link } = vtaAgent.getState()
+        const key = link.kind === 'linked' ? link.vtaDid : undefined
+        const entry = this.entries.get(key ?? '')
+        if (entry?.agent) void this.read(entry.agent, key).catch(() => undefined)
+      }, 0)
+    }
+    DeviceEventEmitter.addListener(COMMUNITY_CHANGED_EVENT, onChange)
+    DeviceEventEmitter.addListener(VTI_PERSONA_DELIVERIES_EVENT, onChange)
+  }
+
+  /** Forget every reading (unlink does; tests start clean with it). */
+  forget(): void {
+    this.entries.clear()
+  }
+}
+
+const agentHoldings = new AgentHoldingsStore()
+/** Forget every reading (unlink does; tests start clean with it). */
+export const forgetAgentHoldings = () => agentHoldings.forget()
 
 const VtaAgentHome: React.FC = () => {
   // The tab bar draws over the page: the last line scrolls clear of it.
@@ -132,10 +271,11 @@ const VtaAgentHome: React.FC = () => {
   // none yet. An effect that swapped the reading after paint showed the agent
   // before's holdings, or a member's page as a non-member's, for a frame
   // (UI-smoothness plan, Phase 1b).
-  const [reading, setReading] = useState<{ agentKey: string | undefined; holdings: Holdings }>()
-  const holdings: Holdings | undefined =
-    reading && reading.agentKey === agentKey ? reading.holdings : agentKey ? lastHoldings.get(agentKey) : undefined
-  const [holdingsError, setHoldingsError] = useState(false)
+  const {
+    holdings,
+    names,
+    failed: holdingsError,
+  } = useSyncExternalStore(agentHoldings.subscribe, () => agentHoldings.get(agentKey))
   // Bumped when a community's name is read again, so the cards say it (the name lives in communityTarget).
   const [, setNamesRead] = useState(0)
   const [introPanel, setIntroPanel] = useState(0)
@@ -184,80 +324,34 @@ const VtaAgentHome: React.FC = () => {
 
   const load = useCallback(async () => {
     if (!agent) return
-    try {
-      const communities = new GenericRecordsCommunityStore(agent)
-      const [allPersonas, allMemberships, invitations, names] = await Promise.all([
-        new GenericRecordsIdentityStore(agent).listPersonas(),
-        communities.listMemberships(),
-        communities.listInvitations(),
-        communities.listCommunityNames().catch(() => []),
-      ])
-      const { personas, memberships } = ownHoldings(allPersonas, allMemberships, agentKey)
-      // Names the communities published, kept from their manifests, so a
-      // relaunch still says what each is called (IN-26).
-      for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)
-      // An invitation that is waiting for this phone — one issued to an
-      // identity it holds, not yet acted on. The panel listed every
-      // invitation and said "none" when there were none; here it is a line
-      // that appears only when there is one, and it hands over to the door
-      // that knows how to accept it rather than growing a second way in.
-      const waiting = invitations.filter(
-        (i) =>
-          i.status === 'pending' && personas.some((p) => p.did === i.subjectDid && p.communityDid === i.communityDid)
-      )
-      // A vetter is one whose grant still stands — in its window and not
-      // revoked — not one who was ever granted.
-      const grants = await Promise.all(
-        personas.map(async (p) => {
-          const held = await communities.listHeldCredentials('vetter-grant', p.communityDid)
-          const own = held.filter((g) => g.subjectDid === p.did)
-          return {
-            communityDid: p.communityDid,
-            grant: await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ }),
-          }
-        })
-      )
-      const read: Holdings = {
-        personas,
-        memberships,
-        invited: waiting.map((i) => i.communityDid),
-        vetterFor: grants.filter((g) => g.grant.state === 'active').map((g) => g.communityDid),
-        lapsed: grants.flatMap((g) =>
-          g.grant.state === 'revoked' || g.grant.state === 'expired' || g.grant.state === 'notYetValid'
-            ? [{ communityDid: g.communityDid, grant: g.grant }]
-            : []
-        ),
-      }
-      if (agentKey) lastHoldings.set(agentKey, read)
-      setReading({ agentKey, holdings: read })
-      setHoldingsError(false)
-      // A community this agent belongs to whose name on record is missing or
-      // over a day old: its published name is read again, after the stored one
-      // is shown, and never waited on (IN-340, as sign-in reads it). Only
-      // these: a stored name with no holding here, another agent's identity, or
-      // a membership that has ended sends nothing (VTI-LNK-050, 051).
-      const belongsTo = new Set([
-        ...memberships.filter(isCurrentMembership).map((m) => m.communityDid),
-        ...personas.map((p) => p.communityDid),
-      ])
-      const now = Date.now()
-      for (const communityDid of belongsTo) {
-        const kept = names.find((n) => n.communityDid === communityDid)
-        if (!communityNameIsStale(kept, now)) continue
-        // The bump only re-renders: `load` depends on [agent, agentKey] and the
-        // effect that calls it on [load, isFocused], so it never reads again. A
-        // new dependency there that the bump changes would make it a read loop.
-        void refreshPublishedNameThrottled(agent, communityDid, { scope: agentKey, now })
-          .then((fresh) => {
-            if (fresh && fresh !== kept?.name) setNamesRead((n) => n + 1)
-          })
-          .catch(() => undefined)
-      }
-    } catch {
-      // Keep what was shown; say it could not be refreshed.
-      setHoldingsError(true)
-    }
+    // The store keeps what was shown when a read fails, and says so.
+    await agentHoldings.read(agent, agentKey).catch(() => undefined)
   }, [agent, agentKey])
+
+  // Whenever a reading lands — on focus, on the timer, or from a change the
+  // store read again — a community this agent belongs to whose name on record
+  // is missing or over a day old has its published name read again, after the
+  // stored one is shown, and never waited on (IN-340, as sign-in reads it).
+  // Only these: a stored name with no holding here, another agent's identity,
+  // or a membership that has ended sends nothing (VTI-LNK-050, 051). The bump
+  // only re-renders; it changes nothing this effect depends on.
+  useEffect(() => {
+    if (!agent || !holdings || !names) return
+    const belongsTo = new Set([
+      ...holdings.memberships.filter(isCurrentMembership).map((m) => m.communityDid),
+      ...holdings.personas.map((p) => p.communityDid),
+    ])
+    const now = Date.now()
+    for (const communityDid of belongsTo) {
+      const kept = names.find((n) => n.communityDid === communityDid)
+      if (!communityNameIsStale(kept, now)) continue
+      void refreshPublishedNameThrottled(agent, communityDid, { scope: agentKey, now })
+        .then((fresh) => {
+          if (fresh && fresh !== kept?.name) setNamesRead((n) => n + 1)
+        })
+        .catch(() => undefined)
+    }
+  }, [agent, agentKey, holdings, names])
 
   // Read again whenever the screen comes back into view. It stays mounted
   // under Join and Vetting, so without this a phone that had just made its
@@ -299,8 +393,7 @@ const VtaAgentHome: React.FC = () => {
   // A grant, a card or an invitation that arrives while this screen is open
   // shows without a visit to Vetting — and so does anything this phone stores
   // itself (a join, a vetting, a leave): the stores say when they write.
-  const loadNow = useCallback(() => void load(), [load])
-  useCommunityChanged(loadNow)
+  // (The store reads it again itself, mounted or not.)
 
   // A revoke sends the phone nothing: the community only flips a bit on its
   // status list. So while this screen shows a vetter's seat, the grants are read
@@ -867,7 +960,7 @@ const VtaAgentHome: React.FC = () => {
                   // Only a read that will run clears the error: with no agent, load() returns at once and the
                   // spinner would never stop — the hung screen this card replaces (7a, #483).
                   if (!agent) return
-                  setHoldingsError(false)
+                  agentHoldings.clearFailed(agentKey)
                   void load()
                 }}
                 testID={testIdWithKey(VtaAgentHomeIds.holdsRetry)}

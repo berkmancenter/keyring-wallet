@@ -9,7 +9,7 @@
  * before any passive effect could correct it.
  */
 import { act, fireEvent, render, within } from '@testing-library/react-native'
-import React, { Profiler, useLayoutEffect, useSyncExternalStore } from 'react'
+import React, { Profiler } from 'react'
 import { ActivityIndicator } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -93,25 +93,26 @@ const linkedTo = (vtaDid: string) => ({
   connection: { kind: 'online', since: 0 },
 })
 
-/** The home, with a probe after it that records each committed frame's answer to `ask`. */
+/**
+ * The home, recording each committed frame's answer to `ask`. A Profiler's onRender runs in every commit of the
+ * screen, whatever caused it: a probe re-rendered by the agent store alone missed the commits of the screen's own
+ * state (the holdings landing). The screen mounts once the tree is there to ask, so its first frame is recorded too;
+ * `again` renders it again in the same tree, so it is not remounted.
+ */
 function renderWithFrames(ask: (tree: ReturnType<typeof render>) => boolean) {
   const frames: boolean[] = []
   const box: { tree?: ReturnType<typeof render> } = {}
-  const Probe = () => {
-    // Re-rendered by every store change, in the same commit as the screen.
-    useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
-    useLayoutEffect(() => {
-      if (box.tree) frames.push(ask(box.tree))
-    })
-    return null
-  }
-  box.tree = render(
+  const screen = (shown: boolean) => (
     <BasicAppContext>
-      <VtaAgentHome />
-      <Probe />
+      <Profiler id="home" onRender={() => box.tree && frames.push(ask(box.tree))}>
+        {shown ? <VtaAgentHome /> : null}
+      </Profiler>
     </BasicAppContext>
   )
-  return { tree: box.tree, frames }
+  // Mounted once the tree is there to ask, so the first frame is recorded too.
+  box.tree = render(screen(false))
+  box.tree.rerender(screen(true))
+  return { tree: box.tree, frames, again: () => box.tree?.rerender(screen(true)) }
 }
 
 const settle = async () => {
@@ -215,15 +216,11 @@ describe('the agent home paints only the state it is in', () => {
     // 7a on #483: load() returns at once with no agent, so a Try again then cleared the error and left a spinner.
     it('Try again with no agent at that moment: the error stays, and no spinner starts', async () => {
       ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], undefined, () => true))
-      const { tree } = renderWithFrames(() => false)
+      const { tree, again } = renderWithFrames(() => false)
       await settle()
       expect(tree.getByTestId(id('AgentHoldsUnread'))).toBeTruthy()
       ;(useAgent as jest.Mock).mockReturnValue({ agent: undefined })
-      tree.rerender(
-        <BasicAppContext>
-          <VtaAgentHome />
-        </BasicAppContext>
-      )
+      again()
       await act(async () => {
         fireEvent.press(tree.getByTestId(id('AgentHoldsRetry')))
       })
@@ -310,5 +307,88 @@ describe("the agent home's next step", () => {
     expect(tree.getByTestId(cardOf(COMMUNITY))).toHaveTextContent(/Join\.StandingSent/)
     expect(frames.length).toBeGreaterThan(0)
     expect(frames.filter((f) => f.page || f.card)).toEqual([])
+  })
+})
+
+// Phase 2: the holdings were kept across remounts but only read again by the screen, so a change stored while the tab
+// was unmounted (an approval arriving) came back to the page from before it — a member saw the non-member's ways in
+// until the screen's own read landed.
+describe('the agent home after a change while it was unmounted', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    forgetAgentHoldings()
+    communityTarget.clear()
+    controller.set({ introSeen: true, activity: [], approvals: [], switchingTo: undefined, link: linkedTo(VTA_A) })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  /** Open the home as an applicant, leave it, store `stored` while away, and come back: each frame's doors. */
+  async function leaveAndReturn(stored: Rec[]) {
+    const records: Rec[] = [persona(COMMUNITY, VTA_A)]
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent(records))
+    const first = renderWithFrames(() => false)
+    await settle()
+    // The control: an applicant has the ways in.
+    expect(first.tree.getByTestId(id('AgentDoors'))).toBeTruthy()
+    first.tree.unmount()
+    records.push(...stored)
+    await act(async () => emitCommunityChanged(COMMUNITY, 'membership'))
+    await settle()
+    // Coming back reads again, and that read hangs: whatever shows is what the store kept.
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent(records, () => true))
+    return renderWithFrames((t) => Boolean(t.queryByTestId(id('AgentDoors'))))
+  }
+
+  it('an approval stored while away: no frame on return shows the ways in', async () => {
+    const back = await leaveAndReturn([membership(COMMUNITY)])
+    expect(back.frames.length).toBeGreaterThan(0)
+    expect(back.frames).not.toContain(true)
+  })
+
+  it('nothing stored while away: the ways in, as before (the control)', async () => {
+    const back = await leaveAndReturn([])
+    expect(back.frames[0]).toBe(true)
+  })
+})
+
+describe("the agent's holdings, read more than once", () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    forgetAgentHoldings()
+    communityTarget.clear()
+    controller.set({ introSeen: true, activity: [], approvals: [], switchingTo: undefined, link: linkedTo(VTA_A) })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  it('an older read finishing late does not put back what a newer one read', async () => {
+    const records: Rec[] = [persona(COMMUNITY, VTA_A)]
+    // The first read's answers wait; later reads answer at once.
+    const held: (() => void)[] = []
+    let holding = true
+    const base = fakeAgent(records).agent
+    const agent = {
+      ...base,
+      genericRecords: {
+        findAllByQuery: (query: Record<string, string>) => {
+          const answer = base.genericRecords.findAllByQuery(query)
+          if (!holding) return answer
+          return new Promise((resolve) => held.push(() => resolve(answer)))
+        },
+      },
+    }
+    // The first read sees the applicant; it is held.
+    ;(useAgent as jest.Mock).mockReturnValue({ agent })
+    const { tree } = renderWithFrames(() => false)
+    await settle()
+    // Approved meanwhile: a newer read sees the membership and lands.
+    records.push(membership(COMMUNITY))
+    holding = false
+    await act(async () => emitCommunityChanged(COMMUNITY, 'membership'))
+    await settle()
+    expect(tree.queryByTestId(id('AgentDoors'))).toBeNull()
+    // The older read comes back with the applicant's holdings: not shown.
+    await act(async () => held.splice(0).forEach((go) => go()))
+    await settle()
+    expect(tree.queryByTestId(id('AgentDoors'))).toBeNull()
   })
 })
