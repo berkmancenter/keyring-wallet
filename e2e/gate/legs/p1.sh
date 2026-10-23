@@ -11,13 +11,16 @@ leg_begin p1 "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5570; AP=
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1
-  [ -n "$AP" ] && kill "$AP" 2>/dev/null; emu_stop
+  [ -n "$AP" ] && kill "$AP" 2>/dev/null; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
 }
 LEG_CLEANUP=fin
 export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN ENROL_PORT=8196 E2E_RELEASE=1
 export PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD APPIUM_PORT=4760 OPENVTC_TUI_STYLE=current
 emu_start 5570; adb -s $E uninstall $BID >/dev/null 2>&1
+# The app's own log for the whole leg, as waiting and testreq keep it (#591): 269's p1 kept none, so its agent calls
+# (the approvals, the link) went unchecked by the carriage check.
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 curl -s -m 2 http://127.0.0.1:4760/status >/dev/null || { nohup appium --port 4760 --relaxed-security > "$LEG_DIR/appium.log" 2>&1 & AP=$!; for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:4760/status >/dev/null && break; sleep 1; done; }
 cd "$E2E"
 t=$(date +%s)

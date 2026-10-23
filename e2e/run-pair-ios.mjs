@@ -108,6 +108,10 @@ try {
       // The code's own invitation is readable only in a dev build (InvitationUrl, __DEV__); a release build says so.
       const codeEl = (await existsTestId(a, "InvitationUrl", 5000)) ? await a.$("~InvitationUrl") : undefined;
       const code = codeEl ? await codeEl.getAttribute("label") : undefined;
+      // Emptied first (both the WDA and the simctl pasteboard): a Copy that copies nothing must not pass on an earlier
+      // run's link left on this simulator (review on #598).
+      await a.setClipboard("", "plaintext").catch(() => undefined);
+      try { execFileSync("xcrun", ["simctl", "pbcopy", A.udid], { input: "" }); } catch { /* the WDA clear stands */ }
       await tapTestId(a, "MyQRShareLink", 15000);
       // The share sheet's Copy is a cell named "actionGroupCell" whose label is "Copy" (iOS 26), so not "~Copy" by name
       // (the RC rerun 1021-0328 stopped there with the sheet open).
@@ -115,13 +119,17 @@ try {
       await copy.waitForExist({ timeout: 15000 });
       await copy.click();
       await sleep(1000);
-      // The message is the words, then the link on its own line (QRScanner.tsx).
-      link = simctl("pbpaste", A.udid).trim().split(/\s+/).pop() || "";
+      // The message is the words, then the link on its own line (QRScanner.tsx). Read through WebDriverAgent first, as
+      // lib/pages/link.js does: simctl pbpaste came back empty for 10 s on the MacBook while WDA had the link (10-23).
+      const clip = Buffer.from((await a.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+      link = (clip || simctl("pbpaste", A.udid).trim()).split(/\s+/).pop() || "";
       const isLink = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(link);
       const note = await existsTestId(a, "MyQRShareLinkNote", 3000);
       const error = await existsTestId(a, "MyQRShareLinkError", 1000);
       const log = deviceLog({ platform: "ios", udid: A.udid }, since);
-      const made = /invitation link: made, share sheet opened/.test(log);
+      // The app says which link it made since the short links (#550 era): "made (long)" or "made (short)" (269's run read
+      // "[VRC] invitation link: made (long), share sheet opened" and this row, matching the older words, said false).
+      const made = /invitation link: made(?: \((?:long|short)\))?, share sheet opened/.test(log);
       const leaked = isLink && log.includes(link);
       await screenshot(a, "pair-share-link").catch(() => undefined);
       const differs = code === undefined ? "the code is not readable in a release build" : `a different invitation from the code ${link !== code}`;
