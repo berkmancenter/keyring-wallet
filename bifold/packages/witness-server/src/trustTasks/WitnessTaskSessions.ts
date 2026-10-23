@@ -69,6 +69,7 @@ import {
   verifyTranscript,
 } from './locality'
 import { loadTrustTaskRuntime } from './runtime'
+import { packTspReply } from './tspReply'
 
 /** Which carriage a request arrived on — a reply always goes back the same way. */
 type Carriage = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
@@ -230,7 +231,14 @@ export class WitnessTaskSessions {
           // invitation rotates its DID on first contact (tsp-reference/ref-19).
           const { unpacked } = await unpackForConnection(this.host.agent, envelope, connection, this.resolver)
           const document = JSON.parse(Buffer.from(unpacked.payload).toString('utf-8')) as Record<string, unknown>
-          await this.handleDocument(document, connection.id, connection.did, connection.theirDid, 'tsp')
+          await this.handleDocument(
+            document,
+            connection.id,
+            connection.did,
+            connection.theirDid,
+            'tsp',
+            unpacked.revision
+          )
         } catch (error) {
           console.error(`[${this.host.name}] TSP trust-task handling failed: ${(error as Error).message}`)
         }
@@ -273,7 +281,9 @@ export class WitnessTaskSessions {
     connectionId: string,
     myDid: string,
     theirDid: string,
-    carriage: Carriage
+    carriage: Carriage,
+    /** The TSP version a TSP request was framed with; the reply uses it. */
+    requestRevision?: tsp.TspRevision
   ): Promise<void> {
     const type = String(document.type ?? '')
     let reply: Record<string, unknown> | undefined
@@ -310,7 +320,7 @@ export class WitnessTaskSessions {
     if (carriage === 'tsp') {
       const senderIdentity = await identityFromDid(this.host.agent, myDid)
       const body = new TextEncoder().encode(JSON.stringify(reply))
-      const packed = await tsp.pack(body, myDid, theirDid, senderIdentity, this.resolver)
+      const packed = await packTspReply(body, myDid, theirDid, senderIdentity, this.resolver, requestRevision)
       await sender.sendMessage(
         new DidCommOutboundMessageContext(new TspEnvelopeMessage({ envelope: packed.bytes }), {
           agentContext: this.host.agent.context,
