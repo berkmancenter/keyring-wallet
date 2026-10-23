@@ -248,7 +248,9 @@ export async function handleContinuityRequest(
     connectionId,
     handler: async () => undefined,
   })
-  if (outcome.kind !== 'handled') return
+  // The handler sends no reply (that waits for the person), so a request that passes comes back 'accepted', not
+  // 'handled'. Only a refusal ('rejected') or a suppression ends it here.
+  if (outcome.kind !== 'accepted' && outcome.kind !== 'handled') return
 
   const relationships = await agent.dependencyManager.resolve(RelationshipDidRepository).getAll(agent.context)
   const current = relationships.find((record) => record.connectionId === connectionId)
