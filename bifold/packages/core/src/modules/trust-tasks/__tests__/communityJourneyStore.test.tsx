@@ -10,6 +10,7 @@ import { emitCommunityChanged } from '../module/communityChanged'
 import {
   communityJourneys,
   joinKnown,
+  readFailed,
   withPart,
   useCommunityJourney,
   type CommunityJourney,
@@ -211,6 +212,66 @@ describe('one journey per community, shared and kept', () => {
       expect(joinKnown(result.current.journey)?.kind).toBe('pending')
     })
 
+    it('a member shows at once, from what the phone holds; the card is checked after', async () => {
+      let release: () => void = () => undefined
+      const join = jest.fn(async (_a: unknown, _d: string, { local }: { poll: boolean; local?: boolean }) => {
+        if (local) return stateOf('member')
+        await new Promise<void>((resolve) => (release = resolve))
+        return stateOf('removed')
+      })
+      const r = { join, application: async () => undefined, vetterGrant: async () => ({ state: 'none' }) } as never
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      expect(join).toHaveBeenNthCalledWith(1, agent, COMMUNITY, { poll: false, local: true })
+      expect(join).toHaveBeenLastCalledWith(agent, COMMUNITY, { poll: false })
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+      await act(async () => release())
+      expect(joinKnown(result.current.journey)?.kind).toBe('removed')
+    })
+
+    // #494 review: a read lands twice now; the second landing of an older read must not follow a newer read's.
+    it('an older read whose full pass is slow does not land after a newer read that finished', async () => {
+      let release: () => void = () => undefined
+      let call = 0
+      const join = jest.fn(async () => {
+        call += 1
+        if (call === 1) return stateOf('sent')
+        if (call === 2) {
+          await new Promise<void>((resolve) => (release = resolve))
+          return stateOf('pending')
+        }
+        return stateOf('member')
+      })
+      const r = { join, application: async () => undefined, vetterGrant: async () => ({ state: 'none' }) } as never
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      await act(async () => result.current.refresh())
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+      await act(async () => release())
+      expect(join).toHaveBeenCalledTimes(4)
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+    })
+
+    it('a join that cannot be read says so through the hook, and reading it again clears it', async () => {
+      let fail = true
+      const r = {
+        join: async () => {
+          if (fail) throw new Error('store unavailable')
+          return stateOf('member')
+        },
+        application: async () => undefined,
+        vetterGrant: async () => ({ state: 'none' }),
+      } as never
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      expect(joinKnown(result.current.journey)).toBeUndefined()
+      expect(readFailed(result.current.journey, 'join')).toBe(true)
+      fail = false
+      await act(async () => result.current.refresh())
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+      expect(readFailed(result.current.journey, 'join')).toBe(false)
+    })
+
     // Phase 2b: a read that did not ask, started while one that asks was out, read the record before the answer was
     // stored and landed after it — a request the community said it never got shown as "Sent" again.
     it('a read that does not ask waits for one that asks, and reads what it stored', async () => {
@@ -247,5 +308,18 @@ describe('one journey per community, shared and kept', () => {
       // The grant is still out: unknown, not "none".
       expect(result.current.journey?.unread).toEqual(['vetterGrant'])
     })
+  })
+
+  // #494 review: unknown because the read failed is not unknown because it has not come back — a screen waiting
+  // on it said nothing and offered nothing.
+  it('a part never read whose read fails is marked failed; a part read before is not; reading it clears the mark', () => {
+    const none = withPart(undefined, 'join', { ok: false, value: undefined })
+    expect(readFailed(none, 'join')).toBe(true)
+    expect(readFailed(none, 'application')).toBe(false)
+    const member: CommunityJourney = { join: stateOf('member'), vetterGrant: { state: 'none' } }
+    expect(withPart(member, 'join', { ok: false, value: undefined })).toBe(member)
+    const read = withPart(none, 'join', { ok: true, value: stateOf('member') })
+    expect(readFailed(read, 'join')).toBe(false)
+    expect(read.failed).toBeUndefined()
   })
 })

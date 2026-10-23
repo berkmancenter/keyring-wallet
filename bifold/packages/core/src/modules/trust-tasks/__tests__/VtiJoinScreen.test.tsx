@@ -370,6 +370,21 @@ describe('I want to join a community', () => {
       mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
     })
 
+    // #494 review: a standing that could not be read showed the spinner for as long as the person stayed.
+    it('a standing that cannot be read: said, with Check again, which reads it again', async () => {
+      mockReadJoinState.mockRejectedValue(new Error('store unavailable'))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinReadFailed'))).toHaveTextContent(/Join\.StandingUnread/)
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid: linked, role: 'member' } })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinReadAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinReadFailed'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
     it('once known to stand nowhere, the way in shows', async () => {
       let answer: (state: unknown) => void = () => undefined
       mockReadJoinState.mockImplementation(() => new Promise((resolve) => (answer = resolve)))

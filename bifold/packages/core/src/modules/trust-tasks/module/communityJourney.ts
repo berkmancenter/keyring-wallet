@@ -38,6 +38,12 @@ export interface CommunityJourney {
    * Phase 2). Read the join through {@link joinKnown}.
    */
   unread?: ReadonlyArray<JourneyPart>
+  /**
+   * The unread parts whose last read failed: "could not read", not "reading"
+   * — a screen that waits for a part says so and offers to read again, rather
+   * than waiting on nothing. Read through {@link readFailed}.
+   */
+  failed?: ReadonlyArray<JourneyPart>
 }
 
 export type JourneyPart = 'join' | 'application' | 'vetterGrant'
@@ -45,6 +51,11 @@ export type JourneyPart = 'join' | 'application' | 'vetterGrant'
 /** The join state when it was read; undefined when not read yet or when its read failed — unknown, never "none". */
 export function joinKnown(journey: CommunityJourney | undefined): CommunityJoinState | undefined {
   return journey && !journey.unread?.includes('join') ? journey.join : undefined
+}
+
+/** Whether `part` is unknown because its read failed, not because it has not come back yet. */
+export function readFailed(journey: CommunityJourney | undefined, part: JourneyPart): boolean {
+  return Boolean(journey?.failed?.includes(part))
 }
 
 /** The vetter grant when it was read; undefined when unknown. */
@@ -63,7 +74,8 @@ const NOTHING_READ: CommunityJourney = {
  * One part landing on the reading before it. A part that was read replaces
  * that part and leaves the unread list; a part that could not be read keeps
  * the last value read — a passing failure must not replace an answer with a
- * stand-in for every screen — and stays unread if it never was read.
+ * stand-in for every screen — and stays unread if it never was read, marked
+ * failed.
  */
 export function withPart(
   before: CommunityJourney | undefined,
@@ -71,7 +83,10 @@ export function withPart(
   read: { ok: boolean; value: unknown }
 ): CommunityJourney {
   const base = before ?? NOTHING_READ
-  if (!read.ok) return base
+  if (!read.ok) {
+    if (!base.unread?.includes(part) || base.failed?.includes(part)) return base
+    return { ...base, failed: [...(base.failed ?? []), part] }
+  }
   const next: CommunityJourney = { ...base }
   if (part === 'join') next.join = read.value as CommunityJoinState
   else if (part === 'application') next.application = read.value as VettingApplication | undefined
@@ -79,18 +94,22 @@ export function withPart(
   const unread = (base.unread ?? []).filter((p) => p !== part)
   if (unread.length) next.unread = unread
   else delete next.unread
+  const failed = (base.failed ?? []).filter((p) => p !== part)
+  if (failed.length) next.failed = failed
+  else delete next.failed
   return next
 }
 
 /** How each part is read; the defaults read this phone's stores. Tests replace them. */
 export interface CommunityJourneyReaders {
-  join: (agent: Agent, communityDid: string, options: { poll: boolean }) => Promise<CommunityJoinState>
+  /** `local`: only what this phone holds, with no network read (see readJoinState). */
+  join: (agent: Agent, communityDid: string, options: { poll: boolean; local?: boolean }) => Promise<CommunityJoinState>
   application: (agent: Agent, communityDid: string) => Promise<VettingApplication | undefined>
   vetterGrant: (agent: Agent, communityDid: string) => Promise<VetterGrantState>
 }
 
 export const defaultJourneyReaders: CommunityJourneyReaders = {
-  join: (agent, communityDid, { poll }) => readJoinState(agent, communityDid, { poll }),
+  join: (agent, communityDid, { poll, local }) => readJoinState(agent, communityDid, { poll, local }),
   application: (agent, communityDid) => new GenericRecordsVettingStore(agent).getApplication(communityDid),
   vetterGrant: async (agent, communityDid) => {
     const grants = await new GenericRecordsCommunityStore(agent).listHeldCredentials('vetter-grant', communityDid)
@@ -210,12 +229,14 @@ class CommunityJourneyStore {
           entry.journey = withPart(entry.journey, part, result)
           this.listeners.forEach((l) => l())
         })
-    const join = (poll: boolean) => () => readers.join(agent, communityDid, { poll })
     const reading = Promise.all([
-      // Asking the community waits on the network: what the phone holds lands
-      // first, then the answer (a first visit with an open request sat on
-      // "reading" for the whole ask).
-      options.poll ? land('join', join(false)).then(() => land('join', join(true))) : land('join', join(false)),
+      // The join waits on the network (the card's status list, and the
+      // community while a request is open): what the phone holds lands first,
+      // then the full read (a first visit sat on "reading" for the whole wait —
+      // a member, up to the status list's timeout).
+      land('join', () => readers.join(agent, communityDid, { poll: false, local: true })).then(() =>
+        land('join', () => readers.join(agent, communityDid, { poll: options.poll }))
+      ),
       land('application', () => readers.application(agent, communityDid)),
       land('vetterGrant', () => readers.vetterGrant(agent, communityDid)),
     ]).then(() => undefined)

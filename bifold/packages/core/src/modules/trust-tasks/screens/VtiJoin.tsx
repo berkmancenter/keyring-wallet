@@ -35,7 +35,7 @@ import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifes
 import { communityTarget } from '../module/vtiCommunityLink'
 import { vtaAgent } from '../module/vtaAgent'
 import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
-import { joinKnown, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
+import { joinKnown, readFailed, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
@@ -185,7 +185,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // "Sent for review" → member (UI-smoothness plan, Phase 2b).
   const joinReaders = useMemo<Partial<CommunityJourneyReaders>>(
     () => ({
-      join: (a, did, { poll }) => readJoinState(a, did, { poll, mediatorDid: config?.mediatorDid }),
+      join: (a, did, { poll, local }) => readJoinState(a, did, { poll, local, mediatorDid: config?.mediatorDid }),
     }),
     [config?.mediatorDid]
   )
@@ -680,12 +680,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // card filled with defaults, until both came back (Phase 2b). A manifest
       // that could not be read at all (nameRead) goes on to say so, as before.
       if (communityDid && ((!manifest && nameRead !== communityDid) || standing === undefined)) {
+        // A standing that could not be read is said, with a way to read it
+        // again — not a spinner waiting on nothing.
+        const failed = standing === undefined && readFailed(journey, 'join')
         body = (
           <>
             {waysTitle}
-            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.reading)}>
-              <ActivityIndicator color={ColorPalette.brand.primary} />
-            </View>
+            {failed ? (
+              <View style={styles.card} testID={testIdWithKey(VtiJoinIds.readFailed)}>
+                <ThemedText>{t('Join.StandingUnread')}</ThemedText>
+                <Button
+                  title={t('Join.CheckAgain')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() => void onCheckAgain()}
+                  disabled={checking}
+                  testID={testIdWithKey(VtiJoinIds.readAgain)}
+                />
+              </View>
+            ) : (
+              <View style={styles.card} testID={testIdWithKey(VtiJoinIds.reading)}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+              </View>
+            )}
           </>
         )
         actions = different

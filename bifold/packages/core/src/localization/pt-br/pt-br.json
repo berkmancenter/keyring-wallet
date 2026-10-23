@@ -1595,6 +1595,7 @@
     "StandingWithdrawn": "Você retirou seu pedido a {{community}}.",
     "StandingLeft": "Você saiu de {{community}}.",
     "StandingAgain": "Você pode pedir para entrar de novo.",
+    "StandingUnread": "Não foi possível ler sua situação com esta comunidade.",
     "IdentityHere": "Seu ID de persona: {{name}}",
     "Open": "Abrir {{community}}",
     "CheckAgain": "Verificar de novo",

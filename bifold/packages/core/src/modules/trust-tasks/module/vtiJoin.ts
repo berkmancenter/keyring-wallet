@@ -27,7 +27,7 @@ import {
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { selfRemoveRefusal, vtiAgent, VtiSentNoAnswer, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
-import { recordCardRevocation } from './vtiCardStanding'
+import { cardStandingOf, recordCardRevocation } from './vtiCardStanding'
 import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { reciprocateIfOwed } from './vtiReciprocate'
 import { receiveIssue, roleNameOf, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
@@ -285,6 +285,12 @@ export type CommunityJoinState =
 export interface ReadJoinStateOptions {
   /** Ask the community while a request is open (default true). */
   poll?: boolean
+  /**
+   * Only what this phone holds: no poll, and a card's revocation as last
+   * recorded (vtiCardStanding), never a status-list fetch — so a member reads
+   * as a member at once, not after the list answers (up to its timeout).
+   */
+  local?: boolean
   mediatorDid?: string
   communityStore?: VtiCommunityStore
   identityStore?: VtiIdentityStore
@@ -322,18 +328,25 @@ export async function readJoinState(
   if (membership?.removal && !sentSince(membership.removal.decidedAt))
     return { kind: 'removed', membership, at: membership.removal.decidedAt }
   if (membership && !membership.removal) {
-    const cardStatus =
-      options.cardStatus ??
-      (async (m: VtiMembership) => {
-        const result = await checkCredentialStatus(agent, m.vmc, communityDid)
-        // What the list said is kept, so the Wallet and the screens can say
-        // where the card stands without reading it again (vtiCardStanding).
-        if (result.state === 'ok' || result.state === 'revoked' || result.state === 'none')
-          await recordCardRevocation(agent, String(m.vmc.id ?? ''), result.state === 'revoked', result.checkedAt).catch(
-            () => undefined
-          )
-        return result.state === 'revoked' ? { revoked: true, at: result.checkedAt } : { revoked: false }
-      })
+    const cardStatus = options.local
+      ? async (m: VtiMembership) => {
+          const recorded = cardStandingOf(m.vmc as Record<string, unknown>)
+          return recorded.state === 'revoked' ? { revoked: true, at: recorded.at } : { revoked: false }
+        }
+      : (options.cardStatus ??
+        (async (m: VtiMembership) => {
+          const result = await checkCredentialStatus(agent, m.vmc, communityDid)
+          // What the list said is kept, so the Wallet and the screens can say
+          // where the card stands without reading it again (vtiCardStanding).
+          if (result.state === 'ok' || result.state === 'revoked' || result.state === 'none')
+            await recordCardRevocation(
+              agent,
+              String(m.vmc.id ?? ''),
+              result.state === 'revoked',
+              result.checkedAt
+            ).catch(() => undefined)
+          return result.state === 'revoked' ? { revoked: true, at: result.checkedAt } : { revoked: false }
+        }))
     const card = await cardStatus(membership).catch(() => ({ revoked: false, at: undefined }))
     if (!card.revoked) return { kind: 'member', membership }
     // Revoked: a request sent since the membership began is the person asking again.
@@ -352,7 +365,7 @@ export async function readJoinState(
   if (!submission) return { kind: 'none' }
 
   const open = !submission.acknowledgedAt || submission.status === 'pending' || submission.status === 'deferred'
-  if (open && options.poll !== false) {
+  if (open && options.poll !== false && !options.local) {
     const poll =
       options.status ??
       (async (did: string, requestId?: string) => {

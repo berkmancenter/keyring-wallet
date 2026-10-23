@@ -38,6 +38,9 @@ export const VtiJoinIds = {
   preparingSlow: 'PreparingSlow',
   standing: 'JoinStanding',
   reading: 'JoinReading',
+  /** Where the person stands could not be read: said, with Check again. */
+  readFailed: 'JoinReadFailed',
+  readAgain: 'JoinReadAgain',
   requestSent: 'JoinRequestSent',
   memberCheck: 'JoinMemberCheck',
   standingText: 'JoinStandingText',

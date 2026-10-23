@@ -5,6 +5,7 @@ import type { JoinSubmission, VtiCommunityStore, VtiMembership } from '../module
 import { vtiAgent, VtiRefusal } from '../module/vtiAgent'
 import { joinCommunity, readJoinState } from '../module/vtiJoin'
 import { vtaAgent } from '../module/vtaAgent'
+import * as cardStanding from '../module/vtiCardStanding'
 
 // p220 items 1, 2 and 7: where a join stands, read from what the phone sent
 // and what the community said — "Sent — waiting for the community" until it
@@ -185,6 +186,32 @@ describe('where a join stands', () => {
     await expect(
       readJoinState(agent, COMMUNITY, { communityStore: store, cardStatus: revoked })
     ).resolves.toMatchObject({ kind: 'removed', at: 'r' })
+  })
+
+  // Phase 2b: a member's first visit waited on the status list (up to its
+  // timeout) before anything showed. A local read answers from what the phone
+  // holds: the card's revocation as last recorded, and no poll.
+  it('local: a member at once from the recorded card, never the status list; an open request not asked', async () => {
+    const fetched = jest.fn(async () => ({ revoked: false }))
+    const { store } = memoryStore({ membership: card })
+    await expect(
+      readJoinState(agent, COMMUNITY, { communityStore: store, cardStatus: fetched, local: true })
+    ).resolves.toMatchObject({ kind: 'member' })
+    expect(fetched).not.toHaveBeenCalled()
+    const recorded = jest.spyOn(cardStanding, 'cardStandingOf').mockReturnValue({ state: 'revoked', at: 'r' })
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: store, local: true })).resolves.toMatchObject({
+      kind: 'removed',
+      at: 'r',
+    })
+    recorded.mockRestore()
+    const status = jest.fn(async () => undefined)
+    const open = memoryStore({ submission: sent() }).store
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: open, status, local: true })).resolves.toMatchObject(
+      {
+        kind: 'sent',
+      }
+    )
+    expect(status).not.toHaveBeenCalled()
   })
 
   // A community tells a removed member so in a signed notice
