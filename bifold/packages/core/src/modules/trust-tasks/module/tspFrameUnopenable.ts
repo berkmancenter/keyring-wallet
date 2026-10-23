@@ -27,6 +27,9 @@ export type TspFrameDropReason =
   | 'otherReceiver'
   /** Opened, but its document names another issuer or recipient than TSP authenticated (binding §3). */
   | 'identityMismatch'
+  /** Its version marker names a TSP MAJOR this build does not read (it reads Rev 2,
+   *  Rev 3 and 1.0). Lasting: the frame will never open here, whatever key arrives. */
+  | 'versionMismatch'
 
 export class TspFrameUnopenable extends Error {
   constructor(

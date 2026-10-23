@@ -66,6 +66,29 @@ describe('which frames can never be opened here', () => {
     expect(await reasonOf(unpackTrustTaskFromPeer(sessionFailingAt('read').session, BYTES, ME))).toBe('malformed')
   })
 
+  it('a TSP version this build does not read (a MAJOR above 1.0): lasting, and named as such', async () => {
+    // The peek's refusal, as tsp-js shapes it: a code, the MAJOR and MINOR read.
+    const refusal = Object.assign(new Error('tsp: message declares MAJOR 2; this implementation reads MAJOR 0 and 1'), {
+      code: 'E_TSP_REVISION',
+      major: 2,
+      minor: 0,
+    })
+    const session = {
+      identity: { signingKey: {} as never, keyAgreement: { publicKey: new Uint8Array(32), agree: jest.fn() } },
+      resolver: { resolve: jest.fn() },
+      codec: {
+        unpack: jest.fn(async () => {
+          throw refusal
+        }),
+        pack: jest.fn(),
+      },
+    } as unknown as TspSessionIdentity
+    expect(await reasonOf(unpackTrustTaskFromPeer(session, BYTES, ME))).toBe('versionMismatch')
+    await expect(unpackTrustTaskFromPeer(session, BYTES, ME)).rejects.toThrow(
+      /declares TSP 2\.0, which this build does not read/
+    )
+  })
+
   it('opened, but for another identity, or naming another issuer: lasting', async () => {
     const other = sessionFailingAt('none', { receiver: 'did:peer:2.someone-else' })
     expect(await reasonOf(unpackTrustTaskFromPeer(other.session, BYTES, ME))).toBe('otherReceiver')

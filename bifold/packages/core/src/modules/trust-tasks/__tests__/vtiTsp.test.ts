@@ -358,6 +358,52 @@ describe('vtiAgent — the peer leg on TSP', () => {
     expect((vtiAgent.getState().peerRevisions ?? []).map((r) => r.vid)).toContain(vetter.vid)
   })
 
+  // TSP 1.0 bridge, B3: a peer that wrote to us is answered in the version it wrote in.
+  test.each([
+    ['v1', 1],
+    ['rev3', 0],
+  ] as const)('a peer that wrote in %s is answered in %s: the invite and the task alike', async (revision, major) => {
+    controller.state = {
+      status: 'connected',
+      did: applicant.vid,
+      peerLeg: 'didcomm',
+      tspReady: true,
+      peerRevisions: [],
+    }
+    const packed = await packTrustTaskForPeer(
+      sessionFor(vetter),
+      vetter.vid,
+      applicant.vid,
+      { ...request, id: `urn:uuid:ask-${revision}`, issuer: vetter.vid, recipient: applicant.vid },
+      revision
+    )
+    expect(tsp.peekRevision(packed.bytes).revision).toBe(revision)
+    const stop = vtiAgent.onInbound(() => undefined)
+    await controller.receiveTspFrame(packed.bytes, applicant.vid)
+    stop()
+    expect(vtiAgent.peerRevisionOf(vetter.vid)).toBe(revision)
+
+    await vtiAgent.send(vetter.vid, request.type, request)
+    expect(controller.session!.sendTo).not.toHaveBeenCalled()
+    const sent = controller.session!.sendTspFrame.mock.calls.map(([b]) => b as Uint8Array)
+    expect(sent).toHaveLength(2)
+    expect(sent.map((b) => tsp.readTspVersion(b).major)).toEqual([major, major])
+    const opened = await unpackTrustTaskFromPeer(sessionFor(vetter), sent[1], vetter.vid)
+    expect(opened!.plaintext.body).toEqual(request)
+    expect(logs.some((l) => new RegExp(`sent ${revision} short frame to did:webvh:example:vetter`).test(l))).toBe(true)
+  })
+
+  test('starting a conversation keeps the codec version: no recorded reply version, no 1.0', async () => {
+    setPeerLegCarriage('tsp')
+    controller.state = { status: 'connected', did: applicant.vid, peerLeg: 'tsp', tspReady: true, peerRevisions: [] }
+    await vtiAgent.send(vetter.vid, request.type, request)
+    const sent = controller.session!.sendTspFrame.mock.calls.map(([b]) => b as Uint8Array)
+    // vtiAgent is a singleton that remembers whom it greeted, so an earlier test
+    // may already have sent this pair's invite: assert every frame, not the count.
+    expect(sent.length).toBeGreaterThan(0)
+    expect(sent.every((b) => tsp.peekRevision(b).revision === 'rev3')).toBe(true)
+  })
+
   // D7FG-2Y9J: a frame left on the mediator for ever fills the queue a peer's replies need. Sealed to another key and
   // opened with this one, it can never open here: it is dropped, and said so. A frame not opened YET stays (below).
   test('a frame sealed to another persona is said in Release and dropped: it can never be opened here', async () => {

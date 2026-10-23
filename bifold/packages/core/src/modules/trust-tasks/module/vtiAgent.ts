@@ -491,6 +491,11 @@ class VtiAgentController {
   }
 
   /** How `peerDid` last reached us, if it has — what a reply to it should use. */
+  /** The TSP version `peerDid` last wrote to us in, as recorded on receipt. */
+  peerRevisionOf(peerDid: string): tsp.TspRevision | undefined {
+    return this.state.peerRevisions?.find((record) => record.vid === peerDid)?.revision
+  }
+
   inboundCarriageOf(peerDid: string): Carriage | undefined {
     return this.inboundCarriage.get(peerDid)
   }
@@ -533,11 +538,12 @@ class VtiAgentController {
    * reports the outcome, and the peer may already know us from an earlier
    * session, in which case the invite was never needed.
    */
-  private async ensureGreeted(toDid: string): Promise<void> {
+  private async ensureGreeted(toDid: string, revision?: tsp.TspRevision): Promise<void> {
     const session = this.session
     const did = this.state.did
     if (!session || !did || !this.tsp || !this.agent) return
-    const pair = `${did} ${toDid}`
+    // Keyed by version too: a peer that moves from Rev 3 to 1.0 needs a 1.0 invite.
+    const pair = `${did} ${toDid} ${revision ?? 'codec'}`
     if (this.greeted.has(pair)) return
     this.greeted.add(pair)
     try {
@@ -548,7 +554,7 @@ class VtiAgentController {
       // requires at least one onward hop" and never answered the invite.
       // Upstream's own `form_relationship_routed` sends exactly this pair.
       const route = this.mediatorDid ? [this.mediatorDid, did] : []
-      const invite = await greetPeerOverTsp(this.tsp, did, toDid, route)
+      const invite = await greetPeerOverTsp(this.tsp, did, toDid, route, revision)
       await session.sendTspFrame(invite.bytes)
       this.agent.config.logger.info(
         `${TSP_LOG_PREFIX} greeted ${toDid} with an XRFI invite (${invite.bytes.length} bytes, route ${route.length})`
@@ -1130,11 +1136,21 @@ class VtiAgentController {
               'tsp'
             : false)
     if (capable && this.tsp && this.agent) {
-      await this.ensureGreeted(toDid)
-      const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {
-        ...document,
-        type: String(document.type ?? type),
-      })
+      // Answering a peer that wrote to us over TSP: answer in the version it
+      // wrote in, as recorded on receipt. Starting a conversation keeps the
+      // codec's version; choosing one per peer is B4's.
+      const revision = inbound === 'tsp' ? this.peerRevisionOf(toDid) : undefined
+      await this.ensureGreeted(toDid, revision)
+      const packed = await packTrustTaskForPeer(
+        this.tsp,
+        did,
+        toDid,
+        {
+          ...document,
+          type: String(document.type ?? type),
+        },
+        revision
+      )
       await session.sendTspFrame(packed.bytes)
       this.agent.config.logger.info(
         `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${named(type, toDid, 'a peer')} (${packed.bytes.length} bytes, type ${type})`

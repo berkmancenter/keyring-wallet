@@ -163,9 +163,14 @@ export async function packTrustTaskForPeer(
   session: TspSessionIdentity,
   fromDid: string,
   toDid: string,
-  document: Record<string, unknown>
+  document: Record<string, unknown>,
+  revision?: tsp.TspRevision
 ): Promise<tsp.PackedMessage> {
-  return session.codec.pack(tsp.encodeTrustTaskEnvelope(document), fromDid, toDid, session.identity, session.resolver)
+  const body = tsp.encodeTrustTaskEnvelope(document)
+  // A reply goes out in the version the peer wrote in (TSP 1.0 cutover plan
+  // §6.1, B3): that is evidence, not a guess. Otherwise the session's codec.
+  if (revision === 'v1') return tsp.packV1(body, fromDid, toDid, session.identity, session.resolver)
+  return session.codec.pack(body, fromDid, toDid, session.identity, session.resolver)
 }
 
 /**
@@ -189,8 +194,10 @@ export async function greetPeerOverTsp(
   session: TspSessionIdentity,
   fromDid: string,
   toDid: string,
-  route: string[]
+  route: string[],
+  revision?: tsp.TspRevision
 ): Promise<tsp.PackedMessage> {
+  if (revision === 'v1') return tsp.packInviteV1(fromDid, toDid, session.identity, session.resolver, { route })
   return tsp.packInviteRev3(fromDid, toDid, session.identity, session.resolver, { route })
 }
 
@@ -287,6 +294,16 @@ export async function unpackTrustTaskFromPeer(
     // stranded accept per applicant, charged to the community.
     if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) return undefined
     const detail = String((error as Error)?.message ?? error).slice(0, 160)
+    // A version marker this build cannot read (the peek's `E_TSP_REVISION`): named,
+    // so the log says "a TSP version this build does not read" rather than
+    // "could not be read". Checked on the code, not the class, which may come
+    // from another bundle copy.
+    const revisionError = error as { code?: unknown; major?: unknown; minor?: unknown }
+    if (revisionError?.code === 'E_TSP_REVISION' && typeof revisionError.major === 'number')
+      throw new TspFrameUnopenable(
+        'versionMismatch',
+        `${LOG_PREFIX} frame declares TSP ${revisionError.major}.${String(revisionError.minor ?? '?')}, which this build does not read (it reads Rev 2, Rev 3 and 1.0): ${detail}`
+      )
     if (stage === 'keyUsed')
       throw new TspFrameUnopenable(
         'unsealFailed',
