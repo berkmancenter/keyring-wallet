@@ -1,3 +1,4 @@
+// 268 OTA bundle: build 268's own JavaScript plus this comment, so the bundle differs from the build and is published at all.
 // =============================================================================
 // React Native Entry Point
 // Polyfills are loaded before the app to ensure compatibility
