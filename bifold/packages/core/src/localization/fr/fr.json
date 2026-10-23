@@ -524,7 +524,20 @@
     "GoToCredentialDetail": "Aller au détail de l'attestation",
     "CredentialName": "Nom du justificatif",
     "Credentials": "Mes justificatifs avec ce contact",
-    "NoCredentials": "Vous n'avez aucun justificatif de ce contact."
+    "NoCredentials": "Vous n'avez aucun justificatif de ce contact.",
+    "MergeOfferTitle": "Même personne ?",
+    "MergeOfferBody": "Vous avez un autre contact nommé {{name}}. S'il s'agit de la même personne, fusionnez-les en un seul contact. Rien n'est supprimé, et vous pourrez les séparer à nouveau.",
+    "Merge": "Fusionner",
+    "MergeConfirmTitle": "Fusionner les deux contacts {{name}} ?",
+    "MergeConfirmBody": "Ils apparaîtront comme un seul contact, avec les cartes des deux échanges. Seul ce téléphone change : {{name}} n'est pas prévenu. Vous pourrez les séparer à nouveau.",
+    "MergeBack": "Retour",
+    "MergedByYou": "Fusionné par vous — non confirmé par le téléphone de {{name}}",
+    "Separate": "Séparer",
+    "MergeFailed": "Impossible de modifier vos contacts. Rien n'a été changé.",
+    "MergedRemoveTitle": "Supprimer {{name}} ?",
+    "MergedRemoveBody": "Cela supprime {{count}} relations avec {{name}}, y compris les cartes de chacune, et ne peut pas être annulé. S'il s'agit de personnes différentes, séparez-les d'abord.",
+    "MergedRemoveSeparate": "Les séparer plutôt",
+    "MergedRemoveConfirm": "Tout supprimer ({{count}})"
   },
   "WhatAreContacts": {
     "Title": "Que sont les Contacts?",

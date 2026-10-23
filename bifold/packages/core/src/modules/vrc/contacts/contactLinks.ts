@@ -15,6 +15,9 @@ import type { Agent } from '@credo-ts/core'
 /** genericRecords recordType of a contact link. */
 export const CONTACT_LINK = 'keyring.contact-link'
 
+/** What reading and writing links needs of an agent: its generic record store. */
+export type ContactLinkStore = Pick<Agent, 'genericRecords'>
+
 /** issuer DID → contact id, for linked relationships only. */
 export type ContactLinks = ReadonlyMap<string, string>
 
@@ -46,7 +49,7 @@ export function relationshipsOfContact(links: ContactLinks, issuerDid: string): 
 }
 
 /** The links stored on this phone. None when there is no agent yet or no record store. */
-export async function loadContactLinks(agent: Agent | undefined): Promise<ContactLinks> {
+export async function loadContactLinks(agent: ContactLinkStore | undefined): Promise<ContactLinks> {
   const records =
     (agent?.genericRecords && (await agent.genericRecords.findAllByQuery({ recordType: CONTACT_LINK }))) || []
   const links = new Map<string, string>()

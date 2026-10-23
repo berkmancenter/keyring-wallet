@@ -2,6 +2,9 @@
  * Contact details resolved by contact id must look exactly as they did by issuer while nothing is linked. The
  * snapshots were recorded against the screen as it was before contact ids, from a store with several relationships
  * per person and no link records; the grouped screen must reproduce them.
+ *
+ * One deliberate change since: the two Alice relationships share a name, so each now carries the "Same person?"
+ * merge offer (ContactMergeSection). Their snapshots gained that section and nothing else; Bob's is as recorded.
  */
 import { render, waitFor } from '@testing-library/react-native'
 import React from 'react'
