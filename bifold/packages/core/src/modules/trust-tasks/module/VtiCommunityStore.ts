@@ -141,6 +141,13 @@ export interface JoinSubmission {
    * without it.
    */
   rejectionSaidAt?: string
+  /**
+   * When the community, asked, said it holds no such request — the send never
+   * reached it (238). Kept so a read that does not ask still says so, rather
+   * than "sent" again; any later answer clears it, and a new send replaces the
+   * record.
+   */
+  lostAt?: string
 }
 
 /** A member leaving a community from this phone. */

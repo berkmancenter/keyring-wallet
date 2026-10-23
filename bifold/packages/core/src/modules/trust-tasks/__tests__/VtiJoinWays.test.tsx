@@ -551,7 +551,11 @@ describe('Join, at manifest 0.3', () => {
     expect(tree.queryByTestId(id('JoinError'))).toBeNull()
     expect(tree.queryByTestId(id('JoinAsContinue'))).toBeNull()
     // Asked the community where it stands (a poll), not only what this phone holds.
-    expect(mockReadJoinState).toHaveBeenCalledWith(expect.anything(), community, { mediatorDid: config.mediatorDid })
+    expect(mockReadJoinState).toHaveBeenCalledWith(
+      expect.anything(),
+      community,
+      expect.objectContaining({ poll: true, mediatorDid: config.mediatorDid })
+    )
     expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
   })
 

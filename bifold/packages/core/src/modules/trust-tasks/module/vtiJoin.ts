@@ -268,8 +268,9 @@ export function membershipFromVerdict(
 export type CommunityJoinState =
   /**
    * Nothing stands. `lost`: this phone sent a request and the community, asked,
-   * holds none — the send never reached it. Only ever from that answer, never
-   * from a request that is merely unanswered (238).
+   * holds none — the send never reached it. Only ever from that answer (kept
+   * as the submission's `lostAt`), never from a request that is merely
+   * unanswered (238).
    */
   | { kind: 'none'; lost?: boolean }
   | { kind: 'member'; membership: VtiMembership }
@@ -370,7 +371,12 @@ export async function readJoinState(
       // The community holds no such request: the send never reached it, or it
       // was swept. There is nothing to wait for — the person can send again,
       // and is told why (238).
-      if (!polled) return { kind: 'none', lost: true }
+      if (!polled) {
+        // Kept, so a read that does not ask says so too; failing to keep it does not unsay the answer.
+        if (!submission.lostAt)
+          await store.saveSubmission?.({ ...submission, lostAt: new Date().toISOString() })?.catch(() => undefined)
+        return { kind: 'none', lost: true }
+      }
       submission = (await recordStatus(store, communityDid, polled)) ?? submission
     } catch {
       // Keep what the phone last knew.
@@ -381,6 +387,7 @@ export async function readJoinState(
 
 /** A submission as a join state, from what the community last said about it. */
 export function stateOfSubmission(submission: JoinSubmission): CommunityJoinState {
+  if (submission.lostAt) return { kind: 'none', lost: true }
   if (!submission.acknowledgedAt) return { kind: 'sent', submission }
   switch (submission.status) {
     case 'deferred':

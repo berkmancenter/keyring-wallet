@@ -37,6 +37,7 @@ export const VtiJoinIds = {
   asContinue: 'JoinAsContinue',
   preparingSlow: 'PreparingSlow',
   standing: 'JoinStanding',
+  reading: 'JoinReading',
   requestSent: 'JoinRequestSent',
   memberCheck: 'JoinMemberCheck',
   standingText: 'JoinStandingText',

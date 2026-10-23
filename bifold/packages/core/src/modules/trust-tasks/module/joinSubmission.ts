@@ -118,12 +118,13 @@ export async function recordAnswer(
       status,
       needs: status === 'deferred' ? answer.verdict.needs : undefined,
       rejection: undefined,
+      lostAt: undefined,
     })
     return
   }
   // A refusal is an answer: the community received the request and said no to
   // this send. It does not say the request was decided (an open one, say).
-  await store.saveSubmission?.({ ...current, acknowledgedAt })
+  await store.saveSubmission?.({ ...current, acknowledgedAt, lostAt: undefined })
 }
 
 /** Record a poll of the community's status task. */
@@ -161,6 +162,8 @@ export async function recordStatus(
       status === 'rejected'
         ? { code: polled.code ?? 'rejected', reason: polled.reason, decidedAt: polled.decidedAt }
         : undefined,
+    // The community holds it after all.
+    lostAt: undefined,
   }
   // First learned now: it was open, and nobody has been told.
   const key = `${communityDid} ${current.sentAt}`

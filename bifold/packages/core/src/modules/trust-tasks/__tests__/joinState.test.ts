@@ -236,6 +236,30 @@ describe('where a join stands', () => {
     ).resolves.toEqual({ kind: 'none', lost: true })
   })
 
+  // The answer is kept: a read that does not ask (a change to the community
+  // read again) said "sent" again for a request the community never got.
+  it('lost is kept: said again without asking, until the community answers or a new request is sent', async () => {
+    const { store, current } = memoryStore({ submission: sent() })
+    await readJoinState(agent, COMMUNITY, { communityStore: store, status: async () => undefined })
+    expect(current()?.lostAt).toEqual(expect.any(String))
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: store, poll: false })).resolves.toEqual({
+      kind: 'none',
+      lost: true,
+    })
+    // The community holds it after all.
+    const status = async () => ({ requestId: 'r1', status: 'pending' as const })
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: store, status })).resolves.toMatchObject({
+      kind: 'pending',
+    })
+    expect(current()?.lostAt).toBeUndefined()
+    // A new request replaces the record: sent, not lost.
+    await readJoinState(agent, COMMUNITY, { communityStore: store, status: async () => undefined })
+    await recordSent(store, { communityDid: COMMUNITY, personaDid: PERSONA, withInvitation: false, via: 'join' }, NOW)
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: store, poll: false })).resolves.toMatchObject({
+      kind: 'sent',
+    })
+  })
+
   it('rejected, with the code and the community’s own words', async () => {
     const { store } = memoryStore({ submission: sent({ acknowledgedAt: 't', status: 'pending', requestId: 'r1' }) })
     const status = jest.fn(async () => ({

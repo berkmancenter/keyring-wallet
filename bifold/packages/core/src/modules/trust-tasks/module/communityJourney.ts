@@ -52,28 +52,34 @@ export function vetterGrantKnown(journey: CommunityJourney | undefined): VetterG
   return journey && !journey.unread?.includes('vetterGrant') ? journey.vetterGrant : undefined
 }
 
+/** Nothing read yet: every part a stand-in, and listed unread (unknown, never "none"). */
+const NOTHING_READ: CommunityJourney = {
+  join: { kind: 'none' },
+  vetterGrant: { state: 'none' },
+  unread: ['join', 'application', 'vetterGrant'],
+}
+
 /**
- * A new reading over the one before: a part the new one could not read keeps
- * the last value that was read, so a passing failure does not replace an
- * answer with a stand-in for every screen. A part never read stays unread.
+ * One part landing on the reading before it. A part that was read replaces
+ * that part and leaves the unread list; a part that could not be read keeps
+ * the last value read — a passing failure must not replace an answer with a
+ * stand-in for every screen — and stays unread if it never was read.
  */
-export function mergeReading(before: CommunityJourney | undefined, next: CommunityJourney): CommunityJourney {
-  if (!next.unread?.length) return next
-  const merged: CommunityJourney = { ...next }
-  const unread: JourneyPart[] = []
-  for (const part of next.unread) {
-    const known = before && !before.unread?.includes(part)
-    if (!known) {
-      unread.push(part)
-      continue
-    }
-    if (part === 'join') merged.join = before.join
-    else if (part === 'application') merged.application = before.application
-    else merged.vetterGrant = before.vetterGrant
-  }
-  if (unread.length) merged.unread = unread
-  else delete merged.unread
-  return merged
+export function withPart(
+  before: CommunityJourney | undefined,
+  part: JourneyPart,
+  read: { ok: boolean; value: unknown }
+): CommunityJourney {
+  const base = before ?? NOTHING_READ
+  if (!read.ok) return base
+  const next: CommunityJourney = { ...base }
+  if (part === 'join') next.join = read.value as CommunityJoinState
+  else if (part === 'application') next.application = read.value as VettingApplication | undefined
+  else next.vetterGrant = read.value as VetterGrantState
+  const unread = (base.unread ?? []).filter((p) => p !== part)
+  if (unread.length) next.unread = unread
+  else delete next.unread
+  return next
 }
 
 /** How each part is read; the defaults read this phone's stores. Tests replace them. */
@@ -131,7 +137,16 @@ export async function readCommunityJourney(
 class CommunityJourneyStore {
   private readonly entries = new Map<
     string,
-    { journey?: CommunityJourney; seq: number; agent?: Agent; readers?: Partial<CommunityJourneyReaders> }
+    {
+      journey?: CommunityJourney
+      seq: number
+      /** The read each part last landed from. */
+      landed: Partial<Record<JourneyPart, number>>
+      /** A read that asks the community, while it is out. */
+      polling?: Promise<void>
+      agent?: Agent
+      readers?: Partial<CommunityJourneyReaders>
+    }
   >()
   private readonly listeners = new Set<() => void>()
   private watching = false
@@ -153,24 +168,64 @@ class CommunityJourneyStore {
     return communityDid ? this.entries.get(this.keyOf(communityDid))?.journey : undefined
   }
 
+  /**
+   * Read every part; each lands as soon as it is read, not when the slowest
+   * is — the join was held up by the vetter grant's status-list fetch, a
+   * network read, and a screen waited for an answer it did not need (Phase
+   * 2b). Only the newest read of a part lands: a part from an older read
+   * finishing after a newer one's does not put back what was before.
+   *
+   * A read that does not ask, started while one that asks is out, waits for
+   * it: started alongside, it could read the record before the answer is
+   * stored and land after it — a request the community said it never got
+   * shown as "Sent" again.
+   */
   read(
     agent: Agent,
     communityDid: string,
     options: { poll: boolean; readers?: Partial<CommunityJourneyReaders> }
   ): Promise<void> {
     const key = this.keyOf(communityDid)
-    const entry = this.entries.get(key) ?? { seq: 0 }
+    const entry = this.entries.get(key) ?? { seq: 0, landed: {} }
+    if (!options.poll && entry.polling) {
+      const asking = entry.polling
+      return asking.then(() => (this.entries.get(key) === entry ? this.read(agent, communityDid, options) : undefined))
+    }
     entry.agent = agent
     entry.readers = options.readers
     const seq = ++entry.seq
     this.entries.set(key, entry)
-    return readCommunityJourney(agent, communityDid, { poll: options.poll, readers: options.readers }).then(
-      (journey) => {
-        if (this.entries.get(key) !== entry || entry.seq !== seq) return
-        entry.journey = mergeReading(entry.journey, journey)
-        this.listeners.forEach((l) => l())
-      }
-    )
+    const readers = { ...defaultJourneyReaders, ...options.readers }
+    const land = (part: JourneyPart, run: () => Promise<unknown>): Promise<void> =>
+      // A reader that throws before it returns a promise is caught the same way.
+      Promise.resolve()
+        .then(run)
+        .then(
+          (value) => ({ ok: true, value }),
+          () => ({ ok: false, value: undefined })
+        )
+        .then((result) => {
+          if (this.entries.get(key) !== entry || seq < (entry.landed[part] ?? 0)) return
+          entry.landed[part] = seq
+          entry.journey = withPart(entry.journey, part, result)
+          this.listeners.forEach((l) => l())
+        })
+    const join = (poll: boolean) => () => readers.join(agent, communityDid, { poll })
+    const reading = Promise.all([
+      // Asking the community waits on the network: what the phone holds lands
+      // first, then the answer (a first visit with an open request sat on
+      // "reading" for the whole ask).
+      options.poll ? land('join', join(false)).then(() => land('join', join(true))) : land('join', join(false)),
+      land('application', () => readers.application(agent, communityDid)),
+      land('vetterGrant', () => readers.vetterGrant(agent, communityDid)),
+    ]).then(() => undefined)
+    if (options.poll) {
+      entry.polling = reading
+      void reading.then(() => {
+        if (entry.polling === reading) entry.polling = undefined
+      })
+    }
+    return reading
   }
 
   /** A change to a community already read, wherever it came from, is read again; changes that land together, once. */
@@ -209,7 +264,8 @@ export const communityJourneys = new CommunityJourneyStore()
 export interface UseCommunityJourney {
   /** Undefined until the first reading lands. */
   journey?: CommunityJourney
-  refresh: () => void
+  /** Read again; resolves when the reading lands (a caller may wait for it). */
+  refresh: () => Promise<void>
   /** Ask the community where a request stands now; resolves when the reading lands. */
   check: () => Promise<void>
 }
@@ -239,7 +295,7 @@ export function useCommunityJourney(
     [agent, communityDid]
   )
 
-  const refresh = useCallback(() => void read(false), [read])
+  const refresh = useCallback(() => read(false), [read])
   /** Ask the community where a request stands now (the person's "Check now"). */
   const check = useCallback(() => read(true), [read])
 

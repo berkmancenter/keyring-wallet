@@ -15,7 +15,7 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -34,8 +34,9 @@ import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { isUnsupportedJoinVersion, joinRequestRefusal, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { vtaAgent } from '../module/vtaAgent'
-import { useCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
-import { ensurePersonaFor, joinCommunity, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
+import { VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { joinKnown, useCommunityJourney, type CommunityJourneyReaders } from '../module/communityJourney'
+import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { CardStatusNotice } from './cardStatusNotice'
@@ -176,10 +177,25 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // A request was refused because the community changed what it asks meanwhile.
   const [changed, setChanged] = useState(false)
   const [reread, setReread] = useState(0)
-  // Where the person already stands with this community (220): what the phone
-  // holds, at once, then what the community says while a request is open. It
-  // used to say only "You joined this one before", whatever had happened since.
-  const [standing, setStanding] = useState<CommunityJoinState>()
+  // Where the person already stands with this community (220): the journey
+  // store's reading, shared with every journey screen and kept current at
+  // module level; "Check now" and coming into view ask the community while a
+  // request is open (poll). One source with "newest wins": this screen used to
+  // write its own copy from five places with no guard, and could go member →
+  // "Sent for review" → member (UI-smoothness plan, Phase 2b).
+  const joinReaders = useMemo<Partial<CommunityJourneyReaders>>(
+    () => ({
+      join: (a, did, { poll }) => readJoinState(a, did, { poll, mediatorDid: config?.mediatorDid }),
+    }),
+    [config?.mediatorDid]
+  )
+  const {
+    journey,
+    refresh: rereadStanding,
+    check: askStanding,
+  } = useCommunityJourney(agent, communityDid, { poll: true, readers: joinReaders })
+  // Unknown (not read yet, or its read failed) is not "none" (joinKnown).
+  const standing = joinKnown(journey)
   const holding = useAgentsHoldingIdentity(communityDid)
   const [checking, setChecking] = useState(false)
   // "Join again" was chosen: the next identity for this community is a new one.
@@ -242,8 +258,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   }, [communityDid, agent, reread])
 
   // A different community starts from nothing; the same one keeps what it showed.
+  // (Its standing is the store's, per community: nothing to reset.)
   useEffect(() => {
-    setStanding(undefined)
     setAgain(false)
     setChanged(false)
     setPlainRequest(false)
@@ -275,33 +291,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setPlainRequest(plain)
   }, [])
 
-  // Read each time the screen comes into view, not only when it first mounts:
-  // a join finished elsewhere (the invited screen, the vetting) shows here.
-  const focused = useIsFocused()
-  useEffect(() => {
-    if (!agent || !communityDid || !focused) return
-    let live = true
-    void (async () => {
-      const held = await readJoinState(agent, communityDid, { poll: false })
-      if (live) setStanding(held)
-      if (held.kind === 'sent' || held.kind === 'pending' || held.kind === 'deferred') {
-        const asked = await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid })
-        if (live) setStanding(asked)
-      }
-    })()
-    return () => {
-      live = false
-    }
-  }, [agent, communityDid, config?.mediatorDid, focused])
-
-  // And whenever this phone stores something about the community, at once.
-  const rereadHeld = useCallback(() => {
-    if (!agent || !communityDid) return
-    void readJoinState(agent, communityDid, { poll: false })
-      .then(setStanding)
-      .catch(() => undefined)
-  }, [agent, communityDid])
-  useCommunityChanged(rereadHeld, communityDid)
+  // Coming into view reads it (asking the community while a request is open),
+  // and so does anything this phone stores about the community: the store does
+  // both (useCommunityJourney with poll, and its module-level watcher).
 
   // The community answered where the request stands after the ask gave up
   // waiting: ask again, which takes the answer already in hand (238: a
@@ -310,22 +302,20 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!agent || !communityDid) return
     const sub = DeviceEventEmitter.addListener(VTI_JOIN_STATUS_LATE_EVENT, (e?: { communityDid?: string }) => {
       if (e?.communityDid !== communityDid) return
-      void readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid })
-        .then(setStanding)
-        .catch(() => undefined)
+      void askStanding().catch(() => undefined)
     })
     return () => sub.remove()
-  }, [agent, communityDid, config?.mediatorDid])
+  }, [agent, communityDid, askStanding])
 
   const onCheckAgain = useCallback(async () => {
     if (!agent || !communityDid) return
     setChecking(true)
     try {
-      setStanding(await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+      await askStanding()
     } finally {
       setChecking(false)
     }
-  }, [agent, communityDid, config?.mediatorDid])
+  }, [agent, communityDid, askStanding])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -369,7 +359,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           { freshPersona: again }
         )
         setAgain(false)
-        setStanding(await readJoinState(agent, communityDid, { poll: false }))
+        await rereadStanding()
         setStep('asks')
         return
       }
@@ -399,7 +389,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         // and a late answer, if it comes, shows there too (7b's R5, 10-06:
         // the screen sat on "hasn't answered yet" for four minutes).
         setAgain(false)
-        setStanding(await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+        await askStanding()
         setStep('asks')
       } else {
         setError(plainError(e))
@@ -408,6 +398,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       setBusy(false)
     }
   }, [
+    askStanding,
+    rereadStanding,
     agent,
     vtaDid,
     communityDid,
@@ -590,7 +582,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   earlier build — telling them their software has an opinion it
                   does not have, and sending two of us hunting a configuration
                   leak that did not exist (report #23). */}
-              {!standing || standing.kind === 'none' ? (
+              {standing?.kind === 'none' ? (
                 <ThemedText style={styles.muted} testID={testIdWithKey(VtiJoinIds.suggestedSource)}>
                   {remembered ? t('Join.Remembered') : t('Join.Suggested')}
                 </ThemedText>
@@ -677,6 +669,22 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {waysTitle}
             <View style={styles.card} testID={testIdWithKey(VtiJoinIds.directoryUnreadable)}>
               <ThemedText>{t('Errors.DirectoryUnreadable')}</ThemedText>
+            </View>
+          </>
+        )
+        actions = different
+        break
+      }
+      // Not before the community's manifest and this phone's standing are
+      // read: a member saw the ways in, with live Join buttons, and an asks
+      // card filled with defaults, until both came back (Phase 2b). A manifest
+      // that could not be read at all (nameRead) goes on to say so, as before.
+      if (communityDid && ((!manifest && nameRead !== communityDid) || standing === undefined)) {
+        body = (
+          <>
+            {waysTitle}
+            <View style={styles.card} testID={testIdWithKey(VtiJoinIds.reading)}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
             </View>
           </>
         )

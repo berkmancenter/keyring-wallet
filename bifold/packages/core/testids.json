@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "4023ff1b1d1e20a78e6b415061de8ec6ca69180a",
+  "generatedFrom": "c1b718df11f34dbf30d00c18e1bf6faf6faca442",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -576,6 +576,7 @@
     "JoinOpenCommunity": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinOpenMyAgent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinPrivateVettingRefused": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "JoinReading": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinRememberedUnreachable": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinRequestLost": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinRequestSent": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
@@ -2056,6 +2057,9 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.privateRefused"
+    },
+    {
+      "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.reading"
     },
     {
       "src/modules/trust-tasks/screens/VtiJoin.tsx": "VtiJoinIds.rememberedUnreachable"

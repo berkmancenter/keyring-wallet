@@ -17,6 +17,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent } from '../module/vtiAgent'
 import { emitCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { communityJourneys } from '../module/communityJourney'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { asksFrom } from '../screens/VtiJoin'
 
@@ -76,6 +77,7 @@ describe('I want to join a community', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     communityTarget.clear()
+    communityJourneys.forget()
     mockEnsurePersona.mockClear()
     // No network in tests: a community that cannot be read, unless a test says otherwise.
     jest.spyOn(vtiAgent, 'fetchManifest').mockRejectedValue(new Error('offline'))
@@ -351,6 +353,35 @@ describe('I want to join a community', () => {
     }
     afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
 
+    // Phase 2b: the asks card showed, filled with defaults, until where the
+    // person stands came back — a member saw "Ask to join" first.
+    it('while where the person stands is not known: no way in shown, only that it is being read', async () => {
+      let answer: (state: unknown) => void = () => undefined
+      mockReadJoinState.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinReading'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      await act(async () => answer({ kind: 'member', membership: { communityDid: linked, role: 'member' } }))
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
+    it('once known to stand nowhere, the way in shows', async () => {
+      let answer: (state: unknown) => void = () => undefined
+      mockReadJoinState.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      await act(async () => answer({ kind: 'none' }))
+      expect(tree.getByTestId(testIdWithKey('JoinStart'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
     // 238: the community holds no request this phone sent. Said, with the way
     // to send it again; the plain ways in alone said nothing of what happened.
     it('a request that never reached the community: said, and Send it again starts it over', async () => {
@@ -428,7 +459,11 @@ describe('I want to join a community', () => {
         jest.advanceTimersByTime(10)
       })
       expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
-      expect(mockReadJoinState).toHaveBeenLastCalledWith(expect.anything(), linked, { poll: false })
+      expect(mockReadJoinState).toHaveBeenLastCalledWith(
+        expect.anything(),
+        linked,
+        expect.objectContaining({ poll: false })
+      )
     })
 
     // Alberto, 238: a success state in place. Done goes back to Your agent

@@ -10,7 +10,7 @@ import { emitCommunityChanged } from '../module/communityChanged'
 import {
   communityJourneys,
   joinKnown,
-  mergeReading,
+  withPart,
   useCommunityJourney,
   type CommunityJourney,
   type CommunityJourneyReaders,
@@ -174,23 +174,78 @@ describe('one journey per community, shared and kept', () => {
       expect(joinKnown(result.current.journey)).toBeUndefined()
     })
 
-    it('a part never read stays unread through a merge; a part read before is kept', () => {
+    it('a part that lands: replaces that part and leaves unread; a part that fails: keeps what was read', () => {
       const before: CommunityJourney = {
         join: stateOf('member'),
         vetterGrant: { state: 'none' },
         unread: ['application'],
       }
-      const next: CommunityJourney = {
-        join: stateOf('none'),
-        vetterGrant: { state: 'none' },
-        unread: ['join', 'application'],
-      }
-      const merged = mergeReading(before, next)
-      expect(merged.join.kind).toBe('member')
-      expect(merged.unread).toEqual(['application'])
-      // A reading with nothing unread replaces the one before outright.
-      const clean: CommunityJourney = { join: stateOf('pending'), vetterGrant: { state: 'none' } }
-      expect(mergeReading(before, clean)).toBe(clean)
+      // The join could not be read: the member stays.
+      expect(withPart(before, 'join', { ok: false, value: undefined })).toBe(before)
+      // Nothing read before, and it fails: unknown, with every part listed unread.
+      expect(withPart(undefined, 'join', { ok: false, value: undefined }).unread).toEqual([
+        'join',
+        'application',
+        'vetterGrant',
+      ])
+      // The application lands: no longer unread.
+      const landed = withPart(before, 'application', { ok: true, value: undefined })
+      expect(landed.unread).toBeUndefined()
+      expect(landed.join.kind).toBe('member')
+    })
+
+    it('a read that asks shows what the phone holds first, then the community’s answer', async () => {
+      let release: () => void = () => undefined
+      const join = jest.fn(async (_a: unknown, _d: string, { poll }: { poll: boolean }) => {
+        if (!poll) return stateOf('sent')
+        await new Promise<void>((resolve) => (release = resolve))
+        return stateOf('pending')
+      })
+      const r = { join, application: async () => undefined, vetterGrant: async () => ({ state: 'none' }) } as never
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { poll: true, readers: r }))
+      await settle()
+      // Asked, not answered yet: what this phone holds.
+      expect(join).toHaveBeenLastCalledWith(agent, COMMUNITY, { poll: true })
+      expect(joinKnown(result.current.journey)?.kind).toBe('sent')
+      await act(async () => release())
+      expect(joinKnown(result.current.journey)?.kind).toBe('pending')
+    })
+
+    // Phase 2b: a read that did not ask, started while one that asks was out, read the record before the answer was
+    // stored and landed after it — a request the community said it never got shown as "Sent" again.
+    it('a read that does not ask waits for one that asks, and reads what it stored', async () => {
+      let stored = 'sent'
+      let release: () => void = () => undefined
+      const join = jest.fn(async (_a: unknown, _d: string, { poll }: { poll: boolean }) => {
+        if (!poll) return stateOf(stored)
+        await new Promise<void>((resolve) => (release = resolve))
+        stored = 'lost'
+        return stateOf(stored)
+      })
+      const r = { join, application: async () => undefined, vetterGrant: async () => ({ state: 'none' }) } as never
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { poll: true, readers: r }))
+      await settle()
+      // A change read again while the ask is out.
+      let rereading: Promise<void> = Promise.resolve()
+      act(() => {
+        rereading = result.current.refresh()
+      })
+      await settle()
+      release()
+      await act(async () => rereading)
+      expect(result.current.journey?.join.kind).toBe('lost')
+      expect(join).toHaveBeenLastCalledWith(agent, COMMUNITY, { poll: false })
+    })
+
+    // Phase 2b: the join waited for the vetter grant's status-list fetch (a network read) before any of it landed.
+    it('the join lands as soon as it is read, not when a slow part is', async () => {
+      const { r } = readers(() => stateOf('member'))
+      r.vetterGrant = () => new Promise(() => undefined)
+      const { result } = renderHook(() => useCommunityJourney(agent, COMMUNITY, { readers: r }))
+      await settle()
+      expect(joinKnown(result.current.journey)?.kind).toBe('member')
+      // The grant is still out: unknown, not "none".
+      expect(result.current.journey?.unread).toEqual(['vetterGrant'])
     })
   })
 })
