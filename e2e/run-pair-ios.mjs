@@ -108,6 +108,10 @@ try {
       // The code's own invitation is readable only in a dev build (InvitationUrl, __DEV__); a release build says so.
       const codeEl = (await existsTestId(a, "InvitationUrl", 5000)) ? await a.$("~InvitationUrl") : undefined;
       const code = codeEl ? await codeEl.getAttribute("label") : undefined;
+      // Emptied first (both the WDA and the simctl pasteboard): a Copy that copies nothing must not pass on an earlier
+      // run's link left on this simulator (review on #598).
+      await a.setClipboard("", "plaintext").catch(() => undefined);
+      try { execFileSync("xcrun", ["simctl", "pbcopy", A.udid], { input: "" }); } catch { /* the WDA clear stands */ }
       await tapTestId(a, "MyQRShareLink", 15000);
       // The share sheet's Copy is a cell named "actionGroupCell" whose label is "Copy" (iOS 26), so not "~Copy" by name
       // (the RC rerun 1021-0328 stopped there with the sheet open).

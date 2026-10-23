@@ -59,6 +59,8 @@ test('pair-ios reads the share link through WebDriverAgent first and knows the "
   const src = readFileSync(path.join(here, '..', 'run-pair-ios.mjs'), 'utf8');
   const gc = src.indexOf('a.getClipboard("plaintext")'), pb = src.indexOf('simctl("pbpaste", A.udid)');
   assert.ok(gc > 0 && pb > gc, 'getClipboard first, pbpaste as the fallback');
+  const tap = src.indexOf('tapTestId(a, "MyQRShareLink"');
+  assert.ok(src.indexOf('a.setClipboard("", "plaintext")') < tap && src.indexOf('"simctl", "pbcopy", A.udid') < tap, 'both pasteboards emptied before the tap');
   const re = new RegExp(src.match(/const made = \/(.+)\/\.test\(log\);/)[1]);
   for (const line of ['[VRC] invitation link: made, share sheet opened', '[VRC] invitation link: made (long), share sheet opened', '[VRC] invitation link: made (short), share sheet opened'])
     assert.match(line, re, line);

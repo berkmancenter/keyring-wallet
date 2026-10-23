@@ -30,6 +30,7 @@ test('a Release build\'s invitation is read from the share sheet, through the dr
   const share = flows.match(/export async function shareLinkFromSheet[\s\S]*?\n}\n/)[0];
   assert.match(share, /driver\.getClipboard\("plaintext"\)/);
   assert.doesNotMatch(share, /pbpaste/, 'pbpaste came back empty on the MacBook');
+  assert.ok(share.indexOf('driver.setClipboard("", "plaintext")') < share.indexOf('tapTestId(driver, "MyQRShareLink"'), 'the clipboard is emptied before the tap, so a stale link cannot pass');
 });
 
 test('run-vti-vetting reads the lab\'s stack.env only for what kk does not name', () => {

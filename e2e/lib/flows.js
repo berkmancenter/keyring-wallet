@@ -1078,6 +1078,8 @@ export async function showRelationshipInvitation(driver) {
  */
 export async function shareLinkFromSheet(driver) {
   await scrollToTestId(driver, "MyQRShareLink", 4).catch(() => undefined);
+  // Emptied first: a Copy that copies nothing would otherwise pass the check below on an earlier run's link (review).
+  await driver.setClipboard("", "plaintext").catch(() => undefined);
   await tapTestId(driver, "MyQRShareLink", 15000);
   if (driver.e2ePlatform === "android") {
     let copy = await driver.$('android=new UiSelector().resourceId("android:id/chooser_copy_button")');
