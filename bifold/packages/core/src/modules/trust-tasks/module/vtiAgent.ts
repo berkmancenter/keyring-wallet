@@ -46,6 +46,7 @@ import {
   getPeerLegCarriage,
   LOG_PREFIX as TSP_LOG_PREFIX,
   greetPeerOverTsp,
+  isFreshV1,
   packTrustTaskForPeer,
   tspSessionForPersona,
   unpackTrustTaskFromPeer,
@@ -56,6 +57,7 @@ import {
 } from './vtiTsp'
 import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
+import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
 import { fetchWaitingIfBusy } from './vtcBusy'
 import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
@@ -473,6 +475,12 @@ class VtiAgentController {
    * two envelope formats; the plan asks for a session-scoped choice, logged.
    */
   private readonly carriageByPeer = new Map<string, Carriage>()
+  /** When each community was last probed, and how it went (`tspProbe.ts`). */
+  private probeStore?: TspProbeStore
+  /** The probe running now, per community: one at a time each. */
+  private readonly probing = new Map<string, Promise<TspProbeOutcome | 'skipped'>>()
+  /** Every DID that has sent this session something: the evidence a community is up (a probe's "down" vs "silent"). */
+  private readonly heardFrom = new Set<string>()
   /**
    * How each peer last reached us, by its DID (the DIDComm sender, the TSP
    * sender, and the document's issuer). A reply goes back the same way: a
@@ -580,6 +588,7 @@ class VtiAgentController {
 
   private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
     const plaintext = unwrapBindingEnvelope(received)
+    if (typeof plaintext.from === 'string') this.heardFrom.add(plaintext.from)
     const type = String(plaintext.type ?? '')
     this.dropExpiredHolds()
     const entry = this.askAnswered(plaintext)
@@ -882,7 +891,12 @@ class VtiAgentController {
   private async connectNow(
     agent: Agent,
     configuredMediatorDid: string | undefined,
-    options: { identity?: VtiClientIdentity; persona?: VtiPersona; peerRevisionStore?: TspPeerRevisionStore }
+    options: {
+      identity?: VtiClientIdentity
+      persona?: VtiPersona
+      peerRevisionStore?: TspPeerRevisionStore
+      probeStore?: TspProbeStore
+    }
   ): Promise<void> {
     this.agent = agent
     const wantedDid = options.persona?.did ?? options.identity?.did
@@ -941,6 +955,7 @@ class VtiAgentController {
       this.tsp = tspSession
       this.persona = options.persona
       this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
+      this.probeStore = options.probeStore ?? this.probeStore ?? new GenericRecordsTspProbeStore(agent)
       let first = true
       const firstMessage = () => {
         if (first) step('first message on the session')
@@ -1127,19 +1142,22 @@ class VtiAgentController {
     // Both apply only when we start the conversation. A peer that has already
     // written to us is answered the way it wrote (`inboundCarriage`).
     const inbound = this.inboundCarriage.get(toDid)
-    const capable =
-      inbound !== undefined
-        ? inbound === 'tsp'
-        : this.peerLeg === 'tsp' ||
-          (this.agent
-            ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) ===
-              'tsp'
-            : false)
+    // A peer that publishes a document is decided by the per-peer rule, where
+    // TSP means TSP 1.0 (cutover plan §6.2); the wallet-to-wallet toggle keeps
+    // the codec's version.
+    const byRule =
+      inbound === undefined && this.peerLeg !== 'tsp' && this.agent
+        ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), {
+            decided: this.carriageByPeer,
+            freshV1: async (peer) => isFreshV1(await this.peerRevisionStore?.get(peer)),
+          })) === 'tsp'
+        : false
+    const capable = inbound !== undefined ? inbound === 'tsp' : this.peerLeg === 'tsp' || byRule
     if (capable && this.tsp && this.agent) {
       // Answering a peer that wrote to us over TSP: answer in the version it
-      // wrote in, as recorded on receipt. Starting a conversation keeps the
-      // codec's version; choosing one per peer is B4's.
-      const revision = inbound === 'tsp' ? this.peerRevisionOf(toDid) : undefined
+      // wrote in, as recorded on receipt. A peer the rule chose TSP for gets
+      // TSP 1.0; the wallet-to-wallet toggle keeps the codec's version.
+      const revision = inbound === 'tsp' ? this.peerRevisionOf(toDid) : byRule ? 'v1' : undefined
       await this.ensureGreeted(toDid, revision)
       const packed = await packTrustTaskForPeer(
         this.tsp,
@@ -1258,10 +1276,13 @@ class VtiAgentController {
       await this.preferDidcommAcrossMediators(communityDid)
       const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
         decided: this.carriageByPeer,
+        freshV1: async (peer) => isFreshV1(await this.peerRevisionStore?.get(peer)),
+        onProbeWanted: (peer, serviceId) => this.startCommunityProbe(peer, serviceId),
       })
       if (carriage === 'tsp') {
-        await this.ensureGreeted(communityDid)
-        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document)
+        // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
+        await this.ensureGreeted(communityDid, 'v1')
+        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document, 'v1')
         await session.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(
           `${TSP_LOG_PREFIX} asked ${named(type, communityDid, 'the community')} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
@@ -1271,8 +1292,10 @@ class VtiAgentController {
         // A community can advertise TSPTransport and not answer it — measured
         // on the VTA Farm's first-vtc (VTI-Q15): its mediator stores the frame
         // and nothing comes back. Keep DIDComm for this community for the rest
-        // of the session.
+        // of the session, and mark its TSP 1.0 record stale so the next
+        // session decides afresh (cutover plan §6.2, change 2).
         this.carriageByPeer.set(communityDid, 'didcomm')
+        await this.peerRevisionStore?.markStale(communityDid).catch(() => undefined)
         // A write is not sent again: silence is not proof the community did not
         // get it — a submit it received and deferred is silent until it
         // answers — and a second copy is a second submit (`requestAlreadyOpen`)
@@ -1329,6 +1352,75 @@ class VtiAgentController {
    * the wallet failing silently before asking. The manifest a fresh phone
    * reads before it has a persona goes over REST first (`fetchManifest`).
    */
+  /** The probe of `communityDid` in flight, if any — for tests and for a caller that wants to wait for it. */
+  probeOf(communityDid: string): Promise<TspProbeOutcome | 'skipped'> | undefined {
+    return this.probing.get(communityDid)
+  }
+
+  /** Start the background TSP 1.0 probe of a community (cutover plan §6.2), unless one is running. */
+  private startCommunityProbe(communityDid: string, serviceId?: string): void {
+    if (this.probing.has(communityDid) || !this.probeStore) return
+    const run = this.probeCommunity(communityDid, serviceId, this.probeStore).finally(() => {
+      this.probing.delete(communityDid)
+    })
+    this.probing.set(communityDid, run)
+  }
+
+  /**
+   * One TSP 1.0 probe of a community: an `XRFI` invite and the newest manifest
+   * read, sent beside the session's DIDComm asks. The read goes in as an ask
+   * entry of its own, so its answer is matched like any other and taken by
+   * nothing else; the entry is dropped when the probe ends. Answered, the rest
+   * of the session speaks TSP 1.0 to the community.
+   */
+  private async probeCommunity(
+    communityDid: string,
+    serviceId: string | undefined,
+    store: TspProbeStore
+  ): Promise<TspProbeOutcome | 'skipped'> {
+    const agent = this.agent
+    if (!agent) return 'skipped'
+    const threadId = `urn:uuid:${utils.uuid()}`
+    let entry: AskEntry | undefined
+    try {
+      return await runTspProbe({
+        did: communityDid,
+        serviceId,
+        store,
+        logger: agent.config.logger,
+        send: async () => {
+          const session = this.session
+          const did = this.state.did
+          if (!session || !did || !this.tsp) throw new Error('not connected over TSP')
+          const type = manifestTaskType(manifestWiresToTry()[0])
+          entry = {
+            id: threadId,
+            did,
+            communityDid,
+            type,
+            payloadKey: `probe:${threadId}`,
+            write: false,
+            correlation: new Set([threadId]),
+            sentAt: Date.now(),
+            lastSentAt: Date.now(),
+            waiters: [],
+          }
+          this.asks.set(threadId, entry)
+          const document = await this.taskDocument(communityDid, type, {}, threadId)
+          entry.correlation.add(String(document.id))
+          await this.ensureGreeted(communityDid, 'v1')
+          const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document, 'v1')
+          await session.sendTspFrame(packed.bytes)
+        },
+        waitForAnswer: async (timeoutMs) => (entry ? (await this.waitFor(entry, timeoutMs)) !== undefined : false),
+        peerAnsweredOtherwise: () => this.heardFrom.has(communityDid),
+        onAnswered: () => this.carriageByPeer.set(communityDid, 'tsp'),
+      })
+    } finally {
+      this.asks.delete(threadId)
+    }
+  }
+
   private async taskDocument(
     communityDid: string,
     type: string,

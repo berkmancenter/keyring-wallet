@@ -15,6 +15,9 @@ import { tsp } from '@bifold/trust-tasks'
 
 import { VtiMediatorSession, type VtiClientIdentity, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
 import { vtiAgent } from '../module/vtiAgent'
+import { MemoryTspProbeStore } from '../module/tspProbe'
+import { JOIN_MANIFEST_TYPES } from '../module/joinWire'
+import { isFreshV1 } from '../module/vtiTsp'
 import {
   getPeerLegCarriage,
   MemoryTspPeerRevisionStore,
@@ -441,5 +444,103 @@ describe('vtiAgent — the peer leg on TSP', () => {
     const changed = await store.observe('did:x', 'rev2', 1)
     expect(changed.firstSeenAt).not.toBe(first.firstSeenAt)
     expect((await store.list()).map((r) => r.revision)).toEqual(['rev2'])
+  })
+})
+
+// B4 of the TSP 1.0 bridge on the community leg (cutover plan §6.2), with the real codec.
+describe('vtiAgent — the community leg on TSP 1.0', () => {
+  const community = vetter
+  const controller = vtiAgent as unknown as {
+    session?: { sendTo: jest.Mock; sendTspFrame: jest.Mock; isOpen: boolean; stop: () => Promise<void> }
+    state: Record<string, unknown>
+    tsp?: TspSessionIdentity
+    agent?: unknown
+    peerRevisionStore?: MemoryTspPeerRevisionStore
+    probeStore?: MemoryTspProbeStore
+    carriageByPeer: Map<string, string>
+    answerTimeoutMs: number
+    startCommunityProbe(did: string, serviceId?: string): void
+    receiveTspFrame(bytes: Uint8Array, myDid: string): Promise<void>
+  }
+  const fakeAgent = {
+    config: { logger: { info: () => undefined, warn: () => undefined, debug: () => undefined } },
+  }
+  const savedTimeout = controller.answerTimeoutMs
+
+  beforeEach(() => {
+    controller.session = { sendTo: jest.fn(), sendTspFrame: jest.fn(), isOpen: true, stop: async () => undefined }
+    controller.agent = fakeAgent
+    controller.tsp = sessionFor(applicant)
+    controller.peerRevisionStore = new MemoryTspPeerRevisionStore()
+    controller.probeStore = new MemoryTspProbeStore()
+    controller.carriageByPeer.delete(community.vid)
+    controller.state = {
+      status: 'connected',
+      did: applicant.vid,
+      peerLeg: 'didcomm',
+      tspReady: true,
+      peerRevisions: [],
+    }
+  })
+  afterEach(() => {
+    controller.answerTimeoutMs = savedTimeout
+    controller.carriageByPeer.delete(community.vid)
+  })
+
+  test('a probe answered in TSP 1.0 moves the community to TSP 1.0 for the session', async () => {
+    controller.startCommunityProbe(community.vid, `${community.vid}#tsp`)
+    const probe = vtiAgent.probeOf(community.vid)
+    expect(probe).toBeDefined()
+    const readSent = async () => {
+      for (let i = 0; i < 100; i++) {
+        const frames = controller.session!.sendTspFrame.mock.calls.map(([b]) => b as Uint8Array)
+        for (const frame of frames) {
+          const opened = await unpackTrustTaskFromPeer(sessionFor(community), frame, community.vid).catch(
+            () => undefined
+          )
+          if (opened) return { frames, opened }
+        }
+        await new Promise((r) => setTimeout(r, 10))
+      }
+      throw new Error('the probe sent no read')
+    }
+    const { frames, opened } = await readSent()
+    // The invite (unless this singleton already greeted the pair in 1.0) and the manifest read: all TSP 1.0.
+    expect(frames.every((b) => tsp.readTspVersion(b).major === 1)).toBe(true)
+    const asked = opened!.plaintext.body as { type: string; threadId: string }
+    expect(JOIN_MANIFEST_TYPES).toContain(asked.type)
+
+    const reply = await packTrustTaskForPeer(
+      sessionFor(community),
+      community.vid,
+      applicant.vid,
+      {
+        id: 'urn:uuid:manifest-reply',
+        type: `${asked.type}#response`,
+        threadId: asked.threadId,
+        issuer: community.vid,
+        recipient: applicant.vid,
+        payload: {},
+      },
+      'v1'
+    )
+    await controller.receiveTspFrame(reply.bytes, applicant.vid)
+    expect(await probe).toBe('answered')
+    expect(controller.carriageByPeer.get(community.vid)).toBe('tsp')
+    expect(controller.probeStore!.records.get(community.vid)?.outcome).toBe('answered')
+  })
+
+  test('a read TSP 1.0 did not answer: DIDComm for the rest of the session, asked again there, and the record goes stale', async () => {
+    await controller.peerRevisionStore!.observe(community.vid, 'v1', 0)
+    controller.carriageByPeer.set(community.vid, 'tsp')
+    controller.answerTimeoutMs = 50
+    const read = JOIN_MANIFEST_TYPES[0]
+    await vtiAgent.ask(community.vid, read, {})
+    const frames = controller.session!.sendTspFrame.mock.calls.map(([b]) => b as Uint8Array)
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames.every((b) => tsp.readTspVersion(b).major === 1)).toBe(true)
+    expect(controller.session!.sendTo).toHaveBeenCalledTimes(1)
+    expect(controller.carriageByPeer.get(community.vid)).toBe('didcomm')
+    expect(isFreshV1(await controller.peerRevisionStore!.get(community.vid))).toBe(false)
   })
 })

@@ -81,7 +81,16 @@ import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, 
 import { isDigestMultibase } from './vettingShape'
 import { TaskVersions } from './taskVersions'
 import { chooseCarriage, type Carriage } from './tspCapability'
-import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
+import {
+  GenericRecordsTspPeerRevisionStore,
+  isFreshV1,
+  packTrustTaskForPeer,
+  tspSessionForManager,
+  unpackTrustTaskFromPeer,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './vtiTsp'
+import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
 import { purposeForDocumentType } from './proofPurpose'
 import { checkVtaReply } from './vtaReplyProof'
 import { releaseWarn } from './releaseLog'
@@ -727,6 +736,18 @@ export const REPLIES_STALLED_STEPS_MS = [30_000, 60_000, 120_000, 300_000] as co
  * ~40 s). Opened by {@link REPLY_TIMEOUT_BREAKER} unanswered TSP asks in a row; each opening holds the next step of
  * {@link REPLIES_STALLED_STEPS_MS}; any word from the agent closes it and starts the steps over.
  */
+/**
+ * Whether a VTA task only reads: a type whose last segment before the version
+ * is `whoami`, `list`, `show`, `status` or `get`. Only such a task is sent
+ * again over DIDComm after a TSP 1.0 ask went unanswered (cutover plan §6.2,
+ * change 2); anything else could run twice. Unversioned types do not match.
+ * The slash before the verb is load-bearing: it keeps `auth/revoke-session`,
+ * `keys/export-secret` and the like out.
+ */
+export function isReadOnlyVtaTask(type: string): boolean {
+  return /\/(whoami|list|show|status|get)\/\d+(\.\d+)*$/.test(type)
+}
+
 export class TspReplyBreaker {
   /** TSP asks in a row that got no answer; any reply resets it. */
   noAnswerInARow = 0
@@ -834,6 +855,31 @@ export class VtaClient {
   private readonly carriageByPeer = new Map<string, Carriage>()
   /** Whether the VTA has been greeted (§7.2.2) this session; cleared by an ask over TSP that got no answer. */
   private greeted = false
+  private peerRevisionStore?: TspPeerRevisionStore
+  private probeStore?: TspProbeStore
+  /**
+   * What each peer was observed to write in; a fresh TSP 1.0 record lets a
+   * session speak TSP 1.0 unprobed. Made on first use: a session that never
+   * speaks TSP never touches it.
+   */
+  private get peerRevisions(): TspPeerRevisionStore {
+    return (this.peerRevisionStore ??=
+      this.options.peerRevisionStore ?? new GenericRecordsTspPeerRevisionStore(this.agent))
+  }
+  /** When each peer was last probed, and how it went (`tspProbe.ts`); made on first use. */
+  private get probes(): TspProbeStore {
+    return (this.probeStore ??= this.options.probeStore ?? new GenericRecordsTspProbeStore(this.agent))
+  }
+  /** The probe running now, for this session; one at a time. */
+  private probing?: Promise<TspProbeOutcome | 'skipped'>
+  /**
+   * What the probe's answer may name as its thread. `answered` is set the
+   * moment it arrives, so an answer that comes before the wait has begun (while
+   * the frames are still being sent) is not lost.
+   */
+  private probeWaiter?: { ids: Set<string>; answered: boolean; resolve: () => void }
+  /** Whether the VTA has sent this session anything at all: the evidence it is up (a probe's "down" vs "silent"). */
+  private heardFromAgent = false
   /** This agent's reply breaker: the caller's, shared by every client it makes for the agent, else this client's own. */
   private readonly breaker: TspReplyBreaker
   private queue: Promise<unknown> = Promise.resolve()
@@ -881,6 +927,22 @@ export class VtaClient {
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
     // Anything from the agent shows replies reach this phone again.
     this.repliesArrived()
+    // The probe's answer is the probe's, never a task's, and goes nowhere else.
+    const probe = this.probeWaiter
+    if (probe) {
+      const refs = [
+        plaintext.thid,
+        (plaintext as { pthid?: string }).pthid,
+        (plaintext.body as { threadId?: unknown } | undefined)?.threadId,
+      ]
+      if (refs.some((ref) => typeof ref === 'string' && probe.ids.has(ref))) {
+        this.probeWaiter = undefined
+        probe.answered = true
+        probe.resolve()
+        return
+      }
+    }
+    this.heardFromAgent = true
     // A granted notice answers a wait, never a task.
     const body = plaintext.body as { type?: string; payload?: { payloadDigest?: string } } | undefined
     if (body?.type === VTA_TASK.consentGranted) {
@@ -980,9 +1042,18 @@ export class VtaClient {
       breaker?: TspReplyBreaker
       /** Replies stopped reaching this phone (the breaker opened), or came back. */
       onRepliesStalled?: (stalled: boolean) => void
+      /** Where peer revisions are kept; the wallet's generic records when absent. */
+      peerRevisionStore?: TspPeerRevisionStore
+      /** Where probe outcomes are kept; the wallet's generic records when absent. */
+      probeStore?: TspProbeStore
     } = {}
   ) {
     this.breaker = options.breaker ?? new TspReplyBreaker()
+  }
+
+  /** The probe in flight, if any — for tests and for a caller that wants to wait for it. */
+  get probeInFlight(): Promise<TspProbeOutcome | 'skipped'> | undefined {
+    return this.probing
   }
 
   /** The DID this phone presents to its VTA — enrolled on the VTA's ACL. */
@@ -1042,6 +1113,8 @@ export class VtaClient {
     // Not the breaker: a fresh socket is no evidence replies arrive, and the breaker is the agent's, not this
     // session's (D7FG-2Y9J: resetting it here, at every reconnect, was half of why the hold never held).
     this.carriageByPeer.clear()
+    this.heardFromAgent = false
+    this.probeWaiter = undefined
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
       onMessage: (plaintext) => this.deliver(plaintext),
@@ -1053,7 +1126,12 @@ export class VtaClient {
         ? {
             onTspFrame: async (bytes: Uint8Array) => {
               const opened = await unpackTrustTaskFromPeer(this.tsp as TspSessionIdentity, bytes, did)
-              if (opened) this.deliver(opened.plaintext)
+              if (!opened) return
+              // What the agent writes in decides how later sessions speak to it (§6.2, row 3).
+              await this.peerRevisions
+                .observe(opened.unpacked.sender, opened.unpacked.revision, tsp.peekRevision(bytes).minor)
+                .catch(() => undefined)
+              this.deliver(opened.plaintext)
             },
           }
         : {}),
@@ -1077,6 +1155,82 @@ export class VtaClient {
     this.session = undefined
     this.pending = undefined
     this.inFlight = undefined
+    this.probeWaiter = undefined
+  }
+
+  /** Start the background probe of this VTA (cutover plan §6.2), unless one is running. */
+  private startProbe(serviceId?: string): void {
+    if (this.probing) return
+    this.probing = this.probe(serviceId).finally(() => {
+      this.probing = undefined
+    })
+  }
+
+  /**
+   * One TSP 1.0 probe of the VTA: an `XRFI` invite and `auth/whoami`, sent
+   * beside the task queue so no person waits on it. Its answer is matched by
+   * thread in `deliver` and taken by nothing else. Answered, the rest of the
+   * session speaks TSP 1.0 to the VTA.
+   */
+  private async probe(serviceId?: string): Promise<TspProbeOutcome | 'skipped'> {
+    // Held here, not only on `this`: `deliver` clears `this.probeWaiter` when
+    // the answer comes, and the wait must still see that it did.
+    let waiter: { ids: Set<string>; answered: boolean; resolve: () => void } | undefined
+    return runTspProbe({
+      did: this.vtaDid,
+      serviceId,
+      store: this.probes,
+      logger: this.agent.config.logger,
+      send: async () => {
+        const session = this.session
+        const did = this.identity?.did
+        const tspIdentity = this.tsp
+        if (!session || !did || !tspIdentity || !this.mediator) throw new Error('not connected over TSP')
+        const threadId = `urn:uuid:${utils.uuid()}`
+        const documentId = `urn:uuid:${utils.uuid()}`
+        const document = await signDocumentProof(
+          this.agent,
+          {
+            id: documentId,
+            type: VTA_TASK.whoAmI,
+            threadId,
+            payload: {},
+            issuer: did,
+            recipient: this.vtaDid,
+            issuedAt: new Date().toISOString(),
+          },
+          did,
+          { proofPurpose: purposeForDocumentType(VTA_TASK.whoAmI) }
+        )
+        const route = [this.mediator.did, did]
+        const invite = await tsp.packInviteV1(did, this.vtaDid, tspIdentity.identity, tspIdentity.resolver, { route })
+        const ask = await packTrustTaskForPeer(tspIdentity, did, this.vtaDid, document, 'v1')
+        waiter = { ids: new Set([threadId, documentId]), answered: false, resolve: () => undefined }
+        this.probeWaiter = waiter
+        await session.sendTspFrame(invite.bytes)
+        await session.sendTspFrame(ask.bytes)
+      },
+      waitForAnswer: (timeoutMs) =>
+        new Promise<boolean>((resolve) => {
+          const current = waiter
+          if (!current) return resolve(false)
+          if (current.answered) return resolve(true)
+          const timer = setTimeout(() => {
+            if (this.probeWaiter === current) this.probeWaiter = undefined
+            resolve(false)
+          }, timeoutMs)
+          current.resolve = () => {
+            clearTimeout(timer)
+            resolve(true)
+          }
+        }),
+      peerAnsweredOtherwise: () => this.heardFromAgent,
+      onAnswered: () => {
+        this.carriageByPeer.set(this.vtaDid, 'tsp')
+        // The probe's invite stands for the session's greeting.
+        this.greeted = true
+      },
+    })
   }
 
   /**
@@ -1254,7 +1408,11 @@ export class VtaClient {
         this.agent,
         this.vtaDid,
         Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS,
-        { decided: this.carriageByPeer }
+        {
+          decided: this.carriageByPeer,
+          freshV1: async (peer) => isFreshV1(await this.peerRevisions.get(peer)),
+          onProbeWanted: (_peer, serviceId) => this.startProbe(serviceId),
+        }
       )
       const overTsp = carriage === 'tsp' && Boolean(this.tsp)
       // The breaker (vta-sdk's D4 breaker, VTI #1978): after two TSP asks in a
@@ -1268,12 +1426,13 @@ export class VtaClient {
         if (!this.greeted) {
           // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
           const route = [this.mediator!.did, did]
-          const invite = await tsp.packInviteRev3(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
+          const invite = await tsp.packInviteV1(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
           await session.sendTspFrame(invite.bytes)
           this.greeted = true
           this.agent.config.logger.info(`${LOG_PREFIX} greeted ${this.vtaDid} with an XRFI invite`)
         }
-        const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document)
+        // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
+        const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document, 'v1')
         await session.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(
           `${LOG_PREFIX} asked ${agentNamedFor(type, this.vtaDid)} ${type} over ${packed.revision}`
@@ -1326,6 +1485,23 @@ export class VtaClient {
             this.agent.config.logger.info(
               `${LOG_PREFIX} no answer over TSP; greeting ${this.vtaDid} again on the next ask`
             )
+        }
+        // Cutover plan §6.2, change 2: a TSP 1.0 ask that went unanswered moves
+        // the rest of this session to DIDComm and marks the record stale, so
+        // the next session decides afresh. A read is asked once more over
+        // DIDComm; a write is not, since a repeat could run it twice.
+        if (overTsp) {
+          this.carriageByPeer.set(this.vtaDid, 'didcomm')
+          await this.peerRevisions.markStale(this.vtaDid).catch(() => undefined)
+          if (isReadOnlyVtaTask(type)) {
+            this.agent.config.logger.info(
+              `${LOG_PREFIX} no answer to ${type} over TSP 1.0 in ${Math.round(timeoutMs / 1000)} s — DIDComm for this session; asking again over DIDComm, since it only reads`
+            )
+            return this.sendTask<T>(type, payload, timeoutMs, documentExtras)
+          }
+          this.agent.config.logger.info(
+            `${LOG_PREFIX} no answer to ${type} over TSP 1.0 — DIDComm for this session; not sent again, since it writes`
+          )
         }
         // Said on every carriage, not only TSP, and at Info so a release build
         // keeps it: on iOS this is the only place such a silence is recorded,

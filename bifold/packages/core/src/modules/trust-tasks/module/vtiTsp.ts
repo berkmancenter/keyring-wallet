@@ -348,17 +348,59 @@ export interface PeerRevisionRecord {
   minor?: number
   firstSeenAt: string
   lastSeenAt: string
+  /**
+   * For a TSP 1.0 record only: until when it may decide carriage on its own
+   * (TSP 1.0 cutover plan §6.2, row 3). Written when the frame is recorded, so
+   * a later change to the window cannot silently stretch a record already held.
+   */
+  expiresAt?: string
+  /** Set when a TSP 1.0 ask to this peer went unanswered; the next 1.0 frame clears it. */
+  stale?: boolean
+}
+
+/** How long a TSP 1.0 frame from a peer lets later sessions speak TSP 1.0 to it unprobed (§6.2, row 3). */
+export const V1_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Whether `record` still says the peer speaks TSP 1.0: a 1.0 frame, not stale, not past its own expiry. */
+export function isFreshV1(record: PeerRevisionRecord | undefined, now = new Date().valueOf()): boolean {
+  if (!record || record.revision !== 'v1' || record.stale || !record.expiresAt) return false
+  return Date.parse(record.expiresAt) > now
 }
 
 export interface TspPeerRevisionStore {
   get(vid: string): Promise<PeerRevisionRecord | undefined>
   list(): Promise<PeerRevisionRecord[]>
   observe(vid: string, revision: tsp.TspRevision, minor?: number): Promise<PeerRevisionRecord>
+  /** A TSP 1.0 ask to `vid` went unanswered: the record no longer decides carriage (§6.2, change 2). */
+  markStale(vid: string): Promise<void>
+}
+
+/** The record a new observation makes, from the one before it. */
+function nextRecord(
+  vid: string,
+  revision: tsp.TspRevision,
+  minor: number | undefined,
+  previous: PeerRevisionRecord | undefined,
+  now: number
+): PeerRevisionRecord {
+  const at = new Date(now).toISOString()
+  return {
+    vid,
+    revision,
+    ...(minor !== undefined ? { minor } : {}),
+    // A peer that changes revision starts a new "since when".
+    firstSeenAt: previous && previous.revision === revision ? previous.firstSeenAt : at,
+    lastSeenAt: at,
+    ...(revision === 'v1' ? { expiresAt: new Date(now + V1_RECORD_TTL_MS).toISOString() } : {}),
+  }
 }
 
 const RECORD_TYPE = 'keyring/tsp-peer-revision'
 
-/** Survives a restart; never consulted by a packer. */
+/**
+ * Survives a restart. Read by the reply rule (answer a peer in the version it
+ * wrote in) and, for TSP 1.0, by the per-peer carriage rule (§6.2, row 3).
+ */
 export class GenericRecordsTspPeerRevisionStore implements TspPeerRevisionStore {
   constructor(private readonly agent: Agent) {}
 
@@ -373,17 +415,9 @@ export class GenericRecordsTspPeerRevisionStore implements TspPeerRevisionStore 
   }
 
   async observe(vid: string, revision: tsp.TspRevision, minor?: number): Promise<PeerRevisionRecord> {
-    const now = new Date().toISOString()
     const [existing] = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, vid })
     const previous = existing?.content as unknown as PeerRevisionRecord | undefined
-    const next: PeerRevisionRecord = {
-      vid,
-      revision,
-      ...(minor !== undefined ? { minor } : {}),
-      // A peer that changes revision starts a new "since when".
-      firstSeenAt: previous && previous.revision === revision ? previous.firstSeenAt : now,
-      lastSeenAt: now,
-    }
+    const next = nextRecord(vid, revision, minor, previous, new Date().valueOf())
     if (existing) {
       existing.content = { ...next }
       await this.agent.genericRecords.update(existing)
@@ -391,6 +425,13 @@ export class GenericRecordsTspPeerRevisionStore implements TspPeerRevisionStore 
       await this.agent.genericRecords.save({ content: { ...next }, tags: { recordType: RECORD_TYPE, vid } })
     }
     return next
+  }
+
+  async markStale(vid: string): Promise<void> {
+    const [existing] = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, vid })
+    if (!existing) return
+    existing.content = { ...(existing.content as Record<string, unknown>), stale: true }
+    await this.agent.genericRecords.update(existing)
   }
 }
 
@@ -404,16 +445,12 @@ export class MemoryTspPeerRevisionStore implements TspPeerRevisionStore {
     return [...this.records.values()]
   }
   async observe(vid: string, revision: tsp.TspRevision, minor?: number) {
-    const now = new Date().toISOString()
-    const previous = this.records.get(vid)
-    const next: PeerRevisionRecord = {
-      vid,
-      revision,
-      ...(minor !== undefined ? { minor } : {}),
-      firstSeenAt: previous && previous.revision === revision ? previous.firstSeenAt : now,
-      lastSeenAt: now,
-    }
+    const next = nextRecord(vid, revision, minor, this.records.get(vid), new Date().valueOf())
     this.records.set(vid, next)
     return next
+  }
+  async markStale(vid: string) {
+    const record = this.records.get(vid)
+    if (record) this.records.set(vid, { ...record, stale: true })
   }
 }

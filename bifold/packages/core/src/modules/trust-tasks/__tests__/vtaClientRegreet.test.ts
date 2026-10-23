@@ -13,7 +13,8 @@ jest.mock('@bifold/trust-tasks', () => {
     tsp: {
       ...actual.tsp,
       CODEC_FORMS_RELATIONSHIPS: true,
-      packInviteRev3: jest.fn(async () => ({ bytes: new Uint8Array([0x49]) })),
+      // The agent leg greets in TSP 1.0 (cutover plan §6.2).
+      packInviteV1: jest.fn(async () => ({ bytes: new Uint8Array([0x49]) })),
     },
   }
 })

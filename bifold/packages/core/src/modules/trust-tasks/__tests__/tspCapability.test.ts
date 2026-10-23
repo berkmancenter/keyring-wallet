@@ -3,6 +3,8 @@ import {
   chooseCarriage,
   clearTspCapabilityCache,
   documentAdvertisesTsp,
+  documentTspService,
+  parseAdvertisedTspVersion,
   peerAdvertisesTsp,
   setPreferDidcommForUpstream,
 } from '../module/tspCapability'
@@ -32,10 +34,16 @@ const agentWith = (doc: unknown, onResolve?: () => void) =>
     },
   }) as never
 
+// Release lines (`releaseWarn`) go to console.warn.
+const released: string[] = []
+let warnSpy: jest.SpyInstance
 beforeEach(() => {
   logs.length = 0
+  released.length = 0
   clearTspCapabilityCache()
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation((m: unknown) => void released.push(String(m)))
 })
+afterEach(() => warnSpy.mockRestore())
 
 describe('reading a document', () => {
   it('finds TSPTransport as a bare string, the way vta-service writes it', () => {
@@ -122,10 +130,10 @@ describe('choosing, and saying so', () => {
   beforeEach(() => setPreferDidcommForUpstream(false))
   afterEach(() => setPreferDidcommForUpstream(true))
 
-  it('uses TSP when the peer offers it and we can speak it', async () => {
-    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE }] })
+  it('uses TSP when the peer offers TSP 1.0 and we can speak it', async () => {
+    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE, version: '1.0' }] })
     expect(await chooseCarriage(agent, 'did:example:c', true)).toBe('tsp')
-    expect(logs.some((l) => l.level === 'info' && l.message.includes('using TSP'))).toBe(true)
+    expect(released.some((m) => m.includes('using TSP 1.0'))).toBe(true)
   })
 
   it('falls back LOUDLY when the peer offers TSP and we cannot speak it', async () => {
@@ -147,10 +155,115 @@ describe('choosing, and saying so', () => {
     // envelope formats; §4.2 asks for the decision to be session-scoped.
     let resolves = 0
     const decided = new Map<string, 'tsp' | 'didcomm'>()
-    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE }] }, () => (resolves += 1))
+    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE, version: '1.0' }] }, () => (resolves += 1))
     expect(await chooseCarriage(agent, 'did:example:f', true, { decided })).toBe('tsp')
     expect(await chooseCarriage(agent, 'did:example:f', true, { decided })).toBe('tsp')
     expect(resolves).toBe(1)
-    expect(logs.filter((l) => l.message.includes('using TSP'))).toHaveLength(1)
+    expect(released.filter((m) => m.includes('using TSP'))).toHaveLength(1)
+  })
+})
+
+// TSP 1.0 cutover plan §6.2: the per-peer rule, and the probe it asks for.
+describe('the per-peer rule (cutover plan §6.2)', () => {
+  beforeEach(() => setPreferDidcommForUpstream(false))
+  afterEach(() => setPreferDidcommForUpstream(true))
+
+  const tspDoc = (extra: Record<string, unknown> = {}) => ({
+    service: [{ id: 'did:example:x#tsp', type: TSP_SERVICE_TYPE, ...extra }],
+  })
+
+  it('reads a stated version leniently, and anything else as another version', () => {
+    for (const v of ['1', '1.0', 'v1', 'YTSP-BAA', 1]) expect(parseAdvertisedTspVersion(v)).toBe('1.0')
+    for (const v of ['0.2', 'rev3', 'YTSP-AAC', '2.0']) expect(parseAdvertisedTspVersion(v)).toBe('other')
+    for (const v of [undefined, null, '']) expect(parseAdvertisedTspVersion(v)).toBeUndefined()
+    expect(documentTspService(tspDoc({ tspVersion: '1.0' }))).toEqual({
+      advertises: true,
+      serviceId: 'did:example:x#tsp',
+      version: '1.0',
+    })
+    expect(documentTspService(tspDoc())).toEqual({ advertises: true, serviceId: 'did:example:x#tsp' })
+  })
+
+  it('row 2: a document that names TSP 1.0 is TSP, and no probe is asked for', async () => {
+    const onProbeWanted = jest.fn()
+    expect(await chooseCarriage(agentWith(tspDoc({ version: '1.0' })), 'did:r2a', true, { onProbeWanted })).toBe('tsp')
+    expect(onProbeWanted).not.toHaveBeenCalled()
+  })
+
+  it('row 2: a document that names another version is DIDComm, and no probe is asked for', async () => {
+    const onProbeWanted = jest.fn()
+    expect(await chooseCarriage(agentWith(tspDoc({ version: '0.2' })), 'did:r2b', true, { onProbeWanted })).toBe(
+      'didcomm'
+    )
+    expect(onProbeWanted).not.toHaveBeenCalled()
+    expect(released.some((m) => m.includes('does not send'))).toBe(true)
+  })
+
+  it('row 3: no version, but a fresh TSP 1.0 record: TSP, and no probe', async () => {
+    const onProbeWanted = jest.fn()
+    const freshV1 = jest.fn(async () => true)
+    expect(await chooseCarriage(agentWith(tspDoc()), 'did:r3', true, { freshV1, onProbeWanted })).toBe('tsp')
+    expect(freshV1).toHaveBeenCalledWith('did:r3')
+    expect(onProbeWanted).not.toHaveBeenCalled()
+  })
+
+  it('row 4: no version and no fresh record: DIDComm, and a probe is asked for with the service id', async () => {
+    const onProbeWanted = jest.fn()
+    const freshV1 = jest.fn(async () => false)
+    expect(await chooseCarriage(agentWith(tspDoc()), 'did:r4', true, { freshV1, onProbeWanted })).toBe('didcomm')
+    expect(onProbeWanted).toHaveBeenCalledWith('did:r4', 'did:example:x#tsp')
+    expect(released.some((m) => m.includes('probing TSP 1.0 in the background'))).toBe(true)
+  })
+
+  it('a record that cannot be read counts as not fresh: DIDComm, never a guess', async () => {
+    const freshV1 = jest.fn(async () => {
+      throw new Error('wallet locked')
+    })
+    expect(await chooseCarriage(agentWith(tspDoc()), 'did:r4b', true, { freshV1 })).toBe('didcomm')
+  })
+
+  it('row 5 and no identity: DIDComm, and no probe either way', async () => {
+    const onProbeWanted = jest.fn()
+    expect(
+      await chooseCarriage(agentWith({ service: [{ type: 'DIDCommMessaging' }] }), 'did:r5', true, { onProbeWanted })
+    ).toBe('didcomm')
+    expect(await chooseCarriage(agentWith(tspDoc()), 'did:r5b', false, { onProbeWanted })).toBe('didcomm')
+    expect(onProbeWanted).not.toHaveBeenCalled()
+  })
+})
+
+describe('the kill-switch (row 1)', () => {
+  // On by default: the stopgap's preference stays the shipped behaviour until
+  // the release that turns it off.
+  it('with the switch on, no probe starts, and nothing is said about probing', async () => {
+    const onProbeWanted = jest.fn()
+    const freshV1 = jest.fn(async () => true)
+    for (const doc of [
+      { service: [{ type: TSP_SERVICE_TYPE }] },
+      { service: [{ type: TSP_SERVICE_TYPE, version: '1.0' }] },
+    ]) {
+      clearTspCapabilityCache()
+      expect(await chooseCarriage(agentWith(doc), 'did:k', true, { freshV1, onProbeWanted })).toBe('didcomm')
+    }
+    expect(onProbeWanted).not.toHaveBeenCalled()
+    expect(freshV1).not.toHaveBeenCalled()
+    expect(logs.some((l) => /prob/i.test(l.message))).toBe(false)
+    expect(released.some((m) => /prob/i.test(m))).toBe(false)
+  })
+})
+
+describe('Release lines (the stopgap switch off)', () => {
+  beforeEach(() => setPreferDidcommForUpstream(false))
+  afterEach(() => setPreferDidcommForUpstream(true))
+
+  it('each decision is said in Release once, naming the peer by prefix only', async () => {
+    const did = 'did:webvh:QmVeryLongIdentifierThatMustNotReachAReport:example.org:agent'
+    const decided = new Map<string, 'tsp' | 'didcomm'>()
+    const agent = agentWith({ service: [{ type: TSP_SERVICE_TYPE, version: '1.0' }] })
+    await chooseCarriage(agent, did, true, { decided })
+    await chooseCarriage(agent, did, true, { decided })
+    const lines = released.filter((m) => m.includes('using TSP 1.0'))
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).not.toContain(did)
   })
 })
