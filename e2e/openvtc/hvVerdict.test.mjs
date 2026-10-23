@@ -35,9 +35,44 @@ test('neither line: the private way was not recognised', () => {
   assert.match(v.detail, /not recognised/);
 });
 
-test('a verified reply before any ask does not count', () => {
-  const v = applicationVerdict(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'));
+test('a verified reply before the ask does not count', () => {
+  const v = applicationVerdict([
+    L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'),
+    L('[TrustTasks:VtaClient] asked its agent https://trusttasks.org/spec/vta/pcs/applications/create/0.1 over rev3'),
+  ].join('\n'));
   assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /no verified reply/);
+});
+
+// 268's carriage (bifold #486): DIDComm to the agent, which logs no ask line. The applicant's line on 1022-2230 (mini).
+const DIDCOMM_CREATED = '10-22 17:58:42.534  5062  5098 I ReactNativeJS: [TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1  ';
+
+test('created over DIDComm: a verified reply with no ask line at all', () => {
+  const v = applicationVerdict(PASS_LOG.split('\n').slice(0, 2).join('\n') + '\n' + DIDCOMM_CREATED);
+  assert.equal(v.status, 'PASS');
+  assert.match(v.detail, /over DIDComm/);
+});
+
+test('over DIDComm too, no verified reply is still the FAIL it was', () => {
+  const v = applicationVerdict(PASS_LOG.split('\n').slice(0, 2).join('\n'));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /not recognised/);
+});
+
+test('the app\'s refusal still FAILs when a verified reply is in the log too', () => {
+  const v = applicationVerdict([DIDCOMM_CREATED, L('[hidden-vetting] no agent-side application for hv-vetted: agentTooOld')].join('\n'));
+  assert.equal(v.status, 'FAIL');
+  assert.match(v.detail, /agentTooOld/);
+});
+
+test('taskRound: a DIDComm round is verified with no ask line, untimed; no reply is not verified', () => {
+  const ok = taskRound(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/prove/0.1'), '/vta/pcs/prove/0.1');
+  assert.deepEqual(ok, { asked: false, verified: true, seconds: undefined, noAnswer: undefined });
+  const none = taskRound(L('[TrustTasks:VtaClient] reply verified: https://trusttasks.org/spec/vta/pcs/applications/create/0.1'), '/vta/pcs/prove/0.1');
+  assert.equal(none.verified, false);
+  const dropped = taskRound(L('[TrustTasks:VtaClient] no answer to https://trusttasks.org/spec/vta/pcs/prove/0.1 after 90 s'), '/vta/pcs/prove/0.1');
+  assert.equal(dropped.verified, false);
+  assert.match(dropped.noAnswer, /no answer/);
 });
 
 test('lineSeconds reads the clock on Android and iOS lines', () => {

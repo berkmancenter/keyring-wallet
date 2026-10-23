@@ -182,7 +182,7 @@ try {
     await sleep(5000);
     prove = taskRound(deviceLog(appDev, startedMs), '/vta/pcs/prove/0.1');
   }
-  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified in ${prove.seconds} s` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
+  mark('hv-proof', prove.verified ? 'PASS' : 'FAIL', prove.verified ? `vta/pcs/prove verified${prove.seconds !== undefined ? ` in ${prove.seconds} s` : ' (over DIDComm: no ask line to time it from)'}` : prove.noAnswer ? `unanswered: "${prove.noAnswer}"` : `no verified vta/pcs/prove (asked: ${prove.asked})`);
   // The one member since the run began, on two reads: the community is shared with legs beside this one (signin's
   // member joins keyring-hv-lab1 too), and "the newest member" could be theirs, a pass for an admission that is not ours.
   const { member, count: members } = await soleMemberSince(() => admin.members(), since);
