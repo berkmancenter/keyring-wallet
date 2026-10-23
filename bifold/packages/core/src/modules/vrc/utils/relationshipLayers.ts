@@ -21,15 +21,18 @@ export type RelationshipLayer =
 const issuerOf = (raw: { issuer?: unknown }): string | undefined =>
   typeof raw.issuer === 'string' ? raw.issuer : (raw.issuer as { id?: string } | undefined)?.id
 
+/** The layers of one relationship, or of every relationship a contact has (its issuer DIDs). */
 export function relationshipLayers(
   records: W3cCredentialRecord[],
-  issuerDid: string,
+  issuerDid: string | readonly string[],
   witnessRecords: WitnessRecord[]
 ): RelationshipLayer[] {
+  const issuers = new Set(typeof issuerDid === 'string' ? [issuerDid] : issuerDid)
   const cards: RelationshipLayer[] = []
   for (const record of records) {
     const raw = toRawCredential(record)
-    if (!raw || !isPeerVrcCredential(raw) || issuerOf(raw) !== issuerDid) continue
+    const issuer = raw && issuerOf(raw)
+    if (!raw || !isPeerVrcCredential(raw) || !issuer || !issuers.has(issuer)) continue
     cards.push({
       kind: 'card',
       at: raw.validFrom ?? raw.issuanceDate,

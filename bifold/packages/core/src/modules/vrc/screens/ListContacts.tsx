@@ -25,6 +25,8 @@ import {
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import { testIdWithKey } from '../../../utils/testable'
+import { contactIdOf } from '../contacts/contactLinks'
+import { useContactLinks } from '../contacts/useContactLinks'
 
 const ListContacts: React.FC = () => {
   const { t } = useTranslation()
@@ -37,6 +39,8 @@ const ListContacts: React.FC = () => {
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
+  // Read again on each return to the list, so a merge or a separation made on a contact's screen shows here.
+  const contactLinks = useContactLinks(screenIsFocused)
 
   const styles = StyleSheet.create({
     listContainer: {
@@ -179,8 +183,9 @@ const ListContacts: React.FC = () => {
     return null
   }
 
-  // Filter and group credentials by issuer
-  const groupedContacts = useMemo(() => {
+  // Filter and group credentials by contact: one row per contact, which is one relationship (issuer) unless
+  // relationships were merged. The row is the relationship of the newest card; badges cover every relationship.
+  const { groupedContacts, relationshipsByRow } = useMemo(() => {
     const filteredCredentials = w3cCredentialRecords.filter((cred) => hasDTGCredentialType(cred))
 
     const issuerGroupsMap = new Map<string, W3cCredentialRecord[]>()
@@ -188,17 +193,19 @@ const ListContacts: React.FC = () => {
     filteredCredentials.forEach((credential) => {
       const issuerData = extractIssuer(credential)
       if (issuerData) {
-        const { id } = issuerData
-        if (!issuerGroupsMap.has(id)) {
-          issuerGroupsMap.set(id, [])
+        const contactId = contactIdOf(contactLinks, issuerData.id)
+        if (!issuerGroupsMap.has(contactId)) {
+          issuerGroupsMap.set(contactId, [])
         }
-        issuerGroupsMap.get(id)!.push(credential)
+        issuerGroupsMap.get(contactId)!.push(credential)
       }
     })
 
     const contactDetails: ContactCredentialDetails[] = []
+    // A row's issuer id → every relationship (issuer id) of that contact, the row's own first.
+    const rowRelationships = new Map<string, string[]>()
 
-    issuerGroupsMap.forEach((credentials, _issuerId) => {
+    issuerGroupsMap.forEach((credentials, _contactId) => {
       const sortedCredentials = credentials.sort((a, b) => {
         const dateA = getCredentialDate(a)
         const dateB = getCredentialDate(b)
@@ -216,6 +223,12 @@ const ListContacts: React.FC = () => {
 
       if (issuerData) {
         const { id, name, email, organization } = issuerData
+        const relationships = [id]
+        for (const credential of sortedCredentials) {
+          const other = extractIssuer(credential)?.id
+          if (other && !relationships.includes(other)) relationships.push(other)
+        }
+        rowRelationships.set(id, relationships)
         // Contact info source: received RCard first (post-separation exchanges),
         // then the legacy VRC issuer object fields (pre-separation exchanges).
         const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, id)
@@ -227,16 +240,20 @@ const ListContacts: React.FC = () => {
             organization: displayInfo.organization || organization,
             photo: displayInfo.photo,
           },
-          hasWitnessCredentials: hasWitnessCredential(id),
-          hasHardwareAttestation: hasHardwareAttestationCredential(id),
-          hasLocalityConfirmed: hasLocalityConfirmed(id),
+          hasWitnessCredentials: relationships.some(hasWitnessCredential),
+          hasHardwareAttestation: relationships.some(hasHardwareAttestationCredential),
+          hasLocalityConfirmed: relationships.some(hasLocalityConfirmed),
         })
       }
     })
 
-    return contactDetails.sort((a, b) => a.issuer.name.localeCompare(b.issuer.name))
+    return {
+      groupedContacts: contactDetails.sort((a, b) => a.issuer.name.localeCompare(b.issuer.name)),
+      relationshipsByRow: rowRelationships,
+    }
   }, [
     w3cCredentialRecords,
+    contactLinks,
     hasWitnessCredential,
     hasHardwareAttestationCredential,
     hasLocalityConfirmed,
@@ -253,18 +270,21 @@ const ListContacts: React.FC = () => {
       const results: Record<string, boolean> = {}
       for (const contact of candidates) {
         if (cancelled) return
-        try {
-          const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, contact.issuer.id)
-          if (!rawCred) {
-            results[contact.issuer.id] = false
-            continue
+        // Verified when any of the contact's relationships carries hardware evidence that verifies.
+        results[contact.issuer.id] = false
+        for (const issuerId of relationshipsByRow.get(contact.issuer.id) ?? [contact.issuer.id]) {
+          try {
+            const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, issuerId)
+            if (!rawCred) continue
+            const result = await verifyVrcHardwareEvidence(rawCred as any)
+            if (result?.valid === true) {
+              results[contact.issuer.id] = true
+              break
+            }
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.warn('[VRC:Contacts] HW verification error:', error)
           }
-          const result = await verifyVrcHardwareEvidence(rawCred as any)
-          results[contact.issuer.id] = result?.valid === true
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.warn('[VRC:Contacts] HW verification error:', error)
-          results[contact.issuer.id] = false
         }
       }
       if (!cancelled) {
@@ -276,7 +296,7 @@ const ListContacts: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [groupedContacts, w3cCredentialRecords])
+  }, [groupedContacts, relationshipsByRow, w3cCredentialRecords])
 
   useEffect(() => {
     const shouldShowTour = enableToursConfig && store.tours.enableTours && !store.tours.seenContactsTour

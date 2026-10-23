@@ -30,6 +30,8 @@ import { useRCardCredential } from '../hooks/useRCardCredential'
 import { formInputFromTemplate } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
+import { relationshipsOfContact } from '../contacts/contactLinks'
+import { useContactLinks } from '../contacts/useContactLinks'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -60,6 +62,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
+  // Every relationship this contact has on this phone, the one the row opened first. One, unless relationships were
+  // merged: cards, witness records and badges cover them all; the DID, messages, upgrade and removal stay on the
+  // first (the row's own relationship).
+  const contactLinks = useContactLinks()
+  const relationships = useMemo(
+    () => relationshipsOfContact(contactLinks, contact.issuer.id),
+    [contactLinks, contact.issuer.id]
+  )
 
   // Live-resolve contact info from stored credentials (received RCard first,
   // legacy VRC issuer object second) so the screen self-heals if the RCard
@@ -81,8 +91,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   )
 
   const witnessCredentials = useMemo(() => {
-    return getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
-  }, [w3cCredentialRecords, contact.issuer.id])
+    return relationships.flatMap((issuerId) => getVerifiedWitnessCredentialsForSubject(w3cCredentialRecords, issuerId))
+  }, [w3cCredentialRecords, relationships])
 
   const witnessRecords = useMemo(() => {
     return witnessCredentials.map(extractWitnessInfo).filter((record): record is WitnessRecord => record !== null)
@@ -100,44 +110,49 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
   // The relationship's layers, as the records on this phone show them.
   const layers = useMemo(
-    () => relationshipLayers(w3cCredentialRecords, contact.issuer.id, witnessRecords),
-    [w3cCredentialRecords, contact.issuer.id, witnessRecords]
+    () => relationshipLayers(w3cCredentialRecords, relationships, witnessRecords),
+    [w3cCredentialRecords, relationships, witnessRecords]
   )
 
   useEffect(() => {
     let cancelled = false
     const verify = async () => {
-      try {
-        // eslint-disable-next-line no-console
-        console.log(`[VRC:Badge] ContactDetails: verifying HW attestation for issuer=${contact.issuer.id}`)
-        const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, contact.issuer.id)
-        if (!rawCred) {
+      // Secure Exchange when any of the contact's relationships carries hardware evidence that verifies. A
+      // relationship whose check throws is skipped and the next one still gets its turn, as in the Contacts list.
+      let valid = false
+      for (const issuerId of relationships) {
+        try {
           // eslint-disable-next-line no-console
-          console.log(`[VRC:Badge] ContactDetails: no raw credential found for issuer`)
-          if (!cancelled) setHwVerified(false)
-          return
+          console.log(`[VRC:Badge] ContactDetails: verifying HW attestation for issuer=${issuerId}`)
+          const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, issuerId)
+          if (!rawCred) {
+            // eslint-disable-next-line no-console
+            console.log(`[VRC:Badge] ContactDetails: no raw credential found for issuer`)
+            continue
+          }
+          // eslint-disable-next-line no-console
+          console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
+          const result = await verifyVrcHardwareEvidence(rawCred as any)
+          // eslint-disable-next-line no-console
+          console.log(
+            `[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`
+          )
+          if (result?.valid === true) {
+            valid = true
+            break
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log(`[VRC:Badge] ContactDetails: verification exception: ${e}`)
         }
-        // eslint-disable-next-line no-console
-        console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
-        const result = await verifyVrcHardwareEvidence(rawCred as any)
-        // eslint-disable-next-line no-console
-        console.log(
-          `[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`
-        )
-        if (!cancelled) {
-          setHwVerified(result?.valid === true)
-        }
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.log(`[VRC:Badge] ContactDetails: verification exception: ${e}`)
-        if (!cancelled) setHwVerified(false)
       }
+      if (!cancelled) setHwVerified(valid)
     }
     verify()
     return () => {
       cancelled = true
     }
-  }, [w3cCredentialRecords, contact.issuer.id])
+  }, [w3cCredentialRecords, relationships])
 
   useEffect(() => {
     const lookupConnection = async () => {
