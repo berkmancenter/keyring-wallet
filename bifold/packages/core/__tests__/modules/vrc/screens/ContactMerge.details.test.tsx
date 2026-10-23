@@ -211,4 +211,32 @@ describe('Same person? on a contact', () => {
     expect(mockDeleteContact).not.toHaveBeenCalled()
     expect(pop).not.toHaveBeenCalled()
   })
+
+  test('a merge changed elsewhere to another of the same size is not removed under the question asked', async () => {
+    store.records.push({
+      id: 'link-1',
+      content: { issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id },
+      tags: { recordType: CONTACT_LINK, issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id, confirmation: 'user' },
+    })
+    const pop = jest.fn()
+    const tree = render(
+      <ContactDetails route={{ params: { contact: { issuer: ALICE_AGAIN } } } as any} navigation={{ pop } as any} />,
+      { wrapper: Container }
+    )
+    await tree.findByTestId(id('ContactMergedByYou'))
+    fireEvent.press(tree.getByTestId(id('ContactRemove')))
+    // Meanwhile, elsewhere: this relationship now belongs to a different contact of the same size (still 2).
+    store.records[0] = {
+      id: 'link-2',
+      content: { issuerDid: ALICE_AGAIN.id, contactId: 'did:peer:another-alice' },
+      tags: { recordType: CONTACT_LINK, issuerDid: ALICE_AGAIN.id, contactId: 'did:peer:another-alice' },
+    }
+    fireEvent.press(tree.getByTestId(id('ContactRemoveMergedConfirm')))
+
+    await waitFor(() => expect(store.findAllByQuery.mock.calls.length).toBeGreaterThanOrEqual(3))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(mockDeleteContact).not.toHaveBeenCalled()
+    expect(pop).not.toHaveBeenCalled()
+    expect(store.records).toHaveLength(1)
+  })
 })

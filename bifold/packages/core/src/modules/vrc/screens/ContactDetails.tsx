@@ -423,8 +423,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     setIsRemoveModalDisplayed(false)
 
     // What goes is decided by the links as stored now, not as last read: a read that failed earlier would leave part
-    // of a merged contact behind. If they can't be read, or say other than the question the person answered (one
-    // relationship, or the count they were shown), nothing is removed and the screen reads them again.
+    // of a merged contact behind. If they can't be read, or name other relationships than the question the person
+    // answered was about, nothing is removed and the screen reads them again.
     let links: ContactLinks
     try {
       links = await loadContactLinks(agent)
@@ -433,7 +433,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       return
     }
     const group = relationshipsOfContact(links, contact.issuer.id)
-    if (group.length !== relationships.length) {
+    const asked = new Set(relationships)
+    if (group.length !== asked.size || group.some((member) => !asked.has(member))) {
       setLinksVersion((version) => version + 1)
       Toast.show({ type: ToastType.Error, text1: t('ContactDetails.MergeFailed') })
       return
@@ -460,7 +461,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     if (success) {
       navigation.pop()
     }
-  }, [deleteContact, contact.issuer.id, connectionId, navigation, relationships.length, agent, t])
+  }, [deleteContact, contact.issuer.id, connectionId, navigation, relationships, agent, t])
 
   const handleCancelRemove = useCallback(() => {
     setIsRemoveModalDisplayed(false)

@@ -478,9 +478,15 @@
     "Separate": "Separar",
     "MergeFailed": "Não foi possível alterar seus contatos. Nada foi alterado.",
     "MergedRemoveTitle": "Remover {{name}}?",
+    "MergedRemoveTitle_one": "Remover {{name}}?",
+    "MergedRemoveTitle_other": "Remover {{name}}?",
     "MergedRemoveBody": "Isso remove {{count}} relacionamentos com {{name}}, incluindo os cartões de todos eles, e não pode ser desfeito. Se forem pessoas diferentes, separe-os primeiro.",
+    "MergedRemoveBody_one": "Isso remove {{count}} relacionamento com {{name}}, incluindo seus cartões, e não pode ser desfeito.",
+    "MergedRemoveBody_other": "Isso remove {{count}} relacionamentos com {{name}}, incluindo os cartões de todos eles, e não pode ser desfeito. Se forem pessoas diferentes, separe-os primeiro.",
     "MergedRemoveSeparate": "Separá-los em vez disso",
-    "MergedRemoveConfirm": "Remover todos ({{count}})"
+    "MergedRemoveConfirm": "Remover todos ({{count}})",
+    "MergedRemoveConfirm_one": "Remover ({{count}})",
+    "MergedRemoveConfirm_other": "Remover todos ({{count}})"
   },
   "WhatAreContacts": {
     "Title": "O que são Contatos?",

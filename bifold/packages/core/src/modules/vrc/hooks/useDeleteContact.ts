@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useAgent } from '@bifold/react-hooks'
-import { W3cCredentialRecord } from '@credo-ts/core'
+import { RecordNotFoundError, W3cCredentialRecord } from '@credo-ts/core'
 import Toast from 'react-native-toast-message'
 import { useTranslation } from 'react-i18next'
 
@@ -9,6 +9,15 @@ import { RelationshipDidRepository } from '../repositories/RelationshipDidReposi
 import { toRawCredential } from '../utils/rcardDisplayUtils'
 import { OpenIDCredentialType } from '../../openid/types'
 import { ToastType } from '../../../components/toast/BaseToast'
+
+/**
+ * A record that is already gone is what removal wants, so it is not a failure. Anything else (a store that cannot be
+ * read or written) is: it is rethrown so the removal reports failure instead of success over what it never deleted.
+ */
+function unlessAlreadyGone(error: unknown): void {
+  if (error instanceof RecordNotFoundError || (error as Error | undefined)?.name === 'RecordNotFoundError') return
+  throw error
+}
 
 interface DeleteContactParams {
   issuerId: string
@@ -50,7 +59,10 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
       }
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.warn('[VRC:DeleteContact] Issuer extraction error:', error instanceof Error ? error.message : String(error))
+      console.warn(
+        '[VRC:DeleteContact] Issuer extraction error:',
+        error instanceof Error ? error.message : String(error)
+      )
     }
     return null
   }
@@ -99,12 +111,12 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
             if (outOfBandId) {
               try {
                 await agent.modules.didcomm.oob.deleteById(outOfBandId)
-              } catch (_oobError) {
-                // OOB record may already be deleted or not exist
+              } catch (oobError) {
+                unlessAlreadyGone(oobError)
               }
             }
-          } catch (_error) {
-            // Connection may already be deleted or not exist
+          } catch (connectionError) {
+            unlessAlreadyGone(connectionError)
           }
         }
 
@@ -115,8 +127,9 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
           if (record) {
             await repository.delete(agent.context, record)
           }
-        } catch (_error) {
-          // RelationshipDid record may not exist
+        } catch (relationshipError) {
+          // Finding none returns null; a throw here is the store failing, unless the record went in between.
+          unlessAlreadyGone(relationshipError)
         }
 
         // Show success toast

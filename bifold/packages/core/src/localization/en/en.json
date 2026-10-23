@@ -569,9 +569,15 @@
     "Separate": "Separate",
     "MergeFailed": "Couldn't change your contacts. Nothing was changed.",
     "MergedRemoveTitle": "Remove {{name}}?",
+    "MergedRemoveTitle_one": "Remove {{name}}?",
+    "MergedRemoveTitle_other": "Remove {{name}}?",
     "MergedRemoveBody": "This removes {{count}} relationships with {{name}}, including the cards from all of them, and can't be undone. If they're different people, separate them first.",
+    "MergedRemoveBody_one": "This removes {{count}} relationship with {{name}}, including its cards, and can't be undone.",
+    "MergedRemoveBody_other": "This removes {{count}} relationships with {{name}}, including the cards from all of them, and can't be undone. If they're different people, separate them first.",
     "MergedRemoveSeparate": "Separate them instead",
-    "MergedRemoveConfirm": "Remove all {{count}}"
+    "MergedRemoveConfirm": "Remove all {{count}}",
+    "MergedRemoveConfirm_one": "Remove {{count}}",
+    "MergedRemoveConfirm_other": "Remove all {{count}}"
   },
   "WhatAreContacts": {
     "Title": "What are Contacts?",

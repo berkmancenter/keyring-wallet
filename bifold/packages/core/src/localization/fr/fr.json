@@ -535,9 +535,15 @@
     "Separate": "Séparer",
     "MergeFailed": "Impossible de modifier vos contacts. Rien n'a été changé.",
     "MergedRemoveTitle": "Supprimer {{name}} ?",
+    "MergedRemoveTitle_one": "Supprimer {{name}} ?",
+    "MergedRemoveTitle_other": "Supprimer {{name}} ?",
     "MergedRemoveBody": "Cela supprime {{count}} relations avec {{name}}, y compris les cartes de chacune, et ne peut pas être annulé. S'il s'agit de personnes différentes, séparez-les d'abord.",
+    "MergedRemoveBody_one": "Cela supprime {{count}} relation avec {{name}}, y compris ses cartes, et ne peut pas être annulé.",
+    "MergedRemoveBody_other": "Cela supprime {{count}} relations avec {{name}}, y compris les cartes de chacune, et ne peut pas être annulé. S'il s'agit de personnes différentes, séparez-les d'abord.",
     "MergedRemoveSeparate": "Les séparer plutôt",
-    "MergedRemoveConfirm": "Tout supprimer ({{count}})"
+    "MergedRemoveConfirm": "Tout supprimer ({{count}})",
+    "MergedRemoveConfirm_one": "Supprimer ({{count}})",
+    "MergedRemoveConfirm_other": "Tout supprimer ({{count}})"
   },
   "WhatAreContacts": {
     "Title": "Que sont les Contacts?",
