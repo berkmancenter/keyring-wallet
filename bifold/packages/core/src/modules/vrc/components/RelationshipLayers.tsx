@@ -53,6 +53,7 @@ export const RelationshipLayers: React.FC<{ name: string; layers: RelationshipLa
             {layer.kind === 'card'
               ? t(verified[index] ? 'Relationship.LayerCardsHardware' : 'Relationship.LayerCards', {
                   date: dateOf(layer.at),
+                  interpolation: { escapeValue: false },
                 })
               : layer.witnessName
                 ? t('Relationship.LayerWitnessed', {
@@ -60,7 +61,10 @@ export const RelationshipLayers: React.FC<{ name: string; layers: RelationshipLa
                     date: dateOf(layer.at),
                     interpolation: { escapeValue: false },
                   })
-                : t('Relationship.LayerWitnessedUnnamed', { date: dateOf(layer.at) })}
+                : t('Relationship.LayerWitnessedUnnamed', {
+                    date: dateOf(layer.at),
+                    interpolation: { escapeValue: false },
+                  })}
           </ThemedText>
           {layer.kind === 'witnessed' && layer.inPerson ? (
             <ThemedText style={styles.muted}>{t('Relationship.LayerInPerson')}</ThemedText>
