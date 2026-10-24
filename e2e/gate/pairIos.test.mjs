@@ -57,7 +57,8 @@ test('the wake rows are NOT RUN on a build that names no push gateway, and run o
 
 test('pair-ios reads the share link through WebDriverAgent first and knows the "made (long|short)" wording', () => {
   const src = readFileSync(path.join(here, '..', 'run-pair-ios.mjs'), 'utf8');
-  const gc = src.indexOf('a.getClipboard("plaintext")'), pb = src.indexOf('simctl("pbpaste", A.udid)');
+  const gc = src.indexOf('a.getClipboard(type)'), pb = src.indexOf('simctl("pbpaste", A.udid)');
+  assert.match(src, /\(await read\("plaintext"\)\) \|\| \(await read\("url"\)\)/, 'plain text, then the URL type');
   assert.ok(gc > 0 && pb > gc, 'getClipboard first, pbpaste as the fallback');
   const tap = src.indexOf('tapTestId(a, "MyQRShareLink"');
   assert.ok(src.indexOf('a.setClipboard("", "plaintext")') < tap && src.indexOf('"simctl", "pbcopy", A.udid') < tap, 'both pasteboards emptied before the tap');

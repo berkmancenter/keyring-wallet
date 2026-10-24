@@ -28,7 +28,8 @@ test('a Release build\'s invitation is read from the share sheet, through the dr
   assert.match(show, /process\.env\.E2E_RELEASE === "1" && \(await existsTestId\(driver, "MyQRShareLink"/);
   assert.ok(show.indexOf('return shareLinkFromSheet(driver)') < show.indexOf('waitForTestId(driver, "InvitationUrl", 60000)'), 'before the dev-only wait');
   const share = flows.match(/export async function shareLinkFromSheet[\s\S]*?\n}\n/)[0];
-  assert.match(share, /driver\.getClipboard\("plaintext"\)/);
+  assert.match(share, /driver\.getClipboard\(type\)/);
+  assert.match(share, /\(await read\("plaintext"\)\) \|\| \(await read\("url"\)\)/, 'plain text, then the URL type');
   assert.doesNotMatch(share, /pbpaste/, 'pbpaste came back empty on the MacBook');
   assert.ok(share.indexOf('driver.setClipboard("", "plaintext")') < share.indexOf('tapTestId(driver, "MyQRShareLink"'), 'the clipboard is emptied before the tap, so a stale link cannot pass');
 });

@@ -121,7 +121,10 @@ try {
       await sleep(1000);
       // The message is the words, then the link on its own line (QRScanner.tsx). Read through WebDriverAgent first, as
       // lib/pages/link.js does: simctl pbpaste came back empty for 10 s on the MacBook while WDA had the link (10-23).
-      const clip = Buffer.from((await a.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+      // Plain text first, then the URL type: on the mini (270, 1023-2204) the sheet's Copy left nothing readable as
+      // plain text (WDA and pbpaste both empty) though the app had made the link — a URL item is not plain text.
+      const read = async (type) => Buffer.from((await a.getClipboard(type).catch(() => "")) || "", "base64").toString("utf8").trim();
+      const clip = (await read("plaintext")) || (await read("url"));
       link = (clip || simctl("pbpaste", A.udid).trim()).split(/\s+/).pop() || "";
       const isLink = /^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(link);
       const note = await existsTestId(a, "MyQRShareLinkNote", 3000);
