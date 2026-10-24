@@ -1,6 +1,10 @@
-• Sign in to community websites: scan the site's QR code, check the two-digit number, approve with your fingerprint. Needs the next agent release; until then Keyring says your agent needs an update.
-• A vetter in two communities gets the right desk for each.
-• My devices lists every key on your agent.
-• Keyring suggests a phone name when you grant access by hand.
-• A link held for an approval says so.
-• "Join again" sits at the top after a refusal.
+# Google Play release notes for the next build (at most 500 characters).
+# Lines starting with # are ignored.
+
+• Works with agents and communities moving to TSP 1.0.
+• Contacts: "Add to this relationship" to sign again or add a witness.
+• Links opened later say who you're waiting for, not "failed".
+• My Agent loads without flashing the wrong state.
+• A removed phone is shown as removed at once.
+• "Don't have an agent yet?" help in My Agent.
+• Known issue: exchanging again with a contact adds a second row; use "Add to this relationship" instead.
