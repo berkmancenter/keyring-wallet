@@ -12,6 +12,7 @@ import {
   NavContainer,
   NetworkProvider,
   openAppLink,
+  registerHiddenVettingModules,
   StoreProvider,
   Stacks,
   ThemeProvider,
@@ -36,6 +37,7 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
+import { withOta } from '@/ota/withOta'
 import { onPushWake, openApprovalsOnTap } from '@/push/pushHandlers'
 import PushStartup from '@/push/PushStartup'
 import { initialState, reducer } from '@/store'
@@ -58,6 +60,14 @@ messaging().setBackgroundMessageHandler(async (message) =>
   onPushWake('background', message, (m, d) => BCLogger.info(m, d))
 )
 messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
+
+// Before anything renders. The hidden-vetting modules register their seams on
+// evaluation, and a bundler has no reason to evaluate a module whose exports
+// nobody reads — Metro's inlineRequires left them bundled and never run, which
+// is why private vetting was invisible on 254. A call at startup is the one
+// form that does not depend on how the bundle is built; see
+// bifold trust-tasks/hiddenVettingModules.
+registerHiddenVettingModules()
 
 const App = () => {
   const { t } = useTranslation()
@@ -159,4 +169,6 @@ const App = () => {
   )
 }
 
-export default App
+// Over-the-air JS updates: a no-op unless the build names an update server
+// (OTA_UPDATE_URL); see src/ota/withOta.tsx.
+export default withOta(App)

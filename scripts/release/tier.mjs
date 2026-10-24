@@ -27,6 +27,8 @@
 // The range's base must be the LAST STORE BUILD: a JS change that calls a native method added since then reads ota
 // here, and only a native fingerprint at publish time can catch it.
 // Flags (FLAGS) name classes of change that need more than a plain OTA publish (the owner's policy, revised 10-11):
+// A flag reads only files the app ships: a file whose path rule says "none" (deploy/, e2e/, scripts/, docs, tests,
+// server-side packages) raises nothing, whatever its lines say.
 // policy "store" moves an "ota" change to "store" (listed under "held"); policy "strict" moves it to "ota-strict"
 // (listed under "strict"); policy "advisory" (or none) is shown only. Store wins over strict.
 import { execFileSync } from 'node:child_process';
@@ -100,7 +102,7 @@ export function flagsOf(files, added = {}, flags = FLAGS) {
   const out = [];
   for (const { flag, policy = 'advisory', path: p, added: a } of flags) {
     if (!POLICIES.includes(policy)) throw new Error(`flag "${flag}": policy must be ${POLICIES.join(', ')}, not "${policy}"`);
-    const hit = files.filter((f) => !/^(e2e|docs)\/|__tests__|\.test\./.test(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
+    const hit = files.filter((f) => ships(f) && ((p && p.test(f)) || (a && (added[f] || []).some((l) => a.test(l)))));
     if (hit.length) out.push({ flag, policy, files: hit });
   }
   return out;
@@ -134,13 +136,22 @@ export function verdict(files, { added, flags: set = FLAGS } = {}) {
 
 const RANK = { none: 0, ota: 1, store: 2 };
 
+/** The first rule a path matches, as [tier, why]. An unknown path counts as store: never OTA by default. */
+export function ruleOf(f) {
+  const hit = RULES.find(([, , m]) => (typeof m === 'function' ? m(f) : m.test(f)));
+  return hit ? [hit[0], hit[1]] : ['store', 'unknown path (not OTA by default)'];
+}
+
+/** Whether a path is in what the app ships: anything its rule does not call "none" (an unknown path counts). The
+ * older test-file exclusion stays, so a test the rules miss (a .test.mjs under src) still raises no flag. */
+export const ships = (f) => ruleOf(f)[0] !== 'none' && !/^(e2e|docs)\/|__tests__|\.test\./.test(f);
+
 /** The tier of each file, and of the whole change. An unknown path counts as store: never OTA by default. */
 export function classify(files) {
   const reasons = {};
   let tier = 'none';
   for (const f of files) {
-    const hit = RULES.find(([, , m]) => (typeof m === 'function' ? m(f) : m.test(f)));
-    const [t, why] = hit ? [hit[0], hit[1]] : ['store', 'unknown path (not OTA by default)'];
+    const [t, why] = ruleOf(f);
     reasons[f] = `${t}: ${why}`;
     if (RANK[t] > RANK[tier]) tier = t;
   }

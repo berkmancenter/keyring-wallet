@@ -74,6 +74,8 @@
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="https" android:host="wallet.asml.berkmancenter.org" android:pathPrefix="/invite" />
+        <!-- The short invitation link, /i/<id>, when the links service makes one (bifold #466). -->
+        <data android:scheme="https" android:host="wallet.asml.berkmancenter.org" android:pathPrefix="/i/" />
       </intent-filter>
 
       <intent-filter android:autoVerify="true">

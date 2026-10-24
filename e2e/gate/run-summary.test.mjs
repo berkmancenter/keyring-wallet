@@ -155,3 +155,113 @@ test('all app passes is pass; any leg with no verdict on the app is incomplete',
     r.done();
   }
 });
+
+const CORE = 'core=vetting-named:kk vetting-hidden:hv signin:signin-ios join:waiting\n';
+const pass = (row) => `ROW ${row} PASS — ok\n`;
+
+test('a full gate where every core journey passed is pass', () => {
+  const r = runs({ '1019-1000-cccc-gate': { meta: `kind=gate\n${CORE}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, pass('hv-admitted')], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1000-cccc-gate'));
+    assert.equal(s.overall, 'pass');
+    assert.deepEqual(s.coreMissing, []);
+  } finally { r.done(); }
+});
+
+test('a core journey not run, all SKIP, or proven only informationally makes a full gate incomplete, with why', () => {
+  const r = runs({ '1019-1100-cccc-gate': { meta: `kind=gate\n${CORE}`, legs: [
+    ['kk', 0, pass('kk-vetting')],
+    ['hv', 0, 'ROW hv-admitted SKIP — NOT RUN (core journey): no seated Keyring vetter configured\n'],
+    ['waiting', 3, 'INFORMATIONAL rows=join-sent VETTER=tui\nROW join-sent FAIL — openvtc\n'],
+    ['other', 0, pass('x')],
+  ] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1100-cccc-gate'));
+    assert.equal(s.overall, 'incomplete');
+    const by = Object.fromEntries(s.coreMissing.map((m) => [m.journey, m.why]));
+    assert.match(by['vetting-hidden'], /hv: every row SKIP/);
+    assert.equal(by.signin, 'not run');
+    assert.match(by.join, /waiting: informational/);
+    assert.equal(by['vetting-named'], undefined);
+  } finally { r.done(); }
+});
+
+test('an informational row never fails its leg, and is listed apart; other FAILs still do', () => {
+  const r = runs({ '1019-1200-cccc-rerun': { meta: 'kind=rerun\ninformational=p1-tui-vets\n', legs: [
+    ['p1', 3, `${pass('p1-link')}ROW p1-tui-vets FAIL — keyring-test VTC refused manifest/0.2\n`],
+    ['agents', 3, `${pass('a')}ROW b FAIL — real\n`],
+  ] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1200-cccc-rerun'));
+    const p1 = s.legs.find((l) => l.name === 'p1');
+    assert.equal(p1.result, 'pass');
+    assert.equal(p1.fail, 0);
+    assert.equal(s.informational[0].row, 'p1-tui-vets');
+    assert.equal(s.legs.find((l) => l.name === 'agents').result, 'fail');
+    assert.equal(s.overall, 'fail');
+  } finally { r.done(); }
+});
+
+test('core journeys only decide a full gate: a rerun of a few legs reports them but is not held by them', () => {
+  const r = runs({ '1019-1300-cccc-rerun': { meta: `kind=rerun\n${CORE}`, legs: [['kk', 0, pass('kk-vetting')]] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1300-cccc-rerun'));
+    assert.equal(s.overall, 'pass');
+    assert.equal(s.coreMissing.length, 3);
+  } finally { r.done(); }
+});
+
+test("a leg's INFORMATIONAL line sets aside only the rows it names: its other FAILs still fail it", () => {
+  const r = runs({ '1019-1400-cccc-rerun': { meta: 'kind=rerun\n', legs: [
+    ['hv', 3, 'INFORMATIONAL rows=hv-proof,hv-driver VETTER=tui\nROW hv-private-badge FAIL — no badge\nROW hv-proof FAIL — openvtc\nROW hv-driver FAIL — rc=1\n'],
+  ] } });
+  try {
+    const s = summarize(path.join(r.root, '1019-1400-cccc-rerun'));
+    const hv = s.legs[0];
+    assert.equal(hv.result, 'fail');
+    assert.match(hv.reason, /hv-private-badge/);
+    assert.deepEqual(s.informational.map((i) => i.row).sort(), ['hv-driver', 'hv-proof']);
+    assert.equal(s.overall, 'fail');
+  } finally { r.done(); }
+});
+
+test('a core journey that names a row (hv@hv-admitted) is not proven while that row SKIPs, however many others pass', () => {
+  const CORE_ROW = 'core=vetting-named:kk vetting-hidden:hv@hv-admitted signin:signin-ios join:waiting\n';
+  const hv = (admitted) => pass('hv-link') + pass('hv-proof') + admitted;
+  const r = runs({
+    '1021-1000-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv('ROW hv-admitted SKIP — 2 members joined since the run began (read twice) on this shared community\n')], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+    '1021-1100-cccc-gate': { meta: `kind=gate\n${CORE_ROW}`, legs: [['kk', 0, pass('kk-vetting')], ['hv', 0, hv(pass('hv-admitted'))], ['signin-ios', 0, pass('signin-approved')], ['waiting', 0, pass('join-sent')]] },
+  });
+  try {
+    const s = summarize(path.join(r.root, '1021-1000-cccc-gate'));
+    assert.equal(s.overall, 'incomplete');
+    assert.deepEqual(s.coreMissing.map((m) => [m.journey, m.why]), [['vetting-hidden', 'hv: hv-admitted did not PASS']]);
+    const ok = summarize(path.join(r.root, '1021-1100-cccc-gate'));
+    assert.equal(ok.overall, 'pass');
+    assert.deepEqual(ok.coreMissing, []);
+  } finally { r.done(); }
+});
+
+// Each core journey names the row that is the journey (gate.sh CORE_JOURNEYS): a missing or SKIPped verdict row leaves
+// the gate incomplete for that journey alone, however the leg's other rows did.
+const PINNED = { 'vetting-named': ['kk', 'kk-vetting'], 'vetting-hidden': ['hv', 'hv-admitted'], signin: ['signin-ios', 'signin-approved'], join: ['waiting', 'join-approved-listed'] };
+const PINNED_CORE = `core=${Object.entries(PINNED).map(([j, [leg, row]]) => `${j}:${leg}@${row}`).join(' ')}\n`;
+for (const [journey, [legName, verdictRow]] of Object.entries(PINNED)) {
+  for (const how of ['SKIP', 'missing']) {
+    test(`core journey ${journey}: its verdict row ${verdictRow} ${how} leaves the gate incomplete for it alone`, () => {
+      const legs = Object.values(PINNED).map(([leg, row]) => [leg, 0, pass(`${leg}-other`) + (leg !== legName ? pass(row) : how === 'SKIP' ? `ROW ${row} SKIP — not this run's to judge\n` : '')]);
+      const r = runs({ '1021-1200-cccc-gate': { meta: `kind=gate\n${PINNED_CORE}`, legs } });
+      try {
+        const s = summarize(path.join(r.root, '1021-1200-cccc-gate'));
+        assert.equal(s.overall, 'incomplete');
+        assert.deepEqual(s.coreMissing.map((m) => [m.journey, m.why]), [[journey, `${legName}: ${verdictRow} did not PASS`]]);
+      } finally { r.done(); }
+    });
+  }
+}
+
+test('the gate pins each core journey to its verdict row', async () => {
+  const { readFileSync } = await import('node:fs');
+  const gateSh = readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'gate.sh'), 'utf8');
+  assert.equal(gateSh.match(/^CORE_JOURNEYS="([^"]*)"/m)[1], PINNED_CORE.slice('core='.length).trim());
+});

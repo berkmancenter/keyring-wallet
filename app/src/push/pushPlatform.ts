@@ -71,6 +71,91 @@ export async function waitForApnsToken(
   return token
 }
 
+/** How often, and for how long, {@link watchForToken} looks for a late token. */
+export const LATE_TOKEN_POLL_MS = 15_000
+export const LATE_TOKEN_WATCH_MS = 30 * 60_000
+
+/**
+ * Look for the platform token every {@link LATE_TOKEN_POLL_MS} until it is
+ * there, then call `arrived` once. Gives up after {@link LATE_TOKEN_WATCH_MS};
+ * returns a stop.
+ *
+ * Only a read of what the platform already handed over: it registers nothing
+ * and asks nobody, so it is cheap to leave running while the app is open. For
+ * the token that arrives after every try has given up (IN-277): Apple handed
+ * one tester's install its token minutes after registering.
+ */
+export function watchForToken(
+  getToken: () => Promise<string | null | undefined>,
+  arrived: () => void,
+  opts: { pollMs?: number; watchMs?: number } = {}
+): () => void {
+  const pollMs = opts.pollMs ?? LATE_TOKEN_POLL_MS
+  const watchMs = opts.watchMs ?? LATE_TOKEN_WATCH_MS
+  let done = false
+  let waited = 0
+  const stop = () => {
+    done = true
+    clearInterval(timer)
+  }
+  const timer = setInterval(() => {
+    waited += pollMs
+    void getToken()
+      .catch(() => null)
+      .then((token) => {
+        if (done) return
+        if (token) {
+          stop()
+          arrived()
+        } else if (waited >= watchMs) stop()
+      })
+  }, pollMs)
+  return stop
+}
+
+/**
+ * The Android counterpart of {@link watchForToken}: Firebase's token read is a
+ * network call there, not a local read, so polling it every
+ * {@link LATE_TOKEN_POLL_MS} would ask Google's servers ~120 times in the
+ * watch. Instead: one read now, in case the token turned up just before this
+ * was called, then Firebase's own `onTokenRefresh`, which fires when a token
+ * is issued. Gives up after {@link LATE_TOKEN_WATCH_MS}; returns a stop.
+ */
+export function watchForTokenRefresh(
+  getToken: () => Promise<string | null | undefined>,
+  onTokenRefresh: (listener: (token: string) => void) => () => void,
+  arrived: () => void,
+  opts: { watchMs?: number } = {}
+): () => void {
+  let done = false
+  // Held in an object so `stop` can reach the unsubscribe however early it
+  // runs, including from a listener Firebase calls while still subscribing.
+  const subscription: { off?: () => void } = {}
+  const stop = () => {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    subscription.off?.()
+  }
+  const once = () => {
+    if (done) return
+    stop()
+    arrived()
+  }
+  const timer = setTimeout(stop, opts.watchMs ?? LATE_TOKEN_WATCH_MS)
+  subscription.off = onTokenRefresh((token) => {
+    if (token) once()
+  })
+  // Stopped while subscribing: unsubscribe now that there is something to drop.
+  if (done) subscription.off()
+  void getToken()
+    .catch(() => null)
+    .then((token) => {
+      if (token) once()
+    })
+  return stop
+}
+
 /**
  * The person turned notifications off: withdraw what {@link startPlatformPush}
  * set up. What stops the wakes is the agent clearing this device's channel;

@@ -20,6 +20,7 @@ import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  autoUnlockIfLocked,
   byTestId,
   createSession,
   deviceTag,
@@ -35,7 +36,7 @@ import {
   waitForTestId,
 } from "./driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./config.js";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
+import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
 import { cardPrimaryIds, VETTING_DOOR_WORDS } from "./testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -318,6 +319,8 @@ async function awaitText(d, key, re, timeoutMs) {
   const until = Date.now() + timeoutMs;
   let last = "";
   while (Date.now() < until) {
+    // A text read is no wait for a testID, so the backstop is called here (kk on 261, 1017-0209: both phones locked).
+    await autoUnlockIfLocked(d, key);
     await scrollToTestId(d, key, 3, LOW).catch(() => undefined);
     last = await textOf(d, key).catch(() => "");
     if (re.test(last)) return last;
@@ -420,6 +423,8 @@ export function installedHash({ platform, udid, bundleId = "asml.bkc.harvard.wal
   if (platform === "android") {
     const p = execFileSync("adb", ["-s", udid, "shell", "pm", "path", bundleId], { encoding: "utf8" }).split("\n")[0].replace("package:", "").trim();
     const local = path.join(ARTIFACTS, `installed-${Date.now()}.apk`);
+    // A fresh checkout has no artifacts folder (gitignored): 269's p1 on a new worktree lost p1-tui-vets to the pull.
+    mkdirSync(ARTIFACTS, { recursive: true });
     execFileSync("adb", ["-s", udid, "pull", p, local], { stdio: "ignore" });
     return execFileSync("shasum", ["-a", "256", local], { encoding: "utf8" }).slice(0, 12);
   }
@@ -516,6 +521,7 @@ export async function unlockToHome(d, timeoutMs = 300000) {
     await sleep(3000);
   }
   await sleep(3000);
+  await keepUnlockedForRun(d);
 }
 
 // ---------------------------------------------------------------- applicant
@@ -1072,11 +1078,9 @@ export const community = {
   leave(d, { keep = "purge" } = {}, opts = {}) {
     return runStep(d, "member", "leave", opts, async () => {
       await (await waitForTestId(d, "MyAgent", 30000)).click();
-      await sleep(1500);
-      if (!(await existsTestId(d, "AgentHome", 3000))) {
-        const open = await scrollToTestId(d, "OpenYourAgentButton", 4).catch(() => undefined);
-        if (open) await open.click();
-      }
+      // A linked phone's My Agent hands over to the agent home by itself (bifold #484, and on focus since 09-29);
+      // "Open your agent" is gone (bifold #485).
+      await waitForTestId(d, "AgentHome", 30000).catch(() => undefined);
       const row = await scrollToTestId(d, "AgentMembershipRow", 6).catch(() => undefined);
       if (!row) throw failWith("the agent screen lists no community membership", {});
       await row.click();

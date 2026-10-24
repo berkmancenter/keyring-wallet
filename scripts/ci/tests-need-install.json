@@ -1,0 +1,16 @@
+{
+  "e2e/lib/deviceWait.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/steady.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/tapReliable.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/testerFixRows.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/pages/agents.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/pages/calls.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/pages/join.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/pages/link.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/lib/pages/step.test.mjs": "needs webdriverio (e2e's package.json), which this job does not install: the page objects and the device helpers import lib/driver.js",
+  "e2e/openvtc/deskRows.test.mjs": "needs node-pty, a native module this job does not install: the openvtc TUI helpers drive a pseudo-terminal",
+  "e2e/openvtc/joinRoute.test.mjs": "needs node-pty, a native module this job does not install: the openvtc TUI helpers drive a pseudo-terminal",
+  "e2e/openvtc/panelRows.test.mjs": "needs node-pty, a native module this job does not install: the openvtc TUI helpers drive a pseudo-terminal",
+  "e2e/openvtc/style.test.mjs": "needs node-pty, a native module this job does not install: the openvtc TUI helpers drive a pseudo-terminal",
+  "scripts/openvtc/local-vti-stack/enrol-page/test/server.test.mjs": "needs qrcode (the enrol page's own dependency), which this job does not install"
+}

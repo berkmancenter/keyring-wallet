@@ -90,5 +90,10 @@ describe('a phone with no push token says why', () => {
     phone({ permission: AuthorizationStatus.AUTHORIZED, apnsToken: 'apns-secret-token' })
     await expect(platformPushRegistration()).resolves.toMatchObject({ platform: 'apns', token: 'apns-secret-token' })
     expect(JSON.stringify(info.mock.calls)).not.toContain('apns-secret-token')
+    // That it arrived is said, so a report tells a late token from none (IN-277).
+    expect(info).toHaveBeenCalledWith(
+      "push token: Apple's token arrived",
+      expect.objectContaining({ os: 'ios', waitedMs: expect.any(Number), environment: expect.any(String) })
+    )
   })
 })

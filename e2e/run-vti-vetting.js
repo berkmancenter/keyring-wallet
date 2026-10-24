@@ -21,7 +21,7 @@ import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSou
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, keepUnlockedForRun, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
@@ -74,10 +74,15 @@ const ADMIN_TIMEOUT_MS = 90000;
  * caller (a row, or the ceremony) fails on its own, not on the leg's alarm.
  */
 function admin(...args) {
-  const env = Object.fromEntries(
-    readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
-  );
-  // Another community than the lab's (a Farm Full Stack's) is named outright.
+  // Another community than the lab's (a Farm Full Stack's) is named outright; the lab's stack.env is read only for what
+  // is not. Read up front, it broke every admin call on a machine with no lab (the mini: 268/269's kk id305 threw
+  // ENOENT on ~/vti-stack/stack.env though kk names C in full).
+  const named = process.env.KEYRING_COMMUNITY_REST && process.env.KEYRING_COMMUNITY_DID;
+  const env = named
+    ? {}
+    : Object.fromEntries(
+        readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
+      );
   const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
   const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
   const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json");
@@ -181,6 +186,8 @@ async function unlockToHome(d) {
     await sleep(3000);
   }
   await sleep(4000);
+  // A kept phone never onboards again: save Never here too (flows.js keepUnlockedForRun).
+  await keepUnlockedForRun(d);
 }
 /**
  * The release gate's §2 after member: the done card, My Agent's "Joined"

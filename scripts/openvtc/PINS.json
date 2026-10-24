@@ -1,12 +1,12 @@
 {
-  "updated": "2026-10-07",
+  "updated": "2026-10-23",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
-      "sha": "43e2cc7",
-      "commitDate": "2026-09-23",
-      "pinnedOn": "2026-09-23",
-      "why": "#275: a QR button beside every DID the extension draws (a bare DID, \"Scan with Keyring\"), for the first real phone scan of an upstream DID QR; carries #272 (the consent-window race, VTI-40), superseding our local fix",
+      "sha": "bf92427",
+      "commitDate": "2026-10-22",
+      "pinnedOn": "2026-10-23",
+      "why": "TSP 1.0: @openvtc/vti-tsp-js 0.4.0 (#374, a24e498) packs YTSP-BAA and refuses Rev 2 and Rev 3; its spec-v1-vectors.json is the 1.0 Appendix A the bridge build's codec is checked against (docs/plans/tsp-1.0-cutover-plan.md). The app's TSP oracle stays the vendored 0.3.0 build until the Rev 3 reader is removed.",
       "watch": [
         "packages/tsp-js/",
         "packages/core/src/vta/",
@@ -41,12 +41,12 @@
     },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
-      "sha": "a1611baa",
-      "commitDate": "2026-10-06",
-      "pinnedOn": "2026-10-07",
-      "why": "Tag VTI-Eucalyptus: affinidi-messaging-sdk 0.33.2, the version openvtc 0.5.0 builds with.",
+      "sha": "7609754e",
+      "commitDate": "2026-10-22",
+      "pinnedOn": "2026-10-23",
+      "why": "#967: affinidi-tsp 0.3.0, TSP 1.0 (YTSP-BAA), the Rust side the bridge build interoperates with. Since #949 (eafbd150) the mediator lives in its own repository, so this pin no longer holds the mediator's source; the lab builds its mediator from its own checkout (local-vti-stack, TDK_SRC) and does not move with this pin.",
       "watch": [
-        "crates/messaging/affinidi-messaging-mediator/"
+        "crates/messaging/affinidi-tsp/"
       ]
     },
     "openvtc": {

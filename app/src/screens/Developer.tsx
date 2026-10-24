@@ -1,5 +1,6 @@
 import {
   DispatchAction,
+  E2EClockRows,
   SafeAreaModal,
   Screens,
   testIdWithKey,
@@ -14,6 +15,7 @@ import {
   vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
+import Clipboard from '@react-native-clipboard/clipboard'
 import {
   createVtiClientDid,
   resolveVtiMediator,
@@ -46,6 +48,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
+import OtaDeveloperSection from '@/ota/OtaDeveloperSection'
 import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
@@ -66,10 +69,8 @@ const Developer: React.FC = () => {
   const [remoteLoggingWarningModalVisible, setRemoteLoggingWarningModalVisible] = useState(false)
   const [useDevVerifierTemplates, setDevVerifierTemplates] = useState(!!store.preferences.useDevVerifierTemplates)
   const [enableWalletNaming, setEnableWalletNaming] = useState(!!store.preferences.enableWalletNaming)
-  const [preventAutoLock, setPreventAutoLock] = useState(!!store.preferences.preventAutoLock)
   const [remoteLoggingEnabled, setRemoteLoggingEnabled] = useState(logger?.remoteLoggingEnabled)
   const [enableShareableLink, setEnableShareableLink] = useState(!!store.preferences.enableShareableLink)
-  const [enableProxy, setEnableProxy] = useState(!!store.developer.enableProxy)
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
@@ -85,6 +86,8 @@ const Developer: React.FC = () => {
   const [isProbingManager, setIsProbingManager] = useState(false)
   const [managerProbeLog, setManagerProbeLog] = useState<string[]>([])
   const [isClearingContacts, setIsClearingContacts] = useState(false)
+  // Which value's Copy was last tapped, so that button reads "Copied".
+  const [copied, setCopied] = useState<'mediator' | 'session'>()
   const navigation = useNavigation()
 
   const styles = StyleSheet.create({
@@ -114,6 +117,22 @@ const Developer: React.FC = () => {
       flex: 1,
       fontWeight: 'normal',
       flexWrap: 'wrap',
+    },
+    valueLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 10,
+    },
+    value: {
+      ...TextTheme.normal,
+      flexShrink: 1,
+      marginRight: 16,
+      color: ColorPalette.brand.link,
+    },
+    copy: {
+      ...TextTheme.normal,
+      fontWeight: 'bold',
+      color: ColorPalette.brand.link,
     },
     rowSeparator: {
       borderBottomWidth: 1,
@@ -183,6 +202,11 @@ const Developer: React.FC = () => {
       )}
     </>
   )
+
+  const copyValue = (key: 'mediator' | 'session', value: string) => {
+    Clipboard.setString(value)
+    setCopied(key)
+  }
 
   const toggleSwitch = () => {
     dispatch({
@@ -288,29 +312,12 @@ const Developer: React.FC = () => {
     setRemoteLoggingWarningModalVisible(false)
   }
 
-  const togglePreventAutoLockSwitch = () => {
-    dispatch({
-      type: DispatchAction.PREVENT_AUTO_LOCK,
-      payload: [!preventAutoLock],
-    })
-
-    setPreventAutoLock((previousState) => !previousState)
-  }
-
   const toggleShareableLinkSwitch = () => {
     dispatch({
       type: DispatchAction.USE_SHAREABLE_LINK,
       payload: [!enableShareableLink],
     })
     setEnableShareableLink((previousState) => !previousState)
-  }
-
-  const toggleEnableProxySwitch = () => {
-    dispatch({
-      type: BCDispatchAction.TOGGLE_PROXY,
-      payload: [!enableProxy],
-    })
-    setEnableProxy((previousState) => !previousState)
   }
 
   const toggleEnableAppToAppPersonFlowSwitch = () => {
@@ -748,173 +755,58 @@ const Developer: React.FC = () => {
           />
         </SectionRow>
         <View style={styles.sectionSeparator}></View>
-        <SectionHeader icon={'apartment'} title={'IAS'} />
+        <SectionHeader icon={'swap-horiz'} title={'Connection'} />
         <SectionRow
-          title={t('Developer.Environment')}
-          accessibilityLabel={t('Developer.Environment')}
-          testID={testIdWithKey('environment')}
-          onPress={() => {
-            setEnvironmentModalVisible(true)
-          }}
-        >
-          <Text style={[TextTheme.headingFour, { fontWeight: 'normal', color: ColorPalette.brand.link }]}>
-            {store.developer.environment.name}
-          </Text>
-        </SectionRow>
-        <View style={styles.sectionSeparator}></View>
-        <SectionRow
-          title={t('Verifier.UseVerifierCapability')}
-          accessibilityLabel={t('Verifier.Toggle')}
-          testID={testIdWithKey('ToggleVerifierCapability')}
+          title={t('Developer.Mediator')}
+          accessibilityLabel={t('Developer.Mediator')}
+          testID={testIdWithKey('DeveloperMediator')}
+          onPress={() => navigation.navigate(Screens.ConfigureMediator as never)}
           showRowSeparator
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={useVerifierCapability ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleVerifierCapabilitySwitch}
-            value={useVerifierCapability}
-          />
-        </SectionRow>
-        <SectionRow
-          title={t('Verifier.AcceptDevCredentials')}
-          accessibilityLabel={t('Verifier.Toggle')}
-          testID={testIdWithKey('ToggleAcceptDevCredentials')}
-          showRowSeparator
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={acceptDevCredentials ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleAcceptDevCredentialsSwitch}
-            value={acceptDevCredentials}
-          />
-        </SectionRow>
-        <SectionRow
-          title={t('Connection.UseConnectionInviterCapability')}
-          accessibilityLabel={t('Connection.Toggle')}
-          testID={testIdWithKey('ToggleConnectionInviterCapabilitySwitch')}
-          showRowSeparator
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={useConnectionInviterCapability ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleConnectionInviterCapabilitySwitch}
-            value={useConnectionInviterCapability}
-          />
-        </SectionRow>
-        <SectionRow
-          title={t('Verifier.UseDevVerifierTemplates')}
-          accessibilityLabel={t('Verifier.ToggleDevTemplates')}
-          testID={testIdWithKey('ToggleDevVerifierTemplatesSwitch')}
-          showRowSeparator
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={useDevVerifierTemplates ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleDevVerifierTemplatesSwitch}
-            value={useDevVerifierTemplates}
-          />
-        </SectionRow>
-        {!store.onboarding.didCreatePIN && (
-          <SectionRow
-            title={t('NameWallet.EnableWalletNaming')}
-            accessibilityLabel={t('NameWallet.ToggleWalletNaming')}
-            testID={testIdWithKey('ToggleWalletNamingSwitch')}
-            showRowSeparator
-          >
-            <Switch
-              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-              thumbColor={enableWalletNaming ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-              onValueChange={toggleWalletNamingSwitch}
-              value={enableWalletNaming}
-            />
-          </SectionRow>
-        )}
-        <SectionRow
-          title={t('Settings.PreventAutoLock')}
-          accessibilityLabel={t('Settings.TogglePreventAutoLock')}
-          testID={testIdWithKey('TogglePreventAutoLockSwitch')}
-          showRowSeparator
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={preventAutoLock ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={togglePreventAutoLockSwitch}
-            value={preventAutoLock}
-          />
-        </SectionRow>
-        <SectionRow
-          title={'Remote Logging'}
-          accessibilityLabel={'Remote Logging'}
-          testID={testIdWithKey('ToggleRemoteLoggingSwitch')}
           subContent={
-            remoteLoggingEnabled ? (
-              <Text style={[styles.rowTitle, { marginTop: 10 }]}>
-                {`${t('RemoteLogging.SessionID')}: `}
-                <Text style={[styles.rowTitle, { fontWeight: 'bold' }]}>{logger.sessionId.toString()}</Text>
+            // One line, shortened in the middle: the full value is an invitation URL. Copy takes all of it.
+            <View style={styles.valueLine}>
+              <Text
+                testID={testIdWithKey('DeveloperMediatorValue')}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+                style={styles.value}
+              >
+                {store.preferences.selectedMediator}
               </Text>
-            ) : (
-              <></>
-            )
+              <Pressable
+                onPress={() => copyValue('mediator', store.preferences.selectedMediator)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Developer.CopyValue')}
+                testID={testIdWithKey('DeveloperMediatorCopy')}
+                hitSlop={8}
+              >
+                <Text style={styles.copy}>
+                  {copied === 'mediator' ? t('Developer.Copied') : t('Developer.CopyValue')}
+                </Text>
+              </Pressable>
+            </View>
           }
         >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={remoteLoggingEnabled ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleRemoteLoggingSwitch}
-            value={remoteLoggingEnabled}
-          />
+          <Icon name={'chevron-right'} size={24} color={TextTheme.normal.color} />
         </SectionRow>
-
         <SectionRow
-          title={t('PasteUrl.UseShareableLink')}
-          accessibilityLabel={t('PasteUrl.UseShareableLink')}
-          testID={testIdWithKey('ToggleUseShareableLink')}
+          title={t('Developer.EnableDidCommV2')}
+          accessibilityLabel={t('Developer.EnableDidCommV2')}
+          testID={testIdWithKey('ToggleEnableDidCommV2')}
+          showRowSeparator
+          // The row itself toggles too: on iOS the accessible row hides the
+          // Switch from automation, and a tap on the row did nothing (the
+          // Android+iOS DIDComm v2 e2e came back with the flag off, 2026-09-14).
+          onPress={toggleEnableDidCommV2Switch}
         >
           <Switch
             trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={enableShareableLink ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            thumbColor={enableDidCommV2 ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleShareableLinkSwitch}
-            value={enableShareableLink}
-            disabled={!store.authentication.didAuthenticate}
+            onValueChange={toggleEnableDidCommV2Switch}
+            value={enableDidCommV2}
           />
         </SectionRow>
-
-        <SectionRow
-          title={t('Developer.EnableProxy')}
-          accessibilityLabel={t('Developer.EnableProxy')}
-          testID={testIdWithKey('ToggleEnableProxy')}
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={enableProxy ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleEnableProxySwitch}
-            value={enableProxy}
-          />
-        </SectionRow>
-
-        <SectionRow
-          title={t('Developer.EnableAppToAppPersonFlow')}
-          accessibilityLabel={t('Developer.EnableAppToAppPersonFlow')}
-          testID={testIdWithKey('ToggleEnableAppToAppPersonFlow')}
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={enableAppToAppPersonFlow ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleEnableAppToAppPersonFlowSwitch}
-            value={enableAppToAppPersonFlow}
-          />
-        </SectionRow>
-
         <SectionRow
           title={t('Developer.EnableTspCarriage')}
           accessibilityLabel={t('Developer.EnableTspCarriage')}
@@ -931,55 +823,46 @@ const Developer: React.FC = () => {
             value={enableTspCarriage}
           />
         </SectionRow>
-
         <View style={styles.sectionSeparator}></View>
-
+        <SectionHeader icon={'bug-report'} title={'Diagnostics'} />
         <SectionRow
-          title={t('Developer.EnableDidCommV2')}
-          accessibilityLabel={t('Developer.EnableDidCommV2')}
-          testID={testIdWithKey('ToggleEnableDidCommV2')}
-          // The row itself toggles too: on iOS the accessible row hides the
-          // Switch from automation, and a tap on the row did nothing (the
-          // Android+iOS DIDComm v2 e2e came back with the flag off, 2026-09-14).
-          onPress={toggleEnableDidCommV2Switch}
+          title={'Remote Logging'}
+          accessibilityLabel={'Remote Logging'}
+          testID={testIdWithKey('ToggleRemoteLoggingSwitch')}
+          subContent={
+            remoteLoggingEnabled ? (
+              <View style={styles.valueLine}>
+                <Text numberOfLines={1} ellipsizeMode="middle" style={[styles.rowTitle, { flexShrink: 1 }]}>
+                  {`${t('RemoteLogging.SessionID')}: `}
+                  <Text style={[styles.rowTitle, { fontWeight: 'bold' }]}>{logger.sessionId.toString()}</Text>
+                </Text>
+                <Pressable
+                  onPress={() => copyValue('session', logger.sessionId.toString())}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Developer.CopyValue')}
+                  testID={testIdWithKey('RemoteLoggingSessionIdCopy')}
+                  hitSlop={8}
+                >
+                  <Text style={styles.copy}>
+                    {copied === 'session' ? t('Developer.Copied') : t('Developer.CopyValue')}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <></>
+            )
+          }
         >
           <Switch
             trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={enableDidCommV2 ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            thumbColor={remoteLoggingEnabled ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleEnableDidCommV2Switch}
-            value={enableDidCommV2}
+            onValueChange={toggleRemoteLoggingSwitch}
+            value={remoteLoggingEnabled}
           />
         </SectionRow>
-
         <View style={styles.sectionSeparator}></View>
-        <SectionHeader icon={'contacts'} title={'Test Data'} />
-        <View style={styles.section}>
-          <Pressable
-            style={[
-              {
-                backgroundColor: ColorPalette.brand.primary,
-                paddingVertical: 12,
-                paddingHorizontal: 20,
-                borderRadius: 8,
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexDirection: 'row',
-                marginBottom: 10,
-              },
-              isSeedingContacts && { backgroundColor: ColorPalette.brand.primaryDisabled },
-            ]}
-            onPress={handleSeedTestContacts}
-            disabled={isSeedingContacts}
-            testID={testIdWithKey('SeedTestContactsButton')}
-          >
-            {isSeedingContacts ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Seed Test Contacts</Text>
-            )}
-          </Pressable>
-        </View>
+        <SectionHeader icon={'build'} title={'Agent tools (test)'} />
         <View style={styles.section}>
           <Pressable
             style={[
@@ -1002,7 +885,9 @@ const Developer: React.FC = () => {
             {isProbingVta ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Probe VTA mediator</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Probe VTA mediator (sends a join request)
+              </Text>
             )}
           </Pressable>
           <Pressable
@@ -1080,6 +965,34 @@ const Developer: React.FC = () => {
             </Text>
           )}
         </View>
+        <View style={styles.sectionSeparator}></View>
+        <SectionHeader icon={'contacts'} title={'Test data'} />
+        <View style={styles.section}>
+          <Pressable
+            style={[
+              {
+                backgroundColor: ColorPalette.brand.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                marginBottom: 10,
+              },
+              isSeedingContacts && { backgroundColor: ColorPalette.brand.primaryDisabled },
+            ]}
+            onPress={handleSeedTestContacts}
+            disabled={isSeedingContacts}
+            testID={testIdWithKey('SeedTestContactsButton')}
+          >
+            {isSeedingContacts ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Seed Test Contacts</Text>
+            )}
+          </Pressable>
+        </View>
         <View style={styles.section}>
           <Pressable
             style={[
@@ -1105,6 +1018,127 @@ const Developer: React.FC = () => {
             )}
           </Pressable>
         </View>
+        <View style={styles.sectionSeparator}></View>
+        <SectionHeader icon={'system-update'} title={'Over-the-air updates'} />
+        <OtaDeveloperSection />
+        <View style={styles.sectionSeparator}></View>
+        <SectionHeader icon={'verified-user'} title={'Credentials and verifier'} />
+        <SectionRow
+          title={t('Verifier.UseVerifierCapability')}
+          accessibilityLabel={t('Verifier.Toggle')}
+          testID={testIdWithKey('ToggleVerifierCapability')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={useVerifierCapability ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleVerifierCapabilitySwitch}
+            value={useVerifierCapability}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Verifier.AcceptDevCredentials')}
+          accessibilityLabel={t('Verifier.Toggle')}
+          testID={testIdWithKey('ToggleAcceptDevCredentials')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={acceptDevCredentials ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleAcceptDevCredentialsSwitch}
+            value={acceptDevCredentials}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Connection.UseConnectionInviterCapability')}
+          accessibilityLabel={t('Connection.Toggle')}
+          testID={testIdWithKey('ToggleConnectionInviterCapabilitySwitch')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={useConnectionInviterCapability ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleConnectionInviterCapabilitySwitch}
+            value={useConnectionInviterCapability}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Verifier.UseDevVerifierTemplates')}
+          accessibilityLabel={t('Verifier.ToggleDevTemplates')}
+          testID={testIdWithKey('ToggleDevVerifierTemplatesSwitch')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={useDevVerifierTemplates ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleDevVerifierTemplatesSwitch}
+            value={useDevVerifierTemplates}
+          />
+        </SectionRow>
+        {!store.onboarding.didCreatePIN && (
+          <SectionRow
+            title={t('NameWallet.EnableWalletNaming')}
+            accessibilityLabel={t('NameWallet.ToggleWalletNaming')}
+            testID={testIdWithKey('ToggleWalletNamingSwitch')}
+            showRowSeparator
+          >
+            <Switch
+              trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+              thumbColor={enableWalletNaming ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+              ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+              onValueChange={toggleWalletNamingSwitch}
+              value={enableWalletNaming}
+            />
+          </SectionRow>
+        )}
+        <SectionRow
+          title={t('PasteUrl.UseShareableLink')}
+          accessibilityLabel={t('PasteUrl.UseShareableLink')}
+          testID={testIdWithKey('ToggleUseShareableLink')}
+          showRowSeparator
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableShareableLink ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleShareableLinkSwitch}
+            value={enableShareableLink}
+            disabled={!store.authentication.didAuthenticate}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.Environment')}
+          accessibilityLabel={t('Developer.Environment')}
+          testID={testIdWithKey('environment')}
+          showRowSeparator
+          onPress={() => {
+            setEnvironmentModalVisible(true)
+          }}
+        >
+          <Text style={[TextTheme.headingFour, { fontWeight: 'normal', color: ColorPalette.brand.link }]}>
+            {store.developer.environment.name}
+          </Text>
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableAppToAppPersonFlow')}
+          accessibilityLabel={t('Developer.EnableAppToAppPersonFlow')}
+          testID={testIdWithKey('ToggleEnableAppToAppPersonFlow')}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableAppToAppPersonFlow ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableAppToAppPersonFlowSwitch}
+            value={enableAppToAppPersonFlow}
+          />
+        </SectionRow>
+        {/* The clocks in force, for the gate's linkwait rows (bifold E2EClockRows): in a test build only, since a store
+            build never sets E2E_CLOCKS. This screen replaces bifold's, so it renders them itself. */}
+        <E2EClockRows />
       </ScrollView>
     </SafeAreaView>
   )

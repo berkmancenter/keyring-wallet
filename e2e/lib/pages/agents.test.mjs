@@ -323,6 +323,19 @@ test("answerOwnerCheck: the device-credential window gets the PIN and Enter; no 
   }
 });
 
+test("answerOwnerCheck: waits 1 s after the prompt appears before typing (a PIN before it animates in is dropped)", async () => {
+  const s = session({});
+  try {
+    const up = fakeAdb({ prompt: () => true });
+    const wait = async (ms) => void up.calls.push(`wait ${ms}`);
+    assert.equal(await answerOwnerCheck(s.d, "keep", { pin: "1234", adb: up, say: () => undefined, wait }), true);
+    const typed = up.calls.indexOf("shell input text 1234");
+    assert.equal(up.calls[typed - 1], "wait 1000");
+  } finally {
+    s.done();
+  }
+});
+
 test("readHomeName, readCommunityCard, openCommunityCard: the card's status and Check now, and the door into it", async () => {
   const s = session(home("Alpha", { AgentCommunityCard_k: {}, AgentCommunityStatus_k: { children: ["Your request was turned down."] }, AgentCommunityCheck_k: {}, AgentCommunityOpen_k: {} }));
   s.d.onTap.AgentCommunityOpen_k = (d) => d.set({ CommunityName: { text: "Keyring Lab Community" }, ApplyToCommunityButton: { text: "Choose how to join" } });

@@ -36,7 +36,9 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { TEST_ID_PREFIX } from "../config.js";
+import { typeExact } from "../typeExact.js";
 import {
+  autoUnlockIfLocked,
   acceptSystemAlertIfPresent,
   byTestId,
   clearLocalityPreflightIfUp,
@@ -74,6 +76,7 @@ export const defaultIo = {
   dismissTourIfPresent,
   passNewPhoneOfferIfShown,
   pasteLinkOnScanScreen,
+  autoUnlockIfLocked,
   /**
    * What covers a screen mid-link and hides it from the tree: a system alert
    * (a camera permission), the "also open as you" notice of a shared runner
@@ -200,6 +203,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
       // pre-flight) hides what is under it from the tree: clear it, as
       // waitForTestId does on a miss.
       await io.clearNotices(d).catch(() => false);
+      // A test build's 30 s auto-lock (driver.js autoUnlockIfLocked): unlock and keep waiting, unless the PIN screen is
+      // what is wanted.
+      if (current === "EnterPIN" && !wanted.includes("EnterPIN") && io.autoUnlockIfLocked) await io.autoUnlockIfLocked(d, wanted.join("|"));
       if (each) await each();
       if (io.now() > until) {
         const observed = {
@@ -546,7 +552,16 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
         await io.screenshot(d, "link-06-intro");
         const centre = await measureIntroCentre();
         if (onCentre) await onCentre(centre);
-        for (let i = 0; i < 3; i++) await io.tapTestId(d, "AgentIntroNext", 15000);
+        for (let i = 0; i < 3; i++) {
+          // After an unlock (a test build's 30 s auto-lock, driver.js autoUnlockIfLocked) a 261 app comes back on its
+          // home tabs, not on the introduction (1017-0154: Contacts after the unlock): go back to My Agent, where the
+          // introduction shows again or, if the app counts it seen, the agent's home.
+          if (!(await io.existsTestId(d, "AgentIntroNext", 3000))) {
+            if (await io.existsTestId(d, "MyAgent", 2000)) await io.tapTestId(d, "MyAgent", 10000);
+            if ((await awaitStep(["AgentIntro", "AgentHome"], 30000)) === "AgentHome") break;
+          }
+          await io.tapTestId(d, "AgentIntroNext", 15000);
+        }
         await awaitStep("AgentHome", 30000);
         return { value: { offerKept, centre } };
       }),
@@ -653,7 +668,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
     enterAddress: (did) =>
       step("enterAddress", async () => {
         const address = await io.waitForTestId(d, "AgentCreateAddressInput", 30000);
-        await address.setValue(did);
+        // Typed and read back (typeExact): a keystroke out of place on a headless iOS simulator made the app refuse
+        // a mangled address (the mini's vetter seat, 10-22), which is the harness's fault, not the app's.
+        await typeExact(address, did, { platform: d.e2ePlatform });
         await (await io.scrollToTestId(d, "AgentCreateAddressContinue", 4).catch(() => io.byTestId(d, "AgentCreateAddressContinue"))).click();
         const on = await awaitStep(["AgentCreateOwnerCode", "AgentCreateError"], 60000);
         if (on === "AgentCreateError") {
@@ -746,8 +763,9 @@ export function createLinkPage(d, { io = defaultIo, log } = {}) {
           // there to tap: ask for the goal first, and treat the waypoint as optional (candidate tree 2026-09-23).
           if (!(await io.existsTestId(d, "VtaLinkAgentAddress", 2000))) await io.tapTestId(d, "VtaLinkWithoutQr", 15000).catch(() => undefined);
           const address = await io.waitForTestId(d, "VtaLinkAgentAddress", 15000);
-          // Return on the keyboard submits the address, as a person would — on iOS.
-          await address.setValue(`${did}\n`);
+          // Typed and read back (typeExact), then Return on the keyboard submits it, as a person would — on iOS.
+          await typeExact(address, did, { platform: d.e2ePlatform });
+          await address.addValue("\n");
         }
         await awaitStep(["VtaLinkManualDid", "VtaLinkShowTheCode", "VtaLinkShowMyCode", "VtaLinkAgentAddress"], 15000);
         return { value: { knewAgent: knowsAgent } };

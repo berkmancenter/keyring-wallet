@@ -1,0 +1,34 @@
+# One site, the update server. With SITE_SCHEME=https (the default) Caddy
+# obtains and renews the certificate: OTA_HOST needs a public DNS record pointing
+# here and ports 80 and 443 open. Caddy sets X-Forwarded-Proto, which the server
+# uses to answer the publisher on the scheme it came in on.
+#
+# No `log` directive: no access log. Update checks and downloads are public on
+# purpose (every bundle is signed); management (/hot-updater/api/*) and uploads
+# (/storage/*) need the server's bearer token.
+{$SITE_SCHEME:https}://{$OTA_HOST} {
+	request_body /storage/upload* {
+		max_size 200MB
+	}
+	reverse_proxy ota:3080
+}
+
+# The wallet host (WALLET_HOST): the static site that iOS and Android read for
+# universal links (/.well-known), the install page (/invite), and short invitation
+# links (/i, /i/<id>, served by deploy/keyring-links). The same rules as the
+# site this replaces: the extension-less AASA file is served as JSON. No `log`
+# directive, so no access log.
+{$SITE_SCHEME:https}://{$WALLET_HOST:wallet.localhost} {
+	@links path /i /i/*
+	handle @links {
+		request_body {
+			max_size 8KB
+		}
+		reverse_proxy links:3090
+	}
+	handle {
+		root * /srv/wallet-site
+		header /.well-known/apple-app-site-association Content-Type application/json
+		file_server
+	}
+}

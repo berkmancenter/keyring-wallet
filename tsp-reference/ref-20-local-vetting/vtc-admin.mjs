@@ -43,7 +43,7 @@
  *   node vtc-admin.mjs <vtcBaseUrl/v1> <vtcDid> <adminCredentialJson> <command> [args]
  *
  *   signed Trust Tasks:
- *     invite <subjectDid> [role]            vtc/invitations/issue/0.1 (30 days)
+ *     invite <subjectDid> [role|none]       vtc/invitations/issue/0.1 (30 days; "none" sends no role)
  *     invitations-list                      vtc/invitations/list/0.1
  *     invitation-deliver <id> [offer|message]  vtc/invitations/deliver/0.1
  *     invitation-revoke <id>                vtc/invitations/revoke/0.1
@@ -343,7 +343,9 @@ const COMMANDS = {
     signed: true,
     // admin-ui lib/api.ts issueInvitation: { subjectDid, validityDays?, role? }.
     run: ({ send }, [subjectDid, role]) =>
-      send(TASK.invitationIssue, { subjectDid, role: role ?? "member", validityDays: 30 }),
+      // "none": no role, so the VIC's subject is { id } only. A role rides as credentialSubject.scopes, which openvtc 0.5.0
+      // (dtg-credentials 0.13, deny_unknown_fields) refuses as "not a conformant DTG Invitation Credential" (2026-10-16).
+      send(TASK.invitationIssue, role === "none" ? { subjectDid, validityDays: 30 } : { subjectDid, role: role ?? "member", validityDays: 30 }),
   },
   // The answer is { invitations: [...] }, not a paged { items } list.
   "invitations-list": { signed: true, run: ({ send }) => send(TASK.invitationList, {}) },

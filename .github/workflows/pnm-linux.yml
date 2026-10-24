@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       vti-ref:
-        description: "verifiable-trust-infrastructure commit (default: the Farm's vta-service v0.56.0)"
+        description: "verifiable-trust-infrastructure commit (default: the Farm's vta-service v0.60.0)"
         type: string
         default: ""
   workflow_call:
@@ -35,12 +35,12 @@ permissions:
   contents: read
 
 env:
-  # The Farm's VTA: vta-service v0.56.0 (FARM_VERSIONS in the gate's farm.env, checked 2026-10-11). Move this with
+  # The Farm's VTA: vta-service v0.60.0 (FARM_VERSIONS in the gate's farm.env, set when the Farm moved). Move this with
   # the Farm, never ahead of it.
-  FARM_VTI_REF: 39c801ed091cdd0aaa8247b8c7aa8e564903d4d6
+  FARM_VTI_REF: 7adda796f4b57543b346229f0516c2cf9ad3c611
   # The release FARM_VTI_REF is: the commit must be this tag's (checked below). The gate compares this version with the
   # Farm's recorded one on every run (e2e/gate/farm-drift.mjs, farm-drift= in the run's meta).
-  FARM_VTI_VERSION: "0.56.0"
+  FARM_VTI_VERSION: "0.60.0"
   RUST_VERSION: "1.95.0"
   FEATURES: config-session,tsp
   # Upstream's explicit switch to the file session store, first in its priority order: a job that runs pnm sets it
@@ -49,7 +49,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # The OLDEST runner image a job that runs this pnm uses (gate-ci's leg jobs: ubuntu-22.04, glibc 2.35). A binary
+    # built on a newer image links a newer glibc and will not start there (gate-ci run 38500355241: "GLIBC_2.38 not
+    # found"). Keep this in step with them, and the image in the cache key.
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     outputs:
       artifact: ${{ steps.name.outputs.artifact }}
@@ -88,7 +91,7 @@ jobs:
         with:
           path: out/pnm
           # A cache key may not contain commas: the features list is joined with "+".
-          key: pnm-linux-x86_64-${{ steps.name.outputs.ref }}-${{ steps.name.outputs.features }}-rust${{ env.RUST_VERSION }}
+          key: pnm-linux-x86_64-ubuntu2204-${{ steps.name.outputs.ref }}-${{ steps.name.outputs.features }}-rust${{ env.RUST_VERSION }}
 
       - name: Check out VTI at that commit
         if: steps.cache.outputs.cache-hit != 'true'
@@ -113,6 +116,10 @@ jobs:
       - name: The binary runs
         shell: bash
         run: |
+          # The newest glibc symbol it needs: it must run on every image that uses it (22.04: GLIBC_2.35).
+          need=$(objdump -T out/pnm | grep -oE 'GLIBC_[0-9.]+' | sort -t. -k1,1 -k2,2n -V | tail -1)
+          echo "needs $need"
+          [ "$(printf '%s\nGLIBC_2.35\n' "$need" | sort -V | tail -1)" = GLIBC_2.35 ] || { echo "::error::pnm needs $need, newer than ubuntu-22.04's GLIBC_2.35"; exit 1; }
           home=$(mktemp -d)
           # pnm has no --version flag: the commit and sha below identify the build.
           # To a file, not a pipe: with pipefail, head closing early would fail pnm on SIGPIPE.

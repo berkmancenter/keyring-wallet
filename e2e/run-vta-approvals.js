@@ -43,13 +43,14 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 import { listAcl, ownedBy, removeRunKeys } from "./lib/aclCleanup.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 import { buildLacks } from "./lib/buildHas.js";
@@ -94,6 +95,7 @@ function pnm(args, timeout = 120000) {
   return out;
 }
 const PIN_DEV = PLATFORM === "android" ? process.env.DEVICE_PIN || "" : "";
+const BID = process.env.E2E_APP_ID || "asml.bkc.harvard.wallet";
 const OWNER_ROWS = process.env.OWNER_ROWS === "1" && Boolean(PIN_DEV);
 const rows = createRows({ label: "vta-approvals" });
 const ASKS = "317 Approve asks the owner";
@@ -121,6 +123,10 @@ async function answerOwner(d, tag) {
     log(`owner check (${tag}): no prompt in 8 s; nothing typed`);
     return false;
   }
+  // The prompt's window exists before it has animated in. A PIN verified in that time is dropped: SystemUI waits for
+  // onDialogAnimatedIn, then dismisses, and the app gets "Authentication canceled" (code 10) though the PIN was right
+  // (rerun 1014-1651 p1: shown 11:54:10.298, verified .371, animated in .596). A person never types that fast.
+  await sleep(1000);
   log(`owner check (${tag}): ${win.slice(0, 120)}; typing the PIN`);
   adb("shell", "input", "text", PIN_DEV);
   adb("shell", "input", "keyevent", "66");
@@ -251,11 +257,59 @@ try {
     await tapTestId(d, "AgentSettings", 10000).catch(() => undefined);
   }
 
+  // ANDROID-NOTIF-CHANNEL (wallet #421, 241): an approval wake reaching the phone in the background is posted on
+  // the app's own high-importance channel keyring_wake ("Requests and messages"), so it shows as a heads-up banner,
+  // not on FCM's fallback channel. WAKE_CHANNEL_CHECK=1 (p1, on a build whose dex has the channel) and push on.
+  const notifCheck = PLATFORM === "android" && process.env.WAKE_CHANNEL_CHECK === "1" && approver && pushCapableOf(approver) === "true";
+  if (notifCheck) {
+    adb("shell", "input", "keyevent", "3"); // Home: the app in the background before the request
+    adb("logcat", "-c"); // the wake's own lines only, saved below
+    await sleep(2000);
+  }
+
   // The request: read the probe context, which the rule now holds for consent.
   const contextId = probeContext;
   const asked = pnm(["contexts", "get", contextId], 180000);
   if (!/consent required/i.test(asked)) throw new Error(`the request was not held for consent: ${lastLine(asked)}`);
   log(`request held: ${lastLine(asked)}`);
+  if (notifCheck) {
+    let record = "";
+    // Up to 2 min: under load the app can ANR on FCM's receive broadcast and the wake is redelivered ~1.5 min later
+    // (push lane, 10-11). Home, never force-stop: a force-stopped app gets no FCM delivery until opened.
+    for (const until = Date.now() + 120000; Date.now() < until && !record; await sleep(3000)) {
+      record = adb("shell", "dumpsys", "notification", "--noredact").split("\n").find((l) => l.includes(`pkg=${BID}`) && /channel=/.test(l)) ?? "";
+    }
+    const channel = (record.match(/channel=([^\s)]+)/) || [])[1] ?? "(no notification)";
+    // when= says which wake this is: wakes share the collapse id keyring-wake, so a later one replaces an earlier.
+    const when = (record.match(/when=(\d+)/) || [])[1] ?? "?";
+    const all = adb("shell", "dumpsys", "notification");
+    const def = (all.match(/NotificationChannel\{mId='keyring_wake'[^}]*\}/) || [""])[0];
+    const importance = Number((def.match(/mImportance=(\d+)/) || [])[1] ?? 0);
+    const name = (def.match(/mName=([^,]+)/) || [])[1] ?? "";
+    // Whether a wake reached the phone at all, apart from where it was posted: the agent's own view of this phone
+    // (pushCapable) and the phone's FCM lines since Home, saved whole (wake-logcat.txt) for the verdict.
+    const capable = pushCapableOf(approver);
+    const lc = adb("logcat", "-d", "-v", "threadtime");
+    const fcm = lc.split("\n").filter((l) => /FirebaseMessaging|FcmBroadcast|CloudMessag|com\.google\.android\.c2dm|keyring[-_]wake/i.test(l));
+    try {
+      writeFileSync(path.join(process.env.E2E_RUN_DIR || "artifacts", "wake-logcat.txt"), lc);
+    } catch (e) {
+      log(`wake-logcat.txt not saved: ${e.message}`);
+    }
+    const seen = record
+      ? `wake posted (when=${when}) on channel ${channel} (want keyring_wake, not fcm_fallback_notification_channel)`
+      : "no wake arrived in 2 min (no Keyring notification posted)";
+    await row("ANDROID-NOTIF-CHANNEL", channel === "keyring_wake" && importance >= 4,
+      `${seen} · agent says pushCapable ${capable} · ${fcm.length} FCM line(s) in the phone's log since Home (wake-logcat.txt) · channel importance ${importance} (4 = high: heads-up) · name "${name}"`);
+    // A real check again (10-14): the misses of 1014-0451/1651/2239 were the gate AVD's stale Play-services state
+    // (a .pushtest leftover) swallowing FCM; after one -wipe-data boot the wake arrived 1 s after the hold
+    // (1014-2347). No wake with pushCapable true and no FCM line: suspect the AVD first (e2e/gate/README.md).
+    await d.activateApp(BID);
+    await sleep(2000);
+    // Back from the background the wallet may ask for its PIN (activity.tsx locks on return once the auto-lock time
+    // has passed); unlock before the card is looked for (review on #428).
+    await unlockIfLocked(d).catch(() => undefined);
+  }
 
   const t0 = Date.now();
   const card = await awaitCard(d, 180000);
@@ -375,6 +429,25 @@ try {
   if (d) {
     await screenshot(d, "vta-approvals-failure").catch(() => undefined);
     await dumpSource(d, "vta-approvals-failure").catch(() => undefined);
+    // Whether the card is missing or only out of view: the whole agent screen, one dump per scroll position from the
+    // top (1021-0158: the failure dump showed only the top of My Agent, under a leftover vetting card).
+    if (PLATFORM === "android") {
+      const swipe = (direction) => d.execute("mobile: scrollGesture", { left: 100, top: 400, width: 800, height: 1200, direction, percent: 0.8 }).catch(() => undefined);
+      for (let i = 0; i < 4; i++) await swipe("up");
+      for (let i = 0; i < 6; i++) {
+        await dumpSource(d, `vta-approvals-failure-scroll${i}`).catch(() => undefined);
+        await swipe("down");
+        await sleep(800);
+      }
+    }
+  }
+  // The phone's own log: did the consent request reach it ("[TrustTasks:VtaAgent] consent request … verified")?
+  if (PLATFORM === "android") {
+    try {
+      writeFileSync(path.join(process.env.E2E_RUN_DIR || "artifacts", "vta-approvals-failure-logcat.txt"), adb("logcat", "-d", "-v", "threadtime"));
+    } catch (e) {
+      log(`vta-approvals-failure-logcat.txt not saved: ${e.message}`);
+    }
   }
   process.exitCode = 1;
 } finally {

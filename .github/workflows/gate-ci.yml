@@ -5,25 +5,31 @@ name: Gate (CI runners)
 # live connection per identity, so two jobs at once would drop each other's calls.
 #
 # Not usable until the owner approves the CI identity (D-8) and the protected environment "gate-ci" holds:
-#   GATE_CI_ENV            the CI configuration (runner slugs, DIDs, URLs, RUNNER_MEDIATOR_HOST, FARM_VERSIONS): the
-#                          Mac's farm.env WITHOUT PNM_BIN and WITHOUT any community admin value (C_ADMIN_CRED). Its
-#                          RUNNER_MAIN/A/B_SLUG are the only agents pnm may reach on CI (CI_ALLOWED_SLUGS); a person's
-#                          agent is refused even if named there.
+#   GATE_CI_ENV            the CI lane's configuration: ONE runner (RUNNER_MAIN_SLUG, _DID, _URL, _NAME: the lane's own
+#                          runner VTA, gate-efficiency item 11), RUNNER_A_DID (a DID for linkfail's approver set, no
+#                          slug), RUNNER_MEDIATOR_HOST, the community's public C_DID/C_NAME/C_REST, FARM_VERSIONS.
+#                          Never PNM_BIN, never a community admin value (C_ADMIN_CRED), never RUNNER_A_SLUG or
+#                          RUNNER_B_SLUG: ci/ci-env-check.sh refuses the file otherwise, as ENV. RUNNER_MAIN_SLUG is
+#                          the only agent pnm may reach on CI (CI_ALLOWED_SLUGS); a person's agent is refused even if
+#                          named there.
 #   GATE_CI_PNM_HOME_B64   base64 of a .tar.gz of that identity's pnm session directory (file store, PNM_HOME)
 # Until then every leg job stops at once as ENV ("no CI Farm identity"), never a verdict on the app.
 # The environment must allow main only (deployment branch rule): a pull_request job never sees these.
 #
-# The identity (D-8, D-10): a SUPER admin on the three test runners only (farm3-runner-prague, -uiux, -openvtc), because
-# a phone's entry is an unrestricted admin and only a super admin may delete it. Its ACL entries expire every 30 days
-# and a person renews them; CI cannot renew itself. What keeps it to the legs' needs is ci/pnm-ci.sh's command
+# The identity (D-8, D-10, item 11): a SUPER admin on the CI lane's own runner only, because a phone's entry is an
+# unrestricted admin and only a super admin may delete it. A lane is one machine, one identity, one runner: two
+# identities on one runner collide on its ACL and its rate limit, so the CI identity never shares a runner with the
+# Mac lane. Its ACL entry expires every 30 days and a person renews it from the runner's custodian admin on the Mac;
+# CI cannot renew itself. What keeps it to the legs' needs is ci/pnm-ci.sh's command
 # allowlist (CI_COMMANDS), not the VTA.
 # Guards (the gate review's conditions for the identity): only the configuration's runners, never a person's agent
-# (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
+# (e2e/gate/ci/pnm-ci.sh, which every pnm call goes through, and which puts the leg's own calls on the runner's REST
+# service rather than the mediator socket, which dropped every frame of run 38806968457); no verbose pnm output; PNM_HOME under RUNNER_TEMP at 700,
 # outside every uploaded path, removed in an always() step; CI's pnm must match the Farm (farm-drift.mjs) or the leg
 # stops as ENV. Every configuration value is masked in the logs; before upload, the leg's folder is scrubbed
 # (ci/scrub-artifacts.sh): a credential anywhere fails the job and nothing is uploaded, identifiers are redacted.
 # The gate's sleep marking (gate.sh run_leg) is bypassed here: a hosted runner does not sleep.
-# Revoking: delete the identity's ACL entry on each runner VTA and empty the two secrets.
+# Revoking: delete the identity's ACL entry on the CI lane's runner VTA and empty the two secrets.
 #
 #   gh workflow run gate-ci.yml -R berkmancenter/keyring-wallet -f legs="testreq linkwait"
 
@@ -33,7 +39,7 @@ on:
       legs:
         description: "Legs to run, space-separated (Android, one emulator, one build)"
         type: string
-        default: "smoke-android testreq linkwait linkresume linkfail pnmlink"
+        default: "smoke-android testreq linkwait linkfail pnmlink"
       run-id:
         description: "test-builds run whose push-off APK to test (default: the newest green push build of main)"
         type: string
@@ -54,7 +60,7 @@ env:
   # Not on CI yet: devices (several emulators), relaunch-android and update-android (two builds), the push legs (a
   # push-on build and the gateway), p1 (the openvtc TUI, a macOS build), the iOS legs (a macOS runner) and p2 (iOS and
   # Android together).
-  CI_LEGS: "smoke-android testreq linkwait linkresume linkfail pnmlink"
+  CI_LEGS: "smoke-android testreq linkwait linkfail pnmlink"
   # Mac-only by the owner's decision (D-8, 10-12): they need the community VTC's ADMIN credential (C_ADMIN_CRED,
   # lib.sh c_admin), which stays out of CI for now; revisit after the CI gate has run a while.
   MAC_ONLY_LEGS: "agents waiting lostreq"
@@ -136,8 +142,11 @@ jobs:
             v=${l#*=}; v=${v#\"}; v=${v%\"}
             [ ${#v} -ge 4 ] && echo "::add-mask::$v"
           done < "$RUNNER_TEMP/gate-ci.env"
-          if grep -qE '^C_ADMIN_CRED=' "$RUNNER_TEMP/gate-ci.env"; then
-            echo "::error::ENV GATE_CI_ENV holds C_ADMIN_CRED: the community admin credential is not part of the CI identity (D-8)"; exit 1
+          # The one-runner shape (item 11): one slug, linkfail's approver DID, no community admin value.
+          if ! shape=$(bash e2e/gate/ci/ci-env-check.sh "$RUNNER_TEMP/gate-ci.env" "${{ matrix.leg }}"); then
+            echo "$shape" | sed 's/^/::error::/'
+            echo "### leg ${{ matrix.leg }}: **env** — the CI configuration is not the one-runner shape (ci-env-check.sh), not a verdict on the app" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           farm=$(grep -m1 '^FARM_VERSIONS=' "$RUNNER_TEMP/gate-ci.env" | cut -d= -f2- | tr -d '"')
           line=$(node e2e/gate/farm-drift.mjs --farm "$farm"); rc=$?

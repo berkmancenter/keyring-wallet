@@ -11,17 +11,20 @@ leg_begin p1 "$(shasum -a 256 "$APK" | cut -c1-12)" "$APK"
 T0=$(stamp); E=emulator-5570; AP=
 fin() {
   adb -s $E shell locksettings clear --old 1234 >/dev/null 2>&1; adb -s $E uninstall $BID >/dev/null 2>&1
-  [ -n "$AP" ] && kill "$AP" 2>/dev/null; emu_stop
+  [ -n "$AP" ] && kill "$AP" 2>/dev/null; { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }; emu_stop
   echo "== cleanup $(utc)"; keys_since "$RUNNER_MAIN_SLUG" "$T0"; gate_sweep_runner "$RUNNER_MAIN_SLUG"
 }
 LEG_CLEANUP=fin
 export RUNNER_VTA=$RUNNER_MAIN_SLUG RUNNER_VTA_DID=$RUNNER_MAIN_DID RUNNER_VTA_URL=$RUNNER_MAIN_URL PNM_BIN ENROL_PORT=8196 E2E_RELEASE=1
 export PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDROID_AVD=$AVD APPIUM_PORT=4760 OPENVTC_TUI_STYLE=current
 emu_start 5570; adb -s $E uninstall $BID >/dev/null 2>&1
+# The app's own log for the whole leg, as waiting and testreq keep it (#591): 269's p1 kept none, so its agent calls
+# (the approvals, the link) went unchecked by the carriage check.
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 curl -s -m 2 http://127.0.0.1:4760/status >/dev/null || { nohup appium --port 4760 --relaxed-security > "$LEG_DIR/appium.log" 2>&1 & AP=$!; for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:4760/status >/dev/null && break; sleep 1; done; }
 cd "$E2E"
 t=$(date +%s)
-E2E_KEEP_APP=1 LINK_MODE=manual perl -e 'alarm 1800; exec @ARGV' node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 \
+E2E_KEEP_APP=1 LINK_MODE=manual galarm 1800 node run-vta-link.js > "$LEG_DIR/link.out" 2>&1 \
   || broken "applicant link: $(grep -E '✅|❌' "$LEG_DIR/link.out" | tail -1 | cut -c1-120)"
 row p1-link PASS "$(( $(date +%s) - t ))s"
 
@@ -31,7 +34,7 @@ row p1-link PASS "$(( $(date +%s) - t ))s"
 if [ -n "${P1_BLOCKED:-}" ]; then
   row p1-tui-seated SKIP "blocked: $P1_BLOCKED"; row p1-tui-vets SKIP "blocked: $P1_BLOCKED"
 elif selected p1-tui-seated || selected p1-tui-vets; then
-  (cd "$REPO" && perl -e 'alarm 600; exec @ARGV' node e2e/openvtc/regrant-tui.mjs "$OPENVTC_BIN" "$OPENVTC_VERSION" "$TUI_FX" "$TUI_PROFILE" "$TUI_PERSONA" \
+  (cd "$REPO" && galarm 600 node e2e/openvtc/regrant-tui.mjs "$OPENVTC_BIN" "$OPENVTC_VERSION" "$TUI_FX" "$TUI_PROFILE" "$TUI_PERSONA" \
     "$C_REST" "$C_DID" "$C_ADMIN_CRED" vetter-grant) > "$LEG_DIR/tui-seat.out" 2>&1; rc=$?
   seat=$(grep -E 'SEATED|NOT SEATED|vetter-grant:' "$LEG_DIR/tui-seat.out" | tail -1 | cut -c1-160)
   if [ $rc -eq 0 ] && echo "$seat" | grep -q '^.*SEATED' && ! echo "$seat" | grep -q 'NOT SEATED'; then row p1-tui-seated PASS "$seat"
@@ -40,7 +43,7 @@ fi
 
 if [ -z "${P1_BLOCKED:-}" ] && selected p1-tui-vets; then
   t=$(date +%s)
-  (cd "$REPO" && perl -e 'alarm 1800; exec @ARGV' node e2e/openvtc/run-phase1.mjs --platform android --label "P1-gate-${CAND_WALLET:0:8}" --expect green \
+  (cd "$REPO" && galarm 1800 node e2e/openvtc/run-phase1.mjs --platform android --label "P1-gate-${CAND_WALLET:0:8}" --expect green \
     --no-install --apk "$APK" --udid $E --openvtc-bin "$OPENVTC_BIN" --openvtc-version "$OPENVTC_VERSION" --fixture-dir "$TUI_FX" --profile "$TUI_PROFILE" \
     --tui-persona "$TUI_PERSONA" --community-did "$C_DID" --community-name "$C_NAME" --vtc-base "$C_REST" --admin-credential "$C_ADMIN_CRED") > "$LEG_DIR/p1.out" 2>&1; rc=$?
   grep -E '✅|❌|\[step\]' "$LEG_DIR/p1.out" | grep -v webdriver | tail -8 | cut -c1-200
@@ -49,7 +52,12 @@ elif [ -z "${P1_BLOCKED:-}" ]; then row p1-tui-vets SKIP "not selected"; fi
 
 # Approvals on the same linked phone (run-vta-approvals.js reads artifacts/last-link.json from the link).
 t=$(date +%s)
-DEVICE_PIN=1234 OWNER_ROWS=1 CARD_ROWS=1 perl -e 'alarm 1200; exec @ARGV' node run-vta-approvals.js > "$LEG_DIR/approvals.out" 2>&1; rc=$?
+# ANDROID-NOTIF-CHANNEL (wallet #421): only on a build whose dex declares the keyring_wake channel (native code: the
+# JS-bundle markers cannot see it).
+WCC=; unzip -p "$APK" 'classes*.dex' 2>/dev/null | grep -aq keyring_wake && WCC=1
+[ -n "$WCC" ] || row ANDROID-NOTIF-CHANNEL SKIP "build lacks the keyring_wake channel (wallet #421)"
+row ANDROID-NOTIF-MESSAGE-WAKE SKIP "tracked: a message wake (a peer's message over a VRC connection) needs infra PR #12 (gateway -p4 + webhook secret) and the mediator's webhook URL; push lane"
+DEVICE_PIN=1234 OWNER_ROWS=1 CARD_ROWS=1 WAKE_CHANNEL_CHECK=$WCC galarm 1200 node run-vta-approvals.js > "$LEG_DIR/approvals.out" 2>&1; rc=$?
 grep -E '^\[e2e\] [0-9]|^PUSH-CAPABLE|^RATE-LIMITED' "$LEG_DIR/approvals.out" | cut -c1-200
 take_rows "$LEG_DIR/approvals.out"
 if [ $rc -eq 0 ]; then row approvals PASS "held for consent, approved on the phone, then let through ($(( $(date +%s) - t ))s)"

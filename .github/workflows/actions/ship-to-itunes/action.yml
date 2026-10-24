@@ -30,13 +30,26 @@ inputs:
     description: Comma-separated TestFlight group names
     required: true
   release_notes:
-    description: TestFlight "What to Test" text. Defaults to a version-based line.
-    required: false
-    default: ''
+    description: >-
+      TestFlight "What to Test" text. Required and never blank: testers see
+      nothing else about the build, so a blank one fails the job rather than
+      shipping a version number alone.
+    required: true
 
 runs:
   using: composite
   steps:
+    # Before the upload, so a build without notes never reaches App Store Connect.
+    - name: Refuse empty What to Test notes
+      shell: bash
+      env:
+        WHATS_NEW: ${{ inputs.release_notes }}
+      run: |
+        if [ -z "$(printf '%s' "${WHATS_NEW:-}" | tr -d '[:space:]')" ]; then
+          echo "::error::What to Test is empty: the release-notes step gave this build no notes"
+          exit 1
+        fi
+
     - name: Upload to App Store Connect
       shell: bash
       env:
@@ -86,7 +99,7 @@ runs:
         APP_VERSION: ${{ inputs.version_name }}
         BUILD_NUMBER: ${{ inputs.version_code }}
         BETA_GROUPS: ${{ inputs.beta_groups }}
-        WHATS_NEW: ${{ inputs.release_notes || format('Release {0} ({1})', inputs.version_name, inputs.version_code) }}
+        WHATS_NEW: ${{ inputs.release_notes }}
       run: |
         set -euo pipefail
         prefix=$([ -n "$ASC_ISSUER_ID" ] && echo AuthKey || echo ApiKey)
