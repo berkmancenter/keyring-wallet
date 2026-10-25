@@ -13,7 +13,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
-- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — two design changes made while building Step 1 (the capability check and the message class), and corrections to the mediator facts from the Step 3 research.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, and chat over DIDComm v1 only, with v2 as a later item), and corrections to the mediator facts from the Step 3 research.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -107,6 +107,10 @@ iOS already declares the camera and photo-library usage strings (`app/ios/AriesB
   - **Why the event sits one level down:** its own `type` and `eventId` never collide with the DIDComm message's `type` and `id`.
   - **Registration.** The class is registered through `DidCommMessageHandlerRegistry`, from the same inbound setup the Trust Task carriages use. So every build that receives Trust Tasks also receives chat events.
   - **Why not two classes.** Separate classes per DIDComm version, as the Trust Task binding uses, would need two type URIs. Credo matches inbound messages to classes by type alone.
+- **Sent over DIDComm v1 connections only, until chat over v2 is designed.** A contact on a v2 connection counts as not supporting chat (§4.5) and gets plain BasicMessages.
+  - **Why.** Over DIDComm v2 and TSP, Credo can find a connection from the `from` and `to` DIDs alone, so an anoncrypted message reaches the handler with no authenticated sender. The handler drops those (`no-authenticated-sender`, bifold `modules/chat/inbound.ts`), because the sender of a chat event must be the connection it arrived on.
+  - **No cost today.** v2 is off by default in the app: a developer setting turns it on (`setDidCommV2Enabled`, bifold `trust-tasks/ceremony.ts`), so every tester's contacts are v1.
+  - **Chat over v2 is a separate item,** and it must land before the mediator migration's M4 makes v2 the default for new contacts (§7). It decides how a v2 chat event proves its sender (authcrypt required, or another binding to the connection), and it is proven by its own two-device run.
 - **The event JSON is independent of how it is carried,** so it can later travel as a TSP payload unchanged.
 - **Not JSON inside BasicMessage `content`.** The display filter in §3 hides exactly that shape, non-Keyring peers would show raw JSON, and BasicMessage records cannot be indexed by event type.
 - **Not a Credo patch to BasicMessage.** Credo's base message class keeps `~attach` on the wire, but the BasicMessage handler and record drop it. Patching that gives Keyring-only behaviour to a standard type, which other peers would silently lose, and the patch would have to be carried through the Credo 0.7 upgrade.
@@ -205,13 +209,13 @@ Step 0 measures the storage each queued photo takes on both mediators (disk on C
 
 ### 4.5 Capability check and fallback
 
-- **How support is known.** A contact's support comes from the RCE protocol version it announces in the relationship handshake (`vrc:rceVersion:<n>`), stored on its `RelationshipDidRecord`. **Version 6 means "speaks `keyring/chat/1.0`"**. This is the same check VRC issuance uses (`counterpartyRceVersionAtLeast`); Keyring makes no DIDComm Discover Features calls.
+- **How support is known.** A contact's support comes from the RCE protocol version it announces in the relationship handshake (`vrc:rceVersion:<n>`), stored on its `RelationshipDidRecord`. **Version 6 means "speaks `keyring/chat/1.0`"**. This is the same check VRC issuance uses (`counterpartyRceVersionAtLeast`); Keyring makes no DIDComm Discover Features calls. A contact on a DIDComm v2 connection counts as not supporting chat, whatever it announced, until chat over v2 is built (§4.1).
 - **When a build announces 6.** Only from the build that shows chat events in the timeline (Step 1). Before that, nobody sends chat events to a build that cannot show them.
 - **Existing contacts learn of an upgrade.** The relationship handshake is sent once per relationship, and re-sending it would restart the relationship exchange. So a build that first announces 6 sends each existing contact a one-time chat-capability notice, a separate message that never touches the exchange. A contact that receives one raises its stored version. The notice's exact form is settled in Step 1, before anything depends on it.
 - **Peer supports it:** send `chat/1.0/event`.
 - **Peer does not:** send a plain BasicMessage. Text goes as it is. A photo goes as "📷 Photo — update Keyring to see it". A reply goes as its text. Reactions are **not sent**, because a stream of "reacted 👍" messages is worse than nothing.
 - **Receivers accept both,** and existing BasicMessages keep rendering exactly as today.
-- **Disappearing messages need both sides on `chat/1.0`.** A fallback BasicMessage carries no timer, so an older peer cannot honour one. The timer cannot be turned on for a peer that does not advertise `chat/1.0` ("Ask <name> to update Keyring to use disappearing messages"). If the peer stops advertising it while a timer is on, the next send asks before going out as a plain message.
+- **Disappearing messages need both sides on `chat/1.0`.** A fallback BasicMessage carries no timer, so an older peer cannot honour one. The timer cannot be turned on for a peer that does not support `chat/1.0` ("Ask <name> to update Keyring to use disappearing messages"). If the peer stops supporting it while a timer is on, the next send asks before going out as a plain message.
 
 **Delivery to an offline peer.** There are no delivery receipts in this plan. On the Affinidi mediator, a message, including a photo, that waits in the queue for longer than its 7-day expiry is dropped there, and the sender is not told. The current Credo mediator never expires queued messages. That matches text today and is accepted for this plan. Delivered receipts are a later type (§4.2), and they would close the gap.
 
@@ -288,7 +292,7 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
 - Send v1 and v2 messages with growing inline attachments, and record the largest raw attachment that round-trips through each of:
   - (a) the production Credo mediator;
   - (b) a local Affinidi mediator running the `deploy/keyring-messaging` config.
-- Record what a wallet on today's release does when it receives `chat/1.0/event`, an unknown message type: problem report, silent drop or error. This decides how much the fallback (§4.5) leans on Discover Features being current.
+- Record what a wallet on today's release does when it receives `chat/1.0/event`, an unknown message type: problem report, silent drop or error. This decides what the capability notice (§4.5) must guard against when a contact's stored version is out of date.
 - *Done when:* a dated companion records:
   - both ceilings;
   - the per-photo queue memory on both mediators;
@@ -296,7 +300,7 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
   - §4.4's 256 KiB, confirmed or replaced.
 
 **Step 1 — Message type, reactions and replies**
-- **The protocol side:** the `chat/1.0` classes and handler, `ChatEventRecord`, the Discover Features advertisement, and the BasicMessage fallback with §4.5's re-query rule.
+- **The protocol side:** the `chat/1.0` class and handler, `ChatEventRecord`, announcing RCE version 6 with the one-time capability notice (§4.5), and the BasicMessage fallback, over DIDComm v1 (§4.1).
 - **The chat screen:** the unified timeline, the long-press bar with six fixed emoji, quoted replies, Copy, and Delete for me.
 - **Around the chat:** unread counting and the chat-list preview (§5), and the wake listener (§5, with the message-notifications work).
 - *Done when:*
@@ -306,8 +310,9 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
     - "change, then remove" delivered in reverse batches, resolving to removed;
     - a redaction from the wrong author, ignored;
     - a target from another connection, ignored;
+    - a contact on a DIDComm v2 connection, sent a BasicMessage;
   - unread tests show that a message counts and a reaction does not;
-  - a Keyring↔Keyring two-device run sends text, adds a reaction, changes it, removes it and replies. It runs once over DIDComm v1 and once over DIDComm v2;
+  - a Keyring↔Keyring two-device run sends text, adds a reaction, changes it, removes it and replies, over DIDComm v1. Chat over v2 is proven by its own run when it is built (§4.1);
   - a build with the feature and a build without it exchange readable text both ways, with no raw JSON shown on either.
 
 **Step 2 — Emoji picker**
@@ -370,6 +375,7 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 | The wake and preview changes (§5, "Wake") | The message-notifications work | Made together with it; it does not block Steps 1–2 |
 | The Affinidi mediator run in Step 3 | The mediator migration (#530, M1 → M5, no date) | Step 3 can be done on the Credo mediator alone, with the Affinidi run added when M1 is live |
 | Keeping non-content events from waking the phone (§4.2) | The peer-message-notifications work | This plan adopts its answer; it does not block any step |
+| Chat over DIDComm v2 (§4.1) | This plan, as a separate item after Step 1 | It must land before the mediator migration's M4 (#530) makes v2 the default for new contacts; until then a v2 contact gets plain BasicMessages |
 
 ---
 
