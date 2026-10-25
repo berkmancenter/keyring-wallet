@@ -19,10 +19,18 @@
  * Removing a message for everyone is not part of the minimum, so a redaction
  * that targets a message is ignored here.
  *
+ * System events (`SYSTEM_EVENT_TYPES`: a timer set, today) are passed through,
+ * every one, in timeline order; which of them is in force is not decided here.
+ *
+ * The timeline's order is deliberately this phone's: `sentTime`, set when the
+ * event was sent or stored here, then the event id. It is never the sender's
+ * claimed time (`clientTs`), which is another phone's clock.
+ *
  * @module chat/fold
  */
 
 import type { ChatEventRecord, ChatEventRole } from './records/ChatEventRecord'
+import { SYSTEM_EVENT_TYPES } from './systemEvents'
 
 /** How long an event with no stored target is kept, in milliseconds (the mediator's own retention). */
 export const ORPHAN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -44,6 +52,8 @@ export interface FoldedChat {
   reactions: Map<string, ChatReaction[]>
   /** Reactions and redactions whose target is not stored (yet). */
   orphans: ChatEventRecord[]
+  /** The chat's system events (a timer set), every one, in timeline order. */
+  systems: ChatEventRecord[]
 }
 
 const byEventId = (a: ChatEventRecord, b: ChatEventRecord) =>
@@ -85,8 +95,11 @@ export function foldChatEvents(records: ChatEventRecord[]): FoldedChat {
     reactions.set(reaction.target as string, list)
   }
 
-  messages.sort((a, b) => a.sentTime.getTime() - b.sentTime.getTime() || byEventId(a, b))
-  return { messages, reactions, orphans }
+  const inOrder = (a: ChatEventRecord, b: ChatEventRecord) =>
+    a.sentTime.getTime() - b.sentTime.getTime() || byEventId(a, b)
+  messages.sort(inOrder)
+  const systems = records.filter((r) => SYSTEM_EVENT_TYPES.has(r.eventType)).sort(inOrder)
+  return { messages, reactions, orphans, systems }
 }
 
 /**

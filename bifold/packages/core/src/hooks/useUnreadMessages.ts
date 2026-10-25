@@ -2,6 +2,8 @@ import type { DidCommBasicMessageRecord } from '@credo-ts/didcomm'
 import { useBasicMessages } from '@bifold/react-hooks'
 import { useMemo } from 'react'
 
+import { useAllChatEvents } from '../modules/chat/chatEventsStore'
+import { isUnreadChatEvent } from '../modules/chat/seen'
 import { usePendingContinuityConnections } from '../modules/vrc/contacts/useContinuityPrompt'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { isConnectionExcludedFromNotifications, useExclusionVersion } from './notifications'
@@ -30,6 +32,8 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
   const { records: basicMessages } = useBasicMessages()
   const exclusionVersion = useExclusionVersion()
   const continuityPending = usePendingContinuityConnections()
+  // keyring/chat events: a received message counts until seen; a reaction, a redaction or a system line never does.
+  const chatEvents = useAllChatEvents()
 
   return useMemo(() => {
     const unreadByConnection: Record<string, number> = {}
@@ -41,6 +45,13 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
         totalUnread++
       }
     }
+    for (const [connectionId, events] of chatEvents ?? []) {
+      if (isConnectionExcludedFromNotifications(connectionId)) continue
+      const unread = events.filter(isUnreadChatEvent).length
+      if (!unread) continue
+      unreadByConnection[connectionId] = (unreadByConnection[connectionId] ?? 0) + unread
+      totalUnread += unread
+    }
     for (const connectionId of continuityPending) {
       if (isConnectionExcludedFromNotifications(connectionId)) continue
       unreadByConnection[connectionId] = (unreadByConnection[connectionId] ?? 0) + 1
@@ -50,5 +61,5 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
     return { unreadByConnection, totalUnread }
     // exclusionVersion intentionally triggers recomputation when the exclusion list changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [basicMessages, exclusionVersion, continuityPending])
+  }, [basicMessages, exclusionVersion, continuityPending, chatEvents])
 }

@@ -44,6 +44,9 @@ import { getMessageEventRole, getProofEventLabel, getProofEventRole } from '../u
 import { ThemedText } from '../components/texts/ThemedText'
 import { BIOMETRIC_STATUS_MESSAGE_PREFIX } from '../modules/vrc/vrc-biometric'
 import { derivePseudonym } from '../utils/pseudonym'
+import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { foldChatEvents, type ChatReaction } from '../modules/chat/fold'
+import type { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 
 /**
  * Transforms VRC biometric status messages into user-friendly text
@@ -763,7 +766,61 @@ const useReliableBasicMessages = (connectionId: string | undefined): DidCommBasi
   return merged
 }
 
-const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]): boolean => {
+/**
+ * One chat's events as timeline items (rich-messaging-plan.md §5): each message a text bubble carrying its event
+ * id, its folded reactions and what it replies to; each system event a line carrying its event, worded by whoever
+ * owns its type. Reactions and redactions are folded in, never items. Only this chat's events are given, so a
+ * reaction aimed at another chat's message never lands here.
+ */
+export function chatTimelineItems(
+  events: ChatEventRecord[],
+  textStyleFor: (role: Role) => object
+): ExtendedChatMessage[] {
+  const { messages, reactions, systems } = foldChatEvents(events)
+  const byEventId = new Map(messages.map((m) => [m.eventId, m]))
+  const roleOf = (record: ChatEventRecord) => (record.role === 'sent' ? Role.me : Role.them)
+  const items: ExtendedChatMessage[] = messages.map((record) => {
+    const text = record.content?.text ?? ''
+    const target = record.inReplyTo ? byEventId.get(record.inReplyTo) : undefined
+    return {
+      _id: record.id,
+      text,
+      renderEvent: () => <ThemedText style={textStyleFor(roleOf(record))}>{text}</ThemedText>,
+      createdAt: record.sentTime,
+      user: { _id: roleOf(record) },
+      chatEventId: record.eventId,
+      reactions: reactions.get(record.eventId),
+      inReplyTo: record.inReplyTo,
+      replyTo: record.inReplyTo
+        ? target
+          ? { text: target.content?.text ?? '' }
+          : { unavailable: true as const }
+        : undefined,
+    }
+  })
+  for (const record of systems) {
+    items.push({
+      _id: record.id,
+      text: '',
+      // Worded by the owner of its type (the timer module); until then, a line with nothing in it.
+      renderEvent: () => <View />,
+      createdAt: record.sentTime,
+      user: { _id: roleOf(record) },
+      chatEventId: record.eventId,
+      kind: 'system',
+      chatEvent: record,
+    })
+  }
+  return items
+}
+
+const reactionsKey = (reactions?: ChatReaction[]) =>
+  (reactions ?? []).map((r) => `${r.author}:${r.emoji}:${r.eventId}`).join(',')
+const replyKey = (m: ExtendedChatMessage) =>
+  !m.replyTo ? '' : 'unavailable' in m.replyTo ? 'unavailable' : `text:${m.replyTo.text}`
+
+/** Whether two timelines draw the same: the timeline is only replaced when they do not. */
+export const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]): boolean => {
   if (a.length !== b.length) return false
 
   for (let i = 0; i < a.length; i++) {
@@ -776,7 +833,10 @@ const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]
       current.iconType !== next.iconType ||
       current.messageOpensCallbackType !== next.messageOpensCallbackType ||
       current.user?._id !== next.user?._id ||
-      current.createdAt?.getTime?.() !== next.createdAt?.getTime?.()
+      current.createdAt?.getTime?.() !== next.createdAt?.getTime?.() ||
+      current.kind !== next.kind ||
+      reactionsKey(current.reactions) !== reactionsKey(next.reactions) ||
+      replyKey(current) !== replyKey(next)
     ) {
       return false
     }
@@ -795,6 +855,8 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
   const reportingEnabled = store.witness?.enableReporting ?? true
   const navigation = useNavigation<StackNavigationProp<RootStackParams | ContactStackParams>>()
   const basicMessages = useReliableBasicMessages(connection?.id)
+  // This chat's keyring/chat events: undefined until read, then folded into the timeline below.
+  const chatEvents = useChatEvents(connection?.id)
   const credentials = useCredentialsByConnectionId(connection?.id)
   const proofs = useProofsByConnectionId(connection?.id)
   const theirLabel = useConnectionDisplayName(connection?.id)
@@ -1203,6 +1265,10 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
         }
       : undefined
 
+    transformedMessages.push(
+      ...chatTimelineItems(chatEvents ?? [], (role) => (role === Role.me ? theme.rightText : theme.leftText))
+    )
+
     const finalMessages = transformedMessages.sort((a: any, b: any) => b.createdAt - a.createdAt)
 
     // Witness chat: only show text messages, connected card, and reporting pseudonym card.
@@ -1235,6 +1301,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
     w3cCredentialRecords,
     store,
     reportingEnabled,
+    chatEvents,
   ])
 
   return messages

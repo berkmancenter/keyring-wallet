@@ -23,6 +23,7 @@ import { useConnectionDisplayName } from '../hooks/connections'
 import ContinuityRequestCard from '../modules/vrc/components/ContinuityRequestCard'
 import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionProvider'
 import { Role } from '../types/chat'
+import { markChatEventsSeen } from '../modules/chat/seen'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
@@ -181,7 +182,10 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         basicMessageRepository.update(agent.context, msg)
       }
     })
-  }, [basicMessages, agent])
+    // keyring/chat events too, again whenever the timeline changes (one may have just arrived): only the unseen
+    // are written, so this is free once they are.
+    if (agent && connectionId) void markChatEventsSeen(agent, connectionId).catch(() => undefined)
+  }, [basicMessages, chatMessages, agent, connectionId])
 
   const onSend = useCallback(
     async (messages: IMessage[]) => {

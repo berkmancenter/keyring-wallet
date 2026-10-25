@@ -23,7 +23,8 @@ export interface ContactListItemProps {
 const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }) => {
   const { ColorPalette, ListItems } = useTheme()
   const messages = useChatMessagesByConnection(contact)
-  const message = messages[0]
+  // The newest thing said, never a line about the chat itself (a timer set).
+  const message = messages.find((m) => m.kind !== 'system')
   const hasOnlyInitialMessage = messages.length < 2
   const [_store] = useStore()
   const [{ enableChat }] = useServices([TOKENS.CONFIG])
@@ -116,10 +117,7 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
         <View style={{ flex: 1 }}>
           <View style={styles.nameAndTimeContainer}>
             <View style={styles.contactNameContainer}>
-              <ThemedText
-                variant="labelTitle"
-                style={unreadCount > 0 ? { fontWeight: '700' } : undefined}
-              >
+              <ThemedText variant="labelTitle" style={unreadCount > 0 ? { fontWeight: '700' } : undefined}>
                 {contactLabel}
               </ThemedText>
             </View>

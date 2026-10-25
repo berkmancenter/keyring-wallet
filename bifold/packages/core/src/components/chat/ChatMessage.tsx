@@ -12,6 +12,8 @@ import { Role } from '../../types/chat'
 import { ModalUsage } from '../../types/remove'
 import { ThemedText } from '../texts/ThemedText'
 import CommonRemoveModal from '../modals/CommonRemoveModal'
+import type { ChatReaction } from '../../modules/chat/fold'
+import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord'
 
 // Date separator color as per design
 const DATE_SEPARATOR_COLOR = '#888888'
@@ -47,6 +49,17 @@ export interface ExtendedChatMessage extends IMessage {
   // Collapsible witness message support
   collapsedContent?: () => React.JSX.Element // Content shown when collapsed
   expandedContent?: () => React.JSX.Element // Additional content shown when expanded
+  // A chat event (keyring/chat/1.0), rather than a BasicMessage: only these can be reacted or replied to.
+  chatEventId?: string
+  /** Its current reactions, folded in (at most one per person). */
+  reactions?: ChatReaction[]
+  /** The event it replies to, and what of it is shown: its text, or that it is not on this phone. */
+  inReplyTo?: string
+  replyTo?: { text: string } | { unavailable: true }
+  /** A line about the chat itself (a timer set), not a bubble: never unread, never the chat list's preview. */
+  kind?: 'system'
+  /** A system line's event, for whoever words it. */
+  chatEvent?: ChatEventRecord
 }
 
 const MessageTime: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
@@ -87,16 +100,18 @@ const MessageIcon: React.FC<{ iconType: MessageIconType; isMe: boolean }> = ({ i
   }
 
   return (
-    <View style={{
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: EVENT_CIRCLE_COLOR,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 10,
-      flexShrink: 0,
-    }}>
+    <View
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: EVENT_CIRCLE_COLOR,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+        flexShrink: 0,
+      }}
+    >
       {getIcon()}
     </View>
   )
@@ -108,10 +123,10 @@ const shouldShowDaySeparator = (currentMessage: ExtendedChatMessage, previousMes
     // Always show day separator for the first message (oldest message at bottom with inverted list)
     return true
   }
-  
+
   const currentDate = moment(currentMessage.createdAt).startOf('day')
   const previousDate = moment(previousMessage.createdAt).startOf('day')
-  
+
   return !currentDate.isSame(previousDate)
 }
 
@@ -122,34 +137,34 @@ const formatDaySeparator = (date: Date): string => {
 
 const EventCard: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
   return (
-    <View style={{
-      backgroundColor: EVENT_CARD_BG,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: EVENT_CARD_BORDER,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      marginHorizontal: 12,
-      marginVertical: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.15,
-      shadowRadius: 4,
-      elevation: 2,
-      minHeight: 62,
-      justifyContent: 'center',
-    }}>
+    <View
+      style={{
+        backgroundColor: EVENT_CARD_BG,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: EVENT_CARD_BORDER,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginHorizontal: 12,
+        marginVertical: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+        minHeight: 62,
+        justifyContent: 'center',
+      }}
+    >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <MessageIcon iconType={message.iconType!} isMe={false} />
-        <View style={{ flex: 1 }}>
-          {message.renderEvent()}
-        </View>
+        <View style={{ flex: 1 }}>{message.renderEvent()}</View>
       </View>
     </View>
   )
 }
 
-const CredentialOfferActions: React.FC<{ 
+const CredentialOfferActions: React.FC<{
   message: ExtendedChatMessage
 }> = ({ message }) => {
   const { t } = useTranslation()
@@ -161,22 +176,22 @@ const CredentialOfferActions: React.FC<{
       message.onDecline()
     }
   }, [message])
-  
+
   if (!message.onDetails) {
     return null
   }
 
   if (message.messageOpensCallbackType === CallbackType.CredentialOffer) {
     return (
-      <View style={{
-        marginTop: 14,
-        marginBottom: 16,
-        marginHorizontal: 12,
-        paddingVertical: 4,
-      }}>
-        <Text style={{ color: '#333', fontSize: 14, marginBottom: 14 }}>
-          Would you like to accept it?
-        </Text>
+      <View
+        style={{
+          marginTop: 14,
+          marginBottom: 16,
+          marginHorizontal: 12,
+          paddingVertical: 4,
+        }}
+      >
+        <Text style={{ color: '#333', fontSize: 14, marginBottom: 14 }}>Would you like to accept it?</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity
             onPress={message.onDetails}
@@ -234,11 +249,13 @@ const CredentialOfferActions: React.FC<{
   return (
     <View style={{ marginTop: 8, marginHorizontal: 12 }}>
       <TouchableOpacity onPress={message.onDetails}>
-        <Text style={{ 
-          color: 'black', 
-          fontSize: 14,
-          textDecorationLine: 'underline',
-        }}>
+        <Text
+          style={{
+            color: 'black',
+            fontSize: 14,
+            textDecorationLine: 'underline',
+          }}
+        >
           {getLinkText()}
         </Text>
       </TouchableOpacity>
@@ -276,9 +293,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
       <View>
         {daySeparator}
         <EventCard message={message} />
-        {(message.iconType === MessageIconType.Credential || 
-          message.iconType === MessageIconType.Proof
-        ) && (
+        {(message.iconType === MessageIconType.Credential || message.iconType === MessageIconType.Proof) && (
           <CredentialOfferActions message={message} />
         )}
       </View>
