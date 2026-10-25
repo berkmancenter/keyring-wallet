@@ -128,6 +128,99 @@ describe('long press on a message', () => {
   })
 })
 
+// iOS treats an accessible element as one: anything inside it is out of VoiceOver's reach and the e2e driver's. The
+// two-phone run (2026-10-25) found the sheet's entries unreachable while the backdrop wrapped them.
+describe('the actions sheet and accessibility', () => {
+  type Node = { parent: Node | null; props: Record<string, unknown> }
+  // Above the entry itself: a touchable is several nodes (host View, Animated View, the touchable), all carrying its
+  // testID or its own accessible flag, so the walk starts above the outermost node that still carries the testID.
+  const insideAnAccessibleElement = (node: Node) => {
+    let top = node
+    while (top.parent && top.parent.props?.testID === node.props.testID) top = top.parent
+    for (let at = top.parent; at; at = at.parent) {
+      if (at.props?.accessible === true) return true
+    }
+    return false
+  }
+
+  it('leaves every entry reachable: none sits inside an accessible element', () => {
+    const tree = renderChat()
+    fireEvent(tree.getByText('see you at noon'), 'longPress')
+    for (const key of ['ChatActionReply', 'ChatActionCopy', 'ChatActionDeleteForMe', 'ChatReaction-0']) {
+      expect(insideAnAccessibleElement(tree.getByTestId(id(key)) as never)).toBe(false)
+    }
+  })
+
+  it('still closes when the backdrop is tapped', () => {
+    const tree = renderChat()
+    fireEvent(tree.getByText('see you at noon'), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatMessageActionsBackdrop')))
+    expect(tree.queryByTestId(id('ChatMessageActions'))).toBeNull()
+  })
+})
+
+describe('who a quote is by', () => {
+  it('names the contact above the reply preview when answering their message', () => {
+    const tree = renderChat()
+    fireEvent(tree.getByText('see you at noon'), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatActionReply')))
+    expect(tree.getByText('Replying to Alice')).toBeTruthy()
+    expect(tree.queryByText('Replying to Unknown')).toBeNull()
+  })
+
+  it('says "You" above the reply preview when answering this phone’s own message', () => {
+    const tree = renderChat()
+    fireEvent(tree.getByText('on my way'), 'longPress')
+    fireEvent.press(tree.getByTestId(id('ChatActionReply')))
+    expect(tree.getByText('Replying to Chat.UserYou')).toBeTruthy()
+    expect(tree.queryByText('Replying to Unknown')).toBeNull()
+  })
+
+  it('names the original’s author inside a reply’s bubble, and says why when the original is gone', () => {
+    timeline([
+      item({
+        text: 'great',
+        chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9E',
+        inReplyTo: RECEIVED,
+        replyTo: { text: 'see you at noon', author: 'Alice' },
+      }),
+      item({
+        text: 'what was that?',
+        chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9F',
+        inReplyTo: '01JB3XKX6F8Q2W4E5R6T7Y8Z9G',
+        replyTo: { unavailable: true },
+        createdAt: at(5),
+      }),
+    ])
+    const tree = renderChat()
+    expect(tree.getByText('Alice')).toBeTruthy()
+    expect(tree.getByText('Chat.ReplyUnavailable')).toBeTruthy()
+    expect(tree.queryByText('Unknown')).toBeNull()
+  })
+
+  it('says the original expired, and shows no quote while the original is still being read', () => {
+    timeline([
+      item({
+        text: 'about that',
+        chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9H',
+        inReplyTo: '01JB3XKX6F8Q2W4E5R6T7Y8Z9J',
+        replyTo: { expired: true },
+      }),
+      item({
+        text: 'still reading',
+        chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9K',
+        inReplyTo: '01JB3XKX6F8Q2W4E5R6T7Y8Z9M',
+        replyTo: { unread: true },
+        createdAt: at(5),
+      }),
+    ])
+    const tree = renderChat()
+    expect(tree.getByText('Chat.ReplyExpired')).toBeTruthy()
+    expect(tree.getByText('still reading')).toBeTruthy()
+    expect(tree.queryByText('Unknown')).toBeNull()
+  })
+})
+
 describe('reactions', () => {
   it('sends the chosen reaction to the message', async () => {
     const tree = renderChat()

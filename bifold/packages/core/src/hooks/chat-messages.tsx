@@ -777,6 +777,8 @@ export interface ChatTimelineOptions {
    * they are being read, when such a reply quotes nothing yet. Without it, a missing original is not on this phone.
    */
   expired?: ReadonlySet<string> | 'unread'
+  /** Who a quoted original is by, as a reply shows it: this phone's person, and the contact. */
+  authorNames?: { me: string; them: string }
 }
 
 /**
@@ -810,7 +812,10 @@ export function chatTimelineItems(
       inReplyTo: record.inReplyTo,
       replyTo: record.inReplyTo
         ? target
-          ? { text: target.content?.text ?? '' }
+          ? {
+              text: target.content?.text ?? '',
+              author: target.role === 'sent' ? options.authorNames?.me : options.authorNames?.them,
+            }
           : missing(record.inReplyTo)
         : undefined,
       ...(record.expiresIn ? { expiresIn: record.expiresIn } : {}),
@@ -835,7 +840,7 @@ export function chatTimelineItems(
 const reactionsKey = (reactions?: ChatReaction[]) =>
   (reactions ?? []).map((r) => `${r.author}:${r.emoji}:${r.eventId}`).join(',')
 const replyKey = (m: ExtendedChatMessage) =>
-  !m.replyTo ? '' : 'text' in m.replyTo ? `text:${m.replyTo.text}` : Object.keys(m.replyTo)[0]
+  !m.replyTo ? '' : 'text' in m.replyTo ? `text:${m.replyTo.author ?? ''}:${m.replyTo.text}` : Object.keys(m.replyTo)[0]
 
 /** Whether two timelines draw the same: the timeline is only replaced when they do not. */
 export const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]): boolean => {
@@ -1320,6 +1325,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
       ...chatTimelineItems(chatEvents ?? [], (role) => (role === Role.me ? theme.rightText : theme.leftText), {
         systemLine: (record) => timerLine(t, record, theirLabel),
         expired,
+        authorNames: { me: t('Chat.UserYou'), them: theirLabel },
       })
     )
 

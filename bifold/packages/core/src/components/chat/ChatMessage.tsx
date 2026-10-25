@@ -61,7 +61,7 @@ export interface ExtendedChatMessage extends IMessage {
    * this phone; or nothing yet, while which originals disappeared is being read.
    */
   inReplyTo?: string
-  replyTo?: { text: string } | { expired: true } | { unavailable: true } | { unread: true }
+  replyTo?: { text: string; author?: string } | { expired: true } | { unavailable: true } | { unread: true }
   /** A disappearing message's timer, in seconds, as it was sent: the chat list shows no text of it. */
   expiresIn?: number
   /** A line about the chat itself (a timer set), not a bubble: never unread, never the chat list's preview. */
@@ -326,6 +326,17 @@ const quoteOf = (replyTo: NonNullable<ExtendedChatMessage['replyTo']>, t: TFunct
   return ''
 }
 
+/**
+ * What gifted-chat's MessageReply shows above a quote: the original's author, or, when the original is not on this
+ * phone, why (there is no author to name). MessageReply prints `user.name`, or "Unknown" without one, and its own
+ * English "You" whenever the quoted author's id equals the replying message's, so the id here never equals a real
+ * author's.
+ */
+const quotedAuthor = (replyTo: NonNullable<ExtendedChatMessage['replyTo']>, t: TFunction) =>
+  'text' in replyTo
+    ? { _id: `quote:${replyTo.author ?? ''}`, name: replyTo.author }
+    : { _id: 'quote:', name: quoteOf(replyTo, t) }
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
   const { t } = useTranslation()
@@ -386,14 +397,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
             {...messageProps}
             // A reply shows what it answers, through gifted-chat's own MessageReply: the original's text, or that it
             // expired, or that it is not on this phone.
+            // 'unread' is a reply whose original is still being read: nothing to quote yet, so no quote (an empty one
+            // would read "Unknown").
             currentMessage={
-              message.replyTo
+              message.replyTo && !('unread' in message.replyTo)
                 ? {
                     ...message,
                     replyMessage: {
                       _id: message.inReplyTo ?? '',
-                      text: quoteOf(message.replyTo, t),
-                      user: { _id: '' },
+                      text: 'text' in message.replyTo ? message.replyTo.text : '',
+                      user: quotedAuthor(message.replyTo, t),
                     },
                   }
                 : message

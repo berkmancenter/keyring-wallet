@@ -387,8 +387,10 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     const target = actionTarget
     closeActions()
     if (!target?.chatEventId) return
-    setReplyTarget({ _id: target.chatEventId, text: target.text, user: target.user })
-  }, [actionTarget, closeActions])
+    // Named for the preview above the composer (gifted-chat's ReplyPreview prints `user.name`, or "Unknown").
+    const author = target.user?._id === Role.me ? t('Chat.UserYou') : theirLabel
+    setReplyTarget({ _id: target.chatEventId, text: target.text, user: { _id: `quote:${author}`, name: author } })
+  }, [actionTarget, closeActions, t, theirLabel])
 
   const onCopy = useCallback(() => {
     const target = actionTarget

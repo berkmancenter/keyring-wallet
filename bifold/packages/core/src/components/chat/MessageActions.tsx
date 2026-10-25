@@ -48,12 +48,18 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        style={styles.backdrop}
-        onPress={onClose}
-        accessibilityLabel={t('Global.Close')}
-        testID={testIdWithKey(ChatIds.actionsBackdrop)}
-      >
+      {/*
+       * The backdrop is a sibling behind the sheet, not its parent: an accessible Pressable is one element to iOS
+       * accessibility, so every button inside it was unreachable to VoiceOver (and to the e2e driver).
+       */}
+      <View style={styles.layout}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={t('Global.Close')}
+          testID={testIdWithKey(ChatIds.actionsBackdrop)}
+        />
         <View style={styles.sheet} testID={testIdWithKey(ChatIds.actions)}>
           {onReact && <ReactionBar selected={selectedReaction} onReact={onReact} onMore={onMoreReactions} />}
           <View style={styles.entries}>
@@ -62,13 +68,13 @@ const MessageActions: React.FC<MessageActionsProps> = ({
             {onDeleteForMe && entry(t('Chat.DeleteForMe'), ChatIds.deleteForMe, onDeleteForMe, true)}
           </View>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)', justifyContent: 'flex-end' },
+  layout: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.35)', justifyContent: 'flex-end' },
   sheet: { padding: 16, paddingBottom: 32, gap: 12 },
   entries: { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden' },
   entry: { minHeight: 52, justifyContent: 'center', paddingHorizontal: 20 },
