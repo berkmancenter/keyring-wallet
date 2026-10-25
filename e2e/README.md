@@ -912,12 +912,12 @@ run is for. The design, and the local measurements behind it, are in
 [`docs/plans/mediator-migration-plan/2026-10-25-al.md`](../docs/plans/mediator-migration-plan/2026-10-25-al.md)
 part 7.
 
-**Mediator.** Scenarios 1–4 use the build's own mediator, as a tester's phone
-does. Scenario 5 restarts the mediator, so it runs only against a **local**
+**Mediator.** Scenarios 1–5 use the build's own mediator, as a tester's phone
+does. Scenario 6 restarts the mediator, so it runs only against a **local**
 WebSocket-capable mediator with the Postgres pickup queue. It never restarts
 the shared one without the maintainer's explicit go for that test. `yarn
 mediator` is HTTP-only on Credo's built-in queue, so it cannot stand in for this.
-Without such a local mediator, scenario 5 is covered by the Node harness result
+Without such a local mediator, scenario 6 is covered by the Node harness result
 in the companion, and the device run reports it as not run.
 
 ### Setup
@@ -954,7 +954,19 @@ and the time from the last send to the last arrival.
    foreground, A sends 5, then B leaves airplane mode.
    - *Expect:* 5/5 within about 65 s (the next check times out after 5 s, then
      closes and restarts the socket).
-5. **Mediator restart** (local mediator only, see above). Phones in the
+5. **App terminated, then relaunched.** Swipe B away. A sends 10 messages,
+   or photos, over a few minutes. Relaunch B and unlock it.
+   - *Expect:* all 10, intact, no duplicates.
+   - Record three times from B's log: relaunch, "Live message pickup started",
+     and the last message stored. **Pickup time** is from "started" to the
+     last message stored; the rest is unlock and agent start, which live
+     pickup doesn't change.
+   - *Polling baseline* (272 RC, 1 s poll, 2026-10-25): 10 photos sent over
+     ~4 min while B was terminated were all stored 13–14 s after relaunch, in
+     one pickup batch, with no duplicates. Most of that is likely unlock and
+     agent start. Live should match it end to end, and its pickup time should
+     be about a second at most.
+6. **Mediator restart** (local mediator only, see above). Phones in the
    foreground, A sends 3, the mediator is killed and started again on the same
    data, then A sends 10.
    - *Expect:* 13/13. B reconnects on its own, within the 30 s reconnect cap
