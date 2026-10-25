@@ -20,7 +20,19 @@ object OtaTrial {
      * that staged bundle (the loader chose it, not a rollback to another).
      */
     fun trialBundleId(metadataJson: String?, isolationKey: String, bundleFile: String?): String? {
-        if (metadataJson.isNullOrBlank() || bundleFile.isNullOrBlank()) return null
+        if (bundleFile.isNullOrBlank()) return null
+        val staging = pendingTrialId(metadataJson, isolationKey) ?: return null
+        return if (bundleFile.contains("/$staging/")) staging else null
+    }
+
+    /**
+     * The staged bundle id when the metadata says one awaits verification under
+     * this build's isolation key, whatever bundle file React Native was given.
+     * MainActivity logs it when the file is missing, so a watchdog that no longer
+     * arms shows in logcat instead of failing silently.
+     */
+    fun pendingTrialId(metadataJson: String?, isolationKey: String): String? {
+        if (metadataJson.isNullOrBlank()) return null
         val metadata =
             try {
                 JSONObject(metadataJson)
@@ -31,7 +43,6 @@ object OtaTrial {
         if (metadata.optString("isolationKey") != isolationKey) return null
         if (!metadata.optBoolean("verificationPending", false)) return null
         if (metadata.isNull("stagingBundleId")) return null
-        val staging = metadata.optString("stagingBundleId").ifEmpty { return null }
-        return if (bundleFile.contains("/$staging/")) staging else null
+        return metadata.optString("stagingBundleId").ifEmpty { null }
     }
 }

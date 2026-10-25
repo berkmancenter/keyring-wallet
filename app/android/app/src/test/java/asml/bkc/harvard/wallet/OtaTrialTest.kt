@@ -43,6 +43,13 @@ class OtaTrialTest {
     }
 
     @Test
+    fun aPendingTrialIsReportedWithoutTheBundlePath() {
+        assertEquals(staging, OtaTrial.pendingTrialId(metadata(), key))
+        assertNull(OtaTrial.pendingTrialId(metadata(verificationPending = false), key))
+        assertNull(OtaTrial.pendingTrialId(metadata(isolationKey = "other"), key))
+    }
+
+    @Test
     fun doesNotArmWithoutAStagedBundleOrOnBadMetadata() {
         assertNull(OtaTrial.trialBundleId(metadata(stagingBundleId = null), key, bundle))
         assertNull(OtaTrial.trialBundleId(null, key, bundle))

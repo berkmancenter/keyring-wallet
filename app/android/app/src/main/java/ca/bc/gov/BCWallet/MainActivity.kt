@@ -85,8 +85,21 @@ class MainActivity : ReactActivity() {
         if (otaWatchdogArmed) return
         otaWatchdogArmed = true
         val metadata = File(filesDir, "bundle-store/metadata.json").takeIf(File::exists)?.readText()
-        val bundleId =
-            OtaTrial.trialBundleId(metadata, (application as MainApplication).otaIsolationKey(), otaBundleFile) ?: return
+        val isolationKey = (application as MainApplication).otaIsolationKey()
+        val bundleFile = otaBundleFile
+        val bundleId = OtaTrial.trialBundleId(metadata, isolationKey, bundleFile)
+        if (bundleId == null) {
+            // A trial is pending but React Native's bundle file was never recorded: the
+            // watchdog can't tell what is launching, so it stays off. Logged, so a change
+            // that defers the bundle-file read shows here instead of as an unrecovered hang.
+            if (bundleFile == null) {
+                OtaTrial.pendingTrialId(metadata, isolationKey)?.let {
+                    Log.w("OtaWatchdog", "update $it is pending but no bundle file was recorded; not armed")
+                }
+            }
+            return
+        }
+        Log.i("OtaWatchdog", "armed for update $bundleId (${OTA_WATCHDOG_MS / 1000} s)")
         ReactMarker.addListener(otaContentAppeared)
         val watchdog = Runnable {
             Log.e("OtaWatchdog", "no first screen ${OTA_WATCHDOG_MS / 1000} s after launching update $bundleId; failing the launch")
