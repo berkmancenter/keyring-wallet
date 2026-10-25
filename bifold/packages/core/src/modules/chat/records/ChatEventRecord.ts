@@ -7,7 +7,7 @@
  * @module chat/records/ChatEventRecord
  */
 
-import { BaseRecord, TagsBase, utils } from '@credo-ts/core'
+import { BaseRecord, DateTransformer, TagsBase, utils } from '@credo-ts/core'
 
 import type { ChatEventType, ChatMessageContent } from '../chatEvent'
 
@@ -90,3 +90,11 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
     }
   }
 }
+
+// Storage serializes a record to JSON and reads it back through Credo's
+// JsonTransformer, which revives only the fields it has transform metadata for.
+// BaseRecord types createdAt; sentTime needs the same, or a stored event comes
+// back with a string where the timeline sorts by sentTime.getTime(). Credo's
+// own DateTransformer registers that metadata in the class-transformer copy
+// JsonTransformer reads, which bifold's own copy would not be (two installs).
+DateTransformer()(ChatEventRecord.prototype, 'sentTime')
