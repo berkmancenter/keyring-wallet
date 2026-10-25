@@ -5691,6 +5691,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openwallet-foundation/askar-shared@patch:@openwallet-foundation/askar-shared@npm%3A0.6.0#~/.yarn/patches/@openwallet-foundation-askar-shared-npm-0.6.0-38cb7d527c.patch":
+  version: 0.6.0
+  resolution: "@openwallet-foundation/askar-shared@patch:@openwallet-foundation/askar-shared@npm%3A0.6.0#~/.yarn/patches/@openwallet-foundation-askar-shared-npm-0.6.0-38cb7d527c.patch::version=0.6.0&hash=128f1f"
+  dependencies:
+    buffer: "npm:^6.0.3"
+    tar: "npm:^7.4.3"
+  checksum: 10c0/79fb50c1a2e4358f84eda789f7817b76e9d9c2e7c2a81c3fc1855899467003dbbd707be9ef751cd0da795e5a89075db3cfa7d4145ba357bfd8e25fe3b1458841
+  languageName: node
+  linkType: hard
+
 "@owf/cose@npm:0.3.2, @owf/cose@npm:^0.3.0, @owf/cose@npm:^0.3.1":
   version: 0.3.2
   resolution: "@owf/cose@npm:0.3.2"
