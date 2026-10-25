@@ -114,6 +114,9 @@ const LOCAL_WORK_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
   'sharing-witness-record',
 ])
 
+/** Whether, in this status, this phone (not the other one) is doing the work. */
+export const isLocalWorkStatus = (status: VrcFlowStatus): boolean => LOCAL_WORK_STATUSES.has(status)
+
 /**
  * A pending relationship proposal awaiting the user's consent (the trust-task
  * dialect's consent moment: accepting the proposal, not each credential).

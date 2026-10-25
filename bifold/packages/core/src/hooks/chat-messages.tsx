@@ -336,8 +336,9 @@ function overlayAtOpen(connectionId: string): { shown: boolean; statusText: stri
 }
 
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
-  // Once, at mount: the flow under way is in the first frame; the effect below keeps it from there.
-  const [atOpen] = useState(() => overlayAtOpen(connectionId))
+  // At mount, and when another connection opens in the same screen: the flow under way is in the first frame; the
+  // effect below keeps it from there.
+  const [atOpen, setAtOpen] = useState(() => ({ connectionId, ...overlayAtOpen(connectionId) }))
   const [inProgress, setInProgress] = useState(atOpen.shown)
   const [statusText, setStatusText] = useState(atOpen.statusText)
   const [timedOut, setTimedOut] = useState(false)
@@ -349,6 +350,20 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   const [progressFraction, setProgressFraction] = useState(atOpen.fraction)
   const [progressComplete, setProgressComplete] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  // Chat is not remounted when another conversation opens in it (a notification, Contacts: navigating to it updates
+  // its params), so the last connection's overlay would show over the new one for a frame. Seeded again for the new
+  // connection, in render, before anything paints (React applies these before committing).
+  if (atOpen.connectionId !== connectionId) {
+    const next = { connectionId, ...overlayAtOpen(connectionId) }
+    setAtOpen(next)
+    setInProgress(next.shown)
+    setStatusText(next.statusText)
+    setProgressFraction(next.fraction)
+    setProgressComplete(false)
+    setConfirmed(false)
+    setTimedOut(false)
+    setWaitingOnPeer(false)
+  }
   const confirmTimerRef = useRef<NodeJS.Timeout | null>(null)
   const progressStartedRef = useRef(false)
   const maxFractionRef = useRef(0)
@@ -584,6 +599,15 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         clearTimeout(confirmTimerRef.current)
         confirmTimerRef.current = null
       }
+      // This connection's overlay session ends with it. Kept, the next connection opened in the same screen took its
+      // own idle for the end of a session whose bar had started, and showed "Relationship confirmed" over a
+      // conversation where nothing was exchanged.
+      progressStartedRef.current = false
+      maxFractionRef.current = 0
+      flowStartedAtRef.current = null
+      rcardGraceExpiredRef.current = false
+      waitDismissedAtRef.current = null
+      lastStatusRef.current = 'idle'
     }
   }, [connectionId])
 

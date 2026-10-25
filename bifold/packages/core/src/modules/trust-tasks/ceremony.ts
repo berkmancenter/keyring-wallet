@@ -54,7 +54,7 @@ import {
   prepareVrcCredentialWithEvidence,
 } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
-import { vrcFlowStore } from '../vrc/witnessStatusStore'
+import { isLocalWorkStatus, vrcFlowStore } from '../vrc/witnessStatusStore'
 import { logIssuedVrcJson } from '../vrc/vrc-credential-log'
 import { credentialExchangeStore } from './credentialExchangeStore'
 
@@ -308,8 +308,12 @@ async function sendDiscoveryQuery(agent: Agent, connectionId: string): Promise<v
   await service.retain(agent.context, document, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, document)
   agent.config.logger.info(`${LOG_PREFIX} discovery sent on connection ${connectionId}`)
-  // The peer's answer costs a mediated round trip; surface the wait.
-  if (vrcFlowStore.getStatus(connectionId) !== 'idle') {
+  // The peer's answer costs a mediated round trip; surface the wait — unless
+  // this phone is doing its own work meanwhile: the responder's query runs
+  // beside its delivery, and "Checking what your contact supports…" replaced
+  // "Preparing your relationship credential…" while it was still preparing it.
+  const now = vrcFlowStore.getStatus(connectionId)
+  if (now !== 'idle' && !isLocalWorkStatus(now)) {
     vrcFlowStore.setDialect(connectionId, 'trust-tasks')
     vrcFlowStore.setStatus(connectionId, 'discovering', vrcFlowStore.isWitnessedFlow(connectionId))
   }
@@ -1172,10 +1176,13 @@ async function acceptRelationshipProposal(
   // for its duration serves nobody.
   void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).then(
     (outcome) => {
-      // A delivery that did not start leaves nothing preparing. Not a duplicate:
-      // the run already under way owns the status.
-      if (outcome === 'skipped' && vrcFlowStore.getStatus(connectionId) === 'preparing-offer')
-        vrcFlowStore.clearFlow(connectionId, 'error')
+      // Only while it still says what this acceptance set: a delivery that could
+      // not start leaves nothing preparing; one already issued is this side's
+      // part done, as a delivery leaves it. Not a duplicate: the run already
+      // under way owns the status.
+      if (vrcFlowStore.getStatus(connectionId) !== 'preparing-offer') return
+      if (outcome === 'skipped') vrcFlowStore.clearFlow(connectionId, 'error')
+      else if (outcome === 'already-issued') vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
     },
     (e: Error) => {
       logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
@@ -1208,14 +1215,19 @@ async function acceptRelationshipProposal(
 // persisted prior-issue check inside only protects AFTER the issue document
 // is retained; the whole delivery (signing + ceremony) runs ~20s+ before
 // that, and this set closes that window. Claimed synchronously before the
-// first await; released on failure so a genuine retry stays possible.
+// first await; released on failure so a genuine retry stays possible, and on
+// success, when the retained issue document answers every later trigger
+// ("already issued"). Kept after success, a later trigger read as a duplicate
+// of a run under way, and an acceptance after it was left saying "preparing".
 const inFlightVrcDeliveries = new Set<string>()
 
 /**
- * How a delivery ended: it ran (`delivered`), found nothing to do or could not
- * start (`skipped`), or another run of it was already under way (`duplicate`).
+ * How a delivery ended: it ran (`delivered`); this side's credential had been
+ * issued on the exchange already (`already-issued`); it could not start
+ * (`skipped`); or another run of it was under way (`duplicate`). "Already
+ * issued" is not "could not start": one is done, the other failed.
  */
-export type VrcDeliveryOutcome = 'delivered' | 'skipped' | 'duplicate'
+export type VrcDeliveryOutcome = 'delivered' | 'already-issued' | 'skipped' | 'duplicate'
 
 export async function deliverVrcViaTrustTaskForExchange(
   agent: Agent,
@@ -1231,7 +1243,9 @@ export async function deliverVrcViaTrustTaskForExchange(
   }
   inFlightVrcDeliveries.add(deliveryKey)
   try {
-    return await deliverVrcViaTrustTaskForExchangeInner(agent, connectionId, exchangeId)
+    const outcome = await deliverVrcViaTrustTaskForExchangeInner(agent, connectionId, exchangeId)
+    inFlightVrcDeliveries.delete(deliveryKey)
+    return outcome
   } catch (e) {
     inFlightVrcDeliveries.delete(deliveryKey)
     throw e
@@ -1242,7 +1256,7 @@ async function deliverVrcViaTrustTaskForExchangeInner(
   agent: Agent,
   connectionId: string,
   exchangeId: string
-): Promise<'delivered' | 'skipped'> {
+): Promise<'delivered' | 'already-issued' | 'skipped'> {
   const logger = agent.config.logger
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   if (!connection.did || !connection.theirDid) return 'skipped'
@@ -1254,7 +1268,7 @@ async function deliverVrcViaTrustTaskForExchangeInner(
     connectionId,
     role: 'request',
   })
-  if (priorForExchange(priorIssues as never, connection.did, exchangeId)) return 'skipped'
+  if (priorForExchange(priorIssues as never, connection.did, exchangeId)) return 'already-issued'
 
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
   const record = await repository.findByConnectionDid(agent.context, connection.theirDid)

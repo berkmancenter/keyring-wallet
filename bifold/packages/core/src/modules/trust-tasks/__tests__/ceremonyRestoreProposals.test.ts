@@ -438,6 +438,24 @@ describe('the overlay from the moment the person accepts', () => {
     expect(phone.store.flowEndedWith(CONNECTION_ID)).toBeUndefined()
   })
 
+  // The responder's discovery query runs beside its delivery: "Checking what your contact supports…" replaced
+  // "Preparing your relationship credential…" while this phone was still preparing it.
+  test('while this phone prepares its credential, the overlay never goes back to checking the contact', async () => {
+    const phone = canSign(boot(newDisk()))
+    await phone.receive(proposeDoc(FIRST))
+    const statuses: string[] = []
+    const record = (e: { connectionId: string; status: string }) => {
+      if (e.connectionId === CONNECTION_ID) statuses.push(e.status)
+    }
+    phone.store.on('flowUpdate', record)
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    phone.store.off('flowUpdate', record)
+    expect(statuses[0]).toBe('preparing-offer')
+    expect(statuses.slice(statuses.indexOf('preparing-offer'))).not.toContain('discovering')
+    expect(statuses[statuses.length - 1]).toBe('offer-sent')
+  })
+
   test('the acceptance itself fails: the flow ends as an error, and the caller hears it', async () => {
     const phone = boot(newDisk())
     await phone.receive(proposeDoc(FIRST))
@@ -467,6 +485,28 @@ describe('the overlay from the moment the person accepts', () => {
     await flush()
     expect(phone.store.getStatus(CONNECTION_ID)).toBe('idle')
     expect(phone.store.flowEndedWith(CONNECTION_ID)).toBe('error')
+  })
+
+  // A delivery that finds this side's credential already issued is done, not failed (it once read as "skipped",
+  // which the acceptance ended as an error — a failure shown for an exchange that had worked).
+  test('this side already issued on the exchange: back to sent, not ended as an error', async () => {
+    const phone = canSign(boot(newDisk()))
+    await phone.receive(proposeDoc(FIRST))
+    await expect(phone.ceremony.deliverVrcViaTrustTaskForExchange(phone.agent, CONNECTION_ID, FIRST)).resolves.toBe(
+      'delivered'
+    )
+    const statuses: string[] = []
+    const record = (e: { connectionId: string; status: string }) => {
+      if (e.connectionId === CONNECTION_ID) statuses.push(e.status)
+    }
+    phone.store.on('flowUpdate', record)
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    phone.store.off('flowUpdate', record)
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBeUndefined()
+    // Sent, as a delivery leaves it, and not left preparing (the discovery query may then show its wait).
+    expect(statuses.slice(statuses.indexOf('preparing-offer'))).toContain('offer-sent')
+    expect(phone.store.getStatus(CONNECTION_ID)).not.toBe('preparing-offer')
   })
 
   test('a delivery already under way for the exchange: its status stands, and it carries on', async () => {
