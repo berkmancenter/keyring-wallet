@@ -14,7 +14,7 @@ import { useUnreadMessages } from '../../../hooks/useUnreadMessages'
 import { areChatMessagesEqual, chatTimelineItems, useExpiredOriginals } from '../../../hooks/chat-messages'
 import { expiredIds } from '../expired'
 import { ChatEventRecord, type ChatEventRecordProps } from '../records/ChatEventRecord'
-import { chatEventsStore, useChatEvents } from '../chatEventsStore'
+import { chatEventsStore, READ_RETRY_DELAYS_MS, useChatEvents } from '../chatEventsStore'
 import { isUnreadChatEvent, markChatEventsSeen } from '../seen'
 import { ORPHAN_MAX_AGE_MS } from '../fold'
 import { deleteChatMessages } from '../history'
@@ -57,6 +57,7 @@ jest.mock('../ChatModule', () => ({ getChatEventRepository: () => mockRepository
 
 const agent = {
   context: {},
+  config: { logger: { warn: jest.fn() } },
   events: { observable: (type: string) => (bus[type] ??= new Subject()) },
   // The chat's BasicMessages, for deleting a chat's history: none here.
   dependencyManager: { resolve: () => ({ findByQuery: async () => [], delete: jest.fn() }) },
@@ -114,6 +115,62 @@ describe('every chat event, read once and kept current', () => {
     expect(chatEventsStore.chat('A')?.map((r) => r.id)).toEqual([second.id])
     await act(async () => mockRepository.deleteById({}, second.id))
     expect(chatEventsStore.chat('A')).toEqual([])
+  })
+
+  // Unknown hides a message's text everywhere outside its chat (hidesText), so a read that fails must not leave every
+  // chat unknown without a word: it is logged, and tried again.
+  test('a failed first read is logged and tried again, later each time; the chats are unknown until it succeeds', async () => {
+    jest.useFakeTimers()
+    try {
+      mockRecords = [message('A', 'hi')]
+      mockRepository.getAll.mockRejectedValueOnce(new Error('storage busy')).mockRejectedValueOnce(new Error('again'))
+      await act(async () => chatEventsStore.attach(agent as never))
+      expect(chatEventsStore.chat('A')).toBeUndefined()
+      expect(agent.config.logger.warn).toHaveBeenLastCalledWith(
+        '[chat] reading chat events failed (attempt 1): trying again in 1 s',
+        expect.anything()
+      )
+      await act(async () => jest.advanceTimersByTime(READ_RETRY_DELAYS_MS[0]))
+      expect(chatEventsStore.chat('A')).toBeUndefined()
+      expect(agent.config.logger.warn).toHaveBeenLastCalledWith(
+        '[chat] reading chat events failed (attempt 2): trying again in 5 s',
+        expect.anything()
+      )
+      await act(async () => jest.advanceTimersByTime(READ_RETRY_DELAYS_MS[1]))
+      expect(chatEventsStore.chat('A')?.map((r) => r.content?.text)).toEqual(['hi'])
+      expect(mockRepository.getAll).toHaveBeenCalledTimes(3)
+    } finally {
+      // The store tells its watchers on the next tick: run it, or a later test's notice is never sent.
+      act(() => jest.runOnlyPendingTimers())
+      jest.useRealTimers()
+    }
+  })
+
+  test('after the last try it says it gives up, and tries no more', async () => {
+    jest.useFakeTimers()
+    try {
+      mockRepository.getAll.mockRejectedValue(new Error('storage gone'))
+      await act(async () => chatEventsStore.attach(agent as never))
+      for (const delay of READ_RETRY_DELAYS_MS) await act(async () => jest.advanceTimersByTime(delay))
+      expect(agent.config.logger.warn).toHaveBeenLastCalledWith(
+        `[chat] reading chat events failed (attempt ${READ_RETRY_DELAYS_MS.length + 1}): not trying again until the wallet reconnects`,
+        expect.anything()
+      )
+      await act(async () => jest.advanceTimersByTime(10 * 60 * 1000))
+      expect(mockRepository.getAll).toHaveBeenCalledTimes(READ_RETRY_DELAYS_MS.length + 1)
+      expect(chatEventsStore.chat('A')).toBeUndefined()
+    } finally {
+      mockRepository.getAll.mockImplementation(async () => mockRecords)
+      act(() => jest.runOnlyPendingTimers())
+      jest.useRealTimers()
+    }
+  })
+
+  test('an agent with no chat storage: the chats stay unknown, and the log says why', async () => {
+    const warn = jest.fn()
+    await act(async () => chatEventsStore.attach({ context: {}, config: { logger: { warn } } } as never))
+    expect(chatEventsStore.chat('A')).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith('[chat] no chat storage on this agent: chats stay unknown', expect.anything())
   })
 
   test('an event saved while the first read runs is kept', async () => {

@@ -39,7 +39,7 @@ import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionPr
 import { Role } from '../types/chat'
 import { markChatEventsSeen } from '../modules/chat/seen'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
-import { setActiveChatConnectionId } from '../utils/activeChatTracker'
+import { getActiveChatConnectionId, setActiveChatConnectionId } from '../utils/activeChatTracker'
 import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
 import { counterpartySpeaksChat } from '../modules/chat/capability'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
@@ -167,10 +167,16 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     assertNetworkConnected()
   }, [assertNetworkConnected])
 
+  // The chat someone is looking at, so its messages raise no toast: only while attended, so one arriving under a
+  // screen pushed over it, or with the app in the background, still does.
   useEffect(() => {
+    if (!attended) return
     setActiveChatConnectionId(connectionId)
-    return () => setActiveChatConnectionId(undefined)
-  }, [connectionId])
+    // Only its own entry: another chat that has since set itself is left as it is.
+    return () => {
+      if (getActiveChatConnectionId() === connectionId) setActiveChatConnectionId(undefined)
+    }
+  }, [attended, connectionId])
 
   // Opening a chat is when a contact made before chat learns that this phone
   // speaks it (plan §4.5). Best effort: a failed notice is retried next time.

@@ -8,6 +8,7 @@
 import type { TFunction } from 'i18next'
 
 import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord'
+import type { ChatTimer } from '../../modules/chat/timer'
 
 // A contact's name is shown as they wrote it: "A/B" stays "A/B", never "A&#x2F;B".
 const asWritten = { interpolation: { escapeValue: false } }
@@ -33,6 +34,15 @@ export function formatExpiresIn(t: TFunction, seconds: number): string {
     if (count > 0) words.push(t(key, { count }))
   }
   return words.join(' ')
+}
+
+/**
+ * Whether a message's text stays inside its chat (rich-messaging-plan.md §4.6, §5): it was sent with a timer, or its
+ * chat has one on, or the chat's timer is not known yet (`undefined`). The one rule for every place a message is
+ * shown outside its chat, the chat list's preview and the message toast, so they cannot drift apart.
+ */
+export function hidesText(chatTimer: ChatTimer | null | undefined, expiresIn: number | undefined): boolean {
+  return chatTimer === undefined || (chatTimer?.expiresIn ?? 0) > 0 || (expiresIn ?? 0) > 0
 }
 
 /** The line a timer change leaves in the chat: who set it, and to what. Empty for any other event. */

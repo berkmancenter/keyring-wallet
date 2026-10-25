@@ -1275,7 +1275,8 @@
     "DisappearingFailed": "Impossible de modifier les messages éphémères. Réessayez.",
     "PlainSendTitle": "Envoyer sans minuteur ?",
     "PlainSendBody": "{{name}} doit mettre à jour Keyring pour utiliser les messages éphémères : ce message sera donc envoyé sans minuteur, comme un message normal.",
-    "PlainSendConfirm": "Envoyer quand même"
+    "PlainSendConfirm": "Envoyer quand même",
+    "NewMessage": "Nouveau message"
   },
   "Verifier": {
     "UseVerifierCapability": "Utiliser la fonctionnalité Verifier?",

@@ -26,6 +26,7 @@ import { markChatEventsSeen } from '../../src/modules/chat/seen'
 import { chatEventsShown } from '../../src/modules/chat/shown'
 import Chat from '../../src/screens/Chat'
 import { Role } from '../../src/types/chat'
+import { getActiveChatConnectionId, setActiveChatConnectionId } from '../../src/utils/activeChatTracker'
 import navigationContext from '../contexts/navigation'
 import { BasicAppContext } from '../helpers/app'
 
@@ -177,6 +178,47 @@ describe('seen, and the unread count', () => {
     tree.rerender(chatScreen())
     settles(tree)
     expect(tree.getByTestId('unread').props.children).toBe('0')
+  })
+})
+
+// The chat someone is looking at raises no toast for its messages; one under another screen, or with the app in the
+// background, is not being looked at, so its messages do.
+describe('the chat someone is looking at', () => {
+  test('in front and in the foreground: it is', () => {
+    render(chatScreen())
+    expect(getActiveChatConnectionId()).toBe('1')
+  })
+
+  test('under another screen: it is not, until it is back in front', () => {
+    const tree = render(chatScreen())
+    mockFocused = false
+    tree.rerender(chatScreen())
+    expect(getActiveChatConnectionId()).toBeUndefined()
+    mockFocused = true
+    tree.rerender(chatScreen())
+    expect(getActiveChatConnectionId()).toBe('1')
+  })
+
+  test('with the app in the background: it is not, until it is back', () => {
+    render(chatScreen())
+    appGoes('background')
+    expect(getActiveChatConnectionId()).toBeUndefined()
+    appGoes('active')
+    expect(getActiveChatConnectionId()).toBe('1')
+  })
+
+  test('closing one chat leaves another chat that has since set itself', () => {
+    const tree = render(chatScreen())
+    setActiveChatConnectionId('2')
+    tree.unmount()
+    expect(getActiveChatConnectionId()).toBe('2')
+    setActiveChatConnectionId(undefined)
+  })
+
+  test('closed: it is not', () => {
+    const tree = render(chatScreen())
+    tree.unmount()
+    expect(getActiveChatConnectionId()).toBeUndefined()
   })
 })
 

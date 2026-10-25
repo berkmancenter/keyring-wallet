@@ -1194,7 +1194,8 @@
     "DisappearingFailed": "Não foi possível alterar as mensagens temporárias. Tente novamente.",
     "PlainSendTitle": "Enviar sem temporizador?",
     "PlainSendBody": "{{name}} precisa atualizar o Keyring para usar mensagens temporárias, então esta mensagem será enviada sem temporizador, como uma mensagem normal.",
-    "PlainSendConfirm": "Enviar mesmo assim"
+    "PlainSendConfirm": "Enviar mesmo assim",
+    "NewMessage": "Nova mensagem"
   },
   "Verifier": {
     "UseVerifierCapability": "Usar o recurso Verificador?",

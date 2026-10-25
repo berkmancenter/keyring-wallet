@@ -18,6 +18,7 @@ import ContactPhoto from '../../modules/vrc/components/ContactPhoto'
 import { useConnectionFacts } from '../../modules/vrc/contacts/useContactFacts'
 import { useChatEvents } from '../../modules/chat/chatEventsStore'
 import { timerOf } from '../../modules/chat/timer'
+import { hidesText } from '../chat/disappearing'
 import { ThemedText } from '../texts/ThemedText'
 
 export interface ContactListItemProps {
@@ -34,8 +35,8 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
   // In a chat with disappearing messages on, or for a message that will disappear, no text leaves the chat
   // (rich-messaging-plan.md §5).
   const chatEvents = useChatEvents(contact.id)
-  const timer = useMemo(() => (chatEvents ? timerOf(chatEvents) : null), [chatEvents])
-  const hideText = (timer?.expiresIn ?? 0) > 0 || (message?.expiresIn ?? 0) > 0
+  const timer = useMemo(() => (chatEvents ? timerOf(chatEvents) : undefined), [chatEvents])
+  const hideText = hidesText(timer, message?.expiresIn)
   const hasOnlyInitialMessage = messages.length < 2
   const [_store] = useStore()
   const [{ enableChat }] = useServices([TOKENS.CONFIG])

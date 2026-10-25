@@ -30,6 +30,10 @@ let read = false
 let byConnection = new Map<string, ChatEventRecord[]>()
 let subscriptions: Unsubscribe[] = []
 const listeners = new Set<() => void>()
+// A failed first read is tried again, later each time, and each failure is logged: until a read succeeds every chat
+// stays unknown, and what hides text while a chat is unknown (hidesText) keeps hiding it, so the log says why.
+export const READ_RETRY_DELAYS_MS = [1000, 5000, 30000, 120000]
+let retry: ReturnType<typeof setTimeout> | undefined
 // Each chat's events are pruned of stale orphans once per run, when first read.
 const pruned = new Set<string>()
 
@@ -88,6 +92,42 @@ const prune = (agent: Agent, connectionId: string, events: ChatEventRecord[]) =>
   void Promise.all(stale.map((record) => repository.delete(agent.context, record))).catch(() => undefined)
 }
 
+/** Every chat event, read once; a failed read is logged and tried again later, then given up on until re-attached. */
+const readAll = (agent: Agent, repository: ReturnType<typeof getChatEventRepository>, attempt: number) => {
+  void repository
+    .getAll(agent.context)
+    .then((all) => {
+      if (attached !== agent) return
+      const grouped = new Map<string, ChatEventRecord[]>()
+      for (const record of all) grouped.set(record.connectionId, [...(grouped.get(record.connectionId) ?? []), record])
+      // What arrived while the read ran is kept: the read cannot know of it.
+      for (const [connectionId, events] of byConnection) {
+        const ids = new Set((grouped.get(connectionId) ?? []).map((e) => e.id))
+        grouped.set(connectionId, [...(grouped.get(connectionId) ?? []), ...events.filter((e) => !ids.has(e.id))])
+      }
+      byConnection = grouped
+      read = true
+      notify()
+      for (const [connectionId, events] of grouped) prune(agent, connectionId, events)
+    })
+    .catch((error) => {
+      if (attached !== agent) return
+      // Unread, not empty: the screens keep saying so. Said in the log too, and tried again.
+      const delay = READ_RETRY_DELAYS_MS[attempt]
+      agent.config?.logger?.warn(
+        `[chat] reading chat events failed (attempt ${attempt + 1}): ${
+          delay === undefined ? 'not trying again until the wallet reconnects' : `trying again in ${delay / 1000} s`
+        }`,
+        { error }
+      )
+      if (delay === undefined) return
+      retry = setTimeout(() => {
+        retry = undefined
+        if (attached === agent && !read) readAll(agent, repository, attempt + 1)
+      }, delay)
+    })
+}
+
 export const chatEventsStore = {
   subscribe(listener: () => void): () => void {
     listeners.add(listener)
@@ -107,30 +147,13 @@ export const chatEventsStore = {
         follow(agent, RepositoryEventTypes.RecordDeleted, remove),
       ]
       repository = getChatEventRepository(agent)
-    } catch {
-      // An agent with no event bus or storage (a test's stand-in): the chats stay unread, never shown empty.
+    } catch (error) {
+      // An agent with no event bus or chat storage: a test's stand-in, or a build where the chat module was never
+      // registered. The chats stay unread, never shown empty, and the log says why.
+      agent.config?.logger?.warn('[chat] no chat storage on this agent: chats stay unknown', { error })
       return
     }
-    void repository
-      .getAll(agent.context)
-      .then((all) => {
-        if (attached !== agent) return
-        const grouped = new Map<string, ChatEventRecord[]>()
-        for (const record of all)
-          grouped.set(record.connectionId, [...(grouped.get(record.connectionId) ?? []), record])
-        // What arrived while the read ran is kept: the read cannot know of it.
-        for (const [connectionId, events] of byConnection) {
-          const ids = new Set((grouped.get(connectionId) ?? []).map((e) => e.id))
-          grouped.set(connectionId, [...(grouped.get(connectionId) ?? []), ...events.filter((e) => !ids.has(e.id))])
-        }
-        byConnection = grouped
-        read = true
-        notify()
-        for (const [connectionId, events] of grouped) prune(agent, connectionId, events)
-      })
-      .catch(() => {
-        // Unread: the screens keep saying so rather than showing an empty chat.
-      })
+    readAll(agent, repository, 0)
   },
 
   /** One chat's events, or undefined until they have been read. The same array until that chat changes. */
@@ -146,6 +169,8 @@ export const chatEventsStore = {
 
   /** Stop following and forget: no agent, or a new one. */
   forget(): void {
+    if (retry) clearTimeout(retry)
+    retry = undefined
     subscriptions.forEach((s) => s.unsubscribe())
     subscriptions = []
     attached = undefined

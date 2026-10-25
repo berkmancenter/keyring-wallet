@@ -63,6 +63,13 @@ test('with disappearing messages on, the preview says there is a message, not wh
   expect(tree.queryByText('see you tomorrow')).toBeNull()
 })
 
+test("while the chat's events are not read yet: no text, never something it may take back", () => {
+  mockChatEvents = undefined
+  const tree = row()
+  expect(tree.getByText('Chat.PreviewHidden')).toBeTruthy()
+  expect(tree.queryByText('see you tomorrow')).toBeNull()
+})
+
 test('turned off again: the text shows again', () => {
   mockChatEvents = [timerOf(0)]
   expect(row().getByText('see you tomorrow')).toBeTruthy()

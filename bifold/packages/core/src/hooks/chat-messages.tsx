@@ -47,6 +47,7 @@ import { derivePseudonym } from '../utils/pseudonym'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
 import { expiredIds } from '../modules/chat/expired'
 import { timerLine } from '../components/chat/disappearing'
+import { messageTextOf } from '../components/chat/messageText'
 import { foldChatEvents, type ChatReaction } from '../modules/chat/fold'
 import type { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 
@@ -799,12 +800,8 @@ export function chatTimelineItems(
   const { systemLine, expired, photoLabel, unsupportedLabel } = options
   // A photo with no caption reads as the label, so neither its bubble nor a reply quoting it is empty. Only a photo
   // this phone kept is called one: an attachment it could not check or save says so instead.
-  const textOf = (record: ChatEventRecord) => {
-    if (record.content?.text) return record.content.text
-    if (record.attachments?.some((a) => !('unsupported' in a))) return photoLabel ?? ''
-    if (record.attachments?.length) return unsupportedLabel ?? ''
-    return ''
-  }
+  const textOf = (record: ChatEventRecord) =>
+    messageTextOf(record, { photo: photoLabel, unsupported: unsupportedLabel })
   const { messages, reactions, systems } = foldChatEvents(events)
   const byEventId = new Map(messages.map((m) => [m.eventId, m]))
   const roleOf = (record: ChatEventRecord) => (record.role === 'sent' ? Role.me : Role.them)

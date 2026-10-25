@@ -1349,7 +1349,8 @@
     "DisappearingFailed": "Couldn't change disappearing messages. Try again.",
     "PlainSendTitle": "Send without a timer?",
     "PlainSendBody": "{{name}} needs to update Keyring to use disappearing messages, so this message will be sent without a timer, like a normal message.",
-    "PlainSendConfirm": "Send anyway"
+    "PlainSendConfirm": "Send anyway",
+    "NewMessage": "New message"
   },
   "Verifier": {
     "UseVerifierCapability": "Use Verifier capability?",

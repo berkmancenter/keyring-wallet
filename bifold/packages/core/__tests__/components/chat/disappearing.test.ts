@@ -1,6 +1,6 @@
 import i18next, { type TFunction } from 'i18next'
 
-import { formatExpiresIn, timerLine } from '../../../src/components/chat/disappearing'
+import { formatExpiresIn, hidesText, timerLine } from '../../../src/components/chat/disappearing'
 import { ChatEventRecord } from '../../../src/modules/chat/records/ChatEventRecord'
 import { TIMER_CHOICES } from '../../../src/modules/chat/timer'
 import en from '../../../src/localization/en/en.json'
@@ -52,6 +52,29 @@ describe("a timer's length in words", () => {
     const inPortuguese = i18n.cloneInstance({ lng: 'pt-BR' })
     expect(formatExpiresIn(inFrench.t.bind(inFrench) as TFunction, 12345)).toBe('3 heures 26 minutes')
     expect(formatExpiresIn(inPortuguese.t.bind(inPortuguese) as TFunction, 604800)).toBe('1 semana')
+  })
+})
+
+describe("whether a message's text stays inside its chat", () => {
+  const on = { expiresIn: 3600, version: 1, eventId: 'e', setBy: 'received' as const }
+  const off = { ...on, expiresIn: 0, version: 2 }
+
+  test('shown only when certain: no timer on the chat, none on the message', () => {
+    expect(hidesText(null, undefined)).toBe(false)
+    expect(hidesText(off, undefined)).toBe(false)
+  })
+
+  test('hidden while the chat has a timer on', () => {
+    expect(hidesText(on, undefined)).toBe(true)
+  })
+
+  test('hidden for a message sent with a timer, though the chat has since turned it off', () => {
+    expect(hidesText(off, 3600)).toBe(true)
+    expect(hidesText(null, 3600)).toBe(true)
+  })
+
+  test("hidden while the chat's timer is not known yet", () => {
+    expect(hidesText(undefined, undefined)).toBe(true)
   })
 })
 
