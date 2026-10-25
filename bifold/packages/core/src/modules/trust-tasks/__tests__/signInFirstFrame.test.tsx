@@ -37,13 +37,11 @@ const IDENTITY = {
 type Records = { member: boolean; name?: string; identities?: SignInIdentity[] }
 
 /** Steps whose community read answers only when the test says so. */
-const heldSteps = () => {
+const heldSteps = (decisionDeadline = NOW + 120) => {
   let answer: (records: Records) => void = () => undefined
   const steps = {
     community: jest.fn(() => new Promise<Records>((resolve) => (answer = resolve))),
-    claim: jest.fn(
-      async () => ({ requestId: 'r', vtcDid: VTC, decisionDeadline: NOW + 120 }) as unknown as ClaimedSignIn
-    ),
+    claim: jest.fn(async () => ({ requestId: 'r', vtcDid: VTC, decisionDeadline }) as unknown as ClaimedSignIn),
     identifyAndProve: jest.fn(),
     approve: jest.fn(),
     cancel: jest.fn(async () => ({ cancelled: true })),
@@ -64,6 +62,8 @@ type Frame = {
   title?: string
   continueDisabled?: boolean
   result?: string
+  number: boolean
+  timeLeft?: string
 }
 
 const textOf = (node: { props: { children?: unknown } } | null) =>
@@ -75,7 +75,7 @@ const textOf = (node: { props: { children?: unknown } } | null) =>
     : undefined
 
 /** The screen for `link` (`null`: no code), with what every committed frame showed. */
-const open = async (steps: SignInSteps, link: string | null = LINK) => {
+const open = async (steps: SignInSteps, link: string | null = LINK, now: () => number = () => NOW) => {
   const frames: Frame[] = []
   const tree = render(<BasicAppContext>{null}</BasicAppContext>)
   const seen = () => {
@@ -87,12 +87,14 @@ const open = async (steps: SignInSteps, link: string | null = LINK) => {
       title: tree.queryByRole('header') ? textOf(tree.queryByRole('header')) : undefined,
       continueDisabled: button ? Boolean(button.props.accessibilityState?.disabled) : undefined,
       result: textOf(tree.queryByTestId(id(SignInIds.resultMessage))),
+      number: tree.queryByTestId(id(SignInIds.number)) !== null,
+      timeLeft: textOf(tree.queryByTestId(id(SignInIds.timeLeft))),
     })
   }
   tree.rerender(
     <BasicAppContext>
       <Profiler id="sign-in" onRender={seen}>
-        <SignInFlow link={link ?? undefined} steps={steps} now={() => NOW} onClose={jest.fn()} />
+        <SignInFlow link={link ?? undefined} steps={steps} now={now} onClose={jest.fn()} />
       </Profiler>
     </BasicAppContext>
   )
@@ -163,5 +165,45 @@ describe('a scanned sign-in code, in the first frame', () => {
 
     const none = await open(heldSteps().steps, null)
     expect(none.frames[0].result).toBe('SignIn.NoCode')
+  })
+})
+
+// "Timed out" is decided in render, from the clock (Phase 3). It was set by an effect after the frame had painted,
+// so the number step showed once with no time left before it said so; and a claim whose deadline had already passed
+// showed the number first.
+describe('a deadline that has passed, in the first frame it is known', () => {
+  afterEach(() => jest.useRealTimers())
+
+  test('a claim answered after its deadline: timed out, never the number', async () => {
+    const { steps, answer } = heldSteps(NOW - 1)
+    const { tree, frames } = await open(steps)
+    await answer({ member: true, name: 'Test Community', identities: [IDENTITY] })
+    const before = frames.length
+    await press(tree, SignInIds.continue)
+    const after = frames.slice(before)
+    expect(after.filter((f) => f.number)).toEqual([])
+    expect(after[after.length - 1].result).toBe('SignIn.TimedOut')
+  })
+
+  test('a deadline passing while the number waits: the frame in which it passes says timed out', async () => {
+    jest.useFakeTimers()
+    let clock = NOW
+    const { steps, answer } = heldSteps(NOW + 2)
+    const { tree, frames } = await open(steps, LINK, () => clock)
+    await answer({ member: true, name: 'Test Community', identities: [IDENTITY] })
+    await press(tree, SignInIds.continue)
+    expect(tree.getByTestId(id(SignInIds.number))).toBeTruthy()
+    const before = frames.length
+    clock = NOW + 2
+    await act(async () => {
+      jest.advanceTimersByTime(1000)
+    })
+    const after = frames.slice(before)
+    expect(after.length).toBeGreaterThan(0)
+    expect(after[0]).toMatchObject({ number: false, result: 'SignIn.TimedOut' })
+    expect(after.filter((f) => f.number)).toEqual([])
+    // Recorded, too: leaving now gives nothing up, the request already ended.
+    tree.unmount()
+    expect(steps.cancel).not.toHaveBeenCalled()
   })
 })

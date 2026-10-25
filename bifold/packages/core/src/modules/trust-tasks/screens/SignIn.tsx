@@ -141,7 +141,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   const headerHeight = useSafeHeaderHeight()
   const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const [first] = useState(() => firstStep(link, now()))
-  const [step, setStep] = useState<Step>(first)
+  // The step as recorded; what is shown is `step`, below (a deadline that has passed shows as timed out).
+  const [recorded, setStep] = useState<Step>(first)
   const [number, setNumber] = useState('')
   const [clock, setClock] = useState(now)
   // Kept from the confirm step for the review; from the claim, its deadline.
@@ -207,16 +208,20 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The decision deadline, from the claim on.
-  const watching = WATCHED.includes(step.kind) && deadline !== undefined
+  // The decision deadline, from the claim on. Timed out is decided in render, from the clock: the frame in which
+  // the deadline passes says so, never "0 s left" first. The effect only records the end, so no later step
+  // replaces it and leaving no longer gives the request up.
+  const watching = WATCHED.includes(recorded.kind) && deadline !== undefined
+  const timedOut = watching && clock >= (deadline as number)
+  const step: Step = timedOut ? { kind: 'ended', end: { kind: 'timedOut' } } : recorded
   useEffect(() => {
     if (!watching) return
     const timer = setInterval(() => setClock(now()), 1000)
     return () => clearInterval(timer)
   }, [watching, now])
   useEffect(() => {
-    if (watching && deadline !== undefined && clock >= deadline) end({ kind: 'timedOut' })
-  }, [watching, deadline, clock, end])
+    if (timedOut) end({ kind: 'timedOut' })
+  }, [timedOut, end])
 
   // No update is applied over a request under way (utils/otaApply); released at its end, or when the screen goes.
   const inRequest = IN_REQUEST.includes(step.kind)

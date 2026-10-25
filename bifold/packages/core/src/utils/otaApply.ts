@@ -32,6 +32,9 @@ export const hasOtaApplyBlockers = (): boolean => blockers.size > 0
 /** Why applying is blocked right now, for logs. */
 export const otaApplyBlockerReasons = (): string[] => [...blockers.values()]
 
+/** Tests only: forget every blocker, so one test's never depends on another's having released. */
+export const resetOtaApplyBlockers = (): void => blockers.clear()
+
 // unknown, not void: an async listener's promise is caught below.
 type ReturnLockedListener = (awayMs: number) => unknown
 const returnLockedListeners = new Set<ReturnLockedListener>()

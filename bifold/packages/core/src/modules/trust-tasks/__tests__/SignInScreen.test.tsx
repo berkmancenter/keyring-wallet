@@ -13,7 +13,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
 import fr from '../../../localization/fr/fr.json'
 import ptBr from '../../../localization/pt-br/pt-br.json'
-import { hasOtaApplyBlockers, otaApplyBlockerReasons } from '../../../utils/otaApply'
+import { hasOtaApplyBlockers, otaApplyBlockerReasons, resetOtaApplyBlockers } from '../../../utils/otaApply'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
@@ -508,6 +508,8 @@ describe('leaving the screen', () => {
 // A reload into a downloaded update would lose a request under way: the claim, the number and the answer live only
 // in this screen. From Continue to the request's end, the sign-in holds the update back (utils/otaApply).
 describe('an update waits while a request is under way', () => {
+  beforeEach(() => resetOtaApplyBlockers())
+
   test('held from Continue, through the number and the review, and released when it ends', async () => {
     const steps = fakeSteps()
     const tree = await show(steps)
