@@ -178,7 +178,13 @@ describe('withOta', () => {
       expect(reload).not.toHaveBeenCalled()
       expect(log).toHaveBeenCalledWith(
         'return',
-        expect.objectContaining({ staged: null, apply: false, reason: 'no update staged' })
+        expect.objectContaining({
+          staged: null,
+          apply: false,
+          reason: 'no update staged',
+          // Logged with nothing staged too, to compare with the metadata file on a device.
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+        })
       )
     })
 
@@ -201,6 +207,7 @@ describe('withOta', () => {
         expect.objectContaining({
           staged: null,
           apply: false,
+          reason: 'staged under another key',
           isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
           stagedUnderKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
         })

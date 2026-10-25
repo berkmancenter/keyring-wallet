@@ -23,6 +23,13 @@ describe('decideApplyOnReturn', () => {
 
   it('does not apply with nothing staged, or with the staged update already running', () => {
     expect(decideApplyOnReturn({ ...base, stagedBundleId: undefined })).toMatchObject({ reason: 'no update staged' })
+    expect(
+      decideApplyOnReturn({
+        ...base,
+        stagedBundleId: undefined,
+        stagedUnderKey: 'HotUpdaterPrefs_fp_0.2.0+270_production',
+      })
+    ).toEqual({ apply: false, reason: 'staged under another key' })
     expect(decideApplyOnReturn({ ...base, runningBundleId: base.stagedBundleId })).toMatchObject({
       reason: 'the staged update is already running',
     })
