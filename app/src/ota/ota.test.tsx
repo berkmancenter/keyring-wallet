@@ -228,11 +228,12 @@ describe('withOta', () => {
       notifyReturnLocked(away)
       await flush()
       release?.()
-      expect(reload).not.toHaveBeenCalled()
+      // The log first: a failure then names the decision taken, not only the reload.
       expect(log).toHaveBeenCalledWith(
         'return',
         expect.objectContaining({ staged: STAGED, apply: false, reason: 'blocked: a test flow' })
       )
+      expect(reload).not.toHaveBeenCalled()
     })
 
     it('logs a metadata read that fails, and does not reload', async () => {
