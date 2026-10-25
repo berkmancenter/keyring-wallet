@@ -33,5 +33,6 @@ export { ORPHAN_MAX_AGE_MS, ORPHAN_MAX_COUNT, foldChatEvents, prunableOrphans } 
 export type { ChatReaction, FoldedChat } from './fold'
 export { removeReaction, sendChatText, sendReaction } from './send'
 export { chatMediaFolder, deleteChatMessages } from './history'
+export { useClearChat } from './useClearChat'
 export type { ChatMessageIds } from './history'
 export type { ChatSendOutcome } from './send'

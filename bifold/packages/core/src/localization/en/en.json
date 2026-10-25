@@ -1291,7 +1291,12 @@
     "DIDCopiedMessage": "The DID has been copied to your clipboard.",
     "FullContactDetails": "Full Contact details",
     "Actions": "More",
-    "Details": "Details"
+    "Details": "Details",
+    "ClearChat": "Clear chat",
+    "ClearChatTitle": "Clear this chat?",
+    "ClearChatBody": "Every message and photo in this chat will be deleted from this phone for good. {{name}} keeps their copy. This can't be undone.",
+    "ClearChatDone": "Chat cleared",
+    "ClearChatFailed": "The chat couldn't be fully cleared, and some messages may already be gone. Try again."
   },
   "Verifier": {
     "UseVerifierCapability": "Use Verifier capability?",

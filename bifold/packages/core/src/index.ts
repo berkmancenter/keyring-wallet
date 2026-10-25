@@ -252,6 +252,7 @@ export {
   chatMediaFolder,
   counterpartySpeaksChat,
   deleteChatMessages,
+  useClearChat,
   getChatEventRepository,
   isUlid,
   parseChatEvent,

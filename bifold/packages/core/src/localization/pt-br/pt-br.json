@@ -1136,7 +1136,12 @@
     "DIDCopiedMessage": "O DID foi copiado para sua área de transferência.",
     "FullContactDetails": "Detalhes completos do contato",
     "Actions": "More (PT-BR)",
-    "Details": "Details (PT-BR)"
+    "Details": "Details (PT-BR)",
+    "ClearChat": "Limpar conversa",
+    "ClearChatTitle": "Limpar esta conversa?",
+    "ClearChatBody": "Todas as mensagens e fotos desta conversa serão apagadas deste telefone para sempre. {{name}} continua com a própria cópia. Isso não pode ser desfeito.",
+    "ClearChatDone": "Conversa limpa",
+    "ClearChatFailed": "Não foi possível limpar a conversa por completo, e algumas mensagens podem já ter sido apagadas. Tente de novo."
   },
   "Verifier": {
     "UseVerifierCapability": "Usar o recurso Verificador?",
