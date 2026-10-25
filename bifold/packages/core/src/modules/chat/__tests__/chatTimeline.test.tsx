@@ -11,7 +11,8 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { Role } from '../../../types/chat'
 import { useUnreadMessages } from '../../../hooks/useUnreadMessages'
-import { areChatMessagesEqual, chatTimelineItems } from '../../../hooks/chat-messages'
+import { areChatMessagesEqual, chatTimelineItems, useExpiredOriginals } from '../../../hooks/chat-messages'
+import { expiredIds } from '../expired'
 import { ChatEventRecord, type ChatEventRecordProps } from '../records/ChatEventRecord'
 import { chatEventsStore, useChatEvents } from '../chatEventsStore'
 import { isUnreadChatEvent, markChatEventsSeen } from '../seen'
@@ -19,6 +20,11 @@ import { ORPHAN_MAX_AGE_MS } from '../fold'
 import { deleteChatMessages } from '../history'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('../expired', () => ({
+  expiredIds: jest.fn(async () => new Set<string>()),
+  recordExpired: jest.fn(),
+  forgetExpired: jest.fn(async () => undefined),
+}))
 // No chat media folder: deleting a chat's history has no files to remove here.
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/docs',
@@ -179,6 +185,41 @@ describe("one chat's events as timeline items", () => {
     expect(items.find((i) => i.text === 'to something gone')?.replyTo).toEqual({ unavailable: true })
   })
 
+  test('a reply to an original that disappeared on its timer says so; one never here says it is not on this phone', () => {
+    const expiredOriginal = '01JYYYYYYYYYYYYYYYYYYYYYYY'
+    const neverHere = '01JZZZZZZZZZZZZZZZZZZZZZZZ'
+    const toExpired = message('A', 'to something that disappeared', { inReplyTo: expiredOriginal })
+    const toLost = message('A', 'to something never here', { inReplyTo: neverHere })
+    const replyOf = (items: ReturnType<typeof chatTimelineItems>, text: string) =>
+      items.find((i) => i.text === text)?.replyTo
+    const read = chatTimelineItems([toExpired, toLost], style, { expired: new Set([expiredOriginal]) })
+    expect(replyOf(read, 'to something that disappeared')).toEqual({ expired: true })
+    expect(replyOf(read, 'to something never here')).toEqual({ unavailable: true })
+    // While which originals disappeared is being read, a reply quotes nothing rather than something it may take back.
+    const reading = chatTimelineItems([toExpired, toLost], style, { expired: 'unread' })
+    expect(replyOf(reading, 'to something that disappeared')).toEqual({ unread: true })
+    expect(replyOf(reading, 'to something never here')).toEqual({ unread: true })
+  })
+
+  test('a disappearing message carries the timer it was sent with; another carries none', () => {
+    const timed = message('A', 'timed', { expiresIn: 3600 })
+    const plain = message('A', 'plain')
+    const items = chatTimelineItems([timed, plain], style)
+    expect(items.find((i) => i.text === 'timed')?.expiresIn).toBe(3600)
+    expect(items.find((i) => i.text === 'plain')?.expiresIn).toBeUndefined()
+  })
+
+  test('a system line reads as its words, given by whoever words it', () => {
+    const timer = event({
+      connectionId: 'A',
+      eventType: 'timer',
+      role: 'received',
+      timer: { expiresIn: 3600, version: 1 },
+    })
+    const items = chatTimelineItems([timer], style, { systemLine: (r) => `set to ${r.timer?.expiresIn}` })
+    expect(items[0]).toMatchObject({ kind: 'system', text: 'set to 3600' })
+  })
+
   test("a timer is a system line carrying its event; order is this phone's time, never the sender's", () => {
     const early = message('A', 'first', {
       sentTime: new Date(Date.UTC(2026, 9, 25, 9)),
@@ -230,6 +271,27 @@ describe('the timeline is redrawn when what a chat item shows changes', () => {
     expect(areChatMessagesEqual(liked, chatTimelineItems([hello, reaction, changed], style))).toBe(false)
   })
 
+  test("a system line's words changing is a change (a contact renamed)", () => {
+    const timer = event({
+      connectionId: 'A',
+      eventType: 'timer',
+      role: 'received',
+      timer: { expiresIn: 3600, version: 1 },
+    })
+    const as = (name: string) => chatTimelineItems([timer], style, { systemLine: () => `${name} set a timer` })
+    expect(areChatMessagesEqual(as('Ana'), as('Ana'))).toBe(true)
+    expect(areChatMessagesEqual(as('Ana'), as('Bea'))).toBe(false)
+  })
+
+  test("a reply's original found to have disappeared is a change", () => {
+    const reply = message('A', 'the answer', { inReplyTo: original.eventId })
+    const reading = chatTimelineItems([reply], style, { expired: 'unread' })
+    const expired = chatTimelineItems([reply], style, { expired: new Set([original.eventId]) })
+    const lost = chatTimelineItems([reply], style, { expired: new Set() })
+    expect(areChatMessagesEqual(reading, expired)).toBe(false)
+    expect(areChatMessagesEqual(expired, lost)).toBe(false)
+  })
+
   test("a reply's original arriving later is a change", () => {
     const reply = message('A', 'the answer', { inReplyTo: original.eventId })
     expect(
@@ -267,6 +329,62 @@ describe("a chat's history deleted", () => {
     })
     expect(chatTimelineItems(chatEventsStore.chat('A') ?? [], () => ({})).map((i) => i.text)).toEqual(['kept'])
     expect(chatEventsStore.chat('A')?.some((r) => r.eventType === 'reaction')).toBe(false)
+  })
+})
+
+describe('a message that disappears on its timer', () => {
+  test('which originals disappeared is read only for a chat with a reply whose original is missing', async () => {
+    const original = message('A', 'the question')
+    const reply = message('A', 'the answer', { inReplyTo: original.eventId })
+    // The store hands over the same array until the chat changes; so does this.
+    const events = [original, reply]
+    const { result } = renderHook(() => useExpiredOriginals('A', events))
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(result.current).toBeUndefined()
+    expect(expiredIds).not.toHaveBeenCalled()
+  })
+
+  test('a reply whose original is missing: unread while it is read, then the ids read', async () => {
+    const gone = '01JYYYYYYYYYYYYYYYYYYYYYYY'
+    let answer: (ids: Set<string>) => void = () => undefined
+    ;(expiredIds as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    const reply = message('A', 'the answer', { inReplyTo: gone })
+    const events = [reply]
+    const { result } = renderHook(() => useExpiredOriginals('A', events))
+    expect(result.current).toBe('unread')
+    await act(async () => answer(new Set([gone])))
+    expect(result.current).toEqual(new Set([gone]))
+    expect(expiredIds).toHaveBeenCalledWith(agent, 'A')
+  })
+
+  test('unreadable: every missing original is said to be not on this phone, which is still true', async () => {
+    ;(expiredIds as jest.Mock).mockRejectedValueOnce(new Error('storage unavailable'))
+    const reply = message('A', 'the answer', { inReplyTo: '01JYYYYYYYYYYYYYYYYYYYYYYY' })
+    const events = [reply]
+    const { result } = renderHook(() => useExpiredOriginals('A', events))
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(result.current).toEqual(new Set())
+  })
+
+  // The expiry sweep (expiry.ts) deletes through deleteChatMessages, as here: the store follows the repository.
+  test("its reaction, and the chat list's preview of it, go at once", async () => {
+    const before = message('A', 'see you at noon')
+    const timed = message('A', 'the door code is 4512', { expiresIn: 3600 })
+    const onTimed = event({ connectionId: 'A', eventType: 'reaction', target: timed.eventId, emoji: '👍' })
+    mockRecords = [before, timed, onTimed]
+    await attach()
+    const preview = () =>
+      chatTimelineItems(chatEventsStore.chat('A') ?? [], () => ({}))
+        .filter((i) => i.kind !== 'system')
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.text
+    expect(preview()).toBe('the door code is 4512')
+
+    await act(async () => {
+      await deleteChatMessages(agent as never, 'A', { eventIds: [timed.eventId] })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(preview()).toBe('see you at noon')
+    expect(chatEventsStore.chat('A')?.map((r) => r.eventId)).toEqual([before.eventId])
   })
 })
 

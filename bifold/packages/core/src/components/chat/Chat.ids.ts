@@ -16,4 +16,12 @@ export const ChatIds = {
   reactions: 'ChatMessageReactions',
   // The emoji button beside the composer.
   composerEmoji: 'ChatComposerEmojiButton',
+  // The disappearing-messages sheet the chat's menu opens.
+  disappearing: 'ChatDisappearingSheet',
+  // One choice is `ChatDisappearingOption-<seconds>`, 0 for Off.
+  disappearingOption: 'ChatDisappearingOption',
+  // A timer the other phone set to a length no choice offers, shown as the current setting.
+  disappearingCurrent: 'ChatDisappearingCurrent',
+  disappearingSave: 'ChatDisappearingSave',
+  disappearingCancel: 'ChatDisappearingCancel',
 } as const

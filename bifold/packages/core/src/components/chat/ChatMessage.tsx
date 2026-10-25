@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { View, Text } from 'react-native'
 // gesture-handler touchables: RN's own touchables miss taps inside GiftedChat's
 // inverted list + GestureHandlerRootView on Android with the new architecture
@@ -55,9 +56,14 @@ export interface ExtendedChatMessage extends IMessage {
   chatEventId?: string
   /** Its current reactions, folded in (at most one per person). */
   reactions?: ChatReaction[]
-  /** The event it replies to, and what of it is shown: its text, or that it is not on this phone. */
+  /**
+   * The event it replies to, and what of it is shown: its text; that it disappeared on its timer; that it is not on
+   * this phone; or nothing yet, while which originals disappeared is being read.
+   */
   inReplyTo?: string
-  replyTo?: { text: string } | { unavailable: true }
+  replyTo?: { text: string } | { expired: true } | { unavailable: true } | { unread: true }
+  /** A disappearing message's timer, in seconds, as it was sent: the chat list shows no text of it. */
+  expiresIn?: number
   /** A line about the chat itself (a timer set), not a bubble: never unread, never the chat list's preview. */
   kind?: 'system'
   /** A system line's event, for whoever words it. */
@@ -312,6 +318,14 @@ const CredentialOfferActions: React.FC<{
   )
 }
 
+/** What a reply's quote says of its original. */
+const quoteOf = (replyTo: NonNullable<ExtendedChatMessage['replyTo']>, t: TFunction): string => {
+  if ('text' in replyTo) return replyTo.text
+  if ('expired' in replyTo) return t('Chat.ReplyExpired')
+  if ('unavailable' in replyTo) return t('Chat.ReplyUnavailable')
+  return ''
+}
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
   const { t } = useTranslation()
@@ -337,6 +351,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
     </View>
   ) : null
 
+  // A line about the chat itself (a timer change): centered words, no bubble.
+  if (message.kind === 'system') {
+    return (
+      <View>
+        {daySeparator}
+        <View style={{ alignItems: 'center', marginVertical: 8, paddingHorizontal: 32 }}>
+          <Text style={{ color: DATE_SEPARATOR_COLOR, fontSize: 14, textAlign: 'center' }}>{message.text}</Text>
+        </View>
+      </View>
+    )
+  }
+
   // Event messages (connection, credential, proof) render as centered cards
   if (message.iconType) {
     return (
@@ -359,14 +385,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
           <Bubble
             {...messageProps}
             // A reply shows what it answers, through gifted-chat's own MessageReply: the original's text, or that it
-            // is not on this phone.
+            // expired, or that it is not on this phone.
             currentMessage={
               message.replyTo
                 ? {
                     ...message,
                     replyMessage: {
                       _id: message.inReplyTo ?? '',
-                      text: 'text' in message.replyTo ? message.replyTo.text : t('Chat.ReplyUnavailable'),
+                      text: quoteOf(message.replyTo, t),
                       user: { _id: '' },
                     },
                   }

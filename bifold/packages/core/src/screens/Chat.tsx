@@ -38,6 +38,9 @@ import { markChatEventsSeen } from '../modules/chat/seen'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
 import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
+import { counterpartySpeaksChat } from '../modules/chat/capability'
+import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { timerOf } from '../modules/chat/timer'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
 import { Alert, Animated, Easing, View, StyleSheet, Text, TouchableOpacity, ViewToken } from 'react-native'
@@ -272,18 +275,36 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
 
   // A chat event to a contact that speaks chat, a plain BasicMessage otherwise (sendChatText decides). gifted-chat
   // attaches the reply target it was showing, and clears it after this.
+  // With disappearing messages on, a contact whose Keyring cannot honour them would get a plain message that never
+  // disappears: the person is asked first, and their text and reply are put back if they would rather not.
+  const chatEvents = useChatEvents(connectionId)
+  const timerOn = useMemo(() => (chatEvents ? (timerOf(chatEvents)?.expiresIn ?? 0) > 0 : false), [chatEvents])
   const onSend = useCallback(
     async (messages: IMessage[]) => {
       if (!agent) return
-      const inReplyTo = messages[0].replyMessage?._id
-      await sendChatText(
-        agent,
-        connectionId,
-        messages[0].text,
-        typeof inReplyTo === 'string' && inReplyTo ? { inReplyTo } : {}
-      )
+      const message = messages[0]
+      const inReplyTo = message.replyMessage?._id
+      const send = () =>
+        sendChatText(agent, connectionId, message.text, typeof inReplyTo === 'string' && inReplyTo ? { inReplyTo } : {})
+      if (timerOn && !(await counterpartySpeaksChat(agent, connectionId))) {
+        const putBack = () => {
+          composer.insert(message.text)
+          if (message.replyMessage) setReplyTarget(message.replyMessage)
+        }
+        Alert.alert(
+          t('Chat.PlainSendTitle'),
+          t('Chat.PlainSendBody', { name: theirLabel, interpolation: { escapeValue: false } }),
+          [
+            { text: t('Global.Cancel'), style: 'cancel', onPress: putBack },
+            { text: t('Chat.PlainSendConfirm'), onPress: () => void send() },
+          ],
+          { cancelable: true, onDismiss: putBack }
+        )
+        return
+      }
+      await send()
     },
-    [agent, connectionId]
+    [agent, connectionId, timerOn, composer, t, theirLabel]
   )
 
   const onLongPressMessage = useCallback((_context: unknown, message: ExtendedChatMessage) => {

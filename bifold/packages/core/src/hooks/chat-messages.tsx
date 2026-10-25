@@ -1,4 +1,4 @@
-import { W3cCredentialRecord } from '@credo-ts/core'
+import { type Agent, W3cCredentialRecord } from '@credo-ts/core'
 import {
   DidCommBasicMessageRecord,
   DidCommConnectionRecord,
@@ -14,7 +14,7 @@ import { useBasicMessagesByConnectionId, useAgent } from '@bifold/react-hooks'
 import { isPresentationReceived } from '@bifold/verifier'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Linking, View, Text } from 'react-native'
 // gesture-handler touchable: RN's own touchables miss taps inside GiftedChat's
@@ -45,6 +45,8 @@ import { ThemedText } from '../components/texts/ThemedText'
 import { BIOMETRIC_STATUS_MESSAGE_PREFIX } from '../modules/vrc/vrc-biometric'
 import { derivePseudonym } from '../utils/pseudonym'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { expiredIds } from '../modules/chat/expired'
+import { timerLine } from '../components/chat/disappearing'
 import { foldChatEvents, type ChatReaction } from '../modules/chat/fold'
 import type { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 
@@ -766,19 +768,34 @@ const useReliableBasicMessages = (connectionId: string | undefined): DidCommBasi
   return merged
 }
 
+/** What a timeline needs beyond the events: how its system lines read, and which originals disappeared. */
+export interface ChatTimelineOptions {
+  /** The words of a system line (a timer change). Without it, a line with nothing in it. */
+  systemLine?: (record: ChatEventRecord) => string
+  /**
+   * The eventIds of this chat's messages that disappeared on their timer, so a reply to one says so; 'unread' while
+   * they are being read, when such a reply quotes nothing yet. Without it, a missing original is not on this phone.
+   */
+  expired?: ReadonlySet<string> | 'unread'
+}
+
 /**
  * One chat's events as timeline items (rich-messaging-plan.md §5): each message a text bubble carrying its event
- * id, its folded reactions and what it replies to; each system event a line carrying its event, worded by whoever
- * owns its type. Reactions and redactions are folded in, never items. Only this chat's events are given, so a
- * reaction aimed at another chat's message never lands here.
+ * id, its folded reactions and what it replies to; each system event a line carrying its event. Reactions and
+ * redactions are folded in, never items. Only this chat's events are given, so a reaction aimed at another chat's
+ * message never lands here.
  */
 export function chatTimelineItems(
   events: ChatEventRecord[],
-  textStyleFor: (role: Role) => object
+  textStyleFor: (role: Role) => object,
+  options: ChatTimelineOptions = {}
 ): ExtendedChatMessage[] {
+  const { systemLine, expired } = options
   const { messages, reactions, systems } = foldChatEvents(events)
   const byEventId = new Map(messages.map((m) => [m.eventId, m]))
   const roleOf = (record: ChatEventRecord) => (record.role === 'sent' ? Role.me : Role.them)
+  const missing = (eventId: string): NonNullable<ExtendedChatMessage['replyTo']> =>
+    expired === 'unread' ? { unread: true } : expired?.has(eventId) ? { expired: true } : { unavailable: true }
   const items: ExtendedChatMessage[] = messages.map((record) => {
     const text = record.content?.text ?? ''
     const target = record.inReplyTo ? byEventId.get(record.inReplyTo) : undefined
@@ -794,16 +811,17 @@ export function chatTimelineItems(
       replyTo: record.inReplyTo
         ? target
           ? { text: target.content?.text ?? '' }
-          : { unavailable: true as const }
+          : missing(record.inReplyTo)
         : undefined,
+      ...(record.expiresIn ? { expiresIn: record.expiresIn } : {}),
     }
   })
   for (const record of systems) {
+    const line = systemLine?.(record) ?? ''
     items.push({
       _id: record.id,
-      text: '',
-      // Worded by the owner of its type (the timer module); until then, a line with nothing in it.
-      renderEvent: () => <View />,
+      text: line,
+      renderEvent: () => <ThemedText>{line}</ThemedText>,
       createdAt: record.sentTime,
       user: { _id: roleOf(record) },
       chatEventId: record.eventId,
@@ -817,7 +835,7 @@ export function chatTimelineItems(
 const reactionsKey = (reactions?: ChatReaction[]) =>
   (reactions ?? []).map((r) => `${r.author}:${r.emoji}:${r.eventId}`).join(',')
 const replyKey = (m: ExtendedChatMessage) =>
-  !m.replyTo ? '' : 'unavailable' in m.replyTo ? 'unavailable' : `text:${m.replyTo.text}`
+  !m.replyTo ? '' : 'text' in m.replyTo ? `text:${m.replyTo.text}` : Object.keys(m.replyTo)[0]
 
 /** Whether two timelines draw the same: the timeline is only replaced when they do not. */
 export const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]): boolean => {
@@ -845,6 +863,36 @@ export const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMe
   return true
 }
 
+/**
+ * The eventIds of a chat's originals that disappeared on their timer, read when some reply's original is missing:
+ * 'unread' until then. A chat with no such reply reads nothing.
+ */
+export function useExpiredOriginals(
+  connectionId: string | undefined,
+  events: ChatEventRecord[] | undefined
+): ReadonlySet<string> | 'unread' | undefined {
+  const { agent } = useAgent()
+  const needed = useMemo(() => {
+    if (!events) return false
+    const present = new Set(events.map((e) => e.eventId))
+    return events.some((e) => e.inReplyTo !== undefined && !present.has(e.inReplyTo))
+  }, [events])
+  const [read, setRead] = useState<{ connectionId: string; ids: ReadonlySet<string> }>()
+  useEffect(() => {
+    if (!needed || !agent || !connectionId) return
+    let live = true
+    expiredIds(agent as unknown as Agent, connectionId)
+      .then((ids) => live && setRead({ connectionId, ids }))
+      // Unreadable: the originals are said to be not on this phone, which is still true.
+      .catch(() => live && setRead({ connectionId, ids: new Set() }))
+    return () => {
+      live = false
+    }
+  }, [needed, agent, connectionId, events])
+  if (!needed) return undefined
+  return read && read.connectionId === connectionId ? read.ids : 'unread'
+}
+
 export const useChatMessagesByConnection = (connection: DidCommConnectionRecord): ExtendedChatMessage[] => {
   const [messages, setMessages] = useState<Array<ExtendedChatMessage>>([])
   const latestMessagesRef = useRef<Array<ExtendedChatMessage>>([])
@@ -857,6 +905,8 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
   const basicMessages = useReliableBasicMessages(connection?.id)
   // This chat's keyring/chat events: undefined until read, then folded into the timeline below.
   const chatEvents = useChatEvents(connection?.id)
+  // Which originals disappeared on their timer, read only when a reply's original is missing.
+  const expired = useExpiredOriginals(connection?.id, chatEvents)
   const credentials = useCredentialsByConnectionId(connection?.id)
   const proofs = useProofsByConnectionId(connection?.id)
   const theirLabel = useConnectionDisplayName(connection?.id)
@@ -1267,7 +1317,10 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
       : undefined
 
     transformedMessages.push(
-      ...chatTimelineItems(chatEvents ?? [], (role) => (role === Role.me ? theme.rightText : theme.leftText))
+      ...chatTimelineItems(chatEvents ?? [], (role) => (role === Role.me ? theme.rightText : theme.leftText), {
+        systemLine: (record) => timerLine(t, record, theirLabel),
+        expired,
+      })
     )
 
     const finalMessages = transformedMessages.sort((a: any, b: any) => b.createdAt - a.createdAt)
@@ -1303,6 +1356,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
     store,
     reportingEnabled,
     chatEvents,
+    expired,
   ])
 
   return messages

@@ -18,6 +18,9 @@ import { useDeleteContact } from '../hooks/useDeleteContact'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 
 import IconButton, { ButtonLocation } from '../../../components/buttons/IconButton'
+import DisappearingMessagesSheet from '../../../components/chat/DisappearingMessagesSheet'
+import { useConnectionDisplayName } from '../../../hooks/connections'
+import { useClearChat } from '../../chat/useClearChat'
 
 interface InfoIconProps {
   connectionId: string
@@ -37,6 +40,9 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
   const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState(false)
   const buttonRef = useRef<View>(null)
   const { deleteContact } = useDeleteContact()
+  const [disappearingVisible, setDisappearingVisible] = useState(false)
+  const clearChat = useClearChat()
+  const name = useConnectionDisplayName(connectionId)
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
@@ -117,6 +123,16 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
       })
     }
   }, [navigation, issuerDid, issuerName, issuerEmail, issuerOrganization])
+
+  const handleDisappearing = useCallback(() => {
+    setMenuVisible(false)
+    setDisappearingVisible(true)
+  }, [])
+
+  const handleClearChat = useCallback(() => {
+    setMenuVisible(false)
+    clearChat(connectionId, name)
+  }, [clearChat, connectionId, name])
 
   const handleDeletePress = useCallback(() => {
     setMenuVisible(false)
@@ -211,6 +227,28 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
               </TouchableOpacity>
             )}
 
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleDisappearing}
+              accessibilityLabel={t('Chat.DisappearingMessages')}
+              accessibilityRole="menuitem"
+              testID={testIdWithKey('ContactMenuDisappearing')}
+            >
+              <Icon name="timer-outline" size={20} color={ColorPalette.brand.text} />
+              <ThemedText style={styles.menuItemText}>{t('Chat.DisappearingMessages')}</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleClearChat}
+              accessibilityLabel={t('Chat.ClearChat')}
+              accessibilityRole="menuitem"
+              testID={testIdWithKey('ContactMenuClearChat')}
+            >
+              <Icon name="broom" size={20} color={ColorPalette.semantic.error} />
+              <ThemedText style={[styles.menuItemText, styles.deleteText]}>{t('Chat.ClearChat')}</ThemedText>
+            </TouchableOpacity>
+
             {/* Remove Contact Option */}
             <TouchableOpacity
               style={styles.menuItem}
@@ -227,6 +265,13 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
           </View>
         </Pressable>
       </Modal>
+
+      <DisappearingMessagesSheet
+        visible={disappearingVisible}
+        connectionId={connectionId}
+        name={name}
+        onClose={() => setDisappearingVisible(false)}
+      />
 
       {/* Remove Contact Confirmation Modal */}
       <CommonRemoveModal

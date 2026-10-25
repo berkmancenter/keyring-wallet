@@ -1,7 +1,8 @@
 import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { View, StyleSheet, TouchableOpacity } from 'react-native'
 
 import { useStore } from '../../contexts/store'
@@ -15,6 +16,8 @@ import { testIdWithKey } from '../../utils/testable'
 import { TOKENS, useServices } from '../../container-api'
 import ContactPhoto from '../../modules/vrc/components/ContactPhoto'
 import { useConnectionFacts } from '../../modules/vrc/contacts/useContactFacts'
+import { useChatEvents } from '../../modules/chat/chatEventsStore'
+import { timerOf } from '../../modules/chat/timer'
 import { ThemedText } from '../texts/ThemedText'
 
 export interface ContactListItemProps {
@@ -24,9 +27,15 @@ export interface ContactListItemProps {
 
 const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }) => {
   const { ColorPalette } = useTheme()
+  const { t } = useTranslation()
   const messages = useChatMessagesByConnection(contact)
   // The newest thing said, never a line about the chat itself (a timer set).
   const message = messages.find((m) => m.kind !== 'system')
+  // In a chat with disappearing messages on, or for a message that will disappear, no text leaves the chat
+  // (rich-messaging-plan.md §5).
+  const chatEvents = useChatEvents(contact.id)
+  const timer = useMemo(() => (chatEvents ? timerOf(chatEvents) : null), [chatEvents])
+  const hideText = (timer?.expiresIn ?? 0) > 0 || (message?.expiresIn ?? 0) > 0
   const hasOnlyInitialMessage = messages.length < 2
   const [_store] = useStore()
   const [{ enableChat }] = useServices([TOKENS.CONFIG])
@@ -121,7 +130,7 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
                 ellipsizeMode={'tail'}
                 style={unreadCount > 0 ? { fontWeight: '600' } : undefined}
               >
-                {message.text}
+                {hideText ? t('Chat.PreviewHidden') : message.text}
               </ThemedText>
             )}
           </View>

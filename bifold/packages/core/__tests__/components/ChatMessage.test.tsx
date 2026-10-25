@@ -229,3 +229,36 @@ describe('CredentialOfferActions - Decline Flow', () => {
     expect(queryByText('NO')).toBeNull()
   })
 })
+
+describe('chat lines and replies', () => {
+  const chatItem = (overrides: Partial<ExtendedChatMessage>): MessageProps<ExtendedChatMessage> => ({
+    user,
+    position: 'left',
+    currentMessage: {
+      _id: 'item',
+      user: { _id: Role.them },
+      renderEvent: () => <></>,
+      text: '',
+      createdAt: new Date('2026-10-25T12:00:00.000Z'),
+      ...overrides,
+    },
+  })
+
+  test('a line about the chat itself is its words, not a bubble', () => {
+    const tree = render(
+      <ChatMessage messageProps={chatItem({ kind: 'system', text: 'Ana set messages to disappear after 1 hour' })} />
+    )
+    expect(tree.getByText('Ana set messages to disappear after 1 hour')).toBeTruthy()
+  })
+
+  test('a reply quotes its original, or says it expired, or that it is not on this phone, or nothing yet', () => {
+    const quote = (replyTo: ExtendedChatMessage['replyTo']) =>
+      render(<ChatMessage messageProps={chatItem({ text: 'the answer', inReplyTo: 'orig', replyTo })} />)
+    expect(quote({ text: 'the question' }).getByText('the question')).toBeTruthy()
+    expect(quote({ expired: true }).getByText('Chat.ReplyExpired')).toBeTruthy()
+    expect(quote({ unavailable: true }).getByText('Chat.ReplyUnavailable')).toBeTruthy()
+    const reading = quote({ unread: true })
+    expect(reading.queryByText('Chat.ReplyExpired')).toBeNull()
+    expect(reading.queryByText('Chat.ReplyUnavailable')).toBeNull()
+  })
+})
