@@ -81,7 +81,9 @@ class MainApplication : Application(), ReactApplication {
     // update nor a rollback (the update is older than this build). With the
     // build number in the key, each store build starts on its own bundle. This
     // is the default composition with the version read as {version}+{build};
-    // keep it in step with AppDelegate.mm.
+    // keep it in step with AppDelegate.mm and app/src/ota/stagedUpdate.ts
+    // (isolationKeyFor), which rebuilds it to read the staged update for
+    // apply-on-return.
     internal fun otaIsolationKey(): String {
         val version = "${HotUpdaterImpl.getAppVersion(this) ?: "unknown"}+${BuildConfig.VERSION_CODE}"
         val fingerprint = HotUpdaterImpl.getFingerprintHash(this)

@@ -17,8 +17,14 @@
  * stays idle was checked for @hot-updater/react-native 0.36.18 only: a version
  * bump re-checks it (deploy/keyring-ota/README.md, "Upgrading hot-updater").
  */
+import { onReturnLocked, otaApplyBlockerReasons } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
+import { getBuildNumber } from 'react-native-device-info'
+
+import { decideApplyOnReturn } from './applyOnReturn'
+import { isolationKeyFor, readStagedUpdateId } from './stagedUpdate'
 
 import { otaUpdateUrl } from './otaConfig'
 import { ensureRing } from './rings'
@@ -46,6 +52,41 @@ export const withOta = <P extends object>(
     log('loader unavailable, running without updates', { error: String(error) })
     return App
   }
+
+  // A staged update waits for the next cold start, or for a return to the PIN
+  // screen after a while away (applyOnReturn.ts). Nothing is kept between
+  // returns: each reads what hot-updater has staged right then (stagedUpdate.ts).
+  onReturnLocked(async (awayMs) => {
+    const blockers = otaApplyBlockerReasons()
+    const isolationKey = isolationKeyFor({
+      platform: Platform.OS,
+      fingerprint: HotUpdater.getFingerprintHash(),
+      appVersion: HotUpdater.getAppVersion(),
+      buildNumber: getBuildNumber(),
+      // The build's own channel, as the natives compose the key, not a channel
+      // switched at runtime: with that, no key would ever match, and
+      // apply-on-return would stop silently (the log would read staged: null).
+      channel: HotUpdater.getDefaultChannel(),
+    })
+    const stagedBundleId = await readStagedUpdateId(isolationKey).catch(() => undefined)
+    const decision = decideApplyOnReturn({
+      awayMs,
+      stagedBundleId,
+      runningBundleId: HotUpdater.getBundleId(),
+      blockers,
+      platform: Platform.OS,
+    })
+    // Logged every time, so a reader that stops finding the staged update (a
+    // hot-updater change to its metadata) shows here instead of failing silently.
+    log('return', {
+      staged: stagedBundleId ?? null,
+      awayMinutes: Math.round(awayMs / 60000),
+      apply: decision.apply,
+      ...(decision.apply ? {} : { reason: decision.reason }),
+    })
+    if (!decision.apply) return
+    await HotUpdater.reload().catch((error) => log('apply on return failed', { error: String(error) }))
+  })
 
   return HotUpdater.wrap({
     baseURL: url,

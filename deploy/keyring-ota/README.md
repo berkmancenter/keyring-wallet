@@ -215,6 +215,11 @@ leads to a rollback. It leads to a crash on every launch of that update instead:
   `verification_pending` and `launch_in_progress` both set (an unfinished launch);
 - `markLaunchStarted` sets `launch_in_progress` when the bundle URL is resolved
   in the foreground, before anything renders, not at first render.
+Apply-on-return (`app/src/ota/stagedUpdate.ts`) reads the same `metadata.json`
+from JavaScript, through react-native-fs (`DocumentDirectoryPath/bundle-store`
+on both platforms; snake_case keys on iOS, camelCase on Android), to learn
+which update is staged. Its `return` log line names what it read: if it starts
+reading nothing after a bump, apply-on-return has stopped working.
 Both apps set hot-updater's isolation key themselves (`KeyringOtaIsolationKey` in
 `AppDelegate.mm`, `otaIsolationKey` in `MainApplication.kt`): the default
 composition with the build number added, so that each store build starts on
