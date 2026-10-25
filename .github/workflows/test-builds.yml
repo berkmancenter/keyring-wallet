@@ -55,6 +55,24 @@ on:
       # The submodule pin: a bifold bump can carry native code (react-native-attestation).
       - "bifold"
       - ".github/workflows/test-builds.yml"
+      # Below: files that decide what the bundle and the native build resolve, none of
+      # which any required check exercises. A wrong value here builds or boots a
+      # different app than the one that was reviewed, and `singletonPrefixes` has done
+      # exactly that once already (see the comment in app/metro.config.js: on
+      # 2026-08-26 every correct PIN was reported wrong on device, because askar
+      # registered its native binding on one copy and the store check read another).
+      # Which physical copy of each duplicated package the bundle gets.
+      - "app/metro.config.js"
+      # module-resolver aliases and the transforms; what every import resolves to.
+      - "app/babel.config.js"
+      # Assets linked into the native projects (fonts).
+      - "app/react-native.config.js"
+      # `preinstall` builds the bifold submodule and `postinstall` repairs the portal
+      # symlinks, so this file changes the install that every build starts from and
+      # yarn.lock does not record either hook.
+      - "package.json"
+      - "scripts/ensure-bifold-ready.js"
+      - "scripts/fix-portal-symlinks.js"
   workflow_dispatch:
     inputs:
       platform:
@@ -407,7 +425,7 @@ jobs:
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.
           rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
-          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
+          cd android && ./gradlew bundleRelease assembleRelease :app:testReleaseUnitTest --stacktrace
 
       - name: Package the APK and its manifest
         run: |

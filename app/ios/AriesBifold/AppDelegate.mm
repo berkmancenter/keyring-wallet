@@ -76,7 +76,8 @@ static const NSTimeInterval KeyringOtaWatchdogSeconds = 20;
 // rollback (the update is older than this build). With the build number in the
 // key, each store build starts on its own bundle. This is the default
 // composition with the version read as {version}+{build}; keep it in step with
-// MainApplication.kt.
+// MainApplication.kt and app/src/ota/stagedUpdate.ts (isolationKeyFor), which
+// rebuilds it to read the staged update for apply-on-return.
 static NSString *KeyringOtaIsolationKey(void)
 {
   NSDictionary *info = [NSBundle mainBundle].infoDictionary;

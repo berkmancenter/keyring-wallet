@@ -58,11 +58,9 @@ try {
 
   // The community, from the agent screen.
   await (await waitForTestId(driver, "MyAgent", 30000)).click();
-  await sleep(1500);
-  if (!(await existsTestId(driver, "AgentHome", 3000))) {
-    const open = await scrollToTestId(driver, "OpenYourAgentButton", 4).catch(() => undefined);
-    if (open) await open.click();
-  }
+  // A linked phone's My Agent hands over to the agent home by itself (bifold #484, and on focus since 09-29);
+  // "Open your agent" is gone (bifold #485).
+  await waitForTestId(driver, "AgentHome", 30000).catch(() => undefined);
   const row = await scrollToTestId(driver, "AgentMembershipRow", 6).catch(() => undefined);
   if (!row) throw new Error("the agent screen lists no community membership");
   await row.click();

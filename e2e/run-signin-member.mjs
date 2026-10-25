@@ -25,9 +25,40 @@ import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 
-/** Tap a button that may sit below a long screen's fold (the review: community, website, identity, browser, …). */
-async function tapBelow(d, key) {
+/**
+ * Tap a button that may sit below a long screen's fold (the review: community, website, identity, browser, …). With
+ * `enabledWithin`, wait that long for the button to report enabled first: SignInContinue stays disabled until the
+ * community's identities are read (about 1–2 s), and a tap on a disabled button is lost without a word.
+ */
+async function tapBelow(d, key, { enabledWithin = 0 } = {}) {
   await scrollToTestId(d, key, 6, { from: 0.7 }).catch(() => undefined);
+  if (enabledWithin) {
+    // The element is found again on each poll, and a failed read is reported as one: "still disabled" means the
+    // button said so, not that a stale handle or a lost session was read as false.
+    const start = Date.now();
+    let enabled = false;
+    let lastError;
+    while (!enabled) {
+      try {
+        enabled = await (await waitForTestId(d, key, 15000)).isEnabled();
+        lastError = undefined;
+      } catch (err) {
+        lastError = err;
+      }
+      if (enabled) break;
+      if (Date.now() - start > enabledWithin) {
+        throw new Error(
+          lastError
+            ? `${key} could not be read for ${enabledWithin / 1000} s: ${lastError.message}`
+            : `${key} still disabled after ${enabledWithin / 1000} s`
+        );
+      }
+      await sleep(500);
+    }
+    // Whether the wait ran at all: a 0 here with a slow community read would mean the disabled state is not reaching
+    // the driver.
+    console.log(`[e2e] ${key} enabled after ${Date.now() - start} ms`);
+  }
   await tapTestId(d, key, 15000);
 }
 import { pasteLinkFromHome } from "./lib/flows.js";
@@ -103,7 +134,7 @@ try {
 
   // 3. The phone claims; the portal shows two digits; the person types them.
   await waitForTestId(d, "SignInConfirm", 60000);
-  await tapBelow(d, "SignInContinue");
+  await tapBelow(d, "SignInContinue", { enabledWithin: 20000 });
   let match;
   for (const until = Date.now() + 90000; Date.now() < until && !match; await sleep(2000)) {
     const r = await portal.redeem(req.requestId);

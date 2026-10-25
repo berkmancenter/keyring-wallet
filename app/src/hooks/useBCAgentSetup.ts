@@ -27,13 +27,14 @@ import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { chooseMediator } from '@/utils/mediatorPreference'
+import { singleFlight } from '@/utils/singleFlight'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
 /**
@@ -280,7 +281,7 @@ const useBCAgentSetup = () => {
     [credDefs, schemas]
   )
 
-  const initializeAgent = useCallback(
+  const initializeAgentOnce = useCallback(
     async (walletSecret: WalletSecret): Promise<void> => {
       // The stored mediator outlives the build that chose it: one an older
       // build baked in can be retired, or unreadable to this Credo, and then
@@ -393,6 +394,18 @@ const useBCAgentSetup = () => {
       restartExistingAgent,
     ]
   )
+
+  // One agent start at a time. Resetting a stored mediator that can't be used
+  // (just above) changes the preferences this callback depends on, so it is
+  // rebuilt mid-start; the navigator then remounts Splash with the new one, and
+  // the fresh Splash starts the agent again while the first start still runs.
+  // Two or three starts opened the same Askar store at once, and one read it
+  // half-created ("no such table: config"). Every phone whose stored mediator
+  // is not the build's (a mediator move) takes that reset on its next start.
+  // The guard is kept in a ref here, outside the rebuilt callback: a call made
+  // while a start is in flight waits for that start instead of beginning one.
+  const initializeInFlight = useRef<Promise<void> | null>(null)
+  const initializeAgent = useMemo(() => singleFlight(initializeInFlight, initializeAgentOnce), [initializeAgentOnce])
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {

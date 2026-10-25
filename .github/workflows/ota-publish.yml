@@ -17,8 +17,10 @@ name: OTA publish (ring 0)
 # channel waits for the ota-approval reviewer. Only device-test takes a base
 # commit instead of a build, skips the tier check, and has the trial's other
 # actions (scripts/ota/device-test.sh). production and preview also take
-# disable, which withdraws one bundle (scripts/ota/withdraw.mjs). Nothing here
-# widens a bundle past ring 0.
+# disable, which withdraws one bundle (scripts/ota/withdraw.mjs), and promote,
+# which widens one bundle past ring 0 (scripts/ota/promote.mjs), one approval
+# per promotion, after the soak in vars.OTA_PROMOTE_SOAK_HOURS (24 when unset). A
+# publish itself reaches ring 0 only.
 #
 # A dry run checks the commit, the inputs and the signing-key mapping, and
 # probes the server and token, without uploading.
@@ -44,14 +46,19 @@ on:
         type: string
         default: ''
       action:
-        description: 'publish or disable (needs bundle_id) for production/preview; device-test also: tamper, crash, mismatch, cleanup'
+        description: 'publish, disable or promote (both need bundle_id) for production/preview; device-test also: tamper, crash, mismatch, cleanup'
         type: choice
-        options: [publish, tamper, crash, mismatch, disable, cleanup]
+        options: [publish, promote, tamper, crash, mismatch, disable, cleanup]
         default: publish
       bundle_id:
-        description: 'disable only: the bundle to withdraw'
+        description: 'disable and promote only: the bundle to withdraw or widen; promote with platform both: ios:<id>,android:<id>'
         type: string
         default: ''
+      to_ring:
+        description: 'promote only: the widest ring the bundle reaches (ring1, or ring2 for every install)'
+        type: choice
+        options: [ring2, ring1]
+        default: ring2
       expect_fingerprint:
         description: "device-test publishes: the test app's native fingerprint for the platform (its build copy's app/fingerprint.json)"
         type: string
@@ -86,7 +93,7 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ota-approval
     steps:
-      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ring 0."
+      - run: echo "Approved - ${{ inputs.action }} on channel ${{ inputs.channel }} from ${{ github.sha }} (build '${{ inputs.build }}', base '${{ inputs.base }}', bundle '${{ inputs.bundle_id }}', ${{ inputs.platform }}, scope ${{ inputs.scope }}), ${{ inputs.action == 'promote' && format('widening to {0}', inputs.to_ring) || 'ring 0' }}."
 
   publish:
     needs: [approve]
@@ -98,7 +105,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ fromJSON(inputs.platform == 'both' && '["ios","android"]' || format('["{0}"]', inputs.platform)) }}
+        # A promote of both platforms is one job, so its checks are all-or-nothing
+        # (scripts/ota/promote.mjs --bundles); it needs no macOS runner.
+        platform: ${{ fromJSON(inputs.platform == 'both' && (inputs.action == 'promote' && '["both"]' || '["ios","android"]') || format('["{0}"]', inputs.platform)) }}
     runs-on: ${{ matrix.platform == 'ios' && 'macos-26' || 'ubuntu-22.04' }}
     environment: ota
     timeout-minutes: 60
@@ -149,11 +158,20 @@ jobs:
                   [ -z "$BUNDLE_ID" ] || err "bundle_id is for disable only" ;;
                 # Withdrawing only narrows: scripts/ota/withdraw.mjs checks the bundle
                 # is this channel's and this platform's, then disables it.
-                disable)
-                  [ -n "$BUNDLE_ID" ] || err "disable needs bundle_id"
-                  [ -z "$BUILD" ] || err "disable takes bundle_id, not build"
-                  [ "$PLATFORM" != both ] || err "disable needs the bundle's own platform (ios or android), not both" ;;
-                *) err "$CHANNEL takes only the publish and disable actions (got $ACTION)" ;;
+                # Withdrawing only narrows; promoting widens one bundle past ring 0
+                # (scripts/ota/promote.mjs), the one way anything does.
+                disable | promote)
+                  [ -n "$BUNDLE_ID" ] || err "$ACTION needs bundle_id"
+                  [ -z "$BUILD" ] || err "$ACTION takes bundle_id, not build"
+                  if [ "$PLATFORM" = both ]; then
+                    # Each platform keeps its own bundle id: ios:<id>,android:<id>.
+                    [ "$ACTION" = promote ] || err "disable takes one bundle: its own platform (ios or android), not both"
+                    [[ "$BUNDLE_ID" =~ ^(ios|android):[0-9a-f-]+,(ios|android):[0-9a-f-]+$ ]] \
+                      || err "promote with platform both takes bundle_id ios:<id>,android:<id> (got '$BUNDLE_ID')"
+                  else
+                    [[ "$BUNDLE_ID" != *:* ]] || err "a single-platform $ACTION takes a plain bundle id (got '$BUNDLE_ID')"
+                  fi ;;
+                *) err "$CHANNEL takes only the publish, disable and promote actions (got $ACTION)" ;;
               esac
               # staging.yaml writes vars.OTA_CHANNEL (default production) into store builds.
               if [ "$CHANNEL" = production ] && [ -n "$STORE_CHANNEL" ] && [ "$STORE_CHANNEL" != production ]; then
@@ -163,6 +181,7 @@ jobs:
               [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || err "device-test needs base: the test app's build commit as a full SHA (got '$BASE')"
               git merge-base --is-ancestor "$BASE" "$GITHUB_SHA" || err "base $BASE is not an ancestor of $GITHUB_SHA"
               [ -z "$BUILD" ] || err "device-test takes base, not build"
+              [ "$ACTION" != promote ] || err "promote is for production and preview; device-test bundles are never widened"
               if [ "$ACTION" = disable ]; then
                 [ -n "$BUNDLE_ID" ] || err "disable needs bundle_id"
               else
@@ -231,17 +250,17 @@ jobs:
       # (react-native-permissions' setup_permissions), and the fingerprint
       # hashes it, so a bundle built without these steps matches no store build.
       - name: Configure ruby (iOS)
-        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         uses: ruby/setup-ruby@v1
         with:
           working-directory: ./app
 
       - name: Select Xcode 26.3 (iOS)
-        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         run: sudo xcode-select --switch /Applications/Xcode_26.3.app
 
       - name: Install iOS dependencies (iOS)
-        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ matrix.platform == 'ios' && !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         run: |
           echo "export NODE_BINARY=$(which node)" > app/ios/.xcode.env.local
           cd app && USE_HERMES=1 yarn run ios:setup
@@ -252,7 +271,7 @@ jobs:
       # test app's, given as expect_fingerprint. None found: the run stops.
       - name: Expected fingerprint
         id: expected
-        if: ${{ !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         env:
           CHANNEL: ${{ inputs.channel }}
           BUILD: ${{ inputs.build }}
@@ -282,7 +301,7 @@ jobs:
       # device-test: ONLY the test key, which must not be (no fallback). A dry
       # run checks the mapping with the real secrets and writes nothing.
       - name: Signing key
-        if: ${{ inputs.dry_run || !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ inputs.dry_run || !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         env:
           OTA_SIGNING_KEY_PEM: ${{ secrets.OTA_SIGNING_KEY_PEM }}
           OTA_TEST_SIGNING_KEY_PEM: ${{ secrets.OTA_TEST_SIGNING_KEY_PEM }}
@@ -336,6 +355,32 @@ jobs:
           node scripts/ota-deploy.mjs --build "$BUILD" --channel "$CHANNEL" --platform "$PLATFORM" --scope "$SCOPE" \
             --after-native-config --expect-fingerprint "$PLATFORM=$EXPECTED" "${recorded[@]}"
 
+      # production/preview: widen one bundle past ring 0. A dry run only checks.
+      - name: Promote (${{ inputs.channel }})
+        if: ${{ inputs.channel != 'device-test' && inputs.action == 'promote' }}
+        env:
+          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL }}
+          HOT_UPDATER_AUTH_TOKEN: ${{ secrets.HOT_UPDATER_AUTH_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ matrix.platform }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+          TO_RING: ${{ inputs.to_ring }}
+          # Hours a bundle must have been published before it is promoted. A repository
+          # variable, as the dispatch has no room for an eleventh input: 0 while the
+          # audience is beta testers is set there on purpose. Passed raw, so '0' arrives
+          # as '0'; unset arrives empty, and promote.mjs reads that as 24.
+          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          check=()
+          [ "$DRY_RUN" = true ] && check=(--check)
+          if [ "$PLATFORM" = both ]; then
+            target=(--bundles "$BUNDLE_ID")
+          else
+            target=(--platform "$PLATFORM" --bundle-id "$BUNDLE_ID")
+          fi
+          node scripts/ota/promote.mjs --channel "$CHANNEL" "${target[@]}" --to "$TO_RING" --soak-hours "$SOAK_HOURS" "${check[@]}"
+
       # production/preview: withdraw one bundle. A dry run checks it is there.
       - name: Withdraw (${{ inputs.channel }})
         if: ${{ inputs.channel != 'device-test' && inputs.action == 'disable' }}
@@ -370,7 +415,7 @@ jobs:
       # A dry run checks the fingerprint too: what this run would build, against
       # the expected one. A mismatch, or a target build that recorded none, fails.
       - name: Fingerprint check (dry run)
-        if: ${{ inputs.dry_run && !contains(fromJSON('["disable","cleanup"]'), inputs.action) }}
+        if: ${{ inputs.dry_run && !contains(fromJSON('["disable","cleanup","promote"]'), inputs.action) }}
         env:
           OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
           OTA_CHANNEL: ${{ inputs.channel }}
