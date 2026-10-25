@@ -68,23 +68,64 @@ Pass criteria (OTA plan, phase 0):
 
 ## Rings
 
-A bundle is deployed at 0% rollout and then targeted at `ring0` only. Widening
-is a separate step, run by hand with the server's management token; no
-workflow widens. **Nothing is widened past `ring0` until the conditions in
-docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md hold.**
-Widening:
+A bundle is deployed at 0% rollout and then targeted at `ring0` only. A phone
+takes a bundle when its ring is in the bundle's target cohorts. Ring names
+aren't numeric cohorts, so the percentage rollout never applies to them; it
+stays 0.
 
-```sh
-npx hot-updater bundle update <id> --target-cohorts ring0,ring1 -y
-npx hot-updater bundle update <id> --target-cohorts ring0,ring1,ring2 -y
-```
+**Widening** is ota-publish.yml's `promote` action, with `bundle_id`, the
+bundle's own `platform` and `to_ring`, after one ota-approval click per
+promotion (`scripts/ota/promote.mjs`). It refuses unless the server's record
+shows a production or preview bundle that is enabled, has a 0 rollout, and
+sits at the ring below the new one. A minimum time since publish, the soak, is
+the repository variable `OTA_PROMOTE_SOAK_HOURS`, **24 when unset**. While the
+audience is beta testers it is set to 0 on purpose, so a bundle can go from
+ring 0 to everyone on the approval alone. A missing or deleted variable gives
+back the 24 h, never no soak. ring1
+targets ring 0 and 1; ring2 targets all three. **Ring 1 has no members yet** (no
+install can join it until the "Early updates" opt-in ships), so a bundle may go
+from ring 0 straight to ring 2. A dry run checks and changes nothing.
+After the update it re-reads the record and fails the run unless the record
+shows the new ring with a 0 rollout. **A failed check doesn't undo the
+widening:** the bundle may already be wider, so recover with `disable`, not by
+assuming nothing changed. A publish's tier must be `ota` (ota-deploy refuses everything else, `ota-strict`
+included), so a promoted bundle is always one.
 
-Withdrawing a production or preview bundle doesn't need the token by hand:
-ota-publish.yml's `disable` action, with `bundle_id` and the bundle's own
-`platform`, does it after the same approval. It checks that the bundle is on
-that channel and platform, disables it, and checks that it now reads disabled
-(`scripts/ota/withdraw.mjs`). Phones on the bundle go back to the previous one,
-or to the build's own. A dry run checks only that the bundle is there.
+**Withdrawing** a production or preview bundle is the `disable` action, with
+`bundle_id` and the bundle's own `platform`, after the same approval. It checks
+that the bundle is on that channel and platform, disables it, and checks that
+it now reads disabled (`scripts/ota/withdraw.mjs`). It works at any ring. A dry
+run checks only that the bundle is there.
+
+**Store builds stay the main channel.** We keep shipping store builds often;
+OTA supplements them and never replaces them. It carries JavaScript fixes only,
+within store policy: nothing that adds a feature or changes what the app does.
+The tier check enforces the code side (`ota` only). What counts as a fix is the
+publisher's call, and the commit subject is what testers read.
+
+ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to
+replace an existing input or move to a repository variable (as the soak did).
+Past ten, the workflow stops accepting dispatches.
+
+### Pulling an update from everyone
+
+1. **Disable it.** Through ota-publish (`action: disable`, then the approval
+   click), the job takes about 10 minutes after the click (measured 9.5 to
+   12.4 minutes: it installs the workspace before running the CLI). The fast
+   path is the same `npx hot-updater bundle disable <id> -y`, run with the
+   server's management token by whoever holds it: seconds. Check it with a dry
+   run of `disable` on the same id, which must answer "already disabled".
+2. **What a tester sees.** A phone on the disabled bundle is sent back at its
+   next update check, at app start, to the newest enabled bundle older than
+   the disabled one, or to the build's own. It runs that from the following
+   launch on. A bundle that crashes or hangs doesn't wait for this: the
+   watchdog closes a launch that shows nothing for 20 s, hot-updater recovers a
+   bundle that throws, and in both cases the next launch runs the previous
+   bundle. Proven on store builds 267 and 271
+   (docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md).
+3. **Watch.** For 48 hours after a promotion past ring 0, problem reports
+   carry the running bundle in their header (`· update <id>`). Reports naming
+   the new id are read first.
 
 ## Tests
 
@@ -179,7 +220,7 @@ Bump the CLI, `@hot-updater/server` and `@hot-updater/react-native` together
 
 | Name | Kind | Holds | Used by |
 | --- | --- | --- | --- |
-| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off**. Set for store builds from 267 on. Until a bad update recovers without a force-quit on a device (today an iOS update that crashes at load leaves a black screen), no bundle is widened past ring 0 (docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md) | staging.yaml (both store builds) |
+| `OTA_UPDATE_URL` | variable | `https://<OTA_HOST>/hot-updater`; **unset = OTA off**. Set for store builds from 267 on. A bundle reaches ring 0 when published and goes further only through `promote` (Rings, below). The on-device conditions for widening are recorded in docs/plans/release-cadence-and-testing-strategy/2026-10-21-al.md | staging.yaml (both store builds) |
 | `OTA_PUBLIC_KEY` | variable | the loader's RSA public key (PEM; public) | staging.yaml, ota-publish.yml |
 | `OTA_CHANNEL` | variable | the channel, default `production` | staging.yaml, ota-publish.yml |
 | `OTA_SERVER_URL` | variable | `https://<OTA_HOST>` for the publisher | ota-publish.yml |
