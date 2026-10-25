@@ -143,6 +143,9 @@ async function walletCardsForC(d) {
   await tapTestId(d, "Wallet", 10000).catch(() => undefined);
   await sleep(2000);
   for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+  // A pass's title is the community's published name, which can arrive after the card does (CredentialName was the
+  // card's own text): give the first card a few seconds before counting, so a late name is not read as no card.
+  await d.$(walletCardSelector(E.C_NAME)).waitForExist({ timeout: 6000 }).catch(() => undefined);
   return (await d.$$(walletCardSelector(E.C_NAME))).length;
 }
 let walletBefore = -1;

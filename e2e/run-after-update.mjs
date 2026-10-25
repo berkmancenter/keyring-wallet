@@ -85,7 +85,9 @@ try {
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
     const card = d.$(walletCardSelector(process.env.C_NAME || "Keyring Lab Community"));
-    const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
+    // A pass build titles the card with the community's published name, which can arrive after the card: wait a little.
+    const shown = await card.waitForExist({ timeout: 10000 }).then(() => true, () => false);
+    const opened = shown && (await card.click().then(() => true, () => false));
     // The card's details put "Open the community" below the fold: scroll to it (as R7 does).
     const openBtn = opened ? await scrollToTestId(d, "CommunityCardOpenCommunity", 8).catch(() => undefined) : undefined;
     const toC = Boolean(openBtn) && (await openBtn.click().then(() => true, () => false));
