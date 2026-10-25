@@ -2,7 +2,7 @@
  * "Same person?" on a contact's screen: offered when another contact gives the same name, merged only after the person
  * confirms, labelled as their own word (never as confirmed by the other phone), and separated again.
  */
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { container } from 'tsyringe'
 import { useAgent } from '@bifold/react-hooks'
@@ -65,6 +65,25 @@ const open = (issuer: { id: string; name: string }) =>
     wrapper: Container,
   })
 const id = testIdWithKey
+
+/**
+ * The screen's links reads made after the last save (its re-read once a merge or separation has been stored), waited
+ * for and then settled inside act, so what it shows is asserted after that read rather than within a time budget a
+ * loaded CI worker can run out of (CI, 10-25: "expected 4, received 3"). Waiting for the read to be *made* is only a
+ * render away (no I/O); the read itself is awaited, not timed.
+ */
+const reReadSettled = async () => {
+  const readsAfterSave = () => {
+    const saved = Math.max(0, ...store.save.mock.invocationCallOrder)
+    return store.findAllByQuery.mock.invocationCallOrder.flatMap((order, i) =>
+      order > saved ? [store.findAllByQuery.mock.results[i].value] : []
+    )
+  }
+  await waitFor(() => expect(readsAfterSave().length).toBeGreaterThan(0), { timeout: 5000 })
+  await act(async () => {
+    await Promise.all(readsAfterSave())
+  })
+}
 
 describe('Same person? on a contact', () => {
   beforeEach(() => {
@@ -145,7 +164,8 @@ describe('Same person? on a contact', () => {
           [ALICE_THIRD.id, ALICE_FIRST.id],
         ])
       )
-      await waitFor(() => expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(4), { timeout: 5000 })
+      await reReadSettled()
+      expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(4)
       expect(tree.queryByTestId(id('ContactMergeOffer'))).toBeNull()
     })
   })
