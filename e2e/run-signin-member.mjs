@@ -25,9 +25,21 @@ import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 
-/** Tap a button that may sit below a long screen's fold (the review: community, website, identity, browser, …). */
-async function tapBelow(d, key) {
+/**
+ * Tap a button that may sit below a long screen's fold (the review: community, website, identity, browser, …). With
+ * `enabledWithin`, wait that long for the button to report enabled first: SignInContinue stays disabled until the
+ * community's identities are read (about 1–2 s), and a tap on a disabled button is lost without a word.
+ */
+async function tapBelow(d, key, { enabledWithin = 0 } = {}) {
   await scrollToTestId(d, key, 6, { from: 0.7 }).catch(() => undefined);
+  if (enabledWithin) {
+    const el = await waitForTestId(d, key, 15000);
+    const until = Date.now() + enabledWithin;
+    while (!(await el.isEnabled().catch(() => false))) {
+      if (Date.now() > until) throw new Error(`${key} still disabled after ${enabledWithin / 1000} s`);
+      await sleep(500);
+    }
+  }
   await tapTestId(d, key, 15000);
 }
 import { pasteLinkFromHome } from "./lib/flows.js";
@@ -103,7 +115,7 @@ try {
 
   // 3. The phone claims; the portal shows two digits; the person types them.
   await waitForTestId(d, "SignInConfirm", 60000);
-  await tapBelow(d, "SignInContinue");
+  await tapBelow(d, "SignInContinue", { enabledWithin: 20000 });
   let match;
   for (const until = Date.now() + 90000; Date.now() < until && !match; await sleep(2000)) {
     const r = await portal.redeem(req.requestId);
