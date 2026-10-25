@@ -6,7 +6,7 @@
  * Evidence only while it is red against the screens before contact grouping: the linked cases fail with the
  * ContactDetails and relationshipLayers of b71dce9a (this change's first commit, screens unmodified) and pass after.
  */
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 import { container } from 'tsyringe'
 import { useAgent } from '@bifold/react-hooks'
@@ -51,6 +51,14 @@ const Container: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 )
 
 const findRelationship = jest.fn(async () => null)
+// The screen's read of the contact links, kept so a test can wait for exactly that read (and what it renders) before
+// asserting, rather than for a time budget a loaded CI worker can run out of: a linked contact shows one layer until
+// the links land, then all of its relationships' (CI, 10-25: "expected 3, received 1").
+let linksRead: Promise<unknown> = Promise.resolve()
+const linksLoaded = () =>
+  act(async () => {
+    await linksRead
+  })
 const withLinks = (links: { issuerDid: string; contactId: string }[]) =>
   mockUseAgent.mockReturnValue({
     agent: {
@@ -65,7 +73,7 @@ const withLinks = (links: { issuerDid: string; contactId: string }[]) =>
           ],
         }),
       },
-      genericRecords: { findAllByQuery: async () => links.map((content) => ({ content })) },
+      genericRecords: { findAllByQuery: () => (linksRead = Promise.resolve(links.map((content) => ({ content })))) },
     },
   } as any)
 
@@ -86,13 +94,16 @@ describe("a contact's screen grouped by contact", () => {
   test('unlinked: the one card of this relationship', async () => {
     withLinks([])
     const tree = openAliceAgain()
-    await waitFor(() => expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(1))
+    await linksLoaded()
+    // Still one once the (empty) links have been read: the control for the linked case below.
+    expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(1)
   })
 
   test('linked: the cards of both relationships, and the DID and connection of the one the row opened', async () => {
     withLinks([{ issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id }])
     const tree = openAliceAgain()
-    await waitFor(() => expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(3))
+    await linksLoaded()
+    expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(3)
     fireEvent.press(tree.getByTestId(testIdWithKey('ContactRelationshipToggle')))
     expect(tree.getByText(ALICE_AGAIN.id)).toBeTruthy()
     expect(tree.queryByText(ALICE_FIRST.id)).toBeNull()
@@ -114,6 +125,8 @@ describe("a contact's screen grouped by contact", () => {
     // What the app's provider does at the root: read the facts the screen then shares.
     await act(async () => contactFacts.load(mockUseAgent().agent as never, SEVERAL_RELATIONSHIPS as never))
     const tree = openAliceAgain()
+    // The older relationship is checked only once the links say it is this contact's.
+    await linksLoaded()
     expect(await tree.findByTestId('SecureExchangeBadge')).toBeTruthy()
     expect(verifyVrcHardwareEvidence).toHaveBeenCalledWith({ issuer: ALICE_FIRST.id })
   })
