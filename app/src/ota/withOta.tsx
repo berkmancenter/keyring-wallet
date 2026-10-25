@@ -82,24 +82,28 @@ export const withOta = <P extends object>(
       }
       // Read after the file, right before deciding: a flow that began during the
       // read blocks this return.
+      const blockers = otaApplyBlockerReasons()
       const decision = decideApplyOnReturn({
         awayMs,
         stagedBundleId: staged.id,
         stagedUnderKey: staged.stagedUnderKey,
         runningBundleId: HotUpdater.getBundleId(),
-        blockers: otaApplyBlockerReasons(),
+        blockers,
         platform: Platform.OS,
       })
       // Logged every time, so a reader that stops finding the staged update (a
       // hot-updater change to its metadata, or a key composed differently here)
       // shows here instead of failing silently. The key composed here is always
-      // there to compare with the metadata file's, staged or not.
+      // there to compare with the metadata file's, staged or not, and so are the
+      // blockers held at the return, whatever decided it: what a device check
+      // reads to see a flow (a chat draft) still held behind the lock screen.
       log('return', {
         staged: staged.id ?? null,
         awayMinutes: Math.round(awayMs / 60000),
         apply: decision.apply,
         ...(decision.apply ? {} : { reason: decision.reason }),
         isolationKey,
+        blockers,
         ...(staged.stagedUnderKey ? { stagedUnderKey: staged.stagedUnderKey } : {}),
         ...(readError ? { readError } : {}),
       })
