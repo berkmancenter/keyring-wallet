@@ -182,11 +182,9 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      expect(await findByText('Alice Smith')).toBeTruthy()
-      expect(await findByText('Bob Jones')).toBeTruthy()
-      expect(await findByText('Charlie Wilson')).toBeTruthy()
-    })
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(await findByText('Bob Jones')).toBeTruthy()
+    expect(await findByText('Charlie Wilson')).toBeTruthy()
   })
 
   test('Groups multiple credentials from same issuer', async () => {
@@ -226,14 +224,12 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      // Alice should appear only once despite having 3 credentials
-      const aliceElements = queryAllByText('Alice Smith')
-      expect(aliceElements).toHaveLength(1)
+    // Bob should appear once (found first: the list has rendered by then)
+    expect(await findByText('Bob Jones')).toBeTruthy()
 
-      // Bob should also appear once
-      expect(await findByText('Bob Jones')).toBeTruthy()
-    })
+    // Alice should appear only once despite having 3 credentials
+    const aliceElements = queryAllByText('Alice Smith')
+    expect(aliceElements).toHaveLength(1)
   })
 
   test('Sorts contacts alphabetically', async () => {
@@ -305,20 +301,18 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      const contactElement = await findByText('Alice Smith')
-      fireEvent(contactElement, 'press')
+    const contactElement = await findByText('Alice Smith')
+    fireEvent(contactElement, 'press')
 
-      expect(navigation.navigate).toBeCalledWith('Contact Details', {
-        contact: expect.objectContaining({
-          issuer: expect.objectContaining({
-            id: TEST_CONTACTS.alice.issuer.id,
-            name: TEST_CONTACTS.alice.issuer.name,
-            email: TEST_CONTACTS.alice.issuer.email,
-            organization: TEST_CONTACTS.alice.issuer.organization,
-          }),
+    expect(navigation.navigate).toBeCalledWith('Contact Details', {
+      contact: expect.objectContaining({
+        issuer: expect.objectContaining({
+          id: TEST_CONTACTS.alice.issuer.id,
+          name: TEST_CONTACTS.alice.issuer.name,
+          email: TEST_CONTACTS.alice.issuer.email,
+          organization: TEST_CONTACTS.alice.issuer.organization,
         }),
-      })
+      }),
     })
   })
 
@@ -354,11 +348,9 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      // An unnamed contact is said to be one — never a piece of its DID (#12).
-      expect(await findByText('ContactDetails.UnnamedContact')).toBeTruthy()
-      expect(queryByText(new RegExp(unknownIssuerDid.slice(-8)))).toBeNull()
-    })
+    // An unnamed contact is said to be one — never a piece of its DID (#12).
+    expect(await findByText('ContactDetails.UnnamedContact')).toBeTruthy()
+    expect(queryByText(new RegExp(unknownIssuerDid.slice(-8)))).toBeNull()
   })
 
   test('Filters out non-DTG credentials', async () => {
@@ -397,13 +389,11 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      // Alice (DTG) should appear
-      expect(await findByText('Alice Smith')).toBeTruthy()
+    // Alice (DTG) should appear
+    expect(await findByText('Alice Smith')).toBeTruthy()
 
-      // Bob (non-DTG) should not appear
-      expect(queryByText('Bob Jones')).toBeNull()
-    })
+    // Bob (non-DTG) should not appear
+    expect(queryByText('Bob Jones')).toBeNull()
   })
 
   test('Uses most recent credential data for contact display', async () => {
@@ -448,11 +438,9 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      // Should display the newer name
-      expect(await findByText('Alice Smith')).toBeTruthy()
-      expect(queryByText('Old Name')).toBeNull()
-    })
+    // Should display the newer name
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(queryByText('Old Name')).toBeNull()
   })
 
   test('Displays a contact photo when their RCard carries one', async () => {
@@ -490,11 +478,9 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      expect(await findByText('Alice Smith')).toBeTruthy()
-      const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
-      expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
-    })
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
+    expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
   })
 
   test('Draws each contact with the registered contact card', async () => {
@@ -529,11 +515,9 @@ describe('ListContacts Screen', () => {
       </CustomBasicAppContext>
     )
 
-    await waitFor(async () => {
-      expect(await findByText('Custom: Alice Smith')).toBeTruthy()
-      // The default row is gone, not merely joined by the override.
-      expect(queryByText('Alice Smith')).toBeNull()
-    })
+    expect(await findByText('Custom: Alice Smith')).toBeTruthy()
+    // The default row is gone, not merely joined by the override.
+    expect(queryByText('Alice Smith')).toBeNull()
   })
 
   test('Falls back to the generic icon when the contact has no photo', async () => {
@@ -561,10 +545,8 @@ describe('ListContacts Screen', () => {
       </BasicAppContext>
     )
 
-    await waitFor(async () => {
-      expect(await findByText('Alice Smith')).toBeTruthy()
-      expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
-    })
+    expect(await findByText('Alice Smith')).toBeTruthy()
+    expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
   })
 
   describe('locality-confirmed badge', () => {
@@ -597,10 +579,8 @@ describe('ListContacts Screen', () => {
         </BasicAppContext>
       )
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
     })
 
     it('does not show the badge when the VWC declined locality', async () => {
@@ -632,10 +612,8 @@ describe('ListContacts Screen', () => {
         </BasicAppContext>
       )
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
     })
 
     it('does not show the badge for a contact with no witness credentials at all', async () => {
@@ -666,10 +644,8 @@ describe('ListContacts Screen', () => {
         </BasicAppContext>
       )
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
     })
   })
 
@@ -706,21 +682,17 @@ describe('ListContacts Screen', () => {
       // ceremony's verified mark: the contact is listed, unbadged.
       const { findByText, queryByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, false))
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(queryByTestId('WitnessVerifiedBadge')).toBeNull()
-        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('WitnessVerifiedBadge')).toBeNull()
+      expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
     })
 
     it('shows both badges for the same credential once the ceremony verified it', async () => {
       const { findByText, findByTestId } = renderWith(createLocalityVwc(TEST_CONTACTS.alice.issuer.id, true, true))
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(await findByTestId('WitnessVerifiedBadge')).toBeTruthy()
-        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(await findByTestId('WitnessVerifiedBadge')).toBeTruthy()
+      expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
     })
   })
 })
