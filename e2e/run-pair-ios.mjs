@@ -9,6 +9,15 @@
  *   pair-share-link-connects  A leaves the code screen; B opens the link through iOS (simctl openurl, as a tapped link);
  *                             the relationship exchange completes and each lists the other (the VRC gate check)
  *
+ * Emoji picker (bifold #574; rich messaging Step 2, W2). Each side reads the other's change from its own screen:
+ *   pair-react-picker         B sends A a message; A long-presses it, opens the full picker from the reaction bar's
+ *                             "+", searches "cat" and chooses 🐱: B's message shows "🐱 1" on B
+ *   pair-react-same           B chooses 🐱 from the picker on the same message: both read "🐱 2, including you"
+ *   pair-react-remove         A chooses 🐱 again from the picker, which removes A's reaction: B reads
+ *                             "🐱 1, including you" and A reads "🐱 1"
+ *   pair-emoji-composer       A types text, adds 😀 from the composer's emoji button and sends: B shows the text with
+ *                             the emoji
+ *
  * Message-wake tap (bifold #452; tap path only: the mediator wake isn't exercised. The webhook lives only on the shared
  * mediator, which a gate build must not use; the real wake is proven on real phones by the post-build device check):
  *   pair-wake-opens-chat      B sends A a message while A is in the background; a wake-shaped notification (the push
@@ -36,7 +45,15 @@ const B = { udid: process.env.B_UDID, name: process.env.B_NAME, first: "Bob", la
 // The wake needs A and B related: B writes to A from its chat.
 const rows = createRows({
   label: "pair-ios",
-  needs: { "pair-share-link-connects": ["pair-share-link-made"], "pair-wake-opens-chat": ["pair-share-link-connects"], "pair-wake-no-unread-list": ["pair-wake-opens-chat"] },
+  needs: {
+    "pair-share-link-connects": ["pair-share-link-made"],
+    "pair-react-picker": ["pair-share-link-connects"],
+    "pair-react-same": ["pair-react-picker"],
+    "pair-react-remove": ["pair-react-same"],
+    "pair-emoji-composer": ["pair-share-link-connects"],
+    "pair-wake-opens-chat": ["pair-share-link-connects"],
+    "pair-wake-no-unread-list": ["pair-wake-opens-chat"],
+  },
 });
 // Off when the build names no push gateway: no notification permission, so no banner to tap (pair-ios.sh).
 const WAKE_NOT_RUN = process.env.PAIR_WAKE === "off" ? "NOT RUN (no push permission in gate builds): #452 rests on its unit and real-navigator tests and the device check" : undefined;
@@ -77,6 +94,49 @@ async function sendChat(d, text) {
   const send = await d.$("~GC_SEND_TOUCHABLE"); // gifted-chat Send.js
   await send.click();
   await sleep(2000);
+}
+
+/** From the Contacts list, open `peer`'s chat. */
+async function openChatWith(d, peer) {
+  await returnToContacts(d);
+  await (await d.$(`-ios predicate string:label CONTAINS "${peer.first} ${peer.last}" AND visible == 1`)).click();
+  for (const until = Date.now() + 15000; Date.now() < until; await sleep(1000)) if (await onChat(d, peer)) return;
+  throw new Error(`driver: ${peer.first}'s chat did not open`);
+}
+
+/** A message bubble's text, waited for: a received message arrives through the mediator. */
+async function waitForText(d, text, timeout = 60000) {
+  const el = await d.$(`-ios predicate string:label CONTAINS "${text}" AND visible == 1`);
+  await el.waitForExist({ timeout }).catch(() => undefined);
+  return (await el.isExisting()) ? el : undefined;
+}
+
+/** Long-press a message (the actions sheet, ChatIds.actions), then "+" on its reaction bar for the full picker. */
+async function openReactionPicker(d, text) {
+  const bubble = await waitForText(d, text, 15000);
+  if (!bubble) throw new Error(`driver: no message "${text}" to react to`);
+  await d.execute("mobile: touchAndHold", { elementId: bubble.elementId, duration: 1.2 });
+  await tapTestId(d, "ChatReactionBarMore", 10000);
+  if (!(await existsTestId(d, "EmojiPickerSheet", 10000))) throw new Error("driver: the reaction bar's + did not open the picker");
+}
+
+/** In the open picker: search, then choose by code points (EmojiPicker.ids.ts's EmojiPickerEmoji_<code points>). */
+async function chooseEmoji(d, query, codePoints) {
+  await (await byTestId(d, "EmojiPickerSearch")).setValue(query);
+  await tapTestId(d, `EmojiPickerEmoji_${codePoints}`, 10000);
+}
+
+/**
+ * The reactions under the one reacted message, as its accessibility label reads (ChatMessage.tsx's MessageReactions:
+ * "🐱 2, including you"), polled until it says `want` or the time is up. Returns what it last read.
+ */
+async function reactionsReach(d, want, timeout = 60000) {
+  let got = "";
+  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) {
+    got = (await existsTestId(d, "ChatMessageReactions", 1000)) ? ((await byTestId(d, "ChatMessageReactions").getAttribute("label")) ?? "") : "";
+    if (got === want) break;
+  }
+  return got;
 }
 
 let a, b;
@@ -150,6 +210,55 @@ try {
       await acceptRelationshipProposalOnEitherSide(a, b);
       await Promise.all([assertVrcReceived(a, `${B.first} ${B.last}`), assertVrcReceived(b, `${A.first} ${A.last}`)]);
       return { ok: true, detail: `B opened A's shared link with A off the code screen; each lists the other (${A.first} ${A.last} ↔ ${B.first} ${B.last}) (iOS; Android unproven)` };
+    });
+
+    // Emoji picker: reactions chosen from the full picker, and an emoji typed in from the composer's button. Each verdict
+    // is read on the other phone. Before rows that set a disappearing-message timer: a timer applies only to messages
+    // sent after it, so these stay.
+    const REACT_TO = "gate: react to this";
+    await rows.row("pair-react-picker", async () => {
+      await Promise.all([openChatWith(a, B), openChatWith(b, A)]);
+      await sendChat(b, REACT_TO);
+      if (!(await waitForText(a, REACT_TO))) return { ok: false, detail: `B's "${REACT_TO}" never reached A` };
+      // Nothing under it yet, so the reading below is the reaction's doing.
+      const before = await reactionsReach(b, "", 2000);
+      await openReactionPicker(a, REACT_TO);
+      await chooseEmoji(a, "cat", "1F431");
+      const closed = !(await existsTestId(a, "EmojiPickerSheet", 3000));
+      const onB = await reactionsReach(b, "🐱 1");
+      await screenshot(b, "pair-react-picker").catch(() => undefined);
+      return { ok: before === "" && closed && onB === "🐱 1", detail: `under B's message before: "${before}" · A's picker closed on choosing ${closed} · B reads "${onB}" (want "🐱 1")` };
+    });
+    await rows.row("pair-react-same", async () => {
+      await openReactionPicker(b, REACT_TO);
+      await chooseEmoji(b, "cat", "1F431");
+      const want = "🐱 2, including you";
+      const [onA, onB] = await Promise.all([reactionsReach(a, want), reactionsReach(b, want)]);
+      return { ok: onA === want && onB === want, detail: `A reads "${onA}" · B reads "${onB}" (want "${want}" on both)` };
+    });
+    await rows.row("pair-react-remove", async () => {
+      // Choosing the emoji this phone already reacted with removes it, as tapping it on the bar does (Chat.tsx reactTo).
+      await openReactionPicker(a, REACT_TO);
+      await chooseEmoji(a, "cat", "1F431");
+      const [onA, onB] = await Promise.all([reactionsReach(a, "🐱 1"), reactionsReach(b, "🐱 1, including you")]);
+      await screenshot(b, "pair-react-remove").catch(() => undefined);
+      return { ok: onA === "🐱 1" && onB === "🐱 1, including you", detail: `A reads "${onA}" (want "🐱 1") · B reads "${onB}" (want "🐱 1, including you")` };
+    });
+    await rows.row("pair-emoji-composer", async () => {
+      await openChatWith(a, B);
+      const input = await a.$("-ios class chain:**/XCUIElementTypeTextView");
+      await input.waitForExist({ timeout: 15000 });
+      await input.setValue("gate: picked ");
+      await tapTestId(a, "ChatComposerEmojiButton", 10000);
+      if (!(await existsTestId(a, "EmojiPickerSheet", 10000))) return { ok: false, detail: "the composer's emoji button did not open the picker" };
+      await chooseEmoji(a, "grinning", "1F600");
+      // The composer's sheet stays open for more; it closes only when asked.
+      const stayed = await existsTestId(a, "EmojiPickerSheet", 2000);
+      await tapTestId(a, "EmojiPickerSheetClose", 5000);
+      await (await a.$("~GC_SEND_TOUCHABLE")).click();
+      const onB = Boolean(await waitForText(b, "gate: picked 😀"));
+      await screenshot(b, "pair-emoji-composer").catch(() => undefined);
+      return { ok: stayed && onB, detail: `the sheet stayed open after a choice ${stayed} · B shows "gate: picked 😀" ${onB}` };
     });
 
     // Message-wake tap: B writes while A is away, then the wake is tapped. The verdict is the screen A lands on: the
