@@ -2,6 +2,7 @@ import type { DidCommBasicMessageRecord } from '@credo-ts/didcomm'
 import { useBasicMessages } from '@bifold/react-hooks'
 import { useMemo } from 'react'
 
+import { usePendingContinuityConnections } from '../modules/vrc/contacts/useContinuityPrompt'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { isConnectionExcludedFromNotifications, useExclusionVersion } from './notifications'
 import { isProtocolMessage } from '../utils/protocolMessage'
@@ -22,10 +23,13 @@ export function isUnreadChatMessage(msg: DidCommBasicMessageRecord): boolean {
 /**
  * Returns a map of connectionId → unseen message count,
  * plus the total unseen count across all non-excluded connections.
+ * A continuity question ("Is this you?") waiting in a chat counts as one
+ * unread there until it is answered.
  */
 export const useUnreadMessages = (): { unreadByConnection: Record<string, number>; totalUnread: number } => {
   const { records: basicMessages } = useBasicMessages()
   const exclusionVersion = useExclusionVersion()
+  const continuityPending = usePendingContinuityConnections()
 
   return useMemo(() => {
     const unreadByConnection: Record<string, number> = {}
@@ -37,9 +41,14 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
         totalUnread++
       }
     }
+    for (const connectionId of continuityPending) {
+      if (isConnectionExcludedFromNotifications(connectionId)) continue
+      unreadByConnection[connectionId] = (unreadByConnection[connectionId] ?? 0) + 1
+      totalUnread++
+    }
 
     return { unreadByConnection, totalUnread }
     // exclusionVersion intentionally triggers recomputation when the exclusion list changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [basicMessages, exclusionVersion])
+  }, [basicMessages, exclusionVersion, continuityPending])
 }

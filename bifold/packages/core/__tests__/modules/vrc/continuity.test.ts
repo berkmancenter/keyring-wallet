@@ -12,7 +12,9 @@ import {
   ASK_SHOWN_FOR,
   ATTEMPTS_PER_CONNECTION_PER_HOUR,
   CONTINUITY_ASK,
+  CONTINUITY_PROMPT,
   PROMPTS_PER_HOUR,
+  PROMPT_KEPT_FOR,
   askToConfirm,
   askedRecently,
   continuityEvents,
@@ -22,6 +24,7 @@ import {
   isConfirmedByPeer,
   resetContinuityLimits,
   respondToContinuityPrompt,
+  restoreContinuityPrompts,
 } from '../../../src/modules/vrc/contacts/continuity'
 import { SPEC, TYPE_URI } from '../../../src/modules/vrc/contacts/continuitySpec'
 import { TrustTasksService, respondWith } from '../../../src/modules/trust-tasks/services/TrustTasksService'
@@ -235,6 +238,104 @@ describe('answering a continuity check', () => {
     }
     continuityPromptStore.removeAllListeners('prompt')
     expect(shown).toHaveLength(PROMPTS_PER_HOUR)
+  })
+})
+
+describe('a prompt kept on the phone until it is answered', () => {
+  const kept = (store: ReturnType<typeof memoryGenericRecords>) =>
+    store.records.filter((record) => record.tags.recordType === CONTINUITY_PROMPT)
+
+  test('a prompt that opens is kept, with its connection and challenge, and when it arrived', async () => {
+    const { agent, store } = agentWith()
+    await handleContinuityRequest(agent, pipeline, request('conn-new', box('did:peer:me-old')), inbound('conn-new'))
+    expect(kept(store)).toHaveLength(1)
+    expect(kept(store)[0].tags.connectionId).toBe('conn-new')
+    expect(kept(store)[0].content.challenge).toBe(challengeFor('did:peer:me-old'))
+    expect(Number.isFinite(Date.parse(String(kept(store)[0].content.receivedAt)))).toBe(true)
+  })
+
+  test('after a restart it is asked again, and Confirm sends the challenge and lets the record go', async () => {
+    const { agent, store } = agentWith()
+    await handleContinuityRequest(agent, pipeline, request('conn-new', box('did:peer:me-old')), inbound('conn-new'))
+    resetContinuityLimits() // the app's memory, gone with a restart
+    expect(continuityPromptStore.has('conn-new')).toBe(false)
+    await restoreContinuityPrompts(agent)
+    expect(continuityPromptStore.get('conn-new')?.challenge).toBe(challengeFor('did:peer:me-old'))
+    await respondToContinuityPrompt(agent, 'conn-new', true)
+    expect(mockSend).toHaveBeenCalledTimes(1)
+    expect(mockSend.mock.calls[0][2].payload).toEqual({ challenge: challengeFor('did:peer:me-old') })
+    expect(kept(store)).toHaveLength(0)
+  })
+
+  test('a Confirm that fails to send loses nothing: the prompt and its record stay, and answering again sends', async () => {
+    const { agent, store } = agentWith()
+    await handleContinuityRequest(agent, pipeline, request('conn-new', box('did:peer:me-old')), inbound('conn-new'))
+    mockSend.mockRejectedValueOnce(new Error('no route to the mediator'))
+    await expect(respondToContinuityPrompt(agent, 'conn-new', true)).rejects.toThrow('no route')
+    expect(continuityPromptStore.has('conn-new')).toBe(true)
+    expect(kept(store)).toHaveLength(1)
+    await respondToContinuityPrompt(agent, 'conn-new', true)
+    expect(mockSend).toHaveBeenCalledTimes(2)
+    expect(continuityPromptStore.has('conn-new')).toBe(false)
+    expect(kept(store)).toHaveLength(0)
+  })
+
+  test('Not now lets the record go too, so it is not asked again after a restart', async () => {
+    const { agent, store } = agentWith()
+    await handleContinuityRequest(agent, pipeline, request('conn-new', box('did:peer:me-old')), inbound('conn-new'))
+    await respondToContinuityPrompt(agent, 'conn-new', false)
+    expect(kept(store)).toHaveLength(0)
+    resetContinuityLimits()
+    await restoreContinuityPrompts(agent)
+    expect(continuityPromptStore.has('conn-new')).toBe(false)
+    expect(mockSend).not.toHaveBeenCalled()
+  })
+
+  test('a kept prompt older than the asker waits for is removed, not asked', async () => {
+    const { agent, store } = agentWith()
+    const old = new Date(Date.now() - PROMPT_KEPT_FOR - 1000).toISOString()
+    const fresh = new Date().toISOString()
+    for (const [connectionId, receivedAt] of [
+      ['conn-old', old],
+      ['conn-else', fresh],
+    ]) {
+      store.records.push({
+        id: `kept-${connectionId}`,
+        content: { connectionId, asker: '', earlier: '', request: {}, challenge: 'c', receivedAt },
+        tags: { recordType: CONTINUITY_PROMPT, connectionId },
+      })
+    }
+    await restoreContinuityPrompts(agent)
+    // The fresh one is the positive control: restoring works, the old one is the one left out.
+    expect(continuityPromptStore.has('conn-else')).toBe(true)
+    expect(continuityPromptStore.has('conn-old')).toBe(false)
+    expect(kept(store).map((record) => record.tags.connectionId)).toEqual(['conn-else'])
+  })
+
+  test('a prompt that has lapsed in memory no longer holds its connection: a new request is opened', async () => {
+    const { agent } = agentWith()
+    continuityPromptStore.set({
+      connectionId: 'conn-new',
+      asker: '',
+      earlier: '',
+      request: {},
+      challenge: 'stale',
+      receivedAt: new Date(Date.now() - PROMPT_KEPT_FOR - 1000).toISOString(),
+    })
+    await handleContinuityRequest(agent, pipeline, request('conn-new', box('did:peer:me-old')), inbound('conn-new'))
+    expect(continuityPromptStore.get('conn-new')?.challenge).toBe(challengeFor('did:peer:me-old'))
+  })
+
+  test('a kept record without a challenge is removed, not asked', async () => {
+    const { agent, store } = agentWith()
+    store.records.push({
+      id: 'broken',
+      content: { connectionId: 'conn-new', receivedAt: new Date().toISOString() },
+      tags: { recordType: CONTINUITY_PROMPT, connectionId: 'conn-new' },
+    })
+    await restoreContinuityPrompts(agent)
+    expect(continuityPromptStore.has('conn-new')).toBe(false)
+    expect(kept(store)).toHaveLength(0)
   })
 })
 

@@ -216,6 +216,40 @@ describe('resolving a tap', () => {
     })
   })
 
+  describe('with a continuity question ("Is this you?") waiting', () => {
+    it('opens the chat that holds it, ahead of newer plain unread chat', async () => {
+      const { d, calls } = deps({ continuityPending: () => 'alice' })
+      await expect(openMessageWake(d)).resolves.toBe('continuity')
+      expect(calls).toEqual(['list', 'pickup', 'chat:alice'])
+      expect(d.newestUnread).not.toHaveBeenCalled()
+    })
+
+    it('the question arriving during the pickup ends the wait at once and opens its chat', async () => {
+      let ask: () => void = () => undefined
+      let waiting: string | undefined
+      const handle = deps({
+        nextContinuityPrompt: jest.fn(() => ({
+          arrived: new Promise<void>((resolve) => (ask = resolve)),
+          cancel: jest.fn(),
+        })),
+        continuityPending: () => waiting,
+      })
+      handle.d.pickUpNow = jest.fn(() => {
+        waiting = 'alice'
+        ask()
+        return new Promise<void>(() => undefined)
+      })
+      await expect(openMessageWake(handle.d)).resolves.toBe('continuity')
+      expect(handle.d.openChat).toHaveBeenCalledWith('alice')
+    })
+
+    it('a proposal waiting for consent still comes first', async () => {
+      const { d, calls } = deps({ consentPending: () => true, continuityPending: () => 'alice' })
+      await expect(openMessageWake(d)).resolves.toBe('consent')
+      expect(calls).toEqual(['list', 'pickup'])
+    })
+  })
+
   it('stays on the list when nothing is unread', async () => {
     const { d, calls } = deps({ newestUnread: jest.fn(async () => undefined) })
     await expect(openMessageWake(d)).resolves.toBe('list')

@@ -7,8 +7,13 @@ import { useAgent } from '@bifold/react-hooks'
 import { act } from '@testing-library/react-native'
 
 import ContinuityCheckModal from '../../../src/modules/vrc/components/ContinuityCheckModal'
-import { continuityPromptStore, resetContinuityLimits } from '../../../src/modules/vrc/contacts/continuity'
+import {
+  CONTINUITY_PROMPT,
+  continuityPromptStore,
+  resetContinuityLimits,
+} from '../../../src/modules/vrc/contacts/continuity'
 import { testIdWithKey } from '../../../src/utils/testable'
+import { memoryGenericRecords } from './fixtures/memoryGenericRecords'
 
 jest.mock('@bifold/react-hooks')
 const mockRespond = jest.fn(async (..._args: unknown[]) => undefined)
@@ -27,14 +32,32 @@ jest.mock('react-i18next', () => {
 })
 
 const mockUseAgent = useAgent as jest.MockedFunction<typeof useAgent>
-const agent = { config: { logger: { warn: jest.fn() } } }
-const prompt = { connectionId: 'conn-new', asker: 'Bob Jones', earlier: 'Bob J.', request: {}, challenge: 'abc' }
+let agent: { config: { logger: { warn: jest.Mock } }; genericRecords: ReturnType<typeof memoryGenericRecords> }
+const prompt = {
+  connectionId: 'conn-new',
+  asker: 'Bob Jones',
+  earlier: 'Bob J.',
+  request: {},
+  challenge: 'abc',
+  receivedAt: new Date().toISOString(),
+}
 
 describe('ContinuityCheckModal', () => {
   beforeEach(() => {
     resetContinuityLimits()
     mockRespond.mockClear()
+    agent = { config: { logger: { warn: jest.fn() } }, genericRecords: memoryGenericRecords() }
     mockUseAgent.mockReturnValue({ agent } as any)
+  })
+
+  test('a prompt kept on the phone (it arrived before a restart) is asked again once the agent is up', async () => {
+    agent.genericRecords.records.push({
+      id: 'kept',
+      content: { ...prompt },
+      tags: { recordType: CONTINUITY_PROMPT, connectionId: prompt.connectionId },
+    })
+    const tree = render(<ContinuityCheckModal />)
+    expect(await tree.findByTestId(testIdWithKey('ContinuityCheckBody'))).toBeTruthy()
   })
 
   test('nothing without a prompt', () => {

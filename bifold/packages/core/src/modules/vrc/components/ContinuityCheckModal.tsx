@@ -3,7 +3,8 @@
  * challenge opened with the key of one of this phone's EARLIER relationships: they are asking to show the two as one
  * contact. Confirm sends the challenge back and nothing else; Not now sends nothing.
  *
- * Self-contained: listens to continuityPromptStore, mounted once at the root beside RelationshipProposalModal.
+ * Self-contained: listens to continuityPromptStore, mounted once at the root beside RelationshipProposalModal. Once
+ * the agent is up it brings back the prompts kept on the phone, so one that arrived before a restart is still asked.
  */
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -16,7 +17,12 @@ import SafeAreaModal from '../../../components/modals/SafeAreaModal'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
-import { continuityPromptStore, respondToContinuityPrompt, type ContinuityPrompt } from '../contacts/continuity'
+import {
+  continuityPromptStore,
+  respondToContinuityPrompt,
+  restoreContinuityPrompts,
+  type ContinuityPrompt,
+} from '../contacts/continuity'
 
 const ContinuityCheckModal: React.FC = () => {
   const { agent } = useAgent()
@@ -24,6 +30,15 @@ const ContinuityCheckModal: React.FC = () => {
   const { t } = useTranslation()
   const [prompt, setPrompt] = useState<ContinuityPrompt | undefined>(() => continuityPromptStore.getAny())
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!agent) return
+    restoreContinuityPrompts(agent).catch((error: unknown) =>
+      agent.config.logger.warn(
+        `[VRC:Contacts] could not restore continuity prompts: ${(error as Error)?.message ?? error}`
+      )
+    )
+  }, [agent])
 
   useEffect(() => {
     const refresh = () => setPrompt(continuityPromptStore.getAny())

@@ -14,6 +14,10 @@
  * On Not now, nothing is sent. Requests are limited before anything is stored or opened: one pending prompt per
  * connection, a few attempts per connection per hour, a few prompts per hour in all.
  *
+ * A prompt that opened is kept on the phone until it is answered, or for as long as the asker shows its ask as asked:
+ * a request that arrives while the app is closed, or just before it is, still waits in that contact's chat and in the
+ * prompt, instead of being lost with the app's memory (the request itself is never processed twice).
+ *
  * @module vrc/contacts/continuity
  */
 import { utils, type Agent } from '@credo-ts/core'
@@ -36,6 +40,10 @@ const HOUR = 60 * 60 * 1000
 export const ASK_SHOWN_FOR = 24 * HOUR
 export const ATTEMPTS_PER_CONNECTION_PER_HOUR = 5
 export const PROMPTS_PER_HOUR = 3
+/** genericRecords recordType of a prompt waiting for this phone's person. */
+export const CONTINUITY_PROMPT = 'keyring.contact-continuity-prompt'
+/** As long as the asking phone shows its ask as asked; after that its question has lapsed there too. */
+export const PROMPT_KEPT_FOR = ASK_SHOWN_FOR
 
 /** The ceremony module, reached lazily: it registers this type, so importing it at the top would be a cycle. */
 function ceremony(): typeof import('../../trust-tasks/ceremony') {
@@ -182,17 +190,42 @@ export interface ContinuityPrompt {
   earlier: string
   request: Record<string, unknown>
   challenge: string
+  /** When this phone opened it (ISO). */
+  receivedAt: string
+}
+
+const lapsed = (prompt: ContinuityPrompt, now = Date.now()) => {
+  const at = Date.parse(prompt.receivedAt)
+  return !Number.isFinite(at) || now - at >= PROMPT_KEPT_FOR
 }
 
 class ContinuityPromptStore extends EventEmitter {
   private prompts = new Map<string, ContinuityPrompt>()
 
+  /** A prompt waiting on this connection that has not lapsed; a lapsed one is let go here. */
+  public get(connectionId: string): ContinuityPrompt | undefined {
+    const prompt = this.prompts.get(connectionId)
+    if (prompt && lapsed(prompt)) {
+      this.take(connectionId)
+      return undefined
+    }
+    return prompt
+  }
+
   public has(connectionId: string): boolean {
-    return this.prompts.has(connectionId)
+    return this.get(connectionId) !== undefined
   }
 
   public getAny(): ContinuityPrompt | undefined {
-    return this.prompts.values().next().value
+    return this.all()[0]
+  }
+
+  /** Every prompt still waiting, newest first. */
+  public all(): ContinuityPrompt[] {
+    return [...this.prompts.keys()]
+      .map((connectionId) => this.get(connectionId))
+      .filter((prompt): prompt is ContinuityPrompt => prompt !== undefined)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
   }
 
   public set(prompt: ContinuityPrompt): void {
@@ -275,23 +308,69 @@ export async function handleContinuityRequest(
 
   const credentials = await agent.w3cCredentials.getAll()
   const earlier = relationships.find((record) => record.myRelationshipDid === opened.openedWith)
-  continuityPromptStore.set({
+  const prompt: ContinuityPrompt = {
     connectionId,
     asker: resolveContactDisplayInfo(credentials, current.counterpartyRelationshipDid).name ?? '',
     earlier: resolveContactDisplayInfo(credentials, earlier?.counterpartyRelationshipDid ?? '').name ?? '',
     request: document,
     challenge: opened.challenge,
+    receivedAt: new Date(now).toISOString(),
+  }
+  continuityPromptStore.set(prompt)
+  await keepPrompt(agent, prompt).catch((error: unknown) =>
+    agent.config?.logger?.warn(
+      `[VRC:Contacts] could not keep a continuity prompt: ${(error as Error)?.message ?? error}`
+    )
+  )
+}
+
+async function forgetPrompt(agent: Pick<Agent, 'genericRecords'>, connectionId: string): Promise<void> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: CONTINUITY_PROMPT, connectionId })) ?? []
+  for (const record of records) await agent.genericRecords.deleteById(record.id)
+}
+
+async function keepPrompt(agent: Pick<Agent, 'genericRecords'>, prompt: ContinuityPrompt): Promise<void> {
+  await forgetPrompt(agent, prompt.connectionId)
+  await agent.genericRecords.save({
+    content: { ...prompt },
+    tags: { recordType: CONTINUITY_PROMPT, connectionId: prompt.connectionId },
   })
+}
+
+/**
+ * Bring back the prompts kept on this phone (at start), so one that arrived before a restart still waits. A lapsed
+ * one is removed, not shown.
+ */
+export async function restoreContinuityPrompts(agent: Pick<Agent, 'genericRecords'>): Promise<void> {
+  const records = (await agent.genericRecords.findAllByQuery({ recordType: CONTINUITY_PROMPT })) ?? []
+  for (const record of records) {
+    const prompt = record.content as unknown as ContinuityPrompt
+    if (!prompt?.connectionId || !prompt.challenge || lapsed(prompt)) {
+      await agent.genericRecords.deleteById(record.id)
+      continue
+    }
+    if (!continuityPromptStore.has(prompt.connectionId)) continuityPromptStore.set(prompt)
+  }
 }
 
 /** The person's answer to a continuity prompt: on Confirm the challenge goes back, and nothing else; otherwise nothing. */
 export async function respondToContinuityPrompt(agent: Agent, connectionId: string, confirm: boolean): Promise<void> {
-  const prompt = continuityPromptStore.take(connectionId)
-  if (!prompt || !confirm) return
-  const response = respondWith(prompt.request as never, utils.uuid(), { challenge: prompt.challenge }, () =>
-    new Date().toISOString()
-  ) as unknown as Record<string, unknown>
-  const { getTrustTasksService, sendTrustTaskDocument } = ceremony()
-  await getTrustTasksService(agent).retain(agent.context, response, 'response', connectionId)
-  await sendTrustTaskDocument(agent, connectionId, response)
+  const prompt = continuityPromptStore.get(connectionId)
+  if (prompt && confirm) {
+    // Sent first: if sending fails, the prompt and its record stay, and the person can answer again. The request is
+    // never delivered twice, so an answer lost here could not be given later.
+    const response = respondWith(prompt.request as never, utils.uuid(), { challenge: prompt.challenge }, () =>
+      new Date().toISOString()
+    ) as unknown as Record<string, unknown>
+    const { getTrustTasksService, sendTrustTaskDocument } = ceremony()
+    await getTrustTasksService(agent).retain(agent.context, response, 'response', connectionId)
+    await sendTrustTaskDocument(agent, connectionId, response)
+  }
+  continuityPromptStore.take(connectionId)
+  // A record left behind by a failed delete lapses with the ask; answering it again finds no ask on the other phone.
+  await forgetPrompt(agent, connectionId).catch((error: unknown) =>
+    agent.config?.logger?.warn(
+      `[VRC:Contacts] could not drop a continuity prompt: ${(error as Error)?.message ?? error}`
+    )
+  )
 }

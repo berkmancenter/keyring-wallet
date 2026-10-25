@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "df3363179ea67b581c885dab7aa41e3b0926b5c5",
+  "generatedFrom": "69d9b07b652929096dc44cb22edb30b11c66f7ed",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -339,6 +339,9 @@
     "ContinuityCheckBody": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
     "ContinuityConfirm": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
     "ContinuityNotNow": ["src/modules/vrc/components/ContinuityCheckModal.tsx"],
+    "ContinuityRequestCard": ["src/modules/vrc/components/ContinuityRequestCard.tsx"],
+    "ContinuityRequestConfirm": ["src/modules/vrc/components/ContinuityRequestCard.tsx"],
+    "ContinuityRequestNotNow": ["src/modules/vrc/components/ContinuityRequestCard.tsx"],
     "CopyToClipboard": ["src/screens/JSONDetails.tsx"],
     "CreateIdentityButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "CreatePIN": ["src/screens/PINCreate.tsx"],

@@ -20,6 +20,7 @@ import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { useChatMessagesByConnection, useVrcFlowInProgress, PROGRESS_MILESTONES } from '../hooks/chat-messages'
 import { useConnectionDisplayName } from '../hooks/connections'
+import ContinuityRequestCard from '../modules/vrc/components/ContinuityRequestCard'
 import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionProvider'
 import { Role } from '../types/chat'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
@@ -228,6 +229,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
        * height instead and it behaves.
        */}
       <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+        {/* "Is this you?" waits here until it is answered, even if it arrived while the app was closed. */}
+        <ContinuityRequestCard connectionId={connectionId} />
         <GiftedChat<ExtendedChatMessage>
           keyboardAvoidingViewProps={{ keyboardVerticalOffset: headerHeight }}
           messages={chatMessages}

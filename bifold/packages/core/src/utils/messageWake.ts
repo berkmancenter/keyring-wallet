@@ -41,7 +41,9 @@ import {
   type DidCommConnectionStateChangedEvent,
 } from '@credo-ts/didcomm'
 
+import { isConnectionExcludedFromNotifications } from '../hooks/notifications'
 import { isUnreadChatMessage } from '../hooks/useUnreadMessages'
+import { continuityPromptStore } from '../modules/vrc/contacts/continuity'
 import { vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 
 /** How long a tap waits for the waiting messages before it settles on the list. */
@@ -173,6 +175,10 @@ export interface MessageWakeDeps {
   consentPending?(): boolean
   /** Whether an exchange is doing its own work on this phone (signing, witnessing, sending). */
   exchangeWorking?(): boolean
+  /** The next continuity question ("Is this you?") to arrive, if the tap was for one. */
+  nextContinuityPrompt?(): { arrived: Promise<void>; cancel(): void }
+  /** The connection whose chat holds the newest continuity question still waiting, if any. */
+  continuityPending?(): string | undefined
   /** The connection to open, read once the messages are in. */
   newestUnread(): Promise<string | undefined>
   /** Open that connection's chat. */
@@ -186,7 +192,15 @@ export interface MessageWakeDeps {
   sleep?(ms: number): Promise<void>
 }
 
-export type MessageWakeOutcome = 'chat' | 'newContact' | 'consent' | 'exchange' | 'list' | 'moved' | 'notShown'
+export type MessageWakeOutcome =
+  | 'chat'
+  | 'newContact'
+  | 'continuity'
+  | 'consent'
+  | 'exchange'
+  | 'list'
+  | 'moved'
+  | 'notShown'
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -248,10 +262,12 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
   const blursAtLanding = deps.listFocus.blurs()
   const next = deps.nextMessage()
   const connection = deps.nextConnection?.()
+  const continuity = deps.nextContinuityPrompt?.()
   try {
     await Promise.race([
       next.arrived,
       ...(connection ? [connection.arrived] : []),
+      ...(continuity ? [continuity.arrived] : []),
       deps
         .pickUpNow()
         .catch((error: unknown) => {
@@ -263,6 +279,7 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
   } finally {
     next.cancel()
     connection?.cancel()
+    continuity?.cancel()
     setFetching(false)
   }
   if (deps.listFocus.blurs() !== blursAtLanding || !deps.listFocus.focused()) {
@@ -282,6 +299,13 @@ async function resolveWake(deps: MessageWakeDeps, opening: (id: string) => void)
     opening(newContact)
     deps.openChat(newContact)
     return 'newContact'
+  }
+  // A continuity question waits in its chat (it has no message of its own there), so it is opened before plain unread.
+  const asking = deps.continuityPending?.()
+  if (asking) {
+    opening(asking)
+    deps.openChat(asking)
+    return 'continuity'
   }
   const connectionId = await deps.newestUnread().catch(() => undefined)
   if (!connectionId) return 'list'
@@ -390,6 +414,20 @@ export function appMessageWakeDeps(options: {
     nextConnection: () => nextAnsweredInvitation(agent),
     consentPending: () => vrcFlowStore.getAnyProposalPrompt() !== undefined,
     exchangeWorking: () => vrcFlowStore.isWorkingOnThisPhone(),
+    nextContinuityPrompt: () => {
+      let cancel = () => undefined as void
+      const arrived = new Promise<void>((resolve) => {
+        const seen = () => resolve()
+        continuityPromptStore.on('prompt', seen)
+        cancel = () => {
+          continuityPromptStore.off('prompt', seen)
+        }
+      })
+      return { arrived, cancel: () => cancel() }
+    },
+    continuityPending: () =>
+      continuityPromptStore.all().find((prompt) => !isConnectionExcludedFromNotifications(prompt.connectionId))
+        ?.connectionId,
     newestUnread: async () => {
       const basicMessages = (agent.modules as { didcomm?: any }).didcomm?.basicMessages
       const records: DidCommBasicMessageRecord[] = (await basicMessages?.findAllByQuery?.({})) ?? []
