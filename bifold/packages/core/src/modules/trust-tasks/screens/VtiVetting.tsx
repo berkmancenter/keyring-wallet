@@ -179,6 +179,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const vtaDid = useVtaDid(config?.vtaDid)
 
   const [persona, setPersona] = useState<VtiPersona>()
+  // The community whose identity has been read from this phone. Until it is
+  // this one, the identity is not known: "none" (Create identity) and "not
+  // read yet" were the same undefined, so every open showed Create identity,
+  // with a working button, to someone who had one.
+  const [personaReadFor, setPersonaReadFor] = useState<string>()
+  const personaRead = Boolean(communityDid) && personaReadFor === communityDid
   const [grant, setGrant] = useState<VtiHeldCredential>()
   // Whether the seat has been read for this identity yet. The identity is
   // read from this phone at once; the vetter grant only after its status is
@@ -215,13 +221,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
   /**
-   * Whether what this phone already holds has been read once. The name is
-   * filled from a stored application, which arrives from the store rather
-   * than with the first render — so without this the field shows empty and
-   * then "suddenly" fills, which reads as something having gone wrong
-   * (report #18). The step waits instead, briefly and visibly.
+   * Which seat's holdings have been read once: the desk's profile, tickets and
+   * requests, or the applicant's application and checklist. Until the seat
+   * being shown has them, the screen holds its place. Shown before them, the
+   * desk said Step 1 ("new ticket") to a vetter mid-request, the apply step
+   * said "0 of N", and the name field filled in after it had shown empty
+   * (report #18).
    */
-  const [heldRead, setHeldRead] = useState(false)
+  const [heldReadFor, setHeldReadFor] = useState<'vetter' | 'applicant'>()
   // The profile chosen at Join as fills the name in, once (seed by copy).
   const seed = communityDid ? joinSeed.get(communityDid) : undefined
   useEffect(() => {
@@ -488,6 +495,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       const p = await stores.identity.getPersona(communityDid)
       if (cancelled) return
       setPersona(p)
+      setPersonaReadFor(communityDid)
       if (!p?.kmsKeyIds?.keyAgreement) return
       try {
         // Always ask: `connect` returns immediately when its socket is still
@@ -570,7 +578,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
         // This community's requests only: the store keeps every desk's (240).
         setDesk((await stores.vetting.listDesk()).filter((r) => r.communityDid === persona.communityDid))
-        setHeldRead(true)
+        setHeldReadFor('vetter')
       } else {
         if (!applicantRef.current)
           applicantRef.current = new VtiApplicant(agent, persona, stores.vetting, stores.community, bump)
@@ -583,7 +591,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           setLegalName((v) => v || a.claims['name.legal'] || '')
           setChecklist(await applicantRef.current.checklist())
         }
-        setHeldRead(true)
+        setHeldReadFor('applicant')
       }
     }
     void refreshSeat()
@@ -761,6 +769,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     )
   }
 
+  // Nothing is said about the seat until it is known: the identity, then the
+  // grant, then what the seat holds. One placeholder for all three.
+  const seatLoading = (
+    <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey(VtiVettingIds.seatLoading)}>
+      <ActivityIndicator color={ColorPalette.brand.primary} style={{ marginTop: 40 }} />
+    </SafeAreaView>
+  )
+  if (!personaRead) return seatLoading
+
   // No persona yet: the join DID is chosen before gathering, so this is step one.
   if (!persona) {
     return (
@@ -890,18 +907,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   }
 
   // ---------------------------------------------------------------- the desk
-  // The seat is not known yet: neither the desk nor the applicant's steps.
-  if (persona && !seatRead) {
-    return (
-      <SafeAreaView
-        style={styles.container}
-        edges={['left', 'right']}
-        testID={testIdWithKey(VtiVettingIds.seatLoading)}
-      >
-        <ActivityIndicator color={ColorPalette.brand.primary} style={{ marginTop: 40 }} />
-      </SafeAreaView>
-    )
-  }
+  // The seat is not known yet, or not what it holds: neither the desk nor the applicant's steps.
+  if (!seatRead || heldReadFor !== (grant ? 'vetter' : 'applicant')) return seatLoading
 
   if (grant) {
     // The desk lists requests newest first; the one in progress is the step.
@@ -1626,14 +1633,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             </View>
           ) : null}
 
-          {applicantStep === 'name' && !heldRead ? (
-            <View style={styles.row} testID={testIdWithKey(VtiVettingIds.readingHeld)}>
-              <ActivityIndicator color={ColorPalette.brand.primary} />
-              <Text style={styles.value}>{t('Vetting.ReadingHeld')}</Text>
-            </View>
-          ) : null}
-
-          {applicantStep === 'name' && heldRead ? (
+          {applicantStep === 'name' ? (
             <>
               {stepHeader(applicantNumber, 5, t('Vetting.YourFace'))}
               <View style={styles.card}>

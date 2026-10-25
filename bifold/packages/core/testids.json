@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f2f5512f521b1547024f2709b98a0db237653fe2",
+  "generatedFrom": "9c9136b47c94489ec9982602a04f2748232b1dfa",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -2334,9 +2334,6 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.publishProfileButton"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.readingHeld"
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.replaceRequest"

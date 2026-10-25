@@ -59,6 +59,7 @@ export const VtiVettingIds = {
   memberDone: 'VettingMemberDone',
   alreadyMember: 'VettingAlreadyMember',
   goToMyAgent: 'VettingGoToMyAgent',
+  // Not rendered: the whole seat waits on VettingSeatLoading until what it holds is read (#543). Kept, never reused.
   readingHeld: 'VettingReadingHeld',
   legalNameInput: 'VettingLegalNameInput',
   nameFromProfile: 'VettingNameFromProfile',
