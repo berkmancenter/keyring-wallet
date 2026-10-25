@@ -31,8 +31,9 @@ const ActionSlider: React.FC<Props> = ({ actions, onDismiss }) => {
       marginTop: 'auto',
       justifyContent: 'flex-end',
     },
+    // Only the space the sheet leaves: a full-height listener pushes the sheet below the screen.
     outsideListener: {
-      height: '100%',
+      flex: 1,
     },
     modalView: {
       backgroundColor: ColorPalette.grayscale.white,
