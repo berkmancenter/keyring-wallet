@@ -1,6 +1,8 @@
 import { Agent } from '@credo-ts/core'
 import { DidCommEventTypes, DidCommMessageProcessedEvent, DidCommMessageSentEvent } from '@credo-ts/didcomm'
 
+import { isLivePickupEnabled } from './livePickup'
+
 /**
  * How often the app asks its mediator for new messages while it is open.
  *
@@ -113,9 +115,14 @@ export const startPickupBoost = (agent: Agent, logger: { warn: (message: string)
     },
   })
 
+  // Live pickup gets each message pushed as it arrives, so the window has
+  // nothing to add and would only send status-requests over the socket.
+  const boostUnlessLive = () => {
+    if (!isLivePickupEnabled()) boost.boost()
+  }
   const withContact = (connectionId: string | undefined) => {
     if (!connectionId || connectionId === mediatorConnectionId) return
-    boost.boost()
+    boostUnlessLive()
   }
   const onSent = (event: DidCommMessageSentEvent) => withContact(event.payload.message.connection?.id)
   const onProcessed = (event: DidCommMessageProcessedEvent) => withContact(event.payload.connection?.id)
@@ -123,7 +130,7 @@ export const startPickupBoost = (agent: Agent, logger: { warn: (message: string)
   agent.events.on<DidCommMessageProcessedEvent>(DidCommEventTypes.DidCommMessageProcessed, onProcessed)
 
   return {
-    boost: boost.boost,
+    boost: boostUnlessLive,
     stop: () => {
       boost.stop()
       agent.events.off<DidCommMessageSentEvent>(DidCommEventTypes.DidCommMessageSent, onSent)

@@ -33,6 +33,8 @@ import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
+import { disarmLivePickup, isLivePickupEnabled, livePickupFor, trackingWebSocketClass } from '@/utils/livePickup'
+import BCLogger from '@/utils/logger'
 import { chooseMediator } from '@/utils/mediatorPreference'
 import { singleFlight } from '@/utils/singleFlight'
 import { BCState, BCLocalStorageKeys } from '@/store'
@@ -76,15 +78,17 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-// Pickup V2 periodic polling (1s, set in bc-agent-modules). Live mode held a
-// WebSocket open for mediator push, but a socket that dies silently (NAT/proxy
-// idle reaping) leaves the wallet deaf for minutes AND the mediator live-pushes
-// into the dead socket without requeueing — the message is lost outright
-// (measured 2026-08-18: mediator reported message_count:0 after such a window;
-// docs/spikes/e2e-vrc-connect-findings.md). Polling makes every delivery
-// request/ack'd against the mediator's queue and each poll self-heals a dead
-// socket. Revisit live mode once the mediator requeues unacked live deliveries.
-const configureMessagePickup = async (agent: Agent): Promise<void> => {
+// Mediator pickup, by the Developer option "Live message pickup"
+// (developer.enableLivePickup; LIVE_MESSAGE_PICKUP in app/.env sets the
+// build's default). Off: Pickup V2 polling, every 5 s with a 1 s window while
+// in use (utils/pickupBoost.ts); each poll is request/ack'd against the
+// mediator's queue. On: Pickup V2 live mode over a WebSocket, with a status
+// check every 60 s and on each return that closes a dead socket and starts
+// again (utils/livePickup.ts). Live mode was dropped on 2026-08-18 because
+// the mediator then lost pushes into a dead socket; its Postgres pickup queue
+// now requeues them when the live session ends (measured:
+// docs/plans/mediator-migration-plan/2026-10-25-al.md part 7).
+export const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // Stop the pickup credo already started during agent.initialize() before
   // starting ours. Stock initiateMessagePickup SUBSCRIBES A NEW polling
   // interval on every call without replacing the previous one — two loops
@@ -95,14 +99,19 @@ const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // belt to that suspender.
   await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
 
-  // Pass the strategy EXPLICITLY: credo otherwise resolves it as
-  // `mediationRecord.pickupStrategy ?? moduleConfig`, and a value persisted in
-  // the wallet outranks the config — which is how the same code ends up
-  // receiving messages on one wallet and deaf on another.
-  await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
-    undefined,
-    DidCommMediatorPickupStrategy.PickUpV2
-  )
+  if (isLivePickupEnabled()) {
+    await livePickupFor(agent, BCLogger).start()
+  } else {
+    disarmLivePickup()
+    // Pass the strategy EXPLICITLY: credo otherwise resolves it as
+    // `mediationRecord.pickupStrategy ?? moduleConfig`, and a value persisted in
+    // the wallet outranks the config — which is how the same code ends up
+    // receiving messages on one wallet and deaf on another.
+    await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+      undefined,
+      DidCommMediatorPickupStrategy.PickUpV2
+    )
+  }
 
   // Second loop, Pickup 4.0 against the v2 mediator when one is provisioned
   // (didcomm_v2_subtask.md V2 step 4). AFTER the v1 start: that start stops
@@ -192,7 +201,12 @@ const useBCAgentSetup = () => {
           // mediation + auto-accept live on the DidCommModule (see bc-agent-modules.ts)
           // Document loader is configured in W3cCredentialsModule (see bc-agent-modules.ts)
         },
-        dependencies: agentDependencies,
+        // The agent's sockets are remembered, so live pickup can close a dead
+        // one on purpose (utils/livePickup.ts). Only a list; harmless when polling.
+        dependencies: {
+          ...agentDependencies,
+          WebSocketClass: trackingWebSocketClass(agentDependencies.WebSocketClass),
+        },
         modules: getBCAgentModules({
           walletSecret,
           indyNetworks: ledgers,
@@ -429,11 +443,15 @@ const useBCAgentSetup = () => {
   // 24-minute stall that drained instantly on restart.
   //
   // stopMessagePickup() first so a resumed loop never stacks on a stale one.
-  // Note bifold core's ActivityProvider restarts pickup on the same transition
-  // (background → foreground); both handlers racing their stop→start once
-  // left a Galaxy A03s with two loops and 50 s of inbound lag (2026-09-13).
-  // The credo patch (initiateMessagePickup stops the running loop first) is
-  // what makes the pair safe — see configureMessagePickup.
+  // This is the ONLY foreground restart. bifold core's ActivityProvider used to
+  // restart pickup on the same transition, always as polling; both handlers
+  // racing their stop→start once left a Galaxy A03s with two loops and 50 s of
+  // inbound lag (2026-09-13), and its hard-coded PickUpV2 would undo live mode.
+  // It now hands the transition to TOKENS.UTIL_MESSAGE_PICKUP, which this app
+  // registers with background handling only (livePickup.ts,
+  // appMessagePickupLifecycle). In live mode this restart is also the check on
+  // return: it closes the socket, which may have died while suspended, and
+  // starts on a fresh one.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState !== 'active') return
