@@ -30,7 +30,10 @@ describe('decideApplyOnReturn', () => {
 
   it('does not apply while anything blocks it, and names each blocker', () => {
     for (const blocker of ['sign-in', 'chat-draft', 'vta-task:vta/join/0.1']) {
-      expect(decideApplyOnReturn({ ...base, blockers: [blocker] })).toEqual({ apply: false, reason: `blocked: ${blocker}` })
+      expect(decideApplyOnReturn({ ...base, blockers: [blocker] })).toEqual({
+        apply: false,
+        reason: `blocked: ${blocker}`,
+      })
     }
     expect(decideApplyOnReturn({ ...base, blockers: ['sign-in', 'chat-draft'] })).toMatchObject({
       reason: 'blocked: sign-in, chat-draft',
