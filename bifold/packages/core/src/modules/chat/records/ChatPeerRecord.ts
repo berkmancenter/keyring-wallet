@@ -16,6 +16,7 @@ export interface ChatPeerRecordProps {
   connectionId: string
   noticeId?: string
   noticeSentAt?: Date
+  announcedVersion?: number
   chatRefusedAt?: Date
   createdAt?: Date
   tags?: TagsBase
@@ -30,6 +31,11 @@ export class ChatPeerRecord extends BaseRecord<ChatPeerRecordTags, TagsBase> {
   /** The DIDComm `@id` of the last capability notice sent to this contact. */
   public noticeId?: string
   public noticeSentAt?: Date
+  /**
+   * The RCE version this phone last announced to the contact in a notice that was not refused. The relationship
+   * handshake told it only the version this phone had then, which an upgrade outdates.
+   */
+  public announcedVersion?: number
   /** Set when the contact answered a chat event with a problem report. */
   public chatRefusedAt?: Date
 
@@ -44,6 +50,7 @@ export class ChatPeerRecord extends BaseRecord<ChatPeerRecordTags, TagsBase> {
       this.connectionId = props.connectionId
       this.noticeId = props.noticeId
       this.noticeSentAt = props.noticeSentAt
+      this.announcedVersion = props.announcedVersion
       this.chatRefusedAt = props.chatRefusedAt
       this.createdAt = props.createdAt ?? new Date()
       this._tags = props.tags ?? {}

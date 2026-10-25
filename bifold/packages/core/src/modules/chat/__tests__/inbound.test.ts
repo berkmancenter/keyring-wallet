@@ -6,11 +6,12 @@ import { ChatEventMessage } from '../messages/ChatEventMessage'
 import { ChatEventRecord } from '../records/ChatEventRecord'
 import { receiveChatEventMessage, setupChatInbound } from '../inbound'
 import type { ChatInboundVerdict } from '../inbound'
+import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 
 const EVENT_ID = '01JB3XKX6F8Q2W4E5R6T7Y8Z9V'
 const TARGET = '01JB3XKX6F8Q2W4E5R6T7Y8Z9W'
 
-function makeFakeAgent() {
+function makeFakeAgent(options: { counterpartyRceVersion?: number; relationshipFails?: boolean } = {}) {
   const stored: ChatEventRecord[] = []
   let capturedHandler: ((ctx: unknown) => Promise<unknown>) | undefined
   const registrations = new Map<unknown, { useFactory: (c: unknown) => unknown }>()
@@ -39,6 +40,16 @@ function makeFakeAgent() {
       ),
   })
   singletons.set(EventEmitter, { emit: jest.fn() })
+  // The contact's relationship, when a test needs one (noteChatFromContact reads and raises its stored version).
+  const relationship =
+    options.counterpartyRceVersion === undefined ? null : { counterpartyRceVersion: options.counterpartyRceVersion }
+  singletons.set(RelationshipDidRepository, {
+    findByConnectionDid: async () => {
+      if (options.relationshipFails) throw new Error('store unavailable')
+      return relationship
+    },
+    update: async () => undefined,
+  })
   singletons.set(DidCommMessageHandlerRegistry, {
     // setupChatInbound also registers the notice and problem-report handlers
     // (notice.ts), so keep the one for chat events rather than the last one.
@@ -51,7 +62,7 @@ function makeFakeAgent() {
     config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
     dependencyManager: { container, resolve: container.resolve },
   }
-  return { agent: agent as never, stored, handler: () => capturedHandler }
+  return { agent: agent as never, stored, handler: () => capturedHandler, relationship }
 }
 
 const connection = { id: 'conn-1', theirDid: 'did:peer:them', did: 'did:peer:me' }
@@ -184,6 +195,40 @@ describe('an eventId this phone sent', () => {
     const fake = makeFakeAgent()
     fake.stored.push(sentHere('conn-2'))
     expect(await receiveChatEventMessage(fake.agent, theirs())).toBe('stored')
+  })
+})
+
+// The two-phone run, 2026-10-25: a contact that upgraded after pairing may never send its notice. Its first chat event
+// is the evidence, so this phone answers it in chat from then on.
+describe('a stored chat event', () => {
+  it('raises the contact stored below 6 to 6', async () => {
+    const fake = makeFakeAgent({ counterpartyRceVersion: 5 })
+    const verdict = await receiveChatEventMessage(
+      fake.agent,
+      inbound({
+        profile: CHAT_PROFILE,
+        type: 'message',
+        eventId: EVENT_ID,
+        content: { format: 'text/plain', text: 'hi' },
+      })
+    )
+    expect(verdict).toBe('stored')
+    expect(fake.relationship?.counterpartyRceVersion).toBe(6)
+  })
+
+  it('is still stored when recording the contact fails', async () => {
+    const fake = makeFakeAgent({ relationshipFails: true })
+    const verdict = await receiveChatEventMessage(
+      fake.agent,
+      inbound({
+        profile: CHAT_PROFILE,
+        type: 'message',
+        eventId: EVENT_ID,
+        content: { format: 'text/plain', text: 'hi' },
+      })
+    )
+    expect(verdict).toBe('stored')
+    expect(fake.stored).toHaveLength(1)
   })
 })
 

@@ -18,7 +18,7 @@ import type { ChatEventRejection } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
-import { setupChatCapability } from './notice'
+import { noteChatFromContact, setupChatCapability } from './notice'
 import { isBeingSent } from './sending'
 
 const LOG_PREFIX = '[Chat:inbound]'
@@ -89,6 +89,12 @@ export async function receiveChatEventMessage(
       ...(event.type === 'timer' ? { timer: event.timer } : {}),
     })
   )
+  // A chat event proves the contact speaks chat, even if its notice never came (it upgraded after pairing).
+  try {
+    await noteChatFromContact(agent, ctx.connection)
+  } catch (error) {
+    agent.config.logger.warn(`${LOG_PREFIX} could not record that ${connectionId} speaks chat`, { error })
+  }
   return 'stored'
 }
 
