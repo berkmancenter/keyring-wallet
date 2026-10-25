@@ -26,6 +26,7 @@ import { Role } from '../types/chat'
 import { markChatEventsSeen } from '../modules/chat/seen'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
+import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
 import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
@@ -152,6 +153,15 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     setActiveChatConnectionId(connectionId)
     return () => setActiveChatConnectionId(undefined)
   }, [connectionId])
+
+  // Opening a chat is when a contact made before chat learns that this phone
+  // speaks it (plan §4.5). Best effort: a failed notice is retried next time.
+  useEffect(() => {
+    if (!agent) return
+    sendCapabilityNoticeIfNeeded(agent, connectionId).catch((error) => {
+      agent.config?.logger?.warn(`[Chat] capability notice for ${connectionId} not sent`, { error })
+    })
+  }, [agent, connectionId])
 
   // An unsent draft lives only in gifted-chat's own state, so applying an
   // over-the-air update (a reload) would lose it. Watch the text, without

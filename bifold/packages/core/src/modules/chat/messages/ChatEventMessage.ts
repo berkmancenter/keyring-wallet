@@ -14,6 +14,7 @@
 
 import { DidCommMessage, IsValidMessageType, parseMessageType } from '@credo-ts/didcomm'
 
+import { isUlid } from '../chatEvent'
 import type { ChatEvent } from '../chatEvent'
 
 /** The message type URI (plan §4.1, D3). */
@@ -40,7 +41,9 @@ export class ChatEventMessage extends DidCommMessage {
   public constructor(options?: ChatEventMessageOptions) {
     super()
     if (options) {
-      this.id = options.id ?? this.generateId()
+      // The DIDComm @id is the event's own id, so a problem report threaded to
+      // it (pthid) finds the stored event with no extra record (plan §4.5).
+      this.id = options.id ?? (isUlid(options.event?.eventId) ? options.event.eventId : this.generateId())
       this.event = options.event
     }
   }

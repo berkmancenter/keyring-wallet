@@ -40,8 +40,10 @@ function makeFakeAgent() {
   })
   singletons.set(EventEmitter, { emit: jest.fn() })
   singletons.set(DidCommMessageHandlerRegistry, {
-    registerMessageHandler: (handler: { handle: (ctx: unknown) => Promise<unknown> }) => {
-      capturedHandler = handler.handle
+    // setupChatInbound also registers the notice and problem-report handlers
+    // (notice.ts), so keep the one for chat events rather than the last one.
+    registerMessageHandler: (handler: { supportedMessages: unknown[]; handle: (ctx: unknown) => Promise<unknown> }) => {
+      if (handler.supportedMessages.includes(ChatEventMessage)) capturedHandler = handler.handle
     },
   })
   const agent = {

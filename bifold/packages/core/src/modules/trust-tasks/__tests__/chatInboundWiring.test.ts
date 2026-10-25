@@ -5,10 +5,11 @@
  * cannot see the chat registration at all. This one collects every
  * registration, so deleting the setupChatInbound call fails here.
  */
-import { DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
+import { DidCommMessageHandlerRegistry, DidCommProblemReportMessage } from '@credo-ts/didcomm'
 import { EventEmitter, InjectionSymbols } from '@credo-ts/core'
 
 import { setupTrustTasksInbound } from '../ceremony'
+import { ChatCapabilityMessage } from '../../chat/messages/ChatCapabilityMessage'
 import { ChatEventMessage } from '../../chat/messages/ChatEventMessage'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 
@@ -60,6 +61,18 @@ describe('setupTrustTasksInbound wiring', () => {
     const supported = registered.flatMap((handler) => handler.supportedMessages)
     expect(supported).toContain(ChatEventMessage)
     expect(supported).toContain(TrustTaskMessage)
+  })
+
+  it('registers the capability notice and the generic problem report handlers with chat', () => {
+    const { agent, registered } = makeCollectingAgent()
+    setupTrustTasksInbound(agent)
+
+    const supported = registered.flatMap((handler) => handler.supportedMessages)
+    expect(supported).toContain(ChatCapabilityMessage)
+    expect(supported).toContain(DidCommProblemReportMessage)
+    const v1Index = registered.findIndex((handler) => handler.supportedMessages.includes(TrustTaskMessage))
+    const noticeIndex = registered.findIndex((handler) => handler.supportedMessages.includes(ChatCapabilityMessage))
+    expect(noticeIndex).toBeLessThan(v1Index)
   })
 
   it('registers chat before the v1 carriage, so last-handler fakes keep exercising v1', () => {

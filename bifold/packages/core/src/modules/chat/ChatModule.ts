@@ -1,5 +1,5 @@
 /**
- * ChatModule — registers the chat event repository with Credo's dependency
+ * ChatModule — registers the chat repositories with Credo's dependency
  * injection, using the factory pattern the VRC and Trust Task modules use
  * (no decorators).
  *
@@ -10,6 +10,7 @@ import type { Agent } from '@credo-ts/core'
 import { Module, DependencyManager, InjectionSymbols, EventEmitter } from '@credo-ts/core'
 
 import { ChatEventRepository } from './records/ChatEventRepository'
+import { ChatPeerRepository } from './records/ChatPeerRepository'
 
 export class ChatModule implements Module {
   public register(dependencyManager: DependencyManager) {
@@ -18,6 +19,13 @@ export class ChatModule implements Module {
         const storageService = container.resolve(InjectionSymbols.StorageService)
         const eventEmitter = container.resolve(EventEmitter)
         return new ChatEventRepository(storageService, eventEmitter)
+      },
+    } as any)
+    dependencyManager.container.register(ChatPeerRepository, {
+      useFactory: (container: any) => {
+        const storageService = container.resolve(InjectionSymbols.StorageService)
+        const eventEmitter = container.resolve(EventEmitter)
+        return new ChatPeerRepository(storageService, eventEmitter)
       },
     } as any)
   }
@@ -30,4 +38,13 @@ export function getChatEventRepository(agent: Agent): ChatEventRepository {
     new ChatModule().register(agent.dependencyManager)
   }
   return container.resolve(ChatEventRepository)
+}
+
+/** Resolve the per-contact chat repository, registering the module on first use. */
+export function getChatPeerRepository(agent: Agent): ChatPeerRepository {
+  const container = agent.dependencyManager.container
+  if (!container.isRegistered(ChatPeerRepository)) {
+    new ChatModule().register(agent.dependencyManager)
+  }
+  return container.resolve(ChatPeerRepository)
 }

@@ -19,6 +19,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
+import { getChatPeerRepository } from './ChatModule'
 
 /** The first RCE protocol version whose peers speak `keyring/chat/1.0`. */
 export const CHAT_MIN_RCE_VERSION = 6
@@ -27,7 +28,8 @@ export const CHAT_MIN_RCE_VERSION = 6
  * True only when the contact on this connection announced at least
  * {@link CHAT_MIN_RCE_VERSION}, on a DIDComm v1 connection. A contact that
  * never announced a version, a v2 connection, or any lookup failure counts as
- * "no", so the contact keeps getting plain BasicMessages it can read.
+ * "no", so the contact keeps getting plain BasicMessages it can read. So does
+ * a contact that refused a chat event (notice.ts) until it sends a new notice.
  */
 export async function counterpartySpeaksChat(agent: Agent, connectionId: string): Promise<boolean> {
   try {
@@ -35,7 +37,18 @@ export async function counterpartySpeaksChat(agent: Agent, connectionId: string)
     if (!connection.theirDid || connection.didcommVersion === 'v2') return false
     const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
     const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
-    return (record?.counterpartyRceVersion ?? 1) >= CHAT_MIN_RCE_VERSION
+    if ((record?.counterpartyRceVersion ?? 1) < CHAT_MIN_RCE_VERSION) return false
+  } catch {
+    return false
+  }
+  return !(await refusedChat(agent, connectionId))
+}
+
+// A missing or unreadable refusal record is not a refusal.
+async function refusedChat(agent: Agent, connectionId: string): Promise<boolean> {
+  try {
+    const peer = await getChatPeerRepository(agent).findByConnection(agent.context, connectionId)
+    return Boolean(peer?.chatRefusedAt)
   } catch {
     return false
   }

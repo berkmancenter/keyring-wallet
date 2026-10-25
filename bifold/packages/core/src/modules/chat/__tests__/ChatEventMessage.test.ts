@@ -48,3 +48,16 @@ describe('ChatEventMessage', () => {
     expect(() => new ChatEventMessage().toV2Plaintext()).toThrow('no event')
   })
 })
+
+describe('ChatEventMessage @id', () => {
+  it('is the event id, so a problem report threaded to it finds the stored event', () => {
+    const event = { profile: 'keyring.chat/1', type: 'message', eventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9V' } as never
+    expect(new ChatEventMessage({ event }).id).toBe('01JB3XKX6F8Q2W4E5R6T7Y8Z9V')
+  })
+
+  it('falls back to a generated id when the event has no valid id', () => {
+    const message = new ChatEventMessage({ event: { type: 'message', eventId: 'nope' } as never })
+    expect(message.id).not.toBe('nope')
+    expect(message.id.length).toBeGreaterThanOrEqual(8)
+  })
+})

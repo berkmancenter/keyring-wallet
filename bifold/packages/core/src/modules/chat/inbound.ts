@@ -18,6 +18,7 @@ import type { ChatEventRejection } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
+import { setupChatCapability } from './notice'
 
 const LOG_PREFIX = '[Chat:inbound]'
 
@@ -79,7 +80,8 @@ export async function receiveChatEventMessage(
 }
 
 /**
- * Register the inbound handler. Called after agent initialization, because
+ * Register the inbound handlers: chat events, the capability notice and
+ * problem reports (notice.ts). Called after agent initialization, because
  * the handler registry is DIDComm-module state, not container state.
  * Registration is an explicit call, never an import side effect.
  */
@@ -105,4 +107,5 @@ export function setupChatInbound(agent: Agent, onVerdict?: (verdict: ChatInbound
       return undefined
     },
   })
+  setupChatCapability(agent)
 }

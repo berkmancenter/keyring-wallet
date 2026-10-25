@@ -106,12 +106,19 @@ async function logIssuedCredentialSnapshot(
  *       that block signable. A pre-v5 peer has no bundled copy of the new
  *       context, so it still gets the legacy entry. v5 implies v4.
  *
+ * - v6: `keyring/chat/1.0` (rich-messaging-plan.md §4.5). A v6 peer is sent
+ *       chat events instead of plain BasicMessages for chat
+ *       (`counterpartySpeaksChat` in modules/chat). Announced only by a build
+ *       that shows chat events in the timeline; contacts made earlier learn
+ *       of it from the one-time capability notice (modules/chat/notice.ts),
+ *       since this handshake is sent once per relationship. v6 implies v5.
+ *
  * The version is announced in the relationshipDid handshake message
  * (`vrc:rceVersion:<n>`). A peer that doesn't announce one is treated as v1,
  * so exchanges with pre-VC-2.0 app versions still produce credentials the
  * old peer can validate.
  */
-export const RCE_PROTOCOL_VERSION = 5
+export const RCE_PROTOCOL_VERSION = 6
 
 /** A parsed `vrc:relationshipDid:… vrc:rceVersion:N` legacy announcement. */
 export interface LegacyRelationshipAnnouncement {
