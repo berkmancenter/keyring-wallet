@@ -38,9 +38,13 @@ test('ringOf names the three target lists and nothing else', () => {
   assert.equal(ringOf(null), null)
 })
 
-test('a ring-0 bundle soaked 24 h may go to ring 2, and to ring 1', () => {
+test('a ring-0 bundle may go to ring 2, and to ring 1', () => {
   assert.equal(checkPromote(bundle(), target()).ok, true)
   assert.equal(checkPromote(bundle(), target({ to: 'ring1' })).ok, true)
+})
+
+test('with no soak set, a bundle published a minute ago may be promoted', () => {
+  assert.equal(checkPromote(bundle(), target({ now: PUBLISHED + 60000 })).ok, true)
 })
 
 test('a ring-1 bundle may go to ring 2, never back to ring 1', () => {
@@ -48,8 +52,10 @@ test('a ring-1 bundle may go to ring 2, never back to ring 1', () => {
   assert.match(checkPromote(bundle({ targetCohorts: ['ring0', 'ring1'] }), target({ to: 'ring1' })).reason, /at ring1/)
 })
 
-test('a bundle soaked under 24 h is refused', () => {
-  assert.match(checkPromote(bundle(), target({ now: PUBLISHED + 23 * HOUR })).reason, /soaks 24 h/)
+test('a soak, when set, must have passed since publish', () => {
+  assert.match(checkPromote(bundle(), target({ soakHours: 24, now: PUBLISHED + 23 * HOUR })).reason, /soaks 24 h/)
+  assert.equal(checkPromote(bundle(), target({ soakHours: 24, now: PUBLISHED + 25 * HOUR })).ok, true)
+  assert.match(checkPromote(bundle(), target({ soakHours: NaN })).reason, /number of hours/)
 })
 
 test('disabled, percentage-rollout, off-ring and already-wide bundles are refused', () => {

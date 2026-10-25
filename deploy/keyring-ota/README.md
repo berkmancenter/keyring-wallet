@@ -76,8 +76,11 @@ stays 0.
 **Widening** is ota-publish.yml's `promote` action, with `bundle_id`, the
 bundle's own `platform` and `to_ring`, after one ota-approval click per
 promotion (`scripts/ota/promote.mjs`). It refuses unless the server's record
-shows a production or preview bundle that is enabled, has a 0 rollout, sits at
-the ring below the new one, and was published at least 24 hours ago. ring1
+shows a production or preview bundle that is enabled, has a 0 rollout, and
+sits at the ring below the new one. A minimum time since publish, the soak, is
+the repository variable `OTA_PROMOTE_SOAK_HOURS`, 0 when unset. While the
+audience is beta testers, a bundle can go from ring 0 to everyone on the
+approval alone; raise the variable when the audience widens. ring1
 targets ring 0 and 1; ring2 targets all three. **Ring 1 has no members yet** (no
 install can join it until the "Early updates" opt-in ships), so a bundle may go
 from ring 0 straight to ring 2. A dry run checks and changes nothing. A
@@ -89,6 +92,12 @@ included), so a promoted bundle is always one.
 that the bundle is on that channel and platform, disables it, and checks that
 it now reads disabled (`scripts/ota/withdraw.mjs`). It works at any ring. A dry
 run checks only that the bundle is there.
+
+**Store builds stay the main channel.** We keep shipping store builds often;
+OTA supplements them and never replaces them. It carries JavaScript fixes only,
+within store policy: nothing that adds a feature or changes what the app does.
+The tier check enforces the code side (`ota` only). What counts as a fix is the
+publisher's call, and the commit subject is what testers read.
 
 ### Pulling an update from everyone
 

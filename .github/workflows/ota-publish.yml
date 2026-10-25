@@ -18,9 +18,9 @@ name: OTA publish (ring 0)
 # commit instead of a build, skips the tier check, and has the trial's other
 # actions (scripts/ota/device-test.sh). production and preview also take
 # disable, which withdraws one bundle (scripts/ota/withdraw.mjs), and promote,
-# which widens one bundle past ring 0 (scripts/ota/promote.mjs): only after it
-# has soaked 24 h at ring 0, one approval per promotion. A publish itself
-# reaches ring 0 only.
+# which widens one bundle past ring 0 (scripts/ota/promote.mjs), one approval
+# per promotion, after the soak in vars.OTA_PROMOTE_SOAK_HOURS (default 0). A
+# publish itself reaches ring 0 only.
 #
 # A dry run checks the commit, the inputs and the signing-key mapping, and
 # probes the server and token, without uploading.
@@ -356,11 +356,15 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           TO_RING: ${{ inputs.to_ring }}
+          # Hours a bundle must have been published before it is promoted: 0 while the
+          # audience is beta testers. A repository variable, as the dispatch has no room
+          # for an eleventh input.
+          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS || '0' }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           check=()
           [ "$DRY_RUN" = true ] && check=(--check)
-          node scripts/ota/promote.mjs --channel "$CHANNEL" --platform "$PLATFORM" --bundle-id "$BUNDLE_ID" --to "$TO_RING" "${check[@]}"
+          node scripts/ota/promote.mjs --channel "$CHANNEL" --platform "$PLATFORM" --bundle-id "$BUNDLE_ID" --to "$TO_RING" --soak-hours "$SOAK_HOURS" "${check[@]}"
 
       # production/preview: withdraw one bundle. A dry run checks it is there.
       - name: Withdraw (${{ inputs.channel }})
