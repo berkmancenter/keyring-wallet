@@ -1,8 +1,8 @@
 import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useMemo } from 'react'
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native'
+import React, { useCallback } from 'react'
+import { View, StyleSheet, TouchableOpacity } from 'react-native'
 
 import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
@@ -13,6 +13,8 @@ import { ContactStackParams, Screens, Stacks } from '../../types/navigators'
 import { formatTime } from '../../utils/helpers'
 import { testIdWithKey } from '../../utils/testable'
 import { TOKENS, useServices } from '../../container-api'
+import ContactPhoto from '../../modules/vrc/components/ContactPhoto'
+import { useConnectionFacts } from '../../modules/vrc/contacts/useContactFacts'
 import { ThemedText } from '../texts/ThemedText'
 
 export interface ContactListItemProps {
@@ -21,7 +23,7 @@ export interface ContactListItemProps {
 }
 
 const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }) => {
-  const { ColorPalette, ListItems } = useTheme()
+  const { ColorPalette } = useTheme()
   const messages = useChatMessagesByConnection(contact)
   // The newest thing said, never a line about the chat itself (a timer set).
   const message = messages.find((m) => m.kind !== 'system')
@@ -38,21 +40,8 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
       backgroundColor: ColorPalette.brand.secondaryBackground,
     },
     avatarContainer: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: 50,
-      height: 50,
-      borderRadius: 25,
-      borderColor: ListItems.avatarCircle.borderColor,
-      borderWidth: 1,
       marginRight: 16,
-    },
-    avatarPlaceholder: {
-      textAlign: 'center',
-    },
-    avatarImage: {
-      width: 30,
-      height: 30,
+      justifyContent: 'center',
     },
     contactNameContainer: {
       flex: 1,
@@ -93,7 +82,8 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
   }, [navigation, contact, enableChat])
 
   const contactLabel = useConnectionDisplayName(contact.id)
-  const contactLabelAbbr = useMemo(() => contactLabel?.charAt(0).toUpperCase(), [contactLabel])
+  // Their photo from their contact card, as on Contacts; else the connection's own image; else their initial.
+  const facts = useConnectionFacts(contact.id)
 
   return (
     <TouchableOpacity
@@ -104,15 +94,7 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
     >
       <View style={styles.container}>
         <View style={styles.avatarContainer}>
-          {contact.imageUrl ? (
-            <View>
-              <Image style={styles.avatarImage} source={{ uri: contact.imageUrl }} />
-            </View>
-          ) : (
-            <ThemedText allowFontScaling={false} variant="headingFour" style={styles.avatarPlaceholder}>
-              {contactLabelAbbr}
-            </ThemedText>
-          )}
+          <ContactPhoto photo={facts.photo} name={contactLabel} fallbackUrl={contact.imageUrl} size={50} />
         </View>
         <View style={{ flex: 1 }}>
           <View style={styles.nameAndTimeContainer}>

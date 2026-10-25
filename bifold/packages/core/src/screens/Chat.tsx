@@ -10,6 +10,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import Toast from 'react-native-toast-message'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import ChatHeaderTitle from '../modules/vrc/components/ChatHeaderTitle'
 import InfoIcon from '../modules/vrc/components/InfoIcon'
 // Temporarily removed for cleaner witness chat UI
 // import { WitnessChatBanner } from '../modules/vrc/components/WitnessChatBanner'
@@ -224,9 +225,19 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   useEffect(() => {
     navigation.setOptions({
       title: theirLabel,
+      // Their photo beside their name, as in the chat list. `title` stays: it names the screen for Back and the OS.
+      headerTitle: ({ tintColor, style }) => (
+        <ChatHeaderTitle
+          connectionId={connectionId}
+          label={theirLabel}
+          fallbackUrl={connection?.imageUrl}
+          tintColor={tintColor}
+          style={style}
+        />
+      ),
       headerRight: () => <InfoIcon connectionId={connection?.id as string} />,
     })
-  }, [navigation, theirLabel, connection])
+  }, [navigation, theirLabel, connection, connectionId])
 
   // when chat is open, mark messages as seen
   useEffect(() => {

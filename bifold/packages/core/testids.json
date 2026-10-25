@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "3c386324a0d5eaa8c9a8b3023e2618211d6cdc77",
+  "generatedFrom": "a3656d1a679ed23a2883f31ef2952d52bc2c36af",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -252,6 +252,7 @@
     "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
     "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
@@ -346,6 +347,10 @@
     "ContactMergeYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergedByYou": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactOnTheWay": ["src/screens/CredentialOfferAccept.tsx"],
+    "ContactPhoto": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoImage": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoInitial": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoLogo": ["src/modules/vrc/components/ContactPhoto.tsx"],
     "ContactRemove": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMerged": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMergedBack": ["src/modules/vrc/screens/ContactDetails.tsx"],
