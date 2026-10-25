@@ -283,6 +283,22 @@ describe('reply', () => {
   })
 })
 
+describe('a photo with no caption', () => {
+  it('offers no Copy, since its text is a label rather than words anyone wrote; a captioned one does', () => {
+    timeline([
+      item({ text: '📷 Photo', chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9P', textIsLabel: true }),
+      item({ text: 'look at this', chatEventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9Q' }),
+    ])
+    const tree = renderChat()
+    fireEvent(tree.getByText('📷 Photo'), 'longPress')
+    expect(tree.getByTestId(id('ChatActionReply'))).toBeTruthy()
+    expect(tree.queryByTestId(id('ChatActionCopy'))).toBeNull()
+    fireEvent(tree.getByTestId(id('ChatMessageActionsBackdrop')), 'press')
+    fireEvent(tree.getByText('look at this'), 'longPress')
+    expect(tree.getByTestId(id('ChatActionCopy'))).toBeTruthy()
+  })
+})
+
 describe('copy and delete for me', () => {
   it('copies the message text', () => {
     const tree = renderChat()

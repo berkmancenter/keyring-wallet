@@ -16,6 +16,8 @@ export const ChatIds = {
   reactions: 'ChatMessageReactions',
   // The emoji button beside the composer.
   composerEmoji: 'ChatComposerEmojiButton',
+  // A photo in a message bubble; tapping it opens it full screen.
+  image: 'ChatMessageImage',
   // The disappearing-messages sheet the chat's menu opens.
   disappearing: 'ChatDisappearingSheet',
   // One choice is `ChatDisappearingOption-<seconds>`, 0 for Off.

@@ -1,8 +1,15 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { MessageProps } from 'react-native-gifted-chat'
+import { StyleSheet } from 'react-native'
+import { MessageImage, MessageProps } from 'react-native-gifted-chat'
 
-import { ChatMessage, CallbackType, ExtendedChatMessage, MessageIconType } from '../../src/components/chat/ChatMessage'
+import {
+  ChatMessage,
+  CallbackType,
+  ExtendedChatMessage,
+  MessageIconType,
+  bubbleImageSize,
+} from '../../src/components/chat/ChatMessage'
 import { Role } from '../../src/types/chat'
 
 const onDetailsMock = jest.fn()
@@ -249,6 +256,35 @@ describe('chat lines and replies', () => {
       <ChatMessage messageProps={chatItem({ kind: 'system', text: 'Ana set messages to disappear after 1 hour' })} />
     )
     expect(tree.getByText('Ana set messages to disappear after 1 hour')).toBeTruthy()
+  })
+
+  // Under jest, gesture-handler's mocked TouchableOpacity renders no children, so gifted-chat's own <Image> never
+  // appears: what this file decides is checked on the MessageImage it renders (on a device, that Image carries them).
+  test('a photo is drawn in the bubble at its own shape, no larger than the bubble allows', () => {
+    const uri = 'file:///lib/Application%20Support/chat-media/A/01JB3XKX6F8Q2W4E5R6T7Y8Z9P.jpg'
+    const tree = render(
+      <ChatMessage
+        messageProps={chatItem({ text: 'Chat.Photo', image: uri, imageSize: { width: 1600, height: 1200 } })}
+      />
+    )
+    const image = tree.UNSAFE_getByType(MessageImage)
+    expect(image.props.currentMessage.image).toBe(uri)
+    expect(image.props.imageProps).toEqual({
+      testID: 'com.ariesbifold:id/ChatMessageImage',
+      accessibilityLabel: 'Chat.Photo',
+    })
+    expect(StyleSheet.flatten(image.props.imageStyle)).toMatchObject({ width: 220, height: 165 })
+  })
+
+  test('a tall photo is bounded by height, and a missing size draws a square', () => {
+    expect(bubbleImageSize({ width: 1200, height: 1600 })).toEqual({ width: 210, height: 280 })
+    expect(bubbleImageSize({ width: 100, height: 50 })).toEqual({ width: 100, height: 50 })
+    expect(bubbleImageSize(undefined)).toEqual({ width: 220, height: 220 })
+  })
+
+  test('a message with no photo draws no image', () => {
+    const tree = render(<ChatMessage messageProps={chatItem({ text: 'hello' })} />)
+    expect(tree.UNSAFE_queryByType(MessageImage)).toBeNull()
   })
 
   test('a reply quotes its original, or says it expired, or that it is not on this phone, or nothing yet', () => {

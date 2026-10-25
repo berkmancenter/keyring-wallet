@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "62df744ac5b29920465eca627d347c3cd235703c",
+  "generatedFrom": "40b5dbed0b047e118bb5b80d64e847265f30723a",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -260,6 +260,7 @@
     "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageImage": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
     "ChatReaction": ["src/components/chat/Chat.ids.ts"],
     "ChatReactionBar": ["src/components/chat/Chat.ids.ts"],
@@ -1290,6 +1291,9 @@
   "derived": [
     {
       "src/components/chat/ActionSlider.tsx": "action.text"
+    },
+    {
+      "src/components/chat/ChatMessage.tsx": "ChatIds.image"
     },
     {
       "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"

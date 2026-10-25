@@ -535,7 +535,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           onMoreReactions={actionTarget?.chatEventId ? openReactionPicker : undefined}
           selectedReaction={actionTarget?.reactions?.find((reaction) => reaction.author === 'sent')?.emoji}
           onReply={actionTarget?.chatEventId ? onReply : undefined}
-          onCopy={actionTarget ? onCopy : undefined}
+          // A photo's label is not something anyone wrote, so a photo with no caption has nothing to copy.
+          onCopy={actionTarget && !actionTarget.textIsLabel ? onCopy : undefined}
           onDeleteForMe={actionTarget ? onDeleteForMe : undefined}
         />
         <EmojiPickerSheet visible={picker !== null} onSelect={onPickEmoji} onClose={closePicker} />

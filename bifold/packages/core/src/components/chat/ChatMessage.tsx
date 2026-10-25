@@ -5,7 +5,7 @@ import { View, Text } from 'react-native'
 // gesture-handler touchables: RN's own touchables miss taps inside GiftedChat's
 // inverted list + GestureHandlerRootView on Android with the new architecture
 import { TouchableOpacity } from 'react-native-gesture-handler'
-import { Bubble, IMessage, MessageProps } from 'react-native-gifted-chat'
+import { Bubble, IMessage, MessageImage, MessageImageProps, MessageProps } from 'react-native-gifted-chat'
 import moment from 'moment'
 
 import { useTheme } from '../../contexts/theme'
@@ -62,6 +62,10 @@ export interface ExtendedChatMessage extends IMessage {
    */
   inReplyTo?: string
   replyTo?: { text: string; author?: string } | { expired: true } | { unavailable: true } | { unread: true }
+  /** A photo's size as its header gave it, so its bubble keeps the photo's shape (`image` is its local file URI). */
+  imageSize?: { width: number; height: number }
+  /** The text is a label this phone gave it (a photo's), not words anyone wrote: there is nothing to copy. */
+  textIsLabel?: boolean
   /** A disappearing message's timer, in seconds, as it was sent: the chat list shows no text of it. */
   expiresIn?: number
   /** A line about the chat itself (a timer set), not a bubble: never unread, never the chat list's preview. */
@@ -337,6 +341,27 @@ const quotedAuthor = (replyTo: NonNullable<ExtendedChatMessage['replyTo']>, t: T
     ? { _id: `quote:${replyTo.author ?? ''}`, name: replyTo.author }
     : { _id: 'quote:', name: quoteOf(replyTo, t) }
 
+/** The largest a photo is drawn in its bubble; tapping it opens it full screen with pinch-zoom (gifted-chat's own). */
+const IMAGE_MAX = { width: 220, height: 280 }
+
+export const bubbleImageSize = (size?: { width: number; height: number }): { width: number; height: number } => {
+  if (!size || size.width <= 0 || size.height <= 0) return { width: IMAGE_MAX.width, height: IMAGE_MAX.width }
+  const scale = Math.min(IMAGE_MAX.width / size.width, IMAGE_MAX.height / size.height, 1)
+  return { width: Math.round(size.width * scale), height: Math.round(size.height * scale) }
+}
+
+const ChatImage: React.FC<MessageImageProps<IMessage> & { label: string }> = ({ label, ...props }) => (
+  <MessageImage
+    {...props}
+    imageStyle={{
+      ...bubbleImageSize((props.currentMessage as ExtendedChatMessage).imageSize),
+      borderRadius: 8,
+      margin: 0,
+    }}
+    imageProps={{ testID: testIdWithKey(ChatIds.image), accessibilityLabel: label }}
+  />
+)
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
   const { t } = useTranslation()
@@ -413,6 +438,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
             }
             isUsernameVisible={false}
             renderMessageText={() => message.renderEvent()}
+            renderMessageImage={(props) => <ChatImage {...props} label={t('Chat.Photo')} />}
             containerStyle={{
               left: { margin: 0 },
               right: { margin: 0 },

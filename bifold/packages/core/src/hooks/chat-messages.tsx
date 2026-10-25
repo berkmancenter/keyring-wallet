@@ -49,6 +49,7 @@ import { expiredIds } from '../modules/chat/expired'
 import { timerLine } from '../components/chat/disappearing'
 import { messageTextOf } from '../components/chat/messageText'
 import { foldChatEvents, type ChatReaction } from '../modules/chat/fold'
+import { chatMediaUri } from '../modules/chat/media/store'
 import type { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 
 /**
@@ -807,13 +808,25 @@ export function chatTimelineItems(
   const roleOf = (record: ChatEventRecord) => (record.role === 'sent' ? Role.me : Role.them)
   const missing = (eventId: string): NonNullable<ExtendedChatMessage['replyTo']> =>
     expired === 'unread' ? { unread: true } : expired?.has(eventId) ? { expired: true } : { unavailable: true }
+  // A photo this phone kept, drawn from its file; one it could not check or save is only its label.
+  const photoOf = (record: ChatEventRecord) => {
+    const kept = record.attachments?.find((a) => !('unsupported' in a))
+    if (!kept || 'unsupported' in kept) return undefined
+    const uri = chatMediaUri(record.connectionId, kept.file)
+    return uri ? { uri, size: { width: kept.width, height: kept.height } } : undefined
+  }
   const items: ExtendedChatMessage[] = messages.map((record) => {
     const text = textOf(record)
+    const photo = photoOf(record)
     const target = record.inReplyTo ? byEventId.get(record.inReplyTo) : undefined
     return {
       _id: record.id,
       text,
-      renderEvent: () => <ThemedText style={textStyleFor(roleOf(record))}>{text}</ThemedText>,
+      // A photo with no caption shows only the photo; its label stays the text for previews, replies and readers.
+      renderEvent: () =>
+        photo && !record.content?.text ? <></> : <ThemedText style={textStyleFor(roleOf(record))}>{text}</ThemedText>,
+      ...(photo ? { image: photo.uri, imageSize: photo.size } : {}),
+      ...(!record.content?.text && record.attachments?.length ? { textIsLabel: true } : {}),
       createdAt: record.sentTime,
       user: { _id: roleOf(record) },
       chatEventId: record.eventId,
@@ -868,7 +881,8 @@ export const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMe
       current.createdAt?.getTime?.() !== next.createdAt?.getTime?.() ||
       current.kind !== next.kind ||
       reactionsKey(current.reactions) !== reactionsKey(next.reactions) ||
-      replyKey(current) !== replyKey(next)
+      replyKey(current) !== replyKey(next) ||
+      current.image !== next.image
     ) {
       return false
     }

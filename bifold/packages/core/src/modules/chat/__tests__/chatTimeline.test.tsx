@@ -4,7 +4,8 @@
  * agent runs here.
  */
 import { JsonTransformer, RepositoryEventTypes } from '@credo-ts/core'
-import { act, renderHook } from '@testing-library/react-native'
+import { act, render, renderHook } from '@testing-library/react-native'
+import { View } from 'react-native'
 import { Subject } from 'rxjs'
 
 import { useAgent } from '@bifold/react-hooks'
@@ -256,6 +257,29 @@ describe("one chat's events as timeline items", () => {
     expect(chatTimelineItems([bare], style)[0].text).toBe('')
   })
 
+  // A kept photo is drawn from its file; its URI is built now from the chat's folder, percent-encoded (media/store.ts).
+  test('a kept photo carries its file URI and size for the bubble; an unsupported one carries none', () => {
+    const file = '01JB3XKX6F8Q2W4E5R6T7Y8Z9P.jpg'
+    const kept = { id: 'a1', mediaType: 'image/jpeg' as const, byteCount: 1000, width: 1600, height: 1200, file }
+    const bare = event({ connectionId: 'A', eventType: 'message', attachments: [kept] })
+    const captioned = message('A', 'look at this', { attachments: [kept] })
+    const unsupported = event({ connectionId: 'A', eventType: 'message', attachments: [{ unsupported: 'too-large' }] })
+    const [b, c, u] = chatTimelineItems([bare, captioned, unsupported], style, { photoLabel: '📷 Photo' })
+    expect(b.image).toMatch(new RegExp(`^file://.*/Application%20Support/chat-media/A/${file}$`))
+    expect(b.imageSize).toEqual({ width: 1600, height: 1200 })
+    expect(c.image).toBe(b.image)
+    expect(c.text).toBe('look at this')
+    expect(u.image).toBeUndefined()
+    // Only words someone wrote can be copied: a bare photo's text is a label.
+    expect(b.textIsLabel).toBe(true)
+    expect(u.textIsLabel).toBe(true)
+    expect(c.textIsLabel).toBeUndefined()
+    // A bare photo draws no words under it; its label stays its text for previews and replies.
+    expect(b.text).toBe('📷 Photo')
+    expect(render(<View>{b.renderEvent()}</View>).queryByText('📷 Photo')).toBeNull()
+    expect(render(<View>{c.renderEvent()}</View>).getByText('look at this')).toBeTruthy()
+  })
+
   // An attachment this phone could not check or save is not a photo it can show: calling it one would be false.
   test('an attachment this phone cannot show reads as unsupported, never as a photo', () => {
     const unsupported = event({ connectionId: 'A', eventType: 'message', attachments: [{ unsupported: 'too-large' }] })
@@ -348,6 +372,23 @@ describe('the timeline is redrawn when what a chat item shows changes', () => {
   const style = () => ({})
   const hello = message('A', 'hello')
   const original = message('A', 'the question')
+
+  test('a photo arriving in an item, or its file changing, is a change', () => {
+    const kept = { id: 'a1', mediaType: 'image/jpeg' as const, byteCount: 1, width: 10, height: 10 }
+    // The same record each time (id and time fixed), so only the photo can differ.
+    const photo = (file: string) =>
+      event({
+        id: 'rec-photo',
+        connectionId: 'A',
+        eventType: 'message',
+        eventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9Q',
+        sentTime: new Date(Date.UTC(2026, 9, 25, 12)),
+        attachments: [{ ...kept, file }],
+      })
+    const one = chatTimelineItems([photo('01JB3XKX6F8Q2W4E5R6T7Y8Z9Q.jpg')], style)
+    expect(areChatMessagesEqual(one, chatTimelineItems([photo('01JB3XKX6F8Q2W4E5R6T7Y8Z9Q.jpg')], style))).toBe(true)
+    expect(areChatMessagesEqual(one, chatTimelineItems([photo('01JB3XKX6F8Q2W4E5R6T7Y8Z9Q.png')], style))).toBe(false)
+  })
 
   test('a reaction added, changed or removed is a change', () => {
     const reaction = event({ connectionId: 'A', eventType: 'reaction', target: hello.eventId, emoji: '👍' })
