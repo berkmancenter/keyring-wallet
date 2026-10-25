@@ -11,10 +11,8 @@ import React, { useLayoutEffect } from 'react'
 import { BasicAppContext } from '../../helpers/app'
 import { useCredentialErrorsFromRegistry } from '../../../src/modules/openid/hooks/useCredentialErrorsFromRegistry'
 import { useExpiredNotifications } from '../../../src/modules/openid/hooks/useExpiredNotifications'
-import {
-  resetReplacementFirstSeen,
-  useReplacementNotifications,
-} from '../../../src/modules/openid/hooks/useReplacementNotifications'
+import { resetNotificationFirstSeen } from '../../../src/modules/openid/hooks/notificationFirstSeen'
+import { useReplacementNotifications } from '../../../src/modules/openid/hooks/useReplacementNotifications'
 import { credentialRegistry } from '../../../src/modules/openid/refresh/registry'
 import { CredentialErrors } from '../../../src/types/credentials'
 
@@ -38,8 +36,10 @@ const card = (id: string) => ({ id }) as never
 
 beforeEach(() => {
   credentialRegistry.getState().reset()
-  resetReplacementFirstSeen()
+  resetNotificationFirstSeen()
 })
+// A test that moves the clock gets real timers back even when its assertions fail.
+afterEach(() => jest.useRealTimers())
 
 describe('Revoked, from the registry', () => {
   test('a credential the registry has flagged is Revoked in the first frame', () => {
@@ -79,6 +79,19 @@ describe('notifications, from the registry', () => {
     expect(seen).toHaveLength(1)
   })
 
+  // The same rule as a replacement's: both kinds sit in one list, sorted by when they arrived.
+  test('an expired credential keeps its first-seen time across a rebuild, as a replacement does', () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-10-25T12:00:00Z'))
+    credentialRegistry.setState({ expired: ['cred-1'], checked: ['cred-1'] })
+    const { seen } = frames(() => useExpiredNotifications())
+    const first = seen[0][0].createdAt?.getTime()
+    jest.setSystemTime(new Date('2026-10-25T12:01:00Z'))
+    act(() => credentialRegistry.setState({ lastSweepAt: '2026-10-25T12:01:00Z' }))
+    expect(seen.length).toBeGreaterThan(1)
+    expect(seen[seen.length - 1][0].createdAt?.getTime()).toBe(first)
+  })
+
   test('a replacement is listed in the first frame, and keeps its first-seen time across a rebuild', () => {
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-10-25T12:00:00Z'))
@@ -91,6 +104,5 @@ describe('notifications, from the registry', () => {
     act(() => credentialRegistry.setState({ checked: ['cred-1'] }))
     expect(seen.length).toBeGreaterThan(1)
     expect(seen[seen.length - 1][0].createdAt?.getTime()).toBe(first)
-    jest.useRealTimers()
   })
 })

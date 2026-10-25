@@ -3,6 +3,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { credentialRegistry, RegistryStore } from '../refresh/registry'
 import { OpenIDCustomNotificationType } from '../refresh/types'
 import { TOKENS, useServices } from '../../../container-api'
+import { firstSeenAt } from './notificationFirstSeen'
 import { useDeclineReplacement } from './useDeclineReplacement'
 import { OpenIDNotificationData } from '../features/notifications/types'
 
@@ -19,7 +20,7 @@ export const useExpiredNotifications = (): OpenIDNotificationData[] => {
         .map((oldId) => {
           const notification: OpenIDNotificationData = {
             type: OpenIDCustomNotificationType.CredentialExpired,
-            createdAt: new Date(),
+            createdAt: firstSeenAt(`expired:${oldId}`),
             onPressAction: () => {},
             onCloseAction: () => {
               s.markNotificationRemoved(oldId)
