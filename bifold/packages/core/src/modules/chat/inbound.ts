@@ -45,8 +45,9 @@ export async function receiveChatEventMessage(
   // v1 connection only from the sender and recipient keys, so a connection
   // implies a sender key. Over v2 (and TSP) a connection can be found from the
   // `from`/`to` DIDs alone, so an anoncrypt message reaches here with no
-  // sender key and is dropped. Whoever enables chat over v2 must decide that
-  // deliberately, not inherit it.
+  // sender key and is dropped. This phone sends chat events on v1 connections
+  // only (capability.ts), so nothing of ours takes that path; whoever enables
+  // chat over v2 must decide it deliberately, not inherit it.
   if (!ctx.connection) return 'no-connection'
   if (!ctx.senderKey) return 'no-authenticated-sender'
 
