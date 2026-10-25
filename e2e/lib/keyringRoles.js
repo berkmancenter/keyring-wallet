@@ -15,6 +15,7 @@
 // Record: { role, step, platform, device, ok, startedAt, endedAt,
 //           observed: { stepId, ... }, value?, error?, screenshot?, source? }
 
+import { awaitSeatStep as seatStep } from "./seatStep.js";
 import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
@@ -80,6 +81,16 @@ function writeRecord(opts, record) {
  * vetting page is not showing. The testID is on the page root, which fills the
  * screen, so Android's UiAutomator reports it whatever the scroll position.
  */
+/** The vetting seat's first step for `role`, waited for past VettingSeatLoading (lib/seatStep.js). */
+export const awaitSeatStep = (d, role, timeoutMs = 30000) =>
+  seatStep({
+    platform: d.e2ePlatform,
+    role,
+    stepOf: () => stepIdOf(d, role),
+    loadingShown: () => existsTestId(d, "VettingSeatLoading", 1000),
+    timeoutMs,
+  });
+
 export async function stepIdOf(d, role) {
   const stem = `${TEST_ID_PREFIX}${role === "vetter" ? "VettingVetterStep_" : "VettingApplicantStep_"}`;
   try {
@@ -618,6 +629,8 @@ export const applicant = {
       } else {
         await openVetting(d);
       }
+      // The seat's reads first: before them neither the identity step nor any other is showing.
+      await awaitSeatStep(d, "applicant");
       if (await byTestId(d, "VettingCreateIdentityButton").isExisting().catch(() => false)) {
         await byTestId(d, "VettingCreateIdentityButton").click();
       }
@@ -949,6 +962,10 @@ export const vetter = {
   openDesk(d, opts = {}) {
     return runStep(d, "vetter", "openDesk", opts, async () => {
       await openVetting(d);
+      // The desk's reads first: a session an earlier run left open shows its own step only once they finish, and the
+      // probes below would miss it and leave it open. (Until the desk draws a placeholder while it reads, its unread
+      // state already reads "ticket", so this returns at once there.)
+      await awaitSeatStep(d, "vetter");
       for (let i = 0; i < 3; i++) {
         let ended = false;
         for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
