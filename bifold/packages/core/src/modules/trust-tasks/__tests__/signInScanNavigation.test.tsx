@@ -95,7 +95,7 @@ const claimed = {
   keyA: { did: 'did:key:z6MkA', verificationMethod: 'did:key:z6MkA#z6MkA', sign: jest.fn() },
   answer: {},
 } as unknown as ClaimedSignIn
-const proved: ProvedSignIn = {
+const proved = {
   claimed,
   step2: {},
   sessionKey: {},
@@ -103,7 +103,7 @@ const proved: ProvedSignIn = {
   identifiedAs: 'Alberto',
   persona: { did: 'did:webvh:QmP:host:persona', entryId: 'entry-1' },
   version: '0.2',
-}
+} as unknown as ProvedSignIn
 
 const Root = createStackNavigator()
 const Tabs = createBottomTabNavigator()

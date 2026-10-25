@@ -54,7 +54,7 @@ const props = () =>
   ({
     navigation: { navigate, getParent: () => undefined },
     route: { params: { credential: { verifierHostName: 'verifier.example' } } },
-  }) as never
+  }) as unknown as React.ComponentProps<typeof OpenIDProofPresentation>
 
 const screen = () => (
   <BasicAppContext>

@@ -100,7 +100,7 @@ const gate = () => {
 
 /** The agent over `records`; a query for a held `kind` waits on its gate. */
 let reads = 0
-const agentWith = (records: Rec[], held: Record<string, Promise<void>> = {}) => ({
+const agentWith = (records: Rec[], held: Partial<Record<string, Promise<void>>> = {}) => ({
   agent: {
     genericRecords: {
       findAllByQuery: async (query: Record<string, string>) => {
