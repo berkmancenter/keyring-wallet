@@ -14,6 +14,7 @@ import { useOpenIDCredentials } from '../../../../src/modules/openid/context/Ope
 import { testIdWithKey } from '../../../../src/utils/testable'
 import { memoryGenericRecords } from '../fixtures/memoryGenericRecords'
 import { ALICE_AGAIN, ALICE_FIRST, BOB, SEVERAL_RELATIONSHIPS } from '../fixtures/severalRelationships'
+import { createDTGCredential, generateTestDid } from '../fixtures/dtg-credentials'
 import { CONTACT_LINK } from '../../../../src/modules/vrc/contacts/contactLinks'
 import { ASK_SHOWN_FOR, CONTINUITY_ASK } from '../../../../src/modules/vrc/contacts/continuity'
 
@@ -88,6 +89,66 @@ describe('Same person? on a contact', () => {
     mockUseOpenIDCredentials.mockReturnValue({ openIdState: { w3cCredentialRecords: SEVERAL_RELATIONSHIPS } } as any)
   })
   afterEach(() => jest.restoreAllMocks())
+
+  describe('every namesake at once', () => {
+    const ALICE_THIRD = { id: generateTestDid('alice-third'), name: 'Alice Smith', email: 'alice@example.com' }
+    const threeAlices = [
+      ...SEVERAL_RELATIONSHIPS,
+      createDTGCredential({
+        issuer: ALICE_THIRD,
+        credentialSubject: { id: 'did:peer:holder' },
+        validFrom: '2026-06-01',
+      }),
+    ]
+    beforeEach(() => {
+      mockUseOpenIDCredentials.mockReturnValue({ openIdState: { w3cCredentialRecords: threeAlices } } as any)
+    })
+
+    test('three contacts with one name: one offer for both others, one confirmation, one merge', async () => {
+      const tree = open(ALICE_AGAIN)
+      expect(await tree.findByText('ContactDetails.MergeAllOfferBody (count 2)')).toBeTruthy()
+      expect(tree.getByText('ContactDetails.MergeAll')).toBeTruthy()
+      fireEvent.press(tree.getByTestId(id('ContactMergeOffer')))
+      expect(tree.getByText('ContactDetails.MergeAllConfirmTitle (count 3)')).toBeTruthy()
+      fireEvent.press(tree.getByTestId(id('ContactMergeYes')))
+
+      await tree.findByTestId(id('ContactMergedByYou'))
+      // Alice's first contact has two cards, the other two one each: all four on one contact, under the oldest.
+      expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(4)
+      expect(new Map(store.records.map((r) => [r.content.issuerDid, r.content.contactId]))).toEqual(
+        new Map([
+          [ALICE_AGAIN.id, ALICE_FIRST.id],
+          [ALICE_THIRD.id, ALICE_FIRST.id],
+        ])
+      )
+      expect(tree.queryByTestId(id('ContactMergeOffer'))).toBeNull()
+    })
+
+    test('a merged contact is offered a namesake that came later, beside its merged state', async () => {
+      store.records.push({
+        id: 'earlier-merge',
+        content: { issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id, confirmation: 'user' },
+        tags: { recordType: CONTACT_LINK, issuerDid: ALICE_AGAIN.id, contactId: ALICE_FIRST.id },
+      })
+      const tree = open(ALICE_AGAIN)
+      expect(await tree.findByText('ContactDetails.MergeOfferBody (count 1)')).toBeTruthy()
+      expect(tree.getByTestId(id('ContactMergedByYou'))).toBeTruthy()
+      fireEvent.press(tree.getByTestId(id('ContactMergeOffer')))
+      expect(tree.getByText('ContactDetails.MergeConfirmTitle (count 2)')).toBeTruthy()
+      fireEvent.press(tree.getByTestId(id('ContactMergeYes')))
+      // First what was stored (did the merge land?), then what the screen shows (did it read the links again?).
+      await waitFor(() => expect(store.records).toHaveLength(2), { timeout: 5000 })
+      expect(tree.queryByTestId(id('ContactMergeFailed'))).toBeNull()
+      expect(new Map(store.records.map((r) => [r.content.issuerDid, r.content.contactId]))).toEqual(
+        new Map([
+          [ALICE_AGAIN.id, ALICE_FIRST.id],
+          [ALICE_THIRD.id, ALICE_FIRST.id],
+        ])
+      )
+      await waitFor(() => expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(4), { timeout: 5000 })
+      expect(tree.queryByTestId(id('ContactMergeOffer'))).toBeNull()
+    })
+  })
 
   test('someone with no namesake is not offered a merge', async () => {
     const tree = open(BOB)

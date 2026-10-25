@@ -1,8 +1,8 @@
 /**
- * "Same person?", on a contact: when another contact's cards give the same name (exchanging again with someone makes
- * a second contact), offer to merge the two into one. The person decides; the merge says it was theirs ("Merged by
- * you"), never that the other phone confirmed it. A merged contact can be separated again. Neither touches a card, a
- * connection or a message.
+ * "Same person?", on a contact: when other contacts' cards give the same name (exchanging again with someone makes
+ * another contact each time), offer to merge them all into one, in one step, on a merged contact too. The person
+ * decides; the merge says it was theirs ("Merged by you"), never that the other phone confirmed it. A merged contact
+ * can be separated again, every relationship its own contact. Neither touches a card, a connection or a message.
  *
  * @module vrc/components/ContactMergeSection
  */
@@ -18,7 +18,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { ContactLinks } from '../contacts/contactLinks'
-import { findMergeCandidates, mergeContacts, separateContact, type MergeCandidate } from '../contacts/mergeContacts'
+import { findMergeCandidates, mergeAllContacts, separateContact, type MergeCandidate } from '../contacts/mergeContacts'
 import { askToConfirm, askedRecently, continuityEvents, isConfirmedByPeer } from '../contacts/continuity'
 
 export interface ContactMergeSectionProps {
@@ -47,15 +47,16 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
-  const [asking, setAsking] = useState<MergeCandidate>()
+  const [asking, setAsking] = useState<MergeCandidate[]>()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const merged = relationships.length > 1
-  const candidates = useMemo(
-    () => (merged ? [] : findMergeCandidates(records, links, issuerId)),
-    [merged, records, links, issuerId]
-  )
+  const candidates = useMemo(() => findMergeCandidates(records, links, issuerId), [records, links, issuerId])
   const words = { name, interpolation: { escapeValue: false } }
+  // How many contacts a merge joins: this one and every namesake. Two keep the two-contact wording.
+  const joining = candidates.length + 1
+  const many = joining > 2
+  const countWords = { ...words, count: joining }
   // A merge is the person's word until the other phone confirms it (continuity.ts); until then it can be asked to.
   const [confirmedByPhone, setConfirmedByPhone] = useState(false)
   const [asked, setAsked] = useState(false)
@@ -120,6 +121,24 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
 
   return (
     <View style={styles.section} testID={testIdWithKey('ContactMerge')}>
+      {candidates.length > 0 ? (
+        <>
+          <ThemedText style={styles.title}>{t('ContactDetails.MergeOfferTitle')}</ThemedText>
+          <ThemedText style={styles.muted}>
+            {t(candidates.length > 1 ? 'ContactDetails.MergeAllOfferBody' : 'ContactDetails.MergeOfferBody', {
+              ...words,
+              count: candidates.length,
+            })}
+          </ThemedText>
+          <Button
+            title={t(candidates.length > 1 ? 'ContactDetails.MergeAll' : 'ContactDetails.Merge')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => setAsking(candidates)}
+            disabled={busy}
+            testID={testIdWithKey('ContactMergeOffer')}
+          />
+        </>
+      ) : null}
       {merged ? (
         <>
           {confirmedByPhone ? (
@@ -161,19 +180,7 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
             testID={testIdWithKey('ContactSeparate')}
           />
         </>
-      ) : (
-        <>
-          <ThemedText style={styles.title}>{t('ContactDetails.MergeOfferTitle')}</ThemedText>
-          <ThemedText style={styles.muted}>{t('ContactDetails.MergeOfferBody', words)}</ThemedText>
-          <Button
-            title={t('ContactDetails.Merge')}
-            buttonType={ButtonType.Secondary}
-            onPress={() => setAsking(candidates[0])}
-            disabled={busy}
-            testID={testIdWithKey('ContactMergeOffer')}
-          />
-        </>
-      )}
+      ) : null}
       {failed ? (
         <ThemedText style={styles.muted} testID={testIdWithKey('ContactMergeFailed')}>
           {t('ContactDetails.MergeFailed')}
@@ -183,12 +190,23 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
         <View style={styles.sheetBack}>
           {asking ? (
             <View style={styles.sheet} testID={testIdWithKey('ContactMergeConfirm')}>
-              <ThemedText variant="headingThree">{t('ContactDetails.MergeConfirmTitle', words)}</ThemedText>
-              <ThemedText>{t('ContactDetails.MergeConfirmBody', words)}</ThemedText>
+              <ThemedText variant="headingThree">
+                {t(many ? 'ContactDetails.MergeAllConfirmTitle' : 'ContactDetails.MergeConfirmTitle', countWords)}
+              </ThemedText>
+              <ThemedText>
+                {t(many ? 'ContactDetails.MergeAllConfirmBody' : 'ContactDetails.MergeConfirmBody', countWords)}
+              </ThemedText>
               <Button
-                title={t('ContactDetails.Merge')}
+                title={t(many ? 'ContactDetails.MergeAll' : 'ContactDetails.Merge')}
                 buttonType={ButtonType.Primary}
-                onPress={() => void run(() => mergeContacts(agent, records, links, issuerId, asking.issuerId))}
+                onPress={() =>
+                  void run(() =>
+                    mergeAllContacts(agent, records, links, [
+                      issuerId,
+                      ...asking.map((candidate) => candidate.issuerId),
+                    ])
+                  )
+                }
                 disabled={busy}
                 testID={testIdWithKey('ContactMergeYes')}
               />

@@ -81,9 +81,45 @@ async function linkRecordsOf(agent: ContactLinkStore, query: Record<string, stri
 }
 
 /**
- * Merge the contacts of `issuerId` and `otherIssuerId` into one, kept under the older contact's id. Every
- * relationship of the newer contact is linked to it (a link it had before is replaced).
+ * Merge the contacts of every relationship in `issuerIds` into one, kept under the id of the contact whose first card
+ * is oldest (the first given wins a tie). Every relationship of every other contact is linked straight to it, a link
+ * it had before replaced, so no link ever points at another link. Three namesakes merge in one step this way, not two.
  */
+export async function mergeAllContacts(
+  agent: ContactLinkStore,
+  records: W3cCredentialRecord[],
+  links: ContactLinks,
+  issuerIds: string[],
+  confirmation: MergeConfirmation = 'user'
+): Promise<void> {
+  const contacts = new Map<string, string[]>()
+  for (const issuerId of issuerIds) {
+    const contact = contactIdOf(links, issuerId)
+    if (!contacts.has(contact)) contacts.set(contact, relationshipsOfContact(links, issuerId))
+  }
+  if (contacts.size < 2) return
+  let contactId = ''
+  let oldest = ''
+  for (const [contact, members] of contacts) {
+    const first = firstCardAt(records, members)
+    if (!contactId || first < oldest) {
+      contactId = contact
+      oldest = first
+    }
+  }
+  for (const [contact, members] of contacts) {
+    if (contact === contactId) continue
+    for (const member of members) {
+      for (const old of await linkRecordsOf(agent, { issuerDid: member })) await agent.genericRecords.deleteById(old.id)
+      await agent.genericRecords.save({
+        content: { issuerDid: member, contactId, confirmation },
+        tags: { recordType: CONTACT_LINK, issuerDid: member, contactId },
+      })
+    }
+  }
+}
+
+/** Merge the contacts of `issuerId` and `otherIssuerId` into one, kept under the older contact's id. */
 export async function mergeContacts(
   agent: ContactLinkStore,
   records: W3cCredentialRecord[],
@@ -92,19 +128,7 @@ export async function mergeContacts(
   otherIssuerId: string,
   confirmation: MergeConfirmation = 'user'
 ): Promise<void> {
-  const ours = relationshipsOfContact(links, issuerId)
-  const theirs = relationshipsOfContact(links, otherIssuerId)
-  const keepOurs = firstCardAt(records, ours) <= firstCardAt(records, theirs)
-  const contactId = contactIdOf(links, keepOurs ? issuerId : otherIssuerId)
-  const moving = keepOurs ? theirs : ours
-  for (const member of moving) {
-    for (const old of await linkRecordsOf(agent, { issuerDid: member })) await agent.genericRecords.deleteById(old.id)
-    if (member === contactId) continue
-    await agent.genericRecords.save({
-      content: { issuerDid: member, contactId, confirmation },
-      tags: { recordType: CONTACT_LINK, issuerDid: member, contactId },
-    })
-  }
+  await mergeAllContacts(agent, records, links, [issuerId, otherIssuerId], confirmation)
 }
 
 /** Separate a merged contact: every relationship it holds is its own contact again. */

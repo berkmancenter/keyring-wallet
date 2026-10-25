@@ -41,3 +41,28 @@ describe('merged-removal strings', () => {
     }
   })
 })
+
+describe('merge-all strings', () => {
+  const all = (count: number) => ({ name: 'Alice Smith', count, interpolation: { escapeValue: false } })
+
+  test('English: the offer counts the other contacts, the confirmation counts all of them', async () => {
+    const i18n = await instance('en')
+    expect(i18n.t('ContactDetails.MergeAllOfferBody', all(2))).toBe(
+      "You have 2 other contacts named Alice Smith. If they're all the same person, merge them into one contact. Nothing is deleted, and you can separate them again."
+    )
+    expect(i18n.t('ContactDetails.MergeAllConfirmTitle', all(3))).toBe('Merge all 3 Alice Smith contacts?')
+    expect(i18n.t('ContactDetails.MergeAll')).toBe('Merge all')
+  })
+
+  test.each(['en', 'fr', 'pt-BR'])('%s: every merge-all string resolves, in its own words', async (lng) => {
+    const i18n = await instance(lng)
+    const english = await instance('en')
+    for (const key of ['MergeAll', 'MergeAllOfferBody', 'MergeAllConfirmTitle', 'MergeAllConfirmBody']) {
+      const text = i18n.t(`ContactDetails.${key}`, all(3))
+      expect(text).not.toContain('ContactDetails.')
+      expect(text).not.toContain('{{')
+      if (key !== 'MergeAll' && key !== 'MergeAllConfirmBody') expect(text).toContain('3')
+      if (lng !== 'en') expect(text).not.toBe(english.t(`ContactDetails.${key}`, all(3)))
+    }
+  })
+})
