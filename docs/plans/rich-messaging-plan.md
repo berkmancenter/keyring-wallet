@@ -13,6 +13,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, and chat over DIDComm v1 only, with v2 as a later item), and corrections to the mediator facts from the Step 3 research.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -99,12 +100,17 @@ iOS already declares the camera and photo-library usage strings (`app/ios/AriesB
 
 ### 4.1 Message type and carriage
 
-- **One DIDComm message type,** `https://keyring.berkmancenter.org/chat/1.0/event` *(exact URI: D3)*. It carries a **chat event** as a JSON attachment with id `chat-event`, copying the `TrustTaskMessage` pattern:
-  - a `DidCommMessage` subclass with `static type = parseMessageType(...)`;
-  - the payload in `DidCommAttachmentData({ json })`;
-  - registration through `DidCommMessageHandlerRegistry`.
-
-  A DIDComm v2 class mirrors it, the way `DidCommV2Carriage` does for Trust Tasks.
+- **One DIDComm message type,** `https://keyring.berkmancenter.org/chat/1.0/event` *(exact URI: D3)*, carrying one **chat event**.
+  - **One class serves both DIDComm versions,** as Credo's own BasicMessage 2.0 does:
+    - over v1, the event rides as the message's `event` member;
+    - over v2, `toV2Plaintext()` puts it in `body.event`, and Credo spreads `body` back onto the same property on receipt.
+  - **Why the event sits one level down:** its own `type` and `eventId` never collide with the DIDComm message's `type` and `id`.
+  - **Registration.** The class is registered through `DidCommMessageHandlerRegistry`, from the same inbound setup the Trust Task carriages use. So every build that receives Trust Tasks also receives chat events.
+  - **Why not two classes.** Separate classes per DIDComm version, as the Trust Task binding uses, would need two type URIs. Credo matches inbound messages to classes by type alone.
+- **Sent over DIDComm v1 connections only, until chat over v2 is designed.** A contact on a v2 connection counts as not supporting chat (§4.5) and gets plain BasicMessages.
+  - **Why.** Over DIDComm v2 and TSP, Credo can find a connection from the `from` and `to` DIDs alone, so an anoncrypted message reaches the handler with no authenticated sender. The handler drops those (`no-authenticated-sender`, bifold `modules/chat/inbound.ts`), because the sender of a chat event must be the connection it arrived on.
+  - **No cost today.** v2 is off by default in the app: a developer setting turns it on (`setDidCommV2Enabled`, bifold `trust-tasks/ceremony.ts`), so every tester's contacts are v1.
+  - **Chat over v2 is a separate item,** and it must land before the mediator migration's M4 makes v2 the default for new contacts (§7). It decides how a v2 chat event proves its sender (authcrypt required, or another binding to the connection), and it is proven by its own two-device run.
 - **The event JSON is independent of how it is carried,** so it can later travel as a TSP payload unchanged.
 - **Not JSON inside BasicMessage `content`.** The display filter in §3 hides exactly that shape, non-Keyring peers would show raw JSON, and BasicMessage records cannot be indexed by event type.
 - **Not a Credo patch to BasicMessage.** Credo's base message class keeps `~attach` on the wire, but the BasicMessage handler and record drop it. Patching that gives Keyring-only behaviour to a standard type, which other peers would silently lose, and the patch would have to be carried through the Credo 0.7 upgrade.
@@ -184,13 +190,16 @@ The sender is the authenticated DIDComm sender of the connection, never a field 
 - **Why 256 KiB.** The image is base64'd into the attachment, then base64url'd again inside the JWE, so 1 MiB holds about 560 KiB of raw bytes before JSON and forwarding overhead. 256 KiB leaves headroom, and it keeps the pickup batches of up to 10 messages light on mobile networks.
 - **This figure is an estimate until Step 0 measures it.**
 
-**Effect on the mediator's queue.** The queue limits count messages, not bytes. On Affinidi they are `queued_send_messages_per_peer = 50` and `queued_receive_messages_soft/hard = 200/1000` (`deploy/keyring-messaging/mediator/mediator.toml`, enforced through `limits.queue.peer` / `PEER_Q`; see `docs/VTI_UPSTREAM_FINDINGS.md`).
+**Effect on the mediator's queue.** The queue limits count messages, not bytes. On Affinidi they are `queued_send_messages_per_peer = 50` and `queued_receive_messages_soft = 200`, the enforced default per recipient. 1,000 (`_hard`) is only the ceiling an account's limit can be raised to (`deploy/keyring-messaging/mediator/mediator.toml`, enforced through `limits.queue.peer` / `PEER_Q`; see `docs/VTI_UPSTREAM_FINDINGS.md`).
 - **Message counts.** Photos reach those gates no sooner than text does. A burst of photos counts one message each against the 50-per-peer cap.
-- **Bytes held.** This is what grows. At the hard cap, 1,000 queued messages of 256 KiB is about 256 MiB for one recipient, against a few hundred KiB for text. On the Affinidi mediator that sits in its store until pickup or the 7-day expiry.
-- **Pickup batches.** A batch of 10 such messages is about 2.5 MiB raw (roughly 4.5 MiB on the wire), inside the 10 MiB `ws_size`/`http_size` frame limits.
+- **Bytes held.** This is what grows.
+  - **On Affinidi:** at the enforced 200, about 50 MiB for one recipient (about 256 MiB at a raised 1,000), against a few hundred KiB for text. It sits in Redis memory until pickup or the 7-day expiry.
+  - **On the current Credo mediator:** there is no queue cap and no expiry. Queued messages wait on disk, in Postgres, until pickup, however long that is.
+- **Pickup batches.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
+- **The forward on the way in** is a JSON attachment, in both Credo's own v2 routing and the wallet's VTI mediator transport. So about 430 KiB of raw media fits under `message_size`, and 256 KiB leaves room.
 - **The contentless push wake** is unaffected by size.
 
-Step 0 measures queue memory per queued photo on both mediators, and the mediator operator signs off on the worst case before Step 3 ships (D2).
+Step 0 measures the storage each queued photo takes on both mediators (disk on Credo, memory on Affinidi), and the mediator operator signs off on the worst case before Step 3 ships (D2).
 
 **What fits:**
 - **Photos:** resized to 1600 px on the long edge and re-encoded as JPEG with `expo-image-manipulator`, stepping quality down (0.8 → 0.6 → 0.4) until the result fits. A typical phone photo lands at 150–250 KiB. If a photo still does not fit at the lowest step, it is resized further. The re-encode is expected to drop EXIF, including GPS, and Step 3 tests that it does.
@@ -200,19 +209,15 @@ Step 0 measures queue memory per queued photo on both mediators, and the mediato
 
 ### 4.5 Capability check and fallback
 
-- **Advertising support.** Each wallet advertises `keyring/chat/1.0` through Discover Features (Aries RFC 0031, discover-features 1.0, and RFC 0557, discover-features 2.0, both already in Credo).
-- **Caching the answer.** It is cached per connection, and re-queried when:
-  - it is missing;
-  - it was recorded by an older app version;
-  - it is more than 7 days old.
-
-  It is also re-queried **before anything is dropped** because of an "unsupported" answer more than 24 hours old.
+- **How support is known.** A contact's support comes from the RCE protocol version it announces in the relationship handshake (`vrc:rceVersion:<n>`), stored on its `RelationshipDidRecord`. **Version 6 means "speaks `keyring/chat/1.0`"**. This is the same check VRC issuance uses (`counterpartyRceVersionAtLeast`); Keyring makes no DIDComm Discover Features calls. A contact on a DIDComm v2 connection counts as not supporting chat, whatever it announced, until chat over v2 is built (§4.1).
+- **When a build announces 6.** Only from the build that shows chat events in the timeline (Step 1). Before that, nobody sends chat events to a build that cannot show them.
+- **Existing contacts learn of an upgrade.** The relationship handshake is sent once per relationship, and re-sending it would restart the relationship exchange. So a build that first announces 6 sends each existing contact a one-time chat-capability notice, a separate message that never touches the exchange. A contact that receives one raises its stored version. The notice's exact form is settled in Step 1, before anything depends on it.
 - **Peer supports it:** send `chat/1.0/event`.
 - **Peer does not:** send a plain BasicMessage. Text goes as it is. A photo goes as "📷 Photo — update Keyring to see it". A reply goes as its text. Reactions are **not sent**, because a stream of "reacted 👍" messages is worse than nothing.
 - **Receivers accept both,** and existing BasicMessages keep rendering exactly as today.
-- **Disappearing messages need both sides on `chat/1.0`.** A fallback BasicMessage carries no timer, so an older peer cannot honour one. The timer cannot be turned on for a peer that does not advertise `chat/1.0` ("Ask <name> to update Keyring to use disappearing messages"). If the peer stops advertising it while a timer is on, the next send asks before going out as a plain message.
+- **Disappearing messages need both sides on `chat/1.0`.** A fallback BasicMessage carries no timer, so an older peer cannot honour one. The timer cannot be turned on for a peer that does not support `chat/1.0` ("Ask <name> to update Keyring to use disappearing messages"). If the peer stops supporting it while a timer is on, the next send asks before going out as a plain message.
 
-**Delivery to an offline peer.** There are no delivery receipts in this plan. A message, including a photo, that waits in the mediator queue for longer than its 7-day expiry is dropped there, and the sender is not told. That matches text today and is accepted for this plan. Delivered receipts are a later type (§4.2), and they would close the gap.
+**Delivery to an offline peer.** There are no delivery receipts in this plan. On the Affinidi mediator, a message, including a photo, that waits in the queue for longer than its 7-day expiry is dropped there, and the sender is not told. The current Credo mediator never expires queued messages. That matches text today and is accepted for this plan. Delivered receipts are a later type (§4.2), and they would close the gap.
 
 ### 4.6 Message history and disappearing messages
 
@@ -227,11 +232,11 @@ Step 0 measures queue memory per queued photo on both mediators, and the mediato
   - The change is a `timer` event carrying `expiresIn` and a `version`. The highest `version` wins, with ties broken by `eventId`, the race Signal's `expireTimerVersion` exists to settle.
   - It shows as a system line in both timelines: "<name> set messages to disappear after 1 week".
 - **Every message carries the `expiresIn` it was sent with.** So a missed `timer` event does not leave the two phones disagreeing about that message. A timer change applies to new messages only.
-- **When the clock starts** follows Signal: the sender's copy at send, the recipient's copy when it is first shown on screen (D4). An unread message therefore stays until it is read, or until the mediator's 7-day expiry drops it undelivered.
+- **When the clock starts** follows Signal: the sender's copy at send, the recipient's copy when it is first shown on screen (D4). An unread message therefore stays until it is read, or until a mediator expiry drops it undelivered (7 days on Affinidi; the current Credo mediator never expires them).
 - **The sweep** runs at startup, when the app comes to the foreground, and on a timer while a chat is open. It deletes the record, its folded reactions and redactions, quote snippets that show its text, and its media file. A reply whose target has expired shows "Original message expired".
 - **Notifications in a chat with a timer** show "New message" with no preview, both in the in-app toast and in any system notification. That way a preview cannot outlive the message.
 - **What the setting says:** "New messages in this chat disappear from both phones after they've been seen for 1 week. Either of you can change this. People can still screenshot or copy messages, and this only works when you both have a current Keyring."
-- **The mediator queue is not shortened** for timed messages (D5). It holds only ciphertext, for at most 7 days, and shortening it would drop undelivered messages rather than expire read ones.
+- **The mediator queue is not shortened** for timed messages (D5). It holds only ciphertext (for at most 7 days on Affinidi), and shortening it would drop undelivered messages rather than expire read ones.
 
 ---
 
@@ -259,6 +264,10 @@ Step 0 measures queue memory per queued photo on both mediators, and the mediato
   - **Images and GIFs:** React Native `<Image>` from the local file, with `resizeMethod="auto"`, and a full-screen viewer that supports pinch-zoom.
     - iOS animates GIFs natively.
     - Android needs Fresco's `animated-gif` artefact (version-matched to the Fresco already present) added in the app's Gradle file. That is part of React Native's own image stack, not a new JavaScript dependency.
+    - The full-screen viewer reuses gifted-chat's own `MessageImage` (a modal with pinch-zoom, in the 3.3.x already present) rather than a new component.
+    - GIFs are picked with `quality: 1`; a lower quality makes iOS re-encode the file, which can drop the animation.
+    - Very large photos (50 megapixels and up) are resized before anything else, because Android decodes at full size first and can run out of memory.
+- **Pickup pacing for photo traffic:** the app does not start a new message pickup while an earlier pickup batch is still being processed, and it caps the batch size when photos are queued, so several megabyte-sized batches never overlap.
 - **Emoji picker:** our own component, reached from the composer and from "+" on the reaction bar.
   - **Data.** A script turns Unicode's `emoji-test.txt` (fully-qualified entries, grouped by category, Unicode version pinned) and the CLDR short names into a JSON data file checked into the repo. Each entry keeps the emoji version from its `E` field.
   - **Layout.** A sectioned grid with search and a "recent" row.
@@ -283,7 +292,7 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
 - Send v1 and v2 messages with growing inline attachments, and record the largest raw attachment that round-trips through each of:
   - (a) the production Credo mediator;
   - (b) a local Affinidi mediator running the `deploy/keyring-messaging` config.
-- Record what a wallet on today's release does when it receives `chat/1.0/event`, an unknown message type: problem report, silent drop or error. This decides how much the fallback (§4.5) leans on Discover Features being current.
+- Record what a wallet on today's release does when it receives `chat/1.0/event`, an unknown message type: problem report, silent drop or error. This decides what the capability notice (§4.5) must guard against when a contact's stored version is out of date.
 - *Done when:* a dated companion records:
   - both ceilings;
   - the per-photo queue memory on both mediators;
@@ -291,7 +300,7 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
   - §4.4's 256 KiB, confirmed or replaced.
 
 **Step 1 — Message type, reactions and replies**
-- **The protocol side:** the `chat/1.0` classes and handler, `ChatEventRecord`, the Discover Features advertisement, and the BasicMessage fallback with §4.5's re-query rule.
+- **The protocol side:** the `chat/1.0` class and handler, `ChatEventRecord`, announcing RCE version 6 with the one-time capability notice (§4.5), and the BasicMessage fallback, over DIDComm v1 (§4.1).
 - **The chat screen:** the unified timeline, the long-press bar with six fixed emoji, quoted replies, Copy, and Delete for me.
 - **Around the chat:** unread counting and the chat-list preview (§5), and the wake listener (§5, with the message-notifications work).
 - *Done when:*
@@ -301,8 +310,9 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
     - "change, then remove" delivered in reverse batches, resolving to removed;
     - a redaction from the wrong author, ignored;
     - a target from another connection, ignored;
+    - a contact on a DIDComm v2 connection, sent a BasicMessage;
   - unread tests show that a message counts and a reaction does not;
-  - a Keyring↔Keyring two-device run sends text, adds a reaction, changes it, removes it and replies. It runs once over DIDComm v1 and once over DIDComm v2;
+  - a Keyring↔Keyring two-device run sends text, adds a reaction, changes it, removes it and replies, over DIDComm v1. Chat over v2 is proven by its own run when it is built (§4.1);
   - a build with the feature and a build without it exchange readable text both ways, with no raw JSON shown on either.
 
 **Step 2 — Emoji picker**
@@ -321,7 +331,7 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
 - *Done when:*
   - a photo taken on device A shows on device B, through the production Credo mediator. The run through the Affinidi mediator is added once #530's M1 is live; Step 3 is done without it, and the plan records which mediators were covered;
   - a GIF animates on iOS and on Android;
-  - a unit test asserts that a photo carrying GPS EXIF comes out of the encoder with no EXIF;
+  - a simulator or device run reads the encoder's real output and finds no EXIF, GPS included. A unit test cannot prove this, because Jest runs the manipulator's mock;
   - an attachment of exactly the limit is sent, and one byte over is refused on the sender, never sent;
   - a descriptor whose `byteCount`, `width`, `height` or `mediaType` does not match the bytes is rejected;
   - an image declaring dimensions over the cap is rejected;
@@ -352,10 +362,10 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
 | D1 | Is this minimum (reactions, replies, emoji picker, inline photos/GIFs, history controls) the target? | Yes | Step 1 |
-| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read, for at most 7 days until pickup, and the bytes it holds per queued message grow up to 256 KiB (§4.4). | Yes, once the mediator operator accepts the measured worst case; this is the same position the app is in for every text message today | Step 3 |
+| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read until pickup (at most 7 days on Affinidi; no limit on the current Credo mediator), and the bytes it holds per queued message grow up to 256 KiB (§4.4). | Yes, once the mediator operator accepts the measured worst case; this is the same position the app is in for every text message today | Step 3 |
 | D3 | Namespace and profile name: Keyring's own (`keyring.chat/1`), or adopt the rooms name (`org.openvtc.msg/1`)? | Keyring's own, shaped to match, offered upstream once Step 1 proves it | Step 1 |
 | D4 | When does a disappearing message's clock start? | As in Signal: the sender's copy at send, the recipient's at first display, so nothing disappears unread | Step 4 |
-| D5 | Should timed messages also shorten the mediator queue (the DIDComm v2 `expires_time` header)? | No. The queue holds only ciphertext for at most 7 days; shortening it would drop undelivered messages instead of expiring read ones | Step 4 |
+| D5 | Should timed messages also shorten the mediator queue (the DIDComm v2 `expires_time` header)? | No. The queue holds only ciphertext, at most 7 days on Affinidi; shortening it would drop undelivered messages instead of expiring read ones | Step 4 |
 
 **Blocked on:**
 
@@ -365,6 +375,7 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 | The wake and preview changes (§5, "Wake") | The message-notifications work | Made together with it; it does not block Steps 1–2 |
 | The Affinidi mediator run in Step 3 | The mediator migration (#530, M1 → M5, no date) | Step 3 can be done on the Credo mediator alone, with the Affinidi run added when M1 is live |
 | Keeping non-content events from waking the phone (§4.2) | The peer-message-notifications work | This plan adopts its answer; it does not block any step |
+| Chat over DIDComm v2 (§4.1) | This plan, as a separate item after Step 1 | It must land before the mediator migration's M4 (#530) makes v2 the default for new contacts; until then a v2 contact gets plain BasicMessages |
 
 ---
 
