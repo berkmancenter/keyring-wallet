@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "0d4ad763f7e48a2c14e322983b39e7ff51e50db3",
+  "generatedFrom": "9c9136b47c94489ec9982602a04f2748232b1dfa",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -744,6 +744,8 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
+    "PassOpenClose": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
+    "PassOpenLift": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "PassStack": ["src/modules/trust-tasks/components/PassStack.tsx"],
     "PassStackItem": ["src/modules/trust-tasks/components/PassStack.tsx"],
     "PasteFromClipboard": ["src/screens/PasteUrl.tsx"],
@@ -2332,9 +2334,6 @@
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.publishProfileButton"
-    },
-    {
-      "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.readingHeld"
     },
     {
       "src/modules/trust-tasks/screens/VtiVetting.tsx": "VtiVettingIds.replaceRequest"
