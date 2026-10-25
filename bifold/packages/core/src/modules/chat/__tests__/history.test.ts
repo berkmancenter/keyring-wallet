@@ -19,7 +19,14 @@ jest.mock('react-native-fs', () => ({
   }),
 }))
 
-type Ev = { id: string; connectionId: string; eventId: string; eventType: string; target?: string }
+type Ev = {
+  id: string
+  connectionId: string
+  role: 'sent' | 'received'
+  eventId: string
+  eventType: string
+  target?: string
+}
 type Basic = { id: string; connectionId: string }
 
 const notFound = () => Object.assign(new Error('gone'), { name: 'RecordNotFoundError' })
@@ -62,9 +69,16 @@ function makeAgent(events: Ev[], basic: Basic[], { failOn }: { failOn?: string }
   return { agent: agent as never, store, deletedEvents }
 }
 
-const ev = (connectionId: string, eventId: string, eventType: string, target?: string): Ev => ({
-  id: `rec-${eventId}`,
+const ev = (
+  connectionId: string,
+  eventId: string,
+  eventType: string,
+  target?: string,
+  role: Ev['role'] = 'received'
+): Ev => ({
+  id: `rec-${role}-${eventId}`,
   connectionId,
+  role,
   eventId,
   eventType,
   ...(target ? { target } : {}),
@@ -117,13 +131,39 @@ describe('chat history on this phone', () => {
 
   test('Delete for me removes the message, its reactions, their redactions and its media file, and nothing else', async () => {
     const { agent, store } = makeAgent(chat, basics)
-    await deleteChatMessages(agent, 'conn-1', { eventIds: ['M1'] })
+    await deleteChatMessages(agent, 'conn-1', { events: [{ role: 'received', eventId: 'M1' }] })
     expect(store.events.map((e) => e.eventId)).toEqual(['M2', 'R2', 'N1'])
     expect(store.basic).toHaveLength(3)
     expect([...mockFiles].sort()).toEqual([
       '/lib/Application Support/chat-media/conn-1/M2.gif',
       '/lib/Application Support/chat-media/conn-2/N1.jpg',
     ])
+  })
+
+  test("a received event reusing a sent eventId is deleted alone: the peer's copy never takes this phone's", async () => {
+    // Inbound refuses such a pair now (#582), but a phone may already hold one. Each side has a reaction from the
+    // other phone, and the shared name has one media file.
+    const collided = [
+      ev('conn-1', 'M1', 'message', undefined, 'sent'),
+      ev('conn-1', 'R9', 'reaction', 'M1', 'received'),
+      ev('conn-1', 'M1', 'message', undefined, 'received'),
+    ]
+    const { agent, store } = makeAgent(collided, [])
+    await deleteChatMessages(agent, 'conn-1', { events: [{ role: 'received', eventId: 'M1' }] })
+    // This phone's own message stays, with its media file. Following targets stays role-blind (a peer's reaction
+    // targets a message this phone sent), so the reaction naming M1 goes with the deleted one.
+    expect(store.events.map((e) => `${e.role} ${e.eventId}`)).toEqual(['sent M1'])
+    expect(mockFiles.has('/lib/Application Support/chat-media/conn-1/M1.jpg')).toBe(true)
+  })
+
+  test("a peer's reaction to this phone's message goes with it: targets are followed whoever sent them", async () => {
+    const { agent, store } = makeAgent(
+      [ev('conn-1', 'M1', 'message', undefined, 'sent'), ev('conn-1', 'R1', 'reaction', 'M1', 'received')],
+      []
+    )
+    await deleteChatMessages(agent, 'conn-1', { events: [{ role: 'sent', eventId: 'M1' }] })
+    expect(store.events).toEqual([])
+    expect(mockFiles.has('/lib/Application Support/chat-media/conn-1/M1.jpg')).toBe(false)
   })
 
   test('Delete for me on a plain BasicMessage removes only that record', async () => {
@@ -136,7 +176,10 @@ describe('chat history on this phone', () => {
 
   test('ids that belong to another chat are ignored: a deletion never reaches past its own connection', async () => {
     const { agent, store } = makeAgent(chat, basics)
-    await deleteChatMessages(agent, 'conn-1', { eventIds: ['N1'], basicMessageIds: ['b3'] })
+    await deleteChatMessages(agent, 'conn-1', {
+      events: [{ role: 'received', eventId: 'N1' }],
+      basicMessageIds: ['b3'],
+    })
     expect(store.events).toHaveLength(chat.length)
     expect(store.basic).toHaveLength(3)
     expect(mockFiles.size).toBe(3)
@@ -149,7 +192,7 @@ describe('chat history on this phone', () => {
     ).dependencyManager.resolve(ChatEventRepository)
     const original = repository.delete
     repository.delete = async (ctx: unknown, record: Ev) => {
-      if (record.id === 'rec-R1') throw notFound()
+      if (record.id === 'rec-received-R1') throw notFound()
       return original(ctx, record)
     }
     mockFiles = new Set()
@@ -168,7 +211,7 @@ describe('chat history on this phone', () => {
   })
 
   test('a store that cannot be written is a failure, so the caller does not report success', async () => {
-    const { agent } = makeAgent(chat, basics, { failOn: 'rec-M2' })
+    const { agent } = makeAgent(chat, basics, { failOn: 'rec-received-M2' })
     await expect(deleteChatMessages(agent, 'conn-1')).rejects.toThrow('the store could not be written')
   })
 })

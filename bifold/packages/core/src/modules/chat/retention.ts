@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 
 import { getChatEventRepository } from './ChatModule'
-import { deleteChatMessages } from './history'
+import { type ChatEventKey, deleteChatMessages } from './history'
 
 export type KeepMessages = 'forever' | '1y' | '6m' | '30d'
 
@@ -44,10 +44,10 @@ export async function sweepOldMessages(
   const cutoff = keepCutoff(keep, now)
   if (!cutoff) return 0
 
-  const byConnection = new Map<string, { eventIds: string[]; basicMessageIds: string[] }>()
+  const byConnection = new Map<string, { events: ChatEventKey[]; basicMessageIds: string[] }>()
   const entry = (connectionId: string) => {
     let e = byConnection.get(connectionId)
-    if (!e) byConnection.set(connectionId, (e = { eventIds: [], basicMessageIds: [] }))
+    if (!e) byConnection.set(connectionId, (e = { events: [], basicMessageIds: [] }))
     return e
   }
 
@@ -57,13 +57,13 @@ export async function sweepOldMessages(
   }
   for (const record of await getChatEventRepository(agent).getAll(agent.context)) {
     if (record.eventType === 'message' && record.createdAt < cutoff)
-      entry(record.connectionId).eventIds.push(record.eventId)
+      entry(record.connectionId).events.push({ role: record.role, eventId: record.eventId })
   }
 
   let deleted = 0
   for (const [connectionId, ids] of byConnection) {
     await deleteChatMessages(agent, connectionId, ids)
-    deleted += ids.eventIds.length + ids.basicMessageIds.length
+    deleted += ids.events.length + ids.basicMessageIds.length
   }
   return deleted
 }

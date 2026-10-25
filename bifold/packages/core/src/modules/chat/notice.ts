@@ -241,7 +241,7 @@ export async function receiveChatProblemReport(
   }
   // The other phone never showed it, so it leaves this phone's timeline too, with whatever hangs off it (its
   // reactions and their redactions, its media file), the same way Delete for me removes a message.
-  await deleteChatMessages(agent, connection.id, { eventIds: [refused.eventId] })
+  await deleteChatMessages(agent, connection.id, { events: [refused] })
   return 'chat-refused'
 }
 

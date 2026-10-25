@@ -301,7 +301,9 @@ describe('copy and delete for me', () => {
     const buttons = alert.mock.calls[0][2] as { style?: string; onPress?: () => void }[]
     act(() => buttons.find((b) => b.style === 'destructive')!.onPress!())
     await waitFor(() =>
-      expect(deleteChatMessages).toHaveBeenCalledWith(expect.anything(), '1', { eventIds: [RECEIVED] })
+      expect(deleteChatMessages).toHaveBeenCalledWith(expect.anything(), '1', {
+        events: [{ role: 'received', eventId: RECEIVED }],
+      })
     )
   })
 

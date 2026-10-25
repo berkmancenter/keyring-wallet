@@ -22,6 +22,7 @@ import { AppState } from 'react-native'
 import { getChatEventRepository } from './ChatModule'
 import { recordExpired } from './expired'
 import { deleteChatMessages } from './history'
+import type { ChatEventRecord } from './records/ChatEventRecord'
 import { seenAt } from './seen'
 import { effectiveExpiresInMs } from '../../utils/e2eClocks'
 
@@ -50,17 +51,20 @@ export async function sweepExpired(agent: Agent, now = new Date()): Promise<numb
     })
   }
 
-  const due = new Map<string, string[]>()
+  const due = new Map<string, ChatEventRecord[]>()
   for (const record of events) {
     if (record.eventType !== 'message' || !record.expiresAt || record.expiresAt.getTime() > now.getTime()) continue
-    due.set(record.connectionId, [...(due.get(record.connectionId) ?? []), record.eventId])
+    due.set(record.connectionId, [...(due.get(record.connectionId) ?? []), record])
   }
 
   let deleted = 0
-  for (const [connectionId, eventIds] of due) {
-    await deleteChatMessages(agent, connectionId, { eventIds })
-    await recordExpired(connectionId, eventIds)
-    deleted += eventIds.length
+  for (const [connectionId, records] of due) {
+    await deleteChatMessages(agent, connectionId, { events: records })
+    await recordExpired(
+      connectionId,
+      records.map((r) => r.eventId)
+    )
+    deleted += records.length
   }
   return deleted
 }

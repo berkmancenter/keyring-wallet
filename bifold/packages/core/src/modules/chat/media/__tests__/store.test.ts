@@ -170,6 +170,7 @@ describe('deleting a message deletes the photo written for it', () => {
     const events = eventIds.map((eventId) => ({
       id: `rec-${eventId}`,
       connectionId: CONNECTION,
+      role: 'sent' as const,
       eventId,
       eventType: 'message',
     }))
@@ -192,7 +193,9 @@ describe('deleting a message deletes the photo written for it', () => {
     setPlatform(os)
     const mine = await writeChatMedia(CONNECTION, EVENT, 'image/webp', 'AAAA')
     const other = await writeChatMedia(CONNECTION, OTHER_EVENT, 'image/jpeg', 'BBBB')
-    await deleteChatMessages(agentWith([EVENT, OTHER_EVENT]), CONNECTION, { eventIds: [EVENT] })
+    await deleteChatMessages(agentWith([EVENT, OTHER_EVENT]), CONNECTION, {
+      events: [{ role: 'sent', eventId: EVENT }],
+    })
     expect(mockFiles.has(chatMediaPath(CONNECTION, mine) as string)).toBe(false)
     expect(mockFiles.has(chatMediaPath(CONNECTION, other) as string)).toBe(true)
   })

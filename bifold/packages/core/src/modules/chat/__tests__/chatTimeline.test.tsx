@@ -412,7 +412,7 @@ describe("a chat's history deleted", () => {
     mockRecords = [gone, kept, onGone]
     await attach()
     await act(async () => {
-      await deleteChatMessages(agent as never, 'A', { eventIds: [gone.eventId] })
+      await deleteChatMessages(agent as never, 'A', { events: [gone] })
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(chatTimelineItems(chatEventsStore.chat('A') ?? [], () => ({})).map((i) => i.text)).toEqual(['kept'])
@@ -468,7 +468,7 @@ describe('a message that disappears on its timer', () => {
     expect(preview()).toBe('the door code is 4512')
 
     await act(async () => {
-      await deleteChatMessages(agent as never, 'A', { eventIds: [timed.eventId] })
+      await deleteChatMessages(agent as never, 'A', { events: [timed] })
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(preview()).toBe('see you at noon')

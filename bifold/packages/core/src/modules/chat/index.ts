@@ -53,7 +53,7 @@ export {
 } from './retention'
 export type { KeepMessages } from './retention'
 export { EXPIRY_SWEEP_INTERVAL_MS, sweepExpired, useChatExpirySweep } from './expiry'
-export type { ChatMessageIds } from './history'
+export type { ChatEventKey, ChatMessageIds } from './history'
 export type { ChatSendOutcome } from './send'
 export {
   NOTICE_RETRY_MS,

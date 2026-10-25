@@ -16,7 +16,7 @@ import RNFS from 'react-native-fs'
 
 import { getChatEventRepository } from './ChatModule'
 import { forgetExpired } from './expired'
-import type { ChatEventRecord } from './records/ChatEventRecord'
+import type { ChatEventRecord, ChatEventRole } from './records/ChatEventRecord'
 
 /**
  * The folder that holds one chat's media files (rich-messaging-plan.md §5): app-private, out of backups and device
@@ -37,9 +37,19 @@ function unlessAlreadyGone(error: unknown): void {
   throw error
 }
 
-/** What Delete for me removes: chat events by eventId, and plain BasicMessages by record id. */
+/**
+ * One chat event, named by who sent it and its eventId. The role is part of the name: an eventId is chosen by its
+ * sender, so a peer can reuse one this phone sent, and a name without the role would then pick both records.
+ * A ChatEventRecord is one.
+ */
+export interface ChatEventKey {
+  role: ChatEventRole
+  eventId: string
+}
+
+/** What Delete for me removes: chat events by role and eventId, and plain BasicMessages by record id. */
 export interface ChatMessageIds {
-  eventIds?: string[]
+  events?: ChatEventKey[]
   basicMessageIds?: string[]
 }
 
@@ -63,7 +73,7 @@ export async function deleteChatMessages(agent: Agent, connectionId: string, ids
   }
 
   const events = await chatEvents.findByConnection(agent.context, connectionId)
-  const eventsDoomed = ids ? withDependents(events, new Set(ids.eventIds ?? [])) : events
+  const eventsDoomed = ids ? withDependents(events, ids.events ?? []) : events
   for (const record of eventsDoomed) {
     await chatEvents.delete(agent.context, record).catch(unlessAlreadyGone)
   }
@@ -76,7 +86,13 @@ export async function deleteChatMessages(agent: Agent, connectionId: string, ids
     await forgetExpired(connectionId).catch(() => undefined)
     return
   }
-  const messageIds = new Set(eventsDoomed.filter((r) => r.eventType === 'message').map((r) => r.eventId))
+  // A media file is named by its message's eventId alone, so a file whose name a kept message shares is kept with it.
+  const kept = new Set(
+    events.filter((r) => r.eventType === 'message' && !eventsDoomed.includes(r)).map((r) => r.eventId)
+  )
+  const messageIds = new Set(
+    eventsDoomed.filter((r) => r.eventType === 'message' && !kept.has(r.eventId)).map((r) => r.eventId)
+  )
   if (messageIds.size === 0 || !(await RNFS.exists(folder))) return
   for (const file of await RNFS.readDir(folder)) {
     const stem = file.name.includes('.') ? file.name.slice(0, file.name.indexOf('.')) : file.name
@@ -87,18 +103,27 @@ export async function deleteChatMessages(agent: Agent, connectionId: string, ids
 /**
  * The events named, plus everything that targets them, transitively: a message's reactions and any redaction of it,
  * and the redactions of those reactions.
+ *
+ * The named events match on role and eventId, so a received event that reuses the eventId of one this phone sent
+ * (or the reverse) is never taken with it: Delete for me on the peer's message, or its timer, cannot remove this
+ * phone's own. Inbound refuses such a pair (inbound.ts), but a phone that already holds one is not repaired by that.
+ * Following targets stays role-blind, as it must: a reaction from the peer targets a message this phone sent. So in a
+ * pair that predates that refusal, a reaction to the kept half may still go with the deleted one: a target carries no
+ * role, and nothing records which half it meant. The messages themselves are safe.
  */
-function withDependents(events: ChatEventRecord[], named: Set<string>): ChatEventRecord[] {
-  const doomed = new Set([...named].filter((id) => events.some((e) => e.eventId === id)))
+function withDependents(events: ChatEventRecord[], named: ChatEventKey[]): ChatEventRecord[] {
+  const doomed = new Set(events.filter((e) => named.some((n) => n.role === e.role && n.eventId === e.eventId)))
+  const targets = new Set([...doomed].map((e) => e.eventId))
   let grew = true
   while (grew) {
     grew = false
     for (const e of events) {
-      if (!doomed.has(e.eventId) && e.target !== undefined && doomed.has(e.target)) {
-        doomed.add(e.eventId)
+      if (!doomed.has(e) && e.target !== undefined && targets.has(e.target)) {
+        doomed.add(e)
+        targets.add(e.eventId)
         grew = true
       }
     }
   }
-  return events.filter((e) => doomed.has(e.eventId))
+  return events.filter((e) => doomed.has(e))
 }

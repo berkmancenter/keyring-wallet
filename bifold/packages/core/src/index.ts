@@ -271,6 +271,7 @@ export type {
   ChatEventRole,
   ChatInboundVerdict,
   ChatTimer,
+  ChatEventKey,
   ChatMessageIds,
 } from './modules/chat'
 export {

@@ -23,7 +23,7 @@ import { useChatAttended } from '../components/chat/useChatAttended'
 import { useComposerText } from '../components/chat/useComposerText'
 import { ToastType } from '../components/toast/BaseToast'
 import EmojiPickerSheet from '../modules/chat/emoji/EmojiPickerSheet'
-import { deleteChatMessages } from '../modules/chat/history'
+import { type ChatMessageIds, deleteChatMessages } from '../modules/chat/history'
 import { removeReaction, sendChatText, sendReaction } from '../modules/chat/send'
 import type { ChatSendOutcome } from '../modules/chat/send'
 import { chatEventsShown } from '../modules/chat/shown'
@@ -410,7 +410,9 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     const target = actionTarget
     closeActions()
     if (!agent || !target) return
-    const ids = target.chatEventId ? { eventIds: [target.chatEventId] } : { basicMessageIds: [target.basicMessageId!] }
+    const ids: ChatMessageIds = target.chatEventId
+      ? { events: [{ role: target.user._id === Role.me ? 'sent' : 'received', eventId: target.chatEventId }] }
+      : { basicMessageIds: [target.basicMessageId!] }
     Alert.alert(t('Chat.DeleteForMeTitle'), t('Chat.DeleteForMeBody'), [
       { text: t('Global.Cancel'), style: 'cancel' },
       {
