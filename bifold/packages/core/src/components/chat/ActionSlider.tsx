@@ -11,6 +11,8 @@ import SafeAreaModal from '../modals/SafeAreaModal'
 
 interface Action {
   text: string
+  /** A stable id for tests and the e2e drivers; without one, the (translated) text is used. */
+  testID?: string
   icon: React.FC
   onPress: () => void
 }
@@ -84,7 +86,7 @@ const ActionSlider: React.FC<Props> = ({ actions, onDismiss }) => {
             return (
               <TouchableOpacity
                 key={action.text}
-                testID={testIdWithKey(action.text)}
+                testID={testIdWithKey(action.testID ?? action.text)}
                 accessibilityLabel={action.text}
                 accessibilityRole="button"
                 style={styles.drawerRow}

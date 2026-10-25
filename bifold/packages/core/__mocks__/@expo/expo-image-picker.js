@@ -9,3 +9,8 @@ export const requestMediaLibraryPermissionsAsync = jest.fn().mockResolvedValue({
 export const getMediaLibraryPermissionsAsync = jest.fn().mockResolvedValue({ granted: true }) // eslint-disable-line no-undef
 
 export const launchImageLibraryAsync = jest.fn().mockResolvedValue({ canceled: true, assets: null }) // eslint-disable-line no-undef
+
+// The camera, as the library: granted, and cancelled unless a test says otherwise.
+export const getCameraPermissionsAsync = jest.fn().mockResolvedValue({ granted: true }) // eslint-disable-line no-undef
+export const requestCameraPermissionsAsync = jest.fn().mockResolvedValue({ granted: true }) // eslint-disable-line no-undef
+export const launchCameraAsync = jest.fn().mockResolvedValue({ canceled: true, assets: null }) // eslint-disable-line no-undef

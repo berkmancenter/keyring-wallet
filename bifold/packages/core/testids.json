@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "40b5dbed0b047e118bb5b80d64e847265f30723a",
+  "generatedFrom": "c95a747cb5763151df6d09bc8cc33d345852685e",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -251,6 +251,9 @@
     "ChatActionCopy": ["src/components/chat/Chat.ids.ts"],
     "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
     "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionsButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachCamera": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachLibrary": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCancel": ["src/components/chat/Chat.ids.ts"],
     "ChatDisappearingCurrent": ["src/components/chat/Chat.ids.ts"],
@@ -1290,7 +1293,10 @@
   },
   "derived": [
     {
-      "src/components/chat/ActionSlider.tsx": "action.text"
+      "src/components/chat/ActionSlider.tsx": "action.testID ?? action.text"
+    },
+    {
+      "src/components/chat/ChatActions.tsx": "ChatIds.actionsButton"
     },
     {
       "src/components/chat/ChatMessage.tsx": "ChatIds.image"

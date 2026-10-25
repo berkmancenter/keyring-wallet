@@ -3,6 +3,9 @@ import React from 'react'
 import { Actions } from 'react-native-gifted-chat'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
+import { testIdWithKey } from '../../utils/testable'
+import { ChatIds } from './Chat.ids'
+
 export const renderActions = (
   props: any,
   theme: any,
@@ -29,6 +32,7 @@ export const renderActions = (
           accessible={true}
           accessibilityLabel={t('Chat.Actions')}
           accessibilityRole="button"
+          testID={testIdWithKey(ChatIds.actionsButton)}
         />
       )}
       actionSheetOptionTintColor={theme.optionsText}
