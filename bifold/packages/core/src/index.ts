@@ -253,13 +253,25 @@ export {
   counterpartySpeaksChat,
   deleteChatMessages,
   useClearChat,
+  currentTimer,
+  expiredIds,
+  setChatTimer,
+  timerOf,
+  TIMER_CHOICES,
   getChatEventRepository,
   isUlid,
   parseChatEvent,
   receiveChatEventMessage,
   setupChatInbound,
 } from './modules/chat'
-export type { ChatEvent, ChatEventType, ChatEventRole, ChatInboundVerdict, ChatMessageIds } from './modules/chat'
+export type {
+  ChatEvent,
+  ChatEventType,
+  ChatEventRole,
+  ChatInboundVerdict,
+  ChatTimer,
+  ChatMessageIds,
+} from './modules/chat'
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,

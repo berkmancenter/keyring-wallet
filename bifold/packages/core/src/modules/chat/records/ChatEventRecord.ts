@@ -24,6 +24,11 @@ export interface ChatEventRecordProps {
   target?: string
   emoji?: string
   expiresIn?: number
+  /**
+   * When this phone deletes a timed message (rich-messaging-plan.md §4.6, D4): send time plus `expiresIn` for a sent
+   * one; first display plus `expiresIn` for a received one, unset until then.
+   */
+  expiresAt?: Date
   timer?: { expiresIn: number; version: number }
   clientTs?: string
   /** When this phone sent or stored the event. */
@@ -50,6 +55,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
   public target?: string
   public emoji?: string
   public expiresIn?: number
+  public expiresAt?: Date
   public timer?: { expiresIn: number; version: number }
   public clientTs?: string
   public sentTime!: Date
@@ -71,6 +77,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
       this.target = props.target
       this.emoji = props.emoji
       this.expiresIn = props.expiresIn
+      this.expiresAt = props.expiresAt
       this.timer = props.timer
       this.clientTs = props.clientTs
       this.createdAt = props.createdAt ?? new Date()
@@ -98,3 +105,5 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
 // own DateTransformer registers that metadata in the class-transformer copy
 // JsonTransformer reads, which bifold's own copy would not be (two installs).
 DateTransformer()(ChatEventRecord.prototype, 'sentTime')
+// expiresAt likewise: the expiry sweep compares it with the clock, which a string would make meaningless.
+DateTransformer()(ChatEventRecord.prototype, 'expiresAt')

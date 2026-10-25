@@ -15,6 +15,7 @@ import { Platform } from 'react-native'
 import RNFS from 'react-native-fs'
 
 import { getChatEventRepository } from './ChatModule'
+import { forgetExpired } from './expired'
 import type { ChatEventRecord } from './records/ChatEventRecord'
 
 /**
@@ -70,6 +71,9 @@ export async function deleteChatMessages(agent: Agent, connectionId: string, ids
   const folder = chatMediaFolder(connectionId)
   if (!ids) {
     if (await RNFS.exists(folder)) await RNFS.unlink(folder)
+    // Housekeeping only: a stale tombstone can change nothing but the wording for an id that no longer exists, so it
+    // never fails a clear.
+    await forgetExpired(connectionId).catch(() => undefined)
     return
   }
   const messageIds = new Set(eventsDoomed.filter((r) => r.eventType === 'message').map((r) => r.eventId))

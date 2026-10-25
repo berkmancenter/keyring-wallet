@@ -22,6 +22,7 @@ import { getChatEventRepository } from './ChatModule'
 import { newEventId } from './eventId'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
+import { TIMER_CHOICES, currentTimer, nextTimerVersion } from './timer'
 
 /** How a send went out. `not-sent` is a reaction or redaction to a contact without chat. */
 export type ChatSendOutcome =
@@ -35,14 +36,22 @@ async function sendEvent(agent: Agent, connectionId: string, event: ChatEvent): 
   await messageSender.sendMessage(
     new DidCommOutboundMessageContext(new ChatEventMessage({ event }), { agentContext: agent.context, connection })
   )
+  const sentAt = new Date()
   const record = new ChatEventRecord({
     connectionId,
     role: 'sent',
+    sentTime: sentAt,
     eventId: event.eventId,
     eventType: event.type,
     clientTs: event.clientTs,
     ...(event.type === 'message'
-      ? { content: event.content, inReplyTo: event.inReplyTo, expiresIn: event.expiresIn }
+      ? {
+          content: event.content,
+          inReplyTo: event.inReplyTo,
+          expiresIn: event.expiresIn,
+          // D4: the sender's copy starts its clock at send.
+          ...(event.expiresIn ? { expiresAt: new Date(sentAt.getTime() + event.expiresIn * 1000) } : {}),
+        }
       : {}),
     ...(event.type === 'reaction' ? { target: event.target, emoji: event.emoji } : {}),
     ...(event.type === 'redaction' ? { target: event.target } : {}),
@@ -72,11 +81,30 @@ export async function sendChatText(
     await agent.modules.didcomm.basicMessages.sendMessage(connectionId, text)
     return { carriedAs: 'basic' }
   }
+  // The chat's timer applies to messages sent from now on; each message carries the expiresIn it was sent with.
+  const timer = await currentTimer(agent, connectionId)
   const record = await sendEvent(agent, connectionId, {
     ...base(),
     type: 'message',
     content: { format: 'text/plain', text },
     ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}),
+    ...(timer && timer.expiresIn > 0 ? { expiresIn: timer.expiresIn } : {}),
+  })
+  return { carriedAs: 'chat', record }
+}
+
+/**
+ * Set this chat's disappearing-messages timer on both phones: `expiresIn` seconds (one of TIMER_CHOICES; 0 turns it
+ * off). Only to a contact that speaks chat; a plain BasicMessage cannot carry a timer, so it is `not-sent` otherwise.
+ */
+export async function setChatTimer(agent: Agent, connectionId: string, expiresIn: number): Promise<ChatSendOutcome> {
+  if (!TIMER_CHOICES.includes(expiresIn)) throw new Error(`chat: ${expiresIn} is not a timer choice`)
+  if (!(await counterpartySpeaksChat(agent, connectionId))) return { carriedAs: 'not-sent' }
+  const events = await getChatEventRepository(agent).findByConnection(agent.context, connectionId)
+  const record = await sendEvent(agent, connectionId, {
+    ...base(),
+    type: 'timer',
+    timer: { expiresIn, version: nextTimerVersion(events) },
   })
   return { carriedAs: 'chat', record }
 }

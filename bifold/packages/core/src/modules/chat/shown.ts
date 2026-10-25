@@ -3,15 +3,31 @@
  * shown (rich-messaging-plan.md §4.6, D4: a disappearing message's clock
  * starts on the recipient's phone at first display).
  *
- * It does nothing yet. The disappearing-messages work fills it in, so the
- * screen never changes for that.
+ * A failure rejects, never resolves: the screen un-marks the ids and reports
+ * them again on the next scroll. A swallowed failure would leave a timed
+ * message whose clock never starts, so it would outlive the sender's window
+ * with neither person told. The expiry sweep also starts the clock of a
+ * message the chat has marked seen but never reported shown, as a backstop
+ * (expiry.ts), but this is the rule.
  *
  * @module chat/shown
  */
 
 import type { Agent } from '@credo-ts/core'
 
-/** Received chat messages that became visible, each reported once per screen. */
-export async function chatEventsShown(_agent: Agent, _connectionId: string, _eventIds: string[]): Promise<void> {
-  return
+import { getChatEventRepository } from './ChatModule'
+
+/**
+ * Received chat messages that became visible, each reported once per screen. Each timed message among them starts
+ * its clock now, unless it already has: a repeat report changes nothing.
+ */
+export async function chatEventsShown(agent: Agent, connectionId: string, eventIds: string[]): Promise<void> {
+  const repository = getChatEventRepository(agent)
+  const now = Date.now()
+  for (const eventId of eventIds) {
+    const record = await repository.findEvent(agent.context, connectionId, 'received', eventId)
+    if (!record || record.eventType !== 'message' || !record.expiresIn || record.expiresAt) continue
+    record.expiresAt = new Date(now + record.expiresIn * 1000)
+    await repository.update(agent.context, record)
+  }
 }
