@@ -70,6 +70,16 @@ export function chatMediaUri(connectionId: string, fileName: string): string | u
 }
 
 /**
+ * Remove a file this module wrote, by the name it returned: for a photo whose message never came to be stored (its
+ * send failed), which no record would ever lead a deletion to. A name this module would not make, or a file already
+ * gone, is left alone.
+ */
+export async function removeChatMedia(connectionId: string, fileName: string): Promise<void> {
+  const path = chatMediaPath(connectionId, fileName)
+  if (path && (await RNFS.exists(path))) await RNFS.unlink(path)
+}
+
+/**
  * Write a checked photo's bytes (as base64) to its chat's folder and return the
  * file name to store on the record. Throws on anything it cannot name or write,
  * so the caller never stores a record for a file that is not there.

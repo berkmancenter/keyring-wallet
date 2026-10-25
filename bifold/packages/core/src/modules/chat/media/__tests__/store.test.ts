@@ -3,7 +3,14 @@ import RNFS from 'react-native-fs'
 
 import { chatMediaFolder, deleteChatMessages } from '../../history'
 import { ChatEventRepository } from '../../records/ChatEventRepository'
-import { CHAT_MEDIA_FILE_PROTECTION, chatMediaFileName, chatMediaPath, chatMediaUri, writeChatMedia } from '../store'
+import {
+  CHAT_MEDIA_FILE_PROTECTION,
+  chatMediaFileName,
+  chatMediaPath,
+  chatMediaUri,
+  removeChatMedia,
+  writeChatMedia,
+} from '../store'
 
 // The package-wide react-native-fs mock is empty on purpose: this suite brings a small file system of its own.
 let mockFiles: Map<string, string>
@@ -119,6 +126,23 @@ describe('writeChatMedia', () => {
     // The same eventId in another chat is another file.
     await writeChatMedia('7a2b3c4d-0000-4000-8000-000000000000', EVENT, 'image/jpeg', 'OTHER CHAT')
     expect(RNFS.writeFile).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('removeChatMedia', () => {
+  it('removes a file it wrote, by the name it returned, and leaves the others', async () => {
+    const mine = await writeChatMedia(CONNECTION, EVENT, 'image/jpeg', 'MINE')
+    await writeChatMedia(CONNECTION, OTHER_EVENT, 'image/jpeg', 'OTHER')
+    await removeChatMedia(CONNECTION, mine)
+    expect(mockFiles.has(chatMediaPath(CONNECTION, mine) as string)).toBe(false)
+    expect(mockFiles.has(chatMediaPath(CONNECTION, `${OTHER_EVENT}.jpg`) as string)).toBe(true)
+  })
+
+  it('does nothing for a file already gone, or a name it would not make', async () => {
+    await expect(removeChatMedia(CONNECTION, `${EVENT}.jpg`)).resolves.toBeUndefined()
+    await removeChatMedia(CONNECTION, '../../Documents/wallet.db')
+    await removeChatMedia('../x', `${EVENT}.jpg`)
+    expect(RNFS.unlink).not.toHaveBeenCalled()
   })
 })
 

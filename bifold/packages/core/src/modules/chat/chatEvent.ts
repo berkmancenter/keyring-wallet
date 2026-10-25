@@ -15,7 +15,7 @@
 import { normalizeEmoji } from './emoji/validate'
 import { decodeUlidTime } from './eventId'
 import { checkImageAttachment } from './media/checkAttachment'
-import type { ImageCheckFailure, ImageMediaType } from './media'
+import type { ImageAttachmentDescriptor, ImageCheckFailure, ImageMediaType } from './media'
 
 /** The profile every event names (plan D3). */
 export const CHAT_PROFILE = 'keyring.chat/1'
@@ -127,6 +127,14 @@ export interface ChatTimerEvent extends ChatEventBase {
 }
 
 export type ChatEvent = ChatMessageEvent | ChatReactionEvent | ChatRedactionEvent | ChatTimerEvent
+
+/** A message as it is sent: its image travels as its §4.3 descriptor, bytes and all. */
+export interface ChatOutgoingMessageEvent extends Omit<ChatMessageEvent, 'attachments'> {
+  attachments?: [ImageAttachmentDescriptor]
+}
+
+/** An event as this phone sends it. */
+export type ChatOutgoingEvent = Exclude<ChatEvent, ChatMessageEvent> | ChatOutgoingMessageEvent
 
 export type ChatEventRejection =
   | 'not-an-object'

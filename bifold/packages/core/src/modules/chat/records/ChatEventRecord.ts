@@ -43,6 +43,11 @@ export interface ChatEventRecordProps {
   eventType: ChatEventType
   content?: ChatMessageContent
   attachments?: ChatEventRecordAttachment[]
+  /**
+   * A sent photo's plain-message stand-in, in the sender's language, as it would go to a contact without chat: resent
+   * as it is if the contact refuses the chat event (notice.ts).
+   */
+  fallbackText?: string
   inReplyTo?: string
   target?: string
   emoji?: string
@@ -75,6 +80,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
   public eventType!: ChatEventType
   public content?: ChatMessageContent
   public attachments?: ChatEventRecordAttachment[]
+  public fallbackText?: string
   public inReplyTo?: string
   public target?: string
   public emoji?: string
@@ -98,6 +104,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
       this.eventType = props.eventType
       this.content = props.content
       this.attachments = props.attachments
+      this.fallbackText = props.fallbackText
       this.inReplyTo = props.inReplyTo
       this.target = props.target
       this.emoji = props.emoji

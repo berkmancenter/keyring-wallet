@@ -231,7 +231,10 @@ export async function receiveChatProblemReport(
   // not delivered, still visible) instead of the message vanishing from both
   // phones. A failed delete after a good resend only leaves a visible duplicate.
   if (refused.eventType === 'message') {
-    const text = refused.content?.text
+    // A photo resends the words it would have gone as to a contact without chat; a text message, and any record from
+    // before photos, its text. fallbackText was translated when the photo was sent, in the sender's language then: the
+    // words the contact would have got. Do not re-translate it here.
+    const text = refused.fallbackText ?? refused.content?.text
     // Nothing to resend: keep the event rather than delete it with nothing sent.
     if (!text) return 'chat-refused'
     await agent.modules.didcomm.basicMessages.sendMessage(connection.id, text)

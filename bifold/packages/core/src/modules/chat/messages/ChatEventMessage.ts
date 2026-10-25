@@ -15,21 +15,21 @@
 import { DidCommMessage, IsValidMessageType, parseMessageType } from '@credo-ts/didcomm'
 
 import { isUlid } from '../chatEvent'
-import type { ChatEvent } from '../chatEvent'
+import type { ChatOutgoingEvent } from '../chatEvent'
 
 /** The message type URI (plan §4.1, D3). */
 export const CHAT_EVENT_MESSAGE_TYPE = 'https://keyring.berkmancenter.org/chat/1.0/event'
 
 export interface ChatEventMessageOptions {
   id?: string
-  event: ChatEvent
+  event: ChatOutgoingEvent
 }
 
 /** The v2 plaintext this message packs to (DIDComm Messaging v2 §2). */
 export interface ChatEventV2Plaintext {
   id: string
   type: string
-  body: { event: ChatEvent }
+  body: { event: ChatOutgoingEvent }
 }
 
 export class ChatEventMessage extends DidCommMessage {
@@ -54,7 +54,7 @@ export class ChatEventMessage extends DidCommMessage {
   /** The hook Credo's v2 packer calls. */
   public toV2Plaintext(): ChatEventV2Plaintext {
     if (!this.event) throw new Error('ChatEventMessage: no event to pack (inbound instance?)')
-    return { id: this.id, type: ChatEventMessage.type.messageTypeUri, body: { event: this.event as ChatEvent } }
+    return { id: this.id, type: ChatEventMessage.type.messageTypeUri, body: { event: this.event as ChatOutgoingEvent } }
   }
 }
 

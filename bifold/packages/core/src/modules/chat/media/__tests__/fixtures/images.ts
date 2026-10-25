@@ -147,3 +147,10 @@ export const descriptorFor = (
   data: { base64: Buffer.from(bytes).toString('base64') },
   ...overrides,
 })
+
+/** `bytes` followed by zeros up to `length` bytes in all: an image of an exact size whose header still reads. */
+export const paddedTo = (bytes: Uint8Array, length: number): Uint8Array => {
+  const out = new Uint8Array(length)
+  out.set(bytes.subarray(0, Math.min(bytes.length, length)))
+  return out
+}

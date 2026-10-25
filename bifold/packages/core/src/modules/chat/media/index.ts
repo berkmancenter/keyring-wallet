@@ -9,4 +9,11 @@ export {
   sizeFailure,
 } from './checkAttachment'
 export type { CheckedImage, ImageAttachmentDescriptor, ImageCheckFailure, ImageCheckResult } from './checkAttachment'
-export { CHAT_MEDIA_FILE_PROTECTION, chatMediaFileName, chatMediaPath, chatMediaUri, writeChatMedia } from './store'
+export {
+  CHAT_MEDIA_FILE_PROTECTION,
+  chatMediaFileName,
+  chatMediaPath,
+  chatMediaUri,
+  removeChatMedia,
+  writeChatMedia,
+} from './store'

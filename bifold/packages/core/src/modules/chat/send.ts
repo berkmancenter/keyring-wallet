@@ -9,6 +9,13 @@
  * A sent event is stored only after the send succeeds, so a failed send
  * leaves nothing that looks delivered.
  *
+ * A photo (§4.3, §4.4) is checked by the same descriptor check a receiver
+ * runs before anything is sent: one over the limit, or one whose descriptor
+ * does not match its bytes, is refused here. Nothing else would say so: an
+ * oversize message is accepted by the transport and dropped by the mediator
+ * with no error to the sender. To a contact without chat it goes as a plain
+ * message saying a photo was sent.
+ *
  * @module chat/send
  */
 
@@ -17,12 +24,17 @@ import { DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/d
 
 import { counterpartySpeaksChat } from './capability'
 import { CHAT_PROFILE, MAX_TEXT_LENGTH, MAX_TIMER_VERSION, isUlid } from './chatEvent'
-import type { ChatEvent } from './chatEvent'
+import type { ChatOutgoingEvent } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
 import { normalizeEmoji } from './emoji/validate'
 import { newEventId } from './eventId'
 import { ChatEventMessage } from './messages/ChatEventMessage'
+import { checkImageAttachment } from './media/checkAttachment'
+import type { ImageAttachmentDescriptor, ImageCheckFailure } from './media/checkAttachment'
+import type { PreparedPhoto } from './media/prepare'
+import { removeChatMedia, writeChatMedia } from './media/store'
 import { ChatEventRecord } from './records/ChatEventRecord'
+import type { ChatStoredAttachment } from './records/ChatEventRecord'
 import { whileSending } from './sending'
 import { TIMER_CHOICES, currentTimer, nextTimerVersion } from './timer'
 import { effectiveExpiresInMs } from '../../utils/e2eClocks'
@@ -33,13 +45,23 @@ export type ChatSendOutcome =
   | { carriedAs: 'basic' }
   | { carriedAs: 'not-sent' }
 
-async function sendEvent(agent: Agent, connectionId: string, event: ChatEvent): Promise<ChatEventRecord> {
+async function sendEvent(
+  agent: Agent,
+  connectionId: string,
+  event: ChatOutgoingEvent,
+  stored: { attachments?: ChatStoredAttachment[]; fallbackText?: string } = {}
+): Promise<ChatEventRecord> {
   // Marked from before the send until the record is stored, so a peer cannot slip the same eventId in between
   // (sending.ts, inbound.ts).
-  return whileSending(connectionId, event.eventId, () => sendAndStore(agent, connectionId, event))
+  return whileSending(connectionId, event.eventId, () => sendAndStore(agent, connectionId, event, stored))
 }
 
-async function sendAndStore(agent: Agent, connectionId: string, event: ChatEvent): Promise<ChatEventRecord> {
+async function sendAndStore(
+  agent: Agent,
+  connectionId: string,
+  event: ChatOutgoingEvent,
+  stored: { attachments?: ChatStoredAttachment[]; fallbackText?: string }
+): Promise<ChatEventRecord> {
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   const messageSender = agent.dependencyManager.container.resolve(DidCommMessageSender)
   await messageSender.sendMessage(
@@ -56,6 +78,8 @@ async function sendAndStore(agent: Agent, connectionId: string, event: ChatEvent
     ...(event.type === 'message'
       ? {
           content: event.content,
+          attachments: stored.attachments,
+          fallbackText: stored.fallbackText,
           inReplyTo: event.inReplyTo,
           expiresIn: event.expiresIn,
           // D4: the sender's copy starts its clock at send.
@@ -99,6 +123,83 @@ export async function sendChatText(
     ...(options.inReplyTo ? { inReplyTo: options.inReplyTo } : {}),
     ...(timer && timer.expiresIn > 0 ? { expiresIn: timer.expiresIn } : {}),
   })
+  return { carriedAs: 'chat', record }
+}
+
+/** A photo refused before sending: the reason the receiver's own check would give. */
+export class ChatPhotoRefusedError extends Error {
+  constructor(public readonly reason: ImageCheckFailure) {
+    super(`chat: photo refused before sending (${reason})`)
+    this.name = 'ChatPhotoRefusedError'
+  }
+}
+
+/**
+ * Send one prepared photo (media/prepare.ts), with an optional caption. The descriptor is checked as a receiver
+ * would check it before anything is sent or written. To a contact that speaks chat, this phone's copy is written to
+ * the chat's media folder first, then the message is sent, then its record is stored. To one that does not,
+ * `fallbackText` ("📷 Photo — update Keyring to see it", in this phone's language) goes as a plain message, with the
+ * caption after it.
+ */
+export async function sendChatPhoto(
+  agent: Agent,
+  connectionId: string,
+  photo: PreparedPhoto,
+  options: { fallbackText: string; caption?: string }
+): Promise<ChatSendOutcome> {
+  const descriptor: ImageAttachmentDescriptor = {
+    id: 'a1',
+    mediaType: photo.mediaType,
+    byteCount: photo.byteCount,
+    width: photo.width,
+    height: photo.height,
+    data: { base64: photo.base64 },
+  }
+  const checked = checkImageAttachment(descriptor)
+  if (!checked.ok) throw new ChatPhotoRefusedError(checked.reason)
+  const caption = options.caption?.trim()
+  if (caption && caption.length > MAX_TEXT_LENGTH)
+    throw new Error(`chat: caption longer than ${MAX_TEXT_LENGTH} characters`)
+
+  // The same words go to a contact without chat now, and to one that refuses the chat event later (notice.ts).
+  const fallbackText = caption ? `${options.fallbackText}\n\n${caption}` : options.fallbackText
+  if (!(await counterpartySpeaksChat(agent, connectionId))) {
+    await agent.modules.didcomm.basicMessages.sendMessage(connectionId, fallbackText)
+    return { carriedAs: 'basic' }
+  }
+
+  const timer = await currentTimer(agent, connectionId)
+  const event = {
+    ...base(),
+    type: 'message' as const,
+    ...(caption ? { content: { format: 'text/plain' as const, text: caption } } : {}),
+    attachments: [descriptor] as [ImageAttachmentDescriptor],
+    ...(timer && timer.expiresIn > 0 ? { expiresIn: timer.expiresIn } : {}),
+  }
+  // The type and size the check read from the bytes, as a receiver keeps them.
+  const { header } = checked.image
+  // Written first, so a stored record never names a file that is not there; removed again if the send fails, since no
+  // record is stored then and nothing would ever lead a deletion to it.
+  const file = await writeChatMedia(connectionId, event.eventId, header.mediaType, photo.base64)
+  let record: ChatEventRecord
+  try {
+    record = await sendEvent(agent, connectionId, event, {
+      fallbackText,
+      attachments: [
+        {
+          id: descriptor.id,
+          mediaType: header.mediaType,
+          byteCount: photo.byteCount,
+          width: header.width,
+          height: header.height,
+          file,
+        },
+      ],
+    })
+  } catch (error) {
+    await removeChatMedia(connectionId, file).catch(() => undefined)
+    throw error
+  }
   return { carriedAs: 'chat', record }
 }
 

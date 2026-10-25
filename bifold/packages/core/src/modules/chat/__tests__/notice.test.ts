@@ -7,6 +7,8 @@ import {
 import { EventEmitter, InjectionSymbols, JsonTransformer } from '@credo-ts/core'
 import type { BaseRecord } from '@credo-ts/core'
 
+import RNFS from 'react-native-fs'
+
 import { counterpartySpeaksChat } from '../capability'
 import { ChatCapabilityMessage } from '../messages/ChatCapabilityMessage'
 import { ChatEventRecord } from '../records/ChatEventRecord'
@@ -364,6 +366,52 @@ describe('receiveChatProblemReport', () => {
     expect(await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)).toBe('chat-refused')
     expect(fake.events()).toHaveLength(1)
     expect(fake.basic).toHaveLength(0)
+  })
+
+  describe('a refused photo', () => {
+    const FALLBACK = '📷 Photo — update Keyring to see it'
+    const sentPhoto = (caption?: string) => {
+      const record = sentEvent('conn-1', 'message')
+      record.content = caption ? { format: 'text/plain', text: caption } : undefined
+      record.attachments = [
+        { id: 'a1', mediaType: 'image/jpeg', byteCount: 1000, width: 10, height: 10, file: `${EVENT_ID}.jpg` },
+      ]
+      record.fallbackText = caption ? `${FALLBACK}\n\n${caption}` : FALLBACK
+      return record
+    }
+
+    it('resends the words it would have gone as to a contact without chat, caption included', async () => {
+      const fake = makeAgent({ rceVersion: 6 })
+      fake.addEvent(sentPhoto('look at this'))
+      expect(await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)).toBe('chat-refused')
+      expect(fake.basic).toEqual([{ connectionId: 'conn-1', text: `${FALLBACK}\n\nlook at this` }])
+      expect(fake.events()).toHaveLength(0)
+    })
+
+    it('resends the fallback when it has no caption, rather than keeping it unsent', async () => {
+      const fake = makeAgent({ rceVersion: 6 })
+      fake.addEvent(sentPhoto())
+      expect(await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)).toBe('chat-refused')
+      expect(fake.basic).toEqual([{ connectionId: 'conn-1', text: FALLBACK }])
+      expect(fake.events()).toHaveLength(0)
+    })
+
+    it('deletes its media file only after the resend has gone', async () => {
+      const fake = makeAgent({ rceVersion: 6 })
+      fake.addEvent(sentPhoto())
+      const folder = '/lib/Application Support/chat-media/conn-1'
+      let sentBeforeUnlink: number | undefined
+      ;(RNFS.exists as jest.Mock).mockResolvedValueOnce(true)
+      ;(RNFS.readDir as jest.Mock).mockResolvedValueOnce([
+        { name: `${EVENT_ID}.jpg`, path: `${folder}/${EVENT_ID}.jpg` },
+      ])
+      ;(RNFS.unlink as jest.Mock).mockImplementationOnce(async () => {
+        sentBeforeUnlink = fake.basic.length
+      })
+      await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)
+      expect(RNFS.unlink).toHaveBeenCalledWith(`${folder}/${EVENT_ID}.jpg`)
+      expect(sentBeforeUnlink).toBe(1)
+    })
   })
 
   it('removes a refused message together with the reactions on it', async () => {
