@@ -1521,7 +1521,22 @@ class VtiAgentController {
    * without branding that is read instead — in the background, since a screen
    * that subscribes to `communityTarget` picks the name up whenever it lands.
    */
+  /**
+   * The last manifest each community answered with, this run, by who asked: what a screen can show before it reads
+   * again. Kept in memory only. Keyed by the asker too, because a community MAY tailor its criteria to the caller
+   * (vtc/join-requests/manifest/0.3: "A community MAY tailor the criteria to the caller, but the default is its
+   * public join policy"): an answer given to one identity is never shown as another's.
+   */
+  private manifests = new Map<string, VtiManifest>()
+  private manifestKey = (communityDid: string) => `${communityDid}|${this.state.did ?? ''}`
+
+  /** The manifest `communityDid` last answered the current identity with, this run, if it has. Read offline. */
+  lastManifest(communityDid: string): VtiManifest | undefined {
+    return this.manifests.get(this.manifestKey(communityDid))
+  }
+
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
+    this.manifests.set(this.manifestKey(communityDid), manifest)
     const branded = manifest.branding?.displayName?.trim()
     // How its cards look: kept even when it gives nothing, so the Wallet knows it has none (communityBrand.ts).
     rememberCommunityBrand(agent, communityDid, {

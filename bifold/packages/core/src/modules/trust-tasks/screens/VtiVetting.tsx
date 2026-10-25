@@ -219,7 +219,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [profileName, setProfileName] = useState('')
   // application
   const [application, setApplication] = useState<VettingApplication>()
-  const [manifest, setManifest] = useState<VtiManifest>()
+  // The community's manifest. Join read it a moment ago: shown from that read at once (the Private badge was
+  // missing until this screen's own read came back, then popped in), and read afresh once per visit.
+  const [manifest, setManifest] = useState<VtiManifest | undefined>(() =>
+    communityDid ? vtiAgent.lastManifest(communityDid) : undefined
+  )
   const [legalName, setLegalName] = useState('')
   /**
    * Which seat's holdings have been read once: the desk's profile, tickets and
@@ -712,10 +716,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       (!application?.requirementsDigest || c.requirementsDigest === application.requirementsDigest)
   )
   const privateHere = carriesPrivate && (checklist ? checklist.mode === 'private' : Boolean(privateCriterion))
-  // The manifest, read once in a build that carries private vetting: the
-  // applicant's mark from the first step, and the vetter's private way.
+  // The manifest, read in a build that carries private vetting: the
+  // applicant's mark from the first step, and the vetter's private way. Read
+  // afresh even when one from earlier is shown: the community's answer now counts.
   useEffect(() => {
-    if (!side || !(carriesPrivate || hiddenVetterSeam()) || manifest || !communityDid) return
+    if (!side || !(carriesPrivate || hiddenVetterSeam()) || !communityDid) return
     let live = true
     vtiAgent
       .fetchManifest(communityDid)
@@ -724,7 +729,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return () => {
       live = false
     }
-  }, [side, carriesPrivate, manifest, communityDid])
+  }, [side, carriesPrivate, communityDid])
 
   // A vetter where a way is private: where they stand to vouch, read once when
   // the desk opens. Never on a poll or a redraw: it asks their agent, whose

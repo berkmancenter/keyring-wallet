@@ -19,6 +19,10 @@ import { COMMUNITY_CHANGED_EVENT } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { VtiApplicant } from '../module/vtiVetting'
+import { readManifest, type VtiManifest } from '../module/joinManifest'
+import { registerHiddenVetting } from '../screens/hiddenVettingSeam'
+
+import testVtcCapture from './fixtures/join-0.3/test-vtc-hidden-vetting-2026-10-15.json'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -137,7 +141,13 @@ const open = async () => {
   const tree = render(<BasicAppContext>{null}</BasicAppContext>)
   tree.rerender(
     <BasicAppContext>
-      <Profiler id="vetting" onRender={() => frames.push(stepOf(idsIn(tree.toJSON())))}>
+      <Profiler
+        id="vetting"
+        onRender={() => {
+          const ids = idsIn(tree.toJSON())
+          frames.push(stepOf(ids) + (ids.includes('VettingPrivate') ? '+private' : ''))
+        }}
+      >
         <VtiVetting config={config} />
       </Profiler>
     </BasicAppContext>
@@ -291,6 +301,35 @@ describe('a change the stores announce', () => {
       await new Promise((resolve) => setTimeout(resolve, 700))
     })
     expect(reads - before).toBe(once)
+    tree.unmount()
+  })
+})
+
+// Join read the community's manifest a moment ago; Vetting read it again before saying the way in is private, so
+// the Private badge was missing from its first frames and then popped in.
+describe('a community whose way in is private, its manifest already read', () => {
+  const testVtc = readManifest(testVtcCapture.manifest03.payload as Partial<VtiManifest>, '0.3')
+  afterEach(() => registerHiddenVetting(undefined))
+
+  test('the Private badge is on the first frame of the step, before this screen reads the manifest again', async () => {
+    registerHiddenVetting({} as never)
+    jest.spyOn(vtiAgent, 'lastManifest').mockReturnValue(testVtc)
+    // The screen's own read never comes back.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockImplementation(() => new Promise(() => undefined))
+    mockUseAgent.mockReturnValue(agentWith([persona]))
+    const { tree, frames } = await open()
+    expect(steps(frames)).toEqual(['VettingSeatLoading', 'VettingApplicantStep_name+private'])
+    tree.unmount()
+  })
+
+  test("the community's answer now wins over the one read before", async () => {
+    registerHiddenVetting({} as never)
+    jest.spyOn(vtiAgent, 'lastManifest').mockReturnValue(testVtc)
+    // Since the earlier read, the community dropped its private way.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+    mockUseAgent.mockReturnValue(agentWith([persona]))
+    const { tree, frames } = await open()
+    expect(frames[frames.length - 1]).toBe('VettingApplicantStep_name')
     tree.unmount()
   })
 })
