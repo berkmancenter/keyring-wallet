@@ -13,7 +13,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
-- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -194,7 +194,7 @@ The sender is the authenticated DIDComm sender of the connection, never a field 
 - **Message counts.** Photos reach those gates no sooner than text does. A burst of photos counts one message each against the 50-per-peer cap.
 - **Bytes held.** This is what grows.
   - **On Affinidi:** at the enforced 200, about 50 MiB for one recipient (about 256 MiB at a raised 1,000), against a few hundred KiB for text. It sits in Redis memory until pickup or the 7-day expiry.
-  - **On the current Credo mediator:** there is no queue cap and no expiry. Queued messages wait on disk, in Postgres, until pickup, however long that is.
+  - **On the current Credo mediator:** there is no queue cap, per connection or in total. Queued messages wait on disk, in Postgres, until pickup, and a daily job deletes any queued for more than 7 days.
 - **Pickup batches.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
 - **The forward on the way in** is a JSON attachment, in both Credo's own v2 routing and the wallet's VTI mediator transport. So about 430 KiB of raw media fits under `message_size`, and 256 KiB leaves room.
 - **The contentless push wake** is unaffected by size.
@@ -224,7 +224,7 @@ Step 0 measures the storage each queued photo takes on both mediators (disk on C
 - **Receivers accept both,** and existing BasicMessages keep rendering exactly as today.
 - **Disappearing messages need both sides on `chat/1.0`.** A fallback BasicMessage carries no timer, so an older peer cannot honour one. The timer cannot be turned on for a peer that does not support `chat/1.0` ("Ask <name> to update Keyring to use disappearing messages"). If the peer stops supporting it while a timer is on, the next send asks before going out as a plain message.
 
-**Delivery to an offline peer.** There are no delivery receipts in this plan. On the Affinidi mediator, a message, including a photo, that waits in the queue for longer than its 7-day expiry is dropped there, and the sender is not told. The current Credo mediator never expires queued messages. That matches text today and is accepted for this plan. Delivered receipts are a later type (§4.2), and they would close the gap.
+**Delivery to an offline peer.** There are no delivery receipts in this plan. On both mediators, a message, including a photo, that waits in the queue for longer than 7 days is dropped there, and the sender is not told: Affinidi expires it, and the Credo mediator's daily cleanup deletes it. That matches text today and is accepted for this plan. Delivered receipts are a later type (§4.2), and they would close the gap.
 
 ### 4.6 Message history and disappearing messages
 
@@ -239,11 +239,11 @@ Step 0 measures the storage each queued photo takes on both mediators (disk on C
   - The change is a `timer` event carrying `expiresIn` and a `version`. The highest `version` wins, with ties broken by `eventId`, the race Signal's `expireTimerVersion` exists to settle.
   - It shows as a system line in both timelines: "<name> set messages to disappear after 1 week".
 - **Every message carries the `expiresIn` it was sent with.** So a missed `timer` event does not leave the two phones disagreeing about that message. A timer change applies to new messages only.
-- **When the clock starts** follows Signal: the sender's copy at send, the recipient's copy when it is first shown on screen (D4). An unread message therefore stays until it is read, or until a mediator expiry drops it undelivered (7 days on Affinidi; the current Credo mediator never expires them).
+- **When the clock starts** follows Signal: the sender's copy at send, the recipient's copy when it is first shown on screen (D4). An unread message therefore stays until it is read, or until a mediator drops it undelivered after 7 days in the queue (both mediators).
 - **The sweep** runs at startup, when the app comes to the foreground, and on a timer while a chat is open. It deletes the record, its folded reactions and redactions, quote snippets that show its text, and its media file. A reply whose target has expired shows "Original message expired".
 - **Notifications in a chat with a timer** show "New message" with no preview, both in the in-app toast and in any system notification. That way a preview cannot outlive the message.
 - **What the setting says:** "New messages in this chat disappear from both phones after they've been seen for 1 week. Either of you can change this. People can still screenshot or copy messages, and this only works when you both have a current Keyring."
-- **The mediator queue is not shortened** for timed messages (D5). It holds only ciphertext (for at most 7 days on Affinidi), and shortening it would drop undelivered messages rather than expire read ones.
+- **The mediator queue is not shortened** for timed messages (D5). It holds only ciphertext (for at most 7 days on either mediator), and shortening it would drop undelivered messages rather than expire read ones.
 
 ---
 
@@ -377,10 +377,10 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
 | D1 | Is this minimum (reactions, replies, emoji picker, inline photos/GIFs, history controls) the target? | Yes | Step 1 |
-| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read until pickup (at most 7 days on Affinidi; no limit on the current Credo mediator), and the bytes it holds per queued message grow up to 256 KiB (§4.4). | Yes, once the mediator operator accepts the measured worst case; this is the same position the app is in for every text message today | Step 3 |
+| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read until pickup (at most 7 days on either mediator), and the bytes it holds per queued message grow up to 256 KiB (§4.4). | Yes, once the mediator operator accepts the measured worst case; this is the same position the app is in for every text message today | Step 3 |
 | D3 | Namespace and profile name: Keyring's own (`keyring.chat/1`), or adopt the rooms name (`org.openvtc.msg/1`)? | Keyring's own, shaped to match, offered upstream once Step 1 proves it | Step 1 |
 | D4 | When does a disappearing message's clock start? | As in Signal: the sender's copy at send, the recipient's at first display, so nothing disappears unread | Step 4 |
-| D5 | Should timed messages also shorten the mediator queue (the DIDComm v2 `expires_time` header)? | No. The queue holds only ciphertext, at most 7 days on Affinidi; shortening it would drop undelivered messages instead of expiring read ones | Step 4 |
+| D5 | Should timed messages also shorten the mediator queue (the DIDComm v2 `expires_time` header)? | No. The queue holds only ciphertext, at most 7 days on either mediator; shortening it would drop undelivered messages instead of expiring read ones | Step 4 |
 
 **Blocked on:**
 
