@@ -1,11 +1,10 @@
 {
-  "generatedFrom": "882e3c2d8a57a6f2e8aaf24b71bf41cf27f320a2",
+  "generatedFrom": "3c386324a0d5eaa8c9a8b3023e2618211d6cdc77",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "Accept": ["src/screens/Terms.tsx"],
     "AcceptCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx",
       "src/modules/openid/screens/OpenIDCredentialOffer.tsx",
       "src/screens/CredentialOffer.tsx"
     ],
@@ -440,7 +439,6 @@
     "DataRetention": ["src/screens/Settings.tsx"],
     "Decline": ["src/screens/ProofRequest.tsx"],
     "DeclineCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx",
       "src/modules/openid/screens/OpenIDCredentialOffer.tsx",
       "src/screens/CredentialOffer.tsx"
     ],
@@ -466,9 +464,6 @@
       "src/components/modals/AppGuideModal.tsx",
       "src/components/modals/DismissiblePopupModal.tsx",
       "src/components/modals/ImageModal.tsx"
-    ],
-    "DismissCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
     ],
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
     "E2EAutoLockMinutes": ["src/components/misc/E2EClockRows.tsx"],
@@ -757,6 +752,13 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
+    "OpenIDProofDecline": [
+      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
+    ],
+    "OpenIDProofDismiss": [
+      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
+    ],
+    "OpenIDProofSend": ["src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"],
     "PassOpenClose": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "PassOpenLift": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "PassStack": ["src/modules/trust-tasks/components/PassStack.tsx"],
