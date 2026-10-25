@@ -87,6 +87,7 @@ module.exports = {
     '<rootDir>/__tests__/helpers/',
     '<rootDir>/__tests__/screens/fixtures',
     '<rootDir>/__tests__/modules/vrc/fixtures',
+    '<rootDir>/__tests__/hardware-signing/fixtures',
   ],
   coveragePathIgnorePatterns: [
     '/node_modules/',

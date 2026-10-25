@@ -46,6 +46,7 @@ import {
 } from '../modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../modules/vrc/types/evidence'
 import WitnessVerifiedBanner from '../modules/vrc/components/WitnessVerifiedBanner'
+import { attestedMethodLabel } from '../modules/vrc/utils/attestedMethod'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
 import { isDTGCredential, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { didHost } from '../modules/trust-tasks/screens/communityName'
@@ -645,18 +646,12 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
                   : attestationValidation.platform === 'android'
                     ? 'Android TEE'
                     : 'Secure Hardware'}
-                {(() => {
-                  const evidence = jsonLdCredentialData?.evidence?.[0]
-                  const authType = evidence?.authenticationMethod?.type || evidence?.biometricMethod?.type
-                  if (!authType) return ''
-                  const label: Record<string, string> = {
-                    FaceID: 'Face ID',
-                    TouchID: 'Touch ID',
-                    Fingerprint: 'Fingerprint',
-                    DevicePasscode: 'Passcode',
-                  }
-                  return ` via ${label[authType] || authType}`
-                })()}
+                {attestedMethodLabel(
+                  attestationValidation.platform,
+                  jsonLdCredentialData?.evidence?.[0]?.authenticationMethod?.type ||
+                    jsonLdCredentialData?.evidence?.[0]?.biometricMethod?.type,
+                  t
+                )}
               </ThemedText>
             </View>
             <Icon name="check-circle" size={20} color="#4D7A8B" />

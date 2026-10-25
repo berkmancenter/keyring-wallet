@@ -771,7 +771,12 @@
     "DeclineParagraph2": "Êtes-vous sûr de vouloir refuser cette offre d'attestation d'identité?",
     "CustomOfferTitle": "Supprimer cette offre?",
     "CustomOfferParagraph1": "La suppression de cette offre supprimera la notification de votre liste.",
-    "CustomOfferParagraph2": "Vous ne reconnaissez pas l'organisation? Vérifiez votre liste de Contacts. Vous ne recevez des notifications que des Contacts que vous avez initiés."
+    "CustomOfferParagraph2": "Vous ne reconnaissez pas l'organisation? Vérifiez votre liste de Contacts. Vous ne recevez des notifications que des Contacts que vous avez initiés.",
+    "MethodReportedByPhone": "{{method}}, selon leur téléphone",
+    "MethodFaceID": "Face ID",
+    "MethodTouchID": "Touch ID",
+    "MethodFingerprint": "empreinte digitale",
+    "MethodDevicePasscode": "code de l'appareil"
   },
   "ProofRequest": {
     "RequestForProof": "Demande de preuve",

@@ -19,6 +19,7 @@ import {
   verifyVrcHardwareEvidence,
 } from '../../../src/modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../../../src/modules/vrc/types/evidence'
+import { AUTH_REQUIRED, spkiOf } from '../../hardware-signing/fixtures/keyDescriptionCerts'
 import { contentHashBase64 } from '../../../src/hardware-signing/binding'
 
 const testCredential = {
@@ -317,12 +318,13 @@ describe('BiometricSignatureVerifier', () => {
         certificateChainValid: true,
         publicKeyMatchesLeafCert: true,
         signatureValid: true,
+        leafPublicKeyBase64: spkiOf(AUTH_REQUIRED),
       })
 
       const androidEvidence: HardwareAttestationEvidence = {
         ...testEvidence,
         hardwareBinding: { ...testEvidence.hardwareBinding, platform: 'android', keyStorage: 'StrongBox' },
-        attestation: { format: 'android-key-attestation-v3', certificateChain: ['android-cert1'] },
+        attestation: { format: 'android-key-attestation-v3', certificateChain: [AUTH_REQUIRED] },
       }
 
       const verifier = new HardwareSignatureVerifier()
@@ -330,7 +332,7 @@ describe('BiometricSignatureVerifier', () => {
 
       expect(result.valid).toBe(true)
       expect(mockVerifyHardwareEvidence).toHaveBeenCalledWith(
-        ['android-cert1'],
+        [AUTH_REQUIRED],
         expect.anything(),
         expect.anything(),
         expect.anything(),
@@ -463,7 +465,7 @@ describe('BiometricSignatureVerifier', () => {
       },
       attestation: {
         format: 'android-key-attestation-v3',
-        certificateChain: ['cert1-base64', 'cert2-base64'],
+        certificateChain: [AUTH_REQUIRED, 'cert2-base64'],
       },
       signature: {
         value: 'dGVzdC1zaWduYXR1cmU=',
@@ -477,6 +479,7 @@ describe('BiometricSignatureVerifier', () => {
         certificateChainValid: true,
         publicKeyMatchesLeafCert: true,
         signatureValid: true,
+        leafPublicKeyBase64: spkiOf(AUTH_REQUIRED),
       })
 
       const verifier = new HardwareSignatureVerifier()
@@ -493,6 +496,7 @@ describe('BiometricSignatureVerifier', () => {
         certificateChainValid: true,
         publicKeyMatchesLeafCert: true,
         signatureValid: true,
+        leafPublicKeyBase64: spkiOf(AUTH_REQUIRED),
       })
 
       const credentialWithPasscodeEvidence = {
@@ -512,6 +516,7 @@ describe('BiometricSignatureVerifier', () => {
         certificateChainValid: true,
         publicKeyMatchesLeafCert: true,
         signatureValid: true,
+        leafPublicKeyBase64: spkiOf(AUTH_REQUIRED),
       })
 
       const authMethodOnlyEvidence: HardwareAttestationEvidence = {

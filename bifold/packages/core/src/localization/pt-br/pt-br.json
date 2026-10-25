@@ -715,7 +715,12 @@
     "DeclineParagraph2": "Você tem certeza que quer recusar esta oferta de credencial?",
     "CustomOfferTitle": "Remover esta oferta?",
     "CustomOfferParagraph1": "Remover esta oferta irá remover a notificação de sua lista.",
-    "CustomOfferParagraph2": "Não reconhece a organização. Verifique sua lista de Contatos. Você só recebe notificões de Contatos que você tenha adicionado."
+    "CustomOfferParagraph2": "Não reconhece a organização. Verifique sua lista de Contatos. Você só recebe notificões de Contatos que você tenha adicionado.",
+    "MethodReportedByPhone": "{{method}}, conforme informado pelo telefone da pessoa",
+    "MethodFaceID": "Face ID",
+    "MethodTouchID": "Touch ID",
+    "MethodFingerprint": "impressão digital",
+    "MethodDevicePasscode": "código do aparelho"
   },
   "ProofRequest": {
     "RequestForProof": "Request for proof (PT-BR)",

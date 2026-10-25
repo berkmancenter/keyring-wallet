@@ -806,6 +806,11 @@
     "CustomOfferTitle": "Delete this offer?",
     "CustomOfferParagraph1": "Deleting this offer will remove the notification from your list.",
     "CustomOfferParagraph2": "Don't recongize the organization? Check your Contact list. you only recieve notifications from Contacts you've initiated.",
+    "MethodReportedByPhone": "{{method}}, as reported by their phone",
+    "MethodFaceID": "Face ID",
+    "MethodTouchID": "Touch ID",
+    "MethodFingerprint": "fingerprint",
+    "MethodDevicePasscode": "passcode",
     "DeleteOfferTitle": "Delete this offer?",
     "DeleteOfferMessage": "Deleting this offer will remove the notification from your list.",
     "DeleteOfferDescription": "Don't recognize the organization? Check your Contacts list. You only receive notifications from Contacts you've initiated"
