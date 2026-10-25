@@ -177,7 +177,10 @@ describe('Same person? on a contact', () => {
     expect(store.records).toHaveLength(1)
     expect(store.records[0].content.confirmation).toBe('user')
 
+    // On the person's word alone, Separate is a quiet link, and it separates at once: merging again is as easy.
+    expect(tree.getByText('ContactDetails.SeparateLink')).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('ContactSeparate')))
+    expect(tree.queryByTestId(id('ContactSeparateConfirm'))).toBeNull()
     await waitFor(() => expect(tree.getByTestId(id('ContactMergeOffer'))).toBeTruthy())
     expect(store.records).toHaveLength(0)
     expect(tree.getAllByTestId(id('RelationshipLayer'))).toHaveLength(1)
@@ -341,6 +344,25 @@ describe('Same person? on a contact', () => {
     expect(await tree.findByTestId(id('ContactMergeConfirmedByPhone'))).toBeTruthy()
     expect(tree.queryByTestId(id('ContactMergedByYou'))).toBeNull()
     expect(tree.queryByTestId(id('ContactMergeAskPhone'))).toBeNull()
+  })
+
+  test('confirmed by the other phone: Separate asks first; Back keeps the merge, Separate undoes it', async () => {
+    store.records.push(mergedLink('peer'))
+    const tree = openWithConnection(ALICE_AGAIN)
+    await tree.findByTestId(id('ContactMergeConfirmedByPhone'))
+    fireEvent.press(tree.getByTestId(id('ContactSeparate')))
+    // Asked, not done: the confirmed merge is still there.
+    expect(await tree.findByTestId(id('ContactSeparateConfirm'))).toBeTruthy()
+    expect(tree.getByText('ContactDetails.SeparateConfirmBody')).toBeTruthy()
+    expect(store.records).toHaveLength(1)
+    fireEvent.press(tree.getByTestId(id('ContactSeparateBack')))
+    await waitFor(() => expect(tree.queryByTestId(id('ContactSeparateConfirm'))).toBeNull())
+    expect(store.records).toHaveLength(1)
+    // And through: separated, the confirmation forgotten with the link.
+    fireEvent.press(tree.getByTestId(id('ContactSeparate')))
+    fireEvent.press(await tree.findByTestId(id('ContactSeparateYes')))
+    await waitFor(() => expect(store.records).toHaveLength(0))
+    await waitFor(() => expect(tree.queryByTestId(id('ContactMergeConfirmedByPhone'))).toBeNull())
   })
 
   const askOn = (connectionId: string, askedAt: number) => ({

@@ -4,13 +4,16 @@
  * decides; the merge says it was theirs ("Merged by you"), never that the other phone confirmed it. A merged contact
  * can be separated again, every relationship its own contact. Neither touches a card, a connection or a message.
  *
+ * Separate is a quiet link under the merge, not a button beside it: after a merge it is the way back, not the next
+ * step. Once the other phone has confirmed the two are the same person, it is quieter still and asks first.
+ *
  * @module vrc/components/ContactMergeSection
  */
 import { useAgent } from '@bifold/react-hooks'
 import type { W3cCredentialRecord } from '@credo-ts/core'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import SafeAreaModal from '../../../components/modals/SafeAreaModal'
@@ -48,6 +51,7 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
   const [asking, setAsking] = useState<MergeCandidate[]>()
+  const [separating, setSeparating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const merged = relationships.length > 1
@@ -91,6 +95,8 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
     section: { gap: 10, marginTop: 16 },
     title: { fontWeight: 'bold' },
     muted: { color: ColorPalette.grayscale.mediumGrey },
+    separate: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+    separateLink: { color: ColorPalette.brand.link },
     sheetBack: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: {
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
@@ -108,6 +114,7 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
     try {
       await change()
       setAsking(undefined)
+      setSeparating(false)
       onChanged()
     } catch (error) {
       agent.config.logger.warn(`[VRC:Contacts] merge or separate failed: ${(error as Error)?.message ?? error}`)
@@ -172,13 +179,21 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
               )}
             </>
           )}
-          <Button
-            title={t('ContactDetails.Separate')}
-            buttonType={ButtonType.Secondary}
-            onPress={() => void run(() => separateContact(agent, links, issuerId))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy }}
             disabled={busy}
+            onPress={() =>
+              // Confirmed by their phone: asked first. On the person's word alone: at once (merging again is as easy).
+              confirmedByPhone ? setSeparating(true) : void run(() => separateContact(agent, links, issuerId))
+            }
+            style={styles.separate}
             testID={testIdWithKey('ContactSeparate')}
-          />
+          >
+            <ThemedText style={confirmedByPhone ? styles.muted : styles.separateLink}>
+              {t('ContactDetails.SeparateLink')}
+            </ThemedText>
+          </Pressable>
         </>
       ) : null}
       {failed ? (
@@ -186,6 +201,30 @@ export const ContactMergeSection: React.FC<ContactMergeSectionProps> = ({
           {t('ContactDetails.MergeFailed')}
         </ThemedText>
       ) : null}
+      <SafeAreaModal visible={separating} transparent animationType="slide">
+        <View style={styles.sheetBack}>
+          {separating ? (
+            <View style={styles.sheet} testID={testIdWithKey('ContactSeparateConfirm')}>
+              <ThemedText variant="headingThree">{t('ContactDetails.SeparateConfirmTitle', words)}</ThemedText>
+              <ThemedText>{t('ContactDetails.SeparateConfirmBody', words)}</ThemedText>
+              <Button
+                title={t('ContactDetails.Separate')}
+                buttonType={ButtonType.Primary}
+                onPress={() => void run(() => separateContact(agent, links, issuerId))}
+                disabled={busy}
+                testID={testIdWithKey('ContactSeparateYes')}
+              />
+              <Button
+                title={t('ContactDetails.MergeBack')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => setSeparating(false)}
+                disabled={busy}
+                testID={testIdWithKey('ContactSeparateBack')}
+              />
+            </View>
+          ) : null}
+        </View>
+      </SafeAreaModal>
       <SafeAreaModal visible={asking !== undefined} transparent animationType="slide">
         <View style={styles.sheetBack}>
           {asking ? (
