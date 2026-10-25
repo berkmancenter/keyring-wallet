@@ -6,10 +6,13 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
-• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
-• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
-• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
-• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
-• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
-
+• Chat got richer. Long-press a message to react with any emoji, reply with a quote, copy it, or delete it for you. The message box has an emoji button too.
+• Send photos in a chat, from the camera or your library. Photos are resized to fit and their location data is removed before sending. Tap a photo to see it full screen.
+• Disappearing messages: from a chat's menu, choose how long new messages last (1 hour to 4 weeks). The chat menu also has Clear chat, and "Keep messages" lets you choose how long a chat keeps its history.
+• Reactions, replies, photos and disappearing messages work with contacts who also have this version. Contacts on an older version still get your text.
+• Contacts' profile photos now show in Messages and at the top of a chat.
+• Your passes in Wallet are stacked like cards. Tap one to bring it to the front; swipe down or tap Back to put it away. It follows your device's Reduce Motion setting.
+• After merging two contacts, "Separate" is now a quieter option instead of a big button.
+• Many screens open in their final state instead of flashing a loading view first.
+• Privacy and security improvements.
+• Known issue: animated GIFs show only their first frame on Android.
