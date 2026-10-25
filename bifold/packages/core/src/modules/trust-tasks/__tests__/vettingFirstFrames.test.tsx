@@ -9,11 +9,13 @@
  */
 import { act, render } from '@testing-library/react-native'
 import React, { Profiler } from 'react'
+import { DeviceEventEmitter } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import VtiVetting from '../screens/VtiVetting'
+import { COMMUNITY_CHANGED_EVENT } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { VtiApplicant } from '../module/vtiVetting'
@@ -93,10 +95,12 @@ const gate = () => {
 }
 
 /** The agent over `records`; a query for a held `kind` waits on its gate. */
+let reads = 0
 const agentWith = (records: Rec[], held: Record<string, Promise<void>> = {}) => ({
   agent: {
     genericRecords: {
       findAllByQuery: async (query: Record<string, string>) => {
+        reads += 1
         if (query.kind && held[query.kind]) await held[query.kind]
         return records
           .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
@@ -239,4 +243,54 @@ describe('a seat, before what it holds is read', () => {
     ])
     tree.unmount()
   }, 15000)
+})
+
+// Every write the vetting and community stores make is announced (communityChanged); the screen read the seat
+// again only on its next 3 s read, so a grant, a request or a statement kept here showed up to 3 s late.
+describe('a change the stores announce', () => {
+  test('a grant kept while the screen is open seats the vetter at once, not on the next 3 s read', async () => {
+    const records = [persona]
+    mockUseAgent.mockReturnValue(agentWith(records))
+    const { tree, frames } = await open()
+    expect(steps(frames)).toEqual(['VettingSeatLoading', 'VettingApplicantStep_name'])
+    records.push(grant, cardIn)
+    await act(async () => {
+      DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid, what: 'grant' })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    // Within 300 ms, far short of the next 3 s read: at the vetter's step, never an empty Step 1 on the way.
+    expect(steps(frames).slice(-1)).toEqual(['VettingVetterStep_check'])
+    expect(frames).not.toContain('VettingVetterStep_ticket')
+    tree.unmount()
+  })
+
+  test("another community's change is not this screen's", async () => {
+    mockUseAgent.mockReturnValue(agentWith([persona, grant, cardIn]))
+    const { tree } = await open()
+    const before = reads
+    // No 3 s read falls in this second: any read in it is the other community's announcement.
+    await act(async () => {
+      DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: 'did:webvh:example:other', what: 'desk' })
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    })
+    expect(reads - before).toBe(0)
+    tree.unmount()
+  })
+
+  test('reading the seat again announces nothing, so one change is one read (no loop)', async () => {
+    mockUseAgent.mockReturnValue(agentWith([persona, grant, cardIn]))
+    const { tree } = await open()
+    const before = reads
+    await act(async () => {
+      DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid, what: 'desk' })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    const once = reads - before
+    expect(once).toBeGreaterThan(0)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+    })
+    expect(reads - before).toBe(once)
+    tree.unmount()
+  })
 })

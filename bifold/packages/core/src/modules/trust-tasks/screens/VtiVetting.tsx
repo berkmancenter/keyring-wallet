@@ -40,6 +40,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
+import { useCommunityChanged } from '../module/communityChanged'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
@@ -519,6 +520,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     }
   }, [agent, stores, communityDid, mediatorDid, tick])
 
+  // The seat's read, for a change announced by the stores (below).
+  const seatRefresh = useRef<(() => Promise<void>) | undefined>(undefined)
+  // Whatever this phone keeps for the community (a ticket, a request, a statement,
+  // a grant, an inbox delivery) is announced by the store that keeps it: read the
+  // seat again at once, not on the next 3 s read.
+  useCommunityChanged(() => void seatRefresh.current?.(), communityDid)
+
   // Whatever the community or a vetter delivers, keep it; then decide the seat.
   //
   // Deliberately NOT gated on `connected`. Opening the session drains whatever
@@ -595,9 +603,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       }
     }
     void refreshSeat()
+    seatRefresh.current = refreshSeat
+    // The 3 s read stays, for two reasons. What no write here announces: the
+    // grant's standing, checked over the network (a community can revoke it while
+    // the screen is open). And a change announced while this read is not
+    // registered (before this effect runs, or between its cleanup and its next
+    // run) is otherwise lost: the announcement is not repeated.
     const timer = setInterval(() => void refreshSeat(), 3000)
     return () => {
       cancelled = true
+      seatRefresh.current = undefined
       clearInterval(timer)
       stopIssue()
       // The desk's and the applicant's listeners go with the screen. They were
