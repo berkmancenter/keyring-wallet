@@ -2345,6 +2345,8 @@
   },
   "SignIn": {
     "ConfirmTitle": "Entrar em {{name}}?",
+    "ConfirmTitleUnread": "Entrar com esta comunidade?",
+    "ReadingCommunity": "Lendo a comunidade",
     "ConfirmBody": "Um site está pedindo para você entrar com esta comunidade. Nada é enviado até você continuar.",
     "CommunityLabel": "Comunidade",
     "HostLabel": "Endereço da comunidade",

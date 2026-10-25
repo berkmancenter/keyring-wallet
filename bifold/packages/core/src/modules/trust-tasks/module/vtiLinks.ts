@@ -334,7 +334,7 @@ async function routeBareDid(
   }
 }
 
-/** A screen a link lands on, inside the My Agent stack. */
+/** A screen a link lands on, inside the My Agent stack. Not SignIn: that one is reached only with its code (below). */
 export type MyAgentScreenName =
   | 'VtaLink'
   | 'MyAgent'
@@ -343,7 +343,6 @@ export type MyAgentScreenName =
   | 'VtiVetting'
   | 'VtiJoin'
   | 'VtiInvited'
-  | 'SignIn'
   | 'VtaClaim'
 
 /**
@@ -356,7 +355,7 @@ export type SignInDestination = { screen: 'SignIn'; link: string; scanId: string
 /** Where a link lands, inside the My Agent stack. */
 export type MyAgentDestination = MyAgentScreenName | SignInDestination
 
-export const MY_AGENT_SCREEN: Record<MyAgentScreenName, Screens> = {
+export const MY_AGENT_SCREEN: Record<MyAgentScreenName | SignInDestination['screen'], Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
   VtaAgent: Screens.VtaAgent,

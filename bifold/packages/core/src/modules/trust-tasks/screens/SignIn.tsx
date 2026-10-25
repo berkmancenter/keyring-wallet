@@ -38,6 +38,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { registerOtaApplyBlocker } from '../../../utils/otaApply'
 import { testIdWithKey } from '../../../utils/testable'
 import type { ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
@@ -68,8 +69,11 @@ export type SignInEnd =
   | { kind: 'failed'; reason?: SignInEndReason }
 
 type Step =
-  | { kind: 'reading' }
-  | { kind: 'confirm'; vtcDid: string; name: string; host?: string; identities: SignInIdentity[] }
+  /**
+   * From the first frame: the community and its host as the code names them, read offline. Its name and the
+   * identities it could sign in as are unknown (undefined) until the records are read, and Continue waits for them.
+   */
+  | { kind: 'confirm'; vtcDid: string; host?: string; name?: string; identities?: SignInIdentity[] }
   | { kind: 'notMember'; name: string; vtcDid: string }
   | { kind: 'choose'; identities: SignInIdentity[] }
   | { kind: 'claiming' }
@@ -82,6 +86,12 @@ type Step =
 
 /** Steps on which the decision deadline is watched. */
 const WATCHED: Step['kind'][] = ['number', 'checking', 'review']
+
+/**
+ * Steps of a request under way: from Continue to its end. An update must not reload the app over one (the
+ * claim, the number and the answer live only in this screen), so it holds the update back while it lasts.
+ */
+const IN_REQUEST: Step['kind'][] = ['claiming', 'number', 'checking', 'review', 'approving', 'declining']
 
 /** The words for an ending, as a localization key. */
 export function signInEndKey(end: SignInEnd): string {
@@ -117,12 +127,21 @@ export const shortPersonaDid = (did: string): string => {
   return last.length > 24 ? `${last.slice(0, 20)}…` : last
 }
 
+/** The first step, from the code alone: read offline, so the first frame is Confirm (or why the code can't be used). */
+function firstStep(link: string | undefined, at: number): Step {
+  if (!link) return { kind: 'ended', end: { kind: 'noCode' } }
+  const read = signInCommunityOf(link, at)
+  if ('reason' in read) return { kind: 'ended', end: { kind: 'failed', reason: read.reason } }
+  return { kind: 'confirm', vtcDid: read.vtcDid, host: didDomainPath(read.vtcDid) }
+}
+
 export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSeconds, onClose }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const headerHeight = useSafeHeaderHeight()
   const keyboard = useMeasuredKeyboardOffset(headerHeight)
-  const [step, setStep] = useState<Step>({ kind: 'reading' })
+  const [first] = useState(() => firstStep(link, now()))
+  const [step, setStep] = useState<Step>(first)
   const [number, setNumber] = useState('')
   const [clock, setClock] = useState(now)
   // Kept from the confirm step for the review; from the claim, its deadline.
@@ -134,7 +153,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   // The identity the person chose, when there was a choice; else the steps take the one found.
   const chosenRef = useRef<SignInIdentity | undefined>(undefined)
   const approveStarted = useRef(false)
-  const endedRef = useRef(false)
+  const endedRef = useRef(first.kind === 'ended')
   const stepsRef = useRef(steps)
   stepsRef.current = steps
 
@@ -156,30 +175,26 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     [end]
   )
 
-  // 1. Read the code and the records. Local only.
+  // 1. The records, under the Confirm the code already drew: the community's name on record, and the identities
+  // the phone could sign in as. Nothing is sent to the community before Continue.
   useEffect(() => {
-    if (!link) {
-      end({ kind: 'noCode' })
-      return
-    }
-    const read = signInCommunityOf(link, now())
-    if ('reason' in read) {
-      end({ kind: 'failed', reason: read.reason })
-      return
-    }
+    if (first.kind !== 'confirm') return
+    const { vtcDid } = first
     let live = true
     stepsRef.current
-      .community(read.vtcDid)
+      .community(vtcDid)
       .then(({ member, name, identities = [] }) => {
         if (!live) return
         // Never the raw DID as its name: what the community calls itself,
         // else its handle, with the DID behind Details (IN-249).
-        const label = name?.trim() || unnamedCommunityLabel(read.vtcDid, t)
+        const label = name?.trim() || unnamedCommunityLabel(vtcDid, t)
         setCommunityName(label)
-        setStep(
-          member
-            ? { kind: 'confirm', vtcDid: read.vtcDid, name: label, host: didDomainPath(read.vtcDid), identities }
-            : { kind: 'notMember', name: label, vtcDid: read.vtcDid }
+        setStep((current) =>
+          current.kind !== 'confirm'
+            ? current
+            : member
+              ? { ...current, name: label, identities }
+              : { kind: 'notMember', name: label, vtcDid }
         )
       })
       .catch((e) => {
@@ -188,9 +203,9 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
     return () => {
       live = false
     }
-    // Read once per code.
+    // Read once: the screen's code is its own for its whole life.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [link])
+  }, [])
 
   // The decision deadline, from the claim on.
   const watching = WATCHED.includes(step.kind) && deadline !== undefined
@@ -202,6 +217,10 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   useEffect(() => {
     if (watching && deadline !== undefined && clock >= deadline) end({ kind: 'timedOut' })
   }, [watching, deadline, clock, end])
+
+  // No update is applied over a request under way (utils/otaApply); released at its end, or when the screen goes.
+  const inRequest = IN_REQUEST.includes(step.kind)
+  useEffect(() => (inRequest ? registerOtaApplyBlocker('sign-in') : undefined), [inRequest])
 
   // Leaving after a claim and before Approve gives the request up, so the
   // browser stops waiting. Never after Approve: the community would cancel a
@@ -280,6 +299,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
         error: { color: ColorPalette.semantic.error },
         actions: { gap: 12 },
         busy: { alignItems: 'center', gap: 12, paddingVertical: 24 },
+        // The name's place while it is read: a line's height, so the card does not grow when it arrives.
+        reading: { alignSelf: 'flex-start', minHeight: TextTheme.bold.lineHeight ?? 22 },
         input: {
           ...TextTheme.headingTwo,
           borderWidth: 1,
@@ -323,17 +344,31 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
 
   const body = (): React.ReactNode => {
     switch (step.kind) {
-      case 'reading':
-        return <ActivityIndicator color={ColorPalette.brand.primary} />
-      case 'confirm':
+      case 'confirm': {
+        // Ready once the records are read: until then the name is unknown (never guessed from the code) and
+        // Continue waits, so nothing can be claimed for a community the phone may not belong to.
+        const ready = step.identities !== undefined
         return (
           <View style={{ gap: 16 }} testID={id(SignInIds.confirm)}>
             <ThemedText variant="headingThree" accessibilityRole="header">
-              {t('SignIn.ConfirmTitle', { name: step.name, interpolation: { escapeValue: false } })}
+              {step.name === undefined
+                ? t('SignIn.ConfirmTitleUnread')
+                : t('SignIn.ConfirmTitle', { name: step.name, interpolation: { escapeValue: false } })}
             </ThemedText>
             <ThemedText>{t('SignIn.ConfirmBody')}</ThemedText>
             <View style={styles.card}>
-              {row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)}
+              {step.name === undefined ? (
+                <View style={styles.row}>
+                  <ThemedText style={styles.muted}>{t('SignIn.CommunityLabel')}</ThemedText>
+                  <ActivityIndicator
+                    color={ColorPalette.brand.primary}
+                    style={styles.reading}
+                    accessibilityLabel={t('SignIn.ReadingCommunity')}
+                  />
+                </View>
+              ) : (
+                row(t('SignIn.CommunityLabel'), step.name, SignInIds.community)
+              )}
               {/* Who the code says the community is, domain and path, from
                   the code alone: nothing is resolved before Continue, so it
                   is marked unverified (VTI-LNK-050). */}
@@ -347,6 +382,8 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
                 title={t('SignIn.Continue')}
                 buttonType={ButtonType.Primary}
                 onPress={() => void onContinue(step.identities)}
+                // Disabled is also what the e2e drivers wait on (accessibilityState, XCUITest's `enabled`).
+                disabled={!ready}
                 testID={id(SignInIds.continue)}
               />
               <Button
@@ -358,6 +395,7 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
             </View>
           </View>
         )
+      }
       case 'notMember':
         return (
           <View style={{ gap: 16 }} testID={id(SignInIds.notMember)}>

@@ -2436,6 +2436,8 @@
   },
   "SignIn": {
     "ConfirmTitle": "Se connecter à {{name}} ?",
+    "ConfirmTitleUnread": "Se connecter avec cette communauté ?",
+    "ReadingCommunity": "Lecture de la communauté",
     "ConfirmBody": "Un site web demande à vous connecter avec cette communauté. Rien n'est envoyé avant que vous continuiez.",
     "CommunityLabel": "Communauté",
     "HostLabel": "Adresse de la communauté",

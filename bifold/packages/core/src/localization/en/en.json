@@ -2505,6 +2505,8 @@
   },
   "SignIn": {
     "ConfirmTitle": "Sign in to {{name}}?",
+    "ConfirmTitleUnread": "Sign in with this community?",
+    "ReadingCommunity": "Reading the community",
     "ConfirmBody": "A website is asking to sign you in with this community. Nothing is sent until you continue.",
     "CommunityLabel": "Community",
     "HostLabel": "Community's address",
