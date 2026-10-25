@@ -84,6 +84,10 @@ export const newEventId = createEventIdFactory()
  * October 2026: a 48-bit millisecond time, most significant first, in the first 10 characters), and it is the one
  * createEventIdFactory above writes. Ids that stopped following it would decode to a wrong time with no error, so
  * re-check this if the event id format (plan D3) ever changes.
+ *
+ * Callers must have validated the id with isUlid, or handle NaN themselves: a character outside Crockford base32 gives
+ * NaN, and NaN compares false both ways, so a bound written as `decodeUlidTime(id) > limit` would let it through.
+ * parseChatEvent checks isUlid before every type branch, so its future-event bound never sees NaN.
  */
 export function decodeUlidTime(id: string): number {
   let ms = 0

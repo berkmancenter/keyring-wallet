@@ -1,7 +1,8 @@
 import { DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
 import { EventEmitter, InjectionSymbols } from '@credo-ts/core'
 
-import { CHAT_PROFILE } from '../chatEvent'
+import { CHAT_PROFILE, MAX_EVENT_CLOCK_SKEW_MS } from '../chatEvent'
+import { decodeUlidTime } from '../eventId'
 import { ChatEventMessage } from '../messages/ChatEventMessage'
 import { ChatEventRecord } from '../records/ChatEventRecord'
 import { receiveChatEventMessage, setupChatInbound } from '../inbound'
@@ -212,11 +213,20 @@ describe('receiving a photo (plan §4.3, §5)', () => {
 // A peer that copied the eventId of a message this phone sent could otherwise reach it through every lookup by eventId:
 // deleting its own message, or letting it expire, would take this phone's with it.
 describe('an eventId this phone sent', () => {
+  // Dated 2023-12-31, before jestSetup's frozen now (2024-01-01): a later date reads as a timer from the future, which
+  // chatEvent refuses first (future-event, #579), so the timer case would never reach the reused-eventId check.
+  const SENT_ID = '01HJYJQ6008Q2W4E5R6T7Y8Z9V'
+
+  // So a fixture that ever moves past the clock fails here, for that reason, and not as a puzzling verdict below.
+  it('uses an id inside the future-event window, so the timer case reaches the reuse check', () => {
+    expect(decodeUlidTime(SENT_ID)).toBeLessThanOrEqual(Date.now() + MAX_EVENT_CLOCK_SKEW_MS)
+  })
+
   const sentHere = (connectionId: string) =>
     new ChatEventRecord({
       connectionId,
       role: 'sent',
-      eventId: EVENT_ID,
+      eventId: SENT_ID,
       eventType: 'message',
       content: { format: 'text/plain', text: 'mine' },
     })
@@ -224,7 +234,7 @@ describe('an eventId this phone sent', () => {
     inbound({
       profile: CHAT_PROFILE,
       type: 'message',
-      eventId: EVENT_ID,
+      eventId: SENT_ID,
       content: { format: 'text/plain', text: 'gone in an hour' },
       expiresIn: 3600,
     })
@@ -236,13 +246,6 @@ describe('an eventId this phone sent', () => {
     expect(fake.stored).toHaveLength(1)
   })
 
-  // This repo's jest pins Date.now() to 2024-01-01, before these ids (2024-10). A timer dated more than a day ahead of
-  // now is refused as future-event (#579) before the reuse check is reached, so the clock is set to after them here.
-  beforeEach(() => {
-    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 25, 12, 0, 0))
-  })
-  afterEach(() => jest.restoreAllMocks())
-
   it.each([
     ['a reaction', { type: 'reaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W', emoji: '👍' }],
     ['a redaction', { type: 'redaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W' }],
@@ -251,7 +254,7 @@ describe('an eventId this phone sent', () => {
     const fake = makeFakeAgent()
     fake.stored.push(sentHere('conn-1'))
     expect(
-      await receiveChatEventMessage(fake.agent, inbound({ profile: CHAT_PROFILE, eventId: EVENT_ID, ...fields }))
+      await receiveChatEventMessage(fake.agent, inbound({ profile: CHAT_PROFILE, eventId: SENT_ID, ...fields }))
     ).toBe('reused-event-id')
     expect(fake.stored).toHaveLength(1)
   })
