@@ -149,3 +149,45 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
         if: always()
+
+  typecheck:
+    runs-on: ubuntu-22.04
+    # Not a required check yet: it is watched for about a week before that is decided.
+    name: Type check (ratchet)
+    steps:
+      - name: Checkout aries-mobile-agent-react-native
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      # A fresh install, so tsc checks against the dependencies that ship (a
+      # developer checkout can hold stale nested copies that change the result).
+      - name: Install dependencies
+        run: |
+          yarn install --immutable
+
+      - name: Build Workspace
+        run: |
+          yarn build
+
+      - name: tsc-ratchet tests
+        run: |
+          node --test scripts/tsc-ratchet.test.mjs
+
+      - name: No new type errors in @bifold/core
+        run: |
+          # Build Workspace already type-checks core's src (bob's typescript target),
+          # but core's tsconfig excludes the test files and jest strips types, so
+          # this is the only place the tests are type-checked. tsconfig.ratchet.json
+          # adds them back. Policy: src has no type errors; test files get no new
+          # ones, and packages/core/tsc-baseline.txt only shrinks. A new entry needs
+          # a named reason in the PR body and the review lane's explicit agreement
+          # (scripts/tsc-ratchet.mjs). It fails on a new error, on a count that
+          # rises, on a count that falls without the baseline being rewritten in
+          # the same PR, and on a tsc run that fails without a diagnostic.
+          node scripts/tsc-ratchet.mjs --package packages/core --project tsconfig.ratchet.json
