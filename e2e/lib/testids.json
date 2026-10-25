@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "c95a747cb5763151df6d09bc8cc33d345852685e",
+  "generatedFrom": "c3c54ddfc5613002c39dc7007cf65cab591255cc",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -510,6 +510,7 @@
     "ExportPassword": ["src/screens/ExportWallet.tsx"],
     "ExportPasswordConfirm": ["src/screens/ExportWallet.tsx"],
     "ExportWallet": ["src/screens/Settings.tsx"],
+    "FeatureRoomsSwitchElement": ["src/screens/Developer.tsx"],
     "FocusIndicator": ["src/components/misc/ScanCamera.tsx"],
     "ForgotPINDescription": ["src/screens/PINEnter.tsx"],
     "ForgotPINLink": ["src/screens/PINEnter.tsx"],
@@ -884,6 +885,7 @@
     "RevocationMessage": ["src/screens/CredentialDetails.tsx"],
     "RevokedDate": ["src/screens/CredentialDetails.tsx"],
     "RevokedOrNotAvailable": ["src/components/misc/Card11Pure.tsx"],
+    "RoomsSampleDataBanner": ["src/modules/rooms/components/SampleDataBanner.tsx"],
     "Save": [
       "src/components/forms/WalletNameForm.tsx",
       "src/modules/history/ui/HistoryPage.tsx",
@@ -984,6 +986,7 @@
     "ToggleConnectionInviterCapabilitySwitch": ["src/screens/AutoLock.tsx", "src/screens/Developer.tsx"],
     "ToggleDevVerifierTemplatesSwitch": ["src/screens/Developer.tsx"],
     "ToggleEnableWalletNamingSwitch": ["src/screens/Developer.tsx"],
+    "ToggleFeatureRooms": ["src/screens/Developer.tsx"],
     "ToggleHardwareAttestation": ["src/screens/ToggleHardwareAttestation.tsx"],
     "ToggleLocalityConfirmation": ["src/screens/ToggleLocalityConfirmation.tsx"],
     "TogglePreventAutoLockSwitch": ["src/screens/Developer.tsx"],
