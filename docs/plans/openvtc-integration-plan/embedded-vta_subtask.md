@@ -41,6 +41,7 @@ taken by an unrelated same-day entry from a different, concurrently-running
 line of work — `credential-exchange/query` — by the time this document's
 `main` was pulled; this document's own investigation is dated to when it was
 actually written up, 2026-09-14.)
+**Review:** [`2026-10-24-al.md`](./2026-10-24-al.md) — how an "on this phone" option would be offered beside the hosted agent (where it lives, the trade-off wording, waiting and expiry states, switching, navigation fit), and an open question on whether moving keeps the agent's identifier. Proposals only.
 **Baseline:** originally measured against `verifiable-trust-infrastructure` at
 `d294ecb` (live clone, 2026-09-01) — re-verify anything version-specific.
 `keyring-on-the-vta-farm.md` §3.5 (measured 2026-09-03) records all four
