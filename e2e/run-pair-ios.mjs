@@ -18,6 +18,13 @@
  *   pair-emoji-composer       A types text, adds 😀 from the composer's emoji button and sends: B shows the text with
  *                             the emoji
  *
+ * Photos (rich messaging Step 3; bifold #584, #588, S3-3b, S3-4b). A's library is seeded with a 2400 x 1800 JPEG that
+ * carries a GPS position (fixtures/test-chat-photo-gps.jpg):
+ *   pair-photo-send           A sends it from the composer's "+" > Photo library: both phones show it in a bubble
+ *   pair-photo-no-location    the file each phone keeps, read from its app container: no Exif segment, no GPS, at
+ *                             most 1600 px on its long edge and 256 KiB. The fixture itself reads as carrying GPS (the
+ *                             positive control), so a clean result is the re-encode's doing, not a blind scanner's
+ *
  * Disappearing messages (rich messaging Step 4, H7; bifold #570, #572, H5's sheet). Needs a test build with E2E_CLOCKS=short,
  * where an hour's timer runs in DISAPPEAR_SECONDS (60, the Developer screen's E2EDisappearHourSeconds):
  *   pair-timer-set            A sets 1 hour from the chat menu's Disappearing messages sheet: A shows "You set messages
@@ -42,12 +49,13 @@
  */
 import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
+import { jpegMetadata } from "./lib/jpegMetadata.mjs";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
 
@@ -63,6 +71,8 @@ const rows = createRows({
     "pair-react-same": ["pair-react-picker"],
     "pair-react-remove": ["pair-react-same"],
     "pair-emoji-composer": ["pair-share-link-connects"],
+    "pair-photo-send": ["pair-share-link-connects"],
+    "pair-photo-no-location": ["pair-photo-send"],
     "pair-timer-set": ["pair-share-link-connects"],
     "pair-timer-line": ["pair-timer-set"],
     "pair-timer-message": ["pair-timer-line"],
@@ -94,6 +104,32 @@ async function pushAndTapWake(d, udid, tag) {
   if (!(await banner.isExisting())) throw new Error("driver: the wake's banner did not show on the simulator");
   await banner.click();
   await sleep(2000);
+}
+
+/** How many elements carry `key` on screen now. */
+async function countTestId(d, key) {
+  return (await d.$$(`~com.ariesbifold:id/${key}`)).length;
+}
+
+/** Whether `key` reaches `count` elements within `timeout`. */
+async function waitForCount(d, key, count, timeout) {
+  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) if ((await countTestId(d, key)) >= count) return true;
+  return false;
+}
+
+/** The newest file in any chat's media folder in the app's data container on simulator `udid` (media/store.ts). */
+function newestChatPhoto(udid) {
+  const data = simctl("get_app_container", udid, APP, "data").trim();
+  const root = path.join(data, "Library", "Application Support", "chat-media");
+  let newest;
+  for (const chat of readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+    for (const name of readdirSync(path.join(root, chat.name))) {
+      const file = path.join(root, chat.name, name);
+      const at = statSync(file).mtimeMs;
+      if (!newest || at > newest.at) newest = { file, at };
+    }
+  }
+  return newest?.file;
 }
 
 /** On `peer`'s chat: the composer is up and the header names them. */
@@ -307,6 +343,50 @@ try {
       const onB = Boolean(await waitForText(b, "gate: picked 😀"));
       await screenshot(b, "pair-emoji-composer").catch(() => undefined);
       return { ok: stayed && onB, detail: `the sheet stayed open after a choice ${stayed} · B shows "gate: picked 😀" ${onB}` };
+    });
+
+    // Photos (Step 3): before the timer rows, so the photo is untimed and still on both phones when its file is read.
+    const PHOTO_FIXTURE = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures", "test-chat-photo-gps.jpg");
+    await rows.row("pair-photo-send", async () => {
+      simctl("addmedia", A.udid, PHOTO_FIXTURE);
+      simctl("privacy", A.udid, "grant", "photos", APP);
+      await openChatWith(a, B);
+      const imagesBefore = { a: await countTestId(a, "ChatMessageImage"), b: await countTestId(b, "ChatMessageImage") };
+      await tapTestId(a, "ChatActionsButton", 10000);
+      await tapTestId(a, "ChatAttachLibrary", 10000);
+      await acceptSystemAlertIfPresent(a);
+      // The system photo picker: the photo just added is the newest, the last cell of its grid.
+      const cells = await a.$$("-ios class chain:**/XCUIElementTypeCell");
+      if (cells.length === 0) return { ok: false, detail: "the system photo picker showed no photos" };
+      await cells[cells.length - 1].click();
+      for (const label of ["Add", "Choose", "Done"]) {
+        const button = await a.$(`-ios predicate string:type == "XCUIElementTypeButton" AND label == "${label}" AND visible == 1`);
+        if (await button.isExisting()) await button.click();
+      }
+      const onA = await waitForCount(a, "ChatMessageImage", imagesBefore.a + 1, 60000);
+      const onB = await waitForCount(b, "ChatMessageImage", imagesBefore.b + 1, 90000);
+      await screenshot(b, "pair-photo-send").catch(() => undefined);
+      return { ok: onA && onB, detail: `A shows the photo it sent ${onA} · B shows the photo ${onB} (images before: A ${imagesBefore.a}, B ${imagesBefore.b})` };
+    });
+    await rows.row("pair-photo-no-location", async () => {
+      const fixture = jpegMetadata(readFileSync(PHOTO_FIXTURE));
+      if (!fixture.gps) return { ok: false, detail: "the fixture reads as carrying no GPS: the scan proves nothing" };
+      const verdicts = [];
+      let ok = true;
+      for (const [who, d] of [["A", A], ["B", B]]) {
+        const file = newestChatPhoto(d.udid);
+        if (!file) {
+          ok = false;
+          verdicts.push(`${who}: no photo file in chat-media`);
+          continue;
+        }
+        const bytes = readFileSync(file);
+        const m = jpegMetadata(bytes);
+        const clean = m.jpeg && !m.exif && !m.gps && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
+        ok &&= clean;
+        verdicts.push(`${who}: Exif ${m.exif} · GPS ${m.gps} · ${m.width}x${m.height} · ${bytes.length} bytes`);
+      }
+      return { ok, detail: `the fixture carries GPS ${fixture.gps} · ${verdicts.join(" · ")}` };
     });
 
     // Disappearing messages (H7). The two messages the emoji rows sent came before the timer, so they stay untimed: they
