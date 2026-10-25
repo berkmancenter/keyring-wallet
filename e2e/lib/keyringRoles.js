@@ -962,6 +962,10 @@ export const vetter = {
   openDesk(d, opts = {}) {
     return runStep(d, "vetter", "openDesk", opts, async () => {
       await openVetting(d);
+      // The desk's reads first: a session an earlier run left open shows its own step only once they finish, and the
+      // probes below would miss it and leave it open. (Until the desk draws a placeholder while it reads, its unread
+      // state already reads "ticket", so this returns at once there.)
+      await awaitSeatStep(d, "vetter");
       for (let i = 0; i < 3; i++) {
         let ended = false;
         for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
