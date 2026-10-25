@@ -1,15 +1,18 @@
 /**
- * What a JPEG carries besides its pixels: whether it has an Exif segment (APP1, "Exif\0\0"), and whether that holds a
- * GPS position (the GPSInfo tag, 0x8825). Read from the bytes, so a run can prove that a photo received over chat lost
+ * What a JPEG carries besides its pixels: whether it has an Exif segment (APP1, "Exif\0\0"), whether that holds a
+ * GPS position (the GPSInfo tag, 0x8825), and whether it has an XMP packet (APP1, "http://ns.adobe.com/xap/1.0/\0"),
+ * which can carry a location too. The XMP packet is only found, not read: a received photo should carry none at all. Read from the bytes, so a run can prove that a photo received over chat lost
  * its location on the sender's phone (rich messaging Step 3: the re-encode drops EXIF; Jest cannot show it, since it
  * runs the manipulator's mock).
  *
  * Only the header segments are walked, up to the first scan (SOS); a truncated or non-JPEG file is reported as such.
  */
 
-/** @param {Uint8Array} b @returns {{ jpeg: boolean, exif: boolean, gps: boolean, width?: number, height?: number }} */
+const XMP_HEADER = Buffer.from("http://ns.adobe.com/xap/1.0/\0", "binary");
+
+/** @param {Uint8Array} b @returns {{ jpeg: boolean, exif: boolean, gps: boolean, xmp: boolean, width?: number, height?: number }} */
 export function jpegMetadata(b) {
-  const out = { jpeg: false, exif: false, gps: false };
+  const out = { jpeg: false, exif: false, gps: false, xmp: false };
   if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return out;
   out.jpeg = true;
   let i = 2;
@@ -25,6 +28,9 @@ export function jpegMetadata(b) {
     if (marker === 0xe1 && body.length >= 6 && Buffer.from(body.subarray(0, 6)).equals(Buffer.from("Exif\0\0", "binary"))) {
       out.exif = true;
       if (hasGpsTag(body.subarray(6))) out.gps = true;
+    }
+    if (marker === 0xe1 && body.length >= XMP_HEADER.length && Buffer.from(body.subarray(0, XMP_HEADER.length)).equals(XMP_HEADER)) {
+      out.xmp = true;
     }
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc && body.length >= 5) {
       out.height = (body[1] << 8) | body[2];
