@@ -2,7 +2,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DeviceEventEmitter, View, StyleSheet, Text } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, View, StyleSheet, Text } from 'react-native'
 
 import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { EventTypes } from '../../../constants'
@@ -40,13 +40,15 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
     params: { credential },
   },
 }: OpenIDProofPresentationProps) => {
-  const { TextTheme } = useTheme()
+  const { TextTheme, ColorPalette } = useTheme()
   const [declineModalVisible, setDeclineModalVisible] = useState(false)
   const [buttonsVisible, setButtonsVisible] = useState(true)
   const [acceptModalVisible, setAcceptModalVisible] = useState(false)
-  const [credentialsRequested, setCredentialsRequested] = useState<Array<OpenIDCredentialRecord>>([])
-  const [satistfiedCredentialsSubmission, setSatistfiedCredentialsSubmission] = useState<SatisfiedCredentialsFormat>()
-  const [selectedCredentialsSubmission, setSelectedCredentialsSubmission] = useState<SelectedCredentialsFormat>()
+  // The credentials that satisfy the request, read from the wallet: undefined until read. Shown as none
+  // before they were, the request read as one this wallet cannot answer (only "Dismiss"), and then gained Send.
+  const [credentialsRequested, setCredentialsRequested] = useState<Array<OpenIDCredentialRecord>>()
+  // The credentials the person chose instead of the first, by input descriptor. The rest are the first of each.
+  const [chosen, setChosen] = useState<SelectedCredentialsFormat>({})
 
   const { getCredentialById } = useOpenIDCredentials()
 
@@ -57,23 +59,25 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
 
   const submission = useMemo(() => (credential ? formatOpenIdProofRequest(credential) : undefined), [credential])
 
-  //This should run only once when the screen is mounted
-  useEffect(() => {
-    if (!submission) return
-    const creds = submission.entries.reduce((acc: SatisfiedCredentialsFormat, entry) => {
-      acc[entry.inputDescriptorId] = entry.credentials.map((cred) => ({
-        id: cred.id,
-        claimFormat: cred.claimFormat,
-      }))
-      return acc
-    }, {})
-    setSatistfiedCredentialsSubmission(creds)
-  }, [submission])
+  // What satisfies each input descriptor, from the request itself.
+  const satistfiedCredentialsSubmission = useMemo<SatisfiedCredentialsFormat | undefined>(
+    () =>
+      submission?.entries.reduce((acc: SatisfiedCredentialsFormat, entry) => {
+        acc[entry.inputDescriptorId] = entry.credentials.map((cred) => ({
+          id: cred.id,
+          claimFormat: cred.claimFormat,
+        }))
+        return acc
+      }, {}),
+    [submission]
+  )
 
   //Fetch all credentials satisfying the proof
   useEffect(() => {
+    if (!satistfiedCredentialsSubmission) return
+    let live = true
     async function fetchCreds() {
-      if (!satistfiedCredentialsSubmission || satistfiedCredentialsSubmission.entries) return
+      if (!satistfiedCredentialsSubmission) return
       const creds: Array<OpenIDCredentialRecord> = []
 
       for (const [inputDescriptorID, credIDs] of Object.entries(satistfiedCredentialsSubmission)) {
@@ -85,18 +89,21 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
           }
         }
       }
-      setCredentialsRequested(creds)
+      if (live) setCredentialsRequested(creds)
     }
     fetchCreds()
+    return () => {
+      live = false
+    }
   }, [satistfiedCredentialsSubmission, getCredentialById])
 
-  //Once satisfied credentials are set and all credentials fetched, we select the first one of each submission to display on screen
-  useEffect(() => {
-    if (!satistfiedCredentialsSubmission || credentialsRequested?.length <= 0) return
-
-    const creds = Object.entries(satistfiedCredentialsSubmission).reduce(
+  // Once the credentials are read: the first of each input descriptor, unless the person chose another. A read
+  // again (a new `getCredentialById`) keeps what they chose.
+  const selectedCredentialsSubmission = useMemo<SelectedCredentialsFormat | undefined>(() => {
+    if (!satistfiedCredentialsSubmission || !credentialsRequested?.length) return undefined
+    return Object.entries(satistfiedCredentialsSubmission).reduce(
       (acc: SelectedCredentialsFormat, [inputDescriptorId, credentials]) => {
-        acc[inputDescriptorId] = {
+        acc[inputDescriptorId] = chosen[inputDescriptorId] ?? {
           id: credentials[0]?.id,
           claimFormat: credentials?.[0]?.claimFormat,
         }
@@ -104,8 +111,7 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
       },
       {}
     )
-    setSelectedCredentialsSubmission(creds)
-  }, [satistfiedCredentialsSubmission, credentialsRequested])
+  }, [satistfiedCredentialsSubmission, credentialsRequested, chosen])
 
   const { verifierName } = useMemo(() => {
     return { verifierName: credential?.verifierHostName }
@@ -148,7 +154,7 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
     id: string
     claimFormat: string
   }) => {
-    setSelectedCredentialsSubmission((prev) => ({
+    setChosen((prev) => ({
       ...prev,
       [inputDescriptorID]: {
         id,
@@ -194,18 +200,23 @@ const OpenIDProofPresentation: React.FC<OpenIDProofPresentationProps> = ({
       <View style={styles.headerContainer}>
         <Text style={TextTheme.headerTitle}>{t('ProofRequest.OID4VCTitle')}</Text>
       </View>
-      <OpenIdProofRequestDisplay
-        buttonsVisible={buttonsVisible}
-        credential={credential}
-        credentialsRequested={credentialsRequested}
-        onPressAltCredChange={handleAltCredChange}
-        onPressAccept={handleAcceptTouched}
-        onPressDecline={handleDeclineTouched}
-        onPressDismiss={handleDismiss}
-        selectedCredentialsSubmission={selectedCredentialsSubmission}
-        submission={submission}
-        verifierName={verifierName}
-      />
+      {credential && credentialsRequested === undefined ? (
+        <ActivityIndicator color={ColorPalette.brand.primary} style={{ marginTop: 40 }} />
+      ) : (
+        <OpenIdProofRequestDisplay
+          buttonsVisible={buttonsVisible}
+          credential={credential}
+          // Read by here, unless there is no request (the display then shows nothing).
+          credentialsRequested={credentialsRequested ?? []}
+          onPressAltCredChange={handleAltCredChange}
+          onPressAccept={handleAcceptTouched}
+          onPressDecline={handleDeclineTouched}
+          onPressDismiss={handleDismiss}
+          selectedCredentialsSubmission={selectedCredentialsSubmission}
+          submission={submission}
+          verifierName={verifierName}
+        />
+      )}
       <ProofRequestAccept visible={acceptModalVisible} proofId={''} confirmationOnly={true} />
       <CommonRemoveModal
         usage={ModalUsage.ProofRequestDecline}
