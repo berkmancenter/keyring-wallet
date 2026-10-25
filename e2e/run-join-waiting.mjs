@@ -312,6 +312,9 @@ async function approvedFlow(d, me) {
       const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
       const said = line ? (await textOf(d, "CommunityCardRole").catch(() => "")).replace(/\s+/g, " ").trim() : "";
       await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      // Android Back: on a pass build it closes the card opened in place in the Wallet (bifold #534), as it popped the
+      // Details screen before. This flow drives Android only (makeDriver platform "android"); iOS has no Back, and
+      // there the card's "All cards" (PassOpenClose) is the way out.
       if (opened) await d.back().catch(() => undefined);
       return {
         // UI/UX's decision (10-14) is about the Wallet: one card from C, its details naming the role. Your agent's
