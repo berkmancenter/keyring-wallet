@@ -195,6 +195,12 @@ export function getBCAgentModules({
         // runtime by configureMessagePickup (useBCAgentSetup), which starts
         // PickUpV2 explicitly — this interval is what governs.
         mediatorPollingInterval: 1_000,
+        // Live pickup (utils/livePickup.ts, behind its switch) reconnects its
+        // WebSocket through credo's monitor, whose backoff doubles from 100 ms
+        // with NO ceiling by default: a mediator down for a few minutes would
+        // leave the phone waiting hours to try again. 30 s caps it. Unused while
+        // pickup polls. Study: docs/plans/mediator-migration-plan/2026-10-25-al.md part 7.
+        maximumMediatorReconnectionIntervalMs: 30_000,
       },
     }),
     dids: new DidsModule({
