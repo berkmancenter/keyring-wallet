@@ -1,5 +1,6 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
 
 import { BasicAppContext } from '../../../../../__tests__/helpers/app'
 import en from '../../../../localization/en/en.json'
@@ -83,15 +84,57 @@ describe('EmojiPicker', () => {
   })
 
   it('hides a recent emoji the device cannot draw', async () => {
-    load.mockResolvedValue(['🫠'])
+    // 🥲 (13.0) keeps the row, so the wait proves the read landed before 🫠 (14.0) is looked for.
+    load.mockResolvedValue(['🫠', '🥲'])
     const { tree } = renderPicker({ maxVersion: 13.0 })
-    await waitFor(() => expect(load).toHaveBeenCalled())
-    expect(tree.queryByTestId(testIdWithKey(EmojiPickerIds.recent))).toBeNull()
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey(EmojiPickerIds.recent))).toBeTruthy())
+    expect(tree.getAllByTestId(emojiId('🥲'))).toHaveLength(2) // the recent row and the grid
+    expect(tree.queryByTestId(emojiId('🫠'))).toBeNull()
   })
 
   it('names the emoji for screen readers', () => {
     const { tree } = renderPicker()
     expect(tree.getByTestId(emojiId('😀')).props.accessibilityLabel).toBe('grinning face')
+  })
+})
+
+// The limit read from the device, not passed in: Android 11 (API level 30) draws up to Emoji 13.0 (osSupport.ts).
+describe('on Android 11, from Platform', () => {
+  const original = { os: Platform.OS, version: Platform.Version }
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    Object.defineProperty(Platform, 'Version', { value: 30, configurable: true })
+  })
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: original.os, configurable: true })
+    Object.defineProperty(Platform, 'Version', { value: original.version, configurable: true })
+  })
+  const renderOnDevice = () => renderPicker({ maxVersion: undefined })
+
+  it('offers 🥲 (13.0) in the grid and not 🫠 (14.0)', async () => {
+    const { tree } = renderOnDevice()
+    await waitFor(() => expect(load).toHaveBeenCalled())
+    // 🫠 sorts before 🥲 in Smileys & Emotion, so with 🥲's row drawn, 🫠's place has been too.
+    expect(tree.getByTestId(emojiId('🥲'))).toBeTruthy()
+    expect(tree.queryByTestId(emojiId('🫠'))).toBeNull()
+  })
+
+  it('finds 🥲 by searching, and not 🫠', () => {
+    const { tree } = renderOnDevice()
+    const search = tree.getByTestId(testIdWithKey(EmojiPickerIds.search))
+    fireEvent.changeText(search, 'smiling face with tear')
+    expect(tree.getByTestId(emojiId('🥲'))).toBeTruthy()
+    fireEvent.changeText(search, 'melting')
+    expect(tree.queryByTestId(emojiId('🫠'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey(EmojiPickerIds.noResults))).toBeTruthy()
+  })
+
+  it('keeps 🫠 out of the recent row, chosen on a newer phone', async () => {
+    load.mockResolvedValue(['🫠', '🥲'])
+    const { tree } = renderOnDevice()
+    await waitFor(() => expect(tree.getByTestId(testIdWithKey(EmojiPickerIds.recent))).toBeTruthy())
+    expect(tree.getAllByTestId(emojiId('🥲'))).toHaveLength(2)
+    expect(tree.queryByTestId(emojiId('🫠'))).toBeNull()
   })
 })
 
