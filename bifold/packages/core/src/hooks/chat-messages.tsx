@@ -255,16 +255,98 @@ const PEER_WAIT_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
 ])
 export const isPeerWaitStatus = (status: VrcFlowStatus): boolean => PEER_WAIT_STATUSES.has(status)
 
+/** The overlay's words for a flow status; the dialect and witnessing pick the wording. */
+export function flowStatusText(flowStatus: VrcFlowStatus, trustTasks: boolean, isWitnessed: boolean): string {
+  switch (flowStatus) {
+    case 'connecting':
+      return 'Establishing connection...'
+    case 'witness-active':
+      return trustTasks
+        ? 'Verifying with witness...'
+        : isWitnessed
+          ? 'Witness verification in progress...'
+          : 'Reporting in progress...'
+    case 'witness-fallback':
+      return 'Witness unavailable. Issuing credential...'
+    case 'biometric-fallback':
+      return 'Issuing credential without hardware attestation...'
+    case 'discovering':
+      return 'Checking what your contact supports...'
+    case 'proposed':
+      return 'Waiting for your contact to accept...'
+    case 'preparing-offer':
+      // Trust-task dialect: there is no "offer" — the first pass prepares
+      // and signs our relationship credential (the biometric prompt lands
+      // here); after the witness ceremony it is sent on the exchange.
+      return trustTasks
+        ? isWitnessed
+          ? 'Witness verified. Sending your relationship credential...'
+          : 'Preparing your relationship credential...'
+        : isWitnessed
+          ? 'Witness verified. Preparing offer...'
+          : 'Preparing credential offer...'
+    case 'sharing-witness-record':
+      return 'Sharing witness record...'
+    case 'offer-sent':
+      return trustTasks ? "Waiting for your contact's credential..." : 'Waiting for counterparty...'
+    default:
+      return 'Exchange in progress...'
+  }
+}
+
+/**
+ * Whether a connection's flow, as the store has it, shows the overlay. Not
+ * the overlay's timeline — its timers, a dismissed wait, the trailing beat for
+ * the contact card — which `useVrcFlowInProgress` keeps.
+ */
+export function flowOverlayShown(connectionId: string): boolean {
+  const flowStatus = vrcFlowStore.getStatus(connectionId)
+  // Clear overlay when:
+  // - 'idle': No active flow
+  // - 'offer-received': User has received an offer they can act on
+  // - 'offer-sent' AND hasReceivedOffer: Bidirectional exchange complete
+  //   (This handles the case where party receives first, sends second - e.g., QR displayer)
+  // - isExchangeComplete: Both sent and received offers
+  return !(
+    flowStatus === 'idle' ||
+    flowStatus === 'offer-received' ||
+    (flowStatus === 'offer-sent' && vrcFlowStore.hasReceivedOfferFlag(connectionId)) ||
+    vrcFlowStore.isExchangeComplete(connectionId)
+  )
+}
+
+/**
+ * What the overlay shows for a connection the moment a screen opens on it: the
+ * flow already under way is there in the first frame. Read in render; an
+ * effect used to set it after the screen had painted without it (UI-smoothness
+ * plan, Phase 4).
+ */
+function overlayAtOpen(connectionId: string): { shown: boolean; statusText: string; fraction: number } {
+  if (!connectionId || !flowOverlayShown(connectionId)) return { shown: false, statusText: '', fraction: 0 }
+  const flowStatus = vrcFlowStore.getStatus(connectionId)
+  return {
+    shown: true,
+    statusText: flowStatusText(
+      flowStatus,
+      vrcFlowStore.getDialect(connectionId) === 'trust-tasks',
+      vrcFlowStore.isWitnessedFlow(connectionId)
+    ),
+    fraction: STATUS_PROGRESS[flowStatus] ?? 0.15,
+  }
+}
+
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
-  const [inProgress, setInProgress] = useState(false)
-  const [statusText, setStatusText] = useState('')
+  // Once, at mount: the flow under way is in the first frame; the effect below keeps it from there.
+  const [atOpen] = useState(() => overlayAtOpen(connectionId))
+  const [inProgress, setInProgress] = useState(atOpen.shown)
+  const [statusText, setStatusText] = useState(atOpen.statusText)
   const [timedOut, setTimedOut] = useState(false)
   const [waitingOnPeer, setWaitingOnPeer] = useState(false)
   // The status the user dismissed the waiting dialog at; the dialog stays
   // hidden until the flow leaves it.
   const waitDismissedAtRef = useRef<VrcFlowStatus | null>(null)
   const lastStatusRef = useRef<VrcFlowStatus>('idle')
-  const [progressFraction, setProgressFraction] = useState(0)
+  const [progressFraction, setProgressFraction] = useState(atOpen.fraction)
   const [progressComplete, setProgressComplete] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const confirmTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -318,23 +400,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     const checkStatus = () => {
       const flowStatus = vrcFlowStore.getStatus(connectionId)
       const isWitnessed = vrcFlowStore.isWitnessedFlow(connectionId)
-      const hasReceivedOffer = vrcFlowStore.hasReceivedOfferFlag(connectionId)
-      const isComplete = vrcFlowStore.isExchangeComplete(connectionId)
-
-      // Determine if overlay should show
-      // Clear overlay when:
-      // - 'idle': No active flow
-      // - 'offer-received': User has received an offer they can act on
-      // - 'offer-sent' AND hasReceivedOffer: Bidirectional exchange complete
-      //   (This handles the case where party receives first, sends second - e.g., QR displayer)
-      // - isExchangeComplete: Both sent and received offers
-      const shouldClearOverlay =
-        flowStatus === 'idle' ||
-        flowStatus === 'offer-received' ||
-        (flowStatus === 'offer-sent' && hasReceivedOffer) ||
-        isComplete
-
-      const shouldShowOverlay = !shouldClearOverlay
+      const shouldShowOverlay = flowOverlayShown(connectionId)
+      const shouldClearOverlay = !shouldShowOverlay
 
       // The VRC exchange is done, but the peer's R-Card (their contact card —
       // what names them) may still be in flight: the overlay lingers with a
@@ -393,55 +460,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         setProgressComplete(false)
         setInProgress(true)
 
-        const trustTasks = vrcFlowStore.getDialect(connectionId) === 'trust-tasks'
-        switch (flowStatus) {
-          case 'connecting':
-            setStatusText('Establishing connection...')
-            break
-          case 'witness-active':
-            setStatusText(
-              trustTasks
-                ? 'Verifying with witness...'
-                : isWitnessed
-                  ? 'Witness verification in progress...'
-                  : 'Reporting in progress...'
-            )
-            break
-          case 'witness-fallback':
-            setStatusText('Witness unavailable. Issuing credential...')
-            break
-          case 'biometric-fallback':
-            setStatusText('Issuing credential without hardware attestation...')
-            break
-          case 'discovering':
-            setStatusText('Checking what your contact supports...')
-            break
-          case 'proposed':
-            setStatusText('Waiting for your contact to accept...')
-            break
-          case 'preparing-offer':
-            // Trust-task dialect: there is no "offer" — the first pass prepares
-            // and signs our relationship credential (the biometric prompt lands
-            // here); after the witness ceremony it is sent on the exchange.
-            setStatusText(
-              trustTasks
-                ? isWitnessed
-                  ? 'Witness verified. Sending your relationship credential...'
-                  : 'Preparing your relationship credential...'
-                : isWitnessed
-                  ? 'Witness verified. Preparing offer...'
-                  : 'Preparing credential offer...'
-            )
-            break
-          case 'sharing-witness-record':
-            setStatusText('Sharing witness record...')
-            break
-          case 'offer-sent':
-            setStatusText(trustTasks ? "Waiting for your contact's credential..." : 'Waiting for counterparty...')
-            break
-          default:
-            setStatusText('Exchange in progress...')
-        }
+        setStatusText(flowStatusText(flowStatus, vrcFlowStore.getDialect(connectionId) === 'trust-tasks', isWitnessed))
 
         // Advance the milestone bar — monotonically, since some statuses
         // recur across passes and the bar must never move backwards.
