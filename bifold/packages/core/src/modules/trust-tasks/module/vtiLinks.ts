@@ -26,7 +26,6 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
-import { pendingVtaClaimLink } from './vtaClaimSteps'
 import {
   readTrigger,
   TRIGGER_UI_MESSAGE_KEYS,
@@ -343,19 +342,19 @@ export type MyAgentScreenName =
   | 'VtiVetting'
   | 'VtiJoin'
   | 'VtiInvited'
-  | 'VtaClaim'
 
 /**
- * A sign-in code, carried to its screen as the route's params. Each scan is its
- * own screen (`scanId`, the route's id): a second code scanned while a sign-in
- * is on screen opens a new one, and never shows the first one's code or result.
+ * A scanned code, carried to its screen as the route's params: a sign-in, or an
+ * agent host's one-scan setup. Each scan is its own screen (`scanId`, the
+ * route's id): a second code scanned while one is on screen opens a new one,
+ * and never shows the first one's code or result.
  */
-export type SignInDestination = { screen: 'SignIn'; link: string; scanId: string }
+export type ScannedCodeDestination = { screen: 'SignIn' | 'VtaClaim'; link: string; scanId: string }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = MyAgentScreenName | SignInDestination
+export type MyAgentDestination = MyAgentScreenName | ScannedCodeDestination
 
-export const MY_AGENT_SCREEN: Record<MyAgentScreenName | SignInDestination['screen'], Screens> = {
+export const MY_AGENT_SCREEN: Record<MyAgentScreenName | ScannedCodeDestination['screen'], Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
   VtaAgent: Screens.VtaAgent,
@@ -391,9 +390,9 @@ export function myAgentLinkParams(destination: MyAgentDestination): {
   return screen === agentHomeScreen() ? { screen } : { screen, initial: false }
 }
 
-/** A new id for each scan of a sign-in code: unique within this run of the app. */
+/** A new id for each scan of a code: unique within this run of the app. */
 let scans = 0
-export function newSignInScanId(): string {
+export function newScanId(): string {
   scans += 1
   return `${Date.now()}-${scans}`
 }
@@ -574,12 +573,11 @@ export async function routeKeyringAgentLink(
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
     case 'triggerLink':
       if (signInToOpen(trimmed)) {
-        navigate({ screen: 'SignIn', link: trimmed, scanId: newSignInScanId() })
+        navigate({ screen: 'SignIn', link: trimmed, scanId: newScanId() })
         return
       }
       if (vtaClaimToOpen(trimmed)) {
-        pendingVtaClaimLink.set(trimmed)
-        navigate('VtaClaim')
+        navigate({ screen: 'VtaClaim', link: trimmed, scanId: newScanId() })
         return
       }
       throw triggerLinkError(trimmed)

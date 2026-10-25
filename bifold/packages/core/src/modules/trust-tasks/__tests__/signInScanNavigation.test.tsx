@@ -21,8 +21,11 @@ import { Screens, TabStacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import type { ClaimedSignIn } from '../module/oobSignIn'
 import type { ProvedSignIn, SignInSteps } from '../module/signInSteps'
+import type { ClaimedVta } from '../module/vtaClaim'
+import type { VtaClaimSteps } from '../module/vtaClaimSteps'
 import { myAgentLinkParams, routeKeyringAgentLink, type MyAgentDestination } from '../module/vtiLinks'
 import { SignInIds } from '../screens/SignIn.ids'
+import { VtaClaimIds } from '../screens/VtaClaim.ids'
 
 jest.unmock('@react-navigation/native')
 jest.unmock('@react-navigation/core')
@@ -53,7 +56,17 @@ jest.mock('../screens/VtaLink', () => ({
 jest.mock('../screens/VtiHiddenVetter', () => ({ __esModule: true, default: () => null }))
 jest.mock('../screens/VtiHiddenVetting', () => ({ __esModule: true, default: () => null }))
 jest.mock('../screens/VtiVetting', () => ({ __esModule: true, default: () => null }))
-jest.mock('../screens/VtaClaim', () => ({ __esModule: true, default: () => null }))
+// The real setup screen too, with fake steps.
+let mockClaimSteps: VtaClaimSteps
+jest.mock('../screens/VtaClaim', () => {
+  const actual = jest.requireActual('../screens/VtaClaim')
+  const ReactActual = jest.requireActual('react')
+  return {
+    ...actual,
+    __esModule: true,
+    default: (props: object) => ReactActual.createElement(actual.default, { ...props, steps: mockClaimSteps }),
+  }
+})
 // The real sign-in screen, with fake steps in place of the agent's.
 let mockSteps: SignInSteps
 jest.mock('../screens/SignIn', () => {
@@ -168,4 +181,34 @@ test('a second code scanned over a finished sign-in opens its own sign-in, for t
   expect(hosts).toHaveLength(1)
   expect(hosts[0]).toHaveTextContent(/second-vtc/)
   expect(mockSteps.community).toHaveBeenLastCalledWith(SECOND)
+})
+
+const FARM_ONE = 'did:webvh:QmFarmScid:first-farm.example.com'
+const FARM_TWO = 'did:webvh:QmFarmScid:second-farm.example.com'
+const setupCodeFor = (farm: string) =>
+  `https://link.trustoverip.org/t#_from=${farm}&_id=q3Vt7mXo9LwA2bR5cJ8kNg&_exp=${NOW + 600}&_type=/vti/flow/vta-claim/0.1`
+
+test('a second setup code scanned over a finished setup opens its own screen, for that code', async () => {
+  mockClaimSteps = {
+    canOwn: jest.fn(async () => true),
+    confirmOwner: jest.fn(async () => ({ ok: true })),
+    claim: jest.fn(async () => ({ farmDid: FARM_ONE, claimCheck: 'T5WZ42' }) as unknown as ClaimedVta),
+    redeem: jest.fn(async () => ({ vtaDid: 'did:webvh:QmNew:dids.example.com:vta', operation: 'provisionVta' })),
+    finish: jest.fn(async () => ({ kind: 'linked', vtaDid: 'did:webvh:QmNew:dids.example.com:vta' })),
+  } as unknown as VtaClaimSteps
+  const navRef = React.createRef<any>()
+  const tree = render(<App navRef={navRef} />)
+  await act(async () => undefined)
+
+  await scan(navRef, setupCodeFor(FARM_ONE))
+  await press(tree, VtaClaimIds.continue)
+  expect(tree.getByTestId(id(VtaClaimIds.ready))).toBeTruthy()
+
+  await scan(navRef, setupCodeFor(FARM_TWO))
+  const top = focused(navRef.current.getRootState())
+  expect(top.name).toBe(Screens.VtaClaim)
+  expect(top.params?.link).toBe(setupCodeFor(FARM_TWO))
+  const hosts = tree.getAllByTestId(id(VtaClaimIds.host))
+  expect(hosts).toHaveLength(1)
+  expect(hosts[0]).toHaveTextContent(/second-farm/)
 })

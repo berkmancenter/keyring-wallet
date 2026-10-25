@@ -24,20 +24,6 @@ import {
 } from './vtaClaim'
 import type { OwnerConfirmation } from './vtaOwner'
 
-/** The scanned code, held from the scanner to the screen. Read offline; nothing is sent until Continue. */
-let pendingLink: string | undefined
-export const pendingVtaClaimLink = {
-  set(link: string): void {
-    pendingLink = link
-  },
-  peek(): string | undefined {
-    return pendingLink
-  },
-  clear(): void {
-    pendingLink = undefined
-  },
-}
-
 /** A scanned code, read offline: the Farm it is from, or why it can't be used. */
 export function vtaClaimOf(link: string): TriggerAccept | VtaClaimError {
   const action = triggerAction(readTrigger(link, { channel: 'scan' }))

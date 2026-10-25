@@ -4,7 +4,7 @@
  * wait, and how it ends — against fake steps, so no protocol runs here.
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
-import React from 'react'
+import React, { Profiler } from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
@@ -13,7 +13,7 @@ import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { VtaClaimError, type ClaimedVta, type RedeemState } from '../module/vtaClaim'
 import type { VtaClaimSteps } from '../module/vtaClaimSteps'
-import { VtaClaimFlow } from '../screens/VtaClaim'
+import VtaClaim, { VtaClaimFlow } from '../screens/VtaClaim'
 import { VtaClaimIds } from '../screens/VtaClaim.ids'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -181,5 +181,55 @@ describe('the words', () => {
       expect(lang).toBeTruthy()
     }
     expect(JSON.stringify(en.VtaClaim)).not.toMatch(/farm/i)
+  })
+})
+
+// The code is read offline, so the first frame is Confirm (UI-smoothness plan, Phase 5). It started on a
+// "Claiming…" frame that an effect then replaced, before anything had been claimed.
+describe('a scanned setup code, in the first frame', () => {
+  /** Which of Confirm, Claiming or the end each committed frame showed. */
+  const frames = async (link: string | undefined) => {
+    const seen: string[] = []
+    const tree = render(<BasicAppContext>{null}</BasicAppContext>)
+    const look = () =>
+      seen.push(
+        [VtaClaimIds.confirm, VtaClaimIds.claiming, VtaClaimIds.failed].find(
+          (key) => tree.queryByTestId(id(key)) !== null
+        ) ?? 'none'
+      )
+    tree.rerender(
+      <BasicAppContext>
+        <Profiler id="claim" onRender={look}>
+          <VtaClaimFlow link={link} steps={fakeSteps()} onClose={onClose} />
+        </Profiler>
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    return { tree, seen }
+  }
+
+  it('is Confirm, with the host, never "Claiming…" first', async () => {
+    const { tree, seen } = await frames(LINK)
+    expect(seen[0]).toBe(VtaClaimIds.confirm)
+    expect(seen).not.toContain(VtaClaimIds.claiming)
+    expect(tree.getByTestId(id(VtaClaimIds.host))).toHaveTextContent('farm.example.com')
+  })
+
+  it('a code that cannot be used, or none, says why in the first frame', async () => {
+    const expired = LINK.replace(/_exp=\d+/, '_exp=1000')
+    const { tree, seen } = await frames(expired)
+    expect(seen[0]).toBe(VtaClaimIds.failed)
+    expect(tree.getByTestId(id(VtaClaimIds.resultMessage))).toHaveTextContent('VtaClaim.Failure.expired')
+    expect((await frames(undefined)).seen[0]).toBe(VtaClaimIds.failed)
+  })
+
+  it('the screen in the stack takes the code its route carries', async () => {
+    const tree = render(
+      <BasicAppContext>
+        <VtaClaim steps={fakeSteps()} route={{ params: { link: LINK } }} />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect(tree.getByTestId(id(VtaClaimIds.confirm))).toBeTruthy()
   })
 })

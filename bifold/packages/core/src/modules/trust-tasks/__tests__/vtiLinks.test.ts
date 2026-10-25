@@ -1,7 +1,6 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
-import { pendingVtaClaimLink } from '../module/vtaClaimSteps'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
@@ -608,16 +607,19 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
 
     // An agent host's one-scan setup code (vta-claim): the setup screen, the
     // code held for it, and nothing sent until the person continues there.
-    it('opens the agent setup screen for an agent claim it accepts, holding the code, and sends nothing', async () => {
+    it('opens the agent setup screen for an agent claim it accepts, carrying the code, and sends nothing', async () => {
       const claim = live.replace('sign-in/0.1', 'vta-claim/0.1')
-      pendingVtaClaimLink.clear()
       const navigate = jest.fn()
       const resolve = jest.fn()
       await routeKeyringAgentLink(claim, { dids: { resolve } } as never, navigate)
-      expect(navigate).toHaveBeenCalledWith('VtaClaim')
-      expect(pendingVtaClaimLink.peek()).toBe(claim)
+      expect(navigate).toHaveBeenCalledWith({ screen: 'VtaClaim', link: claim, scanId: expect.any(String) })
+      const [destination] = navigate.mock.calls[0]
+      expect(myAgentLinkParams(destination)).toEqual({
+        screen: Screens.VtaClaim,
+        initial: false,
+        params: { link: claim, scanId: destination.scanId },
+      })
       expect(resolve).not.toHaveBeenCalled()
-      pendingVtaClaimLink.clear()
     })
 
     it('opens the sign-in screen for a sign-in it accepts, carrying the code, and sends nothing', async () => {

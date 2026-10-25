@@ -164,6 +164,8 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
       <Stack.Screen
         name={Screens.VtaClaim}
         component={VtaClaim as React.FC}
+        // Each scan is its own screen, as for sign-in.
+        getId={({ params }) => params?.scanId}
         options={{ title: t('Screens.VtaClaim'), ...ScreenOptionsDictionary[Screens.VtaClaim] }}
       />
     </Stack.Navigator>

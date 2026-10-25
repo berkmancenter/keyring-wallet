@@ -24,7 +24,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import type { TriggerAccept } from '../module/triggerLink'
 import { AgentAlreadyOnPhone } from '../module/vtaAgent'
 import { VtaClaimError, type ClaimedVta, type RedeemState, type VtaClaimFailure } from '../module/vtaClaim'
-import { agentVtaClaimSteps, pendingVtaClaimLink, vtaClaimOf, type VtaClaimSteps } from '../module/vtaClaimSteps'
+import { agentVtaClaimSteps, vtaClaimOf, type VtaClaimSteps } from '../module/vtaClaimSteps'
 
 import { didDomainPath, didHost } from './communityName'
 import { DidDetails } from './DidDetails'
@@ -41,7 +41,6 @@ export type VtaClaimEndReason =
   | 'noCode'
 
 type Step =
-  | { kind: 'reading' }
   | { kind: 'confirm'; trigger: TriggerAccept; host: string; where?: string }
   | { kind: 'claiming' }
   | { kind: 'code'; claimed: ClaimedVta; state?: RedeemState }
@@ -63,10 +62,19 @@ const reasonOf = (error: unknown): VtaClaimEndReason => {
   return 'unreachable'
 }
 
+/** The first step, from the code alone: read offline, so the first frame is Confirm (or why the code can't be used). */
+function firstStep(link: string | undefined): Step {
+  if (!link) return { kind: 'failed', reason: 'noCode' }
+  const read = vtaClaimOf(link)
+  if (read instanceof VtaClaimError) return { kind: 'failed', reason: reasonOf(read) }
+  return { kind: 'confirm', trigger: read, host: didHost(read.from) ?? read.from, where: didDomainPath(read.from) }
+}
+
 export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
-  const [step, setStep] = useState<Step>({ kind: 'reading' })
+  // The screen's code is its own for its whole life (MyAgentStack's `getId`): read once, in the first render.
+  const [step, setStep] = useState<Step>(() => firstStep(link))
   const [confirmError, setConfirmError] = useState<string | undefined>()
   const stopped = useRef(false)
 
@@ -82,25 +90,6 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
     if (stopped.current) return
     setStep({ kind: 'failed', reason: reasonOf(error) })
   }, [])
-
-  // 1. Read the code. Local only.
-  useEffect(() => {
-    if (!link) {
-      setStep({ kind: 'failed', reason: 'noCode' })
-      return
-    }
-    const read = vtaClaimOf(link)
-    if (read instanceof VtaClaimError) {
-      setStep({ kind: 'failed', reason: reasonOf(read) })
-      return
-    }
-    setStep({
-      kind: 'confirm',
-      trigger: read,
-      host: didHost(read.from) ?? read.from,
-      where: didDomainPath(read.from),
-    })
-  }, [link])
 
   const onContinue = async (trigger: TriggerAccept) => {
     setConfirmError(undefined)
@@ -176,7 +165,7 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
   )
 
   let body: React.ReactNode = null
-  if (step.kind === 'reading' || step.kind === 'claiming') {
+  if (step.kind === 'claiming') {
     body = waiting(VtaClaimIds.claiming, t('VtaClaim.Claiming'))
   } else if (step.kind === 'confirm') {
     body = (
@@ -289,11 +278,15 @@ export const VtaClaimFlow: React.FC<VtaClaimFlowProps> = ({ link, steps, onClose
   )
 }
 
-const VtaClaim: React.FC<{ steps?: VtaClaimSteps; link?: string }> = ({ steps, link }) => {
+/** The screen in the My Agent stack: the code its route carries (each scan is its own route), the agent's steps. */
+const VtaClaim: React.FC<{ steps?: VtaClaimSteps; link?: string; route?: { params?: { link?: string } } }> = ({
+  steps,
+  link,
+  route,
+}) => {
   const { agent } = useAgent()
   const navigation = useNavigation()
-  const code = useMemo(() => link ?? pendingVtaClaimLink.peek(), [link])
-  useEffect(() => () => pendingVtaClaimLink.clear(), [])
+  const [code] = useState(() => link ?? route?.params?.link)
   const agentSteps = useMemo(() => steps ?? (agent ? agentVtaClaimSteps(agent) : undefined), [steps, agent])
   if (!agentSteps) return null
   return <VtaClaimFlow link={code} steps={agentSteps} onClose={() => navigation.goBack()} />

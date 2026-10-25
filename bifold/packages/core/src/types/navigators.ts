@@ -172,7 +172,8 @@ export type MyAgentStackParams = {
   [Screens.VtiJoin]: undefined
   // The code, and the scan it came from (the route's id: each scan is its own screen).
   [Screens.SignIn]: { link: string; scanId: string } | undefined
-  [Screens.VtaClaim]: undefined
+  // The code, and the scan it came from (the route's id: each scan is its own screen).
+  [Screens.VtaClaim]: { link: string; scanId: string } | undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }
 
