@@ -2,8 +2,8 @@ name: Promote Android build
 
 # Moves the build already on a Play track (internal testing by default) to
 # open testing ("beta" in the API), without rebuilding it. Run it by hand from
-# the Actions tab, on the staging branch: the Play key is a secret of the
-# "internal" environment, which only staging may use. A dry run reports and
+# the Actions tab, on the release's release/* branch (or staging): the Play key is a secret of the
+# "internal" environment, which staging and release/* branches may use. A dry run reports and
 # commits nothing. A real promotion first waits for a required reviewer on the
 # "open-testing" environment, which holds no secrets.
 
@@ -46,10 +46,14 @@ jobs:
     runs-on: ubuntu-22.04
     environment: internal
     steps:
-      - name: Refuse any branch but staging
-        if: github.ref != 'refs/heads/staging'
+      # A release is promoted from its own release/* branch, so the Play notes are
+      # that release's (.github/play/whats-new.md on the branch). staging is still
+      # accepted. Never push to staging to change its notes: a push to staging
+      # ships that branch's code to every TestFlight tester (build 270, 10-24).
+      - name: Refuse any branch but staging or release/*
+        if: github.ref != 'refs/heads/staging' && !startsWith(github.ref, 'refs/heads/release/')
         run: |
-          echo "Run this workflow on staging (Run workflow → Use workflow from: staging)."
+          echo "Run this workflow on the release's own release/* branch (or staging)."
           exit 1
       - uses: actions/checkout@v4
       - name: Take the release notes
