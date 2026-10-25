@@ -17,9 +17,10 @@
  * The server's record (`bundle show`) must show a bundle on that channel and
  * platform, enabled, with a 0 rollout, targeting exactly the ring below the
  * new one, and published at least --soak-hours ago (its id is a UUIDv7, so the
- * publish time is in it). The soak defaults to 0: the audience is beta testers
- * for now. ota-publish passes the repository variable OTA_PROMOTE_SOAK_HOURS,
- * to raise it when the audience widens. Until rings have members beyond ring 0, ring0 may go
+ * publish time is in it). The soak defaults to DEFAULT_SOAK_HOURS when nothing
+ * sets it. ota-publish passes the repository variable OTA_PROMOTE_SOAK_HOURS;
+ * setting it to 0 (no soak, while the audience is beta testers) is a recorded
+ * decision, and a missing variable gives the safe number, not none. Until rings have members beyond ring 0, ring0 may go
  * straight to ring2 (ring 1 is empty: no install can join it yet). --check (a
  * dry run) checks and changes nothing. After the update, the record must
  * target the new rings with the rollout still 0.
@@ -32,6 +33,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 export const PROMOTE_CHANNELS = ['production', 'preview']
+export const DEFAULT_SOAK_HOURS = 24
 export const RING_TARGETS = { ring0: ['ring0'], ring1: ['ring0', 'ring1'], ring2: ['ring0', 'ring1', 'ring2'] }
 // The rings a bundle may be promoted from, per destination. ring0 -> ring2 is allowed while ring 1 has no members.
 const FROM = { ring1: ['ring0'], ring2: ['ring0', 'ring1'] }
@@ -46,7 +48,7 @@ export const ringOf = (targetCohorts) => {
 }
 
 /** Whether `bundle` (the server's record for bundleId, or null) may be promoted to `to` at time `now`. */
-export const checkPromote = (bundle, { channel, platform, bundleId, to, soakHours = 0, now = Date.now() }) => {
+export const checkPromote = (bundle, { channel, platform, bundleId, to, soakHours = DEFAULT_SOAK_HOURS, now = Date.now() }) => {
   if (!PROMOTE_CHANNELS.includes(channel)) return { ok: false, reason: `channel ${channel} is not promoted here` }
   if (!FROM[to]) return { ok: false, reason: `--to must be ring1 or ring2 (got ${to})` }
   if (!bundle || bundle.id !== bundleId) return { ok: false, reason: `the server has no bundle ${bundleId}` }
@@ -85,7 +87,7 @@ const main = () => {
       platform: { type: 'string' },
       'bundle-id': { type: 'string' },
       to: { type: 'string' },
-      'soak-hours': { type: 'string', default: '0' },
+      'soak-hours': { type: 'string', default: String(DEFAULT_SOAK_HOURS) },
       check: { type: 'boolean', default: false },
     },
   })
@@ -94,7 +96,7 @@ const main = () => {
     platform: values.platform,
     bundleId: values['bundle-id'],
     to: values.to,
-    soakHours: Number(values['soak-hours'] === '' ? 0 : values['soak-hours']),
+    soakHours: Number(values['soak-hours'] === '' ? DEFAULT_SOAK_HOURS : values['soak-hours']),
   }
   if (!target.bundleId) throw new Error('--bundle-id is required')
   if (!['ios', 'android'].includes(target.platform)) throw new Error(`--platform must be ios or android (got ${target.platform})`)

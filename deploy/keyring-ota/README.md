@@ -78,9 +78,10 @@ bundle's own `platform` and `to_ring`, after one ota-approval click per
 promotion (`scripts/ota/promote.mjs`). It refuses unless the server's record
 shows a production or preview bundle that is enabled, has a 0 rollout, and
 sits at the ring below the new one. A minimum time since publish, the soak, is
-the repository variable `OTA_PROMOTE_SOAK_HOURS`, 0 when unset. While the
-audience is beta testers, a bundle can go from ring 0 to everyone on the
-approval alone; raise the variable when the audience widens. ring1
+the repository variable `OTA_PROMOTE_SOAK_HOURS`, **24 when unset**. While the
+audience is beta testers it is set to 0 on purpose, so a bundle can go from
+ring 0 to everyone on the approval alone. A missing or deleted variable gives
+back the 24 h, never no soak. ring1
 targets ring 0 and 1; ring2 targets all three. **Ring 1 has no members yet** (no
 install can join it until the "Early updates" opt-in ships), so a bundle may go
 from ring 0 straight to ring 2. A dry run checks and changes nothing.

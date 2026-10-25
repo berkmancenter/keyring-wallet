@@ -43,8 +43,9 @@ test('a ring-0 bundle may go to ring 2, and to ring 1', () => {
   assert.equal(checkPromote(bundle(), target({ to: 'ring1' })).ok, true)
 })
 
-test('with no soak set, a bundle published a minute ago may be promoted', () => {
-  assert.equal(checkPromote(bundle(), target({ now: PUBLISHED + 60000 })).ok, true)
+test('the soak defaults to 24 h; a soak of 0, set on purpose, promotes at once', () => {
+  assert.match(checkPromote(bundle(), target({ now: PUBLISHED + 23 * HOUR })).reason, /soaks 24 h/)
+  assert.equal(checkPromote(bundle(), target({ soakHours: 0, now: PUBLISHED + 60000 })).ok, true)
 })
 
 test('a ring-1 bundle may go to ring 2, never back to ring 1', () => {

@@ -19,7 +19,7 @@ name: OTA publish (ring 0)
 # actions (scripts/ota/device-test.sh). production and preview also take
 # disable, which withdraws one bundle (scripts/ota/withdraw.mjs), and promote,
 # which widens one bundle past ring 0 (scripts/ota/promote.mjs), one approval
-# per promotion, after the soak in vars.OTA_PROMOTE_SOAK_HOURS (default 0). A
+# per promotion, after the soak in vars.OTA_PROMOTE_SOAK_HOURS (24 when unset). A
 # publish itself reaches ring 0 only.
 #
 # A dry run checks the commit, the inputs and the signing-key mapping, and
@@ -356,10 +356,10 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           BUNDLE_ID: ${{ inputs.bundle_id }}
           TO_RING: ${{ inputs.to_ring }}
-          # Hours a bundle must have been published before it is promoted: 0 while the
-          # audience is beta testers. A repository variable, as the dispatch has no room
-          # for an eleventh input.
-          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS || '0' }}
+          # Hours a bundle must have been published before it is promoted. A repository
+          # variable, as the dispatch has no room for an eleventh input: 0 while the
+          # audience is beta testers is set there on purpose; unset, it is 24.
+          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS || '24' }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           check=()
