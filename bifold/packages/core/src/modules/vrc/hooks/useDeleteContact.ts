@@ -9,6 +9,7 @@ import { RelationshipDidRepository } from '../repositories/RelationshipDidReposi
 import { toRawCredential } from '../utils/rcardDisplayUtils'
 import { OpenIDCredentialType } from '../../openid/types'
 import { ToastType } from '../../../components/toast/BaseToast'
+import { deleteChatMessages } from '../../chat/history'
 
 /**
  * A record that is already gone is what removal wants, so it is not a failure. Anything else (a store that cannot be
@@ -34,6 +35,7 @@ interface UseDeleteContactReturn {
 /**
  * Hook to handle deleting a contact and all associated data:
  * - All W3C credentials where issuer.id matches
+ * - The chat history with it (messages, chat events, media)
  * - The DIDComm connection
  * - The RelationshipDidRecord
  */
@@ -105,6 +107,9 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
             // Get the connection record to find its outOfBandId
             const connection = await agent.modules.didcomm.connections.getById(connectionId)
             const outOfBandId = connection?.outOfBandId
+
+            // The chat with this contact goes too: its messages, chat events and media (rich-messaging-plan.md §4.6).
+            await deleteChatMessages(agent, connectionId)
 
             // Delete the connection first
             await agent.modules.didcomm.connections.deleteById(connectionId)

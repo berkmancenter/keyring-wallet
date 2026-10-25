@@ -249,14 +249,16 @@ export {
   ChatEventRecord,
   ChatEventRepository,
   ChatModule,
+  chatMediaFolder,
   counterpartySpeaksChat,
+  deleteChatMessages,
   getChatEventRepository,
   isUlid,
   parseChatEvent,
   receiveChatEventMessage,
   setupChatInbound,
 } from './modules/chat'
-export type { ChatEvent, ChatEventType, ChatEventRole, ChatInboundVerdict } from './modules/chat'
+export type { ChatEvent, ChatEventType, ChatEventRole, ChatInboundVerdict, ChatMessageIds } from './modules/chat'
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,

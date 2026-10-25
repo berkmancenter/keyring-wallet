@@ -13,6 +13,8 @@ import { useOpenIDCredentials } from '../../../src/modules/openid/context/OpenID
 jest.mock('@bifold/react-hooks')
 jest.mock('../../../src/modules/openid/context/OpenIDCredentialRecordProvider')
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }))
+// The chat history removal has its own test (hooks/useDeleteContact.chatHistory.test.tsx); this one is about the rest.
+jest.mock('../../../src/modules/chat/history', () => ({ deleteChatMessages: jest.fn(async () => undefined) }))
 
 const mockUseAgent = useAgent as jest.MockedFunction<typeof useAgent>
 const mockUseOpenIDCredentials = useOpenIDCredentials as jest.MockedFunction<typeof useOpenIDCredentials>
