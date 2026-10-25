@@ -1,0 +1,200 @@
+/**
+ * Make the phone wakeable by each agent it works with, for a person who has
+ * notifications turned on.
+ *
+ * Turning notifications on (in onboarding, or in Settings before any agent is
+ * linked) only records the choice and the system permission: with no agent
+ * there is nothing to give a wake channel to (`enablePushWake` answers
+ * `notLinked`). Without this, the Settings switch would show on and the agent
+ * would never wake the phone. So when the agent link controller reports a new
+ * link, and the person has notifications on, this does what the switch does.
+ *
+ * Also when the phone switches to another of its agents: each agent holds its
+ * own wake channel, and one linked or switched to while notifications were
+ * already on was left without one until the switch was turned off and on
+ * (Alberto's iPhone, 10-06: al-signer's `device list` said pushCapable false).
+ * And a try that fails is tried again on a timer, not only when the link next
+ * changes: right after a link the session is busy, and one refusal or timeout
+ * left the agent with no wake channel for the rest of the session. A try that
+ * finds no platform token is tried again the same way: on an iPhone the token
+ * can arrive after the first look gives up (a tester on 242, 10-10: `noToken`
+ * after a link, never tried again, so the phone was never woken).
+ *
+ * A link restored at launch does not count: an already wakeable phone is not
+ * registered again at every start.
+ */
+import { isHandleLimitRefusal } from './pushGateway'
+import type { PushWakeOutcome } from './pushWake'
+
+/** The parts of bifold's `vtaAgent` this reads. */
+export interface LinkSource {
+  subscribe(listener: () => void): () => void
+  getState(): {
+    link: { kind: string; vtaDid?: string; connection?: { kind: string } }
+    activity: ReadonlyArray<{ at: number; kind: string }>
+  }
+}
+
+export interface PushAfterLinkDeps {
+  source: LinkSource
+  /** Activity at or before this time is history, not a new link. */
+  since: number
+  /** Whether the person has notifications on, read when it is time to act. */
+  optedIn(): boolean
+  enableWake(): Promise<PushWakeOutcome>
+  log(message: string, data?: Record<string, unknown>): void
+  /** The gateway keeps no more handles for this phone's token: say so, and do not retry. */
+  onHandleLimit?(): void
+  /**
+   * Call `arrived` once when the platform token turns up; returns a stop.
+   * Used when every try found no token: the tries are spent, but the token can
+   * still come, and it should not take the person turning notifications off
+   * and on again to use it (IN-277, 263: Apple handed the token over about two
+   * minutes after the last try gave up).
+   */
+  whenTokenArrives?(arrived: () => void): () => void
+  /**
+   * The phone's other agents that hold no wake for it. A wake is registered
+   * only with the agent that is current: one switched away from before a
+   * token existed stays unwakeable until it is switched to again (IN-277).
+   * Logged so a report shows that gap; nothing here acts on it.
+   */
+  unwakeableAgents?(): Promise<string[]>
+}
+
+/** How often one new link is tried before giving up until the next one. */
+export const PUSH_AFTER_LINK_TRIES = 4
+
+/** How long after a failed try the next one is made: 5 s, 30 s, 2 min. */
+export const PUSH_AFTER_LINK_RETRY_MS = [5_000, 30_000, 120_000]
+
+/** Start watching; returns the unsubscribe. */
+export function watchLinkForPush(deps: PushAfterLinkDeps): () => void {
+  let seenUpTo = deps.since
+  let pending = false
+  let tries = 0
+  let inFlight = false
+  let stopped = false
+  let retry: ReturnType<typeof setTimeout> | undefined
+  // The agent the link was on when last seen: another one is a switch.
+  let lastAgent: string | undefined
+  let first = true
+
+  // Watching for a token that arrives after the tries ran out with none.
+  let stopTokenWatch: (() => void) | undefined
+  const unwatchToken = () => {
+    stopTokenWatch?.()
+    stopTokenWatch = undefined
+  }
+
+  const startOver = () => {
+    pending = true
+    tries = 0
+    if (retry) clearTimeout(retry)
+    retry = undefined
+    unwatchToken()
+  }
+
+  // Again after a while, whether or not the link changes meanwhile, until the tries run out.
+  const retryLater = (noToken = false) => {
+    if (tries >= PUSH_AFTER_LINK_TRIES) {
+      pending = false
+      // The tries are spent, but a token that was only slow is not gone: when
+      // it arrives, try again as if the link were new.
+      if (noToken && deps.whenTokenArrives && !stopTokenWatch) {
+        deps.log('push wake: no token after every try; waiting for it')
+        stopTokenWatch = deps.whenTokenArrives(() => {
+          stopTokenWatch = undefined
+          if (stopped) return
+          deps.log('push wake: token arrived after the tries; enabling')
+          startOver()
+          check()
+        })
+      }
+      return
+    }
+    const wait = PUSH_AFTER_LINK_RETRY_MS[Math.min(tries - 1, PUSH_AFTER_LINK_RETRY_MS.length - 1)]
+    retry = setTimeout(() => {
+      retry = undefined
+      check()
+    }, wait)
+  }
+
+  // Which other agents still cannot wake the phone, said once an attempt ends.
+  const sayUnwakeable = () => {
+    if (!deps.unwakeableAgents) return
+    void deps
+      .unwakeableAgents()
+      .then((agents) => {
+        const others = agents.filter((a) => a !== lastAgent)
+        if (others.length > 0) deps.log('push wake: linked agents without a wake', { agents: others })
+      })
+      .catch(() => undefined)
+  }
+
+  const check = () => {
+    if (stopped) return
+    const { link, activity } = deps.source.getState()
+    const fresh = activity.filter((a) => a.at > seenUpTo)
+    if (fresh.length > 0) {
+      seenUpTo = Math.max(...fresh.map((a) => a.at))
+      if (fresh.some((a) => a.kind === 'linked')) startOver()
+    }
+    const agent = link.kind === 'linked' ? link.vtaDid : undefined
+    if (agent && agent !== lastAgent) {
+      // A switch to another agent, never the agent seen at start-up.
+      if (!first && lastAgent !== undefined) startOver()
+      lastAgent = agent
+    }
+    if (link.kind === 'linked') first = false
+    if (!pending || inFlight || retry) return
+    if (!deps.optedIn()) {
+      pending = false
+      return
+    }
+    // The wake channel is set over the link: wait until it is online. A later
+    // change (it comes online, it reconnects) checks again.
+    if (link.kind !== 'linked' || link.connection?.kind !== 'online') return
+
+    inFlight = true
+    tries += 1
+    deps
+      .enableWake()
+      .then((outcome) => {
+        if (outcome.status === 'noToken') {
+          deps.log('push wake: enable after link', { status: outcome.status, agent: lastAgent, try: tries })
+          retryLater(true)
+          return
+        }
+        deps.log('push wake: enable after link', { status: outcome.status, agent: lastAgent })
+        // notLinked: the link went away under us; the next new link starts over.
+        pending = false
+        if (outcome.status === 'wakeable') sayUnwakeable()
+      })
+      .catch((e) => {
+        deps.log('push wake: enable after link failed', {
+          error: e instanceof Error ? e.message : String(e),
+          try: tries,
+        })
+        // The gateway's limit does not lift by trying again soon (retryable: false).
+        if (isHandleLimitRefusal(e)) {
+          deps.onHandleLimit?.()
+          pending = false
+          return
+        }
+        retryLater()
+      })
+      .finally(() => {
+        inFlight = false
+      })
+  }
+
+  const unsubscribe = deps.source.subscribe(check)
+  check()
+  return () => {
+    stopped = true
+    if (retry) clearTimeout(retry)
+    unwatchToken()
+    unsubscribe()
+  }
+}

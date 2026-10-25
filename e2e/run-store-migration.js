@@ -28,10 +28,11 @@
  * No macOS/Xcode? See run-store-migration-android-only.js — same flow, a
  * second Android emulator stands in for the iOS peer.
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { remote } from "webdriverio";
 
-import { sleep } from "./lib/driver.js";
+import { sleep, simTarget } from "./lib/driver.js";
 import { APP_ID, APPIUM_PORT, iosCaps } from "./lib/config.js";
 import { runStoreMigration } from "./lib/storeMigrationFlow.js";
 
@@ -60,7 +61,7 @@ async function createPeerSession() {
  */
 async function primePeer(peer) {
   try {
-    execSync(`xcrun simctl privacy booted grant camera ${APP_ID}`);
+    execSync(`xcrun simctl privacy ${simTarget(peer)} grant camera ${APP_ID}`);
     // granting TCC permission kills the app; relaunch it cleanly (immediate
     // activate can race the teardown and leave a black screen)
     await peer.terminateApp(APP_ID).catch(() => {});

@@ -1,0 +1,17 @@
+{
+  "name": "ref-04s-rev3-relationship",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 04s — form a Rev 3 relationship with a lab VTA (XRFI → XRFA) and end it (XRFD), against upstream's own state machine",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "file:../../bifold/packages/trust-tasks/vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz",
+    "@openvtc/vti-didcomm-js": "0.7.0",
+    "@noble/curves": "^2.2.0",
+    "ws": "^8.18.0"
+  }
+}

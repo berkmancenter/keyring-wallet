@@ -8,6 +8,10 @@
           {
             "/": "/invite*",
             "comment": "Wallet-to-wallet invitation links"
+          },
+          {
+            "/": "/i/*",
+            "comment": "Short invitation links (deploy/keyring-links)"
           }
         ]
       }

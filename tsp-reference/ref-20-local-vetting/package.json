@@ -1,0 +1,20 @@
+{
+  "name": "ref-20-local-vetting",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 20 — the peer identity vetting ceremony against a local VTI stack (community_vetting_subtask.md P2). vtc-admin.mjs drives the community administrator's verbs as the VTC's admin console does: signed Trust Task documents at POST /v1/trust-tasks, and a DID-auth bearer for the REST routes the VTC keeps.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node vtc-admin.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@openvtc/vti-didcomm-js": "^0.7.0",
+    "canonicalize": "^1.0.8",
+    "ws": "^8.21.3"
+  }
+}

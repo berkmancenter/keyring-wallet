@@ -1,10 +1,41 @@
 # Embedded VTA — operating without a hosted server
 
-**Status:** Draft for discussion. Not a commitment to implement.
-**Scope:** on-device VTA-*equivalent* capability (key custody already held by
-Keyring, plus ACL evaluation and Trust Task dispatch) so a phone can act as its
-own personal VTA and never enroll against a hosted `vta-service` — reachable
-only via a push-woken mediator fetch, never an inbound listener.
+**Status:** **Deferred; not a priority.** The **hosted agent is the default**
+and stays the default. The on-phone (embedded) agent is an edge case, not a
+replacement topology, and nothing in the parent plan or its sibling subtasks is
+gated on it. Not a commitment to implement.
+**Scope:** what remains live in this document is a **constraint on other work**:
+the possibility of an all-on-phone mode — for people who want pure-mobile use,
+and for emergencies where no hosted agent is reachable — must stay open, so no
+design elsewhere may assume an agent that cannot run on, or move to, the phone.
+Concretely, three things are kept (from [`2026-10-24-al.md`](./2026-10-24-al.md)
+Part 3):
+1. **A present-user capability** — the phone answers while the user is there
+   (QR, NFC, BLE, a visible approve prompt), offered as an explicit
+   **"On this phone"** choice in My Agent → "Where your agent runs" beside the
+   hosted default (that companion's Part 1, U1–U5). Degraded behavior is part of
+   the design: a request that arrives while the phone is asleep or offline shows
+   the asker "Waiting for <name>'s phone" and, if it lapses, "Expired before
+   <name>'s phone could answer" — never "failed"; standing rules apply the moment
+   the phone wakes; **rooms need a reachable agent, so they are unavailable in
+   this mode** (the member's agent is the MLS leaf, companion E4). The request
+   lifetime and who tells the asker it expired are unspecified (§9).
+2. **The phone as holder of the critical key share**, following upstream's
+   dual-unlock draft (Option C in `tee-dual-unlock.md`): the hosted agent gives
+   availability, the phone gives the key share and the approvals.
+3. **Agent portability** — whether an agent can move hosts and keep its
+   identifier and grants (§9; also the parent plan §5.5).
+
+**Why it is not the default.** The limit is the phone's operating system, not
+connectivity: both platforms deliberately stop a background app from answering
+silently, which is exactly what standing rules need. Every comparable system put
+an always-on server in front of the phone, the upstream VTA has become one and
+rooms depend on it, and upstream's own phone agent approves for a hosted VTA
+rather than replacing one. The evidence is in
+[`2026-10-24-al.md`](./2026-10-24-al.md) Part 2 (E1–E7), accepted in
+[`2026-10-25-bam.md`](./2026-10-25-bam.md); it is not repeated here. Sections
+2–8 below describe the design **if** the on-phone mode is built; they are
+retained as the record of what that would take, not as a plan of work.
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) —
 extends §5 (target architecture) with a topology the parent does not currently
 describe; not yet listed in the parent's subtask index or roadmap (§7).
@@ -41,7 +72,7 @@ taken by an unrelated same-day entry from a different, concurrently-running
 line of work — `credential-exchange/query` — by the time this document's
 `main` was pulled; this document's own investigation is dated to when it was
 actually written up, 2026-09-14.)
-**Review:** [`2026-10-24-al.md`](./2026-10-24-al.md) — a UX review of offering an "on this phone" option; the evidence on phones as always-answering agents and on upstream VTA growth, rooms and enclaves; and a recommended disposition (keep a present-user slice, the phone as key-share holder, and agent portability; do not adopt the topology as a replacement). Proposals only.
+**Review:** [`2026-10-24-al.md`](./2026-10-24-al.md) — Alberto: the UX of an "on this phone" option, the evidence on phones as always-answering agents, and a recommended disposition. **Decision:** [`2026-10-25-bam.md`](./2026-10-25-bam.md) — Brendan: the evidence and disposition are accepted; hosted is the default; the on-phone mode is kept open as a deferred option.
 **Baseline:** originally measured against `verifiable-trust-infrastructure` at
 `d294ecb` (live clone, 2026-09-01) — re-verify anything version-specific.
 `keyring-on-the-vta-farm.md` §3.5 (measured 2026-09-03) records all four
@@ -227,7 +258,7 @@ operator concerns, not something a personal on-device agent does to itself.
 
 ## 3. Scope
 
-**In scope (Phase 1, this document):**
+**If built (deferred; the scope of an on-phone mode, not current work):**
 
 - Wake pipeline: silent push → background execution → on-demand mediator
   pickup, adopting `binding/push/0.1`.
@@ -446,6 +477,19 @@ Concretely:
 
 ## 9. Open questions and risks
 
+- **Agent portability.** Can an agent move between hosts — hosted, self-hosted
+  VTA, the phone — and keep its identifier and therefore its grants? If yes,
+  switching is invisible to communities; if the identifier changes, each community
+  must grant again. Open; also recorded in the parent plan §5.5. Not designed here.
+- **No hosted agent reachable (the emergency case).** The present-user option
+  ([`2026-10-24-al.md`](./2026-10-24-al.md) Part 1) is a deliberate choice made
+  while a hosted agent exists; that companion does not say what happens when the
+  person chose hosted and the host is unreachable or gone. Open: whether the phone
+  can take over temporarily, what it may answer (present-user requests only?), how
+  it is entered, and how it hands back. Not designed here.
+- **Request lifetime while the phone is asleep.** How long a request may wait for
+  an on-phone agent, and who tells the asker it expired ("Expired before <name>'s
+  phone could answer"). The companion's U6 asks for both to be stated; neither is.
 - **Multi-device custody.** If a user has two phones, which one is "the VTA"?
   Today's Keyring wallet-backup/restore story is the closest existing answer,
   but it's a credential backup story, not an ACL-grant/audit-trail one — grants

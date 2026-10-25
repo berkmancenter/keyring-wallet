@@ -33,6 +33,7 @@ const translation = {
     "CodeCopied": "Copiado",
     "ShareCodeWithSupport": "Compartilhe este código com o suporte ao entrar em contato.",
     "Problem": "Algo deu errado",
+    "GoHome": "Ir para a tela inicial",
     "ProblemDescription": "Ocorreu um erro inesperado. Reporte este erro e tente novamente.",
   },
   "Global": {
@@ -71,6 +72,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Crie conexões confiáveis",
     "ConnectionsParagraph": "Construa relacionamentos diretos e mútuos com pessoas que você conhece. Ao contrário de seguir nas redes sociais, ambas as partes confirmam a conexão.\n\nSuas conexões ficam no seu dispositivo, sob seu controle — não gerenciadas por nenhuma plataforma.",
+    // Page 3b: Agent
+    "AgentHeading": "Seu próprio agente",
+    "AgentParagraph": "Nada de agente secreto: este trabalha para você online, mesmo com o telefone desligado. Ele guarda suas identidades e seus cartões, e pergunta a você antes de fazer qualquer coisa importante.",
     // Page 4: Security
     "SecurityHeading": "Proteja sua carteira",
     "SecurityParagraph": "Sua carteira é protegida por um PIN que você cria. Para conveniência, você também pode habilitar Face ID ou Touch ID para desbloquear sua carteira rapidamente e verificar ações como criar novas conexões.\n\nSeus dados biométricos nunca saem do seu dispositivo — são usados apenas para desbloquear o acesso e confirmar suas ações. Você pode habilitar ou desabilitar a qualquer momento nas Configurações.",
@@ -192,6 +196,10 @@ const translation = {
     "EnableProxy": "Enable proxy (PT-BR)",
     "EnableAppToAppPersonFlow": "App-to-app Person flow (PT-BR)",
     "EnableTspCarriage": "Enable TSP envelope carriage (PT-BR)",
+    "EnableDidCommV2": "Ativar DIDComm v2 (experimental)",
+    "Mediator": "Mediador",
+    "CopyValue": "Copiar",
+    "Copied": "Copiado",
   },
   "Tips": {
     "Header": "Tips (PT-BR)",
@@ -212,6 +220,8 @@ const translation = {
     "Tip14": "Even revoked or expired credentials can be usable if the organisation doesn't request for it (PT-BR)",
   },
   "Init": {
+    "MessageServiceTitle": "O Keyring não conseguiu falar com o seu serviço de mensagens",
+    "MessageServiceBody": "Sua carteira e tudo o que há nela estão bem. O serviço que transporta as mensagens do Keyring não respondeu. Verifique se este telefone está online e tente de novo. Se estiver, o serviço pode ficar fora do ar por um tempo.",
     "Retry": "Retry (PT-BR)",
     "Starting": "Starting... (PT-BR)",
     "FetchingPreferences": "Fetching preferences... (PT-BR)",
@@ -224,6 +234,8 @@ const translation = {
     "GiveFeedback": "Give Feedback (PT-BR)",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "As notificações ainda não chegam a este agente",
+    "HandleLimitBody": "Este telefone está registrado no serviço de notificações para tantos agentes quanto ele permite, então as notificações deste agente podem não chegar. O Keyring continua funcionando, e as solicitações continuam esperando em Solicitações.",
     "NotificationsOffTitle": "As notificações para o Keyring estão desativadas",
   },
   "AddCredentialSlider": {
@@ -232,9 +244,9 @@ const translation = {
   },
   "Scan": {
     "ScanOnySpecial": "Apenas códigos QR especiais podem ser digitalizados pelo Keyring.",
-    "ScanOnlySpecial3": "O Keyring atualmente não suporta a adição de credenciais digitais digitalizando ou tirando fotos de credenciais físicas.",
+    "ScanOnlySpecial3": "O Keyring lê o código do seu agente, o de uma comunidade, o código de contato de outra pessoa que usa o Keyring ou o ticket de um verificador.",
     "WhereToUseLink": "Veja onde você pode usar o Keyring",
-    "BadQRCodeDescription": "O código QR digitalizado não funciona com o Keyring. O Keyring só funciona com serviços participantes.\n\nAtualmente, não é possível adicionar credenciais digitais tirando fotos de credenciais físicas.",
+    "BadQRCodeDescription": "O Keyring não consegue usar este código QR. Ele lê o código do seu agente, o de uma comunidade, o código de contato de outra pessoa que usa o Keyring ou o ticket de um verificador.",
   },
   "Services": {
     "CatalogueTitle": "Services (PT-BR)",

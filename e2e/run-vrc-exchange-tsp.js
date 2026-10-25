@@ -25,6 +25,7 @@
  * Requires: hosted mediator/witness reachable (baked into the app via app/.env),
  * appium with uiautomator2, built .apk (see lib/config.js).
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

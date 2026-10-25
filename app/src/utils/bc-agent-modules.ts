@@ -10,6 +10,7 @@ import {
 } from '@credo-ts/anoncreds'
 import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
 import {
+  PeerDidNumAlgo,
   Agent,
   DidsModule,
   JwkDidResolver,
@@ -31,7 +32,7 @@ import {
 } from '@credo-ts/didcomm'
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
 import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
-import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
@@ -44,6 +45,8 @@ interface GetBCAgentModulesOptions {
   indyNetworks: IndyVdrPoolConfig[]
   mediatorInvitationUrl?: string
   txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
+  /** Developer flag: enable DIDComm v2 beside v1 (didcomm_v2_subtask.md C12). */
+  enableDidCommV2?: boolean
 }
 
 /**
@@ -58,6 +61,7 @@ export function getBCAgentModules({
   indyNetworks,
   mediatorInvitationUrl,
   txnCache,
+  enableDidCommV2 = false,
 }: GetBCAgentModulesOptions) {
   const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
   const indyProofFormat = new LegacyIndyDidCommProofFormatService()
@@ -80,10 +84,17 @@ export function getBCAgentModules({
     }),
     kms: new Kms.KeyManagementModule({
       backends: [
+        // Persona keys borrowed from the agent for this session, never stored
+        // (#10). First and the default: Credo tries the default backend, then
+        // the first capable one, and routes key-agreement by neither key id. It
+        // claims only its own ("vta-copy:") keys, so key creation, the wallet's
+        // imports and everything else fall through to askar, and new keys stay
+        // in the wallet store.
+        new BifoldCore.EphemeralKeyManagementService(),
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
       ],
-      defaultBackend: 'askar',
+      defaultBackend: BifoldCore.EPHEMERAL_KMS_BACKEND,
     }),
     anoncreds: new AnonCredsModule({
       anoncreds,
@@ -95,8 +106,17 @@ export function getBCAgentModules({
     }),
     didcomm: new DidCommModule({
       useDidSovPrefixWhereAllowed: true,
+      // DIDComm v2 (credo-ts PR #2704) beside v1 when the developer flag is on;
+      // did:peer:2 for v2 invitations because the VTI stack resolves numalgo 2 only.
+      didcommVersions: enableDidCommV2 ? ['v1', 'v2'] : ['v1'],
+      peerDidNumAlgoForV2OOB: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc,
       connections: {
         autoAcceptConnections: true,
+        // DIDComm v2 OOB has no handshake: the inviter's connection record is
+        // created by Credo when the invitee's first authenticated message
+        // arrives on one of our v2 invitations (ref-15 finding 1 was this
+        // option's default, false). Off with the flag: v1 never needs it.
+        autoCreateConnectionOnFirstMessage: enableDidCommV2,
       },
       credentials: {
         autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
@@ -127,6 +147,11 @@ export function getBCAgentModules({
       },
       mediationRecipient: {
         mediatorInvitationUrl: mediatorInvitationUrl,
+        // Coordinate Mediation 2.0 handlers exist only when v2 is listed here
+        // (Credo's default is ['v1']): without it the v2 mediator's
+        // mediate-grant is answered with "message type is not supported" and
+        // provisionV2Mediation times out (didcomm_v2_subtask.md V2 step 4).
+        mediationProtocolVersions: enableDidCommV2 ? ['v1', 'v2'] : ['v1'],
         // PickUpV2, matching the runtime start in configureMessagePickup. This
         // said Implicit until 2026-08-31 — harmless here only because the runtime
         // override happened to correct it, but it meant the declared config was a
@@ -174,7 +199,7 @@ export function getBCAgentModules({
     }),
     dids: new DidsModule({
       resolvers: [
-        new WebVhDidResolver(),
+        new BifoldCore.RetryingWebVhDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),

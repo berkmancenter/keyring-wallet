@@ -1,0 +1,377 @@
+From 0856939e1d06a4f18c3b131991d371bc79d7a953 Mon Sep 17 00:00:00 2001
+From: Alberto L <alberto_leon@seas.harvard.edu>
+Date: Thu, 1 Oct 2026 14:15:40 -0600
+Subject: [PATCH] feat(controllers): optional DID-host allowlist for closed
+ deployments
+
+GATEWAY_ALLOWED_CONTROLLERS lists controller DIDs exactly. A deployment
+whose DID hosts are closed (only the operator's own VTAs can publish a
+DID there) can now also serve every did:webvh / did:web controller on
+those hosts with GATEWAY_ALLOWED_CONTROLLER_HOSTS, so a new VTA does not
+need a gateway redeploy. The host is part of the DID and resolution
+fetches from it, so on a closed host "the DID lives here" means "the
+operator created it". On an open host it admits anyone; the README says
+so.
+
+- an entry is an exact host or `*.` plus at least two labels, matching
+  subdomains only (never the apex, never a look-alike such as
+  evilexample.org); ports, paths, schemes and nested wildcards are
+  refused and stop startup
+- the host is read from did:webvh (segment 3) or did:web (segment 2),
+  lower-cased, with a percent-encoded port dropped; other methods match
+  only the exact list
+- combining hosts with `*` is an error
+- ControllerPolicy::Listed carries dids and hosts; admits_no_one()
+  replaces the empty-set check in main; summary() names the hosts
+- tests: host extraction, exact and wildcard matching, the apex and
+  look-alike refusals, validation, admits_no_one
+
+Signed-off-by: Alberto L <alberto_leon@seas.harvard.edu>
+---
+ README.md          |  10 ++
+ src/controllers.rs | 238 +++++++++++++++++++++++++++++++++++++++++++--
+ src/main.rs        |   2 +-
+ 3 files changed, 240 insertions(+), 10 deletions(-)
+
+diff --git a/README.md b/README.md
+index 4a99c22..ff5c046 100644
+--- a/README.md
++++ b/README.md
+@@ -169,6 +169,11 @@ that controller. So the operator **lists the VTAs the gateway serves** in
+ refused (`permissionDenied`), and so is a provision by a controller no longer on
+ the list. Unset means nothing is served. `*` is an explicit open mode for
+ deliberate use; it logs a startup warning and keeps every bound below.
++Where the DID hosts themselves are closed (only the operator's own VTAs can
++publish a DID there), `GATEWAY_ALLOWED_CONTROLLER_HOSTS` also serves any
++`did:webvh` / `did:web` controller on a listed host: an exact host, or `*.`
++plus at least two labels for its subdomains (never the apex). On a host where
++anyone can publish a DID this is as open as `*`.
+ 
+ **Who can spend the record.** Within the served controllers:
+ 
+@@ -270,6 +275,11 @@ cargo run
+ #                       patterns). Unset/empty = every push/register is refused
+ #                       (logged at startup). `*` alone = open mode (any
+ #                       controller; startup warning; all other limits apply).
++# GATEWAY_ALLOWED_CONTROLLER_HOSTS="dids.example.org *.vtas.example.org"
++#                       optional: also serve did:webvh / did:web controllers
++#                       whose DID host matches (exact host, or `*.` + at least
++#                       two labels = subdomains only). For closed DID hosts
++#                       only. Not combinable with `*`.
+ #                       A malformed list stops startup.
+ # Registry bounds (push/register is anonymous, so these cap what an
+ # unauthenticated caller can make the gateway hold; all optional):
+diff --git a/src/controllers.rs b/src/controllers.rs
+index f80b4df..84a559b 100644
+--- a/src/controllers.rs
++++ b/src/controllers.rs
+@@ -15,16 +15,108 @@
+ //!   the startup log warns, and every other bound (per-controller handle cap,
+ //!   the replay record's per-issuer, per-handle and fair-share budgets) still
+ //!   applies.
++//!
++//! Optionally, `GATEWAY_ALLOWED_CONTROLLER_HOSTS` adds DID **hosts** for a
++//! deployment whose DID hosts are closed — only the operator's own VTAs can
++//! publish there — so "the controller's DID lives on this host" means "the
++//! operator created it". A `did:webvh` or `did:web` controller whose host
++//! matches is served alongside the exact list. Entries are an exact host
++//! (`dids.example.org`) or `*.` plus at least two labels (`*.example.org`,
++//! subdomains only, never the apex). DID methods without a host (`did:key`,
++//! `did:peer`) are matched by the exact list only. On an open DID host this
++//! admits every DID anyone can publish there: use it only where publishing
++//! is controlled.
+ 
+ use std::collections::HashSet;
+ 
+ /// Env var holding the controller allowlist.
+ pub const ENV_ALLOWED_CONTROLLERS: &str = "GATEWAY_ALLOWED_CONTROLLERS";
+ 
++/// Env var holding the optional controller DID-host allowlist.
++pub const ENV_ALLOWED_CONTROLLER_HOSTS: &str = "GATEWAY_ALLOWED_CONTROLLER_HOSTS";
++
++/// One entry of [`ENV_ALLOWED_CONTROLLER_HOSTS`].
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub enum HostPattern {
++    /// This host exactly.
++    Exact(String),
++    /// Any subdomain of this suffix (stored without the leading `*.`); never
++    /// the suffix itself.
++    Subdomains(String),
++}
++
++impl HostPattern {
++    fn parse(entry: &str) -> Result<Self, String> {
++        let e = entry.to_ascii_lowercase();
++        let (wild, host) = match e.strip_prefix("*.") {
++            Some(rest) => (true, rest),
++            None => (false, e.as_str()),
++        };
++        let labels: Vec<&str> = host.split('.').collect();
++        let valid_label = |l: &&str| {
++            !l.is_empty()
++                && l.len() <= 63
++                && !l.starts_with('-')
++                && !l.ends_with('-')
++                && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
++        };
++        if host.contains('*') || labels.len() < 2 || !labels.iter().all(valid_label) {
++            return Err(format!(
++                "{ENV_ALLOWED_CONTROLLER_HOSTS}: `{entry}` is not a host or `*.` host pattern \
++                 (a wildcard needs at least two labels after `*.`)"
++            ));
++        }
++        Ok(if wild {
++            Self::Subdomains(host.to_string())
++        } else {
++            Self::Exact(host.to_string())
++        })
++    }
++
++    fn matches(&self, host: &str) -> bool {
++        match self {
++            Self::Exact(h) => host == h,
++            Self::Subdomains(suffix) => host
++                .strip_suffix(suffix.as_str())
++                .is_some_and(|prefix| prefix.len() > 1 && prefix.ends_with('.')),
++        }
++    }
++}
++
++/// The host a `did:webvh` or `did:web` DID resolves from, lower-cased and
++/// without a port; `None` for other methods or a malformed DID.
++///
++/// - `did:webvh:<scid>:<host>[:<path>…]`
++/// - `did:web:<host>[:<path>…]`
++///
++/// The host segment may percent-encode a port (`example.org%3A8443`).
++pub fn did_host(did: &str) -> Option<String> {
++    let parts: Vec<&str> = did.split(':').collect();
++    let raw = match parts.as_slice() {
++        ["did", "webvh", scid, host, ..] if !scid.is_empty() => *host,
++        ["did", "web", host, ..] => *host,
++        _ => return None,
++    };
++    let host = raw
++        .split("%3A")
++        .next()
++        .and_then(|h| h.split("%3a").next())
++        .unwrap_or("")
++        .to_ascii_lowercase();
++    if host.is_empty() || host.contains('%') || host.contains('/') {
++        return None;
++    }
++    Some(host)
++}
++
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum ControllerPolicy {
+-    /// Only these controller DIDs (exact match). Empty admits no one.
+-    Listed(HashSet<String>),
++    /// Only these controller DIDs (exact match), plus any `did:webvh` /
++    /// `did:web` controller on one of these hosts. Both empty admits no one.
++    Listed {
++        dids: HashSet<String>,
++        hosts: Vec<HostPattern>,
++    },
+     /// Any controller (`*`). Explicit opt-in only.
+     Open,
+ }
+@@ -32,7 +124,10 @@ pub enum ControllerPolicy {
+ impl Default for ControllerPolicy {
+     /// The secure default: nobody is listed.
+     fn default() -> Self {
+-        Self::Listed(HashSet::new())
++        Self::Listed {
++            dids: HashSet::new(),
++            hosts: Vec::new(),
++        }
+     }
+ }
+ 
+@@ -68,24 +163,62 @@ impl ControllerPolicy {
+             }
+             set.insert(e.to_string());
+         }
+-        Ok(Self::Listed(set))
++        Ok(Self::Listed {
++            dids: set,
++            hosts: Vec::new(),
++        })
+     }
+ 
+-    /// Read [`ENV_ALLOWED_CONTROLLERS`].
++    /// Parse both env-var values: the DID list as [`Self::parse`], plus the
++    /// optional host list. Hosts next to open mode are an error (open mode
++    /// already admits everyone; mixing the two would hide a mistake).
++    pub fn parse_with_hosts(raw: Option<&str>, raw_hosts: Option<&str>) -> Result<Self, String> {
++        let policy = Self::parse(raw)?;
++        let hosts = raw_hosts
++            .unwrap_or("")
++            .split(|c: char| c == ',' || c.is_whitespace())
++            .filter(|e| !e.is_empty())
++            .map(HostPattern::parse)
++            .collect::<Result<Vec<_>, _>>()?;
++        match policy {
++            Self::Open if !hosts.is_empty() => Err(format!(
++                "{ENV_ALLOWED_CONTROLLER_HOSTS} cannot be combined with {ENV_ALLOWED_CONTROLLERS}=*"
++            )),
++            Self::Open => Ok(Self::Open),
++            Self::Listed { dids, .. } => Ok(Self::Listed { dids, hosts }),
++        }
++    }
++
++    /// Read [`ENV_ALLOWED_CONTROLLERS`] and [`ENV_ALLOWED_CONTROLLER_HOSTS`].
+     pub fn from_env() -> Result<Self, String> {
+-        Self::parse(std::env::var(ENV_ALLOWED_CONTROLLERS).ok().as_deref())
++        Self::parse_with_hosts(
++            std::env::var(ENV_ALLOWED_CONTROLLERS).ok().as_deref(),
++            std::env::var(ENV_ALLOWED_CONTROLLER_HOSTS).ok().as_deref(),
++        )
+     }
+ 
+     /// A policy listing exactly `dids`.
+     pub fn listing<I: IntoIterator<Item = S>, S: Into<String>>(dids: I) -> Self {
+-        Self::Listed(dids.into_iter().map(Into::into).collect())
++        Self::Listed {
++            dids: dids.into_iter().map(Into::into).collect(),
++            hosts: Vec::new(),
++        }
++    }
++
++    /// Whether nothing at all is admitted (no DIDs, no hosts).
++    pub fn admits_no_one(&self) -> bool {
++        matches!(self, Self::Listed { dids, hosts } if dids.is_empty() && hosts.is_empty())
+     }
+ 
+     /// Whether `did` may control handles on this gateway.
+     pub fn allows(&self, did: &str) -> bool {
+         match self {
+             Self::Open => true,
+-            Self::Listed(set) => set.contains(did),
++            Self::Listed { dids, hosts } => {
++                dids.contains(did)
++                    || (!hosts.is_empty()
++                        && did_host(did).is_some_and(|h| hosts.iter().any(|p| p.matches(&h))))
++            }
+         }
+     }
+ 
+@@ -93,7 +226,17 @@ impl ControllerPolicy {
+     pub fn summary(&self) -> String {
+         match self {
+             Self::Open => "open (any controller)".into(),
+-            Self::Listed(set) => format!("{} listed", set.len()),
++            Self::Listed { dids, hosts } if hosts.is_empty() => format!("{} listed", dids.len()),
++            Self::Listed { dids, hosts } => {
++                let hosts: Vec<String> = hosts
++                    .iter()
++                    .map(|h| match h {
++                        HostPattern::Exact(h) => h.clone(),
++                        HostPattern::Subdomains(s) => format!("*.{s}"),
++                    })
++                    .collect();
++                format!("{} listed, hosts {}", dids.len(), hosts.join(","))
++            }
+         }
+     }
+ }
+@@ -136,6 +279,83 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn did_host_reads_webvh_and_web_only() {
++        assert_eq!(
++            did_host("did:webvh:QmScid:dids.Example.org:agent").as_deref(),
++            Some("dids.example.org")
++        );
++        assert_eq!(
++            did_host("did:webvh:QmScid:dids.example.org%3A8443:agent").as_deref(),
++            Some("dids.example.org")
++        );
++        assert_eq!(
++            did_host("did:web:vta.example.org").as_deref(),
++            Some("vta.example.org")
++        );
++        assert_eq!(did_host("did:key:z6Mk"), None);
++        assert_eq!(did_host("did:peer:2.Vz6Mk"), None);
++        assert_eq!(did_host("did:webvh::dids.example.org"), None, "empty SCID");
++    }
++
++    #[test]
++    fn host_patterns_match_exact_hosts_and_subdomains_only() {
++        let p =
++            ControllerPolicy::parse_with_hosts(None, Some("dids.example.org, *.vtas.example.net"))
++                .unwrap();
++        assert!(p.allows("did:webvh:QmA:dids.example.org:alice"));
++        assert!(p.allows("did:web:dids.example.org"));
++        assert!(p.allows("did:webvh:QmB:x.vtas.example.net:bob"));
++        assert!(p.allows("did:webvh:QmB:a.b.vtas.example.net"));
++        // the apex of a wildcard, a look-alike, another host, a hostless method
++        assert!(!p.allows("did:webvh:QmC:vtas.example.net:carol"));
++        assert!(!p.allows("did:webvh:QmC:evilvtas.example.net:carol"));
++        assert!(!p.allows("did:webvh:QmC:other.example.org:carol"));
++        assert!(!p.allows("did:key:z6MkAnything"));
++        // exact DIDs still work next to hosts
++        let both = ControllerPolicy::parse_with_hosts(Some("did:key:zC"), Some("dids.example.org"))
++            .unwrap();
++        assert!(both.allows("did:key:zC"));
++        assert!(both.allows("did:webvh:QmA:dids.example.org"));
++    }
++
++    #[test]
++    fn host_patterns_are_validated() {
++        for bad in [
++            "*",
++            "*.org",
++            "example",
++            "https://dids.example.org",
++            "dids.example.org/x",
++            "*.*.example.org",
++            "-bad.example.org",
++            "dids.example.org:8443",
++        ] {
++            assert!(
++                ControllerPolicy::parse_with_hosts(None, Some(bad)).is_err(),
++                "{bad} should be refused"
++            );
++        }
++        assert!(
++            ControllerPolicy::parse_with_hosts(Some("*"), Some("dids.example.org")).is_err(),
++            "hosts next to open mode"
++        );
++        assert!(
++            ControllerPolicy::parse_with_hosts(Some("*"), None).unwrap() == ControllerPolicy::Open
++        );
++    }
++
++    #[test]
++    fn admits_no_one_only_when_both_lists_are_empty() {
++        assert!(ControllerPolicy::default().admits_no_one());
++        assert!(
++            !ControllerPolicy::parse_with_hosts(None, Some("dids.example.org"))
++                .unwrap()
++                .admits_no_one()
++        );
++        assert!(!ControllerPolicy::Open.admits_no_one());
++    }
++
+     #[test]
+     fn a_non_did_entry_is_refused() {
+         assert!(ControllerPolicy::parse(Some("vta.example")).is_err());
+diff --git a/src/main.rs b/src/main.rs
+index 08f7745..a9eb4f2 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -272,7 +272,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+              list the VTAs this gateway serves instead.",
+             vti_push_gateway::controllers::ENV_ALLOWED_CONTROLLERS
+         ),
+-        vti_push_gateway::controllers::ControllerPolicy::Listed(set) if set.is_empty() => {
++        p if p.admits_no_one() => {
+             tracing::error!(
+                 "{} is unset or empty — every push/register will be refused. \
+                  List the controller VTA DIDs this gateway serves.",
+-- 
+2.50.1 (Apple Git-155)
+

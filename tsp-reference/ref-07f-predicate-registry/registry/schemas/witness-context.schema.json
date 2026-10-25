@@ -1,0 +1,10 @@
+{
+  "$comment": "AUTHORED BY THIS RUNG. #52's witnessed entry points at schemas/witness-context.schema.json, which is not published. This transcribes the dtg:witnessed profile's additional member exactly as PR #47 @ bc1fd88 lists it: three OPTIONAL strings. #47 does not say whether other members are allowed inside witnessContext, so this file declares nothing either way (JSON Schema's default: allowed). run.mjs Act 3 also tests the closed reading.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "event": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "method": { "type": "string" }
+  }
+}

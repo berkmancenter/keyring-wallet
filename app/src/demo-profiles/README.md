@@ -31,6 +31,15 @@ To run the app on the starter instead, change one line in `App.tsx`:
 const container = new StarterContainer(bifoldContainer).init()
 ```
 
+If the use case is a game — a party game, a networking icebreaker, anything
+shaped like "everyone connects to a host, then does something together" —
+read Claude Code's `new-game` skill before copying the starter by hand. A
+witness is already a many-to-one hub with a live connection graph, a control
+surface for a human, and a way to message any connected wallet at any time;
+the skill covers that ground, the demo-profile extension points and their
+single-slot collision risk (see "The `DemoProfile` shape" below), and a
+fully worked example design at the level of specific files and classes.
+
 ## Skinning credentials without hosting anything
 
 `starter/ocaBundles.ts` ships OCA bundles _inside the app_.
@@ -51,6 +60,11 @@ witnessed, both). The exchange itself is untouched: this is Keyring's VRC
 flow, with the R-Card's photo (`modules/vrc/utils/rcardPhoto.ts`) rendered
 differently.
 
+Restyling this demo — new colours, layout, grading rules, what's printed on
+the card — is exactly what Claude Code's `customizing-trading-card` skill is
+for: it maps a plain-language request onto the file that owns it and names
+what has to stay put (the e2e testIDs, the VRC exchange underneath).
+
 Two registrations, both additive:
 
 | Token                    | What the profile puts there                             |
@@ -64,7 +78,7 @@ OCA branding overlay in `trading-card/ocaBundles.ts`, keyed by the R-Card
 template id — the identifier `DefaultOCABundleResolver` falls back to when a
 credential has no AnonCreds schema or credential-definition id.
 
-`App.tsx` already registers every installed profile on the container:
+`App.tsx` registers the profiles `ACTIVE_DEMO_PROFILE` selects on the container (none unless a build asks):
 
 ```ts
 import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
@@ -77,15 +91,15 @@ Nothing in `app/.env` has to change for this, and no branding is fetched over
 the network — but `app/.env`'s `ACTIVE_DEMO_PROFILE` is how you pick which
 profiles that registers:
 
-| `ACTIVE_DEMO_PROFILE`                          | Result                                                    |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| unset (the default)                            | every installed profile, all at once                      |
-| a profile's `id` (`trading-card`, `approver`)  | only that one                                             |
-| an id that doesn't match any installed profile | every installed profile (a typo isn't a request for zero) |
-| `none`                                         | no demo profiles at all — a plain Keyring build           |
+| `ACTIVE_DEMO_PROFILE`                          | Result                                            |
+| ---------------------------------------------- | ------------------------------------------------- |
+| unset (the default, what ships)                | no demo profiles: a plain Keyring build           |
+| `none`                                         | the same as unset                                 |
+| a profile's `id` (`trading-card`, `approver`)  | only that one                                     |
+| `all`                                          | every installed profile, all at once (a demo day) |
+| an id that doesn't match any installed profile | none (a typo never switches demo code on)         |
 
-`none` is the one to reach for if you want to build and run Keyring itself,
-with none of this directory's demos active — see "Stripping demos from a
+Unset is what ships: Keyring itself, with none of this directory's demos active. Set a profile id (or `all`) to run a demo — see "Stripping demos from a
 build" below for what `none` does beyond the runtime table above.
 
 ## A worked demo: `approver/`
@@ -142,7 +156,7 @@ the same token means the last one wins.
 
 ## Stripping demos from a build
 
-`ACTIVE_DEMO_PROFILE=none` drives two independent levers, one for RUNTIME
+Unset or `ACTIVE_DEMO_PROFILE=none` drives two independent levers, one for RUNTIME
 behaviour and one for the BUNDLE — both keyed off the same value on purpose,
 so there is no way for "runtime says no demos" and "the bundle still ships
 them" to drift apart:

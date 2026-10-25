@@ -63,6 +63,15 @@ the reference ladder. **Don't advance pins in the middle of a piece of work** �
 do it at a boundary, then re-run the ladder bottom-up: the first rung that goes
 red tells you which layer upstream changed.
 
+**Moving the `verifiable-trust-infrastructure` pin moves `card-verify` in the
+same pull request.** It builds against the pinned clone with `--locked` in
+keyring-bifold's conformance check, and its exact pins (`dtg-credentials`,
+`affinidi-secrets-resolver`, `trust-tasks-rs`, `affinidi-data-integrity`) follow the pinned commit's own
+`Cargo.lock`. Update them, rebuild so `Cargo.lock` follows, and rerun the
+check's steps and `card-verify vectors` against bifold's committed vectors
+before merging. #168 moved the pin alone and turned that check red on every
+bifold pull request until #169, and #342 did the same again until #348 put the pin back.
+
 ## Files here
 
 | File | Purpose |
@@ -95,9 +104,25 @@ file was written was **0.23.3** — six point-releases the tutorial doesn't know
 about. Nothing failed; nothing warned. This exists so drift like that gets
 noticed on purpose.
 
+Only pinned builds reach `external/bin/`. A binary the local pinned snapshot
+carries is copied from there. The snapshot is `FETCH_BINARIES_PINS_DIR`, by
+default `~/vti-stack/pins/current`, a symlink to the dated snapshot the gate
+runs (`nightly-2026-10-22` today; move the symlink, not the code). It holds the
+pnm and openvtc copies, each listed in `MANIFEST.tsv` with its sha256 and
+platform (`darwin-arm64`). An entry for another platform, or one that doesn't
+name its platform, is never used. A cached binary that already holds the
+pinned bytes is left alone, since a rewritten pnm makes macOS ask for its
+Keychain items again; any other is written beside it and renamed into place. Any other is downloaded and cached only if
+its sha256 equals `pinnedSha256`; the server has no versioned URLs, so that sha
+is the explicit version. A drifted or unpinned build is refused and the cache
+is left alone, because after upstream's TSP 1.0 cutover (2026-10-22) latest/main
+may no longer talk to our stack. `--latest` (or `FETCH_BINARIES_ALLOW_LATEST=1`)
+takes the moving build anyway, with drift still reported.
+
 ```sh
 node scripts/openvtc/fetch-binaries.mjs                # fetch + verify every pinned binary into external/bin/
 node scripts/openvtc/fetch-binaries.mjs vta pnm-server  # just the named ones
+node scripts/openvtc/fetch-binaries.mjs --latest vta    # take whatever latest/main serves (opt-in)
 node scripts/openvtc/fetch-binaries.mjs --status        # report the cache's state, no network
 node scripts/openvtc/fetch-binaries.mjs --check          # probe current upstream without touching the cache
 node scripts/openvtc/fetch-binaries.mjs --advance vta --why "reason"   # re-fetch, update the pin, log it
@@ -108,6 +133,30 @@ once fetched (`VTA_BIN` overrides it). See `BINARY_PINS.json` for what's
 pinned, exercised, and still just sitting there unverified — most of the
 mediator/VTC/did-hosting binaries were downloaded once to confirm the URLs
 work, not because anything in this repo runs them yet.
+
+## Signed lab tools: `~/vti-stack/bin/pnm` and `~/vti-stack/bin/openvtc`
+
+pnm and openvtc read their secrets from the login Keychain. An ad hoc build (what
+`cargo build` produces, for example `~/Documents/vti-main/target/debug/pnm`) gets a new
+code identity on every rebuild, so macOS asks "Always Allow" again for every item it
+opens. The harness therefore runs only builds signed with the one local
+"Keyring lab tools" identity, under identifier `org.keyring.lab.<tool>`. Their
+designated requirement doesn't change across rebuilds, so an item granted once stays
+granted.
+
+```sh
+scripts/openvtc/sign-lab-tool.sh pnm --build       # build VTI's pnm, sign it, repoint ~/vti-stack/bin/pnm
+scripts/openvtc/sign-lab-tool.sh openvtc --build   # same for openvtc (OPENVTC_SRC, CARGO_TARGET_DIR)
+scripts/openvtc/sign-lab-tool.sh all               # every lab binary as built: pnm, cnm, openvtc, vta, vtc, mediator, did-hosting-daemon
+```
+
+Run it after every rebuild; without `--build` it signs the existing build. It signs the
+cargo output (`target/debug/<tool>`) in place too, so a script or server that still calls
+that path never meets an ad hoc build. Every
+entry point defaults to `~/vti-stack/bin/pnm` (`PNM_BIN` still overrides), and the TUI
+runners default `--openvtc-bin` to `~/vti-stack/bin/openvtc`. Do not point anything at
+`target/debug/pnm` or at the old `pnm-0.19.0-trusted`. With pnm built from VTI main,
+leave `PNM_HOME` unset: it reads `PNM_HOME` as its config home.
 
 ## Checking claims
 

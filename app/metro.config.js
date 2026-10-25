@@ -15,6 +15,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/dtg-vocab')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
   // @bifold/trust-tasks: platform-neutral trust-task plumbing shared with the
@@ -29,6 +30,7 @@ const packageDirs = [
 const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/core',
   '@bifold/verifier',
+  '@bifold/dtg-vocab',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
   '@bifold/react-native-locality-peripheral',
@@ -59,7 +61,9 @@ const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', '
 // one README table, no way for "runtime says none" and "bundle still has
 // them" to drift apart. See src/demo-profiles/README.md's "Stripping demos
 // from a build" section.
-const stripDemoProfiles = process.env.ACTIVE_DEMO_PROFILE === 'none'
+// Unset strips too: a shipped build carries no demo code at all (decided
+// 2026-09-25). A demo build sets a profile id or `all`, which keeps them.
+const stripDemoProfiles = !process.env.ACTIVE_DEMO_PROFILE || process.env.ACTIVE_DEMO_PROFILE === 'none'
 const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
 const watchFolders = [...packageDirs, bifoldNodeModules]
@@ -183,7 +187,12 @@ module.exports = (async () => {
         // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
         // dedupes within a single tree, so pinning has to happen here. Keep
         // this list in sync when a new native-backed dependency reaches
-        // bifold/packages/*.
+        // bifold/packages/*. bifold core's jest has the same pin for its own
+        // tests (moduleNameMapper for askar-shared in
+        // bifold/packages/core/jest.config.js); a dependency added here may
+        // belong there too. Changing this file runs the android-apk and
+        // ios-simulator builds (paths in .github/workflows/test-builds.yml),
+        // so a resolution mistake here is caught before merge.
         const singletonPrefixes = [
           'react',
           'react-native',
@@ -201,6 +210,14 @@ module.exports = (async () => {
           '@hyperledger/anoncreds-react-native',
           '@hyperledger/indy-vdr-shared',
           '@hyperledger/indy-vdr-react-native',
+          // class-transformer's @Expose metadata store is module-local: @bifold/trust-tasks'
+          // DIDComm v2 envelope registers renames Credo's JsonTransformer must see, so the
+          // bundle needs exactly one copy (didcomm_v2_subtask.md C10).
+          'class-transformer',
+          // Carries a keyring patch (utf8 always uses its pure-JS codec; the
+          // built-in path breaks credo's first agent start in release bundles,
+          // 2026-09-21). bifold's own install has unpatched copies, so pin it.
+          '@scure/base',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {

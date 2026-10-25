@@ -2,9 +2,9 @@
 // unsecured document and the proof options, hash each with SHA-256,
 // concatenate, sign/verify with Ed25519. proofValue is 'z' + base58btc.
 //
-// The proof config is hashed WITH the document's @context attached (per
-// §3.3.5); we attach it at sign/verify time rather than storing it in the
-// proof member, which is deterministic on both sides.
+// The proof config is hashed WITHOUT the document's @context: vc-di-eddsa
+// §3.3.5 (Proof Configuration, eddsa-jcs-2022) never sets it, unlike the
+// rdfc-2022 variant. Verified against dtg-credentials 0.7.0 in ref-07e.
 //
 // JCS here is RFC 8785 restricted to what these documents contain: objects
 // with string keys (sorted by UTF-16 code units), arrays, strings, booleans,
@@ -32,7 +32,12 @@ function hashData(document, proofOptions) {
   const { proof: _drop, ...unsecured } = document
   const config = { ...proofOptions }
   delete config.proofValue
-  if (document['@context']) config['@context'] = document['@context']
+  // NO @context here. vc-di-eddsa's Proof Configuration algorithm for
+  // eddsa-jcs-2022 has five steps and none of them touches @context — that
+  // step exists only in eddsa-rdfc-2022. An earlier version of this file
+  // attached it, which made our signatures mutually unverifiable with
+  // dtg-credentials 0.7.0; ref-07e act 1 is the probe that found it, and the
+  // crate was right. See ref-07e's README.
   const proofHash = sha256(utf8(jcs(config)))
   const docHash = sha256(utf8(jcs(unsecured)))
   const data = new Uint8Array(proofHash.length + docHash.length)

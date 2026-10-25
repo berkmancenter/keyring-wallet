@@ -33,6 +33,7 @@ const translation = {
     "CodeCopied": "Copié",
     "ShareCodeWithSupport": "Communiquez ce code au soutien lorsque vous nous contactez.",
     "Problem": "Un problème est survenu",
+    "GoHome": "Aller à l'écran d'accueil",
     "ProblemDescription": "Une erreur inattendue s'est produite. Veuillez signaler cette erreur et réessayer.",
   },
   "Global": {
@@ -71,6 +72,9 @@ const translation = {
     // Page 3: Connections
     "ConnectionsHeading": "Créer des connexions de confiance",
     "ConnectionsParagraph": "Construisez des relations directes et mutuelles avec des personnes que vous connaissez. Contrairement aux abonnements sur les réseaux sociaux, les deux parties confirment la connexion.\n\nVos connexions vivent sur votre appareil, sous votre contrôle — pas gérées par une plateforme.",
+    // Page 3b: Agent
+    "AgentHeading": "Votre propre agent",
+    "AgentParagraph": "Rien d'un agent secret : celui-ci travaille pour vous en ligne, même quand votre téléphone est éteint. Il garde vos identités et vos cartes, et vous demande votre accord avant toute chose importante.",
     // Page 4: Security
     "SecurityHeading": "Sécurisez votre portefeuille",
     "SecurityParagraph": "Votre portefeuille est protégé par un code PIN que vous créez. Pour plus de commodité, vous pouvez également activer Face ID ou Touch ID pour déverrouiller rapidement votre portefeuille et vérifier des actions comme la création de nouvelles connexions.\n\nVos données biométriques ne quittent jamais votre appareil — elles sont utilisées uniquement pour déverrouiller l'accès et confirmer vos actions. Vous pouvez les activer ou les désactiver à tout moment dans les Paramètres.",
@@ -192,6 +196,10 @@ const translation = {
     "EnableProxy": "Enable proxy (FR)",
     "EnableAppToAppPersonFlow": "App-to-app Person flow (FR)",
     "EnableTspCarriage": "Enable TSP envelope carriage (FR)",
+    "EnableDidCommV2": "Activer DIDComm v2 (expérimental)",
+    "Mediator": "Médiateur",
+    "CopyValue": "Copier",
+    "Copied": "Copié",
   },
   "Tips": {
     "Header": "Conseils",
@@ -212,6 +220,8 @@ const translation = {
     "Tip14": "Même les identifiants révoqués ou expirés peuvent être utilisables si l'organisation ne les demande pas.",
   },
   "Init": {
+    "MessageServiceTitle": "Keyring n'a pas pu joindre son service de messagerie",
+    "MessageServiceBody": "Votre portefeuille et tout ce qu'il contient vont bien. Le service qui transporte les messages de Keyring n'a pas répondu. Vérifiez que ce téléphone est en ligne, puis réessayez. S'il l'est, le service est peut-être indisponible pour un moment.",
     "Retry": "Réessayer",
     "Starting": "Démarrage...",
     "FetchingPreferences": "Récupération des préférences...",
@@ -224,6 +234,8 @@ const translation = {
     "GiveFeedback": "Donner votre avis",
   },
   "PushNotifications": {
+    "HandleLimitTitle": "Les notifications ne peuvent pas encore atteindre cet agent",
+    "HandleLimitBody": "Ce téléphone est enregistré auprès du service de notifications pour autant d'agents qu'il le permet : les notifications pour cet agent pourraient ne pas arriver. Keyring continue de fonctionner, et les demandes attendent toujours dans Demandes.",
     "NotificationsOffTitle": "Les notifications pour Keyring sont désactivées",
   },
   "AddCredentialSlider": {
@@ -232,9 +244,9 @@ const translation = {
   },
   "Scan": {
     "ScanOnySpecial": "Seuls les codes QR spéciaux peuvent être scannés par Keyring.",
-    "ScanOnlySpecial3": "Keyring ne prend actuellement pas en charge l'ajout de justificatifs numériques en scannant ou en prenant des photos de justificatifs physiques.",
+    "ScanOnlySpecial3": "Keyring lit le code de votre agent, celui d'une communauté, le code de contact d'un autre utilisateur de Keyring ou le ticket d'un vérificateur.",
     "WhereToUseLink": "Voyez où vous pouvez utiliser Keyring.",
-    "BadQRCodeDescription": "Le code QR scanné ne fonctionne pas avec Keyring. Keyring ne fonctionne qu'avec les services participants.\n\nIl ne peut actuellement pas ajouter de justificatifs numériques en prenant des photos de justificatifs physiques."
+    "BadQRCodeDescription": "Keyring ne peut pas utiliser ce code QR. Il lit le code de votre agent, celui d'une communauté, le code de contact d'un autre utilisateur de Keyring ou le ticket d'un vérificateur."
   },
   "Services": {
     "CatalogueTitle": "Services (FR)",

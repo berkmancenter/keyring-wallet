@@ -1,0 +1,254 @@
+/**
+ * Remove the ACL entries a run created on the runner VTA — and only those.
+ *
+ * Every link run leaves admin keys behind: the phone's temporary key, and the
+ * permanent key it rotates onto. On 2026-09-23 the Farm runner VTA held 25 of
+ * them, each a full admin, from phones long since wiped. A run now cleans up
+ * after itself:
+ *
+ *   const before = snapshotAcl({ slug, pnmHome })        // before the phone shows its key
+ *   ...
+ *   finally { removeRunKeys({ slug, pnmHome, before, tempDid, failed }) }
+ *
+ * What is removed is decided by ownership, not by "new since the snapshot":
+ * two runs on one VTA can overlap by seconds when they hand it back and forth,
+ * and a pure diff would delete the other run's keys. So only this run's own
+ * temporary DID, and every entry whose `createdBy` chain leads back to it
+ * (the rotated key, and whatever that key created), are removed. Anything else
+ * that is new is logged as "not mine, left alone".
+ *
+ * A manual (no-QR) link breaks that chain: the runner's own admin key grants
+ * the temporary key, and the key the phone rotates onto is recorded as created
+ * by that same admin key, not by the temporary one. So a manual run names its
+ * rotated key itself — `heirOf`, read right after the rotation — and passes it
+ * as `heirs`, another root of what is this run's (10-05: a manual link's keys
+ * were all "not mine, left alone", and 23 were found left on a Farm runner).
+ *
+ * DIDs are compared in full, from `pnm acl list --json`: the table view
+ * truncates a ~350-character did:peer:2, and a prefix is not an identity.
+ *
+ * On a failed run the keys are KEPT by default — a grant that did not work is
+ * evidence (VTI-Q19 was one) — and the exact delete commands are printed.
+ * E2E_ACL_CLEANUP=always removes them anyway; E2E_ACL_CLEANUP=never keeps
+ * them even on success.
+ */
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The signed build at its stable path (scripts/openvtc/sign-lab-tool.sh): an ad hoc
+// target/debug/pnm re-prompts the Keychain on every rebuild.
+const PNM = process.env.PNM_BIN || path.join(os.homedir(), "vti-stack/bin/pnm");
+// Every call goes through the slug's machine-wide lock: one pnm slug is one
+// admin DID, and the mediator keeps one live socket per DID. See the script.
+const PNM_LOCKED = fileURLToPath(new URL("../../scripts/openvtc/pnm-locked", import.meta.url));
+/** A person's own agents: never touched by a runner. */
+const REFUSED = new Set(["alice", "alberto3", "alberto-push-vta-2", "farm"]);
+
+// A dropped transport, not an answer: the mediator keeps one socket per DID, so
+// a pnm call on this slug from outside the lock (another machine, a bare pnm)
+// either replaces ours or is refused ("replaced by a newer connection", 220
+// gate; "this DID already has a live connection" from the duel damper).
+const TRANSIENT = /replaced by a newer connection|already has a live connection|tsp transport error/i;
+
+function pnm(slug, pnmHome, args) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return execFileSync(PNM_LOCKED, ["--vta", slug, ...args], {
+        encoding: "utf8",
+        // PNM_HOME only when a caller names one: pnm since VTI main reads it as
+        // its config and session home (pnm 0.19.0 ignored it).
+        env: { ...process.env, PNM_BIN: PNM, ...(pnmHome ? { PNM_HOME: pnmHome } : {}) },
+        // pnm prints its banner on stderr; keep it out of the run's log.
+        stdio: ["ignore", "pipe", "pipe"],
+        // The lock may wait for another session's call first (PNM_LOCK_WAIT).
+        timeout: 360_000,
+      });
+    } catch (err) {
+      const said = `${err?.stderr ?? ""}${err?.message ?? ""}`;
+      if (attempt >= 3 || !TRANSIENT.test(said)) throw err;
+      console.log(`[acl] pnm ${args[0]} ${args[1] ?? ""}: the connection was dropped (${attempt}/3), trying again`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
+    }
+  }
+}
+
+/** The ACL as full entries: subject, createdBy, createdAt, label. */
+/** Delete one ACL entry on a runner, through pnm-locked (the lock, the retries, no stdin). Never a person's agent. */
+export function deleteAcl({ slug, pnmHome, subject }) {
+  if (REFUSED.has(slug)) throw new Error(`[acl] refusing to change "${slug}": a person's own agent, not a runner's`);
+  return pnm(slug, pnmHome, ["acl", "delete", subject]);
+}
+
+export function listAcl({ slug, pnmHome }) {
+  if (REFUSED.has(slug)) throw new Error(`[acl] refusing to read "${slug}": a person's own agent, not a runner's`);
+  const out = pnm(slug, pnmHome, ["acl", "list", "--json"]);
+  const entries = JSON.parse(out.slice(out.indexOf("[")));
+  return entries.map((e) => ({ subject: e.subject, createdBy: e.createdBy, createdAt: e.createdAt, label: e.label }));
+}
+
+/** The subjects present before the run touched the VTA. */
+export function snapshotAcl({ slug, pnmHome }) {
+  return new Set(listAcl({ slug, pnmHome }).map((e) => e.subject));
+}
+
+/**
+ * This run's entries among `entries`: `tempDid` itself, and everything whose
+ * createdBy chain reaches it. Pure — exported for its test.
+ */
+export function ownedBy(entries, tempDid, heirs = []) {
+  const mine = new Set([tempDid, ...heirs].filter(Boolean));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const e of entries) {
+      if (!mine.has(e.subject) && mine.has(e.createdBy)) {
+        mine.add(e.subject);
+        grew = true;
+      }
+    }
+  }
+  return entries.filter((e) => mine.has(e.subject));
+}
+
+/**
+ * The entries a linked phone holds on its runner, from the link's own record (run-vta-link.js keepForNextStep,
+ * last-link.json: before, tempDid, heirs): new since `before`, and owned by the phone's temporary key or the key it
+ * rotated onto. The same selection the end-of-leg cleanup makes (removeRunKeys), so a step that removes them mid-run
+ * can only touch the harness's own phone grant, never another leg's or a person's entry. Pure.
+ */
+export function linkedPhoneEntries(entries, { before = [], tempDid, heirs = [] } = {}) {
+  if (!tempDid) return [];
+  const seen = new Set(before);
+  return ownedBy(entries.filter((e) => !seen.has(e.subject)), tempDid, heirs);
+}
+
+/**
+ * The entry this phone holds now, from its link record: the newest entry whose subject is one of the phone's OWN keys
+ * (a rotated heir, else the temporary key). Not linkedPhoneEntries' set, which also holds what the phone's key
+ * created (a device it added would then be "the phone"; review on #574). It needs the heirs a manual link records
+ * (LINK_MODE=manual): after the swap removed tempDid's entry, a link without them finds nothing, which is said. Pure.
+ */
+export function phoneOwnEntry(entries, { tempDid, heirs = [] } = {}) {
+  const own = new Set([...heirs, tempDid].filter(Boolean));
+  return entries.filter((e) => own.has(e.subject)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).at(-1);
+}
+
+/** A device the phone added expires with the phone: both permanent, or the same expiresAt. Pure. */
+export function expiresWith(device, phone) {
+  return Boolean(device && phone) && (device.expiresAt ?? null) === (phone.expiresAt ?? null);
+}
+
+/**
+ * The entries that are one grant, wherever its subject has moved: the grant itself, or the key a phone rotated onto
+ * from it. acl/swap-key clones the entry and changes only its subject (vta-service operations/acl.rs swap_acl at
+ * 7adda796: `entry = old.clone(); entry.did = new_did`), so the rotated entry keeps the grant's createdAt, createdBy
+ * and label, and no other grant shares all three. A manual grant breaks the createdBy chain (`ownedBy`), and another
+ * leg's phone linking to the same runner meanwhile looks the same by label; this tells them apart. Pure.
+ */
+export function fromGrant(entries, grant) {
+  if (!grant?.createdAt) return [];
+  return entries.filter((e) => e.createdAt === grant.createdAt && e.createdBy === grant.createdBy && e.label === grant.label);
+}
+
+/**
+ * A case's own entries since its grant: the grant, wherever its subject has rotated (`fromGrant`), and whatever that
+ * key went on to create (`ownedBy`), so a second key the phone made still counts. Another leg's grant on the same
+ * runner in the same minutes (same admin, same label, its own createdAt) does not: the 1021-0158 RC gate's linkwait
+ * read smoke-ios's grant, 25 s into its window, as a second entry of its own. Pure.
+ */
+export function grantEntries(entries, grant) {
+  const own = fromGrant(entries, grant);
+  if (!own.length) return [];
+  const chain = ownedBy(entries.filter((e) => !own.includes(e)), own[0].subject, own.slice(1).map((e) => e.subject));
+  return [...own, ...chain];
+}
+
+/**
+ * The entry a grant of `did` made, read after the grant against `before` (the ACL just before it). By subject while
+ * the phone has not rotated; once it has (a live app's poll can rotate within a second of the grant), the entry new
+ * since `before` labelled like the grant. Several such entries mean another leg granted on the same runner in the same
+ * moment: the oldest is taken (ours was made first, right after `before`) and `ambiguous` says the read is not to be
+ * trusted for a pass. Pure.
+ */
+export function grantAfter(before, after, did, label = "keyring-admin") {
+  const bySubject = after.find((e) => e.subject === did);
+  if (bySubject) return { entry: bySubject, ambiguous: false };
+  const seen = new Set(before.map((e) => e.subject));
+  const fresh = after
+    .filter((e) => !seen.has(e.subject) && e.label === label)
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return { entry: fresh[0], ambiguous: fresh.length > 1 };
+}
+
+/**
+ * Remove this run's entries. Never throws: a cleanup that fails is logged, and
+ * must not turn a passing run red or hide the real failure of a failing one.
+ */
+export function removeRunKeys({ slug, pnmHome, before, tempDid, heirs = [], failed = false, log = console.log }) {
+  try {
+    if (!tempDid) {
+      log("[acl] no temporary key recorded for this run — nothing to clean up");
+      return;
+    }
+    const entries = listAcl({ slug, pnmHome });
+    const added = entries.filter((e) => !before?.has(e.subject));
+    const mine = ownedBy(added, tempDid, heirs);
+    for (const e of added) {
+      if (!mine.includes(e)) log(`[acl] not mine, left alone: ${e.subject.slice(0, 40)}… (${e.label ?? "-"}, created by ${e.createdBy.slice(0, 30)}…)`);
+    }
+    if (!mine.length) {
+      log("[acl] this run left no ACL entries on the VTA");
+      return;
+    }
+    const mode = process.env.E2E_ACL_CLEANUP || "";
+    const keep = mode === "never" || (failed && mode !== "always");
+    if (keep) {
+      log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"} from this ${failed ? "failed " : ""}run, as evidence. To remove them:`);
+      for (const e of mine) log(`  ${pnmHome ? `PNM_HOME=${pnmHome} ` : ''}${PNM} --vta ${slug} acl delete '${e.subject}'`);
+      return;
+    }
+    for (const e of mine) {
+      try {
+        pnm(slug, pnmHome, ["acl", "delete", e.subject]);
+        log(`[acl] removed ${e.subject.slice(0, 40)}… (${e.label ?? "-"}, granted ${e.createdAt})`);
+      } catch (err) {
+        log(`[acl] could not remove ${e.subject}: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+      }
+    }
+  } catch (err) {
+    log(`[acl] cleanup skipped: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+  }
+}
+
+/**
+ * The key a phone rotated onto after a manual grant: the earliest entry that is
+ * new since `before` and was created at or after `since` (an ISO time taken just
+ * before the grant), excluding `taken` (heirs this run already named). Read it
+ * right after the rotation, while no other run is linking on this VTA; a run
+ * that cannot tell returns undefined and cleans up by its chain alone.
+ */
+export function heirOf({ slug, pnmHome, before, since, taken = [] }) {
+  const fresh = listAcl({ slug, pnmHome })
+    .filter((e) => !before?.has(e.subject) && !taken.includes(e.subject) && String(e.createdAt) >= since)
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  return fresh[0]?.subject;
+}
+
+/**
+ * What a runner VTA holds, read-only: its keys (ids and total) and its WebVH
+ * DIDs (count). A persona mint borrows a signing and a key-agreement key, so a
+ * mint that got anywhere grows the keys; used to prove a refused mint minted
+ * nothing (farm-runner-nohost, keyring-bifold#79/#97).
+ */
+export function vtaInventory({ slug, pnmHome }) {
+  if (REFUSED.has(slug)) throw new Error(`[acl] refusing to read "${slug}": a person's own agent, not a runner's`);
+  const keysOut = pnm(slug, pnmHome, ["keys", "list", "--json"]);
+  const keys = JSON.parse(keysOut.slice(keysOut.indexOf("{")));
+  // `dids list` ignores --json (pnm 0.19.0): read the "WebVH DIDs (N)" header.
+  const didsOut = pnm(slug, pnmHome, ["did-mgmt", "dids", "list"]).replace(/\x1b\[[0-9;]*m/g, "");
+  const dids = /WebVH DIDs \((\d+)\)/.exec(didsOut);
+  if (!dids) throw new Error(`[acl] could not read the DID count of "${slug}"`);
+  const keyIds = new Set((keys.keys ?? []).map((k) => k.id ?? k.keyId ?? JSON.stringify(k)));
+  return { keyTotal: Number(keys.total ?? keyIds.size), keyIds, didCount: Number(dids[1]) };
+}

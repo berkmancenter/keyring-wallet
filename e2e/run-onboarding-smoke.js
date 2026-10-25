@@ -2,6 +2,7 @@
  * Single-device smoke test: fresh install → full onboarding → main tab bar visible.
  * Usage: PLATFORM=android node run-onboarding-smoke.js   (or PLATFORM=ios)
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

@@ -131,6 +131,10 @@ export async function startWitness({
   port = Number(process.env.WITNESS_PORT || 9002),
   webPort = Number(process.env.WITNESS_WEB_PORT || 9003),
   readyTimeoutMs = 180000,
+  // Serve DIDComm v2 beside v1 (WITNESS_DIDCOMM_VERSIONS=v1,v2): the witness
+  // then also publishes an out-of-band/2.0 invitation, returned as
+  // `invitationV2Url` for wallets with the DIDComm v2 developer setting on.
+  didcommV2 = false,
 } = {}) {
   // Free the ports first — a prior run's witness whose shutdown hung would
   // otherwise EADDRINUSE this one. Best-effort: only catches processes this
@@ -170,7 +174,11 @@ export async function startWitness({
   // transpile-only: the witness-server has pre-existing @types/node `Timeout`
   // type errors (WitnessService.ts:377/397) that a full ts-node typecheck
   // rejects; a harness launching the server only needs it to run.
-  const proc = spawn("yarn", ["ts-node", "--transpile-only", "src/index.ts"], {
+  // bifold #402: the witness reaches @openvtc/vti-tsp-js (ESM-only) through its workspace packages, and every start
+  // script of the server loads tsp-esm-preload.cjs for it; started without, it fails on that import. Loaded when the
+  // checkout has it (a bifold from before #402 does not).
+  const preload = existsSync(join(witnessDir, "tsp-esm-preload.cjs")) ? ["-r", "./tsp-esm-preload.cjs"] : [];
+  const proc = spawn("yarn", ["ts-node", "--transpile-only", ...preload, "src/index.ts"], {
     cwd: witnessDir,
     // `yarn ts-node ...` spawns ts-node as a GRANDCHILD of this process — killing
     // just `proc` only signals the yarn wrapper, orphaning the actual witness
@@ -185,6 +193,7 @@ export async function startWitness({
       WITNESS_NAME: name,
       WITNESS_PUBLIC_URL: publicUrl,
       WITNESS_INVITATION_FILE: invitationFile,
+      WITNESS_DIDCOMM_VERSIONS: didcommV2 ? "v1,v2" : "v1",
       WITNESS_VERBOSE: process.env.WITNESS_VERBOSE || "false",
       // Wallet lives in the per-run temp dir — see the file header. Also makes
       // this run immune to `bifold/packages/witness-server/.env`'s own wallet
@@ -303,8 +312,8 @@ export async function startWitness({
       throw new Error("witness server exited before becoming ready");
     }
     if (existsSync(invitationFile)) {
-      const { invitationUrl } = JSON.parse(readFileSync(invitationFile, "utf-8"));
-      if (invitationUrl) {
+      const { invitationUrl, invitationV2Url } = JSON.parse(readFileSync(invitationFile, "utf-8"));
+      if (invitationUrl && (!didcommV2 || invitationV2Url)) {
         // Confirm the transport we asked for (via MEDIATOR_INVITATION_URL above)
         // is the transport that actually started, from the witness's own banner —
         // not assumed. Fail loudly here, in seconds, rather than as a mysterious
@@ -326,7 +335,7 @@ export async function startWitness({
           `[e2e] witness ready${readyLogged ? "" : " (invitation file present)"} — invitation captured` +
             (observedTransport ? ` (${observedTransport})` : "")
         );
-        return { invitationUrl, publicUrl, name, stop, waitForParticipants };
+        return { invitationUrl, invitationV2Url, publicUrl, name, stop, waitForParticipants };
       }
     }
     await sleep(1000);

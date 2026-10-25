@@ -1,0 +1,15 @@
+[package]
+name = "gateway-identity"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Open a push-gateway provision bundle into vti-push-gateway's identity file"
+
+# Standalone: not part of any workspace.
+[workspace]
+
+[dependencies]
+# The VTI commit the provisioning VTA and pnm ran. The sealed-bundle format is
+# versioned by the SDK, so open a bundle with the SDK of the VTA that sealed it.
+vta-sdk = { git = "https://github.com/OpenVTC/verifiable-trust-infrastructure", rev = "2240aa7eb42d41d4b0c442285e918d334ad6dce3", default-features = false, features = ["sealed-transfer"] }
+serde_json = "1"

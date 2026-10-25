@@ -3,10 +3,26 @@ name: Staging - Internal Testing Build & Deploy
 on:
   push:
     branches: [staging]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which store builds to run (a rerun of one failed platform need not rebuild the other)
+        type: choice
+        options: [both, android, ios]
+        default: both
+      audience:
+        description: >-
+          Who gets this build. "all" ships as usual. "internal" keeps it from
+          outside testers: on iOS only the internal TestFlight group gets it, and
+          on Android nothing is uploaded to Google Play (the signed APK is this
+          run's artifact, to side-load). For a build that must be checked on our
+          own phones first.
+        type: choice
+        options: [all, internal]
+        default: all
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   calculate-build-number:
@@ -17,15 +33,18 @@ jobs:
       - name: Calculate build number
         id: calc
         run: |
-          OFFSET=5
-          MIN_BUILD_NUMBER=34
+          # The run counter restarted at 1 when the pipeline moved from
+          # AdvancedIdentity, whose uploads reached build ~151. OFFSET must keep
+          # every build above the highest build either store has accepted, and is
+          # only ever raised. A floor alone would repeat the same number on every
+          # run until the counter caught up, and the stores reject a repeat.
+          OFFSET=200
+          MIN_BUILD_NUMBER=201
 
-          CALCULATED_BUILD=$((GITHUB_RUN_NUMBER + OFFSET))
-
-          if [ $CALCULATED_BUILD -lt $MIN_BUILD_NUMBER ]; then
-            BUILD_NUMBER=$MIN_BUILD_NUMBER
-          else
-            BUILD_NUMBER=$CALCULATED_BUILD
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          if [ $BUILD_NUMBER -lt $MIN_BUILD_NUMBER ]; then
+            echo "Build number $BUILD_NUMBER is below the floor $MIN_BUILD_NUMBER"
+            exit 1
           fi
 
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
@@ -41,13 +60,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version from package.json
         id: get_version
@@ -59,43 +71,63 @@ jobs:
 
   check-secrets:
     runs-on: ubuntu-22.04
+    environment: internal
     steps:
       - name: Check required secrets
         shell: bash
         run: |
-          required_secrets=(
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
-            "BUILD_PROVISION_PROFILE_BASE64"
-            "APP_STORE_CONNECT_PRIVATE_KEY_95"
-            "APP_STORE_CONNECT_ISSUER_ID"
-            "APP_STORE_CONNECT_KEY_IDENTIFIER_95"
-            "PLAY_STORE_JKS_BASE64"
-            "PLAY_STORE_JKS_ALIAS"
-            "PLAY_STORE_JKS_PASSWD"
-            "GOOGLE_API_CREDENTIALS_BASE64"
-            "MEDIATOR_URL"
-          )
+          required_secrets=("MEDIATOR_URL")
+          if [ "$DEPLOY_IOS" != "false" ]; then
+            required_secrets+=(
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
+              "BUILD_PROVISION_PROFILE_BASE64"
+              "APP_STORE_CONNECT_API_KEY_P8"
+              "APP_STORE_CONNECT_API_KEY_ID"
+            )
+          else
+            echo "ℹ️ iOS is switched off (repository variable DEPLOY_IOS=false)"
+          fi
+          if [ "$DEPLOY_ANDROID" != "false" ]; then
+            required_secrets+=(
+              "PLAY_STORE_JKS_BASE64"
+              "PLAY_STORE_JKS_ALIAS"
+              "PLAY_STORE_JKS_PASSWD"
+              "GOOGLE_API_CREDENTIALS_BASE64"
+            )
+          else
+            echo "ℹ️ Android is switched off (repository variable DEPLOY_ANDROID=false)"
+          fi
 
+          missing=0
           for secret in "${required_secrets[@]}"; do
             if [ -z "${!secret}" ]; then
-              echo "⚠️ Warning: Secret $secret is not set"
+              echo "❌ Secret $secret is not set"
+              missing=1
             else
               echo "✅ Secret $secret is set"
             fi
           done
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "ℹ️ SLACK_WEBHOOK_URL is not set; the Slack notification will be skipped"
+          fi
+
+          exit $missing
         env:
           APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          APP_STORE_CONNECT_PRIVATE_KEY_95: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER_95: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           PLAY_STORE_JKS_BASE64: ${{ secrets.PLAY_STORE_JKS_BASE64 }}
           PLAY_STORE_JKS_ALIAS: ${{ secrets.PLAY_STORE_JKS_ALIAS }}
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DEPLOY_IOS: ${{ vars.DEPLOY_IOS }}
+          DEPLOY_ANDROID: ${{ vars.DEPLOY_ANDROID }}
 
   test:
     runs-on: ubuntu-22.04
@@ -103,13 +135,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - uses: actions/setup-python@v5
         with:
@@ -130,23 +155,25 @@ jobs:
 
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
+    # Repository variable DEPLOY_ANDROID=false switches the platform off.
+    # A manual run can build one platform only (inputs.platform is empty on push).
+    if: vars.DEPLOY_ANDROID != 'false' && inputs.platform != 'ios'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    environment: internal
+    # Four ABIs of native code; 60 min left no margin.
+    timeout-minutes: 90
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
       ANDROID_PACKAGE_NAME: "asml.bkc.harvard.wallet"
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
+          # Full history and tags, so the notes step can find the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -317,12 +344,118 @@ jobs:
         run: |
           node scripts/verify-bifold-linking.js
 
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
+      - name: Record the native fingerprint
+        id: fingerprint
+        run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-android
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Create environment settings
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
+          # Push notifications: off unless this repository variable names the
+          # push gateway. Unset is what testers get: no prompt, no Settings
+          # switch, nothing registered (docs/plans/push-notifications-plan.md).
+          PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL }}
+          # The Firebase project the gateway's FCM key belongs to. Android's
+          # push tokens are only usable when the app's google-services.json
+          # is from that project.
+          PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
+
+          # Push: on only when the variable names a gateway AND the build's
+          # Firebase project is the gateway's. A token from another project
+          # cannot be sent to, and a Notifications switch that can never work
+          # is worse than none, so a mismatch leaves push off in this build.
+          push=off
+          if [ -n "${PUSH_GATEWAY_URL}" ]; then
+            project=$(jq -r '.project_info.project_id // empty' android/app/google-services.json)
+            if [ -n "${PUSH_FCM_PROJECT_ID}" ] && [ "${project}" = "${PUSH_FCM_PROJECT_ID}" ]; then
+              echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >>.env
+              push=on
+            else
+              echo "::warning::PUSH_GATEWAY_URL is set but google-services.json is project '${project}', not PUSH_FCM_PROJECT_ID '${PUSH_FCM_PROJECT_ID}': push stays OFF in the Android build"
+            fi
+          fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
+          echo "Push notifications (Android): ${push}"
+          echo "- Push notifications (Android): **${push}**" >>"$GITHUB_STEP_SUMMARY"
+
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (Android): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh android
+          echo "- Over-the-air updates (Android): **off**" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -362,21 +495,10 @@ jobs:
           find bifold/packages -type f -name "*.map" -delete 2>/dev/null || true
           find bifold/packages -type f -name "*.d.ts.map" -delete 2>/dev/null || true
 
-          # Clean up large node_modules that aren't needed for Android build
-          # Keep only what's needed for Metro bundling and native builds
-          # CRITICAL: Do NOT delete android/ or ios/ directories - Gradle needs them for native modules!
-          # Remove test directories and files (not needed for runtime/bundling, but exclude native dirs)
-          find . -path "*/node_modules/*" -type d -name "__tests__" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "test" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "tests" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.test.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.spec.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          # Remove documentation files (not needed for runtime/bundling, but preserve CMakeLists.txt and native dirs)
-          find . -path "*/node_modules/*" -type f -name "*.md" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.txt" ! -name "CMakeLists.txt" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "LICENSE*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "CHANGELOG*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "README*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
+          # Never delete files inside node_modules by name: a folder called
+          # "test" can be runtime code (@openvtc/trust-tasks exports
+          # dist/vtc/policies/test/, and deleting it broke build 220's bundle).
+          # There is ~96 GB free at this point; those deletions saved nothing.
 
           # Clean up yarn cache (if not already cleaned)
           yarn cache clean 2>/dev/null || true
@@ -462,12 +584,26 @@ jobs:
 
             export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
-            echo "Accepting Android SDK licenses..."
-            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            echo "Accepting licenses and installing below."
 
-            echo "Installing Android SDK components..."
-            sdkmanager "platform-tools" "platforms;android-35" "build-tools;33.0.2" "ndk;25.1.8937393" > /dev/null 2>&1 || true
           fi
+
+          # Install exactly what the app declares (android/build.gradle), and
+          # fail here if it can't, instead of letting Gradle find out later.
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ] || [ -z "$CMAKE" ]; then
+            echo "❌ Could not read ndk/compileSdk/buildTools/cmake from android/build.gradle"; exit 1
+          fi
+          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK, CMake $CMAKE"
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
+          test -d "$ANDROID_HOME/ndk/$NDK" || { echo "❌ NDK $NDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-$SDK" || { echo "❌ android-$SDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/build-tools/$BT" || { echo "❌ build-tools $BT is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/cmake/$CMAKE" || { echo "❌ CMake $CMAKE is not installed"; exit 1; }
 
           # Set ANDROID_HOME and PATH for subsequent steps
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -490,7 +626,10 @@ jobs:
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           VERSION_CODE: ${{ env.APP_BUILD_NUMBER }}
           VERSION_NAME: ${{ env.APP_VERSION }}
-          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          # No reactNativeArchitectures override: build the four ABIs that
+          # gradle.properties lists, as the gated local release builds do. An
+          # arm64-only native build still packaged prebuilt libs for all four,
+          # so a 32-bit phone would get hermes but no libappmodules.so.
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
         run: |
           # Bundle React Native code
@@ -518,7 +657,7 @@ jobs:
           df -h
 
           # Build with Gradle (limit memory to reduce disk usage)
-          cd android && ./gradlew bundleRelease assembleRelease --no-parallel --stacktrace --max-workers=1
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
           # Aggressively clean up Gradle cache immediately after build (frees ~1-2GB)
           rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
@@ -549,34 +688,49 @@ jobs:
           echo "✅ Build verification complete"
 
       - name: Upload Android artifact
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
         uses: actions/upload-artifact@v4
         with:
           name: android-staging-${{ env.APP_BUILD_NUMBER }}
           path: app/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
+      # An internal-audience run uploads nothing to Google Play, so the build
+      # reaches a phone as this APK: the same code and signing key as the
+      # bundle, installable with adb. A phone that has the Play copy must
+      # uninstall it first (Play re-signs what it delivers).
+      - name: Upload the signed APK (internal audience only)
+        if: inputs.audience == 'internal'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-staging-apk-${{ env.APP_BUILD_NUMBER }}
+          path: app/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
             CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
+          fi
+
+          # A release's own Play notes win, as on the promotion, but only when
+          # this release changed the file, so one release's notes never ship
+          # with the next. Lines starting with # are the file's instructions.
+          PLAY_NOTES=.github/play/whats-new.md
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
+          if [ -s "$PLAY_NOTES" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$PLAY_NOTES" 2>/dev/null)" ]; then
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$PLAY_NOTES" | sed '/./,$!d' | head -c 500 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              CLEAN_MSG="$FROM_FILE"
+              echo "using $PLAY_NOTES"
+            fi
           fi
 
           {
@@ -585,8 +739,19 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
+      - name: Say who gets this build
+        env:
+          AUDIENCE: ${{ inputs.audience }}
+        run: |
+          if [ "${AUDIENCE}" = "internal" ]; then
+            echo "- Audience (Android): **internal only**. Nothing is uploaded to Google Play; side-load the APK artifact." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Audience (Android): **all testers** (Google Play internal testing)." >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      # inputs.audience is empty on a push to staging, which ships as usual.
       - name: Ship to Google Play Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
+        if: inputs.audience != 'internal'
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
@@ -605,22 +770,24 @@ jobs:
 
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
-    runs-on: macos-14
-    timeout-minutes: 60
+    # Repository variable DEPLOY_IOS=false switches the platform off.
+    if: vars.DEPLOY_IOS != 'false' && inputs.platform != 'android'
+    # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
+    # since 2026-04-28; macos-26 carries every Xcode 26 release.
+    runs-on: macos-26
+    environment: internal
+    timeout-minutes: 120
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
+          # The release-notes step reads the range since the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -645,10 +812,13 @@ jobs:
         with:
           working-directory: ./app
 
-      - name: Switch to correct Xcode
+      # Pinned to the Xcode used for local builds. Xcode 26.4+ (clang) rejects
+      # fmt 11.0.2's consteval format strings, which React Native 0.81 bundles.
+      - name: Select Xcode 26.3
         run: |
-          sudo xcode-select --switch /Applications/Xcode_16.2.app
-          sudo xcode-select -p
+          sudo xcode-select --switch /Applications/Xcode_26.3.app
+          xcode-select -p
+          xcodebuild -version
 
       - name: Cache pod dependencies
         id: pod-cache
@@ -730,24 +900,148 @@ jobs:
       - name: Install iOS dependencies
         working-directory: app
         run: |
-          export USE_HERMES=true
+          # '1', not 'true': ExpoModulesCore.podspec only treats '1' (or unset) as
+          # Hermes, and otherwise depends on React-jsc, which RN 0.81 does not ship.
+          export USE_HERMES=1
           yarn run ios:setup
 
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
+      - name: Record the native fingerprint
+        id: fingerprint
+        run: bash scripts/ota/record-fingerprint.sh ios "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-ios
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Bump Build No.
+        id: ios-version
         working-directory: app/ios
         env:
           CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
           MARKETING_VERSION: ${{ env.APP_VERSION }}
         run: |
+          # App Store Connect rejects a pre-release suffix (ITMS-90060), so iOS
+          # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
           agvtool new-version ${CURRENT_PROJECT_VERSION}
-          agvtool new-marketing-version ${MARKETING_VERSION}
+          agvtool new-marketing-version ${MARKETING_VERSION%%-*}
+          echo "version=${MARKETING_VERSION%%-*}" >> $GITHUB_OUTPUT
 
       - name: Create environment settings
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
+          # Push notifications: off unless this repository variable names the
+          # push gateway. Unset is what testers get: no prompt, no Settings
+          # switch, nothing registered (docs/plans/push-notifications-plan.md).
+          PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
+
+          # Push: on only when the variable names a gateway. TestFlight and App
+          # Store builds get production APNs tokens.
+          push=off
+          if [ -n "${PUSH_GATEWAY_URL}" ]; then
+            echo "PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL}" >>.env
+            echo "PUSH_APNS_ENVIRONMENT=production" >>.env
+            push=on
+          fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
+          echo "Push notifications (iOS): ${push}"
+          echo "- Push notifications (iOS): **${push}**" >>"$GITHUB_STEP_SUMMARY"
+
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (iOS): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh ios
+          echo "- Over-the-air updates (iOS): **off**" >>"$GITHUB_STEP_SUMMARY"
+
+      # The store target carries no push entitlement, so a tester's build asks
+      # Apple for nothing. A build that names a push gateway adds it here. The
+      # App Store profile must grant it, or the archive fails at signing with
+      # an error that does not name the cause; so the profile is read first.
+      - name: Add the push entitlement (push builds only)
+        if: ${{ vars.PUSH_GATEWAY_URL != '' }}
+        env:
+          PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          printf '%s' "${PROFILE_BASE64}" | base64 --decode >"${RUNNER_TEMP}/push-check.mobileprovision"
+          security cms -D -i "${RUNNER_TEMP}/push-check.mobileprovision" >"${RUNNER_TEMP}/push-check.plist"
+          aps=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "${RUNNER_TEMP}/push-check.plist" 2>/dev/null || true)
+          rm -f "${RUNNER_TEMP}/push-check.mobileprovision" "${RUNNER_TEMP}/push-check.plist"
+          if [ -z "${aps}" ]; then
+            echo "::error::PUSH_GATEWAY_URL is set, but the App Store provisioning profile (BUILD_PROVISION_PROFILE_BASE64) grants no aps-environment. Enable Push Notifications on the App ID, regenerate the profile and update the secret, or unset PUSH_GATEWAY_URL."
+            exit 1
+          fi
+          echo "The provisioning profile grants aps-environment=${aps}"
+          # 'development' here; the next step turns it into 'production'.
+          /usr/libexec/PlistBuddy -c 'Add :aps-environment string development' app/ios/AriesBifold/AriesBifold.entitlements
+          /usr/libexec/PlistBuddy -c 'Print :aps-environment' app/ios/AriesBifold/AriesBifold.entitlements
 
       - name: Update APS environment
         run: |
@@ -758,7 +1052,6 @@ jobs:
         with:
           certificate: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           certificate_password: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
           provisioning_profile: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
 
       - name: Clear Metro bundler cache
@@ -775,15 +1068,15 @@ jobs:
           # Also clear React Native cache
           rm -rf $TMPDIR/react-* 2>/dev/null || true
           rm -rf /tmp/react-* 2>/dev/null || true
-          # Clear any Xcode derived data that might have cached bundles
-          rm -rf ios/build 2>/dev/null || true
+          # Not ios/build: React Native 0.81's codegen writes its sources to
+          # ios/build/generated during pod install, and the archive compiles them.
+          # The archive's own derived data lives in ios/xbuild.
           echo "✅ Metro cache cleared"
 
+      # Signing is manual (certificate + profile from the secrets), so the archive
+      # needs no API key and no provisioning updates.
       - name: Archive build
         working-directory: app/ios
-        env:
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
         run: |
           xcodebuild \
           -workspace AriesBifold.xcworkspace \
@@ -792,74 +1085,144 @@ jobs:
           -xcconfig ../../release.xcconfig \
           -derivedDataPath xbuild \
           -archivePath ../../AriesBifold.xcarchive \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p9" \
-          -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-          -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
           -sdk iphoneos \
           archive
 
       - name: Export production archive
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/export-ios-archive
         with:
           export_options: "export-options-keyring.plist"
           ouput_artifact_ref: "ios-staging-artifact"
 
       - name: Upload iOS artifact
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: actions/upload-artifact@v4
         with:
           name: ios-staging-${{ env.APP_BUILD_NUMBER }}
           path: export/KeyRing.ipa
           retention-days: 30
 
-      - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
+      # Runs on every event. It once ran on a push only, so a build run by hand
+      # (every release/* build) shipped a version number as its notes (247, 248).
+      - name: Summarise what this build adds
         id: commit-msg-ios
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
+          set -u
+          # GitHub runs this with -e -o pipefail: a grep that matches nothing
+          # fails its whole pipeline, so every pipeline here ends in || true.
+          # Test changes to this step with: bash --noprofile --norc -e -o pipefail
+          # What a tester wants in "What to Test" is what CHANGED, not the subject
+          # line of whichever merge happened to be last. Most user-facing work lands
+          # in the bifold submodule, so summarise both: the wallet's own commits
+          # since the previous staging tag, and the submodule commits the pointer
+          # moved across. Fall back to the old behaviour if either range is unknown.
+          # This build's own tag is created after the build, so the previous
+          # release is the newest staging tag reachable from HEAD's parent.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
+
+          collect() { # $1 = repo dir, $2 = range
+            git -C "$1" log --no-merges --pretty=%s "$2" 2>/dev/null \
+              | grep -E '^(feat|fix)(\(|:)' \
+              | grep -vE '^(feat|fix)\((ci|e2e|test|tests|lab|harness|deps)\)' \
+              | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
+              | sed -E 's/[[:space:]]+$//' \
+              | awk 'NF && !seen[$0]++' || true
+          }
+
+          LINES=""
+          if [ -n "${PREV_TAG:-}" ] && git rev-parse -q --verify "$PREV_TAG^{commit}" >/dev/null; then
+            LINES=$(collect . "$PREV_TAG..HEAD")
+            OLD_PIN=$(git ls-tree "$PREV_TAG" bifold 2>/dev/null | awk '{print $3}')
+            NEW_PIN=$(git ls-tree HEAD bifold 2>/dev/null | awk '{print $3}')
+            if [ -n "${OLD_PIN:-}" ] && [ -n "${NEW_PIN:-}" ] && [ "$OLD_PIN" != "$NEW_PIN" ]; then
+              git -C bifold fetch -q --no-tags origin "$OLD_PIN" "$NEW_PIN" 2>/dev/null || true
+              if git -C bifold merge-base --is-ancestor "$OLD_PIN" "$NEW_PIN" 2>/dev/null; then
+                LINES=$(printf '%s\n%s\n' "$(collect bifold "$OLD_PIN..$NEW_PIN")" "$LINES" | awk 'NF && !seen[$0]++')
+              fi
+            fi
+          fi
+
+          if [ -n "$LINES" ]; then
+            KEPT=$(printf '%s\n' "$LINES" | head -8 | sed 's/^/• /')
+            REST=$(printf '%s\n' "$LINES" | tail -n +9 | grep -c . || true)
+            NOTES="$KEPT"
+            if [ "${REST:-0}" -gt 0 ]; then
+              NOTES=$(printf '%s\n• and %s more change(s)\n' "$NOTES" "$REST")
             fi
           else
+            # Nothing conventional in the range: keep the previous behaviour.
             COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
+            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
               COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+            fi
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+          fi
+
+          # A release's own notes win: the same plain-words bullets as the build's
+          # card on the command center. Used only when this release changed the
+          # file, so one release's notes are never shipped with the next.
+          NOTES_FILE=.github/testflight/whats-new.md
+          if [ -s "$NOTES_FILE" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$NOTES_FILE" 2>/dev/null)" ]; then
+            # Lines starting with # are the file's own instructions, not notes.
+            # App Store Connect's "What to Test" holds at most 4000 characters.
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              NOTES="$FROM_FILE"
+              echo "using $NOTES_FILE"
             fi
           fi
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
-          CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-          if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
-            CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
+          if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
+            NOTES="Build ${{ env.APP_BUILD_NUMBER }} of ${{ env.APP_VERSION }}."
           fi
 
+          echo "--- release notes ---"
+          printf '%s\n' "$NOTES"
           {
-            echo "release_notes<<EOF"
-            echo "$CLEAN_MSG"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+            echo "release_notes<<RELEOF"
+            printf '%s\n' "$NOTES"
+            echo "RELEOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Say who gets this build
+        env:
+          AUDIENCE: ${{ inputs.audience }}
+        run: |
+          if [ "${AUDIENCE}" = "internal" ]; then
+            echo "- Audience (iOS): **internal only**. TestFlight group \"KeyRing Internal Testers\"; add the build to the external group by hand once checked." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Audience (iOS): **all testers** (internal and external TestFlight groups)." >>"$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Ship to TestFlight Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
+          # An individual key (no issuer) or a team key (with APP_STORE_CONNECT_ISSUER_ID).
+          app_store_connect_key_id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           app_store_connect_issuer_id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_key_identifier: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
+          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ipa_path: export/KeyRing.ipa
+          bundle_id: asml.bkc.harvard.wallet
           version_code: ${{ env.APP_BUILD_NUMBER }}
-          version_name: ${{ env.APP_VERSION }}-staging
+          version_name: ${{ steps.ios-version.outputs.version }}
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
-          distribute_external: "false"
-          beta_groups: "KeyRing Internal Testers"
+          # Internal first, then the external maintainers' group. distribute.mjs
+          # submits an external group for Beta App Review automatically; only the
+          # first build of a version needs it. An internal-audience run names
+          # the internal group alone, so nothing is submitted for outside
+          # testers; the build is added to the external group by hand in App
+          # Store Connect once it has been checked. (inputs.audience is empty on
+          # a push to staging, which ships to both.)
+          beta_groups: ${{ inputs.audience == 'internal' && 'KeyRing Internal Testers' || 'KeyRing Internal Testers,openvtc testers' }}
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: github.event_name == 'push' && success()
+    # Runs when any platform shipped, so the next build's notes start after this one.
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
     steps:
@@ -867,12 +1230,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive
 
       - name: Extract version
         id: get_version
@@ -882,30 +1239,37 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
+        env:
+          IOS_FINGERPRINT: ${{ needs.build-ios-staging.outputs.ota_fingerprint }}
+          ANDROID_FINGERPRINT: ${{ needs.build-android-staging.outputs.ota_fingerprint }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           TAG="staging-v${{ steps.get_version.outputs.version }}-${{ env.APP_BUILD_NUMBER }}"
-          git tag -a "$TAG" -m "Staging build ${{ env.APP_BUILD_NUMBER }}"
+          # The native fingerprints the builds recorded (record-fingerprint.sh), read by
+          # ota-publish.yml (check-fingerprint.mjs) before it publishes for this build.
+          {
+            echo "Staging build ${{ env.APP_BUILD_NUMBER }}"
+            echo
+            [ -n "$IOS_FINGERPRINT" ] && echo "OTA fingerprint ios: $IOS_FINGERPRINT"
+            [ -n "$ANDROID_FINGERPRINT" ] && echo "OTA fingerprint android: $ANDROID_FINGERPRINT"
+            # Load-bearing: as the group's last command, a false `[ -n "" ] && …`
+            # would end the group non-zero and bash -e would fail the tag step.
+            true
+          } > "$RUNNER_TEMP/tag-message"
+          git tag -a "$TAG" -F "$RUNNER_TEMP/tag-message"
           git push origin "$TAG"
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: success() # Only notify on successful builds
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    environment: internal
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version
         id: get_version
@@ -915,22 +1279,11 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract commit message for Slack
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-slack
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -3 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
@@ -950,18 +1303,17 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Send Slack Notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data "{
-              \"text\": \"🚀 New Staging Build Available! Version: ${{ steps.get_version.outputs.version }}-staging, Build: ${{ env.APP_BUILD_NUMBER }}\",
+              \"text\": \"🚀 New Staging Build Available${{ inputs.audience == 'internal' && ' (internal testers only)' || '' }}! Version: ${{ steps.get_version.outputs.version }}-staging, Build: ${{ env.APP_BUILD_NUMBER }}\",
               \"blocks\": [
                 {
                   \"type\": \"header\",
                   \"text\": {
                     \"type\": \"plain_text\",
-                    \"text\": \"🚀 New Staging Build Available!\"
+                    \"text\": \"🚀 New Staging Build Available${{ inputs.audience == 'internal' && ' (internal testers only)' || '' }}!\"
                   }
                 },
                 {

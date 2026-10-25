@@ -24,6 +24,10 @@ if (typeof global.self === 'undefined') {
   global.self = global
 }
 
+// Keep recent console output for "Report this problem" (app/src/utils/problemReport.ts).
+// First, so it sees everything that logs after it.
+require('./src/utils/logBuffer').installLogBuffer()
+
 // =============================================================================
 // Step 1: Set up crypto.getRandomValues using react-native-get-random-values
 // This MUST come before any other crypto setup
@@ -96,6 +100,44 @@ if (typeof global.window !== 'undefined') {
 // Continue with remaining polyfills
 // =============================================================================
 require('fast-text-encoding') // TextEncoder/TextDecoder
+// credo-ts 0.7 decodes UTF-8 with `new TextDecoder('utf-8', { fatal: true })`
+// (TypedArrayEncoder.toUtf8String — every Askar KMS key creation goes through
+// it), and fast-text-encoding throws "the 'fatal' option is unsupported" on
+// construction, which surfaced as "Error during call to 'onInitializeContext'
+// method in module 'didcomm'" at the first agent start on the 0.7 hop. Keep
+// the fast decoder, accept the option, and enforce it the way the spec does
+// (invalid input throws a TypeError): a lossy decode replaces bad sequences
+// with U+FFFD and no longer round-trips byte-for-byte through the encoder.
+{
+  const FastTextDecoder = global.TextDecoder
+  const roundTripEncoder = new global.TextEncoder()
+  const toBytes = (input) =>
+    input instanceof Uint8Array
+      ? input
+      : ArrayBuffer.isView(input)
+      ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+      : new Uint8Array(input)
+  class TextDecoderWithFatal {
+    constructor(label = 'utf-8', options = {}) {
+      this._inner = new FastTextDecoder(label)
+      this.encoding = this._inner.encoding
+      this.fatal = !!options.fatal
+      this.ignoreBOM = !!options.ignoreBOM
+    }
+    decode(input, options) {
+      const text = this._inner.decode(input, options)
+      if (this.fatal && input !== undefined) {
+        const bytes = toBytes(input)
+        const back = roundTripEncoder.encode(text)
+        if (back.length !== bytes.length || back.some((b, i) => b !== bytes[i])) {
+          throw new TypeError('The encoded data was not valid.')
+        }
+      }
+      return text
+    }
+  }
+  global.TextDecoder = TextDecoderWithFatal
+}
 require('react-native-gesture-handler')
 require('@formatjs/intl-getcanonicallocales/polyfill')
 require('@formatjs/intl-locale/polyfill')
@@ -112,6 +154,13 @@ require('@formatjs/intl-relativetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/polyfill')
 require('@formatjs/intl-datetimeformat/locale-data/en')
 require('@formatjs/intl-datetimeformat/add-all-tz')
+// The polyfill formats in UTC until told the phone's zone (IN-58): tell it now
+// and whenever the app comes back to the foreground.
+require('./src/utils/deviceTimeZone').followDeviceTimeZone(
+  Intl,
+  () => require('react-native-localize').getTimeZone(),
+  require('react-native').AppState
+)
 require('reflect-metadata')
 
 // Buffer polyfill

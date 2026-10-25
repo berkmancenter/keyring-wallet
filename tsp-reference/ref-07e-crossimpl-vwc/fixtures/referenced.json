@@ -1,0 +1,34 @@
+{
+  "credential": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2",
+      "https://firstperson.network/credentials/dtg/v1"
+    ],
+    "credentialSubject": {
+      "digestMultibase": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+      "id": "did:example:observed-party",
+      "witnessContext": {
+        "event": "ref-07e cross-implementation",
+        "method": "session-based-challenge",
+        "sessionId": "urn:uuid:5e5510f0-0000-4000-8000-000000000001"
+      }
+    },
+    "issuer": "did:key:z6MkgG1WNcB7jHYaVXdnEDwqWJ8SH9jfdKYyBAcHP3NvVSL3",
+    "proof": {
+      "created": "2026-09-10T19:49:58Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z2jZ4LYTP5mpvWg7tDm81ouDuXP8LqQwQEocXenR1EMDZPquMrqypuvAXResC3pQNbr9yc2J6ZeqH8nq8nM2HxX5n",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6MkgG1WNcB7jHYaVXdnEDwqWJ8SH9jfdKYyBAcHP3NvVSL3#z6MkgG1WNcB7jHYaVXdnEDwqWJ8SH9jfdKYyBAcHP3NvVSL3"
+    },
+    "taskContext": "urn:uuid:5e5510f0-0000-4000-8000-000000000001",
+    "type": [
+      "VerifiableCredential",
+      "DTGCredential",
+      "WitnessCredential"
+    ],
+    "validFrom": "2026-09-10T19:49:58Z",
+    "validUntil": "2026-09-17T19:49:58Z"
+  }
+}

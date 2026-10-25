@@ -12,6 +12,10 @@ import {
   setupVrcConnectionHandler,
   setupTrustTasksInbound,
   setTspCarriageEnabled,
+  setDidCommV2Enabled,
+  findV2MediationRecord,
+  provisionV2Mediation,
+  startV2MessagePickup,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -23,12 +27,14 @@ import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
+import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { activate } from '@/utils/PushNotificationsHelper'
+import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
+import { chooseMediator } from '@/utils/mediatorPreference'
+import { singleFlight } from '@/utils/singleFlight'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
 /**
@@ -97,6 +103,54 @@ const configureMessagePickup = async (agent: Agent): Promise<void> => {
     undefined,
     DidCommMediatorPickupStrategy.PickUpV2
   )
+
+  // Second loop, Pickup 4.0 against the v2 mediator when one is provisioned
+  // (didcomm_v2_subtask.md V2 step 4). AFTER the v1 start: that start stops
+  // every running loop (the anti-stacking guard in the credo patch), the v4
+  // start does not, so this order leaves exactly one loop per mediator.
+  await startV2MessagePickup(agent)
+}
+
+/**
+ * Provision Coordinate Mediation 2.0 with the mediator named by
+ * MEDIATOR_V2_URL (a second deployment beside the v1 mediator — §7.1 of the
+ * subtask plan; the production v1 mediator is never upgraded in place).
+ * Idempotent, and a failure is logged rather than fatal: the wallet keeps
+ * working over v1, and v2 invitations fall back to unmediated routing.
+ *
+ * Exported (only) for the de-dup regression test — see
+ * useBCAgentSetup.test.ts. Not otherwise part of this module's public API.
+ */
+export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
+  const invitationUrl = Config.MEDIATOR_V2_URL
+  if (!enabled || !invitationUrl) {
+    // Logged so a device run shows WHY v2 mediation did not start: the flag
+    // (persisted developer setting) or the build (MEDIATOR_V2_URL in .env).
+    agent.config.logger.info(
+      `[TrustTasks:V2Mediation] not provisioning: flag=${enabled ? 'on' : 'off'}, MEDIATOR_V2_URL=${
+        invitationUrl ? 'set' : 'unset'
+      }`
+    )
+    return
+  }
+  try {
+    // configureMessagePickup (called before this, unconditionally) already
+    // started the v4 loop when a v2 mediation record pre-existed from a
+    // previous launch. Only start it here for a record THIS call newly
+    // provisions — startV2MessagePickup's PickUpV4 start has no anti-stacking
+    // guard (unlike the patched v1/v2 start), so calling it again on an
+    // already-provisioned record subscribed a second polling loop on every
+    // launch after the first.
+    const alreadyProvisioned = !!(await findV2MediationRecord(agent))
+    await provisionV2Mediation(agent, invitationUrl)
+    if (!alreadyProvisioned) {
+      await startV2MessagePickup(agent)
+    }
+  } catch (error) {
+    agent.config.logger.warn(
+      `[TrustTasks:V2Mediation] provisioning failed, continuing on v1 only: ${(error as Error).message}`
+    )
+  }
 }
 
 const useBCAgentSetup = () => {
@@ -143,6 +197,7 @@ const useBCAgentSetup = () => {
           walletSecret,
           indyNetworks: ledgers,
           mediatorInvitationUrl: mediatorUrl,
+          enableDidCommV2: !!store.developer.enableDidCommV2,
           txnCache: {
             capacity: 1000,
             expiryOffsetMs: 1000 * 60 * 60 * 24 * 7,
@@ -160,7 +215,7 @@ const useBCAgentSetup = () => {
 
       return newAgent
     },
-    [logger]
+    [logger, store.developer.enableDidCommV2]
   )
 
   const migrateIfRequired = useCallback(
@@ -226,9 +281,24 @@ const useBCAgentSetup = () => {
     [credDefs, schemas]
   )
 
-  const initializeAgent = useCallback(
+  const initializeAgentOnce = useCallback(
     async (walletSecret: WalletSecret): Promise<void> => {
-      const mediatorUrl = store.preferences.selectedMediator
+      // The stored mediator outlives the build that chose it: one an older
+      // build baked in can be retired, or unreadable to this Credo, and then
+      // every start fails in 'onInitializeContext' (7MCB-MF6G). Use the
+      // build's mediator instead, and store that choice (mediatorPreference).
+      const mediator = chooseMediator(
+        store.preferences.selectedMediator,
+        Config.MEDIATOR_URL,
+        store.preferences.availableMediators
+      )
+      if (mediator.replaced) {
+        logger.warn(
+          `Stored mediator can't be used (${mediator.replaced}); using this build's mediator and resetting the stored one`
+        )
+        dispatch({ type: DispatchAction.RESET_MEDIATORS })
+      }
+      const mediatorUrl = mediator.url
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
         const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
@@ -252,7 +322,24 @@ const useBCAgentSetup = () => {
       await migrateIfRequired(newAgent, walletSecret)
 
       logger.info('Initializing agent...')
-      await newAgent.initialize()
+      try {
+        await newAgent.initialize()
+      } catch (error) {
+        // Credo wraps module-init failures ("Error during call to
+        // 'onInitializeContext' method in module 'didcomm'") and puts the
+        // real reason on `cause`. Log the whole chain at info as well: on iOS
+        // dev builds console.error is captured by LogBox and never reaches
+        // the device log, so an error-only line leaves nothing to read.
+        const chain: string[] = []
+        let current: unknown = error
+        while (current instanceof Error && chain.length < 6) {
+          chain.push(`${current.name}: ${current.message}`)
+          current = (current as Error & { cause?: unknown }).cause
+        }
+        logger.error(`Agent initialization failed: ${chain.join(' <- ')}`)
+        logger.info(`[AgentInit] failure chain: ${chain.join(' <- ')}`)
+        throw error
+      }
 
       // Fix up R-Card template records stored by pre-credo-0.6 versions (no
       // proof) before any UI provider reads W3C credential records
@@ -260,6 +347,7 @@ const useBCAgentSetup = () => {
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)
+      await provisionV2MediationIfConfigured(newAgent, !!store.developer.enableDidCommV2)
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
@@ -276,6 +364,7 @@ const useBCAgentSetup = () => {
       // once per agent. Toggling Developer > Enable TSP envelope carriage takes
       // effect on outbound sends immediately, but needs a restart for inbound.
       setTspCarriageEnabled(!!store.developer.enableTspCarriage)
+      setDidCommV2Enabled(!!store.developer.enableDidCommV2)
 
       logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
       setupTrustTasksInbound(newAgent)
@@ -287,20 +376,16 @@ const useBCAgentSetup = () => {
         void runDataIntegritySelfTest(newAgent)
       }
 
-      // DISABLED: Push notifications disabled — no server backend yet
-      // if (store.preferences.usePushNotifications) {
-      //   logger.info('Activating push notifications...')
-      //   activate(newAgent)
-      // }
-
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
     },
     [
       store.preferences.selectedMediator,
+      store.preferences.availableMediators,
+      dispatch,
       store.developer.enableTspCarriage,
-      // store.preferences.usePushNotifications, // DISABLED: Push notifications disabled
+      store.developer.enableDidCommV2,
       logger,
       indyLedgers,
       createNewAgent,
@@ -310,10 +395,22 @@ const useBCAgentSetup = () => {
     ]
   )
 
+  // One agent start at a time. Resetting a stored mediator that can't be used
+  // (just above) changes the preferences this callback depends on, so it is
+  // rebuilt mid-start; the navigator then remounts Splash with the new one, and
+  // the fresh Splash starts the agent again while the first start still runs.
+  // Two or three starts opened the same Askar store at once, and one read it
+  // half-created ("no such table: config"). Every phone whose stored mediator
+  // is not the build's (a mediator move) takes that reset on its next start.
+  // The guard is kept in a ref here, outside the rebuilt callback: a call made
+  // while a start is in flight waits for that start instead of beginning one.
+  const initializeInFlight = useRef<Promise<void> | null>(null)
+  const initializeAgent = useMemo(() => singleFlight(initializeInFlight, initializeAgentOnce), [initializeAgentOnce])
+
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {
       try {
-        await agent.shutdown()
+        await shutdownAgent(agent)
       } catch (error) {
         logger.error(`Error shutting down agent with shutdownAndClearAgentIfExists: ${error}`)
       } finally {

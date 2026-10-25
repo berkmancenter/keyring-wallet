@@ -1,0 +1,260 @@
+diff --git a/build/modules/dcql/DcqlService.mjs b/build/modules/dcql/DcqlService.mjs
+index bc329b1bfe0d78606f55985a15689d8e1f4beada..2ac65cebbbe6a4d4d7016d817d67305dd33fae73 100644
+--- a/build/modules/dcql/DcqlService.mjs
++++ b/build/modules/dcql/DcqlService.mjs
+@@ -78,9 +78,13 @@ let DcqlService = class DcqlService {
+ 			allRecords.push(...w3cRecords);
+ 		}
+ 		if (formats.has("ldp_vc")) {
++			// KEYRING PATCH: upstream copy-pastes the jwt_vc_json branch's
++			// condition here (c.format === "jwt_vc_json"), so this $or filter
++			// is always empty for ldp_vc queries and no W3C JSON-LD credential
++			// is ever found — fixed to check ldp_vc, matching the branch it's in.
+ 			const w3cRecords = await w3cCredentialRepository.findByQuery(agentContext, {
+ 				claimFormat: ClaimFormat.LdpVc,
+-				$or: dcqlQuery.credentials.flatMap((c) => c.format === "jwt_vc_json" ? c.meta.type_values : []).map((typeValues) => ({ expandedTypes: typeValues }))
++				$or: dcqlQuery.credentials.flatMap((c) => c.format === "ldp_vc" ? c.meta.type_values : []).map((typeValues) => ({ expandedTypes: typeValues }))
+ 			});
+ 			allRecords.push(...w3cRecords);
+ 		}
+diff --git a/build/modules/dids/domain/service/ServiceTransformer.mjs b/build/modules/dids/domain/service/ServiceTransformer.mjs
+index cd489f8100e902595bc798cedabba35b64678444..5a055369da591f2d892986793f6e855ec5d146df 100644
+--- a/build/modules/dids/domain/service/ServiceTransformer.mjs
++++ b/build/modules/dids/domain/service/ServiceTransformer.mjs
+@@ -25,9 +25,37 @@ const serviceTypes = {
+ *   private service: Service
+ * }
+ */
++// DID Core allows `service.type` to be a string OR a set of strings, and
++// Credo's classes only accept a string: `DidDocumentService.type` carries a
++// plain `@IsString()`, so a document declaring `type: ["DIDCommMessaging"]`
++// fails class validation and the WHOLE document is discarded — the caller sees
++// only `notFound`. Measured 2026-09-20 against the VTA Farm, whose mediator
++// declares `#service` as `["DIDCommMessaging"]` and `#auth` as
++// `["Authentication"]`; the wallet could not resolve its mediator at all.
++//
++// The producer is conformant, so the fix belongs here. A single-element array
++// is collapsed to its string before the JSON reaches the class, which is the
++// shape every consumer already expects: validation passes, and equality checks
++// such as `service.type === DidCommV2Service.type` keep working. Longer arrays
++// are left alone rather than guessed at — picking one of several types is a
++// decision this transformer has no basis to make, and DID Core gives no
++// precedence rule.
++//
++// Note `serviceTypes[serviceJson.type]` already selects the right class for an
++// array, because indexing coerces `["DIDCommMessaging"]` to the same string.
++// It was never the lookup that failed, only the validation afterwards.
++function normalizeServiceType(serviceJson) {
++	if (!serviceJson || !Array.isArray(serviceJson.type)) return serviceJson;
++	if (serviceJson.type.length !== 1 || typeof serviceJson.type[0] !== "string") return serviceJson;
++	return {
++		...serviceJson,
++		type: serviceJson.type[0]
++	};
++}
+ function ServiceTransformer() {
+ 	return Transform(({ value }) => {
+-		return value?.map((serviceJson) => {
++		return value?.map((rawServiceJson) => {
++			const serviceJson = normalizeServiceType(rawServiceJson);
+ 			let serviceClass = serviceTypes[serviceJson.type] ?? DidDocumentService;
+ 			if (serviceJson.type === DidCommV2Service.type && "serviceEndpoint" in serviceJson && typeof serviceJson.serviceEndpoint === "string") serviceClass = LegacyDidCommV2Service;
+ 			return JsonTransformer.fromJSON(serviceJson, serviceClass);
+diff --git a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+index 8666aae8f74ea09b74d0f7d109b05ebd6b85d054..450c12a71361cea8783b6dccf0a8151a30336c03 100644
+--- a/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
++++ b/build/modules/dif-presentation-exchange/DifPresentationExchangeService.mjs
+@@ -21,6 +21,7 @@ import { W3cCredentialRepository } from "../vc/repository/W3cCredentialRepositor
+ import { purposes } from "../vc/linked-data-proofs/adapters/jsonld-signatures-adapter.mjs";
+ import { SignatureSuiteRegistry } from "../vc/linked-data-proofs/SignatureSuiteRegistry.mjs";
+ import { W3cCredentialService } from "../vc/W3cCredentialService.mjs";
++import { CREDENTIALS_CONTEXT_V2_URL } from "../vc/constants.mjs";
+ import "../vc/index.mjs";
+ import { MdocDeviceResponse } from "../mdoc/MdocDeviceResponse.mjs";
+ import { MdocApi } from "../mdoc/MdocApi.mjs";
+@@ -125,13 +126,15 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 					typeSupportsSelectiveDisclosure: true,
+ 					type: `DataIntegrityProof.${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`
+ 				} : {};
++				const basePresentationPayload = this.getVc2BasePresentationPayload(presentationToCreate);
+ 				const verifiablePresentationResult = await this.pex.verifiablePresentationFrom(presentationDefinitionForSubject, credentialsForPresentation, this.getPresentationSignCallback(agentContext, presentationToCreate), {
+ 					proofOptions: {
+ 						challenge,
+ 						domain,
+ 						...extraProofOptions
+ 					},
+-					presentationSubmissionLocation
++					presentationSubmissionLocation,
++					...basePresentationPayload
+ 				});
+ 				verifiablePresentationResultsWithFormat.push({
+ 					verifiablePresentationResult,
+@@ -233,6 +236,14 @@ let DifPresentationExchangeService = class DifPresentationExchangeService {
+ 		});
+ 		return validDescriptorFormat && credentialsAreSignedWithAnonCredsW3c;
+ 	}
++	getVc2BasePresentationPayload(presentationToCreate) {
++		if (presentationToCreate.claimFormat !== ClaimFormat.LdpVp) return void 0;
++		const allV2 = presentationToCreate.verifiableCredentials.every(({ credential }) => {
++			const firstCredential = credential.firstCredential;
++			return firstCredential.claimFormat === ClaimFormat.LdpVc && firstCredential.contexts?.[0] === CREDENTIALS_CONTEXT_V2_URL;
++		});
++		return allV2 ? { basePresentationPayload: { "@context": [CREDENTIALS_CONTEXT_V2_URL] } } : void 0;
++	}
+ 	getPresentationSignCallback(agentContext, presentationToCreate) {
+ 		return async (callBackParams) => {
+ 			const { presentation: presentationInput, options, presentationDefinition, presentationSubmission } = callBackParams;
+diff --git a/build/modules/vc/W3cCredentialServiceOptions.d.mts b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+index 99be0e96d817fc430b95d2179782ccd2b52f2988..f5c237a87d4899e3c2875501b4283fe245897959 100644
+--- a/build/modules/vc/W3cCredentialServiceOptions.d.mts
++++ b/build/modules/vc/W3cCredentialServiceOptions.d.mts
+@@ -159,6 +159,13 @@ interface W3cJwtVerifyPresentationOptions extends W3cVerifyPresentationOptionsBa
+ interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentationOptionsBase {
+   presentation: W3cJsonLdVerifiablePresentation;
+   purpose?: ProofPurpose;
++  /**
++   * keyring: whether the presentation's holder proof must authenticate the
++   * credentialSubject of every included credential (upstream default: true).
++   * Keyring's VRC presenter is the credential's ISSUER, not its subject, so the
++   * witness ceremony verifies party membership itself and passes false.
++   */
++  verifyCredentialSubjectAuthentication?: boolean;
+ }
+ type W3cStoreCredentialOptions = {
+   record: W3cCredentialRecord;
+diff --git a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+index f3bc5c1c1ac97b732e9160397a564fb15a752721..c3b3078ef81ae614541983598dff5b1e9c8b9c86 100644
+--- a/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
++++ b/build/modules/vc/linked-data-proofs/W3cJsonLdCredentialService.mjs
+@@ -187,7 +187,7 @@ let W3cJsonLdCredentialService = class W3cJsonLdCredentialService {
+ 			const holderVerificationMethods = asArray(options.presentation.proof).filter((proof) => proof.proofPurpose === holderProofPurpose).map((proof) => proof.verificationMethod);
+ 			const credentialValidations = credentials.map((credential) => {
+ 				const credentialSubjectIds = credential.credentialSubjectIds;
+-				const credentialSubjectAuthentication = credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
++				const credentialSubjectAuthentication = options.verifyCredentialSubjectAuthentication === false || credentialSubjectIds.length === 0 || holderVerificationMethods.some((verificationMethod) => validateCredentialSubjectAuthentication(credentialSubjectIds, verificationMethod).isValid) ? { isValid: true } : {
+ 					isValid: false,
+ 					error: new CredoError("Presentation does not authenticate the credentialSubject of one or more included credentials")
+ 				};
+diff --git a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
+index 3b5714feb609a171e24f3720a364e162aba19ef5..22a1c2a7dc7ef2bfd72901e45b9521313df13084 100644
+--- a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
++++ b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.mjs
+@@ -1,3 +1,4 @@
++import { AnonCredsW3cCredentialProof as KeyringGenericDataIntegrityProof } from "../../anoncreds-w3c-credential/AnonCredsW3cCredentialProof.mjs";
+ 
+ 
+ import { CredoError } from "../../../../error/CredoError.mjs";
+@@ -20,7 +21,7 @@ import { ValidateNested } from "class-validator";
+ //#region src/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiableCredential.ts
+ const mapProofOptionToProofClass = (proof) => {
+ 	if ("cryptosuite" in proof) {
+-		if (proof.type !== "DataIntegrityProof" || proof.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) throw new CredoError(`W3C credential proofs only support DataIntegrityProof with cryptosuite ${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`);
++		if (proof.type === "DataIntegrityProof" && proof.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) return new KeyringGenericDataIntegrityProof(proof); // KEYRING PATCH: generic Data Integrity proofs (eddsa-jcs-2022, eddsa-rdfc-2022) keep the 0.7.0 mapping; main moved them to w3c-di, which Keyring does not use yet
+ 		return new AnonCredsW3cCredentialProof(proof);
+ 	}
+ 	return new LinkedDataProof(proof);
+diff --git a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiablePresentation.mjs b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiablePresentation.mjs
+index 13545ed48cb92ec376c899c081680892793730c5..ee9cc8cb47774be1f1cb99045a6533f1d08129f8 100644
+--- a/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiablePresentation.mjs
++++ b/build/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiablePresentation.mjs
+@@ -1,3 +1,4 @@
++import { AnonCredsW3cCredentialProof as KeyringGenericDataIntegrityProof } from "../../anoncreds-w3c-credential/AnonCredsW3cCredentialProof.mjs";
+ 
+ 
+ import { CredoError } from "../../../../error/CredoError.mjs";
+@@ -20,7 +21,7 @@ import "../../models/index.mjs";
+ //#region src/modules/vc/linked-data-proofs/models/W3cJsonLdVerifiablePresentation.ts
+ const mapProofOptionToProofClass = (proof) => {
+ 	if ("cryptosuite" in proof) {
+-		if (proof.type !== "DataIntegrityProof" || proof.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) throw new CredoError(`W3C credential proofs only support DataIntegrityProof with cryptosuite ${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`);
++		if (proof.type === "DataIntegrityProof" && proof.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) return new KeyringGenericDataIntegrityProof(proof); // KEYRING PATCH: generic Data Integrity proofs (eddsa-jcs-2022, eddsa-rdfc-2022) keep the 0.7.0 mapping; main moved them to w3c-di, which Keyring does not use yet
+ 		return new AnonCredsW3cCredentialProof(proof);
+ 	}
+ 	return new LinkedDataProof(proof);
+diff --git a/build/modules/vc/linked-data-proofs/proof-ops/ProofTransformer.mjs b/build/modules/vc/linked-data-proofs/proof-ops/ProofTransformer.mjs
+index d8a241061c30195ad4d0f750d5bf7817878ec8fb..b45ebcfb2470a423ccf681fbf6d94bfaa5c1b299 100644
+--- a/build/modules/vc/linked-data-proofs/proof-ops/ProofTransformer.mjs
++++ b/build/modules/vc/linked-data-proofs/proof-ops/ProofTransformer.mjs
+@@ -1,3 +1,4 @@
++import { AnonCredsW3cCredentialProof as KeyringGenericDataIntegrityProof } from "../../anoncreds-w3c-credential/AnonCredsW3cCredentialProof.mjs";
+ 
+ 
+ import { CredoError } from "../../../../error/CredoError.mjs";
+@@ -14,7 +15,7 @@ function ProofTransformer() {
+ 		if (type === TransformationType.PLAIN_TO_CLASS) {
+ 			const plainOptionsToClass = (v) => {
+ 				if ("cryptosuite" in v) {
+-					if (v.type !== "DataIntegrityProof" || v.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) throw new CredoError(`W3C credential proofs only support DataIntegrityProof with cryptosuite ${ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE}`);
++					if (v.type === "DataIntegrityProof" && v.cryptosuite !== ANONCREDS_W3C_CREDENTIAL_CRYPTOSUITE) return new KeyringGenericDataIntegrityProof(v); // KEYRING PATCH: generic Data Integrity proofs (eddsa-jcs-2022, eddsa-rdfc-2022) keep the 0.7.0 mapping; main moved them to w3c-di, which Keyring does not use yet
+ 					return plainToInstance(AnonCredsW3cCredentialProof, v);
+ 				}
+ 				return plainToInstance(LinkedDataProof, v);
+diff --git a/build/modules/vc/models/credential/W3cCredential.d.mts b/build/modules/vc/models/credential/W3cCredential.d.mts
+index 6ecceb006c81a8f7dba8500b18e217c3d6b8c192..6df40bc454dec759ac878f20cb4eec9e74b742d0 100644
+--- a/build/modules/vc/models/credential/W3cCredential.d.mts
++++ b/build/modules/vc/models/credential/W3cCredential.d.mts
+@@ -10,7 +10,7 @@ interface W3cCredentialOptions {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuerOptions;
+-  issuanceDate: string;
++  issuanceDate?: string;
+   expirationDate?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubjectOptions>;
+   credentialStatus?: W3cCredentialStatus;
+@@ -22,7 +22,7 @@ declare class W3cCredential {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuer;
+-  issuanceDate: string;
++  issuanceDate?: string;
+   expirationDate?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubject>;
+   credentialSchema?: SingleOrArray<W3cCredentialSchema>;
+diff --git a/build/modules/vc/models/credential/W3cCredential.mjs b/build/modules/vc/models/credential/W3cCredential.mjs
+index f3ad42c21d31e28b0f297416f17d7e560454082d..783cae8b47016777ac82d96f599319e8cfd63b3d 100644
+--- a/build/modules/vc/models/credential/W3cCredential.mjs
++++ b/build/modules/vc/models/credential/W3cCredential.mjs
+@@ -66,7 +66,13 @@ __decorate([
+ 	IsW3cIssuer(),
+ 	__decorateMetadata("design:type", Object)
+ ], W3cCredential.prototype, "issuer", void 0);
+-__decorate([IsRFC3339(), __decorateMetadata("design:type", String)], W3cCredential.prototype, "issuanceDate", void 0);
++// KEYRING PATCH (VCDM 2.0): issuanceDate is v1.1-only; VCDM 2.0 credentials
++// use validFrom instead, so the property must be optional to accept them.
++__decorate([
++	IsRFC3339(),
++	IsOptional(),
++	__decorateMetadata("design:type", String)
++], W3cCredential.prototype, "issuanceDate", void 0);
+ __decorate([
+ 	IsRFC3339(),
+ 	IsOptional(),
+diff --git a/build/modules/vc/validators.mjs b/build/modules/vc/validators.mjs
+index 426119e976ffe2f31744cc0ceba83f49e9056e32..9725a7dfa8225c08ad9af700e34f7c73059498f3 100644
+--- a/build/modules/vc/validators.mjs
++++ b/build/modules/vc/validators.mjs
+@@ -7,15 +7,21 @@ import { CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL, VERIFIABLE_CRED
+ import { ValidateBy, buildMessage, isString, isURL } from "class-validator";
+ 
+ //#region src/modules/vc/validators.ts
++// KEYRING PATCH (VCDM 2.0 over DIDComm JSON-LD): also accept the VCDM 2.0
++// context URL as the first @context entry, so v2-context credentials can be
++// parsed/validated by the v1 W3cCredential model used by the DIDComm jsonld
++// credential format. See https://www.w3.org/TR/vc-data-model-2.0/
++const CREDENTIALS_CONTEXT_V2_URL_PATCH = "https://www.w3.org/ns/credentials/v2";
+ function IsCredentialJsonLdContext(validationOptions) {
+ 	const allowString = validationOptions?.allowString ?? false;
+ 	const credentialContext = validationOptions?.credentialContext ?? CREDENTIALS_CONTEXT_V1_URL;
++	const acceptedContexts = credentialContext === CREDENTIALS_CONTEXT_V1_URL ? [CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL_PATCH] : [credentialContext];
+ 	return ValidateBy({
+ 		name: "IsCredentialJsonLdContext",
+ 		validator: {
+ 			validate: (value) => {
+-				if (!Array.isArray(value)) return allowString && isString(value) && value === credentialContext;
+-				if (value[0] !== credentialContext) return false;
++				if (!Array.isArray(value)) return allowString && isString(value) && acceptedContexts.includes(value);
++				if (!acceptedContexts.includes(value[0])) return false;
+ 				return value.every((v) => isString(v) && isURL(v) || isJsonObject(v));
+ 			},
+ 			defaultMessage: buildMessage((eachPrefix) => `${eachPrefix}$property must be an array of strings or objects, where the first item is the verifiable credential context URL.`, validationOptions)

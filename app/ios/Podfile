@@ -62,7 +62,10 @@ target 'AriesBifold' do
   end
   config = use_native_modules!
 
-  pod 'Firebase', :modular_headers => true
+  # CoreOnly: the umbrella 'Firebase' pod's default subspec adds FirebaseAnalytics
+  # (with ad-ID support), which nothing uses and which contacts Firebase
+  # Installations at launch. Messaging comes in through @react-native-firebase.
+  pod 'Firebase/CoreOnly', :modular_headers => true
   pod 'FirebaseCore', :modular_headers => true
   pod 'FirebaseCoreInternal', :modular_headers => true
   pod 'GoogleUtilities', :modular_headers => true

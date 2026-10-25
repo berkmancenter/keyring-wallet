@@ -1,0 +1,10 @@
+# Configuration for the workflow lint in quality.yml.
+self-hosted-runner:
+  # GitHub-hosted, but newer than actionlint 1.7.7's list of known labels.
+  labels:
+    - macos-26
+paths:
+  .github/workflows/quality.yml:
+    ignore:
+      # setup-python@v4 and cache@v3 still run; bumping them is a separate change.
+      - 'the runner of ".+" action is too old to run on GitHub Actions'

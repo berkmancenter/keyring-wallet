@@ -1,0 +1,15 @@
+{
+  "https://trustoverip.org/dtg/vocab#witnessed": {
+    "status": "active",
+    "objectKind": [
+      "digestMultibase"
+    ],
+    "taskContextRequired": true,
+    "minimumIssuerScope": "directed",
+    "additionalMembers": {
+      "witnessContext": {
+        "required": false
+      }
+    }
+  }
+}

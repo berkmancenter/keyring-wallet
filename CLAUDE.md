@@ -100,6 +100,15 @@ took a user catching it to surface (see `docs/plans/openvtc-integration-plan/202
 correction section). If `external/` doesn't have the clone yet, run
 `setup-external.mjs` rather than reaching for one elsewhere.
 
+## Proving VTI work, and watching upstream
+
+The `vti-lab-and-field` skill covers how VTI/vetting work is proven — the local
+stack we own versus the VTA Farm we don't, which claims each one can support,
+how a fixture deviation gets declared, and the practice of watching the
+upstream repos for changes that land obligations on us. Read it before running
+a VTI e2e, standing up the local stack, or recording anything in
+`docs/VTI_UPSTREAM_FINDINGS.md`.
+
 ## CodeGraph
 
 A CodeGraph MCP index (`.codegraph/`) is configured for this repo — prefer `codegraph_*` tools over grep for structural questions (symbol definitions, callers, impact analysis).

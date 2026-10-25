@@ -9,7 +9,11 @@
  * runner; this file is the CLI over it.
  */
 
-const { DEFAULT_PORT, startMediator, writeMediatorUrl } = require('./mediator-lifecycle')
+const {
+  DEFAULT_PORT,
+  startMediator,
+  writeMediatorUrl,
+} = require("./mediator-lifecycle");
 
 const HELP = `
 yarn mediator — run a local DIDComm mediator for Keyring
@@ -23,49 +27,69 @@ yarn mediator — run a local DIDComm mediator for Keyring
   --port <n>        Local port the mediator binds (default ${DEFAULT_PORT}).
   --fresh           Delete the mediator's wallet first: no connections, no
                     queued messages.
+  --didcomm-v2      Serve DIDComm v2 (Coordinate Mediation 2.0, Pickup 4.0)
+                    beside v1 and write MEDIATOR_V2_URL too. v1 is always
+                    served; existing wallets are unaffected.
   --no-env          Print MEDIATOR_URL instead of writing it to app/.env.
   --verbose         Pass through the mediator's debug logging.
-`
+`;
 
 function parseArgs(argv) {
-  const args = { port: DEFAULT_PORT, endpoint: undefined, fresh: false, writeEnv: true, verbose: false }
+  const args = {
+    port: DEFAULT_PORT,
+    endpoint: undefined,
+    fresh: false,
+    writeEnv: true,
+    verbose: false,
+    didcommV2: false,
+  };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]
-    if (arg === '--port') args.port = Number(argv[++i])
-    else if (arg === '--endpoint') args.endpoint = argv[++i]
-    else if (arg === '--fresh') args.fresh = true
-    else if (arg === '--no-env') args.writeEnv = false
-    else if (arg === '--verbose') args.verbose = true
-    else if (arg === '--help' || arg === '-h') args.help = true
-    else throw new Error(`unknown argument "${arg}" — run with --help`)
+    const arg = argv[i];
+    if (arg === "--port") args.port = Number(argv[++i]);
+    else if (arg === "--endpoint") args.endpoint = argv[++i];
+    else if (arg === "--fresh") args.fresh = true;
+    else if (arg === "--no-env") args.writeEnv = false;
+    else if (arg === "--verbose") args.verbose = true;
+    else if (arg === "--didcomm-v2") args.didcommV2 = true;
+    else if (arg === "--help" || arg === "-h") args.help = true;
+    else throw new Error(`unknown argument "${arg}" — run with --help`);
   }
   if (!Number.isInteger(args.port) || args.port < 1 || args.port > 65535) {
-    throw new Error('--port must be an integer between 1 and 65535')
+    throw new Error("--port must be an integer between 1 and 65535");
   }
-  return args
+  return args;
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2))
+  const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log(HELP)
-    return
+    console.log(HELP);
+    return;
   }
 
-  const mediator = await startMediator(args)
+  const mediator = await startMediator(args);
 
-  process.on('SIGINT', mediator.stop)
-  process.on('SIGTERM', mediator.stop)
-  mediator.process.on('exit', (code) => process.exit(code ?? 0))
+  process.on("SIGINT", mediator.stop);
+  process.on("SIGTERM", mediator.stop);
+  mediator.process.on("exit", (code) => process.exit(code ?? 0));
 
   if (args.writeEnv) {
-    const { created } = writeMediatorUrl(mediator.mediatorUrl)
-    if (created) console.log('[mediator] created app/.env from .env.sample')
-    console.log('[mediator] app/.env MEDIATOR_URL updated — build the app in another terminal')
+    const { created } = writeMediatorUrl(
+      mediator.mediatorUrl,
+      mediator.mediatorV2Url
+    );
+    if (created) console.log("[mediator] created app/.env from .env.sample");
+    console.log(
+      `[mediator] app/.env MEDIATOR_URL${
+        mediator.mediatorV2Url ? " and MEDIATOR_V2_URL" : ""
+      } updated — build the app in another terminal`
+    );
   }
 }
 
 main().catch((error) => {
-  console.error(`[mediator] ${error instanceof Error ? error.message : String(error)}`)
-  process.exit(1)
-})
+  console.error(
+    `[mediator] ${error instanceof Error ? error.message : String(error)}`
+  );
+  process.exit(1);
+});

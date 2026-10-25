@@ -31,6 +31,8 @@ import WalletFront from '@assets/img/wallet-front.svg'
 import CredentialCard from '@assets/img/credential-card.svg'
 import WalletExportIcon from '@assets/img/wallet-export.svg'
 import WalletImportIcon from '@assets/img/wallet-import.svg'
+
+import NotificationsIllustration from './components/NotificationsIllustration'
 import { KeyRingThemeNames } from '@/constants'
 import GradientHeaderBackground from './components/GradientHeaderBackground'
 
@@ -918,6 +920,8 @@ export const Assets: IAssets = {
     credentialCard: CredentialCard as React.FC,
     walletExport: WalletExportIcon as React.FC,
     walletImport: WalletImportIcon as React.FC,
+    // Keyring's own picture, drawn from the theme (bifold's was another wallet's artwork).
+    pushNotificationImg: NotificationsIllustration,
   },
 }
 

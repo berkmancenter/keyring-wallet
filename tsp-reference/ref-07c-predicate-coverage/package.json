@@ -1,0 +1,15 @@
+{
+  "name": "ref-07c-predicate-coverage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "@scure/base": "^2.3.0",
+    "jsonld": "^8.3.3"
+  }
+}

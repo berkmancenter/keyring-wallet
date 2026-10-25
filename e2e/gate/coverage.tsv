@@ -1,0 +1,157 @@
+leg	row	anchor
+agents	IN-114 no "key not found" with several agents	agent
+agents	R1 add + keep	agent
+agents	R1 switch to B	agent
+agents	R2 Join on B goes ahead with B	join
+agents	R4 unlink B	agent
+agents	R4 unlink the last	agent
+agents	R5 refusal on the card by itself	agent
+agents	R7 C says it is A's	agent
+agents	R7 use A	agent
+agents	add-done-lands	agent
+agents	add-existing-refused	agent
+agents	add-existing-scan-refused	agent
+agents	add-existing-switch	agent
+agents	add-fail-return-back	agent
+agents	add-fail-return-scanner	agent
+agents	add-fail-return-tab	agent
+agents	agents-link-a	agent
+agents	persona-in-own-context	agent
+agents	swap-held-add-returns	agent
+agents	wallet-both-cards	join
+agents	wallet-hidden-unlinked	agent
+devices	community-agent-refused	agent
+devices	devices ACL label is the name	agent
+devices	devices name defaults to "Computer"	agent
+devices	devices rename changes the label	agent
+devices	in124 My devices loads or says it didn't answer (15 s)	agent
+devices	scanbeside another agent is offered beside, not refused	agent
+kk	desk-finished-identity	vetting
+kk	foot-kk-applicant-community-card	vetting
+kk	foot-kk-applicant-request-card	vetting
+kk	foot-kk-vetter-desk	vetting
+kk	foot-kk-vetter-desk-finished	vetting
+kk	foot-kk-vetter-step4	vetting
+kk	id305	vetting
+kk	kk-link	vetting
+kk	kk-vetting	vetting
+linkfail	swap-held	agent
+linkfail	swap-held-no-retry	agent
+linkfail	swap-held-rescan	agent
+linkfail	swap-held-try-again	agent
+linkfail	swap-no-answer	agent
+linkfail	swap-refused	agent
+linkfail	swap-refused-no-try-again	agent
+linkfail	swap-refused-rescan	agent
+linkwait	create-wait-no-lock	agent
+linkwait	create-window-paused	agent
+linkwait	create-window-paused-short	agent
+linkwait	link-address-resume	agent
+linkwait	link-address-resume-later	agent
+linkwait	link-no-answer	agent
+lostreq	card-status-unreachable-notice	join
+lostreq	lost-ask-offline-error	join
+p1	317 Approve asks the owner	agent
+p1	317 Decline does not ask	agent
+p1	317 cancel keeps it waiting	agent
+p1	ANDROID-NOTIF-CHANNEL	other
+p1	ANDROID-NOTIF-MESSAGE-WAKE	other
+p1	approvals	agent
+p1	card in plain words	agent
+p1	card says what it would do	agent
+p1	card technical name behind the toggle	agent
+p1	p1-link	agent
+p1	p1-tui-seated	vetting
+p1	p1-tui-vets	vetting
+p1	push stays on through Approve	agent
+pnmlink	link-again-rescan	agent
+pnmlink	pnmqr-scan	agent
+pnmlink	scan-agent-no-rest	agent
+relaunch-android	relaunch-keys-fetched-on-use	agent
+relaunch-android	relaunch-linked	agent
+relaunch-android	relaunch-member	agent
+relaunch-android	relaunch-two-agents	agent
+relaunch-android	update-agents-kept-android	agent
+relaunch-android	update-agents-linked-android	agent
+relaunch-android	update-no-missing-key	other
+relaunch-android	update-persona-used-android	agent
+smoke-android	add-then-back-android	other
+smoke-android	agent-intro-centred-android	agent
+smoke-android	android-install-cold-launch	other
+smoke-android	android-no-notification-prompt	other
+smoke-android	android-no-token-activity-plain-launch	other
+smoke-android	android-no-token-activity-through-onboarding	other
+smoke-android	android-onboarding-home	agent
+smoke-android	android-push-off	other
+smoke-android	chip-row-fits-android	other
+smoke-android	chip-strip-edges-android	other
+smoke-android	header-corners-android	other
+smoke-android	home-sections-android	other
+smoke-android	join-way-in-android	join
+smoke-android	settings-section-rules-android	other
+smoke-android	signin-unjoined-names-community	signin
+smoke-android	wrong-pin-clears	other
+smoke-ios	add-then-back-ios	other
+smoke-ios	agent-icon-size	other
+smoke-ios	agent-intro-centred-ios	agent
+smoke-ios	agent-slide-words	other
+smoke-ios	chip-row-fits-ios	other
+smoke-ios	chip-strip-edges-ios	other
+smoke-ios	header-corners-ios	other
+smoke-ios	home-sections-ios	other
+smoke-ios	ios-cold-launch-no-crash	other
+smoke-ios	ios-no-fcm-token-activity-at-launch	other
+smoke-ios	ios-no-firebase-installations-or-fcm-host-at-launch	other
+smoke-ios	ios-no-remote-notification-registration-at-launch	other
+smoke-ios	ios-onboarding-home	agent
+smoke-ios	ios-push-off	other
+smoke-ios	join-way-in-ios	join
+smoke-ios	layout-welcome	other
+smoke-ios	settings-section-rules-ios	other
+smoke-ios	signin-unjoined-names-community	signin
+smoke-ios	welcome-learn-more	other
+smoke-ios	wrong-pin-clears	other
+testreq	approve clears it	agent
+testreq	no lock: refusal shown	agent
+testreq	notification + Requests	agent
+testreq	switch off	agent
+testreq	switch on (owner check)	agent
+testreq	test request held	agent
+testreq	testreq-link	agent
+update-android	update-agents-kept-android	agent
+update-android	update-agents-linked-android	agent
+update-android	update-community-kept-android	agent
+update-android	update-no-missing-key	other
+update-android	update-prev-linked	agent
+update-android	update-prev-member	agent
+update-android	update-prev-two-agents	agent
+update-ios	update-agents-kept-ios	agent
+update-ios	update-agents-linked-ios	agent
+update-ios	update-no-missing-key	other
+update-ios	update-prev-linked	agent
+waiting	cards-back-new-install	join
+waiting	cards-kept-on-agent	join
+waiting	choose-how-to-join	join
+waiting	community-card-waiting	join
+waiting	foot-community-card-waiting	join
+waiting	foot-join-actions	join
+waiting	foot-join-standing-identity	join
+waiting	join-actions-scroll	join
+waiting	join-approved-card	join
+waiting	join-approved-listed	join
+waiting	join-approved-role-card	join
+waiting	join-approved-wallet	join
+waiting	join-done-highlight	join
+waiting	join-done-member	join
+waiting	join-persona-id	join
+waiting	join-request-is-mine	join
+waiting	join-request-sent	join
+waiting	join-standing-identity	join
+waiting	join-waiting-no-ways	join
+waiting	left-scan-other-ticket	join
+waiting	member-join-different-community	join
+waiting	member-scan-other-ticket	join
+waiting	member-vmc-sent	join
+waiting	outside-join-meet-vetter	join
+waiting	outside-join-vetting-not-supported	join
+waiting	relink-wiped-app	agent

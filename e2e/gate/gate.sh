@@ -1,0 +1,580 @@
+#!/bin/bash
+# The release gate runner. See README.md beside it.
+#
+#   gate.sh run --pin <wallet-sha> [--legs a,b] [--serial]   every leg (or some), on that commit's CI builds
+#   gate.sh run --pin <sha> --legs a [--rows r1,a:r2]        only those rows of those legs (kind rows, never the gate)
+#   gate.sh rerun <run-id> --only-failed                      the rows that failed or never ran, same builds
+#   gate.sh dry --golden [--legs a,b]                         the drivers on the shipped build ($GATE_HOME/golden)
+#   gate.sh nightly [--pin <wallet-sha>]                      the nightly legs ($LEGS_NIGHTLY), on main's newest green build
+#   gate.sh watch --pr <n>                                    run when that pin PR merges and its builds are green
+#   gate.sh watch --main                                      a gate for every new green push build of main, for ever
+#   gate.sh report <run-id>                                   rows per leg, with wall-clock
+#   gate.sh summary <run-id>                                  write the run's summary.json (the board's feed) again
+#   gate.sh changed --pin <sha> (--range a..b | --files f,…)  only the legs a fix touches: a fast check, not the gate
+#   gate.sh pause [reason]                                    legs running finish; no further leg or gate starts
+#   gate.sh resume                                            lift a pause (then: rerun <run> --only-failed)
+# Lead our own process group, so a stop passed to "the group" (stop_forward's kill -TERM 0) reaches the gate and
+# nothing else: a gate started from a shell without job control (an agent's command, a script) would otherwise share
+# that shell's group with whatever else it started. A terminal already makes each job a group leader, so ctrl-C still
+# works there. setpgrp, not setsid: the terminal session is kept.
+if [ -z "${GATE_PGRP:-}" ] && [ "$(ps -o pgid= -p $$ | tr -d ' ')" != "$$" ]; then
+  GATE_PGRP=1 exec perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash "$0" "$@"
+fi
+. "$(dirname "$0")/lib.sh"
+
+# Legs in the order they run on one platform, and which device each needs.
+LEGS_IOS="kk p2 smoke-ios update-ios signin-ios pair-ios"
+LEGS_ANDROID="p1 testreq agents waiting lostreq smoke-android devices update-android relaunch-android linkwait refused hv signin"
+# Legs that run only when named (--legs signin), never in `all`: `signin` (Android), whose approval raises the UV key's
+# biometric-only prompt, and the emulator's fingerprint HAL token is read as expired (1019-1416, 1019-1514), so it cannot
+# pass there; `signin-ios` is the gate's member sign-in proof, and an Android one needs a real phone. A leg has to be in
+# a leg list to be scheduled at all (run_legs), so it stays in LEGS_ANDROID and is kept out of `all` here.
+LEGS_BY_NAME_ONLY="signin"
+# push2 (push off, then on, with two agents) is out of the default legs until push is fully integrated (Alberto, 10-07); run it with --legs push2.
+# Legs that change a shared runner for every phone (a swap-key rule or policy): run alone, after both platforms.
+LEGS_SOLO="linkfail pnmlink"
+# The core journeys, Keyring to Keyring (Alberto 10-19: "what people will mostly use today is joining, signing in, join
+# by vetting (hidden and non hidden)"), and the legs that prove each. Scoped by the coordinator on 10-19 to exactly these
+# four Keyring-to-Keyring journeys for this release; the 10-14 list's Farm connect and mediator are not in it (their
+# legs, e.g. the smoke legs' link rows, stay ordinary verdicts). A full gate (kind=gate) in which one of them did
+# not run, skipped every row, or passed only informationally is not green (run-summary.mjs coreMissing). Sign-in is
+# signin-ios alone: the Android `signin` leg runs by name only (the emulator's fingerprint HAL), so its absence is an
+# ordinary SKIP. journey:leg[,leg]@row entries: the row after @ decides the journey and must PASS, so a leg that
+# passes while that row SKIPs (or never ran) proves nothing; each journey names its own, so a future SKIP path cannot
+# silently turn it "proven".
+CORE_JOURNEYS="vetting-named:kk@kk-vetting vetting-hidden:hv@hv-admitted signin:signin-ios@signin-approved join:waiting@join-approved-listed"
+# Rows reported apart and never a verdict, while their other side is behind: p1's TUI vetter against keyring-test's VTC
+# (it refuses openvtc 0.5.0's manifest/0.2). A leg can name more with an INFORMATIONAL rows=a,b line (hv's
+# VETTER=tui: the rows downstream of openvtc's attestation, which is not the published shape).
+INFORMATIONAL_ROWS="p1-tui-vets"
+# iOS legs that link under load: their links failed only while the Android legs ran beside them (237 gate, 10-07),
+# so they run first, with nothing beside them; the rest of iOS then runs beside Android.
+LEGS_IOS_ALONE="kk p2 smoke-ios"
+# Mostly waiting (IN-135's slow cases, about 35 min) on the emulator, so it runs beside the iOS-alone legs, where the
+# emulator is otherwise idle; both sides then defer their key cleanup to the end of that phase.
+LEGS_BESIDE_IOS_ALONE="linkwait"
+# The nightly run (gate efficiency §6, item 9): what moved out of the per-release gate because a Jest twin runs on every
+# pull request. The watcher runs it once a night (GATE_NIGHTLY_HOUR, local) on main's newest green build; `gate.sh
+# nightly` runs it by hand. p2 runs only there, so `all` leaves it out (LEGS_NIGHTLY_ONLY; --legs p2 still names it).
+# lostreq runs in both: its offline-ask row (lost-ask-offline-error, twin bifold #414) only in the nightly run.
+# linkwait runs in both: on the short-clock test build in a gate, and on a real-clocks build (test-builds.yml
+# clocks=real, APK_REAL) at night, so the clocks the store build has are proven too (gate efficiency §3).
+LEGS_NIGHTLY="p2 lostreq linkwait"
+LEGS_NIGHTLY_ONLY="p2"
+
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+# ---- one leg ----
+
+# run_leg <run-dir> <leg> [only-rows]: the leg's own folder holds its log and every screenshot and page dump.
+# A pause (gate.sh pause: $GATE_HOME/stop-after-leg) lets the legs already running finish and starts no other: each
+# leg not started is recorded with exit 4, "not run (paused)", which rerun --only-failed runs in full. A clean stop
+# for another lane's device build, instead of cutting the legs mid-way (10-11).
+PAUSE_FILE_NAME=stop-after-leg
+paused() { [ -f "$GATE_HOME/$PAUSE_FILE_NAME" ]; }
+# The watcher never gates a commit again once it has a run, so a paused run's legs wait for a person: say which.
+paused_runs() {
+  local rd id n
+  for rd in "$GATE_HOME"/runs/*/; do
+    [ -f "$rd/legs.tsv" ] || continue; id=$(basename "$rd")
+    n=$(awk -F'\t' '$2==4' "$rd/legs.tsv" | wc -l | tr -d ' '); [ "$n" -gt 0 ] || continue
+    grep -qx "rerun-of=$id" "$GATE_HOME"/runs/*/meta 2>/dev/null && continue
+    say "legs not run (paused): $n in $id; finish it with: gate.sh rerun $id --only-failed"
+  done
+}
+run_leg() {
+  local rd=$1 leg=$2 only=${3:-} dir=$1/$2 s e rc
+  if paused; then
+    say "$leg: not started (paused: $(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME"))"
+    printf '%s\t%s\t%s\t%s\n' "$leg" 4 "$(date +%s)" "$(date +%s)" >> "$rd/legs.tsv"
+    return
+  fi
+  mkdir -p "$dir"
+  mem_ok || { say "$leg: not started (memory)"; printf '%s\t%s\t%s\t%s\n' "$leg" 1 "$(date +%s)" "$(date +%s)" >> "$rd/legs.tsv"; return; }
+  say "$leg: start${only:+ (only: $only)}"
+  s=$(date +%s)
+  # In the background with wait (not a foreground child), so a stop reaches this shell at once: stop_forward then
+  # passes it on and waits for the leg's cleanup.
+  # GATE_KIND (gate, nightly, dry, changed): a leg with a row that runs in one kind of run only reads it (lostreq).
+  GATE_KIND=$(sed -n 's/^kind=//p' "$rd/meta" 2>/dev/null | head -1) \
+    E2E_RUN_DIR=$dir E2E_ONLY_ROWS=$only LEG_DIR=$dir RUN_DIR=$rd bash "$GATE_SRC/legs/$leg.sh" > "$dir/leg.log" 2>&1 &
+  wait $!; rc=$?; e=$(date +%s)
+  printf '%s\t%s\t%s\t%s\n' "$leg" "$rc" "$s" "$e" >> "$rd/legs.tsv"
+  # A sleep inside the leg (pmset's log) makes its rows no verdict on the app (1009-1608: a 682 s clamshell sleep
+  # ended both kk iOS sessions by Appium's newCommandTimeout). Marked, not hidden: the rows stay as they ran.
+  local slept; slept=$(node "$GATE_SRC/sleeps.mjs" --from "$s" --to "$e" 2>/dev/null)
+  if [ -n "$slept" ]; then echo "$slept" | sed 's/^/ENV /' >> "$dir/leg.log"; say "$leg: ENV — $(echo "$slept" | paste -sd';' -)"; fi
+  say "$leg: exit $rc in $(( (e - s) / 60 )) min · $(leg_rows "$dir/leg.log" | cut -f1 | sort | uniq -c | tr -s ' ' | tr '\n' ' ')"
+}
+
+# run_group <run-dir> <legs...> one after another (one platform's devices).
+# GATE_ROWS (gate.sh run --rows): each leg gets only its own rows; a leg with none named runs in full.
+run_group() { local rd=$1 leg; shift; for leg in "$@"; do run_leg "$rd" "$leg" "$(rows_for "$leg" "${GATE_ROWS:-}")"; done; }
+
+# Whether leg $1 is among the wanted legs $2 ("all", or a comma list). "all" is every leg but the nightly-only ones.
+leg_wanted() {
+  [[ ",$2," == *",$1,"* ]] && return 0
+  [ "$2" = all ] && [[ " ${LEGS_NIGHTLY_ONLY:-} ${LEGS_BY_NAME_ONLY:-} " != *" $1 "* ]]
+}
+
+# Split the wanted legs by platform, and run the two platforms side by side when the disk allows.
+run_legs() {
+  local rd=$1 want=$2 serial=$3 ios=() android=() solo=() l return_solo=0
+  for l in $LEGS_SOLO; do leg_wanted "$l" "$want" && solo+=("$l"); done
+  for l in $LEGS_IOS; do leg_wanted "$l" "$want" && ios+=("$l"); done
+  for l in $LEGS_ANDROID; do leg_wanted "$l" "$want" && android+=("$l"); done
+  local free; free=$(disk_free_gb)
+  if [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
+    local alone=() rest=() l2
+    for l2 in "${ios[@]}"; do [[ " $LEGS_IOS_ALONE " == *" $l2 "* ]] && alone+=("$l2") || rest+=("$l2"); done
+    local beside=() arest=()
+    for l2 in "${android[@]}"; do [[ " $LEGS_BESIDE_IOS_ALONE " == *" $l2 "* ]] && beside+=("$l2") || arest+=("$l2"); done
+    if [ ${#alone[@]} -gt 0 ] && [ ${#beside[@]} -gt 0 ]; then
+      say "first: ${alone[*]} (iOS), beside them ${beside[*]} (Android, mostly waiting)"
+      local tb; tb=$(stamp)
+      ( export GATE_DEFER_KEYS=1; run_group "$rd" "${alone[@]}" ) & local pa=$!
+      ( export GATE_DEFER_KEYS=1; run_group "$rd" "${beside[@]}" ) & local pb=$!
+      wait $pa $pb
+      local sl; for sl in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $sl (phone grants since $tb)"; keys_since "$sl" "$tb"; done
+      : > "$rd/defer-keys" 2>/dev/null
+      android=(${arest[@]+"${arest[@]}"})
+    else
+      [ ${#alone[@]} -eq 0 ] || { say "first, alone: ${alone[*]}"; run_group "$rd" "${alone[@]}"; }
+    fi
+    ios=(${rest[@]+"${rest[@]}"})
+    if [ ${#ios[@]} -eq 0 ]; then run_group "$rd" "${android[@]}"; return_solo=1; fi
+  fi
+  if [ "$return_solo" = 1 ]; then :
+  elif [ "$serial" = 0 ] && [ ${#ios[@]} -gt 0 ] && [ ${#android[@]} -gt 0 ] && [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ]; then
+    say "iOS (${ios[*]}) and Android (${android[*]}) side by side: ${free} GB free"
+    local t0; t0=$(stamp)
+    ( export GATE_DEFER_KEYS=1; run_group "$rd" "${ios[@]}" ) & local p1=$!
+    ( export GATE_DEFER_KEYS=1; run_group "$rd" "${android[@]}" ) & local p2=$!
+    wait $p1 $p2
+    local slug; for slug in $(sort -u "$rd/defer-keys" 2>/dev/null); do say "cleanup $slug (phone grants since $t0)"; keys_since "$slug" "$t0"; done
+  else
+    [ "$serial" = 1 ] || [ "$free" -ge "$GATE_PARALLEL_MIN_GB" ] || say "one platform at a time: ${free} GB free, under GATE_PARALLEL_MIN_GB=$GATE_PARALLEL_MIN_GB"
+    run_group "$rd" ${ios[@]+"${ios[@]}"} ${android[@]+"${android[@]}"}
+  fi
+  [ ${#solo[@]} -eq 0 ] || { say "alone, after the others: ${solo[*]}"; run_group "$rd" "${solo[@]}"; }
+}
+
+new_run() {
+  local pin=$1 kind=$2 rd
+  rd=$GATE_HOME/runs/$(date -u +%m%d-%H%M)-${pin:0:8}-$kind
+  mkdir -p "$rd"
+  { echo "pin=$pin"; echo "kind=$kind"; echo "target=${GATE_TARGET:-?}"; echo "harness=$(git -C "$REPO" rev-parse --short HEAD)"; echo "started=$(stamp)Z"; echo "core=${CORE_JOURNEYS:-}"; echo "informational=${INFORMATIONAL_ROWS:-}"; } > "$rd/meta"
+  echo "$rd"
+}
+
+cmd_run() {
+  local pin="" legs=all serial=0 kind="" rows=""
+  while [ $# -gt 0 ]; do case $1 in
+    --pin) pin=$2; shift 2 ;; --legs) legs=$2; shift 2 ;; --serial) serial=1; shift ;; --kind) kind=$2; shift 2 ;;
+    --rows) rows=$2; shift 2 ;; *) usage ;;
+  esac; done
+  [ -n "$pin" ] || usage
+  # Some rows of named legs: one case from the road. Never a release gate (that runs whole legs), and recorded in the
+  # run's meta and report, so a partial run is never read as a full leg.
+  if [ -n "$rows" ]; then
+    [ "$legs" != all ] || die "--rows needs --legs: rows apply only to the legs named"
+    [ "$kind" != gate ] || die "--rows with --kind gate: a release gate runs whole legs"
+    GATE_ROWS=$(rows_spec "$legs" "$rows") || die "--rows $rows not accepted"
+    kind=${kind:-rows}
+  fi
+  kind=${kind:-gate}
+  gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
+  run_lock
+  # A nightly run marks its day only now, holding the lock: one that never got this far is tried again in the window.
+  [ -z "${GATE_NIGHTLY_MARK:-}" ] || echo "started $(stamp)Z, pin ${pin:0:8}" > "$GATE_NIGHTLY_MARK"
+  gate_sweep
+  # Another lane's heavy job (a device build) asks the gate to wait by creating $GATE_HOME/hold-start.
+  local held=0; while [ -f "$GATE_HOME/hold-start" ]; do [ $held = 0 ] && say "held: $GATE_HOME/hold-start exists ($(head -c 120 "$GATE_HOME/hold-start"))"; held=1; sleep 30; done
+  [ $held = 1 ] && say "hold released"
+  local rd; rd=$(new_run "$pin" "$kind")
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
+  [ -z "${PUSH_ON_NOTE:-}" ] || echo "push-on=$PUSH_ON_NOTE" >> "$rd/meta"
+  [ -z "${REAL_NOTE:-}" ] || echo "real-clocks=$REAL_NOTE" >> "$rd/meta"
+  [ -z "${GATE_ROWS:-}" ] || { echo "rows=$GATE_ROWS"; echo "scope=ROWS ONLY ($GATE_ROWS): a partial run of these legs, not the full legs and not the release gate"; } >> "$rd/meta"
+  say "run $(basename "$rd"): target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} harness $(git -C "$REPO" rev-parse --short HEAD) · legs $legs"
+  run_legs "$rd" "$legs" "$serial"
+  echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
+  cmd_report "$(basename "$rd")"
+}
+
+# The rows of a run that failed, or never ran because something they needed failed; and the legs that broke.
+cmd_rerun() {
+  local id=$1 only=${2:-}
+  [ "$only" = --only-failed ] || usage
+  local old=$GATE_HOME/runs/$id; [ -d "$old" ] || die "no run $id"
+  local pin; pin=$(grep '^pin=' "$old/meta" | cut -d= -f2)
+  # The rerun finishes the run it reruns, so it is held to that run's kind (use_build stops a gate with no manifest).
+  local kind; kind=$(grep -m1 '^kind=' "$old/meta" | cut -d= -f2)
+  gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
+  run_lock
+  gate_sweep
+  local rd; rd=$(new_run "$pin" "rerun")
+  echo "rerun-of=$id" >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
+  rerun_legs "$old" "$rd"
+  echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
+  cmd_report "$(basename "$rd")"
+}
+
+# rerun_legs <old-run-dir> <new-run-dir>: every leg of the old run that did not pass, again. legs.tsv is read on fd 3,
+# not stdin: a leg's programs (adb, node, pnm) read stdin, and a loop fed on it lost every line after the first leg
+# it ran (1011-0902: the rerun ran linkwait and never update-ios, p1 or testreq). e2e/gate/rerun.test.mjs.
+rerun_legs() {
+  local old=$1 rd=$2 leg rc s e names
+  while IFS=$'\t' read -r leg rc s e <&3; do
+    # GATE_RERUN_SKIP="p2 …": legs left out on purpose (a known cause a rerun cannot change), named in the meta.
+    if [[ " ${GATE_RERUN_SKIP:-} " == *" $leg "* ]]; then [ "$rc" = 0 ] || echo "rerun-skipped=$leg" >> "$rd/meta"; continue; fi
+    case $rc in
+      0) ;;
+      # Broken, not run (paused), or stopped mid-way: the whole leg, since rows it never reached left no line.
+      1|4|143) run_leg "$rd" "$leg" ;;
+      # GATE_RERUN_WHOLE="agents …": these legs run whole even with only some rows failed, when a failed row needs one
+      # that passed (1013-1633: agents' R5/R7 need the second agent that "R1 add + keep" adds, which --only-failed
+      # skipped as not selected, so every one of them found a single agent).
+      *) if [[ " ${GATE_RERUN_WHOLE:-} " == *" $leg "* ]]; then run_leg "$rd" "$leg"; continue; fi
+         names=$(leg_rows "$old/$leg/leg.log" | awk -F'\t' '$1=="FAIL" || ($1=="SKIP" && $3 ~ /which was FAIL|did not run/) {print $2}' | paste -sd, -)
+         run_leg "$rd" "$leg" "$names" ;;
+    esac
+  done 3< "$old/legs.tsv"
+}
+
+# Only the legs a fix touches (changed.mjs): a fast check that the fix works where the gate looks, minutes not hours.
+# NEVER the release gate: its run is "<id>-changed", which the watcher does not count as a gate of the commit, and
+# its meta and report say "changed legs only". An external release still needs the full gate. A changed file that owns
+# no testID cannot be mapped: the command stops and says to run the full gate (--with-unmapped runs the mapped part).
+cmd_changed() {
+  local pin="" with_unmapped=0 sel=()
+  while [ $# -gt 0 ]; do case $1 in
+    --pin) pin=$2; shift 2 ;; --range) sel=(--range "$2"); shift 2 ;; --files) sel=(--files "$2"); shift 2 ;;
+    --with-unmapped) with_unmapped=1; shift ;; *) usage ;;
+  esac; done
+  [ -n "$pin" ] && [ ${#sel[@]} -gt 0 ] || usage
+  gate_env
+  ! paused || die "paused ($(head -c 120 "$GATE_HOME/$PAUSE_FILE_NAME")): gate.sh resume first"
+  local json rc legs unmapped
+  json=$(node "$GATE_SRC/changed.mjs" "${sel[@]}" --json); rc=$?
+  legs=$(printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).legs.join(",")))')
+  unmapped=$(printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>console.log(JSON.parse(t).unmapped.join(" ")))')
+  case $rc in
+    0) ;;
+    1) die "no gate leg names a testID these files own: the gate does not look at this change. Write a row for it, or run the full gate" ;;
+    2) [ "$with_unmapped" = 1 ] && [ -n "$legs" ] || die "own no testID, so no leg can be chosen for them: $unmapped. Run the full gate (or --with-unmapped for the mapped part)" ;;
+    *) die "changed.mjs failed (exit $rc)" ;;
+  esac
+  mac_stable || die "not started (GATE_ALLOW_UNSTABLE=1 to start anyway)"
+  use_build "$pin"
+  run_lock
+  gate_sweep
+  local rd; rd=$(new_run "$pin" "changed")
+  printf '%s\n' "$json" > "$rd/changed.json"
+  {
+    echo "scope=changed legs only: a fast check for a fix, not the release gate"
+    echo "changed-legs=$legs"
+    [ -z "$unmapped" ] || echo "changed-unmapped=$unmapped (owns no testID: not covered by this run)"
+    printf '%s' "$json" | node -e 'let t="";process.stdin.on("data",d=>t+=d).on("end",()=>{const j=JSON.parse(t);for(const l of j.legs){const w=j.reasons[l]||[];console.log(`changed-why=${l}: ${[...new Set(w.map(x=>x.id))].slice(0,8).join(",")} via ${[...new Set(w.map(x=>x.unit))].slice(0,3).join(", ")}`)}})'
+  } >> "$rd/meta"
+  { echo "wallet=$CAND_WALLET"; echo "bifold=$CAND_BIFOLD"; echo "farm=${FARM_VERSIONS:-unrecorded}"; echo "openvtc=${OPENVTC_VERSION:-?}"; echo "farm-drift=$(farm_drift)"; } >> "$rd/meta"
+  [ -z "${BUILDS_NOTE:-}" ] || echo "builds=$BUILDS_NOTE" >> "$rd/meta"
+  say "run $(basename "$rd"): CHANGED LEGS ONLY (not the release gate) · target ${GATE_TARGET:-?} · wallet ${CAND_WALLET:0:8} bifold ${CAND_BIFOLD:0:8} · legs $legs"
+  run_legs "$rd" "$legs" 0
+  echo "ended=$(stamp)Z" >> "$rd/meta"
+  write_summary "$rd"
+  cmd_report "$(basename "$rd")"
+}
+
+# The drivers against the build testers already have: a FAIL here is the driver's, found before a candidate.
+cmd_dry() {
+  [ "${1:-}" = --golden ] || usage; shift
+  local golden; golden=$(cat "$GATE_HOME/golden" 2>/dev/null) || die "no $GATE_HOME/golden (the shipped release's wallet commit)"
+  cmd_run --pin "$golden" --kind dry "$@"
+}
+
+# The nightly legs on main's newest green build (or --pin). A nightly run never counts as a gate of its commit.
+cmd_nightly() {
+  local pin=""
+  [ "${1:-}" = --pin ] && pin=${2:-}
+  [ -n "$pin" ] || pin=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null | cut -d' ' -f1)
+  [ -n "$pin" ] && [ "$pin" != none ] || die "no green main build to run the nightly legs on"
+  # By hand, a real-clocks build that exists already: of this commit, or HEAD's standing in (the watcher asks for one).
+  GATE_REAL_SHA=$(real_build_commit "$pin") GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$pin" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)"
+}
+
+# The real-clocks Android build the nightly linkwait runs on (test-builds.yml clocks=real). Chosen as a push-on build
+# is: of <sha>, or of main's HEAD when nothing between them changes the app (samebuild.mjs). real_build_commit prints
+# that commit, or nothing when main moved on with an app change.
+real_build_commit() {
+  local sha=$1 head
+  head=$(git -C "$REPO" rev-parse origin/main 2>/dev/null)
+  if [ -z "$head" ] || [ "$head" = "$sha" ]; then echo "$sha"; return; fi
+  [ "$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)" = same ] && echo "$head"
+}
+# Ask once for a real-clocks Android build of main (which is <on>), unless a green one exists or one was asked for
+# (watch-requested-real-<sha8>). The watcher asks when a main build's gate ends, so it is there before the window.
+request_real_build() {
+  local on=$1 req=$GATE_HOME/watch-requested-real-${1:0:8}
+  if [ -n "$(dispatch_build "$on" real)" ] || [ -f "$req" ]; then return 0; fi
+  if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f clocks=real >/dev/null 2>&1; then touch "$req"
+  else say "real-clocks build of ${on:0:8} not requested" >&2; return 1; fi
+}
+# For the nightly run: the commit whose real-clocks build stands for <sha>, asked for if need be and waited for up to
+# an hour, or nothing (linkwait's nightly run then skips, saying so). The wait ends early once nothing of that commit
+# is building any more (a red build is not asked for again), naming its dispatched runs so the SKIP can be explained.
+# Its own lines go to stderr (stdout is the answer).
+nightly_real_build() {
+  local sha=$1 on i runs
+  on=$(real_build_commit "$sha")
+  [ -n "$on" ] || { say "nightly: main moved past ${sha:0:8} with an app change: no real-clocks build of it can be made" >&2; return; }
+  [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }
+  request_real_build "$on" || return
+  for i in $(seq 1 60); do
+    [ -n "$(dispatch_build "$on" real)" ] && { echo "$on"; return; }
+    runs=$(gh run list -R $GH_REPO --workflow test-builds.yml --commit "$on" --event workflow_dispatch --json databaseId,status,conclusion \
+      --jq '.[]|"\(.databaseId) \(.status) \(.conclusion)"' 2>/dev/null)
+    # Five minutes for a fresh request to show up, then: nothing queued or running means nothing is coming.
+    if [ "$i" -gt 5 ] && ! grep -qv ' completed ' <<<"${runs:- completed }"; then
+      say "nightly: no green real-clocks build of ${on:0:8}, and none building; its dispatched runs: $(awk '$3 != "success" {printf "%s %s; ", $1, $3}' <<<"$runs")" >&2
+      return
+    fi
+    sleep 60 & wait $!
+  done
+  say "nightly: no real-clocks build of ${on:0:8} within an hour" >&2
+}
+
+# The nightly window, local hours: from GATE_NIGHTLY_HOUR (default 3) until GATE_NIGHTLY_UNTIL (default 6). A window,
+# not one hour, so a gate running through its start, or a busy or unstable Mac then, delays the nightly run rather
+# than losing the day. The day's marker (nightly-<YYYYMMDD>) is written once a run holds the run lock, or when the
+# window passes with no run.
+nightly_marker() { echo "$GATE_HOME/nightly-$(date +%Y%m%d)"; }
+nightly_hour() { echo $((10#$(date +%H))); }
+# Whether the nightly run is due: GATE_NIGHTLY not 0, inside the window, and none started today.
+nightly_due() {
+  [ "${GATE_NIGHTLY:-1}" != 0 ] || return 1
+  local h; h=$(nightly_hour)
+  [ "$h" -ge "${GATE_NIGHTLY_HOUR:-3}" ] && [ "$h" -lt "${GATE_NIGHTLY_UNTIL:-6}" ] || return 1
+  [ ! -f "$(nightly_marker)" ]
+}
+# Whether today's window has passed with no nightly run (said once in the log, then marked).
+nightly_missed() {
+  [ "${GATE_NIGHTLY:-1}" != 0 ] || return 1
+  [ "$(nightly_hour)" -ge "${GATE_NIGHTLY_UNTIL:-6}" ] && [ ! -f "$(nightly_marker)" ]
+}
+
+# One gate at a time on this Mac, whoever started it. The lock is a directory holding the owner's pid. The pid is
+# the shell that runs the gate (sh -c 'echo $PPID': in a subshell, $$ is still the parent's, and bash 3.2 has no
+# BASHPID), so a run killed hard leaves a dead owner, and a lock with a dead owner is taken over. The takeover is
+# an atomic rename, so two waiters cannot both remove it; a lock with no pid yet is live for its first minute.
+lock_live() {
+  local d=$1 p now m; p=$(cat "$d/pid" 2>/dev/null)
+  if [ -n "$p" ]; then kill -0 "$p" 2>/dev/null; return; fi
+  now=$(date +%s); m=$(stat -f %m "$d" 2>/dev/null || echo "$now"); [ $((now - m)) -lt 60 ]
+}
+run_lock() {
+  local d=$GATE_HOME/run.lock.d tag=$$.$RANDOM
+  while ! mkdir "$d" 2>/dev/null; do
+    if lock_live "$d"; then say "another gate is running (pid $(cat "$d/pid" 2>/dev/null || echo ?)); waiting"; sleep 60
+    elif mv "$d" "$d.stale.$tag" 2>/dev/null; then say "stale run lock (pid $(cat "$d.stale.$tag/pid" 2>/dev/null || echo ?)) taken over"; rm -rf "$d.stale.$tag"
+    else sleep 5; fi
+  done
+  # The running shell's pid, written by a child through a plain redirection. Not $(sh -c 'echo $PPID'): a command
+  # substitution forks first, so that pid is a shell that is already gone, and the lock would read as stale at once.
+  sh -c 'echo $PPID' > "$d/pid"
+  trap gate_unlock EXIT
+  trap stop_forward TERM INT HUP
+  turn_lock
+}
+gate_unlock() { rm -rf "$GATE_HOME/run.lock.d"; turn_release; }
+
+# A stop (launchctl bootout, a ctrl-C, a kill) reaches this shell: pass it to the whole process group (the legs, their
+# drivers, Appium), so each leg's trap runs its cleanup, then wait up to GATE_STOP_WAIT seconds (default 150) for the
+# group to empty before exiting. The run lock goes with the EXIT trap. The watcher's plist gives it ExitTimeOut 180.
+stop_forward() {
+  trap '' TERM INT HUP
+  say "stopping: passing the stop to the legs and waiting for their cleanup"
+  kill -TERM 0 2>/dev/null
+  local pg i left f="${TMPDIR:-/tmp}/gate-stop.$$"; pg=$(ps -o pgid= -p $$ | tr -d ' ')
+  for i in $(seq 1 "${GATE_STOP_WAIT:-150}"); do
+    # pgrep straight into a file, not inside $( ): a command substitution is itself a process in this group, and
+    # would keep the group looking busy for the whole wait.
+    pgrep -g "$pg" > "$f" 2>/dev/null; left=$(grep -cvx "$$" "$f")
+    [ "$left" = 0 ] && break
+    sleep 1
+  done
+  rm -f "$f"
+  say "stopped"
+  exit 143
+}
+
+# The Mac is shared: a build, a test run, an emulator or a booted simulator that belongs to someone else means
+# "not now". Executable names, plus one fixed token for the Gradle wrapper client (never a pattern that could match a
+# waiter's own command line: concurrent waiters deadlocked that way on 10-08). Simulator.app being open is not a
+# signal; a booted simulator is.
+mac_busy() {
+  ps -axo comm= | awk '$0 ~ /(xcodebuild|cargo|rustc|docker-buildx|qemu-system|emulator)$/ {n++} END {exit !n}' && return 0
+  # A Gradle build: the wrapper client lives only while a build runs; idle daemons stay up for hours and do not count.
+  ps -axo args= | grep -q '[G]radleWrapperMain' && return 0
+  xcrun simctl list devices booted 2>/dev/null | grep -q '(Booted)'
+}
+
+# A laptop in a bag is not a gate machine: a closed lid with no display behind it sleeps the Mac, and every leg
+# stalls with it (239 gate, 10-09: three hours). stable.mjs holds the rule and its two detectors, tested on captured
+# outputs: stable when the lid is open or an external display is online; a Mac with no lid and no battery is a
+# desktop and is stable (said once, so the log shows it); no lid key but a battery is unknown, and unknown does not
+# start a gate. There is no power-adapter condition: dropped, 10-10. GATE_ALLOW_UNSTABLE=1 starts anyway, with a
+# warning. A sleep inside a leg is a separate matter: sleeps.mjs marks that leg ENV (wallet #361).
+mac_stable() {
+  local out; out=$(node "$GATE_SRC/stable.mjs" --stable 2>&1)
+  case ${out%%:*} in
+    stable) case $out in *'desktop:'*) say "${out#*: }" ;; esac; return 0 ;;
+  esac
+  if [ "${GATE_ALLOW_UNSTABLE:-0}" = 1 ]; then say "WARNING: the Mac is not stable ($out), but GATE_ALLOW_UNSTABLE=1: running anyway"; return 0; fi
+  say "the Mac is not stable ($out): not running"; return 1
+}
+
+# The watcher's checkout is its own (never a lane's working checkout): on main, clean, fast-forwarded before a
+# run. Anything else and the cycle is skipped, so a report never reads as a main gate when the harness was not main's.
+watch_checkout_ready() {
+  local b; b=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  [ "$b" = main ] || { say "checkout $REPO is on $b, not main: not running"; return 1; }
+  [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] || { say "checkout $REPO has local changes: not running"; return 1; }
+  git -C "$REPO" fetch -q origin main && git -C "$REPO" merge -q --ff-only origin/main || { say "fast-forward of $REPO failed: not running"; return 1; }
+}
+
+cmd_watch_main() {
+  gate_env
+  # A bootout reaches this loop first: stop_forward passes it to the run in progress (its legs clean up) and waits.
+  trap stop_forward TERM INT HUP
+  local interval=${GATE_WATCH_INTERVAL:-300} pair sha run req i head on_sha same started real_sha
+  say "watching main: a gate for every new green push build, every $((interval / 60)) min, from $REPO; the nightly legs ($LEGS_NIGHTLY) from ${GATE_NIGHTLY_HOUR:-3}:00 to ${GATE_NIGHTLY_UNTIL:-6}:00"
+  while :; do
+    started=0; sha=
+    pair=$(node "$GATE_SRC/green.mjs" --newest-main 2>/dev/null) || pair=
+    if [ -n "$pair" ] && [ "$pair" != none ]; then
+      sha=${pair%% *}; run=${pair##* }
+      if ls "$GATE_HOME"/runs/*-"${sha:0:8}"-gate >/dev/null 2>&1; then :
+      elif paused; then say "main build ${sha:0:8} is new, but the gate is paused: next cycle"
+      elif { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } || mac_busy; then say "main build ${sha:0:8} is new, but the Mac is busy: next cycle"
+      elif ! mac_stable; then :
+      elif ! watch_checkout_ready; then :
+      else
+        say "new green main build ${sha:0:8} (run $run)"
+        # The push-on build is dispatched on main, so it is of main's HEAD. When main has moved past this commit with
+        # changes the CI build ignores (e2e, docs: test-builds.yml's paths-ignore, read by samebuild.mjs), HEAD's
+        # push-on build is the same app and stands for this one. When the app changed, no push-on build of this
+        # commit can be made: say so and go on without waiting (1011's first auto-run waited 60 min for one).
+        head=$(git -C "$REPO" rev-parse origin/main); on_sha=$sha
+        if [ "$head" != "$sha" ]; then
+          same=$(node "$GATE_SRC/samebuild.mjs" "$REPO" "$sha" "$head" 2>&1)
+          case $same in
+            same) on_sha=$head; say "main is at ${head:0:8}, past ${sha:0:8} with no app change: its push-on build stands for this one" ;;
+            *) on_sha=; say "main is at ${head:0:8}, past ${sha:0:8} ($same): no push-on build of this commit can be made; push legs will be skipped" ;;
+          esac
+        fi
+        if [ -n "$on_sha" ]; then
+          req=$GATE_HOME/watch-requested-${on_sha:0:8}
+          if [ ! -f "$req" ]; then
+            if gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on >/dev/null 2>&1; then touch "$req"
+            else say "push-on build not requested: push legs will be skipped"; fi
+          fi
+          for i in $(seq 1 60); do [ "$(GATE_PUSH_ON_SHA=$on_sha build_runs "$sha" | cut -d' ' -f2)" != - ] && break; sleep 60 & wait $!; done
+        fi
+        started=1
+        ( GATE_PUSH_ON_SHA=$on_sha cmd_run --pin "$sha" ) & wait $! || say "gate for ${sha:0:8} ended with status $?"
+        # Its real-clocks build for the night's linkwait, asked for now so it is built before the window opens.
+        if [ "${GATE_NIGHTLY:-1}" != 0 ]; then real_sha=$(real_build_commit "$sha"); [ -z "$real_sha" ] || request_real_build "$real_sha"; fi
+      fi
+    fi
+    # The nightly legs, on the build just gated (or the newest already gated), when nothing else started this cycle.
+    # A new main build waits for the next cycle's gate first, so the gate is never behind a nightly run.
+    if [ "$started" = 0 ] && [ -n "$sha" ] && nightly_due && ! paused \
+      && ! { [ -d "$GATE_HOME/run.lock.d" ] && lock_live "$GATE_HOME/run.lock.d"; } && ! mac_busy && mac_stable && watch_checkout_ready; then
+      say "nightly: $LEGS_NIGHTLY on main build ${sha:0:8}"
+      real_sha=$(nightly_real_build "$sha")
+      ( GATE_REAL_SHA=$real_sha GATE_NIGHTLY_MARK=$(nightly_marker) cmd_run --pin "$sha" --kind nightly --legs "$(echo $LEGS_NIGHTLY | tr ' ' ,)" ) & wait $! || say "nightly for ${sha:0:8} ended with status $?"
+    elif nightly_missed; then
+      echo "missed $(stamp)Z: the window passed with no run" > "$(nightly_marker)"
+      say "nightly: the ${GATE_NIGHTLY_HOUR:-3}:00-${GATE_NIGHTLY_UNTIL:-6}:00 window passed with no run today (a gate, a busy or unstable Mac, a pause, or no green main build)"
+    fi
+    sleep "$interval" & wait $!
+  done
+}
+
+# Wait for the pin PR to merge, ask for a push-on Android build of the merge commit, wait for both builds, then run.
+# Runs in the foreground: start it with nohup (or the launchd plist), never as an agent tool's background job.
+cmd_watch() {
+  [ "${1:-}" = --main ] && { cmd_watch_main; return; }
+  [ "${1:-}" = --pr ] && [ -n "${2:-}" ] || usage
+  local pr=$2 st m i runs
+  gate_env
+  for i in $(seq 1 720); do
+    st=$(gh pr view "$pr" -R $GH_REPO --json state,mergeCommit --jq '.state+" "+(.mergeCommit.oid//"")' 2>/dev/null)
+    case $st in MERGED*) break ;; CLOSED*) die "#$pr closed without merging" ;; esac
+    sleep 60
+  done
+  m=${st#MERGED }; [ -n "$m" ] || die "#$pr did not merge in 12 h"
+  say "#$pr merged as ${m:0:8}; asking for a push-on Android build"
+  gh workflow run test-builds.yml -R $GH_REPO --ref main -f platform=android -f push=on || say "push-on build not requested: push legs will be skipped"
+  for i in $(seq 1 180); do
+    runs=$(build_runs "$m"); [ "${runs%% *}" != - ] && [ "${runs##* }" != - ] && break
+    sleep 60
+  done
+  say "builds ready: $runs"
+  cmd_run --pin "$m"
+}
+
+# Rows per leg, and the wall-clock from the first leg's start to the last leg's end.
+# summary.json in the run dir (run-summary.mjs): the feed the board reads. Written at every run's end; `gate.sh
+# summary <run>` writes it again after meta notes are added (env=, env-legs=, harness-legs=).
+write_summary() { node "$GATE_SRC/run-summary.mjs" "$1" >/dev/null 2>&1 || say "summary.json not written for $(basename "$1")"; }
+cmd_summary() { local rd=$GATE_HOME/runs/${1:?usage: gate.sh summary <run-id>}; [ -f "$rd/meta" ] || die "no run $1"; node "$GATE_SRC/run-summary.mjs" "$rd"; }
+
+cmd_report() {
+  local rd=$GATE_HOME/runs/$1; [ -f "$rd/legs.tsv" ] || die "no legs in $1"
+  echo "== $1 · $(grep -E '^(target|wallet|bifold|harness)=' "$rd/meta" | tr '\n' ' ')"
+  ! grep -q '^scope=' "$rd/meta" || echo "   $(grep -m1 '^scope=' "$rd/meta" | cut -d= -f2-)"
+  # CI's pinned pnm against the Farm (farm-drift.mjs): shown only when it is not OK.
+  ! grep -qE '^farm-drift=(DRIFT|UNKNOWN)' "$rd/meta" || echo "   !! $(grep -m1 '^farm-drift=' "$rd/meta" | cut -d= -f2-)"
+  local leg rc s e first= last=0
+  while IFS=$'\t' read -r leg rc s e; do
+    [ -z "$first" ] || [ "$s" -lt "$first" ] && first=$s
+    [ "$e" -gt "$last" ] && last=$e
+    [ "$rc" = 4 ] && { printf '%-14s not run (paused)\n' "$leg"; continue; }
+    printf '%-14s exit %s  %4s min  %s\n' "$leg" "$rc" "$(( (e - s) / 60 ))" "$(leg_rows "$rd/$leg/leg.log" | cut -f1 | sort | uniq -c | awk '{printf "%s %s  ", $2, $1}')"
+    grep -E '^ENV ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^ENV /    ENV /; s/$/: a sleep inside the leg, its rows are no verdict on the app/'
+    # A cleanup that could not run: the rows stand, but keys were left on a runner (lib.sh keys_since).
+    grep -E '^CLEANUP-FAILED ' "$rd/$leg/leg.log" 2>/dev/null | sed 's/^/    !! /'
+    leg_rows "$rd/$leg/leg.log" | awk -F'\t' '$1!="PASS" {printf "    %s %s — %s\n", $1, $2, substr($3,1,140)}'
+    # Where the leg's time went (steps.tsv, gate-efficiency phase 0): the longest steps by name.
+    node "$GATE_SRC/steps.mjs" "$rd/$leg/steps.tsv" 2>/dev/null | sed 's/^/    /'
+  done < "$rd/legs.tsv"
+  echo "wall-clock: $(( (last - first) / 60 )) min (first leg start to last leg end)"
+  # Core journeys no leg proved (a full gate is not green while any is listed), and informational rows, apart.
+  node "$GATE_SRC/run-summary.mjs" "$rd" 2>/dev/null | tail -n +2
+}
+
+case ${1:-} in
+  run) shift; cmd_run "$@" ;;
+  rerun) shift; cmd_rerun "$@" ;;
+  dry) shift; cmd_dry "$@" ;;
+  nightly) shift; gate_env; cmd_nightly "$@" ;;
+  watch) shift; cmd_watch "$@" ;;
+  report) shift; cmd_report "$@" ;;
+  summary) shift; gate_env; cmd_summary "$@" ;;
+  changed) shift; cmd_changed "$@" ;;
+  pause) shift; gate_env; echo "${*:-paused} ($(stamp)Z)" > "$GATE_HOME/$PAUSE_FILE_NAME"; say "paused: legs running finish, nothing else starts; gate.sh resume to lift it" ;;
+  resume) gate_env; rm -f "$GATE_HOME/$PAUSE_FILE_NAME"; say "resumed"; paused_runs ;;
+  *) usage ;;
+esac

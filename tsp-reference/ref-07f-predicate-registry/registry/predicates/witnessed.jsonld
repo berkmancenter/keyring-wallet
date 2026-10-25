@@ -1,0 +1,40 @@
+{
+  "@context": "https://trustoverip.org/dtg/vocab/meta-context.jsonld",
+  "id": "https://trustoverip.org/dtg/vocab#witnessed",
+  "type": "Predicate",
+  "status": "active",
+  "since": "2026-10-01",
+  "label": {
+    "en": "witnessed",
+    "de": "bezeugt",
+    "nl": "getuige geweest van"
+  },
+  "definition": {
+    "en": "The issuer observed the subject issue the credential the object names, under the conditions of a specific trust task exchange."
+  },
+  "classification": "evidence",
+  "weighedBy": "The community whose witnessing policy the attestation is issued under.",
+  "objectKind": [
+    "digestMultibase"
+  ],
+  "subjectObjectRelationship": "credentialSubject.id MUST be the issuer of the credential object.digestMultibase names; a verifier holding that credential MUST check it.",
+  "additionalMembers": {
+    "witnessContext": {
+      "required": false,
+      "schema": "https://trustoverip.org/dtg/vocab/schemas/witness-context.schema.json"
+    }
+  },
+  "taskContextRequired": true,
+  "minimumIssuerScope": "directed",
+  "issuer": "A member, or a VTA acting according to VTC policy.",
+  "establishes": "That the issuer attests that, in the exchange identified by taskContext, it observed the subject issue the credential whose claims digest to object.digestMultibase.",
+  "doesNotEstablish": [
+    "that the referenced credential is currently valid or unrevoked",
+    "that the referenced credential's claims are true",
+    "that the exchange reached its terminal state (Outcome Interpretability applies)",
+    "that the witness is a member of any community",
+    "that any consequential action is authorized"
+  ],
+  "definedIn": "https://trustoverip.github.io/dtgwg-cred-spec/#the-dtgwitnessed-profile-vwc",
+  "governedBy": null
+}

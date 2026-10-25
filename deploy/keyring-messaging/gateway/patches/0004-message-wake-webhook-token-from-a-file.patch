@@ -1,0 +1,102 @@
+From 91765b65dafb791c2713e69d4298a2cb1633220a Mon Sep 17 00:00:00 2001
+From: Alberto L <alberto_leon@seas.harvard.edu>
+Date: Sun, 11 Oct 2026 12:18:14 +0100
+Subject: [PATCH] feat(message-wake): read the webhook secret from a file
+
+GATEWAY_MEDIATOR_WEBHOOK_SECRET_FILE names a file holding the secret,
+read and permission-checked like the APNs and FCM keys, for deployments
+that keep secret values out of the environment. Setting both it and
+GATEWAY_MEDIATOR_WEBHOOK_SECRET stops startup.
+
+Signed-off-by: Alberto L <alberto_leon@seas.harvard.edu>
+---
+ README.md           |  1 +
+ src/main.rs         | 33 ++++++++++++++++++++++++++++-----
+ src/message_wake.rs |  8 ++++++--
+ 3 files changed, 35 insertions(+), 7 deletions(-)
+
+diff --git a/README.md b/README.md
+index 5aeca1f..f2fa014 100644
+--- a/README.md
++++ b/README.md
+@@ -395,6 +395,7 @@ handle's allowlist (`suggestedTriggers`).
+ | Env | Meaning |
+ | --- | --- |
+ | `GATEWAY_MEDIATOR_WEBHOOK_SECRET` | Turns the route on. At least 32 characters of `[A-Za-z0-9_-]`; the mediator's URL is `https://<gateway>/mediator-webhook/<secret>` |
++| `GATEWAY_MEDIATOR_WEBHOOK_SECRET_FILE` | The same secret read from a file (permissions checked like the APNs and FCM keys), for deployments that keep secret values out of the environment. Set one of the two, not both |
+ | `GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS` | At most one message wake per handle per this many seconds (default 30) |
+ 
+ The gateway then wakes the handle as **its own** trigger: a handle whose
+diff --git a/src/main.rs b/src/main.rs
+index 7f77289..fad5c16 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -462,11 +462,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+ 
+     // Message wakes from a mediator's push webhook: off unless a secret is set.
+     let mut app = api::router(state.clone());
+-    if let Some(secret) = std::env::var(message_wake::ENV_WEBHOOK_SECRET)
+-        .ok()
+-        .map(|s| s.trim().to_string())
+-        .filter(|s| !s.is_empty())
+-    {
++    let set = |key: &str| {
++        std::env::var(key)
++            .ok()
++            .map(|s| s.trim().to_string())
++            .filter(|s| !s.is_empty())
++    };
++    let webhook_secret = match (
++        set(message_wake::ENV_WEBHOOK_SECRET),
++        set(message_wake::ENV_WEBHOOK_SECRET_FILE),
++    ) {
++        (Some(_), Some(_)) => {
++            return Err(format!(
++                "set {} or {}, not both",
++                message_wake::ENV_WEBHOOK_SECRET,
++                message_wake::ENV_WEBHOOK_SECRET_FILE
++            )
++            .into())
++        }
++        (Some(secret), None) => Some(secret),
++        (None, Some(path)) => {
++            let raw = secretfile::read_secret_file(Path::new(&path), "mediator webhook secret")?;
++            let secret = String::from_utf8(raw)
++                .map_err(|_| "mediator webhook secret file is not UTF-8".to_string())?;
++            Some(secret.trim().to_string())
++        }
++        (None, None) => None,
++    };
++    if let Some(secret) = webhook_secret {
+         let interval = Duration::from_secs(env_num(
+             message_wake::ENV_MIN_INTERVAL_SECS,
+             message_wake::DEFAULT_MIN_INTERVAL.as_secs(),
+diff --git a/src/message_wake.rs b/src/message_wake.rs
+index 472ecca..3c32baf 100644
+--- a/src/message_wake.rs
++++ b/src/message_wake.rs
+@@ -9,8 +9,9 @@
+ //!
+ //! The webhook is not a Trust Task and carries no proof, so it is gated three
+ //! ways:
+-//! - the URL holds a shared secret (`GATEWAY_MEDIATOR_WEBHOOK_SECRET`); a wrong
+-//!   secret answers `404` as if the route did not exist;
++//! - the URL holds a shared secret (`GATEWAY_MEDIATOR_WEBHOOK_SECRET`, or a file
++//!   named by `GATEWAY_MEDIATOR_WEBHOOK_SECRET_FILE`); a wrong secret answers
++//!   `404` as if the route did not exist;
+ //! - the gateway wakes the handle as **its own** trigger DID: the handle's
+ //!   controller must have put the gateway's DID on the allowlist (the device
+ //!   asks for it in `suggestedTriggers`), so a handle whose controller did not
+@@ -46,6 +47,9 @@ use crate::types::{Urgency, WakePayload};
+ 
+ /// Env var holding the webhook path secret; the route is off when unset.
+ pub const ENV_WEBHOOK_SECRET: &str = "GATEWAY_MEDIATOR_WEBHOOK_SECRET";
++/// Env var naming a file that holds the secret instead (as the APNs and FCM
++/// keys are given), for deployments that keep secret values out of the env.
++pub const ENV_WEBHOOK_SECRET_FILE: &str = "GATEWAY_MEDIATOR_WEBHOOK_SECRET_FILE";
+ /// Env var setting the minimum seconds between two message wakes of one handle.
+ pub const ENV_MIN_INTERVAL_SECS: &str = "GATEWAY_MESSAGE_WAKE_MIN_INTERVAL_SECS";
+ /// Default minimum interval between two message wakes of one handle.
+-- 
+2.50.1 (Apple Git-155)
+

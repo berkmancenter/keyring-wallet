@@ -1,0 +1,19 @@
+# 2026-09-16 — the first-vetter bootstrap, on documented surfaces only.
+#
+# 1. community criteria: invitation only        (delete-criterion vetted-member)
+# 2. POST /v1/invitations  subjectDid=<fresh did:key>          -> 201, InvitationCredential
+# 3. submit/0.2 with that credential in the presentation        -> verdict allow,
+#    MembershipCredential + role EndorsementCredential inline   (submit-0.2-invitation-allow.log)
+# 4. POST /v1/vetting/vetters  memberDid=<same did>             -> 201, below
+# 5. restore the vetting criterion                              (put-criterion criterion.json)
+#
+# The subject here is an X25519-only did:key, which cannot sign a vetting
+# statement; a vetter that will actually vet needs an Ed25519 identity. The point
+# measured is the governance path, not the signing one.
+[ref-20] POST /vetting/vetters -> 201
+{
+  "credentialId": "urn:uuid:3e4a1666-5ce4-4ca0-bdc5-6b56dc032731",
+  "endorsementId": "3e4a1666-5ce4-4ca0-bdc5-6b56dc032731",
+  "validFrom": "2026-09-16T16:28:31Z",
+  "validUntil": "2027-03-15T16:28:31Z"
+}

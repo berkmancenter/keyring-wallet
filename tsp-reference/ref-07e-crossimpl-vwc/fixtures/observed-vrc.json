@@ -1,0 +1,27 @@
+{
+  "credential": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2",
+      "https://www.firstperson.network/dtg/v1",
+      "https://www.firstperson.network/relationship/v1",
+      "https://w3id.org/security/suites/ed25519-2018/v1"
+    ],
+    "type": [
+      "VerifiableCredential",
+      "DTGCredential",
+      "RelationshipCredential"
+    ],
+    "issuer": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk",
+    "validFrom": "2026-08-26T20:21:11.945Z",
+    "credentialSubject": {
+      "id": "did:peer:0z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n"
+    },
+    "proof": {
+      "verificationMethod": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk#z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk",
+      "type": "Ed25519Signature2018",
+      "created": "2026-08-26T20:21:11Z",
+      "proofPurpose": "assertionMethod",
+      "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..szPEtX4G0S4TxsqDpwtWkIJMWfp0LCFXboPTvkI3EKi1eiOSzRMM-gH2OLJQzoOIS3S0J_Y6N6h5ysZGE_hRDw"
+    }
+  }
+}

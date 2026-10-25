@@ -31,6 +31,13 @@ import {
   connectToWitness,
   enableHardwareAttestation,
   enableTspCarriage,
+  enableDidCommV2,
+  assertDidCommV2CarriageMarkers,
+  assertTspOverDidCommV2Markers,
+  assertV2MediationMarker,
+  readAppJsLog,
+  startIosLogCapture,
+  stopIosLogCapture,
   showRelationshipInvitation,
 } from "./flows.js";
 import { startWitness } from "./witness.js";
@@ -55,15 +62,44 @@ async function ensureMetro() {
     return;
   }
   console.log("[e2e] starting metro (yarn start in app/)…");
-  metroProc = spawn("yarn", ["start"], {
+  const artifactsDir = new URL("../artifacts", import.meta.url).pathname;
+  mkdirSync(artifactsDir, { recursive: true });
+  const metroLog = `${artifactsDir}/metro-${Date.now()}.log`;
+  metroProc = spawn("sh", ["-c", 'exec yarn start > "$METRO_LOG" 2>&1'], {
     cwd: new URL("../../app", import.meta.url).pathname,
+    env: { ...process.env, METRO_LOG: metroLog },
     stdio: ["ignore", "ignore", "inherit"],
   });
+  console.log(`[e2e] metro log: ${metroLog}`);
   for (let i = 0; i < 60; i++) {
     if (await portInUse(8081)) return;
     await sleep(1000);
   }
   throw new Error("metro did not start within 60s");
+}
+
+/**
+ * Build metro's iOS bundle once before any device needs it. A debug build on
+ * a real device loads its JS from metro whenever metro is reachable, and after
+ * a source change the first bundle takes ~40–55 s — long enough that an app
+ * relaunched mid-run sat on its splash past every UI wait (2026-09-15, both
+ * devices at once). Warming it here moves that cost to before the sessions.
+ * Best effort: a failure only means the first launch pays it instead.
+ */
+async function warmMetroBundle(platform) {
+  const url =
+    `http://127.0.0.1:8081/index.bundle?platform=${platform}&dev=true&minify=false` +
+    "&inlineSourceMap=false&modulesOnly=false&runModule=true&app=asml.bkc.harvard.wallet";
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(300000) });
+    const body = await res.arrayBuffer();
+    console.log(
+      `[e2e] metro ${platform} bundle warm (${res.status}, ${Math.round(body.byteLength / 1e6)} MB, ${Math.round((Date.now() - started) / 1000)} s)`
+    );
+  } catch (err) {
+    console.warn(`[e2e] metro ${platform} bundle warm-up failed (continuing): ${err.message}`);
+  }
 }
 
 /** Filter + save the witness/attestation-relevant logcat lines for one or more android udids. */
@@ -199,26 +235,23 @@ export function dumpAndroidWitnessLogs(udids) {
  * fails loudly here instead of silently downgrading the run.
  */
 async function assertHardwareEvidenceMarker(driver, timeout = 120000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
   const deadline = Date.now() + timeout;
   for (;;) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    }).toString();
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
     const added = log.match(/Evidence block added \[[^\]]*\]/);
     if (added) {
-      console.log(`[e2e] android: hardware-attestation evidence present — ${added[0]}`);
+      console.log(`[e2e] ${driver.e2ePlatform}: hardware-attestation evidence present — ${added[0]}`);
       return;
     }
     const downgraded = log.match(
       /proceeding without hardware attestation|issued without hardware attestation evidence/
     );
     if (downgraded) {
-      throw new Error(`android: exchange downgraded to unattested: "${downgraded[0]}"`);
+      throw new Error(`${driver.e2ePlatform}: exchange downgraded to unattested: "${downgraded[0]}"`);
     }
     if (Date.now() > deadline) {
-      throw new Error(`android: no hardware-attestation evidence marker after ${timeout}ms`);
+      throw new Error(`${driver.e2ePlatform}: no hardware-attestation evidence marker after ${timeout}ms`);
     }
     await sleep(3000);
   }
@@ -263,6 +296,19 @@ export async function runWitnessedExchange({
   assertLocality = false,
   reportLocality = false,
   useTspCarriage = false,
+  // DIDComm v2 on both wallets (didcomm_v2_subtask.md C14/T6 on devices):
+  // the witness serves v1+v2 and the wallets connect to its out-of-band/2.0
+  // invitation; with useTspCarriage too, every Trust Task document is a TSP
+  // envelope delivered on those v2 connections. The build must carry
+  // MEDIATOR_V2_URL (`yarn mediator --didcomm-v2`, tunnel mode for devices).
+  useDidCommV2 = false,
+  // Require the Secure Exchange badge too (real devices on both sides; the
+  // Android runners keep it optional because an old device's attestation
+  // root can legitimately fail to verify).
+  requireSecureExchange,
+  // Platforms whose metro bundle to build before the sessions start (see
+  // warmMetroBundle); the real-device runners pass theirs.
+  warmMetroPlatforms = [],
 }) {
   let sessionA, sessionB, witness;
   try {
@@ -270,6 +316,7 @@ export async function runWitnessedExchange({
     console.log(`[e2e] device A: ${udidA}, device B: ${udidB}`);
 
     await ensureMetro();
+    for (const platform of warmMetroPlatforms) await warmMetroBundle(platform);
     await ensureAppium();
 
     if (assertLocality && process.env.WITNESS_LOCALITY_REQUIRED !== "true") {
@@ -287,7 +334,8 @@ export async function runWitnessedExchange({
     // blocks cleartext http, and production witnesses are HTTPS (real mediators
     // like aaleon have SSL). The tunnel mirrors that locally without the
     // instability of routing the witness through the app's mediator.
-    witness = await startWitness({ name: WITNESS_NAME });
+    witness = await startWitness({ name: WITNESS_NAME, didcommV2: useDidCommV2 });
+    if (useDidCommV2 && !witness.invitationV2Url) throw new Error("witness published no DIDComm v2 invitation");
 
     console.log(
       "\n[e2e] ATTENDED WITNESSED RUN — keep both phones unlocked and within reach.\n" +
@@ -301,6 +349,11 @@ export async function runWitnessedExchange({
 
     sessionA = await createSessionA(udidA);
     sessionB = await createSessionB(udidB);
+    // Real iPhones/iPads: capture the app's JS log so the marker assertions
+    // below check iOS too instead of skipping it (simulator udids are UUIDs).
+    for (const [session, udid] of [[sessionA, udidA], [sessionB, udidB]]) {
+      if (session.e2ePlatform === "ios" && udid && !/^[0-9A-F-]{36}$/i.test(udid)) await startIosLogCapture(session, udid);
+    }
     if (assertLocality || reportLocality) {
       const iosUdid = sessionA.e2ePlatform === "ios" ? udidA : sessionB.e2ePlatform === "ios" ? udidB : null;
       if (iosUdid && !/^[0-9A-F-]{36}$/i.test(iosUdid)) iosSyslogCapture = startIosSyslogCapture(iosUdid); // real devices only (simulator udids are UUIDs)
@@ -322,6 +375,9 @@ export async function runWitnessedExchange({
     // restart disrupts in-flight witness-protocol state (it doesn't need to
     // — DIDComm connections persist across a restart — but there's no
     // reason to find out under an attended run instead of before one starts).
+    if (useDidCommV2) {
+      await Promise.all([enableDidCommV2(sessionA), enableDidCommV2(sessionB)]);
+    }
     if (useTspCarriage) {
       await Promise.all([enableTspCarriage(sessionA), enableTspCarriage(sessionB)]);
     }
@@ -347,9 +403,13 @@ export async function runWitnessedExchange({
           "████████████████████████████████████████████████████████████\n"
       );
     }
-    await connectToWitness(sessionA, witness.invitationUrl);
+    if (useDidCommV2) {
+      await Promise.all([assertV2MediationMarker(sessionA, 120000), assertV2MediationMarker(sessionB, 120000)]);
+    }
+    const witnessInvitationUrl = useDidCommV2 ? witness.invitationV2Url : witness.invitationUrl;
+    await connectToWitness(sessionA, witnessInvitationUrl);
     if (assertLocality || reportLocality) await acceptLocalityPreflightIfPresent(sessionA);
-    await connectToWitness(sessionB, witness.invitationUrl);
+    await connectToWitness(sessionB, witnessInvitationUrl);
     if (assertLocality || reportLocality) {
       await acceptLocalityPreflightIfPresent(sessionB);
       // A slow phone can raise its sheet after the other's connect finished —
@@ -360,6 +420,9 @@ export async function runWitnessedExchange({
     console.log("[e2e] both wallets connected to the witness");
 
     const invitationUrl = await showRelationshipInvitation(sessionA);
+    if (useDidCommV2 && !/[?&]_oob=/.test(invitationUrl)) {
+      throw new Error(`expected an out-of-band/2.0 invitation (_oob=), got: ${invitationUrl.slice(0, 80)}…`);
+    }
     await acceptInvitationViaPaste(sessionB, invitationUrl);
 
     // v4 consent: one bottom-sheet on the non-proposer wallet, no
@@ -387,11 +450,12 @@ export async function runWitnessedExchange({
       assertTrustTaskExchangeMarkers(sessionA, vrcTimeout),
       assertTrustTaskExchangeMarkers(sessionB, vrcTimeout),
     ]);
-    if (useTspCarriage) {
-      await Promise.all([
-        assertTspCarriageMarkers(sessionA),
-        assertTspCarriageMarkers(sessionB),
-      ]);
+    if (useTspCarriage && useDidCommV2) {
+      await Promise.all([assertTspOverDidCommV2Markers(sessionA), assertTspOverDidCommV2Markers(sessionB)]);
+    } else if (useTspCarriage) {
+      await Promise.all([assertTspCarriageMarkers(sessionA), assertTspCarriageMarkers(sessionB)]);
+    } else if (useDidCommV2) {
+      await Promise.all([assertDidCommV2CarriageMarkers(sessionA), assertDidCommV2CarriageMarkers(sessionB)]);
     }
     await Promise.all([
       assertWitnessCeremonyMarkers(sessionA, 180000),
@@ -425,10 +489,12 @@ export async function runWitnessedExchange({
     }
 
     await assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 120000, {
-      requireSecureExchange: false,
+      requireSecureExchange: requireSecureExchange ?? false,
+      requireLocality: assertLocality,
     });
     await assertContactShields(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`, 120000, {
-      requireSecureExchange: false,
+      requireSecureExchange: requireSecureExchange ?? false,
+      requireLocality: assertLocality,
     });
 
     printSuccess(name);
@@ -454,6 +520,7 @@ export async function runWitnessedExchange({
     process.exitCode = 1;
   } finally {
     stopIosSyslogCapture();
+    for (const d of [sessionA, sessionB].filter(Boolean)) stopIosLogCapture(d);
     for (const d of [sessionA, sessionB].filter(Boolean)) {
       try {
         await d.deleteSession();

@@ -9,6 +9,7 @@ import {
   getVersion,
 } from 'react-native-device-info'
 import { autoDisableRemoteLoggingIntervalInMinutes } from '../constants'
+import { offerProblemReport } from './problemReport'
 import { generateReferenceCode } from './reference-code'
 
 const logOptions: RemoteLoggerOptions = {
@@ -36,11 +37,13 @@ const BCLogger = new RemoteLogger(logOptions)
  * always given a code to share, even when the network/Loki is unavailable.
  *
  * @param error - the error being reported
+ * @param shown - what the screen said, when it is not the error's own description
  * @returns the reference code to surface to the user
  */
-export const reportProblem = (error: BifoldError): string => {
+export const reportProblem = (error: BifoldError, shown?: string): string => {
   const referenceCode = generateReferenceCode()
-  const { title, description, code, message, stack } = error
+  const { title, code, message, stack } = error
+  const description = shown ?? error.description
 
   try {
     if (logOptions.lokiUrl) {
@@ -67,6 +70,10 @@ export const reportProblem = (error: BifoldError): string => {
     // Never let a reporting failure prevent the user from getting their code.
     BCLogger.error?.(`Failed to send problem report to Loki: ${e}`)
   }
+
+  // The tester sends the report (log included) by email or the share sheet;
+  // this works with or without a Loki endpoint.
+  offerProblemReport({ referenceCode, title, description, message, error })
 
   return referenceCode
 }

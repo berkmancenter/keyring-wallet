@@ -26,12 +26,25 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>keyring</string>
+				<string>vetting-ticket</string>
 			</array>
 		</dict>
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>didcomm</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>did</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>openid-credential-offer</string>
 			</array>
 		</dict>
 	</array>
@@ -50,8 +63,6 @@
 		<string>ca.bc.gov.iddev.servicescard.v2</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
@@ -113,8 +124,6 @@
 		<string>audio</string>
 		<string>voip</string>
 	</array>
-	<key>UIFileSharingEnabled</key>
-	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

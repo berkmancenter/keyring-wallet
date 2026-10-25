@@ -20,6 +20,7 @@
  *
  * Usage: APPIUM_PORT=4750 WDA_LOCAL_PORT=8101 node run-vrc-exchange-witnessed.js
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,

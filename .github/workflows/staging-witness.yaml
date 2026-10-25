@@ -35,10 +35,8 @@ jobs:
             cd $APP_PATH
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git fetch origin
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git reset --hard origin/$BRANCH_NAME
-            git config --global url."https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
             git submodule sync --recursive
             git submodule update --init --recursive --force
-            git config --global --unset url."https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/".insteadOf
             cd $APP_PATH/bifold/packages/witness-server
             echo "Restarting witness server..."
             docker compose down

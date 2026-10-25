@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCL37I5zpWEauPopROBm6d64bGDiimAvZE</string>
+	<string>AIzaSyCflMM5EFlE0eQ9XRrwMxF5ODfsxNfXvtE</string>
 	<key>GCM_SENDER_ID</key>
-	<string>1008044298583</string>
+	<string>336844734698</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>asml.bkc.harvard.wallet</string>
 	<key>PROJECT_ID</key>
-	<string>bc-wallet-mobile</string>
+	<string>hls-asml-identity-ba68</string>
 	<key>STORAGE_BUCKET</key>
-	<string>bc-wallet-mobile.appspot.com</string>
+	<string>hls-asml-identity-ba68.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:1008044298583:ios:76bfc02e8a3c04f844ae12</string>
+	<string>1:336844734698:ios:b14b9a72054f8629de5793</string>
 </dict>
 </plist>
