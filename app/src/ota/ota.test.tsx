@@ -162,7 +162,7 @@ describe('withOta', () => {
     })
     afterEach(() => {
       if (os) Object.defineProperty(Platform, 'OS', os)
-      ;(exists as jest.Mock).mockReset().mockResolvedValue(false)
+      jest.mocked(exists).mockReset().mockResolvedValue(false)
     })
 
     it("does not reload on a bare 'UPDATE' event: an offered update is not a staged one", async () => {
@@ -179,8 +179,8 @@ describe('withOta', () => {
     })
 
     it("does not reload for the previous build's staged update (same fingerprint, another build number)", async () => {
-      ;(exists as jest.Mock).mockResolvedValue(true)
-      ;(readFile as jest.Mock).mockResolvedValue(
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(
         JSON.stringify({
           isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
           stagingBundleId: STAGED,
@@ -195,8 +195,8 @@ describe('withOta', () => {
     })
 
     it('reloads into the update hot-updater has staged, read from its metadata at the return', async () => {
-      ;(exists as jest.Mock).mockResolvedValue(true)
-      ;(readFile as jest.Mock).mockResolvedValue(
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(
         JSON.stringify({
           isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
           stagingBundleId: STAGED,
