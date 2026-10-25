@@ -108,6 +108,17 @@ jobs:
           # after its last push does not go stale on merge.
           node packages/core/scripts/gen-testids.mjs --check
 
+      - name: emoji data tests
+        run: |
+          node --test packages/core/scripts/emoji/generate-emoji-data.test.mjs
+
+      - name: emoji data is current
+        run: |
+          # packages/core/src/modules/chat/emoji/emoji-data.json is generated from the
+          # vendored Unicode and CLDR files in packages/core/scripts/emoji/sources/. A PR
+          # that changes either must regenerate it (`yarn emoji` in packages/core).
+          node packages/core/scripts/emoji/generate-emoji-data.mjs --check
+
   test:
     runs-on: ubuntu-22.04
     name: Testing

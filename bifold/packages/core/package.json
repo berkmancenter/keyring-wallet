@@ -52,7 +52,10 @@
     "typecheck": "tsc --noEmit",
     "testids": "node scripts/gen-testids.mjs",
     "testids:check": "node scripts/gen-testids.mjs --check",
-    "testids:test": "node --test scripts/gen-testids.test.mjs"
+    "testids:test": "node --test scripts/gen-testids.test.mjs",
+    "emoji": "node scripts/emoji/generate-emoji-data.mjs",
+    "emoji:check": "node scripts/emoji/generate-emoji-data.mjs --check",
+    "emoji:test": "node --test scripts/emoji/generate-emoji-data.test.mjs"
   },
   "devDependencies": {
     "@animo-id/expo-secure-environment": "0.1.5",

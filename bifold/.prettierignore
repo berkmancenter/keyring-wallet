@@ -12,3 +12,9 @@ packages/core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vtc-join-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vetting-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.json
+
+# Generated emoji data (one entry per line, by scripts/emoji/generate-emoji-data.mjs)
+# and the vendored Unicode/CLDR inputs it is built from. Reformatting either would
+# break the generator --check and the byte-identical sources.
+packages/core/src/modules/chat/emoji/emoji-data.json
+packages/core/scripts/emoji/sources/
