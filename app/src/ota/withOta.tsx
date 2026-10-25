@@ -81,8 +81,11 @@ export const withOta = <P extends object>(
         readError = String(error)
       }
       // Read after the file, right before deciding: a flow that began during the
-      // read blocks this return.
-      const blockers = otaApplyBlockerReasons()
+      // read blocks this return. By kind only, for the decision's reason and the
+      // log alike: a VTA task's blocker names its Trust Task type
+      // (vta-task:<type>), and this line, in every problem report, need not say
+      // which flow the person was in.
+      const blockers = otaApplyBlockerReasons().map((blocker) => blocker.split(':')[0])
       const decision = decideApplyOnReturn({
         awayMs,
         stagedBundleId: staged.id,
@@ -97,16 +100,13 @@ export const withOta = <P extends object>(
       // there to compare with the metadata file's, staged or not, and so are the
       // blockers held at the return, whatever decided it: what a device check
       // reads to see a flow (a chat draft) still held behind the lock screen.
-      // By kind only: a VTA task's blocker names its Trust Task type
-      // (vta-task:<type>), and this line, in every problem report, need not say
-      // which flow the person was in.
       log('return', {
         staged: staged.id ?? null,
         awayMinutes: Math.round(awayMs / 60000),
         apply: decision.apply,
         ...(decision.apply ? {} : { reason: decision.reason }),
         isolationKey,
-        blockers: blockers.map((blocker) => blocker.split(':')[0]),
+        blockers,
         ...(staged.stagedUnderKey ? { stagedUnderKey: staged.stagedUnderKey } : {}),
         ...(readError ? { readError } : {}),
       })

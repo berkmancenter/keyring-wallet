@@ -264,13 +264,20 @@ describe('withOta', () => {
       )
     })
 
-    it("logs a blocker by its kind only, not a VTA task's Trust Task type", async () => {
+    it("names a blocker by its kind only, in the reason and the log, not a VTA task's Trust Task type", async () => {
+      // Staged and away long enough, so the decision reaches the blockers and names them in its reason.
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(staged271)
       const release = registerOtaApplyBlocker('vta-task:vta/join/0.1')
-      const { log } = wrapped()
-      notifyReturnLocked(6 * 60_000)
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
       await flush()
       release()
-      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ blockers: ['vta-task'] }))
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ apply: false, reason: 'blocked: vta-task', blockers: ['vta-task'] })
+      )
       expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
     })
 
