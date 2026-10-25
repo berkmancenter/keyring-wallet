@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "a3656d1a679ed23a2883f31ef2952d52bc2c36af",
+  "generatedFrom": "3eeb552b64184db5e841a3327158bccb23b9e075",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -475,6 +475,11 @@
     "E2EClocksMode": ["src/components/misc/E2EClockRows.tsx"],
     "E2EGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EPhoneGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
+    "EmojiPicker": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerClearSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerNoResults": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerRecent": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EnableWalletNamingSwitchElement": ["src/screens/Developer.tsx"],
     "Enter": ["src/screens/AttemptLockout.tsx", "src/screens/PINEnter.tsx"],
     "EnterOldPIN": ["src/screens/PINChange.tsx", "src/screens/PINVerify.tsx"],
@@ -670,6 +675,7 @@
     "JoinWaysTitle": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
     "JoinWaysVettingNotSupported": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWillShow": ["src/modules/trust-tasks/screens/VtiJoin.ids.ts"],
+    "KeepMessages": ["src/screens/Settings.tsx"],
     "KeysMoved": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedDevices": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
     "KeysMovedOk": ["src/modules/trust-tasks/screens/KeysMovedNotice.tsx"],
@@ -1221,6 +1227,7 @@
     "DenyConsentButton_": ["src/modules/trust-tasks/screens/RequestCard.tsx"],
     "DirectoryDisclosureField_": ["src/modules/trust-tasks/screens/DirectoryDisclosureCard.tsx"],
     "Dismiss": ["src/components/listItems/NotificationListItem.tsx", "src/components/misc/InfoBox.tsx"],
+    "EmojiPickerEmoji_": ["src/modules/chat/emoji/EmojiPicker.tsx"],
     "JoinPrivateVettingRefused_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinPrivateVettingStart_": ["src/modules/trust-tasks/screens/PrivateVettingStart.tsx"],
     "JoinWayCannotUse_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
@@ -1229,6 +1236,7 @@
     "JoinWayFollows_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWayStart_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
     "JoinWay_": ["src/modules/trust-tasks/screens/JoinWaysCard.tsx"],
+    "KeepMessages_": ["src/screens/Settings.tsx"],
     "MyProfilesRow-": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "OfferChoice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
     "OfferDevice_": ["src/modules/trust-tasks/screens/NewPhoneOffer.tsx"],
@@ -1313,6 +1321,21 @@
     },
     {
       "src/components/texts/Link.tsx": "testIdForAccessabilityLabel(linkText)"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.clearSearch"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.noResults"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.root"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "EmojiPickerIds.search"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPicker.tsx": "section.testID"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
