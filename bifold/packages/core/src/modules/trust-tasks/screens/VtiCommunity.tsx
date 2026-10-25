@@ -77,23 +77,28 @@ const VtiCommunity: React.FC = () => {
   const holding = useAgentsHoldingIdentity(communityDid)
   const heldElsewhere = holding.onlyOthers ? holding.holders.find(Boolean) : undefined
   const join = joinKnown(journey)
-  const membership = !heldElsewhere && join?.kind === 'member' ? join.membership : undefined
-  const vetsHere = !heldElsewhere && vetterGrantKnown(journey)?.state === 'active'
+  // Whose standing it is must be known before any is shown as this agent's.
+  const mine = holding.known && !heldElsewhere
+  const membership = mine && join?.kind === 'member' ? join.membership : undefined
+  const vetsHere = mine && vetterGrantKnown(journey)?.state === 'active'
   // Not known yet whether this is a member: neither the criteria nor the way
   // to apply — a member saw the non-member page until the read came back
   // (UI-smoothness plan, Phase 2b). One that could not be read is said, with
   // a way to read it again.
-  const standingUnknown = !heldElsewhere && join === undefined
-  const standingFailed = standingUnknown && readFailed(journey, 'join')
+  const standingUnknown = !heldElsewhere && (join === undefined || !holding.known)
+  // Either read can fail: the journey's, or whose identity it is. Both are said, with the way to read again.
+  const standingFailed = standingUnknown && (readFailed(journey, 'join') || holding.failed)
   const [rereading, setRereading] = useState(false)
+  const retryHolders = holding.retry
   const readAgain = useCallback(async () => {
     setRereading(true)
     try {
+      retryHolders()
       await refresh()
     } finally {
       setRereading(false)
     }
-  }, [refresh])
+  }, [refresh, retryHolders])
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
