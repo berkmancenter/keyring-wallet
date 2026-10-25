@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const leg = (name) => readFileSync(path.join(here, 'legs', `${name}.sh`), 'utf8');
 const finOf = (src) => src.match(/^fin\(\) \{\n([\s\S]*?)\n\}/m)?.[1] ?? '';
 
-for (const name of ['waiting', 'agents', 'testreq', 'p1']) {
+for (const name of ['waiting', 'agents', 'testreq', 'p1', 'pnmlink']) {
   test(`${name} streams the phone's logcat for the whole leg and stops it in its cleanup`, () => {
     const src = leg(name);
     const start = src.indexOf('adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!');
@@ -27,4 +27,12 @@ test('kk and signin-ios save the app\'s iOS log', () => {
   assert.match(leg('kk'), /ios_log_save "\$APPLICANT_SIM_UDID" "\$LEG_DIR\/applicant-ios\.log"/);
   assert.match(leg('kk'), /ios_log_save "\$VETTER_SIM_UDID" "\$LEG_DIR\/vetter-ios\.log"/);
   assert.match(leg('signin-ios'), /ios_log_save "\$U" "\$LEG_DIR\/ios\.log"/);
+});
+
+test('hv streams the applicant\'s logcat from before the link, without clearing what its rows read back', () => {
+  const src = leg('hv');
+  const start = src.indexOf('adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!');
+  assert.ok(start > src.indexOf('emu_start') && start < src.indexOf('cd "$E2E"'), 'after the emulator, before any driver');
+  assert.doesNotMatch(src.slice(0, start), /logcat -c/, 'never cleared: the hv rows read logcat -d');
+  assert.match(finOf(src), /kill "\$LC"/);
 });
