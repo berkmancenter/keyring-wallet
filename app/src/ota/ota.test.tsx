@@ -1,4 +1,4 @@
-import { notifyReturnLocked, resetOtaReturnLockedListenersForTests } from '@bifold/core'
+import { notifyReturnLocked, registerOtaApplyBlocker, resetOtaReturnLockedListenersForTests } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
 import { Platform, Text } from 'react-native'
@@ -131,6 +131,11 @@ describe('withOta', () => {
     const STAGED = '01a170f1-bf53-7586-8537-e480624f5e1a'
     const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
     const away = 31 * 60_000
+    const staged271 = JSON.stringify({
+      isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+      stagingBundleId: STAGED,
+      verificationPending: true,
+    })
     let os: PropertyDescriptor | undefined
 
     const wrapped = (log = jest.fn()) => {
@@ -161,6 +166,7 @@ describe('withOta', () => {
     afterEach(() => {
       if (os) Object.defineProperty(Platform, 'OS', os)
       jest.mocked(exists).mockReset().mockResolvedValue(false)
+      jest.mocked(readFile).mockReset()
     })
 
     it("does not reload on a bare 'UPDATE' event: an offered update is not a staged one", async () => {
@@ -189,23 +195,68 @@ describe('withOta', () => {
       notifyReturnLocked(away)
       await flush()
       expect(reload).not.toHaveBeenCalled()
-      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: null, apply: false }))
+      // Logged with both keys, so on a device it does not read as "nothing staged".
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: null,
+          apply: false,
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+          stagedUnderKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
+        })
+      )
     })
 
     it('reloads into the update hot-updater has staged, read from its metadata at the return', async () => {
       jest.mocked(exists).mockResolvedValue(true)
-      jest.mocked(readFile).mockResolvedValue(
-        JSON.stringify({
-          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
-          stagingBundleId: STAGED,
-          verificationPending: true,
-        })
-      )
+      jest.mocked(readFile).mockResolvedValue(staged271)
       const { reload, log } = wrapped()
       notifyReturnLocked(away)
       await flush()
       expect(reload).toHaveBeenCalledTimes(1)
       expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: STAGED, apply: true }))
+    })
+
+    it('does not reload when a flow begins while the metadata is being read', async () => {
+      let release: (() => void) | undefined
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockImplementation(async () => {
+        release = registerOtaApplyBlocker('a test flow')
+        return staged271
+      })
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      release?.()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ staged: STAGED, apply: false, reason: 'blocked: a test flow' })
+      )
+    })
+
+    it('logs a metadata read that fails, and does not reload', async () => {
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockRejectedValue(new Error('EACCES'))
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ staged: null, apply: false, readError: 'Error: EACCES' })
+      )
+    })
+
+    it('logs a return check that throws, and does not reload', async () => {
+      const { reload, log } = wrapped()
+      jest.spyOn(HotUpdater, 'getDefaultChannel').mockImplementation(() => {
+        throw new Error('native module gone')
+      })
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith('apply on return failed', { error: 'Error: native module gone' })
     })
   })
 
