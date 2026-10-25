@@ -902,6 +902,83 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
 - **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. Distinct from a **deterministic 0/N** failure, seen on real devices through 2026-08-31: the witness silently running in mediator mode with a push-only pickup strategy against a mediator that only queues — fixed (see `docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"), and the harness no longer lets a local `.env` put the witness back into that mode by accident.
 - **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
+## Live message pickup on two phones — attended
+
+Before live WebSocket pickup leaves its switch (wallet #643, Developer options →
+"Live message pickup (WebSocket)", or `LIVE_MESSAGE_PICKUP=true` in `app/.env`
+for the build), it is run on two real phones. Emulators and simulators don't
+suspend, sleep or switch networks the way phones do, and those are what this
+run is for. The design, and the local measurements behind it, are in
+[`docs/plans/mediator-migration-plan/2026-10-25-al.md`](../docs/plans/mediator-migration-plan/2026-10-25-al.md)
+part 7.
+
+**Mediator.** Scenarios 1–4 use the build's own mediator, as a tester's phone
+does. Scenario 5 restarts the mediator, so it runs only against a **local**
+WebSocket-capable mediator with the Postgres pickup queue. It never restarts
+the shared one without the maintainer's explicit go for that test. `yarn
+mediator` is HTTP-only on Credo's built-in queue, so it cannot stand in for this.
+Without such a local mediator, scenario 5 is covered by the Node harness result
+in the companion, and the device run reports it as not run.
+
+### Setup
+
+- Two phones on a build with the switch **on**: the same build on both, its
+  bundle hash noted.
+- The two are connected as contacts, with the chat open between them.
+- Capture each phone's log for the whole run:
+  - Android: `adb -s <serial> logcat -v time > android.log`
+  - iPhone: the device syslog filtered to the app, as the device runs above do.
+- Name every test message `lp-<scenario>-<n>`, so a missing or doubled one is
+  easy to spot.
+
+### Scenarios
+
+For each one, record on the receiving phone: how many arrived, any duplicates,
+and the time from the last send to the last arrival.
+
+1. **Foreground, steady.** A sends 10 messages, one every few seconds, while B
+   watches the chat.
+   - *Expect:* 10/10, no duplicates, each about a second or less.
+2. **Background 1 min, then 10 min.** Put B in the background. A sends 5, then
+   B comes back to the foreground.
+   - *Expect:* all 5 arrive within a few seconds of B returning. If a push wake
+     arrives, so much the better, but it isn't required.
+   - Repeat with 10 minutes in the background, and with the screen locked.
+3. **Wi-Fi ↔ cellular mid-delivery.** A sends 10 at about one a second. Halfway
+   through, B turns Wi-Fi off (B is then on cellular). Repeat with Wi-Fi coming
+   back on.
+   - *Expect:* 10/10, no duplicates.
+   - Messages sent across the switch may wait for the next liveness check, at
+     most 60 s, or for B's next return to the foreground.
+4. **Half-open socket.** B in airplane mode for 2 min while staying in the
+   foreground, A sends 5, then B leaves airplane mode.
+   - *Expect:* 5/5 within about 65 s (the next check times out after 5 s, then
+     closes and restarts the socket).
+5. **Mediator restart** (local mediator only, see above). Phones in the
+   foreground, A sends 3, the mediator is killed and started again on the same
+   data, then A sends 10.
+   - *Expect:* 13/13. B reconnects on its own, within the 30 s reconnect cap
+     plus the next check.
+
+### After the run
+
+```sh
+node e2e/scripts/live-pickup-log-check.mjs android.log
+node e2e/scripts/live-pickup-log-check.mjs iphone.log
+```
+
+The checker passes a log when pickup went live and stayed live. It fails when:
+- nothing went live (the switch was off);
+- credo started live mode more often than the app did (a second reconnect
+  monitor);
+- pickup ended on polling.
+
+It lists each restart with its reason. A brief polling start right after an
+agent (re)start is a note, not a failure.
+
+**Report:** a table of scenario × phone with delivered, duplicates and
+latency, the checker's output for both phones, and the bundle hash.
+
 ## A local VTA for real-VTA testing (`lib/vta.js`)
 
 `startVta()` (`lib/vta.js`) brings up a real, disposable OpenVTC `vta` binary
