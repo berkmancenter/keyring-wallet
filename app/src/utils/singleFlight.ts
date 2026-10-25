@@ -3,6 +3,11 @@
  * that run's promise instead of starting another. Once it settles, resolved or
  * rejected, the next call starts afresh.
  *
+ * A joined call's arguments are ignored: it gets the run already in flight,
+ * started with the first call's arguments. Join only where any caller would
+ * have got the same result (agent start: the mediator is chosen before the
+ * start begins, and every caller passes the same wallet secret).
+ *
  * `inFlight` is kept by the caller (a React ref), so the guard outlives the
  * function it wraps: a hook's callback is rebuilt whenever its dependencies
  * change, and the run in flight must still be seen by the rebuilt one.
