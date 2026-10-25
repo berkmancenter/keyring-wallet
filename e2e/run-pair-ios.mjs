@@ -153,9 +153,31 @@ async function sendChat(d, text) {
 }
 
 /** From the Contacts list, open `peer`'s chat. */
+/**
+ * Back out of stacked screens (a chat, its Contact Details) toward the tabs: up to four presses of whichever back the
+ * screen has, its testID Back or BackButton, or a header button labelled "Back". returnToContacts knows BackButton only,
+ * and a chat opened through Contact Details sits two screens deep behind headers without it.
+ */
+async function backOut(d) {
+  for (let i = 0; i < 4; i++) {
+    if (await existsTestId(d, "Contacts", 1000)) return;
+    if (await existsTestId(d, "Back", 1000)) await tapTestId(d, "Back", 3000).catch(() => undefined);
+    else if (await existsTestId(d, "BackButton", 1000)) await tapTestId(d, "BackButton", 3000).catch(() => undefined);
+    else {
+      const back = await d.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Back" AND visible == 1');
+      if (!(await back.isExisting())) return;
+      await back.click();
+    }
+    await sleep(1000);
+  }
+}
+
 async function openChatWith(d, peer) {
+  await backOut(d);
   await returnToContacts(d);
   await (await d.$(`-ios predicate string:label CONTAINS "${peer.first} ${peer.last}" AND visible == 1`)).click();
+  // A contact opens on its details page; its "View Messages" (ContactDetails.tsx) opens the chat.
+  if (await existsTestId(d, "ContactViewMessages", 5000)) await tapTestId(d, "ContactViewMessages", 5000);
   for (const until = Date.now() + 15000; Date.now() < until; await sleep(1000)) if (await onChat(d, peer)) return;
   throw new Error(`driver: ${peer.first}'s chat did not open`);
 }
@@ -275,8 +297,13 @@ try {
       // (the RC rerun 1021-0328 stopped there with the sheet open).
       const copy = await a.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
       await copy.waitForExist({ timeout: 15000 });
-      await copy.click();
-      await sleep(1000);
+      // A tap while the sheet is still sliding in can miss: the sheet stays up and nothing is copied (10-25 run 3 and
+      // 4 on the MacBook, screenshot shows the sheet still open). Copy dismisses the sheet, so tap until it goes.
+      for (let i = 0; i < 3 && (await copy.isExisting()); i++) {
+        await sleep(800);
+        await copy.click().catch(() => undefined);
+        await sleep(1200);
+      }
       // The message is the words, then the link on its own line (QRScanner.tsx). Read through WebDriverAgent first, as
       // lib/pages/link.js does: simctl pbpaste came back empty for 10 s on the MacBook while WDA had the link (10-23).
       const clip = Buffer.from((await a.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
@@ -362,7 +389,13 @@ try {
     const PHOTO_FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "test-chat-photo-gps.jpg");
     await rows.row("pair-photo-send", async () => {
       simctl("addmedia", A.udid, PHOTO_FIXTURE);
+      // Changing a privacy grant terminates the running app (iOS 26.3 simulator: SIGKILL, no crash report, 10-25), so
+      // bring Keyring back and unlock it before driving it.
       simctl("privacy", A.udid, "grant", "photos", APP);
+      await sleep(1500);
+      await a.execute("mobile: activateApp", { bundleId: APP });
+      await sleep(3000);
+      await unlockIfLocked(a);
       await openChatWith(a, B);
       const imagesBefore = { a: await countTestId(a, "ChatMessageImage"), b: await countTestId(b, "ChatMessageImage") };
       await tapTestId(a, "ChatActionsButton", 10000);
@@ -455,8 +488,7 @@ try {
     // outcome line (logger.info, TabStack.tsx) reaches the device log only when the build logs at info, so it is detail.
     await rows.row("pair-wake-opens-chat", async () => {
       await a.execute("mobile: pressButton", { name: "home" });
-      await returnToContacts(b);
-      await (await b.$(`-ios predicate string:label CONTAINS "${A.first} ${A.last}" AND visible == 1`)).click();
+      await openChatWith(b, A);
       await sendChat(b, "gate: a message for the wake");
       const since = Date.now();
       await pushAndTapWake(a, A.udid, "chat");
