@@ -98,15 +98,14 @@ export async function mergeAllContacts(
     if (!contacts.has(contact)) contacts.set(contact, relationshipsOfContact(links, issuerId))
   }
   if (contacts.size < 2) return
-  let contactId = ''
-  let oldest = ''
+  // The contact kept: none chosen yet is undefined, not an empty id that a real one could be mistaken for.
+  let kept: { contactId: string; oldest: string } | undefined
   for (const [contact, members] of contacts) {
     const first = firstCardAt(records, members)
-    if (!contactId || first < oldest) {
-      contactId = contact
-      oldest = first
-    }
+    if (!kept || first < kept.oldest) kept = { contactId: contact, oldest: first }
   }
+  if (!kept) return
+  const { contactId } = kept
   for (const [contact, members] of contacts) {
     if (contact === contactId) continue
     for (const member of members) {

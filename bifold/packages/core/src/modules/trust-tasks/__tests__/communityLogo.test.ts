@@ -84,6 +84,32 @@ describe('a community logo', () => {
     expect(fs.unlink).toHaveBeenCalled()
   })
 
+  test('a file sent without its size is stopped once it passes the limit, not written out in full', async () => {
+    const reported: number[] = []
+    fs.downloadFile.mockImplementation(
+      ({ begin, progress }: { begin: (r: unknown) => void; progress: (r: { bytesWritten: number }) => void }) => ({
+        jobId: 9,
+        promise: new Promise((resolve) =>
+          setTimeout(() => {
+            begin({ statusCode: 200, contentLength: -1, headers: { 'Content-Type': 'image/png' } })
+            for (const bytesWritten of [MAX_LOGO_BYTES / 2, MAX_LOGO_BYTES, MAX_LOGO_BYTES + 1]) {
+              reported.push(bytesWritten)
+              progress({ bytesWritten })
+              // Under the limit, it carries on (the control for the stop below).
+              if (bytesWritten <= MAX_LOGO_BYTES) expect(fs.stopDownload).not.toHaveBeenCalled()
+            }
+            resolve({ statusCode: 200, bytesWritten: MAX_LOGO_BYTES + 1 })
+          }, 0)
+        ),
+      })
+    )
+    expect(await cachedCommunityLogo(DID, LOGO)).toBeUndefined()
+    expect(reported).toHaveLength(3)
+    expect(fs.stopDownload).toHaveBeenCalledWith(9)
+    expect(fs.moveFile).not.toHaveBeenCalled()
+    expect(fs.unlink).toHaveBeenCalled()
+  })
+
   test('a failure is not asked again in the same run', async () => {
     fs.downloadFile.mockImplementation(() => ({ jobId: 1, promise: Promise.reject(new Error('offline')) }))
     expect(await cachedCommunityLogo(DID, LOGO)).toBeUndefined()

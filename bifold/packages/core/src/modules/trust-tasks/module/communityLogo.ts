@@ -5,6 +5,9 @@
  *
  * Only an https address (communityBrand.ts `httpsLogoUrl`) is fetched, and only a PNG, JPEG or WebP image no larger
  * than {@link MAX_LOGO_BYTES} is kept; anything else, and any failure, means no logo, and the card shows its monogram.
+ * The download stops as soon as it passes that size, announced or not (a server need not say how large it is), so a
+ * large file is never written out in full. "https" is the first address only: a redirect is followed by the platform,
+ * which refuses a plain-http hop itself (App Transport Security on iOS; Android's default refusal of cleartext).
  * A failure is remembered until the app restarts, so a host that is down is not asked again on every render.
  *
  * @module trust-tasks/module/communityLogo
@@ -17,6 +20,8 @@ import { httpsLogoUrl } from './communityBrand'
 
 export const MAX_LOGO_BYTES = 512 * 1024
 const IMAGE_TYPE = /^image\/(png|jpeg|webp)(;|$)/i
+/** How often a download reports its progress, so one past the size limit stops promptly. */
+const PROGRESS_MS = 100
 
 const logoDir = () => `${RNFS.CachesDirectoryPath}/community-logos`
 const settled = new Map<string, Promise<string | undefined>>()
@@ -40,6 +45,14 @@ async function fetchLogo(url: string, path: string): Promise<string | undefined>
       begin: (res) => {
         const type = headerOf(res.headers, 'content-type') ?? ''
         if (res.statusCode !== 200 || !IMAGE_TYPE.test(type) || res.contentLength > MAX_LOGO_BYTES) {
+          refused = true
+          RNFS.stopDownload(job.jobId)
+        }
+      },
+      // A server that does not say how large the file is (or says too little) is stopped once it has sent too much.
+      progressInterval: PROGRESS_MS,
+      progress: (res) => {
+        if (!refused && res.bytesWritten > MAX_LOGO_BYTES) {
           refused = true
           RNFS.stopDownload(job.jobId)
         }

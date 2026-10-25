@@ -31,6 +31,11 @@ interface Der {
   from: number
 }
 
+/**
+ * One DER element's header, its tag number decoded with its class split off, multi-byte (high) tags included: Android's
+ * authorization list tags entries 503 and 504 that way. signingTime.ts has a simpler reader that keeps the whole first
+ * identifier byte as the tag (0x30, not 0x10, for a SEQUENCE); the two are not interchangeable.
+ */
 function readDer(bytes: Uint8Array, offset: number, limit: number): Der {
   let at = offset
   if (at >= limit) throw new Error('truncated DER')

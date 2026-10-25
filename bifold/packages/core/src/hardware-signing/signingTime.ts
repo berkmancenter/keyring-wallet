@@ -66,6 +66,11 @@ interface Der {
   end: number
 }
 
+/**
+ * One DER element's header. Its tag is the whole first identifier byte (0x30 is a SEQUENCE): enough for an X.509
+ * certificate's validity, which uses only single-byte tags. keyDescription.ts has a second reader that also decodes
+ * multi-byte (high) tags, which Android's key description uses (503, 504); use that one for anything past validity.
+ */
 function readDer(bytes: Uint8Array, offset: number, limit: number): Der {
   if (offset + 2 > limit) throw new Error('truncated DER')
   const tag = bytes[offset]
