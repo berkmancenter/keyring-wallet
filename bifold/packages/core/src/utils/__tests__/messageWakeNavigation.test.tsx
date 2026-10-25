@@ -10,6 +10,7 @@
  * while the list was on screen. The test before this one drove the wake from
  * the container's root ref, and so never ran the app's path.
  */
+import { RepositoryEventTypes } from '@credo-ts/core'
 import { DidCommBasicMessageEventTypes, DidCommConnectionEventTypes } from '@credo-ts/didcomm'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { NavigationContainer, useNavigation, useRoute } from '@react-navigation/native'
@@ -18,6 +19,7 @@ import { act, render } from '@testing-library/react-native'
 import React, { useEffect, useState } from 'react'
 import { Text } from 'react-native'
 
+import { ChatEventRepository } from '../../modules/chat/records/ChatEventRepository'
 import { vrcFlowStore } from '../../modules/vrc/witnessStatusStore'
 import { Screens, Stacks, TabStacks } from '../../types/navigators'
 import { setActiveChatConnectionId } from '../activeChatTracker'
@@ -109,6 +111,17 @@ const record = (connectionId: string, at: string) => ({
   metadata: { get: () => undefined },
 })
 
+/** A received keyring/chat message, as the chat repository stores it. */
+const chatMessage = (connectionId: string, at: string) => ({
+  type: 'ChatEventRecord',
+  connectionId,
+  role: 'received',
+  eventType: 'message',
+  eventId: `${connectionId}-${at}`,
+  createdAt: new Date(at),
+  metadata: { get: () => undefined },
+})
+
 /** A connection on which this phone made the invitation, as the DID exchange moves it. */
 const answered = (id: string, state = 'request-received', metadata: Record<string, unknown> = {}) => ({
   id,
@@ -121,8 +134,20 @@ function agentWith(
   stored: ReturnType<typeof record>[],
   waiting: ReturnType<typeof record>[],
   duringPickup?: () => Promise<void>,
-  connections: ReturnType<typeof answered>[] = []
+  connections: ReturnType<typeof answered>[] = [],
+  chat: {
+    stored?: ReturnType<typeof chatMessage>[]
+    waiting?: ReturnType<typeof chatMessage>[]
+    /** The pickup never ends once the messages are in: only their arrival can end the wait. */
+    pickupHangs?: boolean
+  } = {}
 ) {
+  const chatStored = chat.stored ?? []
+  // The chat module's repository, resolved as getChatEventRepository resolves it.
+  const chatRepository = {
+    findByQuery: async (_context: unknown, query: Record<string, string>) =>
+      chatStored.filter((r) => Object.entries(query).every(([k, v]) => (r as Record<string, unknown>)[k] === v)),
+  }
   // One listener set per event type, as Credo's event emitter keeps them.
   const listeners = new Map<string, Set<(event: unknown) => void>>()
   const emit = (type: string, event: unknown) => listeners.get(type)?.forEach((fn) => fn(event))
@@ -151,9 +176,24 @@ function agentWith(
                 payload: { basicMessageRecord: message },
               })
             }
+            for (const message of chat.waiting ?? []) {
+              chatStored.push(message)
+              emit(RepositoryEventTypes.RecordSaved, { payload: { record: message } })
+            }
+            if (chat.pickupHangs) await new Promise<void>(() => undefined)
           }),
         },
         basicMessages: { findAllByQuery: async () => stored },
+      },
+    },
+    context: {},
+    dependencyManager: {
+      container: {
+        isRegistered: (token: unknown) => token === ChatEventRepository,
+        resolve: (token: unknown) => {
+          if (token !== ChatEventRepository) throw new Error(`fake container cannot resolve ${String(token)}`)
+          return chatRepository
+        },
       },
     },
   } as never
@@ -175,7 +215,13 @@ const tap = (agent: never) =>
     graceMs: 0,
   })
 
-/** Resolves once the Messages list reports it no longer has focus. */
+/**
+ * Resolves once the Messages list reports it no longer has focus.
+ *
+ * If "a person who goes elsewhere after the list took focus is not moved" fails again (Received "chat"), suspect
+ * this wait first. The flake it replaced (run 40184117411) never reproduced locally, so #578's fix rests on removing
+ * the ordering assumption, not on a reproduction.
+ */
 const listLostFocus = () =>
   new Promise<void>((resolve) => {
     if (!messagesListFocus.focused()) return resolve()
@@ -250,6 +296,55 @@ describe('a tapped message notification, driven as the app drives it', () => {
     const tree = render(<App />)
     expect(await settle(tap(agentWith([], [])))).toBe('list')
     expect(tree.getByTestId('MessagesScreen')).toBeTruthy()
+  })
+})
+
+/** K↔K chat: a tap for a keyring/chat message must open its chat, as a BasicMessage's does. */
+describe('a tap for a keyring/chat message', () => {
+  it('a keyring/chat message waiting: its chat opens', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [], undefined, [], { waiting: [chatMessage('cal', '2026-10-20T10:05:00Z')] })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_cal')).toBeTruthy()
+  })
+
+  it('its arrival ends the wait: the chat opens though the pickup never ends', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [], undefined, [], {
+      waiting: [chatMessage('cal', '2026-10-20T10:05:00Z')],
+      pickupHangs: true,
+    })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_cal')).toBeTruthy()
+  })
+
+  it('a BasicMessage waiting, with none of keyring/chat: its chat still opens', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], undefined, [], {
+      stored: [],
+    })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
+  })
+
+  it('both kinds unread: the newest wins, a keyring/chat message over an older BasicMessage', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([record('ada', '2026-10-20T10:00:00Z')], [], undefined, [], {
+      waiting: [chatMessage('cal', '2026-10-20T10:05:00Z')],
+    })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_cal')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_ada')).toBeNull()
+  })
+
+  it('both kinds unread: the newest wins, a BasicMessage over an older keyring/chat message', async () => {
+    const tree = render(<App />)
+    const agent = agentWith([], [record('bob', '2026-10-20T10:09:00Z')], undefined, [], {
+      stored: [chatMessage('cal', '2026-10-20T10:05:00Z')],
+    })
+    expect(await settle(tap(agent))).toBe('chat')
+    expect(await tree.findByTestId('Chat_bob')).toBeTruthy()
+    expect(tree.queryByTestId('Chat_cal')).toBeNull()
   })
 })
 

@@ -5,10 +5,13 @@
  */
 import type { DidCommBasicMessageRecord } from '@credo-ts/didcomm'
 
+import { addExcludedNotificationConnectionId, clearExcludedNotificationConnectionIds } from '../../hooks/notifications'
+import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord'
 import { BasicMessageMetadata } from '../../types/metadata'
 import {
   messageWakeFetching,
   messageWakeHold,
+  newestUnreadAcross,
   newestUnreadConnection,
   openMessageWake,
   type MessageWakeDeps,
@@ -27,6 +30,68 @@ const message = (connectionId: string, at: string, opts: { seen?: boolean; conte
       get: (key: string) => (key === BasicMessageMetadata.customMetadata && opts.seen ? { seen: true } : undefined),
     },
   }) as unknown as DidCommBasicMessageRecord
+
+/** A stored keyring/chat event, as the chat repository returns one. */
+const chatEvent = (
+  connectionId: string,
+  at: string,
+  opts: { seen?: boolean; role?: 'received' | 'sent'; eventType?: string } = {}
+) =>
+  ({
+    type: 'ChatEventRecord',
+    connectionId,
+    role: opts.role ?? 'received',
+    eventType: opts.eventType ?? 'message',
+    createdAt: new Date(at),
+    metadata: { get: (key: string) => (key === '_keyring/chatSeen' && opts.seen ? { at } : undefined) },
+  }) as unknown as ChatEventRecord
+
+describe('which chat a tap opens, BasicMessages and keyring/chat messages together', () => {
+  afterEach(() => clearExcludedNotificationConnectionIds())
+
+  it('a keyring/chat message newer than any BasicMessage: its chat', () => {
+    expect(
+      newestUnreadAcross([message('ada', '2026-10-20T10:00:00Z')], [chatEvent('cal', '2026-10-20T10:05:00Z')])
+    ).toBe('cal')
+  })
+
+  it('a BasicMessage newer than any keyring/chat message: its chat', () => {
+    expect(
+      newestUnreadAcross([message('ada', '2026-10-20T10:09:00Z')], [chatEvent('cal', '2026-10-20T10:05:00Z')])
+    ).toBe('ada')
+  })
+
+  it('reads keyring/chat as the badge does: a seen message, a reaction or one this phone sent is not unread', () => {
+    const events = [
+      chatEvent('cal', '2026-10-20T10:01:00Z'),
+      chatEvent('dee', '2026-10-20T10:02:00Z', { seen: true }),
+      chatEvent('eve', '2026-10-20T10:03:00Z', { eventType: 'reaction' }),
+      chatEvent('fay', '2026-10-20T10:04:00Z', { role: 'sent' }),
+    ]
+    expect(newestUnreadAcross([], events)).toBe('cal')
+  })
+
+  it('a connection left out of notifications is not picked, for either kind', () => {
+    addExcludedNotificationConnectionId('cal')
+    addExcludedNotificationConnectionId('ada')
+    expect(
+      newestUnreadAcross(
+        [message('ada', '2026-10-20T10:09:00Z'), message('bob', '2026-10-20T10:00:00Z')],
+        [chatEvent('cal', '2026-10-20T10:05:00Z')]
+      )
+    ).toBe('bob')
+  })
+
+  it('none when nothing of either kind is unread', () => {
+    expect(
+      newestUnreadAcross(
+        [message('ada', '2026-10-20T10:00:00Z', { seen: true })],
+        [chatEvent('cal', '2026-10-20T10:05:00Z', { seen: true })]
+      )
+    ).toBeUndefined()
+    expect(newestUnreadAcross([], [])).toBeUndefined()
+  })
+})
 
 describe('which chat a tap opens', () => {
   it('the connection whose unread message is newest, whoever has more of them', () => {

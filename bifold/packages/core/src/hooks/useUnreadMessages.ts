@@ -3,6 +3,7 @@ import { useBasicMessages } from '@bifold/react-hooks'
 import { useMemo } from 'react'
 
 import { useAllChatEvents } from '../modules/chat/chatEventsStore'
+import type { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 import { isUnreadChatEvent } from '../modules/chat/seen'
 import { usePendingContinuityConnections } from '../modules/vrc/contacts/useContinuityPrompt'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
@@ -20,6 +21,14 @@ export function isUnreadChatMessage(msg: DidCommBasicMessageRecord): boolean {
   if (isProtocolMessage(msg.content)) return false
   const meta = msg.metadata.get(BasicMessageMetadata.customMetadata) as basicMessageCustomMetadata
   return !meta?.seen
+}
+
+/**
+ * Whether a keyring/chat event counts as unread chat: a received message not yet seen, from a connection not left
+ * out of notifications. The badge and a tapped message notification use this one rule, as for BasicMessages.
+ */
+export function isUnreadKeyringChatEvent(record: ChatEventRecord): boolean {
+  return !isConnectionExcludedFromNotifications(record.connectionId) && isUnreadChatEvent(record)
 }
 
 /**
@@ -46,8 +55,7 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
       }
     }
     for (const [connectionId, events] of chatEvents ?? []) {
-      if (isConnectionExcludedFromNotifications(connectionId)) continue
-      const unread = events.filter(isUnreadChatEvent).length
+      const unread = events.filter(isUnreadKeyringChatEvent).length
       if (!unread) continue
       unreadByConnection[connectionId] = (unreadByConnection[connectionId] ?? 0) + unread
       totalUnread += unread

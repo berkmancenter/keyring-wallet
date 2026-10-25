@@ -18,15 +18,16 @@
  *    - someone has just answered one of this phone's invitations (a shared
  *      link opened later): open that new contact's chat, where the exchange
  *      shows its progress;
- *    - otherwise the chat with the newest unread message — the rule the
- *      Messages badge counts by — or the list when nothing is unread.
+ *    - otherwise the chat with the newest unread message, a BasicMessage or a
+ *      keyring/chat message alike — the rule the Messages badge counts by — or
+ *      the list when nothing is unread.
  *
  * A person who has gone anywhere by then is not moved: the tap brought them to
  * the list, and what they did next wins.
  *
  * @module utils/messageWake
  */
-import type { Agent } from '@credo-ts/core'
+import { RepositoryEventTypes, type Agent, type BaseEvent } from '@credo-ts/core'
 import { useFocusEffect } from '@react-navigation/native'
 import { useCallback } from 'react'
 import {
@@ -42,7 +43,9 @@ import {
 } from '@credo-ts/didcomm'
 
 import { isConnectionExcludedFromNotifications } from '../hooks/notifications'
-import { isUnreadChatMessage } from '../hooks/useUnreadMessages'
+import { isUnreadChatMessage, isUnreadKeyringChatEvent } from '../hooks/useUnreadMessages'
+import { getChatEventRepository } from '../modules/chat/ChatModule'
+import { ChatEventRecord } from '../modules/chat/records/ChatEventRecord'
 import { continuityPromptStore } from '../modules/vrc/contacts/continuity'
 import { vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 
@@ -68,6 +71,27 @@ export function newestUnreadConnection(
     if (!isUnread(message)) continue
     if (!newest || new Date(message.createdAt).getTime() > new Date(newest.createdAt).getTime()) newest = message
   }
+  return newest?.connectionId
+}
+
+/**
+ * The connection of the newest unread message of all, BasicMessages and keyring/chat messages together, each by the
+ * badge's own rule. Both kinds are timed by when this phone stored them (createdAt), so they compare on one clock.
+ * Never by the sender's own time (a chat event's clientTs): a peer could then make its message win every tap by
+ * claiming a time in the future.
+ */
+export function newestUnreadAcross(
+  basicMessages: DidCommBasicMessageRecord[],
+  chatEvents: ChatEventRecord[]
+): string | undefined {
+  let newest: { connectionId: string; at: number } | undefined
+  const consider = (connectionId: string, createdAt: Date) => {
+    const at = new Date(createdAt).getTime()
+    if (!newest || at > newest.at) newest = { connectionId, at }
+  }
+  for (const message of basicMessages)
+    if (isUnreadChatMessage(message)) consider(message.connectionId, message.createdAt)
+  for (const event of chatEvents) if (isUnreadKeyringChatEvent(event)) consider(event.connectionId, event.createdAt)
   return newest?.connectionId
 }
 
@@ -332,7 +356,7 @@ export async function pickUpNow(agent: Agent, timeoutMs: number = MESSAGE_WAKE_W
   })
 }
 
-/** The next chat message this phone receives, from either DIDComm version. */
+/** The next chat message this phone receives: a BasicMessage from either DIDComm version, or a keyring/chat message. */
 export function nextReceivedMessage(agent: Agent): { arrived: Promise<void>; cancel(): void } {
   let cancel = () => undefined as void
   const arrived = new Promise<void>((resolve) => {
@@ -348,9 +372,18 @@ export function nextReceivedMessage(agent: Agent): { arrived: Promise<void>; can
         DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged
       )
       .subscribe((event) => received(event.payload.basicMessageRecord))
+    // A keyring/chat message is stored once, when it arrives; a reaction, a redaction or what this phone sent never
+    // ends the wait.
+    // The role and type are checked here as in newestUnread's query, not left to the unread rule alone.
+    const chat = agent.events.observable<BaseEvent>(RepositoryEventTypes.RecordSaved).subscribe((event) => {
+      const record = (event.payload as { record?: ChatEventRecord } | undefined)?.record
+      if (record?.type !== ChatEventRecord.type || record.role !== 'received' || record.eventType !== 'message') return
+      if (isUnreadKeyringChatEvent(record)) resolve()
+    })
     cancel = () => {
       v1.unsubscribe()
       v2.unsubscribe()
+      chat.unsubscribe()
     }
   })
   return { arrived, cancel: () => cancel() }
@@ -431,7 +464,19 @@ export function appMessageWakeDeps(options: {
     newestUnread: async () => {
       const basicMessages = (agent.modules as { didcomm?: any }).didcomm?.basicMessages
       const records: DidCommBasicMessageRecord[] = (await basicMessages?.findAllByQuery?.({})) ?? []
-      return newestUnreadConnection(records)
+      // Received keyring/chat messages; if they cannot be read, the BasicMessages still decide.
+      let chatEvents: ChatEventRecord[] = []
+      try {
+        chatEvents = await getChatEventRepository(agent).findByQuery(agent.context, {
+          role: 'received',
+          eventType: 'message',
+        })
+      } catch (error) {
+        log?.('message wake: chat messages could not be read', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return newestUnreadAcross(records, chatEvents)
     },
     openChat: (connectionId) =>
       navigation.navigate(names.contactStack, { screen: names.chat, params: { connectionId } }),
