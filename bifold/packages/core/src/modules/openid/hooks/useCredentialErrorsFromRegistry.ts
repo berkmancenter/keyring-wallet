@@ -1,6 +1,6 @@
 // hooks/useCredentialErrorsFromRegistry.ts
-import { useEffect, useMemo, useState } from 'react'
-import { credentialRegistry, RegistryStore } from '../refresh/registry'
+import { useMemo, useSyncExternalStore } from 'react'
+import { credentialRegistry } from '../refresh/registry'
 import { getRefreshCredentialMetadata } from '../metadata'
 import { RefreshStatus } from '../refresh/types'
 import { CredentialErrors, GenericCredentialExchangeRecord } from '../../../types/credentials'
@@ -17,24 +17,12 @@ export function useCredentialErrorsFromRegistry(
   propErrors?: CredentialErrors[]
 ) {
   const id = credential?.id
-  const [isInvalidByRegistry, setIsInvalidByRegistry] = useState(false)
-
-  // Subscribe to registry changes and keep a boolean for this credential
-  useEffect(() => {
-    if (!id) return
-
-    // Immediate read
-    const s = credentialRegistry.getState()
-    setIsInvalidByRegistry(s.expired.includes(id))
-
-    // Subscribe to changes
-    const unsub = credentialRegistry.subscribe((next: RegistryStore) => {
-      const flagged = next.expired.includes(id)
-      setIsInvalidByRegistry(flagged)
-    })
-
-    return unsub
-  }, [id])
+  // Read during render, so the first frame already says Revoked, and another
+  // credential (or none) is read afresh rather than keeping the last one's flag.
+  const isInvalidByRegistry = useSyncExternalStore(
+    credentialRegistry.subscribe,
+    () => id !== undefined && credentialRegistry.getState().expired.includes(id)
+  )
 
   // Fallback: metadata (covers case after restart when registry is empty)
   const isInvalidByMetadata = useMemo(() => {
