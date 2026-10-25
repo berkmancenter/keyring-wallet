@@ -184,6 +184,8 @@ describe('withOta', () => {
           reason: 'no update staged',
           // Logged with nothing staged too, to compare with the metadata file on a device.
           isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+          // Logged whatever decided the return: here nothing holds it.
+          blockers: [],
         })
       )
     })
@@ -238,9 +240,45 @@ describe('withOta', () => {
       // The log first: a failure then names the decision taken, not only the reload.
       expect(log).toHaveBeenCalledWith(
         'return',
-        expect.objectContaining({ staged: STAGED, apply: false, reason: 'blocked: a test flow' })
+        expect.objectContaining({
+          staged: STAGED,
+          apply: false,
+          reason: 'blocked: a test flow',
+          blockers: ['a test flow'],
+        })
       )
       expect(reload).not.toHaveBeenCalled()
+    })
+
+    it('logs the blockers held at a short return with nothing staged, as a device check reads them', async () => {
+      // A chat draft typed before the phone was locked for a few minutes: the lock-out return fires,
+      // the decision stops at "nothing staged", and the draft's blocker must still show.
+      const release = registerOtaApplyBlocker('chat-draft')
+      const { log } = wrapped()
+      notifyReturnLocked(6 * 60_000)
+      await flush()
+      release()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ awayMinutes: 6, reason: 'no update staged', blockers: ['chat-draft'] })
+      )
+    })
+
+    it("names a blocker by its kind only, in the reason and the log, not a VTA task's Trust Task type", async () => {
+      // Staged and away long enough, so the decision reaches the blockers and names them in its reason.
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockResolvedValue(staged271)
+      const release = registerOtaApplyBlocker('vta-task:vta/join/0.1')
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      release()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ apply: false, reason: 'blocked: vta-task', blockers: ['vta-task'] })
+      )
+      expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
     })
 
     it('logs a metadata read that fails, and does not reload', async () => {
