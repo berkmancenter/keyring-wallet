@@ -15,6 +15,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/dtg-vocab')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
   // @bifold/trust-tasks: platform-neutral trust-task plumbing shared with the
@@ -29,6 +30,7 @@ const packageDirs = [
 const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/core',
   '@bifold/verifier',
+  '@bifold/dtg-vocab',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
   '@bifold/react-native-locality-peripheral',
@@ -185,7 +187,12 @@ module.exports = (async () => {
         // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
         // dedupes within a single tree, so pinning has to happen here. Keep
         // this list in sync when a new native-backed dependency reaches
-        // bifold/packages/*.
+        // bifold/packages/*. bifold core's jest has the same pin for its own
+        // tests (moduleNameMapper for askar-shared in
+        // bifold/packages/core/jest.config.js); a dependency added here may
+        // belong there too. Changing this file runs the android-apk and
+        // ios-simulator builds (paths in .github/workflows/test-builds.yml),
+        // so a resolution mistake here is caught before merge.
         const singletonPrefixes = [
           'react',
           'react-native',

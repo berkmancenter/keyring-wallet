@@ -1,0 +1,447 @@
+#!/usr/bin/env node
+/**
+ * 235 evidence (10-06): the community card's "Show the code they see" WHILE a join is still waiting.
+ * On a linked Android phone: open C by its link, Ask to join (the admin-review way), then My Agent → the card's
+ * identity line → screenshot community-card-waiting.png into PERSONA_SHOTS. Prints `PERSONA-DID …` and
+ * `WAITING-STATUS …`. The caller declines the request afterwards, unless JOIN_APPROVE=1.
+ *
+ * JOIN_APPROVE=1 (C_ADMIN="<rest> <did> <admin credential>"): flow B, a plain join approved by the community.
+ * After the waiting checks the community's admin approves the request, and the rows are:
+ *   join-request-is-mine     (a) the newest pending request is from the identity the phone showed
+ *   join-approved-card       (b) Your agent's card for C turns to member: on its own within 90 s, else after Check now
+ *   join-approved-listed     (c) the community lists that identity as a member
+ *   join-approved-wallet     (d) the Wallet shows C's membership card
+ *   join-approved-role-card  (e) the default "member" role (decide/0.1 names none) gets no Wallet card of its own (one
+ *                                card from C), and the membership card's details say "Role: member"
+ *                                (CommunityCardRole, bifold #399, UI/UX 10-14). A build without that line keeps the
+ *                                earlier check, tracked: the role card beside the membership on Your agent
+ *   cards-kept-on-agent      (f) the runner agent's vault holds both cards C issued this identity, within 90 s
+ *                                (pnm cred-vault query: purpose membership; type AuthorityCredential for the role)
+ *   member-vmc-sent          (g) TRACKED: C's member row records the identity's reciprocal membership credential
+ *                                (members/vmc/1.0); Keyring does not send it yet (lane ac)
+ * (f) needs RUNNER_VTA (the runner's pnm slug) and PNM_BIN. Prints `CARD_IDS <membership id> <role id>` for the leg.
+ * The new-install recovery of both cards is run-cards-back.mjs (row cards-back-new-install), after this driver.
+ * Always, before approving: choose-how-to-join (#326): C's screen offers "Choose how to join" → Join.
+ * Prints `JOIN_MEMBER <did>` so the caller removes the member afterwards.
+ * The rows are lib/rows.js rows (a failing row never stops the rest; (b)–(d) need (a)); the Join and
+ * community screens are driven through lib/pages/join.js and lib/pages/agents.js.
+ *   E2E_APP_ID=… UDID=emulator-5572 C_DID=… C_NAME="Keyring Lab Community" PERSONA_SHOTS=<dir> node run-join-waiting.mjs
+ */
+import "./lib/cli-guard.js";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsTestId, scrollToTestId, sleep, stopAppium, tapTestId, ensureAppium, screenshot } from "./lib/driver.js";
+import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { pasteLinkFromHome } from "./lib/flows.js";
+import { capturePersonaDid, footClear } from "./lib/personaDid.js";
+import { communityCardKey } from "./lib/testIdKeys.js";
+import { createRows } from "./lib/rows.js";
+import { buildLacks } from "./lib/buildHas.js";
+import { credVaultQuery } from "./lib/pnm.js";
+import { agents } from "./lib/pages/agents.js";
+import { community, join, readMemberState, readStanding } from "./lib/pages/join.js";
+import { walletCardKeys, walletCardSelector } from "./lib/walletCards.js";
+
+const C_DID = process.env.C_DID;
+const key = communityCardKey(C_DID || "");
+const C_NAME = process.env.C_NAME || "Keyring Lab Community";
+const ADMIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
+const admin = (...a) =>
+  execFileSync("node", [ADMIN, ...(process.env.C_ADMIN || "").split(" ").filter(Boolean), ...a], { encoding: "utf8", timeout: 90000, stdio: ["ignore", "pipe", "pipe"] });
+const json = (t) => JSON.parse(t.slice(t.indexOf("{")));
+const rows = createRows({
+  label: "waiting",
+  // A rerun of one of the three alone (gate.sh rerun --only-failed) runs join-request-is-mine first: declared here.
+  needs: {
+    "join-approved-card": ["join-request-is-mine"],
+    "join-approved-listed": ["join-request-is-mine"],
+    "join-approved-wallet": ["join-request-is-mine"],
+    "join-approved-role-card": ["join-request-is-mine"],
+    "cards-kept-on-agent": ["join-request-is-mine"],
+    "member-vmc-sent": ["join-request-is-mine"],
+  },
+});
+const log = (m) => console.log(`[e2e] ${new Date().toISOString().slice(11, 23)}Z ${m}`);
+/**
+ * The Wallet's cards from `issuer`, as distinct "issuer|card name" pairs read from the page over the whole list
+ * (scrolled down until it stops moving, then back to the top). Android.
+ */
+async function walletCardsFrom(d, issuer) {
+  const seen = new Set();
+  const read = async () => {
+    const src = await d.getPageSource().catch(() => "");
+    // An older build's issuer|card-name pairs, or a pass build's pass descriptions (bifold #524): lib/walletCards.js.
+    for (const key of walletCardKeys(src, issuer)) seen.add(key);
+  };
+  const scroll = (direction) =>
+    d.execute("mobile: scrollGesture", { left: 100, top: 500, width: 800, height: 1200, direction, percent: 0.8 }).catch(() => false);
+  await read();
+  for (let i = 0; i < 8 && (await scroll("down")); i++) await read();
+  await read();
+  for (let i = 0; i < 8 && (await scroll("up")); i++);
+  return seen.size;
+}
+
+/** C's status on Your agent, polled up to `tries` × 1.5 s: the status line, else the row's own label after ", ". */
+async function statusOf(d, tries) {
+  let status = "";
+  for (let i = 0; i < tries && !status; i++) {
+    await sleep(1500);
+    // The status line sits above the card's kept-card lines and identity: a screen left scrolled down (by a foot check,
+    // or since 249's role line made the card taller) has it off screen, and an off-screen element reads "" (249 run
+    // 1015-0047: "not a member … status ''" over a card that said "You're a member"). Scroll it into view first.
+    await scrollToTestId(d, `AgentCommunityStatus_${key}`, 6, { direction: "up" }).catch(() => undefined);
+    status = (await textOf(d, `AgentCommunityStatus_${key}`).catch(() => "")).replace(/\s+/g, " ").trim();
+    if (!status) {
+      for (const id of [`AgentCommunityOpen_${key}`, "AgentMembershipRow"]) {
+        const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/${id}")`);
+        const label = String((await el.getAttribute("content-desc").catch(() => "")) || "");
+        if (label.includes(", ")) status = label.slice(label.indexOf(", ") + 2).trim();
+        if (status) break;
+      }
+    }
+  }
+  return status;
+}
+
+/** The card's own words for a member ("You're a member of <C>."), not any status that mentions members. */
+const isMember = (status) => /you(?:'|’)?re a member/i.test(status);
+
+/**
+ * #326 (IN-127): C's own screen never sends a request; its button is "Choose how to join" and leads to Join's
+ * ways in. Opened from Your agent's card for C while this phone's request waits. Row: choose-how-to-join.
+ */
+async function chooseHowToJoin(d) {
+  await rows.row("choose-how-to-join", async () => {
+    await agents.openCommunityCard(d, { key });
+    const { words, landed } = (await community.chooseHowToJoin(d)).value;
+    await screenshot(d, "choose-how-to-join").catch(() => undefined);
+    return { ok: Boolean(landed) && !/apply to join/i.test(words), detail: `button "${words || "?"}" → ${landed}` };
+  });
+  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+}
+
+/**
+ * 238 (#344): Join for a member says so (JoinMemberCheck) and ends on Done, which goes to Your agent with C's card
+ * set apart (AgentCommunityHighlighted). Rows: join-done-member, join-done-highlight.
+ */
+async function doneFlow(d) {
+  await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+  await join.openCommunity(d, { did: C_DID, name: C_NAME });
+  await rows.row("join-done-member", async () => {
+    const { check, done, open } = await readMemberState(d);
+    await screenshot(d, "join-done-member").catch(() => undefined);
+    return { ok: check && done, detail: `JoinMemberCheck ${check} · JoinDone ${done} · JoinOpenCommunity ${open}` };
+  });
+  // IN-142 (239 re-pin): a member's Join still offers "A different community", and it opens the scanner (#344 hid
+  // it, a dead end for joining a second community).
+  await rows.row("member-join-different-community", async () => {
+    const { offered, scanner } = (await join.scanOtherCommunity(d)).value;
+    return { ok: offered && scanner, detail: `JoinScanCommunity on a member's Join ${offered} · the scanner opened ${scanner} (IN-142)` };
+  });
+  await rows.row("join-done-highlight", async () => {
+    const { lit } = (await join.done(d)).value;
+    await screenshot(d, "join-done-highlight").catch(() => undefined);
+    return { ok: lit, detail: `Your agent true · AgentCommunityHighlighted ${lit}` };
+  });
+}
+
+/**
+ * IN-144 (#362): a member of C, and again after leaving C, scans a vetter's ticket for another community B: Get vetted
+ * opens for B with the ticket in hand, and the scanner says nothing about a "different community". Read-only on B (the
+ * request is not sent). B is a parameter: COMMUNITY_B_DID and COMMUNITY_B_TICKET_CMD (a shell command printing a fresh
+ * vetting-ticket: link for B, from a B vetter on a runner); without them the rows are SKIP.
+ */
+async function otherTicketFlow(d, me) {
+  const B = process.env.COMMUNITY_B_DID;
+  const cmd = process.env.COMMUNITY_B_TICKET_CMD;
+  if (!B || !cmd) {
+    for (const n of ["member-scan-other-ticket", "left-scan-other-ticket"]) rows.skip(n, "SKIP: no community B (COMMUNITY_B_DID / COMMUNITY_B_TICKET_CMD unset)");
+    return;
+  }
+  const scan = (name, when) =>
+    rows.row(name, async () => {
+      const ticket = execFileSync("bash", ["-c", cmd], { encoding: "utf8", timeout: 120000 }).trim().split("\n").pop();
+      if (!/^vetting-ticket:/.test(ticket)) return { ok: false, detail: `${when}: no vetting-ticket from COMMUNITY_B_TICKET_CMD ("${ticket.slice(0, 40)}")` };
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      await pasteLinkFromHome(d, ticket).catch((e) => log(`${name}: ${String(e.message).split("\n")[0]}`));
+      const field = await scrollToTestId(d, "VettingTicketInput", 6).catch(() => undefined);
+      const held = field ? String((await field.getAttribute("text").catch(() => "")) || "").trim() : "";
+      const different = /different community/i.test(await d.getPageSource());
+      await screenshot(d, name).catch(() => undefined);
+      await d.back().catch(() => undefined);
+      return { ok: held === ticket && !different, detail: `${when}: Get vetted holds B's ticket ${held === ticket} · "different community" shown ${different} (IN-144)` };
+    });
+  await scan("member-scan-other-ticket", "a member of C");
+  // Leave C (the community removes the member, as the leg's cleanup would), then scan again.
+  const said = admin("member-remove", me, "gate: IN-144, left before the second scan").split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+  log(`left C: ${said.trim()}`);
+  await sleep(10000);
+  await scan("left-scan-other-ticket", "after leaving C");
+}
+
+/** C's member row for `did` (vtc/members/list/0.1: currentVmcId, currentRoleVacId, memberVmcId, memberVmcReceivedAt). */
+const memberRow = (did) => (json(admin("members")).items ?? []).find((m) => m.did === did);
+
+/**
+ * The two cards C issued this identity, by id: from C's member row, else from the decide answer (`vmc`, `roleVac`:
+ * spec vtc/join-requests/decide/0.1). These are the very cards the phone was delivered (bifold vtiJoin.ts takes the
+ * membership and `roleVac` from the same answer).
+ */
+function issuedCards(did, decided) {
+  let row;
+  try {
+    row = memberRow(did);
+  } catch (e) {
+    log(`members list: ${String(e.message).split("\n")[0]}`);
+  }
+  return {
+    membership: row?.currentVmcId || decided?.vmc?.id || "",
+    role: row?.currentRoleVacId || decided?.roleVac?.id || "",
+  };
+}
+
+/** (f) The runner agent's vault, asked the two ways it files C's cards: by purpose, and the role card by its type. */
+async function cardsKeptOnAgent(want) {
+  const slug = process.env.RUNNER_VTA;
+  if (!slug) return { ok: false, detail: "no RUNNER_VTA (the runner agent's pnm slug)" };
+  if (!want.membership || !want.role) return { ok: false, detail: `C issued no ${want.membership ? "role" : "membership"} card id to look for (members list, decide answer)` };
+  const t0 = Date.now();
+  let have = { membership: false, role: false };
+  let said = "";
+  for (let first = true; first || (Date.now() - t0 < 90000 && !(have.membership && have.role)); first = false) {
+    if (!first) await sleep(15000);
+    try {
+      // A card the vault filed with no purpose (a role: vta-vault receive.rs infer_purpose) is found by type only.
+      const byPurpose = credVaultQuery({ purpose: "membership" }, { slug }).ids;
+      // By type, and by purpose "role" too: a vault that learns to file roles (infer_purpose) is still read right.
+      const byType = [...new Set([...credVaultQuery({ type: "AuthorityCredential" }, { slug }).ids, ...credVaultQuery({ purpose: "role" }, { slug }).ids])];
+      have = { membership: byPurpose.includes(want.membership), role: byType.includes(want.role) || byPurpose.includes(want.role) };
+      said = `${byPurpose.length} by purpose membership, ${byType.length} by type AuthorityCredential or purpose role`;
+    } catch (e) {
+      said = `query: ${String(e.message).split("\n")[0].slice(0, 160)}`;
+    }
+  }
+  const s = Math.round((Date.now() - t0) / 1000);
+  return {
+    ok: have.membership && have.role,
+    detail: `after ${s} s: membership ${want.membership} kept ${have.membership} · role ${want.role} kept ${have.role} (${said})`,
+  };
+}
+
+/** Flow B: the community's admin approves the waiting request, and the phone must show and hold the membership. */
+async function approvedFlow(d, me) {
+  const pending = (json(admin("join-list", "pending")).items ?? []).sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
+  const req = pending.filter((r) => r.applicantDid === me).pop();
+  await rows.row("join-request-is-mine", () => ({
+    ok: Boolean(me && req),
+    detail: req ? `request ${req.id} from ${me}` : `no pending request from ${me ?? "(no identity read)"}; newest is from ${pending.at(-1)?.applicantDid ?? "nobody"}`,
+  }));
+  let decided;
+  if (req) {
+    const out = admin("join-decide", req.id, "approved");
+    const said = out.split("\n").filter((l) => /->/.test(l)).pop() ?? "";
+    log(`admin approves ${req.id}: ${said.trim()}`);
+    console.log(`JOIN_MEMBER ${me}`);
+    try {
+      decided = json(out);
+    } catch {
+      decided = undefined;
+    }
+  }
+  // (b) On its own first: Keyring is told, or finds out at its next read. Then once by Check now.
+  await rows.row("join-approved-card", async () => {
+    const t0 = Date.now();
+    let status = "";
+    let how = "";
+    for (const until = Date.now() + 90000; Date.now() < until && !isMember(status); ) {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      status = await statusOf(d, 3);
+      if (isMember(status)) how = `on its own after ${Math.round((Date.now() - t0) / 1000)} s`;
+    }
+    if (!isMember(status) && (await existsTestId(d, `AgentCommunityCheck_${key}`, 3000))) {
+      await tapTestId(d, `AgentCommunityCheck_${key}`, 10000);
+      const t1 = Date.now();
+      for (const until = Date.now() + 60000; Date.now() < until && !isMember(status); ) status = await statusOf(d, 3);
+      if (isMember(status)) how = `after Check now (${Math.round((Date.now() - t1) / 1000)} s; nothing in the first 90 s)`;
+    }
+    await screenshot(d, "join-approved-card").catch(() => undefined);
+    return { ok: isMember(status), detail: `${how || "not a member after 90 s and Check now"}; status "${status}"` };
+  });
+  // (c) The community's own list.
+  await rows.row("join-approved-listed", () => {
+    const members = (json(admin("members")).items ?? []).map((m) => m.did);
+    return { ok: members.includes(me), detail: members.includes(me) ? `${me} is a member` : `${me} is not among ${members.length} members` };
+  });
+  // (d) The Wallet card. The Wallet's first-visit tour sits over the list: close it first.
+  await rows.row("join-approved-wallet", async () => {
+    await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+    await sleep(2000);
+    for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+    const card = d.$(walletCardSelector(C_NAME));
+    let shown = false;
+    for (const until = Date.now() + 60000; Date.now() < until && !shown; await sleep(2000)) shown = await card.isExisting().catch(() => false);
+    const words = shown ? String(await card.getAttribute("text").catch(() => "")) : "";
+    await screenshot(d, "join-approved-wallet").catch(() => undefined);
+    return { ok: shown, detail: shown ? `"${words}"` : `no card naming ${C_NAME} in 60 s` };
+  });
+  // (e) The role. UI/UX's decision (10-14, bifold #399): a role credential with the default "member" role gets no card
+  // of its own, on Your agent or in the Wallet; the membership card's details say "Role: member" (CommunityCardRole).
+  // A build without that line keeps the earlier check, tracked: the role card beside the membership on Your agent.
+  if (!buildLacks("CommunityCardRole", { platform: "android" })) {
+    await rows.row("join-approved-role-card", async () => {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      let membership = false;
+      for (const until = Date.now() + 60000; Date.now() < until && !membership; await sleep(2000)) {
+        await scrollToTestId(d, `AgentCard_membership_${key}`, 6).catch(() => undefined);
+        membership = await existsTestId(d, `AgentCard_membership_${key}`, 1500);
+      }
+      const roleCard = await existsTestId(d, `AgentCard_role_${key}`, 1500);
+      await screenshot(d, "join-approved-role-card-agent").catch(() => undefined);
+      // The membership card's details, from the Wallet (its tour closed, as in (d)).
+      await tapTestId(d, "Wallet", 10000).catch(() => undefined);
+      await sleep(2000);
+      for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
+      // C's cards in the Wallet, by issuer and card name, collected over the whole list: d.$$ alone sees only the cards
+      // on screen, and a second card from C below the fold would read as one (review on #467). The default "member"
+      // role has no card of its own, so one.
+      const walletCards = await walletCardsFrom(d, C_NAME);
+      const card = d.$(walletCardSelector(C_NAME));
+      const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
+      const line = opened ? await scrollToTestId(d, "CommunityCardRole", 8).catch(() => undefined) : undefined;
+      const said = line ? (await textOf(d, "CommunityCardRole").catch(() => "")).replace(/\s+/g, " ").trim() : "";
+      await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      // Android Back: on a pass build it closes the card opened in place in the Wallet (bifold #534), as it popped the
+      // Details screen before. This flow drives Android only (makeDriver platform "android"); iOS has no Back, and
+      // there the card's "All cards" (PassOpenClose) is the way out.
+      if (opened) await d.back().catch(() => undefined);
+      return {
+        // UI/UX's decision (10-14) is about the Wallet: one card from C, its details naming the role. Your agent's
+        // "Your role card — Kept by your agent" line (AgentCard_role) says the agent keeps it, and stays (249: #408
+        // keeps the role with its membership); it is reported, not judged.
+        ok: membership && walletCards === 1 && /\bmember\b/i.test(said),
+        detail: `Wallet: ${walletCards} card(s) from ${C_NAME} (want 1: no card of its own for "member") · details CommunityCardRole ${opened ? `"${said || "absent"}"` : `not read (no card naming ${C_NAME})`} · Your agent: membership line ${membership}, role kept-line ${roleCard}`,
+      };
+    });
+  } else {
+    await rows.row("join-approved-role-card", async () => {
+      await tapTestId(d, "MyAgent", 10000).catch(() => undefined);
+      let role = false;
+      let membership = false;
+      for (const until = Date.now() + 60000; Date.now() < until && !(role && membership); await sleep(2000)) {
+        await scrollToTestId(d, `AgentCard_role_${key}`, 6).catch(() => undefined);
+        role = await existsTestId(d, `AgentCard_role_${key}`, 1500);
+        membership = await existsTestId(d, `AgentCard_membership_${key}`, 1000);
+      }
+      await screenshot(d, "join-approved-role-card").catch(() => undefined);
+      return { ok: role && membership, detail: `AgentCard_role ${role} · AgentCard_membership ${membership} · decide/0.1 names no role: the default "member"` };
+    }, { tracked: "role card for default member role: a build without CommunityCardRole (bifold #399)" });
+  }
+  // (f) Both cards kept by the runner agent, as the phone pushed them (vault/credentials/receive/0.1).
+  const want = me ? issuedCards(me, decided) : { membership: "", role: "" };
+  console.log(`CARD_IDS ${want.membership || "-"} ${want.role || "-"}`);
+  await rows.row("cards-kept-on-agent", () => cardsKeptOnAgent(want));
+  // (g) TRACKED: the identity's reciprocal membership credential, recorded on C's member row (vtc-service
+  // members/inbound_vmc.rs record_reciprocation → memberVmcId, memberVmcReceivedAt on members/list/0.1).
+  await rows.row(
+    "member-vmc-sent",
+    async () => {
+      let row;
+      for (const until = Date.now() + 60000; ; await sleep(10000)) {
+        row = memberRow(me);
+        if ((row?.memberVmcId && row?.memberVmcReceivedAt) || Date.now() >= until) break;
+      }
+      const sent = Boolean(row?.memberVmcId && row?.memberVmcReceivedAt);
+      return {
+        ok: sent,
+        detail: row
+          ? sent
+            ? `C recorded ${row.memberVmcId} at ${row.memberVmcReceivedAt}`
+            : `C's member row for ${me} has no reciprocal membership credential after 60 s (memberVmcId ${row.memberVmcId ?? "none"})`
+          : `${me} is not on C's members list`,
+      };
+    },
+    { tracked: "Keyring does not send the reciprocal member VMC yet; lane ac's work pending" }
+  );
+  if (!req) return;
+  if (is238) await doneFlow(d);
+  await otherTicketFlow(d, me);
+}
+
+let d;
+let is238 = false;
+try {
+  await ensureAppium();
+  d = await makeDriver({ platform: "android", udid: process.env.UDID, keepState: true });
+  rows.setDriver(d);
+  await d.activateApp(process.env.E2E_APP_ID);
+  await unlockToHome(d).catch(async (e) => {
+    if (!(await existsTestId(d, "MyAgent", 10000))) throw e;
+  });
+  await join.openCommunity(d, { did: C_DID, name: C_NAME });
+  const { askId } = (await join.ask(d)).value;
+  log(`asked to join by ${askId}`);
+  // Sent: the standing, or the "request was sent" line when the answer is late. Either way, it is waiting.
+  const { shown } = (await join.awaitSent(d, { timeoutMs: 120000, required: false })).value;
+  log(`Join after sending: ${shown}`);
+  // 236: #319 the Join screen names the identity it asked with; #322 its actions end above the tab bar.
+  const standing = await readStanding(d);
+  const nameLine = standing.identityName;
+  console.log(`JOIN-IDENTITY-NAME ${nameLine || "(none)"}`);
+  // #334: the line names the identity as a persona ID; 238 (#344): the bare word, under "You asked to join as".
+  const bareWord = /^[a-z]+(?:-[a-z]+)+$/.test(nameLine);
+  await rows.row("join-persona-id", () => ({ ok: /^Your persona ID: \S/.test(nameLine) || bareWord, detail: `"${nameLine}"${bareWord ? " (the bare word, #344)" : ""}` }));
+  // 238 (#344): the waiting state says so in a title and what shows when accepted, and offers no ways in.
+  is238 = standing.requestSent;
+  if (is238) await rows.row("join-request-sent", () => ({ ok: standing.willShow, detail: `JoinRequestSent "${standing.requestSentText}" · JoinWillShow ${standing.willShow}` }));
+  const actionsY = async () => {
+    const el = await d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/JoinActions")`);
+    return (await el.isExisting().catch(() => false)) ? Math.round((await el.getLocation()).y) : undefined;
+  };
+  const yBefore = await actionsY();
+  await capturePersonaDid(d, "JoinStandingIdentity", "join-standing-identity");
+  // To the very end of the page: the question is whether its last line can rise above the tab bar.
+  const { width: w, height: h } = await d.getWindowSize();
+  for (let i = 0; i < 4; i++) {
+    await d.action("pointer").move({ x: Math.floor(w / 2), y: Math.floor(h * 0.7) }).down().pause(80).move({ x: Math.floor(w / 2), y: Math.floor(h * 0.3), duration: 400 }).up().perform();
+    await sleep(600);
+  }
+  await footClear(d, "JoinActions", "join-actions");
+  // #334: Join's buttons scroll with the page (nothing hides behind them), so a swipe moves them.
+  const yAfter = await actionsY();
+  // Moved by the swipe, or brought into view by it (off screen before, so not in the tree): either way it scrolls.
+  // A page that fits above the tab bar has nothing to scroll (238's shorter waiting state): its buttons stay put and
+  // in view, which is what the row is for. Otherwise the swipe must move them.
+  const { height: wh } = await d.getWindowSize();
+  const fits = yBefore !== undefined && yAfter === yBefore && yAfter < wh * 0.85;
+  await rows.row("join-actions-scroll", () => ({
+    ok: (yAfter !== undefined && yAfter !== yBefore) || fits,
+    detail: fits ? `the page fits: JoinActions stays at y ${yAfter} of ${wh}, in view (nothing to scroll)` : `JoinActions y ${yBefore ?? "off screen"} → ${yAfter ?? "absent"} after swiping`,
+  }));
+  if (is238) {
+    // Swiped to the end of the page: no ways in anywhere on it while the request waits.
+    await rows.row("join-waiting-no-ways", async () => {
+      const ways = (await existsTestId(d, "JoinWays", 1500)) || (await existsTestId(d, "JoinWaysOthers", 500));
+      return { ok: !ways, detail: ways ? "the waiting state still shows ways in" : "no JoinWays while waiting" };
+    });
+  }
+  await tapTestId(d, "MyAgent", 15000);
+  // The status settles after the journey read; it is the row's own label after the first ", " (one accessible
+  // element: AgentCommunityOpen_<key> or AgentMembershipRow), or the status child's text on Android.
+  const status = await statusOf(d, 10);
+  console.log(`WAITING-STATUS ${status || "(no status line)"}`);
+  const me = await capturePersonaDid(d, `AgentCommunityIdentity_${key}`, "community-card-waiting");
+  await screenshot(d, "community-card-waiting").catch(() => undefined);
+  await chooseHowToJoin(d);
+  if (process.env.JOIN_APPROVE === "1") await approvedFlow(d, me);
+} catch (e) {
+  log(`error: ${e.message.split("\n")[0]}`);
+  if (d) await screenshot(d, "community-card-waiting-failure").catch(() => undefined);
+  rows.fatal(e);
+} finally {
+  rows.summary();
+  process.exitCode = rows.exitCode();
+  if (d) await d.deleteSession().catch(() => undefined);
+  stopAppium();
+}

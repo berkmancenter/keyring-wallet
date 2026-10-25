@@ -14,7 +14,14 @@ import { Config } from 'react-native-config'
 import BCLogger from '@/utils/logger'
 
 import { watchLinkForPush } from './pushAfterLink'
-import { appPushWakeDeps, notificationsAllowedNow, showHandleLimit } from './pushDefaults'
+import {
+  appPushWakeDeps,
+  clearPushWake,
+  linkedAgentsWithoutWake,
+  notificationsAllowedNow,
+  showHandleLimit,
+  whenPlatformTokenArrives,
+} from './pushDefaults'
 import { watchPushPermission } from './pushPermissionWatch'
 import { enablePushWake } from './pushWake'
 
@@ -43,6 +50,8 @@ const PushLinkListener: React.FC = () => {
       enableWake: () => enablePushWake(appPushWakeDeps(agent)),
       log: (message, data) => BCLogger.info(message, data),
       onHandleLimit: showHandleLimit,
+      whenTokenArrives: whenPlatformTokenArrives,
+      unwakeableAgents: () => linkedAgentsWithoutWake(agent),
     })
   }, [agent])
 
@@ -58,7 +67,7 @@ const PushLinkListener: React.FC = () => {
         },
         permission: notificationsAllowedNow,
         clearedForDenial,
-        clearWake: () => vtaAgent.clearThisDeviceWake(agent),
+        clearWake: () => clearPushWake(agent),
         enableWake: () => enablePushWake(appPushWakeDeps(agent)),
         log: (message, data) => BCLogger.info(message, data),
       },

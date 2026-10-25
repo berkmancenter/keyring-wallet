@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Appium E2E harness: fresh install, onboarding, and a two-device VRC exchange",
   "scripts": {
-    "test:lib": "node --test lib/*.test.mjs",
+    "test:lib": "node --test lib/*.test.mjs lib/pages/*.test.mjs",
     "vrc-exchange": "node run-vrc-exchange.js",
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
     "vrc-exchange:tsp": "node run-vrc-exchange-tsp.js",

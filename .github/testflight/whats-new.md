@@ -6,14 +6,10 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
-• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
-• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
-• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
-• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
-• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
-• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
-• Screens stay above the keyboard when you type or paste a code.
-• The demo collector card and approval demo are gone; contacts show the regular list.
-• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
-• Update over your current version; there's no need to reinstall.
+• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
+• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
+• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
+• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
+• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
+• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
+

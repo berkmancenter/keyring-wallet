@@ -8,7 +8,7 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { ToastType, vtaAgent } from '@bifold/core'
+import { GenericRecordsIdentityStore, ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import i18n from 'i18next'
@@ -21,9 +21,16 @@ import { checkNotifications, requestNotifications, RESULTS, type PermissionStatu
 
 import BCLogger from '@/utils/logger'
 
+import { setMediatorDeviceInfo } from './mediatorDeviceInfo'
 import { pushNotificationsConfig, type PermissionState, type PushNotificationsConfig } from './pushConfig'
 import type { PushRegistration } from './pushGateway'
-import { startPlatformPush, stopPlatformPush, waitForApnsToken } from './pushPlatform'
+import {
+  startPlatformPush,
+  stopPlatformPush,
+  waitForApnsToken,
+  watchForToken,
+  watchForTokenRefresh,
+} from './pushPlatform'
 import { enablePushWake, type KeptWakeHandle, type PushWakeDeps, type WakeHandleStore } from './pushWake'
 
 /** Whether an APNs token is for the sandbox or production service: a development-signed build is sandbox. */
@@ -40,18 +47,84 @@ export async function platformPushRegistration(): Promise<PushRegistration | und
   const m = messaging()
   const status = await m.hasPermission()
   if (status !== messaging.AuthorizationStatus.AUTHORIZED && status !== messaging.AuthorizationStatus.PROVISIONAL) {
+    BCLogger.info('push token: none, notifications are not allowed', { os: Platform.OS, permission: status })
     return undefined
   }
-  await startPlatformPush(Platform.OS, m)
+  try {
+    await startPlatformPush(Platform.OS, m)
+  } catch (e) {
+    BCLogger.info('push token: none, registering for remote notifications failed', {
+      os: Platform.OS,
+      error: e instanceof Error ? e.message : String(e),
+    })
+    throw e
+  }
   if (Platform.OS === 'ios') {
     // The gateway sends to APNs directly with Keyring's own key, so it needs
     // the APNs device token, not Firebase's. On a first registration it can
     // arrive just after registering returns: wait for it.
+    const startedAt = Date.now()
     const token = await waitForApnsToken(() => m.getAPNSToken())
-    return token ? { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() } : undefined
+    if (!token) {
+      // Which step stopped (a tester on 242, 10-10, had only `noToken`): Apple
+      // never handed over a token while the app waited. Never log the token.
+      BCLogger.info("push token: none, Apple's token did not arrive", {
+        os: Platform.OS,
+        permission: status,
+        registeredForRemote: m.isDeviceRegisteredForRemoteMessages,
+        waitedMs: Date.now() - startedAt,
+      })
+      return undefined
+    }
+    // That it arrived, and how long it took: only failures used to be
+    // logged, so a report could not tell a late token from a stale handle
+    // (IN-277). Never the token.
+    BCLogger.info("push token: Apple's token arrived", {
+      os: Platform.OS,
+      waitedMs: Date.now() - startedAt,
+      environment: apnsEnvironment(),
+    })
+    return { platform: 'apns', token, topic: getBundleId(), environment: apnsEnvironment() }
   }
   const token = await m.getToken()
-  return token ? { platform: 'fcm', token } : undefined
+  if (!token) {
+    BCLogger.info('push token: none, Firebase returned no token', { os: Platform.OS, permission: status })
+    return undefined
+  }
+  BCLogger.info('push token: Firebase token present', { os: Platform.OS })
+  return { platform: 'fcm', token }
+}
+
+/**
+ * The agents this phone holds an identity for that have no wake from it: no
+ * handle here that one of them accepted (`provisionedAt`). For the log only
+ * ({@link PushAfterLinkDeps.unwakeableAgents}).
+ */
+export async function linkedAgentsWithoutWake(agent: Agent): Promise<string[]> {
+  const managers = (await new GenericRecordsIdentityStore(agent).listManagers()) ?? []
+  const lacking: string[] = []
+  for (const { vtaDid } of managers) {
+    const kept = await appWakeHandles.get(vtaDid).catch(() => undefined)
+    if (kept?.provisionedAt === undefined) lacking.push(vtaDid)
+  }
+  return lacking
+}
+
+/**
+ * Call `arrived` once this phone's platform token turns up (see
+ * {@link watchForToken}); returns a stop. The read, not a registration: Apple's
+ * token on iOS, Firebase's elsewhere.
+ */
+export function whenPlatformTokenArrives(arrived: () => void): () => void {
+  const m = messaging()
+  // iOS reads the APNs token the app already holds; on Android the read is a
+  // call to Firebase's servers, so it listens for the token instead of asking.
+  if (Platform.OS === 'ios') return watchForToken(() => m.getAPNSToken(), arrived)
+  return watchForTokenRefresh(
+    () => m.getToken(),
+    (listener) => m.onTokenRefresh(listener),
+    arrived
+  )
 }
 
 const HANDLE_KEY_PREFIX = 'keyring.push.handle.'
@@ -94,8 +167,35 @@ export function appPushWakeDeps(agent: Agent): PushWakeDeps {
     agentDid: () => vtaAgent.agentAddress(),
     pushRegistration: platformPushRegistration,
     setWake: (wake, opts) => vtaAgent.setThisDeviceWake(agent, wake, opts),
+    // Logged here, on every path that enables the wake; the outcome only says it failed.
+    setMediatorDeviceInfo: (info) =>
+      setMediatorDeviceInfo(agent, info).then(
+        () => BCLogger.info('push wake: mediator given the handle for message wakes'),
+        (e) => {
+          BCLogger.info('push wake: mediator device info not set', {
+            error: e instanceof Error ? e.message : String(e),
+          })
+          throw e
+        }
+      ),
     handles: appWakeHandles,
   }
+}
+
+/**
+ * Stop this phone being woken: the agent drops the wake channel, then the
+ * mediator forgets the handle, so a waiting message no longer rings it either.
+ * The mediator step is best effort and logged: the agent's answer is what the
+ * caller acts on.
+ */
+export async function clearPushWake(agent: Agent): Promise<unknown> {
+  const channel = await vtaAgent.clearThisDeviceWake(agent)
+  await setMediatorDeviceInfo(agent, null).catch((e) =>
+    BCLogger.info('push wake: mediator device info not cleared', {
+      error: e instanceof Error ? e.message : String(e),
+    })
+  )
+  return channel
 }
 
 function fromIos(status: number): PermissionState {
@@ -151,7 +251,7 @@ export function appPushNotificationsConfig(): PushNotificationsConfig | undefine
     permissionStatus: notificationPermissionStatus,
     requestPermission: requestNotificationPermission,
     enableWake: (agent) => enablePushWake(appPushWakeDeps(agent)),
-    clearWake: (agent) => vtaAgent.clearThisDeviceWake(agent),
+    clearWake: clearPushWake,
     stopPlatformPush: () => stopPlatformPush(Platform.OS, messaging()),
     log: (message, data) => BCLogger.info(message, data),
     onHandleLimit: showHandleLimit,

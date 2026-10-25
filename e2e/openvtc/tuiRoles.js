@@ -17,13 +17,15 @@
 // stands; 177a218's line is given alongside when it moved.
 
 import { rowSelected, selectedLine, walkTo } from './listWalk.js';
+import { sweepSpentTickets } from './ticketSweep.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { OpenvtcTui } from '../lib/openvtcTui.js';
 
 /** Builds driven with ed13d29's screens. Anything else is driven as 177a218. */
-const CURRENT_STYLE = ['ed13d29'];
+// openvtc builds driven in the current style: ed13d29 (main, 09-25) and 2a4fa2b3 (0.5.0, VTI-Eucalyptus).
+const CURRENT_STYLE = ['ed13d29', '2a4fa2b3'];
 
 /**
  * Whether `tui` is driven as 177a218 (our pin). A version is "current"
@@ -36,7 +38,9 @@ export function at177(tui) {
   if (forced === 'current') return false;
   if (forced === '177a218') return true;
   const v = String(tui?.version ?? '').toLowerCase();
-  return !CURRENT_STYLE.some((c) => v.length >= 7 && (v.startsWith(c) || c.startsWith(v)));
+  // The gate names a release with its commit after the last '-' (OPENVTC_VERSION=v0.5.0-2a4fa2b3): match that as well.
+  const sha = v.slice(v.lastIndexOf('-') + 1);
+  return !CURRENT_STYLE.some((c) => [v, sha].some((x) => x.length >= 7 && (x.startsWith(c) || c.startsWith(x))));
 }
 
 /** The citation for this build: `current` at ed13d29, `pin` (a 177a218 file:line) otherwise. */
@@ -81,7 +85,7 @@ export async function openDesk(tui) {
   await tui.pressEach(['Enter'], 800);
   await tui.waitFor('Vetting desk (', { step: 'vetter.vettingPage', source: src(tui, 'ui/pages/main/vetting_panel.rs:165-175', 'ui/pages/main/components/vetting_panel.rs:163-172') });
   if (!/Requests \(\d+\)\s+Tickets \(\d+\)/.test(tui.screen())) await tui.pressEach(['Tab'], 800);
-  await tui.waitFor(/Requests \(\d+\)\s+Tickets \(\d+\)\s+Issued \(\d+\)/, { step: 'vetter.desk', source: src(tui, 'ui/pages/main/vetting_panel.rs:1425-1445', 'ui/pages/main/components/vetting_panel.rs:1086-1106') });
+  await tui.waitFor(/Requests \(\d+\)\s+Tickets \(\d+\)\s+(?:Issued|History) \(\d+\)/, { step: 'vetter.desk', source: src(tui, 'ui/pages/main/vetting_panel.rs:1425-1445', 'ui/pages/main/components/vetting_panel.rs:1086-1106') });
   if (tui.screen().includes('No community has named you a vetter yet')) {
     throw tui.failure('vetter.seat', new Date(), 'the TUI holds no vetter grant ("No community has named you a vetter yet")');
   }
@@ -94,7 +98,24 @@ export async function openDesk(tui) {
  * of six stopped short); walkTo covers any length. True once selected.
  */
 async function selectDeskRow(tui, isWanted) {
-  return walkTo(tui, (screen) => screen.split('\n').some((l) => l.includes('▸') && isWanted(l)));
+  return walkTo(tui, (screen) => screen.split('\n').some((l) => l.includes('▸') && isWanted(l)), { reveal: DESK_REVEAL });
+}
+// The desk's pane does not follow the ▸ (listWalk.js): with enough earlier requests, the new one sits below the fold.
+const DESK_REVEAL = { Down: 'PageDown', Up: 'PageUp' };
+
+/**
+ * Wait until a desk row in state `text` is selected and on screen, however many earlier requests sit above it: while
+ * it is not on screen, walk the desk to it (1014-1651 rerun, p1: 29 earlier requests, the new one 30th and below the
+ * fold, so "card verified —" never showed though the TUI had the card). Fails as `step`, like waitFor.
+ */
+async function awaitDeskRow(tui, text, { step, source, timeoutMs, everyMs = 5000 }) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    if (rowSelected(tui.screen(), text) || (await selectDeskRow(tui, (l) => l.includes(text)))) break;
+    if (Date.now() >= until) break;
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return tui.waitFor(text, { step, source, timeoutMs: 1000 });
 }
 
 /**
@@ -122,12 +143,22 @@ export async function declineStale(tui) {
   return declined;
 }
 
-/** Move the desk to one of its views: Requests, Tickets or Issued (←/→). */
+/**
+ * Move the desk to one of its views: Requests, Tickets or Issued (←/→). With enough tickets out the Tickets view's
+ * detail and key hints sit below the pane (1013-1633 rerun: 29 tickets, none of its markers on screen, so the walk
+ * cycled past it); a ticket row ("ABCD-1234  <community>  spent or expired | N left, until …") marks it too.
+ */
 export async function deskView(tui, view) {
-  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
-  for (let i = 0; i < 3; i++) {
-    if (marker.test(tui.screen())) return tui;
-    await tui.pressEach(['Right'], 700);
+  const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed|\s{2}declined\b/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket|t: new ticket|[0-9A-Z]{4}-[0-9A-Z]{4}\s{2}.+\s{2}(spent or expired|\d+ left, until)/, Issued: /You have not signed any vetting statements|signed/ }[view];
+  // Right three times, then Left three times, looking after every press: whether the views wrap or stop at their
+  // ends, one of the two reaches every view. Right alone left the desk on Tickets after the ticket sweep's deletes
+  // and a new ticket (1014-1857 gate, p1: vetter.view.Requests with Tickets (4) on screen; 1014-0451 the same).
+  if (marker.test(tui.screen())) return tui;
+  for (const key of ['Right', 'Left']) {
+    for (let i = 0; i < 3; i++) {
+      await tui.pressEach([key], 1000);
+      if (marker.test(tui.screen())) return tui;
+    }
   }
   await tui.waitFor(marker, { step: `vetter.view.${view}`, timeoutMs: 3000 });
   return tui;
@@ -140,6 +171,11 @@ export async function deskView(tui, view) {
  */
 export async function issueTicket(tui) {
   await deskView(tui, 'Tickets');
+  // TICKET_SWEEP: unset or "list" lists the vetter's tickets (read-only); "delete" also deletes the spent or expired
+  // ones, local to this harness vetter's profile (ticketSweep.js). Then back to the top of the list.
+  const swept = await sweepSpentTickets(tui, { mode: process.env.TICKET_SWEEP === 'delete' ? 'delete' : 'list', log: (l) => console.log(`[tickets] ${l}`) });
+  tui.record('vetter.ticketSweep', true, new Date(), { value: swept });
+  await tui.pressEach(['Home'], 400);
   await tui.pressEach(['t'], 800);
   await tui.waitFor('Hand out a ticket', { step: 'vetter.ticketForm', source: src(tui, 'ui/pages/main/vetting_panel.rs:543', 'ui/pages/main/components/vetting_panel.rs:344') });
   await tui.pressEach(['Enter'], 1500);
@@ -156,7 +192,9 @@ export async function issueTicket(tui) {
   // then the only sign it is selected.
   const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen()) || rowSelected(tui.screen(), code);
   // The tickets view grows by one every run; its position is the ticket read aloud.
-  await walkTo(tui, selected, { pace: 600, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
+  // The pane does not follow the ▸ (main/mod.rs:562-577 scroll it on PageUp/PageDown/Home/End only): page after
+  // it, or a ticket below the fold is never reached (1012-2223 rerun: 28 tickets out, the new one last).
+  await walkTo(tui, selected, { pace: 600, reveal: { Down: 'PageDown', Up: 'PageUp' }, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
   if (!selected()) throw tui.failure('vetter.ticketSelect', new Date(), `could not select ticket ${code} on the Tickets view`);
   await tui.pressEach(['End'], 800);
   const uri = scrapeTicketUri(tui.screen());
@@ -206,8 +244,8 @@ export function panelRows(screen) {
 export async function awaitRequest(tui, { timeoutMs = 180000 } = {}) {
   const ACCEPTED = 'accepted — open a session when you are together';
   await deskView(tui, 'Requests');
-  await tui.waitFor(ACCEPTED, { step: 'vetter.requestAccepted', source: src(tui, 'state_handler/vetting_actions.rs:335', 'state_handler/vetting_actions.rs:338'), timeoutMs });
-  if (!(await selectDeskRow(tui, (l) => l.includes(ACCEPTED)))) throw tui.failure('vetter.requestSelect', new Date(), 'could not select the accepted request on the desk');
+  await awaitDeskRow(tui, ACCEPTED, { step: 'vetter.requestAccepted', source: src(tui, 'state_handler/vetting_actions.rs:335', 'state_handler/vetting_actions.rs:338'), timeoutMs });
+  if (!rowSelected(tui.screen(), ACCEPTED)) throw tui.failure('vetter.requestSelect', new Date(), 'could not select the accepted request on the desk');
 }
 
 /**
@@ -236,7 +274,7 @@ export async function openSession(tui) {
 
 /** The card arrives and the TUI verifies it with the VTI SDK. */
 export async function awaitCard(tui, { timeoutMs = 180000 } = {}) {
-  await tui.waitFor('card verified — check the person, then attest or decline', {
+  await awaitDeskRow(tui, 'card verified — check the person, then attest or decline', {
     step: 'vetter.cardVerified',
     source: src(tui, 'state_handler/vetting_actions.rs:347', 'state_handler/vetting_actions.rs:350'),
     timeoutMs,
@@ -255,7 +293,9 @@ export async function attest(tui) {
   // Down = next field and Space ticks, ui/pages/main/mod.rs:2493-2513).
   await tui.pressEach(['Down', 'Down', 'Down', ' ', 'Down', ' '], 400);
   await tui.pressEach(['Enter'], 1500);
-  await tui.waitFor('Statement signed and sent.', { step: 'vetter.statementSent', source: src(tui, 'state_handler/vetting_actions.rs:3372', 'state_handler/vetting_actions.rs:2870'), timeoutMs: 60000 });
+  // A named criterion signs a statement; a hidden (PCS ZKP) one sends an attestation that names nobody (0.5.0,
+  // vetting_actions.rs:5773 and :5778 at 2a4fa2b; hv-tui on 261 sent one and this waited for the named words).
+  await tui.waitFor(/Statement signed and sent\.|Attestation sent\. The community will count it without learning it was you\./, { step: 'vetter.statementSent', source: src(tui, 'state_handler/vetting_actions.rs:5773-5781', 'state_handler/vetting_actions.rs:3372'), timeoutMs: 60000 });
 }
 
 /**
@@ -1182,6 +1222,44 @@ export async function joinWithStatements(tui, { communityDid, personaDid, person
   return awaitMembershipStored(tui, { community: communityDid, debugLog, since, timeoutMs, step: 'applicant.membershipStored' });
 }
 
+/**
+ * The vetting route rows on "Choose how to join" at 0.5.0, one per persona (state_handler/join_flow.rs:570-600):
+ * "Present your vetting statements as <who>" (satisfied, named), "Present your PCS ZKP proof as <who>" (satisfied,
+ * hidden), "Carry on with your application as <who>" (under way) and "Apply for vetting as a new persona". <who> is
+ * the persona shortened from the middle, so the DID's last segment survives. Each row: its text, and whether the
+ * cursor (▸) is on it.
+ */
+export function vettingRouteRows(screen) {
+  const row = /(Present your vetting statements as |Present your PCS ZKP proof as |Carry on with your application as |Apply for vetting as a new persona)/;
+  return String(screen)
+    .split('\n')
+    .filter((l) => row.test(l) && !/Your application, as /.test(l))
+    .map((l) => ({ text: l.replace(/[│]/g, '').trim(), focused: l.includes('▸') }));
+}
+
+/** Whether a route row presents THIS persona's statements: the row names it by its DID's last segment. */
+export function isOwnStatementsRow(text, personaDid) {
+  return /Present your vetting statements as /.test(text) && text.includes(didTail(personaDid));
+}
+
+/** 0.5.0: move the cursor onto this persona's "Present your vetting statements as …" row, then Enter. */
+async function joinRoutePerPersona(tui, { personaDid, started }) {
+  const SRC = 'state_handler/join_flow.rs:589';
+  const onOurs = () => {
+    const f = vettingRouteRows(tui.screen()).find((r) => r.focused);
+    return Boolean(f && isOwnStatementsRow(f.text, personaDid));
+  };
+  // The page opens on the first row; ours may be above or below it, behind other runs' applications.
+  for (let i = 0; i < 16 && !onOurs(); i++) await tui.pressEach(['Down'], 600);
+  for (let i = 0; i < 16 && !onOurs(); i++) await tui.pressEach(['Up'], 600);
+  if (!onOurs()) {
+    const rows = vettingRouteRows(tui.screen()).map((r) => `${r.focused ? '▸ ' : ''}${r.text}`).join(' / ');
+    throw tui.failure('applicant.joinRoute', started, `no "Present your vetting statements as …${didTail(personaDid)}" row to choose (rows: ${rows})`, SRC);
+  }
+  tui.record('applicant.joinRoute', true, started, { tuiState: `Present your vetting statements as …${didTail(personaDid)}`, tuiSource: SRC });
+  await tui.pressEach(['Enter'], 2000);
+}
+
 /** ed13d29: `j` on the application, then "Apply as" this persona and "Present your vetting statements". */
 async function joinRouteCurrent(tui, { personaDid, started }) {
   await tui.pressEach(['j'], 2000);
@@ -1191,6 +1269,12 @@ async function joinRouteCurrent(tui, { personaDid, started }) {
     timeoutMs: 60000,
   });
   if (String(page[0]) !== 'Choose how to join') throw tui.failure('applicant.joinRoutes', started, String(page[0]));
+  // 0.5.0 (2a4fa2b3) dropped the nested "Apply as" chooser: every persona is its own route row, "Present your vetting
+  // statements as <persona>" once its application is satisfied (state_handler/join_flow.rs:589).
+  if (!tui.screen().includes('Apply as') && vettingRouteRows(tui.screen()).length) {
+    await joinRoutePerPersona(tui, { personaDid, started });
+    return;
+  }
   // "Apply as" is a row only while the cursor is on the vetting route (state_handler/join.rs:306-326).
   const applyAs = () => tui.screen().split('\n').find((l) => /▸ Apply as\s/.test(l));
   for (let i = 0; i < 8 && !applyAs(); i++) await tui.pressEach(['Down'], 600);

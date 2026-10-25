@@ -1,3 +1,4 @@
+import { isPhysical } from "./prodGuard.js";
 import {
   acceptSystemAlertIfPresent,
   collapseNotificationShadeIfOpen,
@@ -14,10 +15,12 @@ import {
   tapTestIdReliable,
   waitForTestId,
   screenshot,
-  simTarget
+  simTarget,
+  dumpSource
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { REAL_CLOCKS, parseClocks, textInSource } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -289,6 +292,7 @@ export async function completeOnboarding(
   while (Date.now() < deadline) {
     if (await existsTestId(driver, "Contacts", 2000)) {
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
+      await keepUnlockedForRun(driver);
       return;
     }
 
@@ -346,6 +350,7 @@ export async function completeOnboarding(
         await unlockIfLocked(driver);
       }
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
+      await keepUnlockedForRun(driver);
       return;
     }
 
@@ -380,6 +385,29 @@ export async function completeOnboarding(
   throw new Error(
     `onboarding did not finish within 5min (last action: ${lastAction})`
   );
+}
+
+/**
+ * A test build locks after 30 s without a touch (E2E_CLOCKS=short), and a run that waits on the other side (a grant,
+ * a vetter's answer) loses its screen to it. So right after onboarding the run saves Never as the auto-lock in
+ * Settings: a time the person saved wins over the short default (bifold e2eClocks). Not under E2E_NO_AUTO_UNLOCK=1:
+ * the rows that assert the lock set it, and keep the build's own clock. driver.js autoUnlockIfLocked stays the
+ * backstop, and its AUTO-UNLOCK lines still count a lock nobody expected. A failure here is said and not fatal.
+ * A kept phone never onboards again, so the drivers' unlockToHome calls this too; once per session (setAutoLockNever).
+ */
+export async function keepUnlockedForRun(driver) {
+  if (process.env.E2E_NO_AUTO_UNLOCK === "1" || driver.e2eAutoLockNeverSet) return;
+  try {
+    // The feature tour opens over the tab bar right after onboarding (kk on 261, 1017-0209: Settings not displayed).
+    await dismissTourIfPresent(driver);
+    await tapTestId(driver, "Settings", 15000);
+    await setAutoLockNever(driver);
+    console.log(`AUTO-LOCK ${new Date().toISOString()} ${deviceTag(driver)} set to Never in Settings after onboarding`);
+  } catch (e) {
+    console.log(`AUTO-LOCK ${new Date().toISOString()} ${deviceTag(driver)} not set (${String(e?.message || e).split("\n")[0]}); auto-unlock is the backstop`);
+  }
+  await tapTestId(driver, "Contacts", 15000).catch(() => undefined);
+  await waitForTestId(driver, "Contacts", 15000).catch(() => undefined);
 }
 
 /**
@@ -780,11 +808,13 @@ async function findRowEitherDirection(driver, testId) {
 /**
  * Settings → Developer screen (Auto-lock off on the way), whether developer
  * mode is already on or has to be tripped by tapping the Version footer.
+ * `keepAutoLock` leaves the auto-lock as it is: for a run that times the lock
+ * itself (readClocks), where "Never" would leave it nothing to time.
  */
-export async function openDeveloperScreen(driver) {
+export async function openDeveloperScreen(driver, { keepAutoLock = false } = {}) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
-  await setAutoLockNever(driver);
+  if (!keepAutoLock) await setAutoLockNever(driver);
 
   if (await findDeveloperOptionsRow(driver)) {
     // Developer mode was already enabled in a prior session (persisted store).
@@ -800,11 +830,17 @@ export async function openDeveloperScreen(driver) {
     // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
     // count and poll for the Developer screen after each one, so a few
     // dropped taps just cost a few extra clicks instead of failing the run.
-    const versionEl = await scrollToTestId(driver, "Version");
+    await scrollToTestId(driver, "Version");
     const maxTaps = 20;
     let reachedDeveloperScreen = false;
+    // Each tap looks the footer up again: a handle taken once can go stale when
+    // the counter re-renders Settings, and its clicks would then be accepted and
+    // land nowhere. A failed click is counted and reported, not swallowed.
+    const clickErrors = [];
     for (let i = 0; i < maxTaps; i++) {
-      await versionEl.click().catch(() => {});
+      await byTestId(driver, "Version")
+        .click()
+        .catch((err) => clickErrors.push(String(err?.message ?? err).split("\n")[0]));
       if (await existsTestId(driver, "ToggleDeveloper", 300)) {
         reachedDeveloperScreen = true;
         console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
@@ -816,11 +852,99 @@ export async function openDeveloperScreen(driver) {
     // for a Developer-screen-only element, not a Settings row. The VTA probe
     // (VTI_PROBE_ON_START) fires as the screen mounts and reports with an
     // alert, which hides the toggle from a lookup until it is dismissed.
+    if (clickErrors.length) {
+      console.log(
+        `[e2e] ${deviceTag(driver)}: ${clickErrors.length} Version tap(s) failed: ${[...new Set(clickErrors)].slice(0, 3).join(" | ")}`
+      );
+    }
     if (!reachedDeveloperScreen) {
       for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
-      await waitForTestId(driver, "ToggleDeveloper", 5000);
+      try {
+        await waitForTestId(driver, "ToggleDeveloper", 5000);
+      } catch (err) {
+        // What the screen showed decides it: something covering Settings, or not on Settings at all.
+        await screenshot(driver, "developer-trip-failed").catch(() => {});
+        throw err;
+      }
     }
   }
+}
+
+/**
+ * The clocks in force on this build (lib/clocks.js), as the Developer screen
+ * shows them under E2EClocksMode, E2EGrantWindowSeconds,
+ * E2EPhoneGrantWindowSeconds and E2EAutoLockMinutes (bifold #411). A build
+ * without those rows (`buildHasRows` false: from before #411) has the real
+ * clocks, said as such. The Developer screen is opened with the auto-lock left
+ * as it is, since the lock is one of the clocks, and the run returns to
+ * Contacts. A row not found or not readable is the driver's failure
+ * ("driver: …"), never a guess.
+ */
+export async function readClocks(driver, { buildHasRows } = {}) {
+  if (buildHasRows === false) return { ...REAL_CLOCKS, source: "real clocks: this build has no clock rows (before bifold #411)" };
+  await openDeveloperScreen(driver, { keepAutoLock: true });
+  // The clock rows are the Developer screen's last children, below a long list of switches. On Android a fixed
+  // number of swipes did not reach them (1018-2047 rerun: "E2EClocksMode not found" after 8 down and 8 up, the page
+  // source holding the switches above them and no E2E* id), so UiAutomator scrolls the ScrollView to the row itself,
+  // as setAutoLockNever finds its Lockout row; swipes stay as the fallback, and are iOS's way (XCUITest lists
+  // off-screen elements).
+  const find = async (key) => {
+    if (driver.e2ePlatform === "android") {
+      const el = driver.$(
+        `android=new UiScrollable(new UiSelector().scrollable(true).instance(0)).setMaxSearchSwipes(30)` +
+          `.scrollIntoView(new UiSelector().resourceId("${TEST_ID_PREFIX}${key}"))`
+      );
+      // A UiScrollable whose target is not found resolves to the scrollable itself (1018-2229 rerun: "found", text ""):
+      // only the row, by its own resource-id, counts.
+      if ((await el.isExisting().catch(() => false)) && (await el.getAttribute("resource-id").catch(() => "")) === `${TEST_ID_PREFIX}${key}`) return el;
+    }
+    return scrollToTestId(driver, key, 16).catch(() => undefined);
+  };
+  // The rows are rendered by the app's own Developer screen too (app/src/screens/Developer.tsx replaces bifold's): a
+  // row on neither is a build whose Developer screen does not show the clocks, said so, never read as empty.
+  const absent = (key) => {
+    // buildHasRows undefined: no build file was known to tell an old build (real clocks) from a read that broke.
+    const why = buildHasRows === undefined ? "; no build file known, so an old build without clock rows cannot be told from a broken read" : "";
+    return new Error(`driver: ${key} not on the Developer screen (the screen the app shows must render the E2E clock rows${why})`);
+  };
+  const read = async (key) => {
+    const el = await find(key);
+    if (!el) {
+      await dumpSource(driver, `clocks-absent-${key}`).catch(() => undefined);
+      throw absent(key);
+    }
+    // Found is not yet filled: React Native can lay the row out before its text arrives (1018-2229 rerun: the node was
+    // found, its text ""). Look until it says something, up to 5 s: on Android from the page source (the element
+    // handle can stay on that first, empty layout), scrolling to the row again if it has left the hierarchy; on iOS
+    // by its label. Still empty, the page source of that moment is kept and the row reads "" (parseClocks says which).
+    let seen = driver.e2ePlatform === "ios";
+    for (const until = Date.now() + 5000; ; ) {
+      let said;
+      if (driver.e2ePlatform === "ios") said = ((await el.getAttribute("label").catch(() => "")) || "").trim();
+      else {
+        said = textInSource(await driver.getPageSource().catch(() => ""), TEST_ID_PREFIX, key);
+        if (said === undefined) await find(key);
+        else seen = true;
+      }
+      if (said) return said;
+      if (Date.now() > until) {
+        await dumpSource(driver, `clocks-empty-${key}`).catch(() => undefined);
+        if (!seen) throw absent(key);
+        return "";
+      }
+      await sleep(300);
+    }
+  };
+  const raw = {
+    mode: await read("E2EClocksMode"),
+    grantWindowS: await read("E2EGrantWindowSeconds"),
+    phoneGrantWindowS: await read("E2EPhoneGrantWindowSeconds"),
+    autoLockMin: await read("E2EAutoLockMinutes"),
+  };
+  await returnToContacts(driver);
+  const clocks = parseClocks(raw);
+  console.log(`[e2e] ${deviceTag(driver)}: the Developer screen's clocks: ${JSON.stringify(raw)}`);
+  return clocks;
 }
 
 /** The QR exchange bottom sheet is open if any of its content is visible. */
@@ -905,10 +1029,16 @@ export async function showRelationshipInvitation(driver) {
   await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
 
   // QR view renders; the invitation URL is exposed via the __DEV__-only hidden text.
+  // A Release build (the CI test builds) has no such text (bifold QRScanner.tsx, `__DEV__ && invitation`): read the
+  // invitation the way a person shares it instead, the "Share as a link" sheet's Copy (shareLinkFromSheet).
+  if (process.env.E2E_RELEASE === "1" && (await existsTestId(driver, "MyQRShareLink", 20000))) return shareLinkFromSheet(driver);
   // The Scan screen occasionally comes up blank on iOS (camera-disclosure Modal
   // fails to present when mounted mid animation) — back out and re-enter.
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await existsTestId(driver, "InvitationUrl", 20000)) break;
+    // No invitation text but the share link is there: a Release build run without E2E_RELEASE (269: "QR view blank"
+    // three times, then a 60 s failure, on a working screen).
+    if (await existsTestId(driver, "MyQRShareLink", 1000)) return shareLinkFromSheet(driver);
     if (await existsTestId(driver, "Continue", 3000)) {
       await tapTestId(driver, "Continue");
       continue;
@@ -936,6 +1066,39 @@ export async function showRelationshipInvitation(driver) {
   console.log(
     `[e2e] ${driver.e2ePlatform}: invitation URL captured (${url.length} chars)`
   );
+  return url;
+}
+
+/**
+ * The invitation as a person shares it: "Share as a link" (MyQRShareLink), the share sheet's Copy, then the clipboard
+ * read through the driver (WebDriverAgent / UiAutomator2), not simctl pbpaste, which came back empty on the MacBook
+ * while WDA had the link (10-23). The copied message is words, then the link on its own line (QRScanner.tsx).
+ * iOS: the Copy cell is an XCUIElementTypeCell labelled "Copy" (iOS 26; run-pair-ios.mjs). Android: the chooser's
+ * copy button (android:id/chooser_copy_button), else a "Copy" text. The Android path is not yet proven on a device.
+ */
+export async function shareLinkFromSheet(driver) {
+  await scrollToTestId(driver, "MyQRShareLink", 4).catch(() => undefined);
+  // Emptied first: a Copy that copies nothing would otherwise pass the check below on an earlier run's link (review).
+  await driver.setClipboard("", "plaintext").catch(() => undefined);
+  await tapTestId(driver, "MyQRShareLink", 15000);
+  if (driver.e2ePlatform === "android") {
+    let copy = await driver.$('android=new UiSelector().resourceId("android:id/chooser_copy_button")');
+    if (!(await copy.waitForExist({ timeout: 10000 }).catch(() => false))) copy = await driver.$('android=new UiSelector().text("Copy")');
+    await copy.waitForExist({ timeout: 10000 });
+    await copy.click();
+  } else {
+    const copy = await driver.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
+    await copy.waitForExist({ timeout: 15000 });
+    await copy.click();
+  }
+  await sleep(1000);
+  const clip = Buffer.from((await driver.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
+  const url = clip.split(/\s+/).pop() || "";
+  if (!/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(url)) {
+    await screenshot(driver, "share-link-missing").catch(() => undefined);
+    throw new Error(`the share sheet's Copy left no link on the clipboard (got: ${clip.slice(0, 80)})`);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: invitation link copied from the share sheet (${url.length} chars)`);
   return url;
 }
 
@@ -1655,6 +1818,18 @@ export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5
  *  - "issue receipt matched" — the peer's receipt correlated to our delivery.
  * No-op on iOS drivers (no logcat; the Android log covers both directions).
  */
+/**
+ * A wait on a physical iPhone is at least E2E_DEVICE_TIMEOUT_MS (default 240 s). On the #397 device run (10-14) an
+ * iPhone 11's App Attest took a retry plus a key replacement before the ceremony's discovery, so the 90 s proposal
+ * window expired about 30 s early, and a 60 s marker window failed a run in which both wallets showed the
+ * relationship confirmed. Emulators and simulators keep the given time.
+ */
+export function deviceWait(driver, ms) {
+  const udid = driver?.e2eRequestedUdid || driver?.e2eUdid || driver?.capabilities?.udid;
+  if (driver?.e2ePlatform !== "ios" || !isPhysical("ios", udid)) return ms;
+  return Math.max(ms, Number(process.env.E2E_DEVICE_TIMEOUT_MS) || 240000);
+}
+
 export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   const required = [
     [/\[TrustTasks:Ceremony\] discovery (sent|answered|confirmed propose support)/, "discovery"],
@@ -1664,7 +1839,7 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:Ceremony\] issue receipt sent/, "issue receipt sent"],
     [/\[TrustTasks:Ceremony\] issue receipt matched/, "issue receipt matched"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1698,7 +1873,7 @@ export async function assertTspCarriageMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
     [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1833,7 +2008,7 @@ export async function assertDidCommV2CarriageMarkers(driver, timeout = 60000) {
     [/\[TrustTasks:DidCommV2Carriage\] envelope sent/, "envelope sent"],
     [/\[TrustTasks:DidCommV2Carriage\] envelope received/, "envelope received"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1865,7 +2040,7 @@ export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
     [/\[TrustTasks:TspCarriage\] envelope received on v2 connection/, "TSP envelope received on v2"],
   ];
   const forbidden = /\[TrustTasks:DidCommV2Carriage\] envelope (sent|received)/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -1893,7 +2068,7 @@ export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
  */
 export async function assertV2MediationMarker(driver, timeout = 60000) {
   const re = /\[TrustTasks:V2Mediation\] Coordinate Mediation 2\.0 granted/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     // Provisioning runs at agent start, which only happens after unlock: a
     // wallet left on its PIN screen would make this wait pointless.
@@ -1923,7 +2098,7 @@ export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
     [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
     [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
   ];
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   let missing = required;
   while (Date.now() < deadline) {
     const log = await readAppJsLog(driver);
@@ -2011,7 +2186,7 @@ export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
   const { execSync } = await import("node:child_process");
   const confirmed = /\[TrustTasks:Witness\] locality confirmed for session/;
   const notConfirmed = /\[TrustTasks:Witness\] locality not confirmed for session[^\n]*/;
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
       encoding: "utf8",
@@ -2038,7 +2213,7 @@ export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
  * false after the wait, which is expected.
  */
 export async function acceptRelationshipProposalIfPrompted(driver, timeout = 90000) {
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
     if (await existsTestId(driver, "ProposalAccept", 3000)) {
       await tapTestId(driver, "ProposalAccept");

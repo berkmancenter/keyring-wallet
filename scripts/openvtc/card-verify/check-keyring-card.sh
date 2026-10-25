@@ -7,9 +7,10 @@
 #   scripts/openvtc/card-verify/check-keyring-card.sh
 #   CARD_VERIFY_BUILD=1 scripts/openvtc/card-verify/check-keyring-card.sh   # build card-verify first (a heavy compile: declare it)
 #
-# Then the reverse direction: the statement Keyring's vetter makes over that
-# card, checked by vta-sdk's verify_statement + check_against_card (what an
-# openvtc applicant runs on a statement it receives).
+# Then the reverse direction: the vetted/1 statement Keyring's vetter makes
+# over that card, checked by vta-sdk's verify_statement, check_against_card and
+# check_against_session (what an openvtc applicant runs on a statement it
+# receives), and the vetter's eligibility presentation with its role VAC.
 #
 #   BIFOLD_DIR=<bifold checkout> …   # check a bifold other than the submodule
 #
@@ -51,9 +52,13 @@ trap 'rm -rf "$OUT"' EXIT
 }
 echo "check-keyring-card: VTI ${have:0:8} (pinned), bifold $(git -C "$BIFOLD" rev-parse --short=8 HEAD)"
 "$BIN" "$OUT/card.json" "$OUT/expect.json"
-if [ -f "$OUT/statement.json" ]; then
-  "$BIN" verify-statement "$OUT/statement.json" "$OUT/card.json" "$OUT/expect.json"
-else
-  echo "check-keyring-card: this bifold writes no statement.json (before keyring-bifold#116); the statement check was not run" >&2
+if [ "$("$BIN" shape 2>/dev/null)" != v1 ]; then
+  echo "check-keyring-card: $BIN is not a DTG Credentials v1 build; rerun with CARD_VERIFY_BUILD=1" >&2
   exit 1
 fi
+if [ ! -f "$OUT/statement-v1.json" ] || [ ! -f "$OUT/eligibility-v1.json" ]; then
+  echo "check-keyring-card: this bifold writes no statement-v1.json or eligibility-v1.json (before keyring-bifold#358); the statement and eligibility checks were not run" >&2
+  exit 1
+fi
+"$BIN" verify-statement "$OUT/statement-v1.json" "$OUT/card.json" "$OUT/session.json" "$OUT/expect.json"
+"$BIN" verify-eligibility "$OUT/eligibility-v1.json" "$OUT/expect.json" eligibilityV1

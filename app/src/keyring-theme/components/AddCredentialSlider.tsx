@@ -1,4 +1,4 @@
-import { SafeAreaModal, Screens, Stacks, testIdForAccessabilityLabel, testIdWithKey } from '@bifold/core'
+import { SafeAreaModal, Screens, Stacks, testIdWithKey } from '@bifold/core'
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { DidCommCredentialState } from '@credo-ts/didcomm'
 import { useCredentialByState } from '@bifold/react-hooks'
@@ -75,7 +75,7 @@ export default function AddCredentialSlider() {
             <TouchableOpacity
               style={styles.purpleButton}
               onPress={goToPersonCredentialScreen}
-              testID={testIdWithKey(testIdForAccessabilityLabel(t('BCID.GetDigitalID')))}
+              testID={testIdWithKey('GetYourPersonCredential')}
               accessibilityLabel={t('BCID.GetDigitalID')}
               accessibilityRole="button"
             >
@@ -85,7 +85,7 @@ export default function AddCredentialSlider() {
           <TouchableOpacity
             style={styles.purpleButton}
             onPress={goToScanScreen}
-            testID={testIdWithKey(testIdForAccessabilityLabel(t('AddCredentialSlider.ScanQRCode')))}
+            testID={testIdWithKey('ScanAQRCode')}
             accessibilityLabel={t('AddCredentialSlider.ScanQRCode')}
             accessibilityRole="button"
           >

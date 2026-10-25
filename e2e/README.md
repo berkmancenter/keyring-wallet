@@ -131,6 +131,50 @@ content changing. Fix: `(cd bifold && yarn install)` then
 `yarn workspace @bifold/core run build`. Do **not** run bifold's root
 `yarn build` (see the root `CLAUDE.md`).
 
+## Keeping an AVD's state across a restart
+
+An emulator booted with `-no-snapshot-save` **discards that session's disk
+writes when it exits**, including app installs and anything the app stored.
+The next boot loads the previous snapshot, so the device comes back as it was
+*before* the session — an app you installed is simply gone, and a wallet you
+onboarded is at the welcome screen again. `scripts/emu.sh stop` and a bare
+`adb emu kill` both end the session, so neither saves you from this.
+
+That flag is a reasonable choice for a throwaway run, and a trap whenever the
+state matters — a build you want to keep installed, an onboarded wallet, any
+identity the app minted and stored. Save the snapshot explicitly before
+shutting down:
+
+```sh
+adb emu avd snapshot save default_boot   # ~2 GB, takes a few seconds
+adb emu kill
+```
+
+Check it landed before you trust it — the snapshot directory's mtime should be
+the moment you saved, not the AVD's creation time:
+
+```sh
+ls -la ~/.android/avd/<AVD>.avd/snapshots/default_boot/
+```
+
+**Appium clears app data too, at session start**, whenever `appium:noReset` is
+false (the default): a run that reuses an install has to pass
+`'appium:noReset': true` and skip onboarding, or it will wipe exactly the state
+it meant to reuse.
+
+**Copying an AVD** (to keep state off a shared one, say) is a directory copy
+plus two edits, with the emulator shut down:
+
+```sh
+cp -R ~/.android/avd/<SRC>.avd ~/.android/avd/<DST>.avd
+cp    ~/.android/avd/<SRC>.ini ~/.android/avd/<DST>.ini
+# in <DST>.ini:        path= and path.rel=  -> the new .avd directory
+# in <DST>.avd/config.ini:  AvdId=  and  avd.ini.displayname=
+```
+
+Boot the copy once and confirm it carries what you expected before deleting or
+wiping the original.
+
 ## Emulator recovery: `io.appium.settings` will not start
 
 Symptom, on any Android suite, before a single test step runs:
@@ -208,6 +252,28 @@ FORCE_BUNDLING=1 xcodebuild -workspace AriesBifold.xcworkspace -scheme AriesBifo
 Debug builds for the emulator/Android phone load JS from **metro** — run
 `yarn start` in `app/` (the real-device runner starts it for you if it isn't
 running; the port is forwarded to the phone over USB with `adb reverse`).
+
+**Start metro as its own process, not as a child of the build.** `yarn android`
+starts metro for you, but as a child of that command: the moment the build
+command exits — including when a CI step or a background task that ran it
+finishes — metro dies with it. The `adb reverse` tunnel survives and keeps
+pointing at the dead port, so the app installs, launches, and renders nothing.
+
+What that looks like is **not** a bundler error. The suite waits on a screen
+that never arrives and reports:
+
+```
+onboarding did not finish within 5min (last action: )
+```
+
+Before chasing onboarding, check the server is actually there:
+
+```sh
+lsof -ti:8081            # nothing listening = metro is gone
+adb reverse --list       # the tunnel will still be there, pointing nowhere
+```
+
+Run `yarn start` in `app/` in its own long-lived shell and re-run.
 
 ## Simulator/emulator run (`yarn e2e:vrc`)
 
@@ -542,6 +608,41 @@ rebuild of both apps — see `scripts/openvtc/local-vti-stack/README.md`.
   minutes on a machine also running the stack.
 - `VTI_PROBE_ON_START=1` in `app/.env` fires the probe as the Developer screen
   mounts, so a run does not depend on a button tap landing.
+
+### Phones, two Android devices, and a private lab build
+
+- **A phone instead of an AVD.** `androidCaps()` stays in AVD mode by default.
+  Set `ANDROID_UDID=<serial>` (the same variable the `*-devices*` runners use;
+  `adb devices`) and, when no AVD is named, it sends `appium:udid` instead of
+  `appium:avd` and no AVD launch settings. It also accepts a running emulator's
+  serial (`emulator-5554`). Do not leave `ANDROID_UDID` exported in the shell
+  for an emulator run. `fullReset` still uninstalls the app, wiping any state
+  on that phone, so use `E2E_KEEP_STATE=1` for a phone holding a persona.
+  `run-agent-connect.js` reads logcat from the session's own serial.
+- **AVD boot.** In AVD mode the Appium caps `appium:avdLaunchTimeout` and
+  `appium:avdReadyTimeout` are 300000 (Appium's default is 60 s, which a second
+  emulator's cold boot overran).
+- **Two Android roles** (`run-vti-vetting.js`, `run-vti-approve.js`, with
+  `PLATFORMS=android,android`): `APPLICANT_ANDROID_UDID` / `VETTER_ANDROID_UDID`
+  and `MANAGER_ANDROID_UDID` / `APPROVER_ANDROID_UDID` (or the `_ANDROID_AVD`
+  forms) pick one device per role. **Unverified:** no android+android run of
+  these two scripts has been made; the role code goes through
+  `lib/keyringRoles.js`, whose Android paths were only exercised with one
+  Android role.
+- **Private lab APK (do not overwrite the shared `app/.env` or APK).** The
+  lab's DIDs are baked at native build time. Rather than swapping `app/.env`
+  (`use-stack.sh lab`), build from the lab env file directly:
+
+  ```bash
+  scripts/openvtc/local-vti-stack/use-stack.sh lab --private   # app/.env untouched
+  (cd app/android && ENVFILE=.env.lab ./gradlew assembleDebug) # react-native-config reads $ENVFILE
+  mkdir -p ~/lab-apk && cp app/android/app/build/outputs/apk/debug/app-debug.apk ~/lab-apk/keyring-lab.apk
+  ANDROID_APK=$HOME/lab-apk/keyring-lab.apk ANDROID_UDID=<serial> node run-agent-connect.js
+  ```
+
+  `ENVFILE` is relative to `app/` (or an absolute path). Copy the APK out
+  immediately: any later build in the checkout overwrites the one in `build/`.
+  `app/.env.lab` is gitignored.
 
 ## Store migration (`yarn e2e:migration`)
 

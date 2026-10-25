@@ -166,10 +166,14 @@ jobs:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
       ANDROID_PACKAGE_NAME: "asml.bkc.harvard.wallet"
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # Full history and tags, so the notes step can find the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -340,6 +344,27 @@ jobs:
         run: |
           node scripts/verify-bifold-linking.js
 
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
+      - name: Record the native fingerprint
+        id: fingerprint
+        run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-android
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Create environment settings
         working-directory: app
         env:
@@ -391,8 +416,46 @@ jobs:
               echo "::warning::PUSH_GATEWAY_URL is set but google-services.json is project '${project}', not PUSH_FCM_PROJECT_ID '${PUSH_FCM_PROJECT_ID}': push stays OFF in the Android build"
             fi
           fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
           echo "Push notifications (Android): ${push}"
           echo "- Push notifications (Android): **${push}**" >>"$GITHUB_STEP_SUMMARY"
+
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (Android): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh android
+          echo "- Over-the-air updates (Android): **off**" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -656,6 +719,20 @@ jobs:
             CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
           fi
 
+          # A release's own Play notes win, as on the promotion, but only when
+          # this release changed the file, so one release's notes never ship
+          # with the next. Lines starting with # are the file's instructions.
+          PLAY_NOTES=.github/play/whats-new.md
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
+          if [ -s "$PLAY_NOTES" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$PLAY_NOTES" 2>/dev/null)" ]; then
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$PLAY_NOTES" | sed '/./,$!d' | head -c 500 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              CLEAN_MSG="$FROM_FILE"
+              echo "using $PLAY_NOTES"
+            fi
+          fi
+
           {
             echo "release_notes<<EOF"
             echo "$CLEAN_MSG"
@@ -703,6 +780,8 @@ jobs:
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+    outputs:
+      ota_fingerprint: ${{ steps.fingerprint.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -826,6 +905,27 @@ jobs:
           export USE_HERMES=1
           yarn run ios:setup
 
+      # Every store build records the native fingerprint it is made for, with OTA
+      # on or off, so a later over-the-air publish can refuse a bundle that no
+      # phone on this build would be offered (ota-publish.yml). It changes
+      # nothing in the build: record-fingerprint.sh puts back every file it
+      # touches. A fingerprint it cannot compute does not stop a release (a
+      # warning; a later publish for this build is refused). A file it cannot
+      # put back does, with exit 3: the binary would ship the OTA key, channel
+      # and fingerprint with OTA off.
+      - name: Record the native fingerprint
+        id: fingerprint
+        run: bash scripts/ota/record-fingerprint.sh ios "$RUNNER_TEMP/ota-fingerprint"
+
+      - name: Keep the native fingerprint
+        if: ${{ steps.fingerprint.outputs.hash != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-fingerprint-ios
+          path: ${{ runner.temp }}/ota-fingerprint/fingerprint.json
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Bump Build No.
         id: ios-version
         working-directory: app/ios
@@ -880,8 +980,46 @@ jobs:
             echo "PUSH_APNS_ENVIRONMENT=production" >>.env
             push=on
           fi
+          # Never the e2e clock switch: a store build keeps the real clocks (only
+          # test-builds.yml sets it, for the release checks).
+          if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS would be baked into a store build"; exit 1; fi
           echo "Push notifications (iOS): ${push}"
           echo "- Push notifications (iOS): **${push}**" >>"$GITHUB_STEP_SUMMARY"
+
+      # Over-the-air JS updates (docs/plans/release-cadence-and-testing-strategy/
+      # ota_updates_subtask.md): off unless the repository variable
+      # OTA_UPDATE_URL names the update server (set from build 267 on; unset, the
+      # app never contacts an update server). When set, the build also carries
+      # the loader's public key and channel (repository variables; both public)
+      # and the native fingerprint, written by the same script the publish job
+      # runs, so a bundle published later matches this build.
+      - name: Over-the-air updates (OTA builds only)
+        if: ${{ vars.OTA_UPDATE_URL != '' }}
+        env:
+          OTA_UPDATE_URL: ${{ vars.OTA_UPDATE_URL }}
+          OTA_PUBLIC_KEY: ${{ vars.OTA_PUBLIC_KEY }}
+          OTA_CHANNEL: ${{ vars.OTA_CHANNEL || 'production' }}
+        run: |
+          case "${OTA_UPDATE_URL}" in
+            https://*) ;;
+            *) echo "::error::OTA_UPDATE_URL must be https (a Release build refuses cleartext)"; exit 1 ;;
+          esac
+          if [ -z "${OTA_PUBLIC_KEY}" ]; then
+            echo "::error::OTA_UPDATE_URL is set but OTA_PUBLIC_KEY is not: a build without the key would accept unsigned bundles"
+            exit 1
+          fi
+          echo "OTA_UPDATE_URL=${OTA_UPDATE_URL%/}" >>app/.env
+          node scripts/ota/native-config.mjs
+          echo "- Over-the-air updates (iOS): **on**, channel ${OTA_CHANNEL}" >>"$GITHUB_STEP_SUMMARY"
+
+      # An OTA-off build must carry none of the loader's settings, or it could
+      # pick up an update stored by the OTA-on build it replaces
+      # (scripts/ota/check-ota-off.sh).
+      - name: Over-the-air updates off (no loader settings)
+        if: ${{ vars.OTA_UPDATE_URL == '' }}
+        run: |
+          bash scripts/ota/check-ota-off.sh ios
+          echo "- Over-the-air updates (iOS): **off**" >>"$GITHUB_STEP_SUMMARY"
 
       # The store target carries no push entitlement, so a tester's build asks
       # Apple for nothing. A build that names a push gateway adds it here. The
@@ -963,8 +1101,9 @@ jobs:
           path: export/KeyRing.ipa
           retention-days: 30
 
+      # Runs on every event. It once ran on a push only, so a build run by hand
+      # (every release/* build) shipped a version number as its notes (247, 248).
       - name: Summarise what this build adds
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
         shell: bash
         run: |
@@ -1100,11 +1239,25 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
+        env:
+          IOS_FINGERPRINT: ${{ needs.build-ios-staging.outputs.ota_fingerprint }}
+          ANDROID_FINGERPRINT: ${{ needs.build-android-staging.outputs.ota_fingerprint }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           TAG="staging-v${{ steps.get_version.outputs.version }}-${{ env.APP_BUILD_NUMBER }}"
-          git tag -a "$TAG" -m "Staging build ${{ env.APP_BUILD_NUMBER }}"
+          # The native fingerprints the builds recorded (record-fingerprint.sh), read by
+          # ota-publish.yml (check-fingerprint.mjs) before it publishes for this build.
+          {
+            echo "Staging build ${{ env.APP_BUILD_NUMBER }}"
+            echo
+            [ -n "$IOS_FINGERPRINT" ] && echo "OTA fingerprint ios: $IOS_FINGERPRINT"
+            [ -n "$ANDROID_FINGERPRINT" ] && echo "OTA fingerprint android: $ANDROID_FINGERPRINT"
+            # Load-bearing: as the group's last command, a false `[ -n "" ] && …`
+            # would end the group non-zero and bash -e would fail the tag step.
+            true
+          } > "$RUNNER_TEMP/tag-message"
+          git tag -a "$TAG" -F "$RUNNER_TEMP/tag-message"
           git push origin "$TAG"
 
   notify-team:

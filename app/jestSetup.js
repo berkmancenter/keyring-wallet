@@ -27,6 +27,23 @@ jest.mock('@bifold/react-native-attestation', () => ({}))
 jest.mock('@hyperledger/anoncreds-react-native', () => ({}))
 jest.mock('@openwallet-foundation/askar-react-native', () => ({}))
 jest.mock('@hyperledger/indy-vdr-react-native', () => ({}))
+// The over-the-air update loader's native module: a phone running its shipped
+// bundle, no update installed. src/ota tests override what they need.
+jest.mock('@hot-updater/react-native', () => ({
+  HotUpdater: {
+    wrap: () => (App) => App,
+    getBundleId: () => '00000000-0000-0000-0000-000000000000',
+    getMinBundleId: () => '00000000-0000-0000-0000-000000000000',
+    getChannel: () => 'production',
+    getDefaultChannel: () => 'production',
+    getAppVersion: () => '1',
+    reload: async () => undefined,
+    getCohort: () => 'ring2',
+    setCohort: () => undefined,
+    getFingerprintHash: () => null,
+    getCrashHistory: () => [],
+  },
+}))
 
 // React 18+/19: enable proper act() behavior in tests
 globalThis.IS_REACT_ACT_ENVIRONMENT = true

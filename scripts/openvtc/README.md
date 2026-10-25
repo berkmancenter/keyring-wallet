@@ -66,11 +66,11 @@ red tells you which layer upstream changed.
 **Moving the `verifiable-trust-infrastructure` pin moves `card-verify` in the
 same pull request.** It builds against the pinned clone with `--locked` in
 keyring-bifold's conformance check, and its exact pins (`dtg-credentials`,
-`affinidi-secrets-resolver`, `trust-tasks-rs`) follow the pinned commit's own
+`affinidi-secrets-resolver`, `trust-tasks-rs`, `affinidi-data-integrity`) follow the pinned commit's own
 `Cargo.lock`. Update them, rebuild so `Cargo.lock` follows, and rerun the
 check's steps and `card-verify vectors` against bifold's committed vectors
 before merging. #168 moved the pin alone and turned that check red on every
-bifold pull request until #169.
+bifold pull request until #169, and #342 did the same again until #348 put the pin back.
 
 ## Files here
 
@@ -104,9 +104,25 @@ file was written was **0.23.3** — six point-releases the tutorial doesn't know
 about. Nothing failed; nothing warned. This exists so drift like that gets
 noticed on purpose.
 
+Only pinned builds reach `external/bin/`. A binary the local pinned snapshot
+carries is copied from there. The snapshot is `FETCH_BINARIES_PINS_DIR`, by
+default `~/vti-stack/pins/current`, a symlink to the dated snapshot the gate
+runs (`nightly-2026-10-22` today; move the symlink, not the code). It holds the
+pnm and openvtc copies, each listed in `MANIFEST.tsv` with its sha256 and
+platform (`darwin-arm64`). An entry for another platform, or one that doesn't
+name its platform, is never used. A cached binary that already holds the
+pinned bytes is left alone, since a rewritten pnm makes macOS ask for its
+Keychain items again; any other is written beside it and renamed into place. Any other is downloaded and cached only if
+its sha256 equals `pinnedSha256`; the server has no versioned URLs, so that sha
+is the explicit version. A drifted or unpinned build is refused and the cache
+is left alone, because after upstream's TSP 1.0 cutover (2026-10-22) latest/main
+may no longer talk to our stack. `--latest` (or `FETCH_BINARIES_ALLOW_LATEST=1`)
+takes the moving build anyway, with drift still reported.
+
 ```sh
 node scripts/openvtc/fetch-binaries.mjs                # fetch + verify every pinned binary into external/bin/
 node scripts/openvtc/fetch-binaries.mjs vta pnm-server  # just the named ones
+node scripts/openvtc/fetch-binaries.mjs --latest vta    # take whatever latest/main serves (opt-in)
 node scripts/openvtc/fetch-binaries.mjs --status        # report the cache's state, no network
 node scripts/openvtc/fetch-binaries.mjs --check          # probe current upstream without touching the cache
 node scripts/openvtc/fetch-binaries.mjs --advance vta --why "reason"   # re-fetch, update the pin, log it

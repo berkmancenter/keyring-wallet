@@ -30,6 +30,21 @@ jobs:
             echo "::error::Private files are committed:"; echo "$found"; exit 1
           fi
 
+      # The e2e clock switch shortens the app's clocks for the release checks.
+      # Only test-builds.yml may write it into an app's .env; staging builds what
+      # ships, and refuses a .env that carries it, in both its app jobs.
+      - name: Only test builds set E2E_CLOCKS
+        run: |
+          found=$(grep -l 'E2E_CLOCKS[=]' .github/workflows/*.yml .github/workflows/*.yaml app/.env.sample \
+            | grep -vx '.github/workflows/test-builds.yml' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Only test-builds.yml may set E2E_CLOCKS:"; echo "$found"; exit 1
+          fi
+          guards=$(grep -c 'E2E_CLOCKS would be baked into a store build' .github/workflows/staging.yaml || true)
+          if [ "$guards" -lt 2 ]; then
+            echo "::error::staging.yaml must refuse E2E_CLOCKS in both the Android and the iOS build (found $guards guards)"; exit 1
+          fi
+
   lint:
     runs-on: ubuntu-22.04
     name: Lint+Format+Types
@@ -91,6 +106,29 @@ jobs:
             node --input-type=module --check < "$f" \
               || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
+          # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
+          # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
+          # bifold's packages/core/testids.json at the pinned submodule, both ways: a pin bump carries its resync
+          # (e2e/scripts/sync-testids.sh bifold), and a check that cannot read the pin fails here (CI is set).
+          node e2e/scripts/check-testids.mjs || fail=1
+          # The harness's and the scripts' own tests (node built-ins and bash only, no install), found rather than named
+          # (scripts/ci/find-tests.mjs): every *.test.mjs and *.test.sh under e2e/ and scripts/, so a new one runs here
+          # without anyone adding it. Named lists left 21 of them running nowhere, check-testids.test.mjs among them,
+          # until 2026-10-22; #518 and #522 had merged green while breaking two gate tests the same way. Those needing
+          # a package this job does not install (webdriverio, node-pty, qrcode) are listed with why in
+          # scripts/ci/tests-need-install.json; a listed file that is gone fails here. Among what they cover: the leg
+          # cleanup through the CI guard (keys-since), the pnm call cap, the CI lane's configuration, phone-grant expiry
+          # and the gate turn lock, gate.sh --rows, the release tier check, the openvtc helpers, fetch-binaries' refusal
+          # of an unpinned moving build, and the testid manifest's drift from the pinned bifold.
+          tests=$(node scripts/ci/find-tests.mjs) || { echo "::error file=scripts/ci/tests-need-install.json::a listed test no longer exists"; fail=1; }
+          while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            # stdin from /dev/null: a test reading stdin would otherwise eat the rest of this list.
+            case $t in
+              *.sh) bash "$t" < /dev/null ;;
+              *) node --test "$t" < /dev/null ;;
+            esac || { echo "::error file=$t::$t failed"; fail=1; }
+          done <<< "$tests"
           exit $fail
 
   test:
@@ -123,3 +161,8 @@ jobs:
 
       - name: Automated testing
         run: yarn test
+
+      # The OTA publishing scripts' own tests (node:test, Node built-ins only):
+      # among them, which key each channel signs with (scripts/ota/signing-key.mjs).
+      - name: OTA script tests
+        run: node --test scripts/ota/

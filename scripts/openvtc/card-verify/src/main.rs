@@ -39,10 +39,16 @@
 //!   published schema, typed parse). See `check_task`.
 //! - `card-verify verify-tasks <tasks.json> <dir>` runs `verify-task` on every
 //!   `{ file, type, signer }` entry of a conformance run's list.
-//! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
+//! - `card-verify verify-statement <statement.json> <card.json> [<session.json>] <expect.json>`
 //!   verifies the card as above, then runs vta-sdk's `verify_statement` and
-//!   `check_against_card` on the statement: what an openvtc applicant runs on a
+//!   `check_against_card` on the statement, and with a session document
+//!   `check_against_session` too: what an openvtc applicant runs on a
 //!   statement it receives (openvtc-core `vetting/applicant.rs` `on_statement`).
+//!   At this pin the statement must be a DTG v1 Vetting Statement
+//!   (`StatementCredential` under `vetted/1`); the endorsement shape is refused.
+//! - `card-verify shape` prints `v1`: the statement and role-credential shapes
+//!   this build accepts. A card-verify built before DTG Credentials v1 has no
+//!   such subcommand.
 //!   `expect.json` may add `"statementNow"` (RFC 3339); it defaults to one
 //!   second after the statement's `validFrom`.
 
@@ -58,7 +64,9 @@ use vta_sdk::vetting::card::{CardExpectations, VerifiedVettingCard, verify_card}
 use serde_json::json;
 use vta_sdk::protocols::vetting::session::v0_1::VettingCardClaim;
 use affinidi_secrets_resolver::secrets::Secret;
-use vta_sdk::protocols::vetting::IdentityVettingEndorsement;
+use vta_sdk::protocols::vetting::{VettedObjectValue, role_action};
+use vta_sdk::vetting::statement::IssuerScope;
+use dtg_credentials::DTGCredential;
 use vta_sdk::vetting::card::{CardDraft, identity_commitment, sign_card};
 use vta_sdk::vetting::statement::{StatementDraft, sign_statement};
 use vta_sdk::vetting::match_code::vetting_match_code;
@@ -66,7 +74,6 @@ use vta_sdk::vetting::statement::verify_statement;
 use vta_sdk::trust_task_proof::{purpose_for_document_type, verify_trust_task_proof_with};
 use vta_sdk::vetting::ticket_uri;
 use vta_sdk::vetting::eligibility::{EligibilityExpectations, build_eligibility_vp, verify_eligibility_vp};
-use affinidi_data_integrity::{DataIntegrityProof, SignOptions, crypto_suites::CryptoSuite};
 
 fn read(path: &str) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -237,8 +244,7 @@ async fn sign_fixtures() -> Result<String, String> {
         "now": "2026-09-25T00:00:01Z"
     });
     let verified = verified_card(&card, &expect).await?;
-    let endorsement: IdentityVettingEndorsement = serde_json::from_value(json!({
-        "type": vta_sdk::protocols::vetting::IDENTITY_VETTING_ENDORSEMENT_TYPE,
+    let value: VettedObjectValue = serde_json::from_value(json!({
         "community": community,
         "method": "inPerson",
         "documentClasses": ["passport"],
@@ -248,16 +254,30 @@ async fn sign_fixtures() -> Result<String, String> {
         "cardDigestMultibase": verified.digest_multibase(),
         "declaredRelationship": "none"
     }))
-    .map_err(|e| format!("endorsement: {e}"))?;
+    .map_err(|e| format!("vetted/1 value: {e}"))?;
+    // The vetting/session document that opened the session, as the vetter
+    // sent it: its id becomes the statement's taskContext, its task digest
+    // taskDigestMultibase (vta-sdk sign_statement).
+    let session_document = json!({
+        "id": session_id,
+        "type": "https://trusttasks.org/spec/vetting/session/0.1",
+        "threadId": session_id,
+        "parentThreadId": "urn:uuid:1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+        "issuer": vetter_did,
+        "recipient": applicant_did,
+        "issuedAt": "2026-09-25T00:00:00Z",
+        "payload": { "method": "inPerson" }
+    });
     let statement = sign_statement(
         StatementDraft {
             id: "urn:uuid:5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d".into(),
             issuer: vetter_did.clone(),
             subject: applicant_did.clone(),
-            endorsement,
+            issuer_scope: IssuerScope::Directed,
+            value,
             valid_from: issued_at + Duration::minutes(1),
             valid_until: issued_at + Duration::days(120),
-            task_context: session_id.clone(),
+            session: session_document.clone(),
         },
         &vetter,
     )
@@ -269,6 +289,7 @@ async fn sign_fixtures() -> Result<String, String> {
         "vetterDid": vetter_did,
         "community": community,
         "session": { "documentId": session_id, "challenge": challenge, "domain": community, "requiredClaims": ["name.legal"] },
+        "sessionDocument": session_document,
         "card": card,
         "cardDigest": verified.digest_multibase(),
         "statement": statement
@@ -466,7 +487,12 @@ fn digest(value_path: &str) -> Result<String, String> {
     dtg_credentials::digest_multibase_json(&read(value_path)?).map_err(|e| format!("digest: {e}"))
 }
 
-async fn verify_statement_against(statement_path: &str, card_path: &str, expect_path: &str) -> Result<String, String> {
+async fn verify_statement_against(
+    statement_path: &str,
+    card_path: &str,
+    session_path: Option<&str>,
+    expect_path: &str,
+) -> Result<String, String> {
     let statement = read(statement_path)?;
     let expect = read(expect_path)?;
     let card = verified_card(&read(card_path)?, &expect).await?;
@@ -486,11 +512,15 @@ async fn verify_statement_against(statement_path: &str, card_path: &str, expect_
     let verified = verify_statement(&statement, now, &resolver)
         .await
         .map_err(|e| format!("REFUSED: {e} — {e:?}"))?;
-    verified.check_against_card(&card).map_err(|e| format!("REFUSED: {e} — {e:?}"))?;
-    Ok(format!(
-        "OK: statement accepted by vta-sdk verify_statement + check_against_card (card digest {})",
-        card.digest_multibase()
-    ))
+    verified.check_against_card(&card).map_err(|e| format!("REFUSED (check_against_card): {e} — {e:?}"))?;
+    let mut checks = "verify_statement + check_against_card";
+    if let Some(path) = session_path {
+        verified
+            .check_against_session(&read(path)?)
+            .map_err(|e| format!("REFUSED (check_against_session): {e} — {e:?}"))?;
+        checks = "verify_statement + check_against_card + check_against_session";
+    }
+    Ok(format!("OK: vetted/1 statement accepted by vta-sdk {checks} (card digest {})", card.digest_multibase()))
 }
 
 /// A resolver for every DID a check touches: did:key alone resolves offline,
@@ -506,10 +536,10 @@ async fn resolver_for_all(dids: &[&str]) -> Result<TrustTaskVmResolver, String> 
 /// `expect.json` carries `eligibility: { vetter, community, role, challenge,
 /// domain, now? }` — challenge is the id of the vetting/request document the
 /// presentation answers, domain that request's joinDid.
-async fn verify_eligibility(vp_path: &str, expect_path: &str) -> Result<String, String> {
+async fn verify_eligibility(vp_path: &str, expect_path: &str, key: &str) -> Result<String, String> {
     let vp = read(vp_path)?;
     let expect = read(expect_path)?;
-    let e = expect.get("eligibility").ok_or("expect.json: missing \"eligibility\"")?;
+    let e = expect.get(key).ok_or_else(|| format!("expect.json: missing \"{key}\""))?;
     let now: DateTime<Utc> = match e.get("now").and_then(Value::as_str) {
         Some(t) => t.parse().map_err(|err| format!("eligibility.now: {err}"))?,
         None => Utc::now(),
@@ -543,32 +573,25 @@ async fn sign_eligibility() -> Result<String, String> {
     let (community_key, community_did) = seeded(3)?;
     let (_, applicant_did) = seeded(1)?;
     let request_id = "urn:uuid:6f1c2b0a-3d4e-4f5a-8b6c-7d8e9f0a1b01";
-    let mut grant = json!({
-        "@context": ["https://www.w3.org/ns/credentials/v2", "https://firstperson.network/credentials/dtg/v1"],
-        "id": "urn:uuid:0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b",
-        "type": ["VerifiableCredential", "EndorsementCredential"],
-        "issuer": community_did,
-        "validFrom": "2026-09-01T00:00:00Z",
-        "validUntil": "2027-03-01T00:00:00Z",
-        "credentialSubject": {
-            "id": vetter_did,
-            "endorsement": {
-                "type": vta_sdk::protocols::vetting::COMMUNITY_ROLE_ENDORSEMENT_TYPE,
-                "communityDid": community_did,
-                "role": "vetter"
-            }
-        }
-    });
-    let proof = DataIntegrityProof::sign(
-        &grant,
-        &community_key,
-        SignOptions::new()
-            .with_proof_purpose("assertionMethod")
-            .with_cryptosuite(CryptoSuite::EddsaJcs2022),
+    // The vetter's grant: a DTG v1 role VAC the community issues, conferring
+    // role:vetter at its own DID, as vta-sdk's eligibility check requires
+    // (vetting/eligibility.rs: issuerScope public, scope = issuer, no parent,
+    // maxAttenuation 0).
+    let mut vac = DTGCredential::new_vac(
+        community_did.clone(),
+        IssuerScope::Public,
+        vetter_did.clone(),
+        community_did.clone(),
+        vec![role_action("vetter")],
+        "2026-09-01T00:00:00Z".parse().map_err(|e| format!("{e}"))?,
+        "2027-03-01T00:00:00Z".parse().map_err(|e| format!("{e}"))?,
     )
-    .await
-    .map_err(|e| format!("sign grant: {e}"))?;
-    grant["proof"] = serde_json::to_value(proof).map_err(|e| e.to_string())?;
+    .map_err(|e| format!("new_vac: {e}"))?
+    .with_max_attenuation(0)
+    .map_err(|e| format!("with_max_attenuation: {e}"))?
+    .with_id("urn:uuid:0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b".to_string());
+    vac.sign(&community_key, None).await.map_err(|e| format!("sign grant: {e}"))?;
+    let grant = serde_json::to_value(&vac).map_err(|e| e.to_string())?;
     let vp = build_eligibility_vp(&vetter, vec![grant], request_id, &applicant_did)
         .await
         .map_err(|e| format!("build_eligibility_vp: {e}"))?;
@@ -593,12 +616,18 @@ async fn sign_eligibility() -> Result<String, String> {
     .await
     .map_err(|e| format!("upstream refused its own fixture: {e}"))?;
     let doc = json!({
-        "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-eligibility: vta-sdk build_eligibility_vp; the grant signed eddsa-jcs-2022 for assertionMethod). Never re-sign with Keyring's code.",
+        "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-eligibility: vta-sdk build_eligibility_vp; the grant a DTG v1 role VAC signed by dtg-credentials). Never re-sign with Keyring's code.",
         "eligibility": expect,
         "vp": vp
     });
     serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
 }
+
+/// The statement and role-credential shapes this build's vta-sdk accepts,
+/// printed by `card-verify shape`. A card-verify without the subcommand
+/// predates DTG Credentials v1 (the endorsement shapes); keyring-bifold's
+/// conformance workflow reads this to pick which documents to judge.
+const STATEMENT_SHAPE: &str = "v1";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -611,13 +640,18 @@ async fn main() -> ExitCode {
         ["verify-task", task, signer] => verify_task(task, signer, None).await,
         ["verify-task", task, signer, type_uri] => verify_task(task, signer, Some(type_uri)).await,
         ["verify-tasks", list, dir] => verify_tasks(list, dir).await,
-        ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
-        ["verify-eligibility", vp, expect] => verify_eligibility(vp, expect).await,
+        ["shape"] => Ok(STATEMENT_SHAPE.to_string()),
+        ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, None, expect).await,
+        ["verify-statement", statement, card, session, expect] => {
+            verify_statement_against(statement, card, Some(session), expect).await
+        }
+        ["verify-eligibility", vp, expect] => verify_eligibility(vp, expect, "eligibility").await,
+        ["verify-eligibility", vp, expect, key] => verify_eligibility(vp, expect, key).await,
         ["sign-eligibility"] => sign_eligibility().await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did> [<expected-type>]\n       card-verify verify-tasks <tasks.json> <dir>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>\n       card-verify verify-eligibility <vp.json> <expect.json>\n       card-verify sign-eligibility"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did> [<expected-type>]\n       card-verify verify-tasks <tasks.json> <dir>\n       card-verify verify-statement <statement.json> <card.json> [<session.json>] <expect.json>\n       card-verify shape\n       card-verify verify-eligibility <vp.json> <expect.json> [<expect-key>]\n       card-verify sign-eligibility"
             );
             return ExitCode::from(2);
         }
