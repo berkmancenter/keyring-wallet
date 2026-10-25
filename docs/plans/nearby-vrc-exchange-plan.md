@@ -1,10 +1,12 @@
 # Nearby VRC exchange — two phones, Bluetooth, no witness
 
 **Scope.** Two people standing together form a relationship by finding each
-other's phone over Bluetooth Low Energy instead of scanning a QR code. Each confirms
-a short code on both screens, then exchanges Verifiable Relationship Credentials
+other's phone over Bluetooth Low Energy instead of scanning a QR code. Each picks the
+short code shown on the other phone, then exchanges Verifiable Relationship Credentials
 through the ceremony Keyring already runs. No witness is needed; when one is
-available, the exchange hands off to the witnessed ceremony (§4.1). The plan keeps
+available, the exchange hands off to the witnessed ceremony (§4.1). **Nearby is
+optional:** the QR code stays the default way to exchange, and every nearby screen
+offers it. The plan keeps
 the principles of the witnessed exchange:
 
 - a live ceremony bound to a challenge;
@@ -40,9 +42,10 @@ What Bluetooth buys here is different and still real:
 |---|---|---|
 | The Trust Task relationship ceremony: `vrc/relationships/propose`/`#response`, `vrc/relationships/issue`, deterministic proposer, the unwitnessed path | [`openvtc-integration-plan.md`](./openvtc-integration-plan.md), shipped in `bifold/packages/core/src/modules/trust-tasks/ceremony.ts` | Shipped. The unwitnessed path is the default whenever no witness is connected (`openRelationshipExchange`, `witnessed: false`) |
 | Hardware-key VRC evidence, one biometric prompt per exchange | [`docs/HARDWARE_ATTESTATION_FLOW.md`](../HARDWARE_ATTESTATION_FLOW.md) | Shipped. Keyring verifies it on the receiving phone only; nothing verifies it server-side |
-| A BLE peripheral on the phone: advertising, a GATT server, long reads across two characteristics, a hardware-key signature inside the radio window | [`locality-plan.md`](./locality-plan.md) §10.3, `bifold/packages/react-native-locality-peripheral` | Shipped for Android. The iOS peripheral is proven on a device (locality-plan companion 2026-09-13-al) |
+| A BLE peripheral on the phone: advertising, a GATT server, long reads across two characteristics, a hardware-key signature inside the radio window | [`locality-plan.md`](./locality-plan.md) §10.3, `bifold/packages/react-native-locality-peripheral` | Shipped for Android; the iOS peripheral is proven on a device (locality-plan companion 2026-09-13-al). **Its API is witness-shaped:** one `respondToSensor()` call, a single turn. The host role here needs a new API surface for `hello`/`join`/`reveal`/`sealed` and several turns, which is new native work (§3) |
 | A BLE **central** on the phone (scan, connect, write, read) | this plan, Phase 0 | **Does not exist.** No phone scans today; the only central is the witness server |
-| The Android Bluetooth runtime permissions helper | keyring-bifold #327 (`bluetoothPermissions.ts`) | Open draft. Asks for `BLUETOOTH_ADVERTISE` + `BLUETOOTH_CONNECT`; this plan adds `BLUETOOTH_SCAN` |
+| The Android Bluetooth runtime permissions helper | keyring-bifold #327 (`bluetoothPermissions.ts`) | Open draft, last pushed 2026-10-07, and it now conflicts with `main`. Meanwhile `main`'s `LocalityPreflightModal` still asks for `BLUETOOTH_ADVERTISE` + `BLUETOOTH_SCAN` and never `BLUETOOTH_CONNECT`, the bug #327 fixes. **#327 is rebased or replaced before Phase 1**, and this plan adds `BLUETOOTH_SCAN` to what it requests |
+| Upgrading a relationship on an existing connection | keyring-bifold #471 (`upgradeRelationship` in `ceremony.ts`, merged 2026-10-22) | Shipped. Used for confirming an existing contact nearby (§2.7) |
 
 **Reviews.** See [`nearby-vrc-exchange-plan/`](./nearby-vrc-exchange-plan/):
 
@@ -50,6 +53,7 @@ What Bluetooth buys here is different and still real:
 |---|---|
 | [2026-10-11-al.md](./nearby-vrc-exchange-plan/2026-10-11-al.md) | The request, the conflict with the locality plan's closure and how this plan stays inside it, the three shapes considered (rendezvous, offline carriage, phone-as-witness) and why rendezvous comes first |
 | [2026-10-14-al.md](./nearby-vrc-exchange-plan/2026-10-14-al.md) | The product owner's answers on the two open questions: the offline carriage is wanted but optional (Phase 3, later, blocking nothing), and Nearby hands off to the witnessed ceremony when a witness is available (§4.1) |
+| [2026-10-25-al.md](./nearby-vrc-exchange-plan/2026-10-25-al.md) | A security review (replay, relay, MITM, reflection, rubber-stamping, tracking, downgrade), the UI/UX review, and corrections against `main` after #471; what each changed in this plan |
 
 ---
 
@@ -148,7 +152,7 @@ can promise:
 - **For anyone else:** there is no proximity evidence at all (§1.2).
 
 Copy follows the same discipline as the locality plan's "at the venue, never at the
-table" (§1). The UI says **"Exchanged nearby"**, never "Confirmed in person". The
+table" (§1). The UI says **"Cards exchanged nearby"**, never "Confirmed in person". The
 second phrase is reserved for a witness-confirmed exchange (`locality-plan.md` §8.4).
 
 ### 2.2 Pairing and the confirmation code
@@ -164,7 +168,9 @@ used in ZRTP (RFC 6189, the Short Authentication String):
    - an ephemeral X25519 key pair `(eH, EH)`;
    - a 32-byte nonce `nH`.
 
-   Its `hello` characteristic exposes `{v, EH, commitH = SHA-256(nH)}`.
+   Its `hello` characteristic exposes `{v, EH, commitH}`, where
+   `commitH = SHA-256("keyring-nearby-v1" ‖ EH ‖ nH)`, so the commitment also fixes
+   the protocol version and the host's key.
 2. The **joiner**, the phone in "Find" mode, connects. It writes
    `{EJ, nJ}` to `join`, where `nJ` is its own fresh 32-byte nonce.
 3. The host now reveals `nH` on `reveal`. The joiner checks it against `commitH`.
@@ -177,21 +183,45 @@ used in ZRTP (RFC 6189, the Short Authentication String):
 
    20 bits gives a one-in-a-million chance per attempt. The ceremony allows one
    attempt per session.
-5. Each person compares the code on their own screen with the other phone's and taps
-   **Match** or **Doesn't match**.
-   - A mismatch, a cancel, or no confirmation within the window ends the session. The
-     app offers no retry with the same keys.
+5. **Each person picks the code shown on the other phone,** in two short steps, so
+   neither can confirm without looking:
+   - Phone A shows its code. Phone B shows three codes, its own derived code and two
+     decoys, and B's person taps the one on A's screen.
+   - Then B shows its code, A shows three, and A's person taps the one on B's screen.
+   - Under a man-in-the-middle the two links derive different codes, so the code on
+     the other phone is not among a phone's own choices and the pick fails. Showing a
+     phone's own code next to its own choices would let a person pick by matching
+     their own screen, so a phone never shows both.
+   - A wrong pick, a cancel, or no pick within the window ends the session: "That
+     isn't the code on the other phone." The app offers no retry with the same keys.
    - The code is never sent over the air. Only humans compare it.
-6. After both taps, every further GATT payload travels under AEAD (ChaCha20-Poly1305,
-   key `k`). This includes the host's out-of-band invitation, the binding (§2.4) and
-   the acknowledgements.
+6. **Key confirmation.** After its person picks correctly, each phone sends
+   `MAC_k("confirm" ‖ role)` and waits for the other's. Nothing sealed is sent until
+   both confirmations have arrived.
+7. **Then every further GATT payload travels under AEAD** (ChaCha20-Poly1305). This
+   includes the host's out-of-band invitation, the binding (§2.4) and the
+   acknowledgements.
+   - **One key per direction** (`HKDF(k, info="h2j")` and `HKDF(k, info="j2h")`), so a
+     phone's own message cannot be reflected back to it.
+   - **A counter as the nonce,** strictly increasing per direction. The additional
+     data is `t ‖ message type`, and a repeated or out-of-order counter is rejected.
+8. **The session has a lifetime.** It ends 10 minutes after both confirmations, and
+   with it the invitation and `t` (§2.4). A host accepts at most three sessions per
+   minute, so a nearby attacker gets few attempts.
 
 **Rejected:** comparing an emoji or word list instead of digits. It is a display
 choice for later, not a design choice. The 20-bit entropy and the single attempt are
 what matter.
 
-**Rejected:** confirming on one phone only. A one-sided match leaves the other person
-unable to detect a man-in-the-middle on their own link.
+**Rejected:** confirming on one phone only, including a passive host that waits
+while the joiner picks. A one-sided match leaves the other person unable to detect a
+man-in-the-middle on their own link: the attacker can send the passive phone a
+confirmation of its own.
+
+**Rejected:** tapping **Match** on identical codes. It works only when people really
+compare, and identical codes on both screens invite a tap without looking. Typing the
+other phone's six digits is safer still, but slower and harder for people with motor
+impairments; picking from three is the balance.
 
 ### 2.3 Discovery: what is on the air
 
@@ -208,6 +238,14 @@ unable to detect a man-in-the-middle on their own link.
 - **Advertising is limited to the open screen.** The host advertises only while the
   "Show" screen is open, and stops after 120 s. No GATT fields carry identity before
   the code is confirmed.
+- **No identity in the GATT surface either.** A connected central may be able to read
+  the operating system's GAP *Device Name* characteristic, which often holds a
+  person's chosen device name. Phase 0 checks what each platform exposes, and the
+  plan does not ship until it exposes no name.
+- **Scanning differs by platform.** iOS cannot filter a scan by a UUID *prefix*, so the
+  joiner scans in the foreground with no service filter and filters in the app.
+  Android uses a `ScanFilter` with a UUID mask. The list never selects a host by
+  itself, even when it has only one entry.
 
 ### 2.4 Binding the BLE session to the network ceremony
 
@@ -219,21 +257,49 @@ mirroring `locality-plan.md` §5.4:
   invitation. The joiner accepts that invitation, and only that invitation, by the
   usual mediator route. A QR code does the same job physically. The connection that
   results is the one the two people confirmed.
+  - The invitation is **single-use** (`multiUseInvitation: false`) and **expires with
+    the session** (§2.2).
+  - The host honours a nearby `propose` only on the connection whose `outOfBandId` is
+    that session's invitation.
+  - These two rules hold from Phase 1, before the digest check of Phase 2 exists.
 - **From the task to the radio.**
   - Each side keeps the nearby session digest `t`.
   - The proposer's `propose` carries an extension member
     `ext["edu.harvard.seas.atl.keyring"].nearby = {sessionDigest: t}`, in the same
     namespace the locality extension uses.
   - The responder refuses a `propose` on that connection whose `sessionDigest` does
-    not equal its own `t`, with `trust-task-error` code `nearby:mismatch`.
+    not equal its own `t`, with `trust-task-error` code `nearby:mismatch`. A
+    `propose` with no digest on a nearby connection is refused as
+    `malformedRequest`.
+  - **Enforcement is the responder's own policy.** The Trust Tasks framework says a
+    consumer MUST ignore an unknown `ext` namespace, and `propose` 0.1's payload
+    schema has no way to mark an extension critical. Both phones have just proved the
+    nearby session over Bluetooth, so each knows to require it.
+  - `t` is stored keyed by the connection, so an exchange resumed after the app is
+    killed (`resumeInterruptedExchanges`) still checks it, and does not stall.
   - The exchange is single-use. Once `issue` completes, `t` cannot be presented
     again.
-- **Signed by hardware.** Inside the one biometric window the ceremony already opens,
-  each phone signs `JCS({context:"keyring-nearby-v1", t, exchangeId})` with the
-  hardware key that signs its VRC evidence. It sends the signature in `issue`'s
-  `ext`. The receiver verifies it against the `hardwareBinding.publicKey` in the
-  sender's VRC evidence. This ties the credential to the confirmed session and the
-  same device key. It is **ceremony evidence**, not a location claim.
+- **Signed by hardware.** Inside the one biometric window the ceremony already
+  opens, each phone signs, with the hardware key that signs its VRC evidence:
+
+  `JCS({context:"keyring-nearby-v1", role, t, exchangeId, myRelationshipDid,
+  theirRelationshipDid, vrcDigest, issuedAt})`
+
+  - It sends the signature in `issue`'s `ext`.
+  - **Verification goes through `HardwareSignatureVerifier.verifyEvidence`**
+    (`hardware-signing/verify.ts`), the same path, with the same checks, that VRC
+    evidence uses, and not a separate public-key check.
+  - **What the signature binds.** The role and both DIDs keep the two phones' signatures
+    distinct. The VRC digest stops a signature being moved onto another credential from
+    the same device key. `issuedAt` must fall inside the session's lifetime.
+  - **On iOS,** App Attest assertions carry a counter that this phone does not track
+    per key, so freshness rests on `t` and `issuedAt`.
+  - This ties the credential to the confirmed session and the same device key. It is
+    **ceremony evidence**, not a location claim.
+- **With no hardware key** (Secure Exchanges turned off, or an emulator), the exchange
+  proceeds without the signature, and the outcome records "no hardware binding". The
+  result says "Cards exchanged nearby" with no hardware wording, and claims nothing
+  more.
 
 **Conditional: whether this signature goes into the credential.** The signature and
 `t` are retained locally as outcome evidence, alongside the propose/issue pair
@@ -252,9 +318,13 @@ VRC.
 | A remote attacker inserts itself between the two phones (BLE man-in-the-middle) | **closed** | The code on both screens differs. The commit-then-reveal design stops the attacker searching for a match (§2.2) |
 | Wrong phone selected in a crowded room | **closed** | The code differs, and the two people see it |
 | A passive listener records the BLE session | **closed for content** | Everything after the code is AEAD-encrypted under an ephemeral key. Before it, only the ephemeral keys, the nonces and the commitment are visible |
-| Replay of a recorded session or binding | **closed** | Fresh keys and nonces each session. `t` is bound to the `exchangeId` and consumed by `issue` |
+| Replay of a recorded session or binding | **closed** | Fresh keys and nonces each session. The session and its single-use invitation expire 10 minutes after confirmation. `t` is bound to the `exchangeId`, stored per connection and consumed by `issue`. The signed binding carries `issuedAt`, the role, both DIDs and the VRC digest (§2.4) |
+| One phone's sealed message reflected back to it | **closed** | A key per direction, counters as nonces, `t ‖ type` as additional data (§2.2) |
+| People confirming the code without looking (rubber-stamping) | **reduced** | Each person picks the other phone's code from three choices, in two steps (§2.2) |
+| A connected central reads the phone's device name | **checked in Phase 0** | The GATT surface must expose no name before this ships (§2.3) |
+| A signature moved onto another credential from the same device | **closed** | The binding includes the VRC digest and both relationship DIDs (§2.4) |
 | An attacker relays a genuine `propose` over the network on another connection | **closed** | `sessionDigest` must equal the responder's own `t` for this connection (§2.4) |
-| **An accomplice relays the radio for a party who is not present** | **open, by design** | Without a witness nothing measures distance on an independent clock (§1.2). It is the same residual the locality plan prices as open even with a witness (§9.2) |
+| **An accomplice relays the radio for a party who is not present** | **open, by design** | Without a witness nothing measures distance on an independent clock (§1.2). It is the same residual the locality plan prices as open even with a witness (§9.2). A remote attacker between two honest people is still defeated by the code. An optional ultra-wideband hint (§5, "Not in this plan") could later warn the people, never record a claim |
 | **Both parties agree to fake a "nearby" exchange** | **open, by design** | It is why no third-party claim is made (§2.1) |
 | A modified app | as strong as App Attest / Play Integrity | Device evidence is unchanged. Nothing server-side verifies it (HARDWARE_ATTESTATION_FLOW, "Known limitations") |
 | Denial of service: a host flooded with joiners, or a jammed radio | **accepted** | The host serves one joiner per session. The person cancels and retries; a new session means new keys |
@@ -277,20 +347,36 @@ VRC.
 - **Unchanged.** No location is recorded or sent. RSSI is used only to order the list
   on the joiner's screen and is not kept.
 
+### 2.7 Confirming an existing contact nearby
+
+Two people who are already contacts can confirm the relationship nearby, through the
+upgrade that bifold #471 added (`upgradeRelationship`, a fresh `exchangeId` on the
+existing connection):
+
+- **No invitation crosses Bluetooth.** After the codes are confirmed, the phones
+  exchange, under AEAD, the relationship DIDs they hold for each other. Each phone
+  requires them to match its stored record for one existing connection; otherwise the
+  session ends ("This isn't the contact you chose").
+- **`ext.nearby.sessionDigest` rides the upgrade `propose`.** The receiver's existing
+  `propose:relationshipMismatch` check applies, and so do the once-per-exchange guards
+  (`priorForExchange`).
+- **The result** is a new layer on the existing contact (§4), not a new contact.
+
 ---
 
 ## 3. What this plan reuses
 
 | Existing piece | Where | How it is reused |
 |---|---|---|
-| The peripheral: advertising, a GATT server, two-characteristic long reads under the 512-byte attribute limit, signing with the hardware key inside the window (Android `CryptoObject`, iOS App Attest assertion) | `bifold/packages/react-native-locality-peripheral` (Android `LocalityPeripheralModule.kt`, iOS `LocalityPeripheral.swift`); `locality-plan.md` §10.3 item 9 | The host role. It gains new characteristics (`hello`, `join`, `reveal`, `sealed`) and a new service prefix. It keeps the chunking, the pacing and the retry rules already learned on devices (`readFullValue()`, the cap of 80 iterations, the stale-`Device` eviction) |
+| The peripheral: advertising, a GATT server, two-characteristic long reads under the 512-byte attribute limit, signing with the hardware key inside the window (Android `CryptoObject`, iOS App Attest assertion) | `bifold/packages/react-native-locality-peripheral` (Android `LocalityPeripheralModule.kt`, iOS `LocalityPeripheral.swift`); `locality-plan.md` §10.3 item 9 | The host role, with a new API surface (several turns over `hello`, `join`, `reveal`, `sealed`, and a new service prefix), since today's `respondToSensor()` serves one witness turn. The chunking, pacing and retry rules learned on devices (`readFullValue()`, the cap of 80 iterations, the stale-`Device` eviction) live in the witness server's *central* code, so the phone's central re-implements them |
 | Ephemeral identifiers derived with HKDF, carried as a 128-bit UUID, one per session | `trust-tasks/deviceLocality.ts` (`deriveEid`, `serviceUuidFromEid`) | Same construction. Here the input is a fresh random value, not a witness challenge |
-| JCS-canonical bindings, with parity tests across Kotlin, Swift, Hermes and Node | `deviceLocality.ts` `bindingFor`, `jcsBindingParity.test.ts` | The nearby binding in §2.4 gets a parity fixture of its own |
+| JCS-canonical bindings, with parity tests across Kotlin, Swift, Hermes and Node | `deviceLocality.ts` `bindingFor`, `jcsBindingParity.test.ts` | Not needed for the nearby crypto. With no tight radio deadline it runs once, in JavaScript, and native code only moves bytes, so the vectors are shared by Hermes and Node only |
+| Hardware-signature verification | `hardware-signing/verify.ts` (`HardwareSignatureVerifier.verifyEvidence`, App Attest CBOR included) | Verifies the nearby binding (§2.4) |
 | Hardware-key VRC evidence and the one-prompt window | `vrc-hardware-signing.ts`, `EvidenceBuilder`; HARDWARE_ATTESTATION_FLOW | Unchanged. The nearby binding is signed inside the same window, adding no second prompt |
 | The unwitnessed ceremony | `ceremony.ts` (`openRelationshipExchange`, `deliverVrcViaTrustTaskForExchange`) | Unchanged, apart from carrying and checking `ext.nearby` (§2.4) |
 | The Android permission helper and the diagnosis of a missing permission (`lastFailure: permissionMissing`) | keyring-bifold #327 (`bluetoothPermissions.ts`) | Extended with `BLUETOOTH_SCAN`, declared with `android:usesPermissionFlags="neverForLocation"` (API 31+). Below API 31, location is required to scan; that gap is already noted in `locality-plan.md` §10.3 |
 | A sheet that asks for permission before the flow starts, once per install | `LocalityPreflightModal`, `hasSeenLocalityPreflight` | The same pattern on the first "Show" or "Find", so the OS dialog never lands mid-exchange. This was the iOS failure the 2026-09-13 run found |
-| A status store that drives the flow | `witnessStatusStore.ts` (`VrcFlowStatus`) | New states `nearby-searching`, `nearby-confirm`, `nearby-connecting` placed before `connecting` |
+| A status store that drives the flow | `witnessStatusStore.ts` (`VrcFlowStatus`) | New states `nearby-searching`, `nearby-confirm`, `nearby-connecting` placed before `connecting`. The exchange's stall timers (the 120 s stall, the 180 s stop, the 60 s witness wait) start at Connecting, never while people are still choosing a code |
 | Retaining outcome evidence | `trust-tasks/outcomeEvidence.ts` | Retains `t` and both binding signatures with the propose/issue pair |
 
 **A central library, not a new native module.** The joiner role is a plain BLE
@@ -310,41 +396,68 @@ consent question (`locality-plan.md` §8.4: locality "must not add a second ques
 to the ceremony"; the same rule holds here).
 
 ```
-Contacts → Add contact
-  ├─ QR code            (unchanged)
-  └─ Nearby  ──────────────────────────────────────────────────────────────
-       First time only: the Bluetooth sheet (why, what is sent, "never your
-       location") → OS permission dialog.
+Contacts → Add contact (QRCodeExchangeSlider)
+  ├─ My code / Scan     (unchanged)
+  └─ Nearby  (a third tab; hidden where the phone can't do it)
+       First time only: the Bluetooth sheet (why, exactly what is sent over the
+       air, "never your location") → OS permission dialog.
 
        Person A: [Show]                        Person B: [Find]
-       "Look for 🦊🌵 on their phone"          "Nearby Keyring phones"
-       (advertising, 120 s)                     🦊🌵 ▂▄▆  (strongest first)
+       "Look for 🦊🌵 Fox Cactus               "Nearby Keyring phones"
+        on their phone" (advertising, 120 s)    🦊🌵 Fox Cactus ▂▄▆ (strongest first)
                                                 ↓ tap
        ┌──────────────────────────────┐       ┌──────────────────────────────┐
-       │ Does their screen show       │       │ Does their screen show       │
-       │        482 913 ?             │       │        482 913 ?             │
-       │  [Match]   [Doesn't match]   │       │  [Match]   [Doesn't match]   │
+       │ Your code                    │       │ Which code is on their       │
+       │        482 913               │       │ phone?                       │
+       │ (they pick it on theirs)     │       │ [ 482 913 ] [ 170 554 ]      │
+       │                              │       │ [ 905 238 ]                  │
        └──────────────────────────────┘       └──────────────────────────────┘
-                     both Match → "Connecting…" (invitation over the
+                     then the roles swap: B shows its code, A picks it
+                                     ↓
+                     both picked → "Connecting…" (invitation over the
                      encrypted BLE session; connection through the mediator)
                                      ↓
        Relationship proposal (the existing RelationshipProposalModal, one question)
                                      ↓
        Biometric prompt (the existing single prompt; it also signs the nearby binding)
                                      ↓
-       "Relationship credential exchanged" · note: "Exchanged nearby · no witness"
+       "Relationship credential exchanged"
 ```
 
+- **Where Nearby lives.** A third tab in `QRCodeExchangeSlider` beside the two QR
+  tabs, shown only where the phone supports it. Below Android 12 it is hidden, once
+  the share of testers on those versions has been checked.
+- **What the pre-flight sheet says.** It names what goes over the air: a random
+  session id, a short code tag, and, only after the codes are confirmed and
+  encrypted, an invitation to connect. Never a name, a photo or a location.
+- **The iOS permission text** is new: "Keyring uses Bluetooth to find a phone near you
+  when you exchange cards or confirm a relationship."
+- **The code.** Digits are grouped in threes and read by the screen reader digit by
+  digit; the code can be enlarged. The emoji tag always has a text name beside it
+  ("🦊🌵 Fox Cactus"), so it can be read aloud and told apart by people who cannot see
+  the emoji well.
 - **Failure copy:**
-  - Mismatch: "The codes didn't match. Nothing was shared. Try again."
+  - Wrong pick: "That isn't the code on the other phone. Nothing was shared."
   - Timeout: "Couldn't finish nearby. Try again, or use a QR code."
-  - Bluetooth off or no permission: a direct link to Settings. The existing #327
-    "Nearby devices" text applies.
-- **Contacts badge.** The contact shows **"Exchanged nearby"**. A nearby exchange
-  never shows the witness's "Confirmed in person" (`locality-plan.md` §8.4) unless a
-  witness took part (§4.1), in which case the witness's result decides the badge.
-- **Accessibility.** The code is read out by the screen reader digit by digit, and it
-  can be enlarged.
+  - Bluetooth off or no permission: a direct link to Settings. The app never turns
+    Bluetooth on or off itself. The existing #327 "Nearby devices" text applies.
+  - A phone that can't do it: "This phone can't exchange nearby. Use a QR code
+    instead."
+  - The app goes to the background while showing: "Keep waiting" or "Stop" on
+    return, since iOS stops advertising in the background.
+  - No phones found after 120 s: "Still looking?" with "Keep looking" and "Use a QR
+    code instead".
+  - Cancelling the biometric prompt sends nothing; the exchange ends as it does today.
+  - **"Use a QR code instead"** is always an explicit button. The app never switches
+    to it by itself.
+- **On the contact.** The contact's layer list gains a row **"Cards exchanged nearby ·
+  {date}"**, or "Cards exchanged nearby, signed with secure hardware · {date}" when
+  both bindings verified (§2.4). It is a row, not a badge, and it never uses
+  in-person wording. A nearby exchange never shows the witness's "Confirmed in
+  person" (`locality-plan.md` §8.4) unless a witness took part (§4.1), in which case
+  the witness's result decides what the contact shows.
+- **Confirming an existing contact** (§2.7) starts from that contact's
+  `RelationshipUpgradeSection` as **"Confirm nearby"**, and adds the same row.
 
 ### 4.1 When a witness is available
 
@@ -363,7 +476,8 @@ offers or requires one (`locality-plan.md` §5).
   applies (keyring-bifold #327: unwitnessed, or nearby not confirmed). The nearby code
   adds nothing to that claim.
 - **A witness that fails or drops out** leaves the exchange unwitnessed, as today
-  ("continuing unwitnessed"), and the badge falls back to "Exchanged nearby".
+  ("continuing unwitnessed"), and the contact falls back to the "Cards exchanged
+  nearby" row.
 - **The phone keeps one radio role at a time.** The host stops advertising its nearby
   service once both people confirm the code, before the witness's locality leg starts
   its own advert. The two adverts never overlap.
@@ -382,13 +496,16 @@ physical phones (§6).
   the prefix and the random session id, scanning, the `hello`/`join`/`reveal`
   characteristics, the SAS derivation, and an AEAD echo once both confirm.
 - **Acceptance:**
-  - Code derivation, commit/reveal and the AEAD round-trip pass unit tests with frozen
-    vectors, shared by TypeScript and every native side that computes them (a parity
-    fixture, as with `jcsBindingParity`).
+  - Code derivation, commit/reveal, key confirmation and the AEAD round-trip (per
+    direction, with counters) pass unit tests with frozen vectors shared by Hermes
+    and Node. No native side computes them (§3).
+  - The GATT surface is read from a third phone on each platform, and it exposes no
+    device name or other identity (§2.3).
   - **Real-device runs** succeed for Android↔Android, iPhone↔Android and
     iPhone↔iPhone, in both host/joiner directions. The time from tap to code is
     recorded; the target is under 5 s at the median.
-  - A third phone, injected as a man-in-the-middle relay, produces mismatched codes.
+  - A third phone, injected as a man-in-the-middle relay, produces codes that neither
+    person can pick.
   - The choice between ble-plx and a native central (§3) is recorded in a dated
     companion with the measured numbers.
 
@@ -400,32 +517,45 @@ physical phones (§6).
   - The VRC exchange then runs unchanged and unwitnessed.
   - Both permission paths: Android 12+ with `BLUETOOTH_SCAN`, `BLUETOOTH_ADVERTISE`
     and `BLUETOOTH_CONNECT`, and iOS `NSBluetoothAlwaysUsageDescription`.
-  - The status states from §3 and the "Exchanged nearby" note.
+  - The status states from §3 and the "Cards exchanged nearby" row.
+  - The single-use invitation that expires with the session, and the host's check
+    that a nearby `propose` arrives on that invitation's connection (§2.4).
   - The hand-off to the witnessed ceremony when a witness is available (§4.1).
+  - Keyring-bifold #327 rebased or replaced first (Dependencies).
 - **Acceptance:**
   - Jest tests cover the flow store, the permission gating, and the failure paths
-    (mismatch, timeout, permission missing, Bluetooth off) with a mocked radio.
+    (wrong pick, timeout, permission missing, Bluetooth off, background, biometric
+    cancel) with a mocked radio, and a second use of the invitation is refused.
   - A **two-device e2e** (Appium, physical phones, in the style of
     `e2e:vrc:devices`) completes Nearby, then a credential on both sides, then the
-    contact badge reads "Exchanged nearby", for one Android+iPhone pair.
+    contact shows the "Cards exchanged nearby" row, for one Android+iPhone pair.
   - Nothing new appears in the VRC beyond today's unwitnessed credential: a fixture
     diff test.
   - With a witness connected, a Jest case shows that `propose` carries
     `witnessed: true`, and that a failed witness falls back to the unwitnessed path
-    with the "Exchanged nearby" badge.
+    with the "Cards exchanged nearby" row.
 
 ### Phase 2 — Bind the session to the ceremony
 
 - **Build:**
   - `ext.nearby.sessionDigest` on `propose`, and the responder's `nearby:mismatch`
     refusal.
-  - The hardware-signed binding in `issue.ext`, verified against the sender's VRC
-    evidence key.
+  - The hardware-signed binding in `issue.ext`, verified through
+    `HardwareSignatureVerifier.verifyEvidence` against the sender's VRC evidence key.
+  - The path with no hardware key, recorded as "no hardware binding" (§2.4).
+  - `t` stored per connection, so a resumed exchange still checks it.
   - Retention in outcome evidence (§2.4).
+  - Confirming an existing contact nearby (§2.7).
 - **Acceptance:**
   - `ceremony.test.ts` gains cases for a matching digest (accepted), a wrong digest
     (refused with `nearby:mismatch`), a missing digest on a nearby connection
-    (refused), and a replayed `t` (refused).
+    (refused as `malformedRequest`), a replayed `t` (refused), a `t` older than the
+    session lifetime (refused), and an exchange resumed after a restart (checked).
+  - A binding is refused when its role, DIDs or VRC digest belong to the other phone
+    or another credential (reflection, transplant), and the no-key path shows no
+    hardware wording.
+  - An upgrade on an existing contact refuses relationship DIDs that do not match
+    the stored record.
   - The binding fixture passes on every runtime that signs or checks it.
   - The real-device e2e from Phase 1 passes again, with both bindings verified in the
     log.
@@ -449,8 +579,13 @@ subtask. Acceptance is defined when the phase is opened.
 - A phone acting as witness for other people's exchanges. The locality plan rules out
   the phone as sensor, because "it inherits background-execution restrictions and
   raises the question of who attests the *sensor*" (§5.6).
-- NFC or UWB. NFC between two phones is not open to iOS apps, and UWB ranging is not
-  exposed to apps (`locality-plan.md` §2).
+- NFC, and UWB as evidence. NFC between two phones is not open to iOS apps.
+  `locality-plan.md` §2 says UWB ranging is not exposed to apps; that is no longer
+  true. Apple's NearbyInteraction framework (U1/U2 phones) and Android's
+  `androidx.core.uwb` both let an app range to a peer. Neither runs on every phone,
+  and neither result can be checked by a third party, so UWB could at most be a hint
+  to the two people ("the other phone is more than a few metres away"), never a
+  recorded claim. It is left for later.
 
 ---
 
@@ -470,15 +605,17 @@ Status"). Physical phones must prove:
    Android 12+ that includes `BLUETOOTH_SCAN` with `neverForLocation` (Phase 1).
 5. Both apps in the foreground. On iOS a backgrounded advertiser moves its service
    UUIDs into an overflow area that non-Apple scanners cannot read
-   (`locality-plan.md` §5.3). Behaviour must be defined if either person locks the
-   phone mid-session.
+   (`locality-plan.md` §5.3). §4 defines what happens when either person leaves the
+   app or locks the phone mid-session; the run proves it.
 6. The hardware-signed nearby binding verifies against the VRC evidence key on both
    platforms: App Attest assertions on iOS, `CryptoObject` signatures on Android
    (Phase 2).
 7. With a witness available, the hand-off of §4.1: the nearby advert stops before
    the witness's locality advert starts, and the witnessed ceremony completes after a
    nearby code confirmation (Phase 1).
-8. Low-end Android: the slow devices that needed a release build and a fixed
+8. The GATT surface exposes no device name to a connected central, on either
+   platform (Phase 0).
+9. Low-end Android: the slow devices that needed a release build and a fixed
    mediator pickup in the locality runs (locality-plan companion 2026-09-13-al).
 
 Unit tests with a mocked radio, and the existing simulator e2e for the unwitnessed
