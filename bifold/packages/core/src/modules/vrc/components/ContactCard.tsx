@@ -82,6 +82,7 @@ const styles = StyleSheet.create({
 const ContactCard: React.FC<ContactCardProps> = ({
   contact,
   hardwareVerified,
+  hardwareChecking = false,
   onPress,
   testID = testIdWithKey('ContactCard'),
 }) => {
@@ -107,7 +108,18 @@ const ContactCard: React.FC<ContactCardProps> = ({
       </View>
       <ThemedText style={styles.itemText}>{contact.issuer.name}</ThemedText>
       <View style={styles.badgeContainer}>
-        {hardwareVerified && <Icon name="shield-check" size={18} color={BADGE_HW_TEAL} style={styles.badgeIcon} />}
+        {hardwareVerified ? (
+          <Icon name="shield-check" size={18} color={BADGE_HW_TEAL} style={styles.badgeIcon} />
+        ) : hardwareChecking ? (
+          // The badge's place while its evidence is checked: an outline, not a badge that pops in.
+          <Icon
+            name="shield-outline"
+            size={18}
+            color="#BBBBBB"
+            style={styles.badgeIcon}
+            testID={testIdWithKey('ContactHardwareChecking')}
+          />
+        ) : null}
         {contact.hasWitnessCredentials && (
           <Icon
             name="check-decagram"

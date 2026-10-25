@@ -102,7 +102,15 @@ class ContactFactsStore {
       const did = r.counterpartyRelationshipDid
       if (!did) continue
       const info = resolveContactDisplayInfo(records, did)
-      const facts: ConnectionFacts = { name: known(info.name || undefined), photo: known(info.photo || undefined) }
+      const name = info.name || undefined
+      const photo = info.photo || undefined
+      // Unchanged, the same object: every credential change re-reads, and a screen re-renders only for a contact
+      // whose name or photo moved (the chat list is long).
+      const before = this.byRelationship.get(did)
+      const facts: ConnectionFacts =
+        before && sameValue(before.name, name) && sameValue(before.photo, photo)
+          ? before
+          : { name: known(name), photo: known(photo) }
       byRelationship.set(did, facts)
       if (r.connectionId) byConnection.set(r.connectionId, facts)
     }
@@ -224,11 +232,15 @@ export function useContactFacts(relationshipDids: string[]): ContactFacts {
   const loaded = contactFacts.relationship(relationshipDids[0] ?? '') !== NOT_READ
   const dids = useRef(relationshipDids)
   dids.current = relationshipDids
+  // And whenever the verification is owed again: a credential re-issued while the screen is open makes it unknown
+  // (the frozen UNKNOWN), and asking then re-checks it; once known, verify() asks for nothing, so no loop.
   useEffect(() => {
     contactFacts.verify(dids.current)
-  }, [key, loaded])
+  }, [key, loaded, facts.hwVerified])
   return facts
 }
 
 const sameKnown = (a: Known<boolean>, b: Known<boolean>) =>
   a.known === b.known && (!a.known || !b.known || a.value === b.value)
+
+const sameValue = (fact: Known<string | undefined>, value: string | undefined) => fact.known && fact.value === value

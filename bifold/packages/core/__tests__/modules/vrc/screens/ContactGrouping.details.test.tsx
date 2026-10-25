@@ -6,7 +6,7 @@
  * Evidence only while it is red against the screens before contact grouping: the linked cases fail with the
  * ContactDetails and relationshipLayers of b71dce9a (this change's first commit, screens unmodified) and pass after.
  */
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { container } from 'tsyringe'
 import { useAgent } from '@bifold/react-hooks'
@@ -17,7 +17,11 @@ import { MainContainer } from '../../../../src/container-impl'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
 import { testIdWithKey } from '../../../../src/utils/testable'
 import { verifyVrcHardwareEvidence } from '../../../../src/modules/vrc/services/BiometricSignatureVerifier'
-import { getVrcCredentialJsonForSubject } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
+import {
+  getVrcCredentialJsonForSubject,
+  hasVrcHardwareAttestation,
+} from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
+import { contactFacts } from '../../../../src/modules/vrc/contacts/useContactFacts'
 import { ALICE_AGAIN, ALICE_FIRST, SEVERAL_RELATIONSHIPS } from '../fixtures/severalRelationships'
 
 jest.mock('@bifold/react-hooks')
@@ -28,7 +32,11 @@ jest.mock('../../../../src/modules/vrc/services/BiometricSignatureVerifier', () 
 }))
 jest.mock('../../../../src/modules/vrc/utils/witnessCredentialUtils', () => {
   const actual = jest.requireActual('../../../../src/modules/vrc/utils/witnessCredentialUtils')
-  return { ...actual, getVrcCredentialJsonForSubject: jest.fn(actual.getVrcCredentialJsonForSubject) }
+  return {
+    ...actual,
+    getVrcCredentialJsonForSubject: jest.fn(actual.getVrcCredentialJsonForSubject),
+    hasVrcHardwareAttestation: jest.fn(actual.hasVrcHardwareAttestation),
+  }
 })
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -47,7 +55,16 @@ const withLinks = (links: { issuerDid: string; contactId: string }[]) =>
   mockUseAgent.mockReturnValue({
     agent: {
       config: { logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
-      dependencyManager: { resolve: () => ({ findByCounterpartyRelationshipDid: findRelationship }) },
+      dependencyManager: {
+        resolve: () => ({
+          findByCounterpartyRelationshipDid: findRelationship,
+          // The relationship records the contact facts read (contacts/useContactFacts).
+          getAll: async () => [
+            { connectionId: 'conn-first', counterpartyRelationshipDid: ALICE_FIRST.id },
+            { connectionId: 'conn-again', counterpartyRelationshipDid: ALICE_AGAIN.id },
+          ],
+        }),
+      },
       genericRecords: { findAllByQuery: async () => links.map((content) => ({ content })) },
     },
   } as any)
@@ -60,6 +77,7 @@ const openAliceAgain = () =>
 describe("a contact's screen grouped by contact", () => {
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => null)
+    contactFacts.forget()
     findRelationship.mockClear()
     mockUseOpenIDCredentials.mockReturnValue({ openIdState: { w3cCredentialRecords: SEVERAL_RELATIONSHIPS } } as any)
   })
@@ -88,12 +106,72 @@ describe("a contact's screen grouped by contact", () => {
     ;(getVrcCredentialJsonForSubject as jest.Mock).mockImplementation((_records: unknown, issuerDid: string) => ({
       issuer: issuerDid,
     }))
+    ;(hasVrcHardwareAttestation as jest.Mock).mockReturnValue(true)
     ;(verifyVrcHardwareEvidence as jest.Mock).mockImplementation(async (raw: { issuer: string }) => {
       if (raw.issuer === ALICE_AGAIN.id) throw new Error('evidence unreadable')
       return { valid: true }
     })
+    // What the app's provider does at the root: read the facts the screen then shares.
+    await act(async () => contactFacts.load(mockUseAgent().agent as never, SEVERAL_RELATIONSHIPS as never))
     const tree = openAliceAgain()
     expect(await tree.findByTestId('SecureExchangeBadge')).toBeTruthy()
     expect(verifyVrcHardwareEvidence).toHaveBeenCalledWith({ issuer: ALICE_FIRST.id })
+  })
+})
+
+// UI-smoothness plan, Phase 4: the contact's page verified hardware evidence itself, from false, so the Secure Exchange
+// badge appeared late — and again after the Contacts list had verified the same evidence.
+describe("a contact's Secure Exchange badge", () => {
+  const openWithFacts = async () => {
+    await act(async () => contactFacts.load(mockUseAgent().agent as never, SEVERAL_RELATIONSHIPS as never))
+    return render(
+      <ContactDetails
+        route={{ params: { contact: { issuer: ALICE_AGAIN, hasHardwareAttestation: true } } } as any}
+        navigation={{} as any}
+      />,
+      { wrapper: Container }
+    )
+  }
+  beforeEach(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => null)
+    contactFacts.forget()
+    mockUseOpenIDCredentials.mockReturnValue({ openIdState: { w3cCredentialRecords: SEVERAL_RELATIONSHIPS } } as any)
+    withLinks([])
+    ;(getVrcCredentialJsonForSubject as jest.Mock).mockImplementation((_records: unknown, issuerDid: string) => ({
+      issuer: issuerDid,
+    }))
+    ;(hasVrcHardwareAttestation as jest.Mock).mockReturnValue(true)
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test('evidence still being checked: its place is held from the first render, then the badge', async () => {
+    let answer: (v: { valid: boolean }) => void = () => undefined
+    ;(verifyVrcHardwareEvidence as jest.Mock).mockImplementation(() => new Promise((r) => (answer = r)))
+    const tree = await openWithFacts()
+    expect(tree.getByTestId('SecureExchangeChecking')).toBeTruthy()
+    expect(tree.queryByTestId('SecureExchangeBadge')).toBeNull()
+    await act(async () => answer({ valid: true }))
+    expect(tree.getByTestId('SecureExchangeBadge')).toBeTruthy()
+    expect(tree.queryByTestId('SecureExchangeChecking')).toBeNull()
+  })
+
+  test('already verified (the Contacts list checked it): the badge from the first render, not checked again', async () => {
+    ;(verifyVrcHardwareEvidence as jest.Mock).mockClear()
+    ;(verifyVrcHardwareEvidence as jest.Mock).mockImplementation(async () => ({ valid: true }))
+    await act(async () => contactFacts.load(mockUseAgent().agent as never, SEVERAL_RELATIONSHIPS as never))
+    await act(async () => {
+      contactFacts.verify([ALICE_AGAIN.id])
+      await Promise.resolve()
+    })
+    expect(verifyVrcHardwareEvidence).toHaveBeenCalledTimes(1)
+    const tree = render(
+      <ContactDetails
+        route={{ params: { contact: { issuer: ALICE_AGAIN, hasHardwareAttestation: true } } } as any}
+        navigation={{} as any}
+      />,
+      { wrapper: Container }
+    )
+    expect(tree.getByTestId('SecureExchangeBadge')).toBeTruthy()
+    expect(verifyVrcHardwareEvidence).toHaveBeenCalledTimes(1)
   })
 })

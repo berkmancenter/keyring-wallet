@@ -3,7 +3,7 @@ import { W3cCredentialRecord } from '@credo-ts/core'
 import { isPeerVrcCredential } from '../credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect, useMemo, useCallback, useState } from 'react'
+import React, { useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FlatList, View, StyleSheet } from 'react-native'
 
@@ -20,13 +20,13 @@ import {
   getVerifiedWitnessCredentialsForSubject,
   extractWitnessInfo,
   hasVrcHardwareAttestation,
-  getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
-import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import { testIdWithKey } from '../../../utils/testable'
 import { contactIdOf } from '../contacts/contactLinks'
+import { useContactFacts } from '../contacts/useContactFacts'
 import { useContactLinks } from '../contacts/useContactLinks'
+import type { ContactCardProps } from '../../../types/contact-card'
 
 const ListContacts: React.FC = () => {
   const { t } = useTranslation()
@@ -73,7 +73,6 @@ const ListContacts: React.FC = () => {
   )
 
   // Track which contacts have passed cryptographic HW verification
-  const [hwVerifiedMap, setHwVerifiedMap] = useState<Record<string, boolean>>({})
 
   // Only used to detect candidates that MIGHT have HW evidence (for triggering verification)
   const hasHardwareAttestationCredential = useCallback(
@@ -260,44 +259,6 @@ const ListContacts: React.FC = () => {
     formatIssuerName,
   ])
 
-  // Run cryptographic verification for contacts that claim HW attestation
-  useEffect(() => {
-    let cancelled = false
-    const candidates = groupedContacts.filter((c) => c.hasHardwareAttestation)
-    if (candidates.length === 0) return
-
-    const verifyAll = async () => {
-      const results: Record<string, boolean> = {}
-      for (const contact of candidates) {
-        if (cancelled) return
-        // Verified when any of the contact's relationships carries hardware evidence that verifies.
-        results[contact.issuer.id] = false
-        for (const issuerId of relationshipsByRow.get(contact.issuer.id) ?? [contact.issuer.id]) {
-          try {
-            const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, issuerId)
-            if (!rawCred) continue
-            const result = await verifyVrcHardwareEvidence(rawCred as any)
-            if (result?.valid === true) {
-              results[contact.issuer.id] = true
-              break
-            }
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.warn('[VRC:Contacts] HW verification error:', error)
-          }
-        }
-      }
-      if (!cancelled) {
-        setHwVerifiedMap((prev) => ({ ...prev, ...results }))
-      }
-    }
-
-    verifyAll()
-    return () => {
-      cancelled = true
-    }
-  }, [groupedContacts, relationshipsByRow, w3cCredentialRecords])
-
   useEffect(() => {
     const shouldShowTour = enableToursConfig && store.tours.enableTours && !store.tours.seenContactsTour
 
@@ -320,9 +281,10 @@ const ListContacts: React.FC = () => {
   // touching this screen.
   const renderContactItem = ({ item }: { item: ContactCredentialDetails }) => {
     return (
-      <ContactCard
+      <ContactRow
+        Card={ContactCard}
         contact={item}
-        hardwareVerified={hwVerifiedMap[item.issuer.id] === true}
+        relationships={relationshipsByRow.get(item.issuer.id) ?? [item.issuer.id]}
         onPress={() => {
           navigation.navigate(Screens.ContactDetails, { contact: item })
         }}
@@ -347,3 +309,28 @@ const ListContacts: React.FC = () => {
 }
 
 export default ListContacts
+
+/**
+ * One contact, with its hardware verification from the facts every screen
+ * shares (contacts/useContactFacts): verified once, not again here and again on
+ * the contact's page. While evidence the contact carries is checked, the card
+ * may hold the badge's place (UI-smoothness plan, Phase 4).
+ */
+const ContactRow: React.FC<{
+  Card: React.FC<ContactCardProps>
+  contact: ContactCredentialDetails
+  relationships: string[]
+  onPress: () => void
+  testID: string
+}> = ({ Card, contact, relationships, onPress, testID }) => {
+  const { hwVerified } = useContactFacts(relationships)
+  return (
+    <Card
+      contact={contact}
+      hardwareVerified={hwVerified.known && hwVerified.value}
+      hardwareChecking={!hwVerified.known && contact.hasHardwareAttestation === true}
+      onPress={onPress}
+      testID={testID}
+    />
+  )
+}

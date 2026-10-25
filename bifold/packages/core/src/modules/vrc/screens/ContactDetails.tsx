@@ -22,10 +22,8 @@ import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecor
 import {
   getVerifiedWitnessCredentialsForSubject,
   extractWitnessInfo,
-  getVrcCredentialJsonForSubject,
   WitnessRecord,
 } from '../utils/witnessCredentialUtils'
-import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import RelationshipLayers from '../components/RelationshipLayers'
 import RelationshipUpgradeSection from '../components/RelationshipUpgradeSection'
 import ContactMergeSection from '../components/ContactMergeSection'
@@ -37,6 +35,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../contacts/contactLinks'
 import { separateContact } from '../contacts/mergeContacts'
+import { useContactFacts } from '../contacts/useContactFacts'
 import { useContactLinks } from '../contacts/useContactLinks'
 
 const AVATAR_BG = '#E8E0E8'
@@ -114,53 +113,17 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     [witnessRecords]
   )
 
-  const [hwVerified, setHwVerified] = useState(false)
+  // Verified once and shared with the Contacts list (contacts/useContactFacts): not again here, from false, with the
+  // badge appearing late. While evidence the contact carries is checked, the badge's place is held.
+  const { hwVerified: hardware } = useContactFacts(relationships)
+  const hwVerified = hardware.known && hardware.value
+  const hwChecking = !hardware.known && contact.hasHardwareAttestation === true
 
   // The relationship's layers, as the records on this phone show them.
   const layers = useMemo(
     () => relationshipLayers(w3cCredentialRecords, relationships, witnessRecords),
     [w3cCredentialRecords, relationships, witnessRecords]
   )
-
-  useEffect(() => {
-    let cancelled = false
-    const verify = async () => {
-      // Secure Exchange when any of the contact's relationships carries hardware evidence that verifies. A
-      // relationship whose check throws is skipped and the next one still gets its turn, as in the Contacts list.
-      let valid = false
-      for (const issuerId of relationships) {
-        try {
-          // eslint-disable-next-line no-console
-          console.log(`[VRC:Badge] ContactDetails: verifying HW attestation for issuer=${issuerId}`)
-          const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, issuerId)
-          if (!rawCred) {
-            // eslint-disable-next-line no-console
-            console.log(`[VRC:Badge] ContactDetails: no raw credential found for issuer`)
-            continue
-          }
-          // eslint-disable-next-line no-console
-          console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
-          const result = await verifyVrcHardwareEvidence(rawCred as any)
-          // eslint-disable-next-line no-console
-          console.log(
-            `[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`
-          )
-          if (result?.valid === true) {
-            valid = true
-            break
-          }
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log(`[VRC:Badge] ContactDetails: verification exception: ${e}`)
-        }
-      }
-      if (!cancelled) setHwVerified(valid)
-    }
-    verify()
-    return () => {
-      cancelled = true
-    }
-  }, [w3cCredentialRecords, relationships])
 
   useEffect(() => {
     const lookupConnection = async () => {
@@ -494,14 +457,27 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
             )}
           </View>
           <ThemedText style={styles.contactName}>{displayName}</ThemedText>
-          {(witnessRecords.length > 0 || hwVerified) && (
+          {(witnessRecords.length > 0 || hwVerified || hwChecking) && (
             <View style={styles.badgesContainer}>
-              {hwVerified && (
+              {hwVerified ? (
                 <View style={styles.hardwareAttestationBadge} testID="SecureExchangeBadge">
                   <Icon name="shield-check" size={14} color={BADGE_HW_TEAL} />
                   <ThemedText style={styles.hardwareAttestationBadgeText}>Secure Exchange</ThemedText>
                 </View>
-              )}
+              ) : hwChecking ? (
+                // The badge's own shape, so nothing shifts when it fills in: an outline, and its words kept but not
+                // shown — it does not say "Secure Exchange" before that is checked.
+                <View style={styles.hardwareAttestationBadge} testID="SecureExchangeChecking">
+                  <Icon name="shield-outline" size={14} color="#BBBBBB" />
+                  <ThemedText
+                    style={[styles.hardwareAttestationBadgeText, { opacity: 0 }]}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  >
+                    Secure Exchange
+                  </ThemedText>
+                </View>
+              ) : null}
               {witnessRecords.length > 0 && (
                 <View style={styles.verifiedBadge} testID="WitnessedBadge">
                   <Icon name="check-decagram" size={14} color={BADGE_WITNESS_PURPLE} />
