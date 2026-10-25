@@ -58,6 +58,11 @@ export function setCardAgentNames(names: ReadonlyMap<string, string>): void {
   cardAgentNames = names
 }
 
+/** The agent holding the identity `subjectDid`, when the phone has several agents (else undefined). */
+export function cardAgentNameOf(subjectDid: unknown): string | undefined {
+  return typeof subjectDid === 'string' ? cardAgentNames.get(subjectDid) : undefined
+}
+
 /** The display of a community card, or undefined for any other credential. */
 export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction): W3cDisplayOverride | undefined {
   if (!isCommunityCard(vc)) return undefined

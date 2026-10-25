@@ -1,5 +1,5 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { useCredentialByState } from '@bifold/react-hooks'
+import { useCredentialByState, useCredentials } from '@bifold/react-hooks'
 import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
 
 import { isVrcModuleCredential } from '../modules/vrc/credentialTypes'
@@ -7,12 +7,8 @@ import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, View } from 'react-native'
-import {
-  DidCommCredentialExchangeRecord,
-  DidCommCredentialRole,
-  DidCommCredentialState,
-} from '@credo-ts/didcomm'
+import { ActivityIndicator, FlatList, View } from 'react-native'
+import { DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState } from '@credo-ts/didcomm'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -26,6 +22,9 @@ import { GenericCredentialExchangeRecord } from '../types/credentials'
 import { BaseTourID } from '../types/tour'
 import { OpenIDCredentialType } from '../modules/openid/types'
 import CredentialCardGen from '../components/misc/CredentialCardGen'
+import PassStack from '../modules/trust-tasks/components/PassStack'
+import { isCommunityCard } from '../modules/trust-tasks/module/vtiWalletCards'
+import { toRawCredential } from '../modules/vrc/utils/rcardDisplayUtils'
 
 const ListCredentials: React.FC = () => {
   const { t } = useTranslation()
@@ -46,8 +45,11 @@ const ListCredentials: React.FC = () => {
   const { start, stop } = useTour()
   const screenIsFocused = useIsFocused()
   const {
-    openIdState: { w3cCredentialRecords, sdJwtVcRecords, mdocVcRecords },
+    openIdState: { w3cCredentialRecords, sdJwtVcRecords, mdocVcRecords, isLoading: openIdLoading },
   } = useOpenIDCredentials()
+  const { loading: didcommLoading } = useCredentials()
+  // Until both stores have been read, the list is not known to be empty: a neutral wait, never "no credentials".
+  const loading = openIdLoading || didcommLoading
 
   let credentials: GenericCredentialExchangeRecord[] = [
     ...useCredentialByState(DidCommCredentialState.CredentialReceived),
@@ -215,6 +217,14 @@ const ListCredentials: React.FC = () => {
     })
   }
 
+  // A community's cards are passes, stacked above the rest (PassStack); every other credential keeps its card.
+  const sorted = credentials.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf())
+  const communityCards = sorted.filter(
+    (r): r is W3cCredentialRecord =>
+      r instanceof W3cCredentialRecord && isCommunityCard((toRawCredential(r) ?? {}) as Record<string, unknown>)
+  )
+  const otherCards = sorted.filter((r) => !communityCards.includes(r as W3cCredentialRecord))
+
   useEffect(() => {
     const shouldShowTour = enableToursConfig && store.tours.enableTours && !store.tours.seenCredentialsTour
 
@@ -275,15 +285,28 @@ const ListCredentials: React.FC = () => {
         // centred, unlike Contacts, which has always passed flexGrow here.
         // Latent until the wallet list legitimately became empty (2026-09-01).
         contentContainerStyle={{ flexGrow: 1 }}
-        data={credentials.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf())}
+        data={otherCards}
         keyExtractor={(credential) => credential.id}
+        ListHeaderComponent={
+          communityCards.length > 0 ? (
+            <PassStack
+              records={communityCards}
+              onOpen={(record) =>
+                navigation.navigate(Screens.OpenIDCredentialDetails, {
+                  credentialId: record.id,
+                  type: OpenIDCredentialType.W3cCredential,
+                })
+              }
+            />
+          ) : null
+        }
         renderItem={({ item: credential, index }) => {
           return (
             <View
               style={{
                 marginHorizontal: 15,
                 marginTop: 15,
-                marginBottom: index === credentials.length - 1 ? 45 : 0,
+                marginBottom: index === otherCards.length - 1 ? 45 : 0,
               }}
             >
               {/* use renderCardItemGen to render new card with abstracted types  */}
@@ -291,7 +314,15 @@ const ListCredentials: React.FC = () => {
             </View>
           )
         }}
-        ListEmptyComponent={() => <CredentialEmptyList message={t('Credentials.EmptyList')} />}
+        ListEmptyComponent={() =>
+          loading ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} testID="ListCredentialsLoading">
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+            </View>
+          ) : communityCards.length > 0 ? null : (
+            <CredentialEmptyList message={t('Credentials.EmptyList')} />
+          )
+        }
         // A real element, not a wrapping function: VirtualizedList treats a
         // non-element ListFooterComponent as a component TYPE and
         // instantiates it fresh via `<ListFooterComponent />` on every

@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "69d9b07b652929096dc44cb22edb30b11c66f7ed",
+  "generatedFrom": "20a7f6249b1566a1ba2f40d5e8f8e3011a207e47",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -276,6 +276,13 @@
     "CommunityName": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityNameClaimed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityOpenDesk": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
+    "CommunityPass": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassAgent": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassLapsing": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassLogo": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassMark": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassStatus": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassTitle": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityReadAgain": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReadFailed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReading": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -723,6 +730,8 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
+    "PassStack": ["src/modules/trust-tasks/components/PassStack.tsx"],
+    "PassStackItem": ["src/modules/trust-tasks/components/PassStack.tsx"],
     "PasteFromClipboard": ["src/screens/PasteUrl.tsx"],
     "PasteNothing": ["src/screens/PasteUrl.tsx"],
     "PasteRead": ["src/screens/PasteUrl.tsx"],
@@ -1208,6 +1217,7 @@
   },
   "raw": {
     "LinkedProfileCard": ["src/modules/vrc/screens/ContactDetails.tsx"],
+    "ListCredentialsLoading": ["src/screens/ListCredentials.tsx"],
     "ListCredentialsRoot": ["src/screens/ListCredentials.tsx"],
     "LocalityConfirmedBadge": [
       "src/modules/vrc/components/ContactCard.tsx",
