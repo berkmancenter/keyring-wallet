@@ -24,6 +24,7 @@ import { setActiveChatConnectionId } from '../activeChatTracker'
 import {
   appMessageWakeDeps,
   messageWakeHold,
+  messagesListFocus,
   openMessageWake,
   useReportMessagesListFocus,
   type WakeNavigation,
@@ -174,6 +175,17 @@ const tap = (agent: never) =>
     graceMs: 0,
   })
 
+/** Resolves once the Messages list reports it no longer has focus. */
+const listLostFocus = () =>
+  new Promise<void>((resolve) => {
+    if (!messagesListFocus.focused()) return resolve()
+    const unsubscribe = messagesListFocus.subscribe(() => {
+      if (messagesListFocus.focused()) return
+      unsubscribe()
+      resolve()
+    })
+  })
+
 /** Let React render between the tap's steps, as the app does; a single act() would hold every render back. */
 async function settle<T>(work: Promise<T>): Promise<T> {
   let done = false
@@ -222,7 +234,11 @@ describe('a tapped message notification, driven as the app drives it', () => {
     const tree = render(<App />)
     const agent = agentWith([], [record('bob', '2026-10-20T10:05:00Z')], async () => {
       mainNavigation!.navigate(Stacks.TabStack, { screen: 'Contacts' })
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      // The person has moved once the list says it lost focus, which it does
+      // when React commits the navigation, on a task of its own. A fixed
+      // settle raced that commit and let the messages land first (run
+      // 40184117411): wait for the list's own report, as the wake does.
+      await listLostFocus()
     })
     expect(await settle(tap(agent))).toBe('moved')
     expect(tree.getByTestId('ContactsScreen')).toBeTruthy()
