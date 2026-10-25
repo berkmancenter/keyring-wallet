@@ -1,4 +1,4 @@
-import { notifyReturnLocked, resetOtaReturnLockedListeners } from '@bifold/core'
+import { notifyReturnLocked, resetOtaReturnLockedListenersForTests } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
 import { Platform, Text } from 'react-native'
@@ -156,7 +156,7 @@ describe('withOta', () => {
     beforeEach(() => {
       // withOta subscribes for the life of the process; each test starts with no
       // listener, so the real notifyReturnLocked reaches only the one it registers.
-      resetOtaReturnLockedListeners()
+      resetOtaReturnLockedListenersForTests()
       os = Object.getOwnPropertyDescriptor(Platform, 'OS')
       Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
     })
