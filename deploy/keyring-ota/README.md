@@ -199,7 +199,11 @@ Record the result in the bump PR. Also run the OTA gate leg (`gate-ota.yml`).
 The iOS update watchdog in `app/ios/AriesBifold/AppDelegate.mm` reads
 hot-updater's own `bundle-store/metadata.json` (`verification_pending`,
 `staging_bundle_id`, `isolation_key`) to tell a trial launch apart, since
-0.36.18 has no public API for it. Check that the file and both keys still mean the same thing; if they
+0.36.18 has no public API for it. The Android watchdog (`MainActivity.kt`,
+`OtaTrial.kt`) reads the same file under `files/`, whose fields are camelCase
+there (`verificationPending`, `stagingBundleId`, `isolationKey`), and relies on
+hot-updater's uncaught-exception handler restarting the app during a trial
+launch (`HotUpdaterRecoveryManager`). Check that the file and both keys still mean the same thing; if they
 don't, the watchdog never arms, which is safe but leaves the black screen it
 exists to close.
 The watchdog's `abort()` is safe only because the next launch rolls the update

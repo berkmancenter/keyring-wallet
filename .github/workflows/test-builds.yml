@@ -425,7 +425,7 @@ jobs:
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.
           rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
-          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
+          cd android && ./gradlew bundleRelease assembleRelease :app:testReleaseUnitTest --stacktrace
 
       - name: Package the APK and its manifest
         run: |
