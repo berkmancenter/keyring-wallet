@@ -16,7 +16,17 @@ jest.mock('../../vrc/vrc-manager', () => ({
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
   isWitnessingPreferred: jest.fn(async () => false),
   issueRCardForAcceptedExchange: jest.fn(async () => undefined),
-  prepareVrcCredentialWithEvidence: jest.fn(async () => ({ credential: {}, biometricSkipped: false })),
+  // A credential that passes W3cCredential's validation, so a delivery can run to its send.
+  prepareVrcCredentialWithEvidence: jest.fn(async () => ({
+    credential: {
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: ['VerifiableCredential'],
+      issuer: 'did:peer:0zMyRel',
+      issuanceDate: '2026-10-22T10:00:00Z',
+      credentialSubject: { id: 'did:peer:0zPeerRel' },
+    },
+    biometricSkipped: false,
+  })),
   getVrcJsonLdProofOptions: jest.fn(async () => ({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })),
 }))
 
@@ -401,5 +411,79 @@ describe('asked proposes are forgotten once answered', () => {
     await after.ceremony.resumeInterruptedExchanges(after.agent)
     expect(after.store.getProposalPrompt(CONNECTION_ID)).toBeUndefined()
     expect(marks(disk)).toEqual([])
+  })
+})
+
+// UI-smoothness plan, Phase 4: Accept closed the sheet at once, and nothing showed until about six awaits later. It
+// now says "preparing" the moment the person accepts; every way on that does not deliver ends the flow, so a failed
+// Accept never leaves the overlay preparing.
+describe('the overlay from the moment the person accepts', () => {
+  type W3c = { signCredential: jest.Mock }
+  const w3c = (phone: ReturnType<typeof boot>) => (phone.agent as unknown as { w3cCredentials: W3c }).w3cCredentials
+  /** A phone whose relationship DID has a key, so its delivery can sign (the harness's has none, and fails). */
+  const canSign = (phone: ReturnType<typeof boot>) => {
+    ;(phone.agent as unknown as { dids: { resolveDidDocument: () => Promise<unknown> } }).dids.resolveDidDocument =
+      async () => ({ verificationMethod: [{ id: 'did:peer:0zMyRel#key-1' }] })
+    return phone
+  }
+
+  test('preparing at once, before anything is awaited; then the delivery takes it on (the control)', async () => {
+    const phone = canSign(boot(newDisk()))
+    await phone.receive(proposeDoc(FIRST))
+    const answering = phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('preparing-offer')
+    await answering
+    await flush()
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('offer-sent')
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBeUndefined()
+  })
+
+  test('the acceptance itself fails: the flow ends as an error, and the caller hears it', async () => {
+    const phone = boot(newDisk())
+    await phone.receive(proposeDoc(FIRST))
+    phone.relationshipRepo.updateCounterpartyRelationshipDid.mockRejectedValueOnce(new Error('storage unavailable'))
+    await expect(phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)).rejects.toThrow(
+      'storage unavailable'
+    )
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('idle')
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBe('error')
+  })
+
+  test('the delivery cannot start (relationship DIDs incomplete): the flow ends, not left preparing', async () => {
+    const phone = boot(newDisk())
+    await phone.receive(proposeDoc(FIRST))
+    phone.relationshipRepo.findByConnectionDid.mockResolvedValue({} as never)
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('idle')
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBe('error')
+  })
+
+  test('the delivery fails: the flow ends, not left preparing until the overlay times out', async () => {
+    const phone = canSign(boot(newDisk()))
+    await phone.receive(proposeDoc(FIRST))
+    w3c(phone).signCredential.mockRejectedValueOnce(new Error('signing failed'))
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('idle')
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBe('error')
+  })
+
+  test('a delivery already under way for the exchange: its status stands, and it carries on', async () => {
+    const phone = canSign(boot(newDisk()))
+    await phone.receive(proposeDoc(FIRST))
+    let release: () => void = () => undefined
+    w3c(phone).signCredential.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve({}))))
+    const first = phone.ceremony.deliverVrcViaTrustTaskForExchange(phone.agent, CONNECTION_ID, FIRST)
+    await flush()
+    await phone.ceremony.respondToRelationshipProposal(phone.agent, CONNECTION_ID, true)
+    await flush()
+    // The acceptance's delivery was the duplicate: it does not end the flow the first run owns (the status may have
+    // moved on — the acceptance also starts a discovery query — but the flow is not ended).
+    expect(phone.store.getStatus(CONNECTION_ID)).not.toBe('idle')
+    expect(phone.store.flowEndedWith(CONNECTION_ID)).toBeUndefined()
+    release()
+    await expect(first).resolves.toBe('delivered')
+    expect(phone.store.getStatus(CONNECTION_ID)).toBe('offer-sent')
   })
 })
