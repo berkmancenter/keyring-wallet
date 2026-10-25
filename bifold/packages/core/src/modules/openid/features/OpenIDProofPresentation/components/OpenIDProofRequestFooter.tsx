@@ -42,8 +42,6 @@ const OpenIDProofPresentationFooter: React.FC<OpenIDProofPresentationFooterProps
     },
   })
 
-  // Its own ids: Send here discloses credentials to a verifier, which is not accepting a credential offer
-  // (AcceptCredentialOffer), and a driver must never mistake one for the other.
   if (!credential) {
     return null
   }
@@ -70,6 +68,8 @@ const OpenIDProofPresentationFooter: React.FC<OpenIDProofPresentationFooterProps
       {selectedCredentialsSubmission && Object.keys(selectedCredentialsSubmission).length > 0 ? (
         <>
           <View style={{ marginBottom: Spacing.sm }}>
+            {/* Its own ids (OpenIDProof*): Send here discloses credentials to a verifier, which is not accepting
+                a credential offer (AcceptCredentialOffer), and a driver must never mistake one for the other. */}
             <Button
               title={t('Global.Send')}
               accessibilityLabel={t('Global.Send')}

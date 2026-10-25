@@ -42,3 +42,12 @@ test('a request it cannot answer: Dismiss under its own id, none of an offer', (
   expect(handlers.onPressDismiss).toHaveBeenCalled()
   expect(noOfferIds(tree)).toEqual([])
 })
+
+// The state every request opens in: one it can answer, with no credential chosen yet.
+test('a request it can answer, before a credential is chosen: Dismiss under its own id, none of an offer', () => {
+  const { tree, handlers } = footer({ submission: { areAllSatisfied: true, entries: [] } })
+  fireEvent.press(tree.getByTestId(testIdWithKey('OpenIDProofDismiss')))
+  expect(handlers.onPressDismiss).toHaveBeenCalled()
+  expect(tree.queryByTestId(testIdWithKey('OpenIDProofSend'))).toBeNull()
+  expect(noOfferIds(tree)).toEqual([])
+})
