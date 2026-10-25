@@ -19,6 +19,7 @@ import { counterpartySpeaksChat } from './capability'
 import { CHAT_PROFILE, MAX_TEXT_LENGTH, MAX_TIMER_VERSION, isUlid } from './chatEvent'
 import type { ChatEvent } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
+import { normalizeEmoji } from './emoji/validate'
 import { newEventId } from './eventId'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
@@ -127,8 +128,16 @@ export async function sendReaction(
   emoji: string
 ): Promise<ChatSendOutcome> {
   if (!isUlid(targetEventId)) throw new Error('chat: reaction target is not an event id')
+  // The receiver accepts only one emoji of the pinned set; send it in the same fully-qualified form.
+  const reaction = normalizeEmoji(emoji)
+  if (!reaction) throw new Error('chat: reaction is not one emoji of the pinned set')
   if (!(await counterpartySpeaksChat(agent, connectionId))) return { carriedAs: 'not-sent' }
-  const record = await sendEvent(agent, connectionId, { ...base(), type: 'reaction', target: targetEventId, emoji })
+  const record = await sendEvent(agent, connectionId, {
+    ...base(),
+    type: 'reaction',
+    target: targetEventId,
+    emoji: reaction,
+  })
   return { carriedAs: 'chat', record }
 }
 

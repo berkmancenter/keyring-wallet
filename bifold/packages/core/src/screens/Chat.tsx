@@ -6,6 +6,7 @@ import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { GiftedChat, IMessage, MessageProps, ReplyMessage } from 'react-native-gifted-chat'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Clipboard from '@react-native-clipboard/clipboard'
 import Toast from 'react-native-toast-message'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -16,10 +17,12 @@ import InfoIcon from '../modules/vrc/components/InfoIcon'
 // import { WitnessChatBanner } from '../modules/vrc/components/WitnessChatBanner'
 import { renderComposer, renderInputToolbar, renderSend } from '../components/chat'
 import ActionSlider from '../components/chat/ActionSlider'
+import { ChatIds } from '../components/chat/Chat.ids'
 import MessageActions from '../components/chat/MessageActions'
 import { useChatAttended } from '../components/chat/useChatAttended'
 import { useComposerText } from '../components/chat/useComposerText'
 import { ToastType } from '../components/toast/BaseToast'
+import EmojiPickerSheet from '../modules/chat/emoji/EmojiPickerSheet'
 import { deleteChatMessages } from '../modules/chat/history'
 import { removeReaction, sendChatText, sendReaction } from '../modules/chat/send'
 import type { ChatSendOutcome } from '../modules/chat/send'
@@ -43,7 +46,8 @@ import { useChatEvents } from '../modules/chat/chatEventsStore'
 import { timerOf } from '../modules/chat/timer'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
-import { Alert, Animated, Easing, View, StyleSheet, Text, TouchableOpacity, ViewToken } from 'react-native'
+import { testIdWithKey } from '../utils/testable'
+import { Alert, Animated, Easing, Pressable, View, StyleSheet, Text, TouchableOpacity, ViewToken } from 'react-native'
 
 const PROGRESS_BAR_WIDTH = 200
 
@@ -200,6 +204,13 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const [actionTarget, setActionTarget] = useState<ExtendedChatMessage | null>(null)
   const closeActions = useCallback(() => setActionTarget(null), [])
 
+  // The emoji picker: open for the composer (each choice is typed in, and it stays open), or for one
+  // message's reaction (its "+"), kept here because the action sheet closes before the picker opens.
+  const [picker, setPicker] = useState<{ for: 'composer' } | { for: 'reaction'; target: ExtendedChatMessage } | null>(
+    null
+  )
+  const closePicker = useCallback(() => setPicker(null), [])
+
   // Received chat messages as they scroll into view, each reported once while someone is looking at this chat
   // (plan §4.6, D4). What is in view while nobody is (another screen over it, the app in the background) is
   // reported when they come back. FlatList takes onViewableItemsChanged once, so it reads the current chat through
@@ -325,10 +336,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     [t, theirLabel]
   )
 
-  const onReact = useCallback(
-    async (emoji: string) => {
-      const target = actionTarget
-      closeActions()
+  const reactTo = useCallback(
+    async (target: ExtendedChatMessage | null, emoji: string) => {
       if (!agent || !target?.chatEventId) return
       // Choosing the reaction this phone already gave removes it; anything else replaces it.
       const mine = target.reactions?.find((reaction) => reaction.author === 'sent')
@@ -342,7 +351,36 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         Toast.show({ type: ToastType.Error, text1: t('Chat.ReactionNotSent') })
       }
     },
-    [actionTarget, agent, closeActions, connectionId, notSentNotice, t]
+    [agent, connectionId, notSentNotice, t]
+  )
+
+  const onReact = useCallback(
+    async (emoji: string) => {
+      const target = actionTarget
+      closeActions()
+      await reactTo(target, emoji)
+    },
+    [actionTarget, closeActions, reactTo]
+  )
+
+  // "+" on the reaction bar: close the sheet, keep the message, and open the full picker for it.
+  const openReactionPicker = useCallback(() => {
+    const target = actionTarget
+    closeActions()
+    if (target?.chatEventId) setPicker({ for: 'reaction', target })
+  }, [actionTarget, closeActions])
+
+  const onPickEmoji = useCallback(
+    (emoji: string) => {
+      if (!picker) return
+      if (picker.for === 'composer') {
+        composer.insert(emoji)
+        return
+      }
+      setPicker(null)
+      reactTo(picker.target, emoji)
+    },
+    [composer, picker, reactTo]
   )
 
   const onReply = useCallback(() => {
@@ -442,9 +480,26 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           renderMessage={renderMessage}
           renderInputToolbar={(props) => renderInputToolbar(props, theme)}
           renderSend={(props) => renderSend(props, theme)}
-          renderComposer={(props) =>
-            renderComposer(props, theme, t('Contacts.TypeHere'), !silentAssertConnectedNetwork() || vrcFlowInProgress)
-          }
+          renderComposer={(props) => {
+            const disabled = !silentAssertConnectedNetwork() || vrcFlowInProgress
+            return renderComposer(
+              props,
+              theme,
+              t('Contacts.TypeHere'),
+              disabled,
+              <Pressable
+                onPress={() => setPicker({ for: 'composer' })}
+                disabled={disabled}
+                hitSlop={8}
+                style={{ paddingHorizontal: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('Emoji.Open')}
+                testID={testIdWithKey(ChatIds.composerEmoji)}
+              >
+                <Icon name="emoticon-happy-outline" size={24} color="#888888" />
+              </Pressable>
+            )
+          }}
           onSend={onSend}
           text={composer.text}
           textInputProps={composer.textInputProps}
@@ -467,11 +522,13 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           visible={actionTarget !== null}
           onClose={closeActions}
           onReact={actionTarget?.chatEventId ? onReact : undefined}
+          onMoreReactions={actionTarget?.chatEventId ? openReactionPicker : undefined}
           selectedReaction={actionTarget?.reactions?.find((reaction) => reaction.author === 'sent')?.emoji}
           onReply={actionTarget?.chatEventId ? onReply : undefined}
           onCopy={actionTarget ? onCopy : undefined}
           onDeleteForMe={actionTarget ? onDeleteForMe : undefined}
         />
+        <EmojiPickerSheet visible={picker !== null} onSelect={onPickEmoji} onClose={closePicker} />
 
         {/* VRC exchange flow loading overlay */}
         {vrcFlowInProgress && (

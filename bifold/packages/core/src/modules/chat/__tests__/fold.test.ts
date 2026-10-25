@@ -134,3 +134,43 @@ describe('prunableOrphans', () => {
     expect(pruned.map((o) => o.eventId)).toEqual([id(3), id(2), id(1)])
   })
 })
+
+describe('foldChatEvents and stored reaction emoji', () => {
+  it('folds a reaction stored in another form into the fully-qualified emoji', () => {
+    const folded = foldChatEvents([message(1, 'sent'), reaction(2, 'received', 1, '❤'), reaction(3, 'sent', 1, '❤️')])
+    expect(folded.reactions.get(id(1))?.map((r) => r.emoji)).toEqual(['❤️', '❤️'])
+  })
+
+  it('shows no reaction for an author whose newest stored reaction is invalid, not their older one', () => {
+    const folded = foldChatEvents([
+      message(1, 'sent'),
+      reaction(2, 'received', 1, '👍'),
+      reaction(3, 'received', 1, 'hello'),
+    ])
+    expect(folded.reactions.get(id(1))).toBeUndefined()
+  })
+
+  it('leaves a timer event as a system line beside a normalised reaction', () => {
+    const timer = new ChatEventRecord({
+      connectionId: 'conn-1',
+      role: 'sent',
+      eventId: id(4),
+      eventType: 'timer',
+      timer: { expiresIn: 3600, version: 1 },
+      sentTime: new Date(base + 4 * 60_000),
+    })
+    const folded = foldChatEvents([message(1, 'sent'), reaction(2, 'received', 1, '\u2764'), timer])
+    expect(folded.reactions.get(id(1))?.map((r) => r.emoji)).toEqual(['\u2764\uFE0F'])
+    expect(folded.systems.map((r) => r.eventId)).toEqual([id(4)])
+    expect(folded.messages.map((m) => m.eventId)).toEqual([id(1)])
+  })
+
+  it('skips a stored reaction that is not one emoji of the pinned set', () => {
+    const folded = foldChatEvents([
+      message(1, 'sent'),
+      reaction(2, 'received', 1, 'hello'),
+      reaction(3, 'sent', 1, '👍'),
+    ])
+    expect(folded.reactions.get(id(1))?.map((r) => r.emoji)).toEqual(['👍'])
+  })
+})

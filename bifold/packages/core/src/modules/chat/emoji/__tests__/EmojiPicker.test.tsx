@@ -163,7 +163,14 @@ describe('emojiCodePoints', () => {
 describe('picker strings', () => {
   const has = (tree: Record<string, unknown>, key: string) =>
     typeof key.split('.').reduce<unknown>((n, p) => (n as Record<string, unknown> | undefined)?.[p], tree) === 'string'
-  const keys = ['Emoji.Search', 'Emoji.ClearSearch', 'Emoji.Recent', 'Emoji.NoResults', ...GROUP_LABEL_KEYS.values()]
+  const keys = [
+    'Emoji.Search',
+    'Emoji.ClearSearch',
+    'Emoji.Recent',
+    'Emoji.NoResults',
+    'Emoji.Open',
+    ...GROUP_LABEL_KEYS.values(),
+  ]
 
   it.each([
     ['en', en],

@@ -114,8 +114,8 @@ describe('long press on a message', () => {
     expect(tree.getByTestId(id('ChatActionReply'))).toBeTruthy()
     expect(tree.getByTestId(id('ChatActionCopy'))).toBeTruthy()
     expect(tree.getByTestId(id('ChatActionDeleteForMe'))).toBeTruthy()
-    // No picker is wired in yet, so no "+".
-    expect(tree.queryByTestId(id('ChatReactionBarMore'))).toBeNull()
+    // "+" opens the full emoji picker (ChatEmojiPicker.test.tsx).
+    expect(tree.getByTestId(id('ChatReactionBarMore'))).toBeTruthy()
   })
 
   it('offers only Copy and Delete for me on a plain message, which cannot be reacted or replied to', () => {

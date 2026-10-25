@@ -5,6 +5,10 @@ export const EmojiPickerIds = {
   clearSearch: 'EmojiPickerClearSearch',
   recent: 'EmojiPickerRecent',
   noResults: 'EmojiPickerNoResults',
+  // The sheet the picker opens in, over the chat.
+  sheet: 'EmojiPickerSheet',
+  sheetBackdrop: 'EmojiPickerSheetBackdrop',
+  sheetClose: 'EmojiPickerSheetClose',
 } as const
 
 /**

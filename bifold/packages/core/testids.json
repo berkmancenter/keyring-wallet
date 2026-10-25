@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "2311cb95d38ef041c1a9405b00ea656b4fa124eb",
+  "generatedFrom": "f91bb47fbd6c9d13b6f26d1e93db319350a7c6f3",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -487,6 +487,9 @@
     "EmojiPickerNoResults": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EmojiPickerRecent": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EmojiPickerSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheet": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetBackdrop": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetClose": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EnableWalletNamingSwitchElement": ["src/screens/Developer.tsx"],
     "Enter": ["src/screens/AttemptLockout.tsx", "src/screens/PINEnter.tsx"],
     "EnterOldPIN": ["src/screens/PINChange.tsx", "src/screens/PINVerify.tsx"],
@@ -1358,6 +1361,15 @@
     },
     {
       "src/modules/chat/emoji/EmojiPicker.tsx": "section.testID"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheet"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetBackdrop"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetClose"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
@@ -2555,6 +2567,9 @@
     },
     {
       "src/screens/AutoLock.tsx": "testID"
+    },
+    {
+      "src/screens/Chat.tsx": "ChatIds.composerEmoji"
     },
     {
       "src/screens/ConfigureMediator.tsx": "mediator"

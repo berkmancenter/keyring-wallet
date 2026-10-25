@@ -147,3 +147,26 @@ describe('parseChatEvent', () => {
     expect(result.ok && 'expiresIn' in result.event).toBe(false)
   })
 })
+
+describe('reaction emoji (plan §5, "Emoji validation")', () => {
+  const reaction = (emoji: unknown) => ({ profile: CHAT_PROFILE, type: 'reaction', eventId: ID, target: TARGET, emoji })
+
+  it('stores a minimally-qualified or unqualified emoji in its fully-qualified form', () => {
+    const result = parseChatEvent(reaction('❤'))
+    expect(result.ok && result.event.type === 'reaction' && result.event.emoji).toBe('❤️')
+  })
+
+  it('accepts skin-tone and ZWJ sequences of the pinned set', () => {
+    for (const emoji of ['👍🏽', '👨‍👩‍👧', '🏳️‍🌈']) {
+      const result = parseChatEvent(reaction(emoji))
+      expect(result.ok && result.event.type === 'reaction' && result.event.emoji).toBe(emoji)
+    }
+  })
+
+  it.each(['👍👍', 'hello', '\u{1F3FD}', 'toString', '__proto__'])(
+    'rejects %s, which is not one emoji of the set',
+    (emoji) => {
+      expect(parseChatEvent(reaction(emoji))).toEqual({ ok: false, reason: 'bad-emoji' })
+    }
+  )
+})

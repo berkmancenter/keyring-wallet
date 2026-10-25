@@ -199,3 +199,38 @@ describe('setupChatInbound', () => {
     expect(fake.stored).toHaveLength(1)
   })
 })
+
+describe('a received reaction that is not one emoji of the pinned set', () => {
+  // Unread counts and chat-list previews are built from stored chat events (chatEventsStore), and the
+  // store hears about a record only through the repository's events. A dropped reaction must leave
+  // neither: no record, and no event that could wake a watcher (plan §5, "Emoji validation").
+  const reaction = (emoji: string) => ({
+    profile: CHAT_PROFILE,
+    type: 'reaction',
+    eventId: EVENT_ID,
+    target: TARGET,
+    emoji,
+  })
+
+  it('is dropped with nothing stored and nothing announced, so no phantom unread or preview', async () => {
+    const fake = makeFakeAgent()
+    const emitter = (
+      fake.agent as never as { dependencyManager: { resolve: (t: unknown) => { emit: jest.Mock } } }
+    ).dependencyManager.resolve(EventEmitter)
+    for (const emoji of ['👍👍', 'toString', 'hello']) {
+      expect(await receiveChatEventMessage(fake.agent, inbound(reaction(emoji)))).toBe('bad-emoji')
+    }
+    expect(fake.stored).toHaveLength(0)
+    expect(emitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('is stored fully-qualified and announced when valid (the control for the test above)', async () => {
+    const fake = makeFakeAgent()
+    const emitter = (
+      fake.agent as never as { dependencyManager: { resolve: (t: unknown) => { emit: jest.Mock } } }
+    ).dependencyManager.resolve(EventEmitter)
+    expect(await receiveChatEventMessage(fake.agent, inbound(reaction('❤')))).toBe('stored')
+    expect(fake.stored[0]).toMatchObject({ eventType: 'reaction', emoji: '❤️' })
+    expect(emitter.emit).toHaveBeenCalled()
+  })
+})

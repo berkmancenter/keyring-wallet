@@ -29,6 +29,7 @@
  * @module chat/fold
  */
 
+import { normalizeEmoji } from './emoji/validate'
 import type { ChatEventRecord, ChatEventRole } from './records/ChatEventRecord'
 import { SYSTEM_EVENT_TYPES } from './systemEvents'
 
@@ -89,9 +90,15 @@ export function foldChatEvents(records: ChatEventRecord[]): FoldedChat {
   }
   const reactions = new Map<string, ChatReaction[]>()
   for (const reaction of latest.values()) {
-    if (redactedReactionIds.has(reaction.eventId) || !reaction.emoji) continue
+    // Normalised on read too: a reaction stored before validation existed may be in another form
+    // ("❤" rather than "❤️") or not an emoji at all; the first folds into its chip, the second is skipped.
+    // This runs after the latest-per-author choice, so an invalid newest reaction shows as no reaction
+    // (it is that person's current intent), never as their older one. Only a value stored before
+    // inbound validation can be invalid; no shipped build stored chat events before it existed.
+    const emoji = reaction.emoji ? normalizeEmoji(reaction.emoji) : undefined
+    if (redactedReactionIds.has(reaction.eventId) || !emoji) continue
     const list = reactions.get(reaction.target as string) ?? []
-    list.push({ author: reaction.role, emoji: reaction.emoji, eventId: reaction.eventId })
+    list.push({ author: reaction.role, emoji, eventId: reaction.eventId })
     reactions.set(reaction.target as string, list)
   }
 

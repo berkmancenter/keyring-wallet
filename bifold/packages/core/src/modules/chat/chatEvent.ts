@@ -11,6 +11,7 @@
  * @module chat/chatEvent
  */
 
+import { normalizeEmoji } from './emoji/validate'
 import { decodeUlidTime } from './eventId'
 
 /** The profile every event names (plan D3). */
@@ -187,7 +188,11 @@ export function parseChatEvent(input: unknown, { now = Date.now() }: { now?: num
       if (typeof raw.emoji !== 'string' || raw.emoji.length === 0 || raw.emoji.length > MAX_EMOJI_LENGTH) {
         return reject('bad-emoji')
       }
-      return { ok: true, event: { ...base, type: 'reaction', target: raw.target, emoji: raw.emoji } }
+      // Only one emoji of the pinned set, stored fully-qualified ("❤" becomes "❤️"), so two forms of the
+      // same emoji fold together and nothing else reaches the screen (plan §5, "Emoji validation").
+      const emoji = normalizeEmoji(raw.emoji)
+      if (!emoji) return reject('bad-emoji')
+      return { ok: true, event: { ...base, type: 'reaction', target: raw.target, emoji } }
     }
     case 'redaction': {
       if (!isUlid(raw.target)) return reject('bad-target')

@@ -131,3 +131,18 @@ describe('sendReaction and removeReaction', () => {
     expect(fake.basic).toHaveLength(0)
   })
 })
+
+describe('sendReaction emoji', () => {
+  it('sends a minimally-qualified emoji in its fully-qualified form', async () => {
+    const fake = makeAgent({ rceVersion: 6 })
+    await sendReaction(fake.agent, 'conn-1', TARGET, '❤')
+    expect(fake.sent[0].event).toMatchObject({ type: 'reaction', emoji: '❤️' })
+  })
+
+  it('refuses something that is not one emoji of the pinned set, and sends nothing', async () => {
+    const fake = makeAgent({ rceVersion: 6 })
+    await expect(sendReaction(fake.agent, 'conn-1', TARGET, '👍👍')).rejects.toThrow('pinned set')
+    expect(fake.sent).toHaveLength(0)
+    expect(fake.stored).toHaveLength(0)
+  })
+})
