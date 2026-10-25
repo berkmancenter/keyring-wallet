@@ -1,4 +1,5 @@
 import { DefaultOCABundleResolver } from '@bifold/oca/build/legacy'
+import { sweepStaleWalletBackupsAtStart } from './utils/walletBackup'
 import { getProofRequestTemplates } from '@bifold/verifier'
 import { Agent } from '@credo-ts/core'
 import React, { createContext, useContext } from 'react'
@@ -130,6 +131,8 @@ export class MainContainer implements Container {
 
   public init(): Container {
     this.log?.info(`Initializing Bifold container`)
+    // A wallet backup shared from Export Wallet is left under the caches for its share target; a day is enough.
+    sweepStaleWalletBackupsAtStart()
 
     this._container.registerInstance(TOKENS.SCREEN_PREFACE, Preface)
     this._container.registerInstance(TOKENS.SCREEN_DEVELOPER, Developer)

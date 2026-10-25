@@ -812,7 +812,11 @@
     "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue? (PT-BR)",
     "Witnessing": "Testemunho",
     "WitnessingDescription": "Quando ativado, o app pode agir como testemunha para outras carteiras, ajudando a verificar e registrar trocas de credenciais na rede.",
-    "ToggleWitnessing": "Alternar testemunho"
+    "ToggleWitnessing": "Alternar testemunho",
+    "ExportWalletShareTitle": "Backup da carteira Keyring",
+    "ExportWalletShared": "Seu backup foi entregue. Guarde-o com a senha: você vai precisar dos dois para restaurar sua carteira.",
+    "ExportWalletNotSavedTitle": "Backup não salvo",
+    "ExportWalletNotSaved": "O backup não foi salvo e nenhuma cópia ficou neste telefone. Exporte de novo quando estiver pronto."
   },
   "AutoLockTimes": {
     "OneHour": "One Hour (PT-BR)",

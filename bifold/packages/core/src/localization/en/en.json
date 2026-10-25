@@ -953,7 +953,11 @@
     "WalletBackup": "Wallet Backup",
     "ExportWalletWarning": "This will create an encrypted backup of your wallet. Store it safely.",
     "ExportWalletInfo": "You will need this password to restore your wallet later.",
-    "ImportWalletWarning": "Importing a wallet backup will replace your current wallet data."
+    "ImportWalletWarning": "Importing a wallet backup will replace your current wallet data.",
+    "ExportWalletShareTitle": "Keyring wallet backup",
+    "ExportWalletShared": "Your backup was handed over. Keep it with its password: you'll need both to restore your wallet.",
+    "ExportWalletNotSavedTitle": "Backup not saved",
+    "ExportWalletNotSaved": "The backup wasn't saved, and no copy was kept on this phone. Export again when you're ready."
   },
   "AutoLockTimes": {
     "OneHour": "One Hour",

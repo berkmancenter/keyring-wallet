@@ -129,6 +129,7 @@ export {
   useCredentialConnectionLabel,
 } from './utils/helpers'
 export { FileCache } from './utils/fileCache'
+export { removeWalletBackups, sweepStaleWalletBackups, WALLET_BACKUP_MAX_AGE_MS } from './utils/walletBackup'
 export { isProtocolMessage } from './utils/protocolMessage'
 export type { CacheDataFile } from './utils/fileCache'
 export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'

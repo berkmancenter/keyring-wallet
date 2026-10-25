@@ -879,7 +879,11 @@
     "ChangeMediator": "Change mediator (FR)",
     "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue? (FR)",
     "GenericErrorMessages": "Generic error messages (FR)",
-    "VersionInfo": "Version information (FR)"
+    "VersionInfo": "Version information (FR)",
+    "ExportWalletShareTitle": "Sauvegarde du portefeuille Keyring",
+    "ExportWalletShared": "Votre sauvegarde a été transmise. Gardez-la avec son mot de passe : il vous faudra les deux pour restaurer votre portefeuille.",
+    "ExportWalletNotSavedTitle": "Sauvegarde non enregistrée",
+    "ExportWalletNotSaved": "La sauvegarde n'a pas été enregistrée, et aucune copie n'est restée sur ce téléphone. Exportez de nouveau quand vous serez prêt."
   },
   "AutoLockTimes": {
     "OneHour": "One Hour (FR)",
