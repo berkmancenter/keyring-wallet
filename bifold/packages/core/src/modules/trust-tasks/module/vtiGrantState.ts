@@ -24,7 +24,15 @@ import { cardStandingOf, recordCardRevocation } from './vtiCardStanding'
 import { checkCredentialStatus } from './vtiStatusList'
 
 export type VetterGrantState =
-  /** A grant is inside its window and not revoked. `statusChecked: false` when the list could not be read. */
+  /**
+   * A grant is inside its window and not revoked as far as known.
+   * `statusChecked: false` means one of two things: the list was asked and
+   * could not be read (`reason` says why; the hidden-vetting round treats it
+   * as actionable, so a vetter can work offline), or it has not been asked
+   * yet (a local read, `reason: 'not read yet'`, for drawing a screen at
+   * once). Nothing branches on `reason` today. A caller that must act only on
+   * a grant whose list was asked needs a field for that, not this sentence.
+   */
   | { state: 'active'; validUntil?: string; statusChecked: boolean; reason?: string }
   | { state: 'revoked'; checkedAt: string }
   | { state: 'expired'; validUntil: string }

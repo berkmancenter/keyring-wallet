@@ -476,6 +476,16 @@ describe('the agent home before anything is read', () => {
     expect(frames).not.toContain(true)
   })
 
+  // The same records as the control below: this phone gets the step bar once read, so its absence while the read
+  // hangs is the condition's doing, not the records' (a member's records never show it, read or not).
+  it('a phone that has joined nothing: no step bar while its read is out', async () => {
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([], () => true))
+    const { frames } = renderWithFrames(strip)
+    await settle()
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames).not.toContain(true)
+  })
+
   it('…and a phone known to have joined nothing gets it (the control)', async () => {
     ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([]))
     const { tree } = renderWithFrames(() => false)
