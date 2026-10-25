@@ -30,6 +30,20 @@ export const MAX_EMOJI_LENGTH = 32
 /** Longest `expiresIn` a message or timer may name: 4 weeks, in seconds. */
 export const MAX_EXPIRES_IN = 4 * 7 * 24 * 60 * 60
 
+/**
+ * Shortest disappearing time: 1 hour, the smallest choice the setting offers. A shorter one from a buggy or hostile
+ * peer would make a message vanish as the chat opens. A timer under it is refused (the chat keeps its setting); a
+ * message under it is kept and its expiresIn raised to it, since refusing would drop the person's text while their
+ * phone shows it sent. 0 still means off for a timer and no timer for a message.
+ */
+export const MIN_EXPIRES_IN = 60 * 60
+
+/**
+ * Highest timer `version` accepted. Unbounded, one event at Number.MAX_SAFE_INTEGER would saturate the count (2^53 + 1
+ * is 2^53), and every later change would tie on version and fall to the eventId tie-break, retiring the versioning.
+ */
+export const MAX_TIMER_VERSION = 1_000_000
+
 /** Largest serialized event accepted while attachments are not supported. */
 export const MAX_EVENT_JSON_LENGTH = 65536
 
@@ -152,7 +166,7 @@ export function parseChatEvent(input: unknown): ChatEventParseResult {
           type: 'message',
           content: { format: 'text/plain', text: content.text },
           ...(raw.inReplyTo !== undefined ? { inReplyTo: raw.inReplyTo as string } : {}),
-          ...(raw.expiresIn ? { expiresIn: raw.expiresIn as number } : {}),
+          ...(raw.expiresIn ? { expiresIn: Math.max(raw.expiresIn as number, MIN_EXPIRES_IN) } : {}),
         },
       }
     }
@@ -173,9 +187,11 @@ export function parseChatEvent(input: unknown): ChatEventParseResult {
         typeof timer !== 'object' ||
         timer === null ||
         !isExpiresIn(timer.expiresIn) ||
+        (timer.expiresIn !== 0 && timer.expiresIn < MIN_EXPIRES_IN) ||
         typeof timer.version !== 'number' ||
         !Number.isInteger(timer.version) ||
-        timer.version < 0
+        timer.version < 0 ||
+        timer.version > MAX_TIMER_VERSION
       ) {
         return reject('bad-timer')
       }

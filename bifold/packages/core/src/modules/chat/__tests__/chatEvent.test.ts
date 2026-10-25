@@ -5,6 +5,8 @@ import {
   MAX_TEXT_LENGTH,
   isUlid,
   parseChatEvent,
+  MAX_TIMER_VERSION,
+  MIN_EXPIRES_IN,
 } from '../chatEvent'
 
 const ID = '01JB3XKX6F8Q2W4E5R6T7Y8Z9V'
@@ -96,11 +98,41 @@ describe('parseChatEvent', () => {
     expect(parseChatEvent(timer(undefined))).toEqual({ ok: false, reason: 'bad-timer' })
     expect(parseChatEvent(timer({ expiresIn: 60, version: -1 }))).toEqual({ ok: false, reason: 'bad-timer' })
     expect(parseChatEvent(timer({ expiresIn: 1.5, version: 0 }))).toEqual({ ok: false, reason: 'bad-timer' })
+    // The version is bounded like expiresIn: one above the cap is refused, the cap itself is not.
+    expect(parseChatEvent(timer({ expiresIn: 3600, version: MAX_TIMER_VERSION + 1 }))).toEqual({
+      ok: false,
+      reason: 'bad-timer',
+    })
+    expect(parseChatEvent(timer({ expiresIn: 3600, version: Number.MAX_SAFE_INTEGER }))).toEqual({
+      ok: false,
+      reason: 'bad-timer',
+    })
+    expect(parseChatEvent(timer({ expiresIn: 3600, version: MAX_TIMER_VERSION })).ok).toBe(true)
   })
 
   it('rejects an event larger than the size cap', () => {
     const big = message({ padding: 'x'.repeat(MAX_EVENT_JSON_LENGTH) })
     expect(parseChatEvent(big)).toEqual({ ok: false, reason: 'too-large' })
+  })
+
+  it('refuses a timer shorter than an hour, so the chat keeps its setting; accepts an hour, two hours and off', () => {
+    const timer = (t: unknown) => ({ profile: CHAT_PROFILE, type: 'timer', eventId: ID, timer: t })
+    expect(parseChatEvent(timer({ expiresIn: 1, version: 2 }))).toEqual({ ok: false, reason: 'bad-timer' })
+    expect(parseChatEvent(timer({ expiresIn: MIN_EXPIRES_IN - 1, version: 2 }))).toEqual({
+      ok: false,
+      reason: 'bad-timer',
+    })
+    for (const expiresIn of [MIN_EXPIRES_IN, 2 * 3600, 0]) {
+      expect(parseChatEvent(timer({ expiresIn, version: 2 }))).toMatchObject({
+        ok: true,
+        event: { timer: { expiresIn } },
+      })
+    }
+  })
+
+  it('keeps a message with a timer shorter than an hour, raised to an hour, rather than dropping its text', () => {
+    expect(parseChatEvent(message({ expiresIn: 1 }))).toMatchObject({ ok: true, event: { expiresIn: MIN_EXPIRES_IN } })
+    expect(parseChatEvent(message({ expiresIn: 2 * 3600 }))).toMatchObject({ ok: true, event: { expiresIn: 2 * 3600 } })
   })
 
   it('drops a zero expiresIn rather than storing it', () => {

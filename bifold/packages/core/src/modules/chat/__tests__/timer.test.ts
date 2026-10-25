@@ -6,6 +6,7 @@ import { expiredIds, forgetExpired, MAX_EXPIRED_KEPT, recordExpired } from '../e
 import { ChatEventRecord } from '../records/ChatEventRecord'
 import { sendChatText, setChatTimer } from '../send'
 import { chatEventsShown } from '../shown'
+import { MAX_TIMER_VERSION } from '../chatEvent'
 import { nextTimerVersion, timerOf } from '../timer'
 
 const mockRecords: ChatEventRecord[] = []
@@ -106,6 +107,15 @@ describe('the chat timer', () => {
     expect(outcome.carriedAs).toBe('chat')
     expect(sent[0].event).toMatchObject({ type: 'timer', timer: { expiresIn: WEEK, version: 5 } })
     await expect(setChatTimer(agent, 'c1', 1234)).rejects.toThrow('not a timer choice')
+  })
+
+  test('a peer timer at the version cap does not lock the setting: this phone still changes it, and its change wins', async () => {
+    mockRecords.push(timerEvent('01JB0000000000000000000001', MAX_TIMER_VERSION, 3600))
+    const outcome = await setChatTimer(agent, 'c1', WEEK)
+    expect(outcome.carriedAs).toBe('chat')
+    expect(sent[0].event).toMatchObject({ type: 'timer', timer: { expiresIn: WEEK, version: MAX_TIMER_VERSION } })
+    // Both phones hold both events; the tie on version goes to the later eventId, which is this phone's change.
+    expect(timerOf(mockRecords)).toMatchObject({ expiresIn: WEEK, setBy: 'sent' })
   })
 
   test('a contact without chat cannot be given a timer: nothing is sent', async () => {

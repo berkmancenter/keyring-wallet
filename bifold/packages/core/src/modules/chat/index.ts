@@ -3,6 +3,8 @@ export {
   MAX_TEXT_LENGTH,
   MAX_EMOJI_LENGTH,
   MAX_EXPIRES_IN,
+  MAX_TIMER_VERSION,
+  MIN_EXPIRES_IN,
   MAX_EVENT_JSON_LENGTH,
   isUlid,
   parseChatEvent,
@@ -50,6 +52,7 @@ export {
   useChatRetentionSweep,
 } from './retention'
 export type { KeepMessages } from './retention'
+export { EXPIRY_SWEEP_INTERVAL_MS, sweepExpired, useChatExpirySweep } from './expiry'
 export type { ChatMessageIds } from './history'
 export type { ChatSendOutcome } from './send'
 export {

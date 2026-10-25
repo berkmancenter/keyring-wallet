@@ -157,6 +157,16 @@ describe('chat history on this phone', () => {
     expect(store.events.map((e) => e.eventId)).toEqual(['R1', 'N1'])
   })
 
+  test("a clear completes when forgetting the chat's expired ids fails: that is housekeeping, not the deletion", async () => {
+    const { PersistentStorage } = jest.requireActual('../../../services/storage')
+    jest.spyOn(PersistentStorage, 'removeValueForKey').mockRejectedValueOnce(new Error('storage unavailable'))
+    const { agent, store } = makeAgent(chat, basics)
+    await expect(deleteChatMessages(agent, 'conn-1')).resolves.toBeUndefined()
+    expect(store.events.map((e) => e.eventId)).toEqual(['N1'])
+    expect([...mockFiles]).toEqual(['/lib/Application Support/chat-media/conn-2/N1.jpg'])
+    expect(PersistentStorage.removeValueForKey).toHaveBeenCalledWith('chat/expired/conn-1')
+  })
+
   test('a store that cannot be written is a failure, so the caller does not report success', async () => {
     const { agent } = makeAgent(chat, basics, { failOn: 'rec-M2' })
     await expect(deleteChatMessages(agent, 'conn-1')).rejects.toThrow('the store could not be written')

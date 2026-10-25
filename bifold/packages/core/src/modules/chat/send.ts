@@ -16,7 +16,7 @@ import type { Agent } from '@credo-ts/core'
 import { DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/didcomm'
 
 import { counterpartySpeaksChat } from './capability'
-import { CHAT_PROFILE, MAX_TEXT_LENGTH, isUlid } from './chatEvent'
+import { CHAT_PROFILE, MAX_TEXT_LENGTH, MAX_TIMER_VERSION, isUlid } from './chatEvent'
 import type { ChatEvent } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
 import { newEventId } from './eventId'
@@ -101,10 +101,13 @@ export async function setChatTimer(agent: Agent, connectionId: string, expiresIn
   if (!TIMER_CHOICES.includes(expiresIn)) throw new Error(`chat: ${expiresIn} is not a timer choice`)
   if (!(await counterpartySpeaksChat(agent, connectionId))) return { carriedAs: 'not-sent' }
   const events = await getChatEventRepository(agent).findByConnection(agent.context, connectionId)
+  // At the cap every change ties on version and the eventId tie-break decides, so the later change wins. Never a
+  // refusal: one peer event at the cap would otherwise lock the setting on both phones for good.
+  const version = Math.min(nextTimerVersion(events), MAX_TIMER_VERSION)
   const record = await sendEvent(agent, connectionId, {
     ...base(),
     type: 'timer',
-    timer: { expiresIn, version: nextTimerVersion(events) },
+    timer: { expiresIn, version },
   })
   return { carriedAs: 'chat', record }
 }

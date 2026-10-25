@@ -15,6 +15,13 @@ import type { ChatEventRecord } from './records/ChatEventRecord'
 
 const SEEN_METADATA_KEY = '_keyring/chatSeen'
 
+/** When the chat marked this message seen (epoch ms), or undefined if it never did. */
+export function seenAt(record: ChatEventRecord): number | undefined {
+  const seen = record.metadata.get(SEEN_METADATA_KEY) as { at?: string } | null
+  const at = seen?.at ? Date.parse(seen.at) : NaN
+  return Number.isFinite(at) ? at : undefined
+}
+
 /** Whether this is a received message that counts as unread: never a reaction, a redaction or a system event. */
 export function isUnreadChatEvent(record: ChatEventRecord): boolean {
   return record.role === 'received' && record.eventType === 'message' && !record.metadata.get(SEEN_METADATA_KEY)
