@@ -3,12 +3,13 @@
  * the way to the community, and its identifiers behind Technical details. The ids the Details it replaced used are
  * kept on what does the same job, so the wallet's end-to-end flows still find them.
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Animated, StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { COMMUNITY, membershipCard, roleCard, seedCardVaultState } from '../../../../__tests__/helpers/cardVault'
+import { resetReduceMotion } from '../../../hooks/reduce-motion'
 import { testIdWithKey } from '../../../utils/testable'
 import { resetCardVaultCache } from '../module/vtiCardVault'
 import CommunityPassDetails from '../screens/CommunityPassDetails'
@@ -82,7 +83,10 @@ describe('a community card’s Details', () => {
 })
 
 describe('a community card opened in place, in the Wallet', () => {
-  beforeEach(() => resetCardVaultCache())
+  beforeEach(() => {
+    resetCardVaultCache()
+    resetReduceMotion()
+  })
 
   const opened = (lift: number, onClose = jest.fn()) =>
     render(
@@ -95,14 +99,18 @@ describe('a community card opened in place, in the Wallet', () => {
     return style.transform?.find((t) => 'translateY' in t)?.translateY
   }
 
-  test('the pass starts where it sat in the stack, and lifts to its place on the native driver', () => {
+  const targetsOf = (timing: jest.SpyInstance) =>
+    timing.mock.calls.map(([, config]) => config as { toValue: number; useNativeDriver: boolean; duration?: number })
+
+  test('the pass starts where it sat in the stack, and lifts to its place on the native driver', async () => {
     const timing = jest.spyOn(Animated, 'timing')
     try {
       const tree = opened(180)
       expect(translateOf(tree.getByTestId(id('PassOpenLift')))).toBe(180)
       // The lift runs natively (jest does not play native-driven frames), so what is asserted is the animation:
       // to its place (0), on the native driver; and the rest of the card coming in (to 1) after it.
-      const targets = timing.mock.calls.map(([, config]) => config as { toValue: number; useNativeDriver: boolean })
+      await waitFor(() => expect(timing).toHaveBeenCalledTimes(2))
+      const targets = targetsOf(timing)
       expect(targets).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ toValue: 0, useNativeDriver: true }),
@@ -110,6 +118,24 @@ describe('a community card opened in place, in the Wallet', () => {
         ])
       )
     } finally {
+      timing.mockRestore()
+    }
+  })
+
+  test('Reduce Motion on: nothing travels; the pass is in its place and the rest of the card dissolves in', async () => {
+    const reduce = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true)
+    const timing = jest.spyOn(Animated, 'timing')
+    try {
+      const tree = opened(180)
+      await waitFor(() => expect(timing).toHaveBeenCalled())
+      expect(translateOf(tree.getByTestId(id('PassOpenLift')))).toBe(0)
+      // One animation: the dissolve (to 1). No lift (a timing to 0), and the rest does not rise.
+      expect(targetsOf(timing)).toEqual([expect.objectContaining({ toValue: 1, useNativeDriver: true })])
+      // Known now: a card opened next starts in its place from its first frame.
+      const next = opened(240)
+      expect(translateOf(next.getAllByTestId(id('PassOpenLift')).slice(-1)[0])).toBe(0)
+    } finally {
+      reduce.mockRestore()
       timing.mockRestore()
     }
   })

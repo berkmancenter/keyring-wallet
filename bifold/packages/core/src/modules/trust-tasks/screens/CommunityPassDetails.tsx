@@ -7,8 +7,9 @@
  * empty body, and every field hidden behind Show.
  *
  * In the Wallet the card opens in place (onClose, liftFrom): the pass lifts from where it sat in the stack to the top,
- * the rest of the card comes in under it, and "All cards" (or Back) returns to the stack. Opened any other way (the
- * Details screen) it simply shows.
+ * the rest of the card comes in under it, and "All cards" (or Back) returns to the stack. With Reduce Motion on, nothing
+ * travels: the pass is in its place at once and the rest of the card dissolves in. Opened any other way (the Details
+ * screen) it simply shows.
  *
  * @module trust-tasks/screens/CommunityPassDetails
  */
@@ -20,6 +21,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { readReduceMotion, useReduceMotion } from '../../../hooks/reduce-motion'
 import { CredentialErrors, GenericCredentialExchangeRecord } from '../../../types/credentials'
 import { testIdWithKey } from '../../../utils/testable'
 import { useCredentialErrorsFromRegistry } from '../../openid/hooks/useCredentialErrorsFromRegistry'
@@ -50,6 +52,8 @@ const LIFT_MS = 320
 const REVEAL_MS = 240
 const REVEAL_DELAY_MS = 120
 const REVEAL_RISE = 16
+/** With Reduce Motion on: the rest of the card dissolves in, in place. */
+const DISSOLVE_MS = 150
 
 export const CommunityPassDetails: React.FC<CommunityPassDetailsProps> = ({
   card,
@@ -71,7 +75,11 @@ export const CommunityPassDetails: React.FC<CommunityPassDetailsProps> = ({
   const face = passFace(card, t, published)
   // Opened in place: the pass starts where it sat in the stack and the rest of the card starts hidden. Values made once,
   // on the first render, so a re-render mid-lift does not restart it.
-  const lift = useRef(new Animated.Value(liftFrom ?? 0)).current
+  // With Reduce Motion known to be on, the pass starts in its place. The very first open after launch cannot know yet
+  // (the system answers asynchronously): with it on, that one open draws the pass at its stack place for a frame, then
+  // sets it in place, rather than holding the frame for the answer.
+  const reduceMotion = useReduceMotion()
+  const lift = useRef(new Animated.Value(reduceMotion ? 0 : (liftFrom ?? 0))).current
   const reveal = useRef(new Animated.Value(liftFrom === undefined ? 1 : 0)).current
   const opened = liftFrom !== undefined
   const announcement = opened ? face?.accessibilityLabel : undefined
@@ -79,16 +87,33 @@ export const CommunityPassDetails: React.FC<CommunityPassDetailsProps> = ({
     if (!opened) return
     // The stack it was opened from is gone, so a screen reader is told which card is now open.
     if (announcement) AccessibilityInfo.announceForAccessibility(announcement)
-    Animated.parallel([
-      Animated.timing(lift, { toValue: 0, duration: LIFT_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(reveal, {
-        toValue: 1,
-        duration: REVEAL_MS,
-        delay: REVEAL_DELAY_MS,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]).start()
+    let live = true
+    readReduceMotion().then((reduce) => {
+      if (!live) return
+      if (reduce) {
+        lift.setValue(0)
+        Animated.timing(reveal, { toValue: 1, duration: DISSOLVE_MS, useNativeDriver: true }).start()
+        return
+      }
+      Animated.parallel([
+        Animated.timing(lift, {
+          toValue: 0,
+          duration: LIFT_MS,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(reveal, {
+          toValue: 1,
+          duration: REVEAL_MS,
+          delay: REVEAL_DELAY_MS,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start()
+    })
+    return () => {
+      live = false
+    }
     // Once, when the card opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -152,7 +177,14 @@ export const CommunityPassDetails: React.FC<CommunityPassDetailsProps> = ({
           styles.rest,
           {
             opacity: reveal,
-            transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [REVEAL_RISE, 0] }) }],
+            transform: [
+              {
+                translateY: reveal.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [reduceMotion ? 0 : REVEAL_RISE, 0],
+                }),
+              },
+            ],
           },
         ]}
       >
