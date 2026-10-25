@@ -19,6 +19,7 @@ import { getChatEventRepository } from './ChatModule'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
 import { setupChatCapability } from './notice'
+import { isBeingSent } from './sending'
 
 const LOG_PREFIX = '[Chat:inbound]'
 
@@ -26,6 +27,7 @@ const LOG_PREFIX = '[Chat:inbound]'
 export type ChatInboundVerdict =
   | 'stored'
   | 'duplicate'
+  | 'reused-event-id'
   | 'no-connection'
   | 'no-authenticated-sender'
   | ChatEventRejection
@@ -59,6 +61,17 @@ export async function receiveChatEventMessage(
   const repository = getChatEventRepository(agent)
   const connectionId = ctx.connection.id
   if (await repository.findEvent(agent.context, connectionId, 'received', event.eventId)) return 'duplicate'
+  // An eventId is a random ULID, so a received one never matches one this phone sent, unless the peer copied it. Every
+  // lookup by eventId (deletion with its dependents, the expiry sweep, replies, a reaction's target when the timeline
+  // is folded) would then reach this phone's own message too: a peer could delete it, or expire it with a short timer
+  // of its own. So it is refused, whatever its type, whether this phone's event is stored or still being sent (its
+  // record is stored only once the send succeeds).
+  if (
+    isBeingSent(connectionId, event.eventId) ||
+    (await repository.findEvent(agent.context, connectionId, 'sent', event.eventId))
+  ) {
+    return 'reused-event-id'
+  }
 
   await repository.save(
     agent.context,

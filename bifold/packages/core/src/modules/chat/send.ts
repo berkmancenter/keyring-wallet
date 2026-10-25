@@ -22,6 +22,7 @@ import { getChatEventRepository } from './ChatModule'
 import { newEventId } from './eventId'
 import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
+import { whileSending } from './sending'
 import { TIMER_CHOICES, currentTimer, nextTimerVersion } from './timer'
 
 /** How a send went out. `not-sent` is a reaction or redaction to a contact without chat. */
@@ -31,6 +32,12 @@ export type ChatSendOutcome =
   | { carriedAs: 'not-sent' }
 
 async function sendEvent(agent: Agent, connectionId: string, event: ChatEvent): Promise<ChatEventRecord> {
+  // Marked from before the send until the record is stored, so a peer cannot slip the same eventId in between
+  // (sending.ts, inbound.ts).
+  return whileSending(connectionId, event.eventId, () => sendAndStore(agent, connectionId, event))
+}
+
+async function sendAndStore(agent: Agent, connectionId: string, event: ChatEvent): Promise<ChatEventRecord> {
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   const messageSender = agent.dependencyManager.container.resolve(DidCommMessageSender)
   await messageSender.sendMessage(

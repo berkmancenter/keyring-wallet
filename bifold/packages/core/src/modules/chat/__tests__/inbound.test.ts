@@ -133,6 +133,53 @@ describe('receiveChatEventMessage', () => {
   })
 })
 
+// A peer that copied the eventId of a message this phone sent could otherwise reach it through every lookup by eventId:
+// deleting its own message, or letting it expire, would take this phone's with it.
+describe('an eventId this phone sent', () => {
+  const sentHere = (connectionId: string) =>
+    new ChatEventRecord({
+      connectionId,
+      role: 'sent',
+      eventId: EVENT_ID,
+      eventType: 'message',
+      content: { format: 'text/plain', text: 'mine' },
+    })
+  const theirs = () =>
+    inbound({
+      profile: CHAT_PROFILE,
+      type: 'message',
+      eventId: EVENT_ID,
+      content: { format: 'text/plain', text: 'gone in an hour' },
+      expiresIn: 3600,
+    })
+
+  it('is refused when a peer sends it back on the same connection, storing nothing', async () => {
+    const fake = makeFakeAgent()
+    fake.stored.push(sentHere('conn-1'))
+    expect(await receiveChatEventMessage(fake.agent, theirs())).toBe('reused-event-id')
+    expect(fake.stored).toHaveLength(1)
+  })
+
+  it.each([
+    ['a reaction', { type: 'reaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W', emoji: '👍' }],
+    ['a redaction', { type: 'redaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W' }],
+    ['a timer', { type: 'timer', timer: { expiresIn: 3600, version: 1 } }],
+  ])('is refused whatever the event, here %s', async (_label, fields) => {
+    const fake = makeFakeAgent()
+    fake.stored.push(sentHere('conn-1'))
+    expect(
+      await receiveChatEventMessage(fake.agent, inbound({ profile: CHAT_PROFILE, eventId: EVENT_ID, ...fields }))
+    ).toBe('reused-event-id')
+    expect(fake.stored).toHaveLength(1)
+  })
+
+  it('is no concern when it was sent on another connection', async () => {
+    const fake = makeFakeAgent()
+    fake.stored.push(sentHere('conn-2'))
+    expect(await receiveChatEventMessage(fake.agent, theirs())).toBe('stored')
+  })
+})
+
 describe('setupChatInbound', () => {
   it('registers a handler that stores events and reports its verdict', async () => {
     const fake = makeFakeAgent()
