@@ -85,19 +85,22 @@ export const withOta = <P extends object>(
       const decision = decideApplyOnReturn({
         awayMs,
         stagedBundleId: staged.id,
+        stagedUnderKey: staged.stagedUnderKey,
         runningBundleId: HotUpdater.getBundleId(),
         blockers: otaApplyBlockerReasons(),
         platform: Platform.OS,
       })
       // Logged every time, so a reader that stops finding the staged update (a
       // hot-updater change to its metadata, or a key composed differently here)
-      // shows here instead of failing silently.
+      // shows here instead of failing silently. The key composed here is always
+      // there to compare with the metadata file's, staged or not.
       log('return', {
         staged: staged.id ?? null,
         awayMinutes: Math.round(awayMs / 60000),
         apply: decision.apply,
         ...(decision.apply ? {} : { reason: decision.reason }),
-        ...(staged.stagedUnderKey ? { isolationKey, stagedUnderKey: staged.stagedUnderKey } : {}),
+        isolationKey,
+        ...(staged.stagedUnderKey ? { stagedUnderKey: staged.stagedUnderKey } : {}),
         ...(readError ? { readError } : {}),
       })
       if (!decision.apply) return

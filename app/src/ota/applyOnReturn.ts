@@ -25,6 +25,8 @@ export interface ApplyOnReturnInput {
   awayMs: number
   /** The update hot-updater has staged for its next launch (stagedUpdate.ts), if any. */
   stagedBundleId?: string
+  /** The key an update was staged under when it is not this build's (stagedUpdate.ts), if any. */
+  stagedUnderKey?: string
   /** The bundle running now (HotUpdater.getBundleId()). */
   runningBundleId?: string
   /** Why applying is blocked right now (bifold otaApplyBlockerReasons()). */
@@ -38,6 +40,7 @@ export type ApplyOnReturnDecision = { apply: true } | { apply: false; reason: st
 export const decideApplyOnReturn = ({
   awayMs,
   stagedBundleId,
+  stagedUnderKey,
   runningBundleId,
   blockers,
   platform,
@@ -45,6 +48,7 @@ export const decideApplyOnReturn = ({
 }: ApplyOnReturnInput): ApplyOnReturnDecision => {
   if (platform === 'ios' && !iosAllowed) return { apply: false, reason: 'iOS applies on the next cold start' }
   if (platform !== 'ios' && platform !== 'android') return { apply: false, reason: `not on ${platform}` }
+  if (!stagedBundleId && stagedUnderKey) return { apply: false, reason: 'staged under another key' }
   if (!stagedBundleId) return { apply: false, reason: 'no update staged' }
   if (stagedBundleId === runningBundleId) return { apply: false, reason: 'the staged update is already running' }
   if (!(awayMs >= OTA_APPLY_AFTER_BACKGROUND_MS)) return { apply: false, reason: 'away for less than 30 min' }
