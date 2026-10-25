@@ -19,6 +19,7 @@ import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { communityCardKey } from "./lib/testIdKeys.js";
 import { buildLacks } from "./lib/buildHas.js";
 import { createRows } from "./lib/rows.js";
+import { walletCardSelector } from "./lib/walletCards.js";
 
 const PLATFORM = process.env.PLATFORM ?? "ios";
 const want = Number(process.env.EXPECT_AGENTS || 1);
@@ -83,7 +84,7 @@ try {
   if (process.env.USE_PERSONA === "1" && !lacksOpen) {
     await tapTestId(d, "Wallet", 10000).catch(() => undefined);
     for (let i = 0; i < 5 && (await existsTestId(d, "Close", 1500).catch(() => false)); i++) await tapTestId(d, "Close", 5000).catch(() => tapTestId(d, "Next", 5000));
-    const card = d.$(`android=new UiSelector().resourceId("com.ariesbifold:id/CredentialName").textContains("${process.env.C_NAME || "Keyring Lab Community"}")`);
+    const card = d.$(walletCardSelector(process.env.C_NAME || "Keyring Lab Community"));
     const opened = (await card.isExisting().catch(() => false)) && (await card.click().then(() => true, () => false));
     // The card's details put "Open the community" below the fold: scroll to it (as R7 does).
     const openBtn = opened ? await scrollToTestId(d, "CommunityCardOpenCommunity", 8).catch(() => undefined) : undefined;
