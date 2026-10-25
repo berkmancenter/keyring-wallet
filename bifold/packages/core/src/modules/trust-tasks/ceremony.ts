@@ -69,6 +69,7 @@ import * as continuitySpec from '../vrc/contacts/continuitySpec'
 import { handleContinuityRequest, handleContinuityResponse } from '../vrc/contacts/continuity'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
+import { setupChatInbound } from '../chat/inbound'
 import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
 import { createTspCarriage } from './module/TspCarriage'
 import { WITNESS_VERIFIED_TAG } from '../vrc/utils/witnessCredentialUtils'
@@ -766,6 +767,13 @@ export function setupTrustTasksInbound(agent: Agent): void {
     logger.info(`${LOG_PREFIX} unhandled trust-task type ${type} — retained`)
     await service.retain(agent.context, document, 'request', context.connectionId)
   }
+
+  // keyring/chat/1.0 (rich-messaging-plan.md) rides the same inbound setup so
+  // every app that receives Trust Tasks also receives chat events: a contact
+  // that announces chat support must never reach a build that drops them.
+  // Registered before the Trust Task carriages, for the same last-handler
+  // reason given below.
+  setupChatInbound(agent)
 
   // The v2 binding's handler is always registered: it only ever fires for
   // messages of its own type, and a v2 peer may reach us whatever the flag.

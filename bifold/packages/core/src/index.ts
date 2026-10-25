@@ -234,6 +234,22 @@ export {
   getCredentialDisplayRegistry,
 } from './modules/vrc'
 export {
+  CHAT_PROFILE,
+  CHAT_EVENT_MESSAGE_TYPE,
+  CHAT_MIN_RCE_VERSION,
+  ChatEventMessage,
+  ChatEventRecord,
+  ChatEventRepository,
+  ChatModule,
+  counterpartySpeaksChat,
+  getChatEventRepository,
+  isUlid,
+  parseChatEvent,
+  receiveChatEventMessage,
+  setupChatInbound,
+} from './modules/chat'
+export type { ChatEvent, ChatEventType, ChatEventRole, ChatInboundVerdict } from './modules/chat'
+export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
