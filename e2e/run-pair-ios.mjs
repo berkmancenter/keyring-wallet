@@ -18,6 +18,18 @@
  *   pair-emoji-composer       A types text, adds 😀 from the composer's emoji button and sends: B shows the text with
  *                             the emoji
  *
+ * Disappearing messages (rich messaging Step 4, H7; bifold #570, #572, H5's sheet). Needs a test build with E2E_CLOCKS=short,
+ * where an hour's timer runs in DISAPPEAR_SECONDS (60, the Developer screen's E2EDisappearHourSeconds):
+ *   pair-timer-set            A sets 1 hour from the chat menu's Disappearing messages sheet: A shows "You set messages
+ *                             to disappear after"
+ *   pair-timer-line           B shows the system line "<A> set messages to disappear after"
+ *   pair-timer-message        A sends a message under the timer; B reads it with the chat open (its clock starts there)
+ *   pair-timer-gone           within the interval plus a sweep, it has gone from both phones, and the two untimed
+ *                             messages the emoji rows left (sent before the timer) are still on both: the control
+ *   pair-timer-background     B goes to the home screen with the chat open; A sends; B comes back without scrolling, and
+ *                             the message still goes from both phones in time (its clock started on return, or from the
+ *                             seen stamp as the backstop)
+ *
  * Message-wake tap (bifold #452; tap path only: the mediator wake isn't exercised. The webhook lives only on the shared
  * mediator, which a gate build must not use; the real wake is proven on real phones by the post-build device check):
  *   pair-wake-opens-chat      B sends A a message while A is in the background; a wake-shaped notification (the push
@@ -51,6 +63,11 @@ const rows = createRows({
     "pair-react-same": ["pair-react-picker"],
     "pair-react-remove": ["pair-react-same"],
     "pair-emoji-composer": ["pair-share-link-connects"],
+    "pair-timer-set": ["pair-share-link-connects"],
+    "pair-timer-line": ["pair-timer-set"],
+    "pair-timer-message": ["pair-timer-line"],
+    "pair-timer-gone": ["pair-timer-message"],
+    "pair-timer-background": ["pair-timer-gone"],
     "pair-wake-opens-chat": ["pair-share-link-connects"],
     "pair-wake-no-unread-list": ["pair-wake-opens-chat"],
   },
@@ -137,6 +154,37 @@ async function reactionsReach(d, want, timeout = 60000) {
     if (got === want) break;
   }
   return got;
+}
+
+/** An hour's timer in this build, in seconds: 60 in a short-clock test build (E2EDisappearHourSeconds). */
+const DISAPPEAR_SECONDS = Number(process.env.DISAPPEAR_SECONDS || 60);
+/** How long a timed message may take to go: its clock, one expiry sweep (every 60 s), and margin for delivery. */
+const DISAPPEAR_BUDGET_MS = (DISAPPEAR_SECONDS + 60 + 45) * 1000;
+
+/** Whether a message with `text` is on the open chat now (not waited for). */
+async function shows(d, text) {
+  return d.$(`-ios predicate string:label CONTAINS "${text}" AND visible == 1`).isExisting();
+}
+
+/** Poll both phones until `text` has gone from both, or the budget is spent; returns when each lost it (ms), or null. */
+async function goneFromBoth(a, b, text, budgetMs = DISAPPEAR_BUDGET_MS) {
+  const start = Date.now();
+  const gone = { a: null, b: null };
+  for (const until = start + budgetMs; Date.now() < until && (gone.a === null || gone.b === null); await sleep(5000)) {
+    if (gone.a === null && !(await shows(a, text))) gone.a = Date.now() - start;
+    if (gone.b === null && !(await shows(b, text))) gone.b = Date.now() - start;
+  }
+  return gone;
+}
+
+/** From the open chat, set its disappearing-messages timer through the chat menu's sheet (H5). */
+async function setTimerFromMenu(d, seconds) {
+  await tapTestId(d, "ContactMenu", 10000);
+  await tapTestId(d, "ContactMenuDisappearing", 10000);
+  if (!(await existsTestId(d, "ChatDisappearingSheet", 10000))) throw new Error("driver: the Disappearing messages sheet did not open");
+  await tapTestId(d, `ChatDisappearingOption-${seconds}`, 10000);
+  await tapTestId(d, "ChatDisappearingSave", 10000);
+  await sleep(1500);
 }
 
 let a, b;
@@ -259,6 +307,55 @@ try {
       const onB = Boolean(await waitForText(b, "gate: picked 😀"));
       await screenshot(b, "pair-emoji-composer").catch(() => undefined);
       return { ok: stayed && onB, detail: `the sheet stayed open after a choice ${stayed} · B shows "gate: picked 😀" ${onB}` };
+    });
+
+    // Disappearing messages (H7). The two messages the emoji rows sent came before the timer, so they stay untimed: they
+    // are the control that only the timed messages go.
+    const TIMED = `gate: disappears ${Date.now().toString(36)}`;
+    const AWAY = `gate: sent while away ${Date.now().toString(36)}`;
+    await rows.row("pair-timer-set", async () => {
+      await openChatWith(a, B);
+      await setTimerFromMenu(a, 3600);
+      const line = Boolean(await waitForText(a, "You set messages to disappear after", 15000));
+      await screenshot(a, "pair-timer-set").catch(() => undefined);
+      return { ok: line, detail: `A shows "You set messages to disappear after…" ${line}` };
+    });
+    await rows.row("pair-timer-line", async () => {
+      await openChatWith(b, A);
+      const line = await waitForText(b, "set messages to disappear after", 60000);
+      const said = line ? ((await line.getAttribute("label")) ?? "") : "";
+      await screenshot(b, "pair-timer-line").catch(() => undefined);
+      return { ok: said.includes(A.first) && !said.startsWith("You"), detail: `B's system line: "${said.slice(0, 100)}"` };
+    });
+    await rows.row("pair-timer-message", async () => {
+      await sendChat(a, TIMED);
+      const onB = Boolean(await waitForText(b, TIMED, 60000)); // B has the chat open: it is shown as it arrives
+      return { ok: onB && (await shows(a, TIMED)), detail: `B shows "${TIMED}" ${onB}` };
+    });
+    await rows.row("pair-timer-gone", async () => {
+      const gone = await goneFromBoth(a, b, TIMED);
+      const kept = (await shows(a, "gate: react to this")) && (await shows(b, "gate: react to this")) && (await shows(a, "gate: picked")) && (await shows(b, "gate: picked"));
+      await screenshot(b, "pair-timer-gone").catch(() => undefined);
+      return {
+        ok: gone.a !== null && gone.b !== null && kept,
+        detail: `gone from A after ${gone.a ?? "—"} ms, from B after ${gone.b ?? "—"} ms (budget ${DISAPPEAR_BUDGET_MS} ms for ${DISAPPEAR_SECONDS} s) · the untimed messages still on both ${kept}`,
+      };
+    });
+    await rows.row("pair-timer-background", async () => {
+      // B leaves the open chat for the home screen; A sends; B comes back to the same chat and does not scroll.
+      await b.execute("mobile: pressButton", { name: "home" });
+      await sleep(1500);
+      await sendChat(a, AWAY);
+      await sleep(10000);
+      await b.execute("mobile: activateApp", { bundleId: APP });
+      await unlockIfLocked(b).catch(() => undefined);
+      const arrived = Boolean(await waitForText(b, AWAY, 60000));
+      const gone = arrived ? await goneFromBoth(a, b, AWAY) : { a: null, b: null };
+      await screenshot(b, "pair-timer-background").catch(() => undefined);
+      return {
+        ok: arrived && gone.a !== null && gone.b !== null,
+        detail: `B shows it on return ${arrived} · gone from A after ${gone.a ?? "—"} ms, from B after ${gone.b ?? "—"} ms`,
+      };
     });
 
     // Message-wake tap: B writes while A is away, then the wake is tapped. The verdict is the screen A lands on: the
