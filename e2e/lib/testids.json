@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "3eeb552b64184db5e841a3327158bccb23b9e075",
+  "generatedFrom": "c95a747cb5763151df6d09bc8cc33d345852685e",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -251,10 +251,19 @@
     "ChatActionCopy": ["src/components/chat/Chat.ids.ts"],
     "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
     "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionsButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachCamera": ["src/components/chat/Chat.ids.ts"],
+    "ChatAttachLibrary": ["src/components/chat/Chat.ids.ts"],
     "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingCancel": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingCurrent": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingOption": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingSave": ["src/components/chat/Chat.ids.ts"],
+    "ChatDisappearingSheet": ["src/components/chat/Chat.ids.ts"],
     "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
     "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageImage": ["src/components/chat/Chat.ids.ts"],
     "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
     "ChatReaction": ["src/components/chat/Chat.ids.ts"],
     "ChatReactionBar": ["src/components/chat/Chat.ids.ts"],
@@ -333,6 +342,8 @@
     "ContactCard": ["src/modules/vrc/components/ContactCard.tsx", "src/modules/vrc/screens/ListContacts.tsx"],
     "ContactHardwareChecking": ["src/modules/vrc/components/ContactCard.tsx"],
     "ContactMenu": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuClearChat": ["src/modules/vrc/components/InfoIcon.tsx"],
+    "ContactMenuDisappearing": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuOverlay": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuRemoveContact": ["src/modules/vrc/components/InfoIcon.tsx"],
     "ContactMenuViewContact": ["src/modules/vrc/components/InfoIcon.tsx"],
@@ -473,6 +484,7 @@
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
     "E2EAutoLockMinutes": ["src/components/misc/E2EClockRows.tsx"],
     "E2EClocksMode": ["src/components/misc/E2EClockRows.tsx"],
+    "E2EDisappearHourSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EPhoneGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "EmojiPicker": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
@@ -480,6 +492,9 @@
     "EmojiPickerNoResults": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EmojiPickerRecent": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EmojiPickerSearch": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheet": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetBackdrop": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
+    "EmojiPickerSheetClose": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],
     "EnableWalletNamingSwitchElement": ["src/screens/Developer.tsx"],
     "Enter": ["src/screens/AttemptLockout.tsx", "src/screens/PINEnter.tsx"],
     "EnterOldPIN": ["src/screens/PINChange.tsx", "src/screens/PINVerify.tsx"],
@@ -1278,10 +1293,31 @@
   },
   "derived": [
     {
-      "src/components/chat/ActionSlider.tsx": "action.text"
+      "src/components/chat/ActionSlider.tsx": "action.testID ?? action.text"
+    },
+    {
+      "src/components/chat/ChatActions.tsx": "ChatIds.actionsButton"
+    },
+    {
+      "src/components/chat/ChatMessage.tsx": "ChatIds.image"
     },
     {
       "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearing"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingCancel"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingCurrent"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "ChatIds.disappearingSave"
+    },
+    {
+      "src/components/chat/DisappearingMessagesSheet.tsx": "`${ChatIds.disappearingOption}-${expiresIn}`"
     },
     {
       "src/components/chat/MessageActions.tsx": "ChatIds.actions"
@@ -1336,6 +1372,15 @@
     },
     {
       "src/modules/chat/emoji/EmojiPicker.tsx": "section.testID"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheet"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetBackdrop"
+    },
+    {
+      "src/modules/chat/emoji/EmojiPickerSheet.tsx": "EmojiPickerIds.sheetClose"
     },
     {
       "src/modules/trust-tasks/screens/DidDetails.tsx": "`${testIdStem}Copy`"
@@ -2533,6 +2578,9 @@
     },
     {
       "src/screens/AutoLock.tsx": "testID"
+    },
+    {
+      "src/screens/Chat.tsx": "ChatIds.composerEmoji"
     },
     {
       "src/screens/ConfigureMediator.tsx": "mediator"
