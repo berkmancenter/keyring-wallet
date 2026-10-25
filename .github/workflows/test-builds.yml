@@ -421,8 +421,7 @@ jobs:
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
         run: |
           set -euo pipefail
-          # RED PROOF, reverted in the next commit: bundle WITH the rooms sample; the check below must fail.
-          ROOMS_SAMPLE=1 npx react-native bundle --platform android --dev false --reset-cache \
+          npx react-native bundle --platform android --dev false --reset-cache \
             --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
           # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
           bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android release bundle"
