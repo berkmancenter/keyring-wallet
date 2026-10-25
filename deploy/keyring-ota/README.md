@@ -83,8 +83,11 @@ audience is beta testers, a bundle can go from ring 0 to everyone on the
 approval alone; raise the variable when the audience widens. ring1
 targets ring 0 and 1; ring2 targets all three. **Ring 1 has no members yet** (no
 install can join it until the "Early updates" opt-in ships), so a bundle may go
-from ring 0 straight to ring 2. A dry run checks and changes nothing. A
-publish's tier must be `ota` (ota-deploy refuses everything else, `ota-strict`
+from ring 0 straight to ring 2. A dry run checks and changes nothing.
+After the update it re-reads the record and fails the run unless the record
+shows the new ring with a 0 rollout. **A failed check doesn't undo the
+widening:** the bundle may already be wider, so recover with `disable`, not by
+assuming nothing changed. A publish's tier must be `ota` (ota-deploy refuses everything else, `ota-strict`
 included), so a promoted bundle is always one.
 
 **Withdrawing** a production or preview bundle is the `disable` action, with
@@ -98,6 +101,10 @@ OTA supplements them and never replaces them. It carries JavaScript fixes only,
 within store policy: nothing that adds a feature or changes what the app does.
 The tier check enforces the code side (`ota` only). What counts as a fix is the
 publisher's call, and the commit subject is what testers read.
+
+ota-publish's dispatch has ten inputs, GitHub's maximum: a new one has to
+replace an existing input or move to a repository variable (as the soak did).
+Past ten, the workflow stops accepting dispatches.
 
 ### Pulling an update from everyone
 
