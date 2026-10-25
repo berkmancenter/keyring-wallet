@@ -63,6 +63,7 @@ import { didPrefix } from './didPrefix'
 import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
 import { releaseWarn } from './releaseLog'
 import { isTspFrameUnopenable } from './tspFrameUnopenable'
+import { httpsLogoUrl } from './communityBrand'
 import { readManifest, type VtiManifest } from './joinManifest'
 import { classifyCredential } from './vtiInbox'
 import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
@@ -1522,11 +1523,16 @@ class VtiAgentController {
    */
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
     const branded = manifest.branding?.displayName?.trim()
+    // How its cards look: kept even when it gives nothing, so the Wallet knows it has none (communityBrand.ts).
+    rememberCommunityBrand(agent, communityDid, {
+      accentColor: manifest.branding?.accentColor,
+      logoUrl: manifest.branding?.logoUrl,
+    })
     if (branded) {
       communityTarget.publishedName(communityDid, branded)
       rememberCommunityName(agent, communityDid, branded)
     } else {
-      this.profileNameRead = this.learnProfileName(communityDid, agent)
+      this.profileNameRead = this.learnProfileName(communityDid, agent, manifest.branding)
     }
     return manifest
   }
@@ -1540,14 +1546,23 @@ class VtiAgentController {
    * community with no profile, an empty name or no reachable endpoint is
    * simply left unnamed.
    */
-  private async learnProfileName(communityDid: string, agent: Agent | undefined): Promise<void> {
+  private async learnProfileName(
+    communityDid: string,
+    agent: Agent | undefined,
+    branding?: VtiManifest['branding']
+  ): Promise<void> {
     if (!agent) return
     try {
       const doc = await agent.dids.resolveDidDocument(communityDid)
       const service = doc.service?.find((s) => s.type === 'VTCRest')
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
       if (!base) return
-      const name = await readPublicProfileName(base, communityDid)
+      const profile = await readPublicProfile(base, communityDid)
+      // The profile's logo, when the manifest gave none.
+      if (profile?.logoUrl && !httpsLogoUrl(branding?.logoUrl)) {
+        rememberCommunityBrand(agent, communityDid, { accentColor: branding?.accentColor, logoUrl: profile.logoUrl })
+      }
+      const name = profile?.name
       if (!name) return
       communityTarget.publishedName(communityDid, name)
       rememberCommunityName(agent, communityDid, name)
@@ -1941,6 +1956,16 @@ function rememberCommunityName(agent: Agent | undefined, communityDid: string, n
   void new GenericRecordsCommunityStore(agent).saveCommunityName(communityDid, name).catch(() => undefined)
 }
 
+/** Keep how a community's cards look for the next launch; a failure only costs the look (the DID's colour is used). */
+function rememberCommunityBrand(
+  agent: Agent | undefined,
+  communityDid: string,
+  brand: { accentColor?: unknown; logoUrl?: unknown }
+): void {
+  if (!agent) return
+  void new GenericRecordsCommunityStore(agent).saveCommunityBrand(communityDid, brand).catch(() => undefined)
+}
+
 /**
  * A path under a community's REST API, from the `VTCRest` endpoint its DID
  * document advertises: with or without the `/v1` prefix (vti #1615 added it to
@@ -1966,6 +1991,19 @@ export async function readPublicProfileName(
   communityDid: string,
   doFetch: typeof fetch = fetch
 ): Promise<string | undefined> {
+  return (await readPublicProfile(base, communityDid, doFetch))?.name
+}
+
+/**
+ * A community's public profile (see {@link readPublicProfileName}): its `name`, and its `logo_url` when that is an
+ * https address (vtc-service `PublicCommunityProfile`). Undefined unless the profile is answered and is about this
+ * very community.
+ */
+export async function readPublicProfile(
+  base: string,
+  communityDid: string,
+  doFetch: typeof fetch = fetch
+): Promise<{ name?: string; logoUrl?: string } | undefined> {
   try {
     const response = await fetchWaitingIfBusy(
       doFetch,
@@ -1975,9 +2013,12 @@ export async function readPublicProfileName(
       3_000
     )
     if (!response.ok) return undefined
-    const body = (await response.json()) as { communityDid?: unknown; name?: unknown } | undefined
-    if (body?.communityDid !== communityDid || typeof body.name !== 'string') return undefined
-    return body.name.trim() || undefined
+    const body = (await response.json()) as { communityDid?: unknown; name?: unknown; logo_url?: unknown } | undefined
+    if (body?.communityDid !== communityDid) return undefined
+    return {
+      name: typeof body.name === 'string' ? body.name.trim() || undefined : undefined,
+      logoUrl: httpsLogoUrl(body.logo_url),
+    }
   } catch {
     return undefined
   }

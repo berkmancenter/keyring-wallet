@@ -20,7 +20,8 @@
 
 import type { Agent } from '@credo-ts/core'
 
-import { changeOfHeldCredential, emitCommunityChanged } from './communityChanged'
+import { type CommunityBrandRecord, httpsLogoUrl, normalisedAccent } from './communityBrand'
+import { changeOfHeldCredential, emitCommunityBrandSaved, emitCommunityChanged } from './communityChanged'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 
@@ -327,6 +328,26 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
 
   listCommunityNames() {
     return this.list<{ communityDid: string; name: string; at?: string }>('community-name')
+  }
+
+  /**
+   * How a community dresses its cards, as it last said: its accent colour and a logo address, each kept only when it
+   * is usable (a #rrggbb colour; an https address). A read that found neither is kept too, so the Wallet knows the
+   * community has none rather than that it was never asked (communityBrand.ts).
+   */
+  async saveCommunityBrand(communityDid: string, brand: { accentColor?: unknown; logoUrl?: unknown }) {
+    if (!communityDid) return
+    await this.put('community-brand', communityDid, {
+      communityDid,
+      accentColor: normalisedAccent(brand.accentColor),
+      logoUrl: httpsLogoUrl(brand.logoUrl),
+      at: new Date().toISOString(),
+    })
+    emitCommunityBrandSaved(communityDid)
+  }
+
+  listCommunityBrands() {
+    return this.list<CommunityBrandRecord>('community-brand')
   }
 
   async forgetCommunity(communityDid: string, personaDid?: string) {

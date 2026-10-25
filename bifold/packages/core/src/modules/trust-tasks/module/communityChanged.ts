@@ -73,6 +73,23 @@ export function emitCommunityChanged(communityDid: string | undefined, what: Com
   }, 0)
 }
 
+/**
+ * A community's card look was kept (VtiCommunityStore `saveCommunityBrand`). Its own event, not a community change:
+ * every manifest read keeps it, and community screens have nothing to redo for it; only the Wallet's cards listen.
+ */
+export const COMMUNITY_BRAND_EVENT = 'vti:community-brand'
+
+/** Announce a kept card look, after the write. Never throws. */
+export function emitCommunityBrandSaved(communityDid: string): void {
+  setTimeout(() => {
+    try {
+      DeviceEventEmitter.emit(COMMUNITY_BRAND_EVENT, { communityDid })
+    } catch {
+      // A listener's failure is the listener's; the write already stands.
+    }
+  }, 0)
+}
+
 /** What a held credential changes: a vetter grant is the vetter's standing, a role card the membership. */
 export function changeOfHeldCredential(kind: VtiHeldCredential['kind']): CommunityChange {
   switch (kind) {

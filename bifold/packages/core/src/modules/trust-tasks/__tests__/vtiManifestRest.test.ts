@@ -142,3 +142,71 @@ describe('readPublicProfileName', () => {
     expect(await readPublicProfileName(restBase, communityDid, doFetch as never)).toBeUndefined()
   })
 })
+
+/**
+ * How a community's cards look is kept from the same reads: its manifest's accent colour and logo, and the public
+ * profile's logo when the manifest gives none. Kept even when there is none, so the Wallet knows it was asked.
+ */
+describe("a community's card look, kept from its manifest and profile", () => {
+  const realFetch = global.fetch
+  const answer = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body })
+  const { memoryGenericRecords } = jest.requireActual('../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords')
+  const { GenericRecordsCommunityStore } = jest.requireActual('../module/VtiCommunityStore')
+
+  function serve(branding: unknown, profile: unknown) {
+    global.fetch = jest.fn(async (url: string) =>
+      url.endsWith('/community/public-profile')
+        ? answer(200, profile)
+        : answer(200, {
+            type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2#response',
+            payload: { communityDid, criteria: [{ type: 'invited-member' }], ...(branding ? { branding } : {}) },
+          })
+    ) as unknown as typeof fetch
+  }
+  async function keptAfterRead() {
+    const agent = { ...fakeAgent(), genericRecords: memoryGenericRecords() }
+    await vtiAgent.fetchManifest(communityDid, agent as never)
+    await vtiAgent.profileNameRead
+    // The brand is kept in the background; let it land.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    return new GenericRecordsCommunityStore(agent).listCommunityBrands()
+  }
+  beforeEach(() => communityTarget.clear())
+  afterEach(() => {
+    global.fetch = realFetch
+  })
+
+  it('keeps the manifest’s accent colour and https logo, as given', async () => {
+    serve({ displayName: 'Harbor', accentColor: '#1A4D80', logoUrl: 'https://vtc.example.org/logo.png' }, {})
+    expect(await keptAfterRead()).toEqual([
+      expect.objectContaining({
+        communityDid,
+        accentColor: '#1a4d80',
+        logoUrl: 'https://vtc.example.org/logo.png',
+      }),
+    ])
+  })
+
+  it('keeps "none" when the community gives none, so the Wallet knows it was asked', async () => {
+    serve(undefined, { communityDid, name: '' })
+    const kept = await keptAfterRead()
+    expect(kept).toHaveLength(1)
+    expect(kept[0]).toMatchObject({ communityDid, accentColor: undefined, logoUrl: undefined })
+  })
+
+  it('takes the public profile’s https logo when the manifest gives none', async () => {
+    serve(undefined, { communityDid, name: 'Harbor', logo_url: 'https://vtc.example.org/profile-logo.png' })
+    expect(await keptAfterRead()).toEqual([
+      expect.objectContaining({ communityDid, logoUrl: 'https://vtc.example.org/profile-logo.png' }),
+    ])
+  })
+
+  it('never keeps an http logo or an unusable colour', async () => {
+    serve(
+      { accentColor: 'red', logoUrl: 'http://vtc.example.org/logo.png' },
+      { communityDid, name: '', logo_url: 'http://vtc.example.org/profile-logo.png' }
+    )
+    const kept = await keptAfterRead()
+    expect(kept[0]).toMatchObject({ communityDid, accentColor: undefined, logoUrl: undefined })
+  })
+})
