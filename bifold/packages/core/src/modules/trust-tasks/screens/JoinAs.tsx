@@ -12,7 +12,7 @@
  * @module trust-tasks/screens/JoinAs
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Image, Pressable, StyleSheet, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -49,20 +49,24 @@ export function offeredProfileName(
 /** The person's profiles as join options, the active one first. */
 export function useJoinAsOptions(): { options: JoinAsOption[]; defaultId?: string } {
   const [store] = useStore()
-  const profiles = store.rCard?.profiles ?? []
-  const options = profiles
-    .map((p) => {
-      const form = formInputFromTemplate(p)
-      const legalName = [form.firstName, form.lastName].filter(Boolean).join(' ').trim()
-      return { id: p.id, seed: { legalName, profileLabel: form.label || undefined }, photo: form.photo }
-    })
-    .filter((o) => o.seed.legalName)
+  const profiles = store.rCard?.profiles
   const active = store.rCard?.activeProfileId
-  const defaultId = options.find((o) => o.id === active)?.id ?? options[0]?.id
-  return {
-    options: [...options].sort((a, b) => (a.id === defaultId ? -1 : b.id === defaultId ? 1 : 0)),
-    defaultId,
-  }
+  // Built again only when the profiles or the active one change: a new list on every render re-ran
+  // whatever depended on it.
+  return useMemo(() => {
+    const options = (profiles ?? [])
+      .map((p) => {
+        const form = formInputFromTemplate(p)
+        const legalName = [form.firstName, form.lastName].filter(Boolean).join(' ').trim()
+        return { id: p.id, seed: { legalName, profileLabel: form.label || undefined }, photo: form.photo }
+      })
+      .filter((o) => o.seed.legalName)
+    const defaultId = options.find((o) => o.id === active)?.id ?? options[0]?.id
+    return {
+      options: [...options].sort((a, b) => (a.id === defaultId ? -1 : b.id === defaultId ? 1 : 0)),
+      defaultId,
+    }
+  }, [profiles, active])
 }
 
 /**
@@ -72,23 +76,19 @@ export function useJoinAsOptions(): { options: JoinAsOption[]; defaultId?: strin
  */
 export function useJoinAsChoice(navigation: unknown) {
   const { options, defaultId } = useJoinAsOptions()
-  const [selectedId, setSelectedId] = useState<string | undefined>(defaultId)
-  const known = useRef<Set<string> | undefined>(undefined)
+  // What the person did: the profile they picked, and the profiles there were when they went to create one.
+  const [pick, setPick] = useState<{ id?: string; before?: Set<string> }>({})
 
-  useEffect(() => {
-    if (known.current) {
-      const created = options.find((o) => !known.current!.has(o.id))
-      if (created) {
-        known.current = undefined
-        setSelectedId(created.id)
-        return
-      }
-    }
-    if (!selectedId && defaultId) setSelectedId(defaultId)
-  }, [options, defaultId, selectedId])
+  // Derived in render, never copied by an effect: a profile created since "new profile" was tapped, else the
+  // one picked while it still exists (a deleted one left nothing chosen), else the default.
+  const created = pick.before ? options.find((o) => !pick.before!.has(o.id)) : undefined
+  const selectedId =
+    created?.id ?? (pick.id && options.some((o) => o.id === pick.id) ? pick.id : undefined) ?? defaultId
+
+  const setSelectedId = useCallback((id: string | undefined) => setPick({ id }), [])
 
   const createProfile = useCallback(() => {
-    known.current = new Set(options.map((o) => o.id))
+    setPick((current) => ({ ...current, before: new Set(options.map((o) => o.id)) }))
     const stack = navigation as { navigate: (name: string, params?: object) => void }
     stack.navigate(Screens.EditRCard)
   }, [navigation, options])
