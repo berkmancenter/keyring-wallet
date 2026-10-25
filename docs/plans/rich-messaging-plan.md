@@ -215,7 +215,7 @@ Step 0 measures the storage each queued photo takes on both mediators (disk on C
   - **Receiving one** on an existing connection, from an authenticated sender, raises the stored `counterpartyRceVersion` to the announced value. It never lowers it, and it never calls `maybeOpenRelationshipExchange`.
   - **Sending one, lazily.** A phone sends its notice the first time the person opens the chat with a contact whose stored version is below 6, once per contact. A phone that receives a notice from a contact it has not notified answers once with its own. So two upgraded phones converge as soon as either opens the chat, and nothing is sent to contacts nobody chats with.
   - **What a build without chat does with it**, and with any chat event: Credo finds no handler for the type and sends back a `https://didcomm.org/notification/1.0/problem-report` (`MessageParseFailure`, "The message type is not supported"), threaded to the message's `@id`. Nothing is shown or stored on that phone. Like any queued message, the notice may wake a backgrounded phone with nothing new to open, which is why notices are lazy and once per contact.
-  - **Problem reports are read, not ignored.** The phone registers a handler for that problem report and acts only when its parent id is a message it sent. Every chat event's DIDComm `@id` is its own `eventId`, so no extra record is needed to match one.
+  - **Problem reports are read, not ignored.** The phone registers a handler for that problem report. The handler acts only when the parent id is a message this phone sent **on the connection the report arrived on**: it queries that connection's sent events first, then matches the id, so a peer cannot cite an id from another chat. Every chat event's DIDComm `@id` is its own `eventId`, so no extra record is needed to match one. The handler never replies.
     - A refused **notice** records the refusal on the connection. The notice is sent again only when the chat is next opened, at least 7 days later.
     - A refused **chat event** (a contact that went back to an older build) marks the contact as not speaking chat until it sends a new notice. A refused text message is sent again as a plain BasicMessage; a refused reaction is dropped.
     - Any other problem report is ignored.
@@ -327,7 +327,8 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
     - it never opens a relationship exchange;
     - a notice with no connection or no authenticated sender is dropped;
     - the answer-once rule;
-    - problem reports for a notice, for a text message (resent as a BasicMessage), for a reaction (dropped), and an unrelated one (ignored).
+    - problem reports for a notice, for a text message (resent as a BasicMessage), for a reaction (dropped), and an unrelated one (ignored);
+    - a problem report citing an id sent on a different connection, ignored.
 
 **Step 2 — Emoji picker**
 - The build script, the data file, the picker component with the OS-version filter, and validation by membership, wired into the composer and the reaction bar.
