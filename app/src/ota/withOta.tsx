@@ -24,7 +24,7 @@ import { Platform } from 'react-native'
 import { getBuildNumber } from 'react-native-device-info'
 
 import { decideApplyOnReturn } from './applyOnReturn'
-import { isolationKeyFor, readStagedUpdateId } from './stagedUpdate'
+import { isolationKeyFor, readStagedUpdate, StagedUpdate } from './stagedUpdate'
 
 import { otaUpdateUrl } from './otaConfig'
 import { ensureRing } from './rings'
@@ -57,35 +57,54 @@ export const withOta = <P extends object>(
   // screen after a while away (applyOnReturn.ts). Nothing is kept between
   // returns: each reads what hot-updater has staged right then (stagedUpdate.ts).
   onReturnLocked(async (awayMs) => {
-    const blockers = otaApplyBlockerReasons()
-    const isolationKey = isolationKeyFor({
-      platform: Platform.OS,
-      fingerprint: HotUpdater.getFingerprintHash(),
-      appVersion: HotUpdater.getAppVersion(),
-      buildNumber: getBuildNumber(),
-      // The build's own channel, as the natives compose the key, not a channel
-      // switched at runtime: with that, no key would ever match, and
-      // apply-on-return would stop silently (the log would read staged: null).
-      channel: HotUpdater.getDefaultChannel(),
-    })
-    const stagedBundleId = await readStagedUpdateId(isolationKey).catch(() => undefined)
-    const decision = decideApplyOnReturn({
-      awayMs,
-      stagedBundleId,
-      runningBundleId: HotUpdater.getBundleId(),
-      blockers,
-      platform: Platform.OS,
-    })
-    // Logged every time, so a reader that stops finding the staged update (a
-    // hot-updater change to its metadata) shows here instead of failing silently.
-    log('return', {
-      staged: stagedBundleId ?? null,
-      awayMinutes: Math.round(awayMs / 60000),
-      apply: decision.apply,
-      ...(decision.apply ? {} : { reason: decision.reason }),
-    })
-    if (!decision.apply) return
-    await HotUpdater.reload().catch((error) => log('apply on return failed', { error: String(error) }))
+    // bifold drops a listener's failure without a word; logged here, so a return
+    // that stopped checking shows in a problem report.
+    try {
+      const isolationKey = isolationKeyFor({
+        platform: Platform.OS,
+        fingerprint: HotUpdater.getFingerprintHash(),
+        appVersion: HotUpdater.getAppVersion(),
+        buildNumber: getBuildNumber(),
+        // The build's own channel, as the natives compose the key. In 0.36.18 this
+        // is the DEFAULT_CHANNEL constant: on Android HotUpdaterImpl.getChannel(context),
+        // the manifest's value, which MainApplication.kt composes with too; on iOS the
+        // Info.plist's, as AppDelegate.mm. A channel switched at runtime is kept in the
+        // preferences under the key and never changes it.
+        channel: HotUpdater.getDefaultChannel(),
+      })
+      let staged: StagedUpdate
+      let readError: string | undefined
+      try {
+        staged = await readStagedUpdate(isolationKey)
+      } catch (error) {
+        staged = {}
+        readError = String(error)
+      }
+      // Read after the file, right before deciding: a flow that began during the
+      // read blocks this return.
+      const decision = decideApplyOnReturn({
+        awayMs,
+        stagedBundleId: staged.id,
+        runningBundleId: HotUpdater.getBundleId(),
+        blockers: otaApplyBlockerReasons(),
+        platform: Platform.OS,
+      })
+      // Logged every time, so a reader that stops finding the staged update (a
+      // hot-updater change to its metadata, or a key composed differently here)
+      // shows here instead of failing silently.
+      log('return', {
+        staged: staged.id ?? null,
+        awayMinutes: Math.round(awayMs / 60000),
+        apply: decision.apply,
+        ...(decision.apply ? {} : { reason: decision.reason }),
+        ...(staged.stagedUnderKey ? { isolationKey, stagedUnderKey: staged.stagedUnderKey } : {}),
+        ...(readError ? { readError } : {}),
+      })
+      if (!decision.apply) return
+      await HotUpdater.reload()
+    } catch (error) {
+      log('apply on return failed', { error: String(error) })
+    }
   })
 
   return HotUpdater.wrap({

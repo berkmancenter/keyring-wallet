@@ -1,4 +1,4 @@
-import { isolationKeyFor, stagedUpdateIdOf } from './stagedUpdate'
+import { isolationKeyFor, stagedUpdateOf } from './stagedUpdate'
 
 jest.mock('react-native-fs', () => ({ DocumentDirectoryPath: '/docs', exists: jest.fn(), readFile: jest.fn() }))
 
@@ -45,39 +45,49 @@ describe('isolationKeyFor', () => {
       `HotUpdaterPrefs_${FP}_unknown+271_production`
     )
   })
+
+  it("reads an empty iOS channel as production, as AppDelegate.mm does; Android's channel is used as given", () => {
+    expect(isolationKeyFor({ platform: 'ios', ...build271, channel: '' })).toBe(IOS_KEY)
+    // On Android the key and the channel read here come from the same call (HotUpdaterImpl.getChannel(context)).
+    expect(isolationKeyFor({ platform: 'android', ...build271, channel: 'preview' })).toBe(
+      `HotUpdaterPrefs_${FP}_0.2.0+271_preview`
+    )
+  })
 })
 
-describe('stagedUpdateIdOf', () => {
+describe('stagedUpdateOf', () => {
   it("reads the staged update from either platform's metadata", () => {
-    expect(stagedUpdateIdOf(ios(), IOS_KEY)).toBe(ID)
-    expect(stagedUpdateIdOf(android(), ANDROID_KEY)).toBe(ID)
+    expect(stagedUpdateOf(ios(), IOS_KEY)).toEqual({ id: ID })
+    expect(stagedUpdateOf(android(), ANDROID_KEY)).toEqual({ id: ID })
   })
 
   it('has nothing staged once the update has been launched and verified', () => {
-    expect(stagedUpdateIdOf(ios({ verification_pending: false }), IOS_KEY)).toBeUndefined()
-    expect(stagedUpdateIdOf(android({ verificationPending: false }), ANDROID_KEY)).toBeUndefined()
+    expect(stagedUpdateOf(ios({ verification_pending: false }), IOS_KEY)).toEqual({})
+    expect(stagedUpdateOf(android({ verificationPending: false }), ANDROID_KEY)).toEqual({})
   })
 
   it('has nothing staged after a rollback, which clears staging', () => {
-    expect(stagedUpdateIdOf(ios({ staging_bundle_id: null, verification_pending: false }), IOS_KEY)).toBeUndefined()
-    expect(stagedUpdateIdOf(android({ stagingBundleId: null }), ANDROID_KEY)).toBeUndefined()
+    expect(stagedUpdateOf(ios({ staging_bundle_id: null, verification_pending: false }), IOS_KEY)).toEqual({})
+    expect(stagedUpdateOf(android({ stagingBundleId: null }), ANDROID_KEY)).toEqual({})
   })
 
-  it('ignores metadata another build wrote, even with the same fingerprint', () => {
+  it("ignores an update staged under another build's key, and says which key it was", () => {
     // A store build with only JavaScript changes: same fingerprint, the next build number.
-    expect(stagedUpdateIdOf(ios(), `hotupdater_${FP}_0.2.0+272_production_`)).toBeUndefined()
-    expect(stagedUpdateIdOf(android(), `HotUpdaterPrefs_${FP}_0.2.0+272_production`)).toBeUndefined()
+    expect(stagedUpdateOf(ios(), `hotupdater_${FP}_0.2.0+272_production_`)).toEqual({ stagedUnderKey: IOS_KEY })
+    expect(stagedUpdateOf(android(), `HotUpdaterPrefs_${FP}_0.2.0+272_production`)).toEqual({
+      stagedUnderKey: ANDROID_KEY,
+    })
     // Another fingerprint, a missing key, or the other platform's form.
-    expect(
-      stagedUpdateIdOf(ios(), 'hotupdater_80ac04b377b593b2621517a5c6b34f261dd50117_0.2.0+271_production_')
-    ).toBeUndefined()
-    expect(stagedUpdateIdOf(android({ isolationKey: null }), ANDROID_KEY)).toBeUndefined()
-    expect(stagedUpdateIdOf(ios(), ANDROID_KEY)).toBeUndefined()
+    expect(stagedUpdateOf(ios(), 'hotupdater_80ac04b377b593b2621517a5c6b34f261dd50117_0.2.0+271_production_')).toEqual({
+      stagedUnderKey: IOS_KEY,
+    })
+    expect(stagedUpdateOf(android({ isolationKey: null }), ANDROID_KEY)).toEqual({ stagedUnderKey: '(none)' })
+    expect(stagedUpdateOf(ios(), ANDROID_KEY)).toEqual({ stagedUnderKey: IOS_KEY })
   })
 
   it('reads nothing from a missing or malformed file', () => {
-    expect(stagedUpdateIdOf(undefined, IOS_KEY)).toBeUndefined()
-    expect(stagedUpdateIdOf('not json', IOS_KEY)).toBeUndefined()
-    expect(stagedUpdateIdOf(ios({ staging_bundle_id: '' }), IOS_KEY)).toBeUndefined()
+    expect(stagedUpdateOf(undefined, IOS_KEY)).toEqual({})
+    expect(stagedUpdateOf('not json', IOS_KEY)).toEqual({})
+    expect(stagedUpdateOf(ios({ staging_bundle_id: '' }), IOS_KEY)).toEqual({})
   })
 })

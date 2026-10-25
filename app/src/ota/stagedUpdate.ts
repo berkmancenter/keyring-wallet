@@ -39,31 +39,40 @@ export const isolationKeyFor = ({
 }): string => {
   const version = `${appVersion ?? 'unknown'}+${buildNumber}`
   const base = fingerprint ? `${fingerprint}_${version}` : version
-  return platform === 'android' ? `HotUpdaterPrefs_${base}_${channel}` : `hotupdater_${base}_${channel}_`
+  if (platform === 'android') return `HotUpdaterPrefs_${base}_${channel}`
+  // AppDelegate.mm reads an empty Info.plist channel as production; the channel
+  // read here (HotUpdater.getDefaultChannel()) would still be the empty string.
+  return `hotupdater_${base}_${channel || 'production'}_`
 }
 
 /**
- * The staged update's id, or undefined: a staged bundle awaits its first launch
- * (verification pending) under exactly this build's isolation key. A rollback
- * stages nothing: it clears staging, and applies at the next cold start.
+ * What hot-updater has staged: an update awaiting its first launch (verification
+ * pending) under exactly this build's isolation key, its `id`. A rollback stages
+ * nothing: it clears staging, and applies at the next cold start.
+ *
+ * An update staged under another key is no update for this build, but it is
+ * reported (`stagedUnderKey`): on a device, "nothing staged" and "staged under a
+ * key composed differently here" would otherwise read the same in the log.
  */
-export const stagedUpdateIdOf = (metadataJson: string | undefined, isolationKey: string): string | undefined => {
-  if (!metadataJson) return undefined
+export type StagedUpdate = { id?: string; stagedUnderKey?: string }
+
+export const stagedUpdateOf = (metadataJson: string | undefined, isolationKey: string): StagedUpdate => {
+  if (!metadataJson) return {}
   let metadata: Record<string, unknown>
   try {
     metadata = JSON.parse(metadataJson)
   } catch {
-    return undefined
+    return {}
   }
   const pending = metadata.verification_pending ?? metadata.verificationPending
   const staged = metadata.staging_bundle_id ?? metadata.stagingBundleId
   const key = metadata.isolation_key ?? metadata.isolationKey
-  if (pending !== true || typeof staged !== 'string' || staged === '') return undefined
-  if (key !== isolationKey) return undefined
-  return staged
+  if (pending !== true || typeof staged !== 'string' || staged === '') return {}
+  if (key !== isolationKey) return { stagedUnderKey: typeof key === 'string' ? key : '(none)' }
+  return { id: staged }
 }
 
-export const readStagedUpdateId = async (isolationKey: string): Promise<string | undefined> => {
-  if (!(await exists(OTA_METADATA_PATH))) return undefined
-  return stagedUpdateIdOf(await readFile(OTA_METADATA_PATH, 'utf8'), isolationKey)
+export const readStagedUpdate = async (isolationKey: string): Promise<StagedUpdate> => {
+  if (!(await exists(OTA_METADATA_PATH))) return {}
+  return stagedUpdateOf(await readFile(OTA_METADATA_PATH, 'utf8'), isolationKey)
 }
