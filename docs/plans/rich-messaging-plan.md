@@ -13,7 +13,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
-- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, and chat over DIDComm v1 only, with v2 as a later item), and corrections to the mediator facts from the Step 3 research.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -211,7 +211,14 @@ Step 0 measures the storage each queued photo takes on both mediators (disk on C
 
 - **How support is known.** A contact's support comes from the RCE protocol version it announces in the relationship handshake (`vrc:rceVersion:<n>`), stored on its `RelationshipDidRecord`. **Version 6 means "speaks `keyring/chat/1.0`"**. This is the same check VRC issuance uses (`counterpartyRceVersionAtLeast`); Keyring makes no DIDComm Discover Features calls. A contact on a DIDComm v2 connection counts as not supporting chat, whatever it announced, until chat over v2 is built (§4.1).
 - **When a build announces 6.** Only from the build that shows chat events in the timeline (Step 1). Before that, nobody sends chat events to a build that cannot show them.
-- **Existing contacts learn of an upgrade.** The relationship handshake is sent once per relationship, and re-sending it would restart the relationship exchange. So a build that first announces 6 sends each existing contact a one-time chat-capability notice, a separate message that never touches the exchange. A contact that receives one raises its stored version. The notice's exact form is settled in Step 1, before anything depends on it.
+- **Existing contacts learn of an upgrade through a capability notice.** The relationship handshake is sent once per relationship, and re-sending it would restart the relationship exchange. So contacts already made exchange a separate message, `https://keyring.berkmancenter.org/chat/1.0/capability`, carrying `rceVersion` (6). It never touches the relationship exchange.
+  - **Receiving one** on an existing connection, from an authenticated sender, raises the stored `counterpartyRceVersion` to the announced value. It never lowers it, and it never calls `maybeOpenRelationshipExchange`.
+  - **Sending one, lazily.** A phone sends its notice the first time the person opens the chat with a contact whose stored version is below 6, once per contact. A phone that receives a notice from a contact it has not notified answers once with its own. So two upgraded phones converge as soon as either opens the chat, and nothing is sent to contacts nobody chats with.
+  - **What a build without chat does with it**, and with any chat event: Credo finds no handler for the type and sends back a `https://didcomm.org/notification/1.0/problem-report` (`MessageParseFailure`, "The message type is not supported"), threaded to the message's `@id`. Nothing is shown or stored on that phone. Like any queued message, the notice may wake a backgrounded phone with nothing new to open, which is why notices are lazy and once per contact.
+  - **Problem reports are read, not ignored.** The phone registers a handler for that problem report. The handler acts only when the parent id is a message this phone sent **on the connection the report arrived on**: it queries that connection's sent events first, then matches the id, so a peer cannot cite an id from another chat. Every chat event's DIDComm `@id` is its own `eventId`, so no extra record is needed to match one. The handler never replies.
+    - A refused **notice** records the refusal on the connection. The notice is sent again only when the chat is next opened, at least 7 days later.
+    - A refused **chat event** (a contact that went back to an older build) marks the contact as not speaking chat until it sends a new notice. A refused text message is sent again as a plain BasicMessage; a refused reaction is dropped.
+    - Any other problem report is ignored.
 - **Peer supports it:** send `chat/1.0/event`.
 - **Peer does not:** send a plain BasicMessage. Text goes as it is. A photo goes as "📷 Photo — update Keyring to see it". A reply goes as its text. Reactions are **not sent**, because a stream of "reacted 👍" messages is worse than nothing.
 - **Receivers accept both,** and existing BasicMessages keep rendering exactly as today.
@@ -313,7 +320,15 @@ Each step ends with `cd bifold/packages/core && yarn test` and the root `yarn ty
     - a contact on a DIDComm v2 connection, sent a BasicMessage;
   - unread tests show that a message counts and a reaction does not;
   - a Keyring↔Keyring two-device run sends text, adds a reaction, changes it, removes it and replies, over DIDComm v1. Chat over v2 is proven by its own run when it is built (§4.1);
-  - a build with the feature and a build without it exchange readable text both ways, with no raw JSON shown on either.
+  - a build with the feature and a build without it exchange readable text both ways, with no raw JSON shown on either. Opening the chat sends one notice; the older build shows nothing for it, and the newer build keeps sending plain messages;
+  - after the older phone is upgraded and either person opens the chat, both phones send chat events;
+  - unit tests cover the capability notice:
+    - it raises the stored version and never lowers it;
+    - it never opens a relationship exchange;
+    - a notice with no connection or no authenticated sender is dropped;
+    - the answer-once rule;
+    - problem reports for a notice, for a text message (resent as a BasicMessage), for a reaction (dropped), and an unrelated one (ignored);
+    - a problem report citing an id sent on a different connection, ignored.
 
 **Step 2 — Emoji picker**
 - The build script, the data file, the picker component with the OS-version filter, and validation by membership, wired into the composer and the reaction bar.
