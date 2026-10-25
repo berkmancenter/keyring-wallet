@@ -402,6 +402,8 @@ export interface NativeVerificationResult {
  * @param signedContentHashBase64 - SHA256 of `signedContent` (base64), computed by the caller from the
  *   content it holds; never a value taken from the evidence. The native verifier always recomputes the
  *   hash itself and fails with `contentBindingMismatch` if a non-empty value differs.
+ * @param verifyAtMs - epoch ms to check the certificate chain at, taken by the caller from the signed
+ *   content (when the card was signed), never from the evidence or the clock; 0 or absent checks it now.
  */
 export const verifyHardwareEvidence = async (
   certificateChainPem: string[],
@@ -409,7 +411,8 @@ export const verifyHardwareEvidence = async (
   signedContent: string,
   publicKeyBase64: string,
   attestationFormat: string,
-  signedContentHashBase64?: string
+  signedContentHashBase64?: string,
+  verifyAtMs?: number
 ): Promise<NativeVerificationResult> => {
   const result = await Attestation.verifyHardwareEvidence(
     certificateChainPem,
@@ -417,7 +420,8 @@ export const verifyHardwareEvidence = async (
     signedContent,
     publicKeyBase64,
     attestationFormat,
-    signedContentHashBase64 || ''
+    signedContentHashBase64 || '',
+    verifyAtMs || 0
   );
 
   // Map native result to typed interface

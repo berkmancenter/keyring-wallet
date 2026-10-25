@@ -1308,6 +1308,7 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
                   publicKeyBase64:(NSString *)publicKeyBase64
                   attestationFormat:(NSString *)attestationFormat
                   signedContentHashBase64:(NSString *)signedContentHashBase64
+                  verifyAtMs:(double)verifyAtMs
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
@@ -1375,6 +1376,14 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
                 if (anchors.count > 0) {
                     SecTrustSetAnchorCertificates(trust, (__bridge CFArrayRef)anchors);
                     SecTrustSetAnchorCertificatesOnly(trust, YES);
+                }
+
+                // Check the chain as it stood when the card was signed: the caller reads that time from the
+                // signed content. An App Attest leaf lasts about 72 hours, so checking it today fails every
+                // card older than that. 0 keeps the check at the current time.
+                if (verifyAtMs > 0) {
+                    NSDate *verifyAt = [NSDate dateWithTimeIntervalSince1970:verifyAtMs / 1000.0];
+                    SecTrustSetVerifyDate(trust, (__bridge CFDateRef)verifyAt);
                 }
 
                 CFErrorRef trustError = NULL;

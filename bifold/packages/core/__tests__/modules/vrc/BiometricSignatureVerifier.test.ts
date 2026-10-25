@@ -106,7 +106,8 @@ describe('BiometricSignatureVerifier', () => {
         'test-content',
         testEvidence.hardwareBinding.publicKey,
         testEvidence.attestation.format,
-        contentHashBase64('test-content')
+        contentHashBase64('test-content'),
+        0
       )
     })
 
@@ -305,6 +306,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         'apple-appattest-v1',
+        expect.anything(),
         expect.anything()
       )
     })
@@ -333,6 +335,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         'android-key-attestation-v3',
+        expect.anything(),
         expect.anything()
       )
     })
@@ -380,7 +383,8 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
-        contentHashBase64('test-content')
+        contentHashBase64('test-content'),
+        0
       )
     })
   })

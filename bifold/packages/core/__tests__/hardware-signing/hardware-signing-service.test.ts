@@ -393,7 +393,9 @@ describe('createHardwareSigningService', () => {
         'login-challenge-abc123',
         PUBLIC_KEY_B64,
         'apple-appattest-v1',
-        contentHashBase64('login-challenge-abc123')
+        contentHashBase64('login-challenge-abc123'),
+        // A challenge names no signed time, so the chain is checked now.
+        0
       )
       expect(result.valid).toBe(true)
       expect(result.details.verificationLevel).toBe('cryptographic')

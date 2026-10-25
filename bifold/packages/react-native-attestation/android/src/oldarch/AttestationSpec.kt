@@ -23,6 +23,7 @@ abstract class AttestationSpec internal constructor(context: ReactApplicationCon
     publicKeyBase64: String,
     attestationFormat: String,
     signedContentHashBase64: String,
+    verifyAtMs: Double,
     promise: Promise
   )
   abstract fun createSecureEnclaveKey(promise: Promise)

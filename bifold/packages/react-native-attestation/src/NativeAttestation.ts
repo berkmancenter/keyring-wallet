@@ -100,7 +100,9 @@ export interface Spec extends TurboModule {
     signedContent: string,
     publicKeyBase64: string,
     attestationFormat: string,
-    signedContentHashBase64: string
+    signedContentHashBase64: string,
+    /** Epoch ms to check the certificate chain at; 0 checks it at the current time. */
+    verifyAtMs: number
   ): Promise<NativeVerificationResult>;
 }
 

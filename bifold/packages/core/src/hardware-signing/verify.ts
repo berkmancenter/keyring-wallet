@@ -7,7 +7,8 @@
  * CertPathValidator.
  *
  * VERIFICATION PERFORMED NATIVELY:
- * 1. Full X.509 certificate chain validation (signatures, expiry, constraints)
+ * 1. Full X.509 certificate chain validation (signatures, expiry, constraints), as of
+ *    the time the signed content says it was signed (see signingTime.ts), not today
  * 2. Public key extraction from leaf cert → comparison with evidence public key
  * 3. ECDSA-SHA256 signature verification (or iOS App Attest assertion verification)
  * 4. Android: Attestation extension parsing (security level, verified boot, biometric enforcement)
@@ -33,6 +34,7 @@
 import { verifyHardwareEvidence, type NativeVerificationResult } from '@bifold/react-native-attestation'
 
 import { CONTENT_BINDING_MISMATCH, checkEmbeddedContentHash, contentHashBase64 } from './binding'
+import { chainVerificationTime } from './signingTime'
 import type { HardwareAttestationEvidence, HardwareSigningLogger, SignedPayloadAttestation } from './types'
 
 const LOG_PREFIX = '[HW:Verify]'
@@ -119,6 +121,13 @@ export class HardwareSignatureVerifier {
     }
     const embeddedCheck = checkEmbeddedContentHash(evidence, signedContent)
     if (!embeddedCheck.ok) return bindingFailure(embeddedCheck.error)
+    // The date comes from signedContent alone, the same string native checks the signature over.
+    const timing = chainVerificationTime(
+      signedContent,
+      evidence.attestation.certificateChain,
+      evidence.attestation.format
+    )
+    if (!timing.ok) return bindingFailure(timing.error)
 
     try {
       const nativeResult: NativeVerificationResult = await verifyHardwareEvidence(
@@ -128,7 +137,8 @@ export class HardwareSignatureVerifier {
         evidence.hardwareBinding.publicKey,
         evidence.attestation.format,
         // The verifier's own recomputation, never the value from the evidence.
-        contentHashBase64(signedContent)
+        contentHashBase64(signedContent),
+        timing.verifyAtMs
       )
 
       const elapsed = Date.now() - startTime

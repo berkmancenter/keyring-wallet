@@ -41,6 +41,7 @@ import java.security.cert.TrustAnchor
 import java.security.cert.X509Certificate
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.X509EncodedKeySpec
+import java.util.Date
 
 class AttestationModule : AttestationSpec {
 
@@ -1349,9 +1350,14 @@ class AttestationModule : AttestationSpec {
     publicKeyBase64: String,
     attestationFormat: String,
     signedContentHashBase64: String,
+    verifyAtMs: Double,
     promise: Promise
   ) {
     Log.i(TAG, "▶ verifyHardwareEvidence [format=$attestationFormat, chainLen=${certificateChainPem.size()}]")
+    // Check the chain as it stood when the card was signed: the caller reads that time from the signed
+    // content. An App Attest leaf lasts about 72 hours, so checking it today fails every card older than
+    // that. 0 keeps the check at the current time.
+    val verifyAt = if (verifyAtMs > 0) Date(verifyAtMs.toLong()) else Date()
 
     val errors = mutableListOf<String>()
     var chainValid = false
@@ -1419,11 +1425,12 @@ class AttestationModule : AttestationSpec {
           val certPath = certFactory.generateCertPath(pathCerts)
           val params = PKIXParameters(trustAnchors)
           params.isRevocationEnabled = false
+          params.date = verifyAt
           CertPathValidator.getInstance("PKIX").validate(certPath, params)
           chainValid = true
           Log.i(TAG, "  ✓ Certificate chain valid")
         } else {
-          val chainResult = GoogleAttestationChainValidator.validateChain(certs)
+          val chainResult = GoogleAttestationChainValidator.validateChain(certs, now = verifyAt)
           chainValid = chainResult.valid
           if (chainValid) {
             Log.i(TAG, "  ✓ Certificate chain valid")
