@@ -203,7 +203,19 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
 
       {/* Popup Menu */}
       <Modal visible={menuVisible} transparent={true} animationType="fade" onRequestClose={handleMenuClose}>
-        <Pressable style={styles.menuOverlay} onPress={handleMenuClose} testID={testIdWithKey('ContactMenuOverlay')}>
+        {/*
+         * The overlay is a sibling behind the menu, not its parent: an accessible Pressable is one element to iOS
+         * accessibility, so every item inside it was unreachable to VoiceOver (and to the e2e driver), read as one
+         * merged label. The same fix as the message actions sheet (MessageActions.tsx).
+         */}
+        <View style={styles.menuOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleMenuClose}
+            accessibilityRole="button"
+            accessibilityLabel={t('Global.Close')}
+            testID={testIdWithKey('ContactMenuOverlay')}
+          />
           <View
             style={[
               styles.menuContainer,
@@ -263,7 +275,7 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
               </ThemedText>
             </TouchableOpacity>
           </View>
-        </Pressable>
+        </View>
       </Modal>
 
       <DisappearingMessagesSheet
