@@ -1,7 +1,7 @@
 # Mediator migration: Keyring ↔ Keyring onto the Affinidi mediator, and the Credo mediator retired
 
 **Status:** draft for review. **Blocked:** no phase starts until the managed infrastructure's wallet-host and short-link change is deployed (§6). **Owner:** product owner. **Implementing lanes:** gateway-infra, push, app/UI.
-**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft. [`mediator-migration-plan/2026-10-21-bam-extension-notes.md`](mediator-migration-plan/2026-10-21-bam-extension-notes.md) holds the notes behind the extension phases (§5.1). [`mediator-migration-plan/2026-10-25-al.md`](mediator-migration-plan/2026-10-25-al.md) holds the response to that review, the reasoning for the rollback section (§5.2), the reasoning for the infrastructure blocker (§6), and why the new mediator's service order is checked (M3d).
+**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft. [`mediator-migration-plan/2026-10-21-bam-extension-notes.md`](mediator-migration-plan/2026-10-21-bam-extension-notes.md) holds the notes behind the extension phases (§5.1). [`mediator-migration-plan/2026-10-25-al.md`](mediator-migration-plan/2026-10-25-al.md) holds the response to that review, the reasoning for the rollback section (§5.2), the reasoning for the infrastructure blocker (§6), why the new mediator's service order is checked (M3d), and the agent-start race a `MEDIATOR_URL` change triggers (§6).
 **Related plans:**
 - [`peer-message-notifications-plan.md`](peer-message-notifications-plan.md): the message-wake design this migration has to keep working.
 - [`push-notifications-plan.md`](push-notifications-plan.md): the push gateway.
@@ -189,6 +189,7 @@ Either way, the rollback and its reason are recorded in a dated companion the sa
 | M1 scheduling | not scheduled; owner and date TBD (M0a) | the infrastructure maintainer |
 | W3 | waiting | VTI-Q52 upstream |
 | Upstream Credo changes (a) and (b) | drafted | the product owner's OK; they matter only until M5 |
+| **The agent-start race at a `MEDIATOR_URL` change.** A store build that changes `MEDIATOR_URL` sends every existing phone through the stored-mediator reset on its first start, and without wallet #631 that reset starts the agent twice on the same store. The build carries #631, and a device check passes first: a phone with the old mediator stored, upgraded to the new build, logs one `Initializing agent` and no `no such table: config` | #631 open, wanted for 272; device check not run | the OTA lane; **blocks M4**, and M1 if its invitation URL changes |
 
 ## 7. Acceptance checks used throughout
 
