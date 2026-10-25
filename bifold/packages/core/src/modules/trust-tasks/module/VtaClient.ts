@@ -104,6 +104,7 @@ import {
   validateApprovals,
 } from './approvalsPolicy'
 import { EMPTY_APPROVALS, modelFromExt, ruleForWire, withKeySwapped, type ApprovalsModel } from './approvalRules'
+import { registerOtaApplyBlocker } from '../../../utils/otaApply'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 
@@ -1255,7 +1256,11 @@ export class VtaClient {
      */
     sendOptions: { waitForConsent?: boolean } = {}
   ): Promise<T> {
-    return this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
+    // A reload would lose all of this (the queue, a step-up, a wait for consent
+    // that can last minutes, the re-submits): none of it is stored. So no
+    // downloaded update applies until the task ends (utils/otaApply).
+    const release = registerOtaApplyBlocker(`vta-task:${type}`)
+    const done = this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
         return this.answerStepUp<T>(stepUp, error, type, () =>
@@ -1300,6 +1305,7 @@ export class VtaClient {
       }
       throw lastError instanceof Error ? lastError : new Error(String(lastError))
     })
+    return done.finally(release)
   }
 
   /** One send in the queue, behind whatever is in flight — no step-up or consent handling. */

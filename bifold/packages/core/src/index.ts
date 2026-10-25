@@ -119,6 +119,13 @@ export {
   SHORT_GRANT_POLL_WINDOW_MS,
 } from './utils/e2eClocks'
 export { RetryingWebVhDidResolver } from './utils/RetryingWebVhDidResolver'
+export {
+  hasOtaApplyBlockers,
+  notifyReturnLocked,
+  onReturnLocked,
+  otaApplyBlockerReasons,
+  registerOtaApplyBlocker,
+} from './utils/otaApply'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {
   connectFromScanOrDeepLink,

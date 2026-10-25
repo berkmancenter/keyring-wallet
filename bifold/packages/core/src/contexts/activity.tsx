@@ -16,6 +16,7 @@ import { useStore } from './store'
 import { defaultAutoLockTime } from '../constants'
 import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { useAppAgent } from '../utils/agent'
+import { notifyReturnLocked } from '../utils/otaApply'
 
 // number of minutes before the timeout action is triggered
 // a value of 0 will never trigger the lock out action and
@@ -138,6 +139,9 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
           timeoutInMilliseconds.current > 0
         ) {
           lockOutUser(LockoutReason.Timeout)
+          // The person lands on the PIN screen: the one moment the app may apply a
+          // downloaded update (utils/otaApply).
+          notifyReturnLocked(Date.now() - lastActiveTimeRef.current)
         } else {
           // otherwise restart message pickup
           try {

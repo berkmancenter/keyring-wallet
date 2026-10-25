@@ -351,6 +351,7 @@ jest.mock('../module/VtaClient', () => {
 
 import { DeviceEventEmitter } from 'react-native'
 
+import { hasOtaApplyBlockers, otaApplyBlockerReasons } from '../../../utils/otaApply'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { VtaClient } from '../module/VtaClient'
 import type { VtaLink } from '../module/VtaLinkStore'
@@ -917,6 +918,21 @@ describe('an agent that asks for more than the owner check (policy gate)', () =>
     mockVta.consentGranted = true
     await expect(adding).resolves.toMatchObject({ did: BACKUP })
     expect(mockVta.acl.has(BACKUP)).toBe(true)
+  })
+
+  it('a task waiting on consent holds the OTA apply blocker until it ends', async () => {
+    mockClientOptions.consentWaitMs = 2000
+    mockVta.consentFor.add(ACL_GRANT)
+    const { vta } = await linkedPhone()
+    const adding = vta.addBackupDevice(agent, BACKUP)
+    // Past the first refusal: the wait for the grant and its re-submit run
+    // outside the first send, and a reload there would lose them.
+    await until(() => sentOf(ACL_GRANT).length >= 2)
+    expect(hasOtaApplyBlockers()).toBe(true)
+    expect(otaApplyBlockerReasons()).toContain(`vta-task:${ACL_GRANT}`)
+    mockVta.consentGranted = true
+    await adding
+    expect(otaApplyBlockerReasons()).not.toContain(`vta-task:${ACL_GRANT}`)
   })
 
   it('a consent that never comes reads as awaiting approval', async () => {
