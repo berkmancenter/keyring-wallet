@@ -13,7 +13,7 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
-- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; and Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; and Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock; and Step 0's attachment ceiling on the Credo path, measured.
 
 **Related plans:**
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
@@ -188,14 +188,20 @@ The sender is the authenticated DIDComm sender of the connection, never a field 
 **One message, including its attachments, stays under 256 KiB of raw bytes.**
 - **The ceiling that matters** is the Affinidi mediator's `message_size = 1_048_576` (`external/affinidi-tdk-rs/…/affinidi-messaging-mediator/src/common/config/limits.rs`; `deploy/keyring-messaging/mediator/mediator.toml` on `origin/main`). Today's 5 MB Credo HTTP limit (`@credo-ts/node/.../DidCommHttpInboundTransport.mjs`) is not.
 - **Why 256 KiB.** The image is base64'd into the attachment, then base64url'd again inside the JWE, so 1 MiB holds about 560 KiB of raw bytes before JSON and forwarding overhead. 256 KiB leaves headroom, and it keeps the pickup batches of up to 10 messages light on mobile networks.
-- **This figure is an estimate until Step 0 measures it.**
+- **On today's path, measured (Step 0).** Photos in this plan's first release travel over DIDComm v1 through the Credo mediator (§4.1), sent and picked up over HTTPS.
+  - The largest raw attachment that arrives is about 2.06 MiB. 2,112 KiB arrives; 2,176 KiB does not.
+  - It is set by the mediator's 5 MB inbound HTTP body limit (`express.text({ limit: "5mb" })` in `@credo-ts/node`, the same in the production mediator's version). A message is about 2.37 times its raw attachment on the wire.
+  - **Above the limit, the mediator refuses the request and the sender's Credo raises no error.** The message looks sent and never arrives. So the size limit is enforced on the sender, before anything is sent (Step 3), never left to the transport.
+  - 256 KiB is confirmed on this path, with about eight times the margin.
+- **On the Affinidi mediator** the 430 KiB figure below is derived from its configuration, not measured. It is measured with the chat-over-v2 item, before the mediator migration's M4 (§7).
 
 **Effect on the mediator's queue.** The queue limits count messages, not bytes. On Affinidi they are `queued_send_messages_per_peer = 50` and `queued_receive_messages_soft = 200`, the enforced default per recipient. 1,000 (`_hard`) is only the ceiling an account's limit can be raised to (`deploy/keyring-messaging/mediator/mediator.toml`, enforced through `limits.queue.peer` / `PEER_Q`; see `docs/VTI_UPSTREAM_FINDINGS.md`).
 - **Message counts.** Photos reach those gates no sooner than text does. A burst of photos counts one message each against the 50-per-peer cap.
 - **Bytes held.** This is what grows.
   - **On Affinidi:** at the enforced 200, about 50 MiB for one recipient (about 256 MiB at a raised 1,000), against a few hundred KiB for text. It sits in Redis memory until pickup or the 7-day expiry.
   - **On the current Credo mediator:** there is no queue cap, per connection or in total. Queued messages wait on disk, in Postgres, until pickup, and a daily job deletes any queued for more than 7 days.
-- **Pickup batches.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
+- **Pickup batches on Credo, measured.** Ten queued 256 KiB photos came back as one pickup response of 6,227,799 bytes (about 623 KB each), and all ten arrived. The 5 MB limit applies to requests sent to the mediator, not to its responses, so a full batch does not fail on it.
+- **Pickup batches on Affinidi.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
 - **The forward on the way in** is a JSON attachment, in both Credo's own v2 routing and the wallet's VTI mediator transport. So about 430 KiB of raw media fits under `message_size`, and 256 KiB leaves room.
 - **The contentless push wake** is unaffected by size.
 
