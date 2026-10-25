@@ -17,8 +17,12 @@
  * stays idle was checked for @hot-updater/react-native 0.36.18 only: a version
  * bump re-checks it (deploy/keyring-ota/README.md, "Upgrading hot-updater").
  */
+import { onReturnLocked, otaApplyBlockerReasons } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
+
+import { decideApplyOnReturn } from './applyOnReturn'
 
 import { otaUpdateUrl } from './otaConfig'
 import { ensureRing } from './rings'
@@ -47,6 +51,25 @@ export const withOta = <P extends object>(
     return App
   }
 
+  // An update downloaded this session waits for the next cold start, or for a
+  // return to the PIN screen after a while away (applyOnReturn.ts).
+  let stagedBundleId: string | undefined
+  onReturnLocked((awayMs) => {
+    const decision = decideApplyOnReturn({
+      awayMs,
+      stagedBundleId,
+      runningBundleId: HotUpdater.getBundleId(),
+      blockers: otaApplyBlockerReasons(),
+      platform: Platform.OS,
+    })
+    if (!decision.apply) {
+      if (stagedBundleId) log('update waits', { id: stagedBundleId, reason: decision.reason })
+      return
+    }
+    log('applying on return', { id: stagedBundleId, awayMinutes: Math.round(awayMs / 60000) })
+    HotUpdater.reload().catch((error) => log('apply on return failed', { error: String(error) }))
+  })
+
   return HotUpdater.wrap({
     baseURL: url,
     updateStrategy: 'fingerprint',
@@ -55,8 +78,11 @@ export const withOta = <P extends object>(
     // seen in the spike) checks timed out. A timeout is safe (the app runs what
     // it has) but should not be the norm.
     requestTimeout: 15000,
-    onUpdateProcessCompleted: ({ status, id, shouldForceUpdate }) =>
-      log('check finished', { status, id, shouldForceUpdate }),
+    onUpdateProcessCompleted: ({ status, id, shouldForceUpdate }) => {
+      // A rollback stages too: a withdrawn update leaves sooner on a return.
+      if (status === 'UPDATE' || status === 'ROLLBACK') stagedBundleId = id
+      log('check finished', { status, id, shouldForceUpdate })
+    },
     onError: (error) => log('update failed', { error: String(error) }),
   })(App) as React.ComponentType<P>
 }
