@@ -1259,7 +1259,6 @@ export class VtaClient {
     // A reload would lose all of this (the queue, a step-up, a wait for consent
     // that can last minutes, the re-submits): none of it is stored. So no
     // downloaded update applies until the task ends (utils/otaApply).
-    const release = registerOtaApplyBlocker(`vta-task:${type}`)
     const done = this.enqueue<T>(type, payload, timeoutMs, documentExtras, onSent).catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
@@ -1305,6 +1304,10 @@ export class VtaClient {
       }
       throw lastError instanceof Error ? lastError : new Error(String(lastError))
     })
+    // Registered once `done` exists, so a synchronous throw before it can't leave a
+    // blocker that is never released. enqueue only schedules its run, so nothing of
+    // the task starts before this line.
+    const release = registerOtaApplyBlocker(`vta-task:${type}`)
     return done.finally(release)
   }
 
