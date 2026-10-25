@@ -4,8 +4,8 @@
 **Scope:** how fast and how cheaply a change gets a trustworthy verdict, from commit to result: native builds, the Jest suites, the e2e harness, a Node protocol tier that does not exist yet, the emulator and simulator runs, and the physical-phone runs. It covers where each assurance is proved, what it runs on, and the order the work happens in. It is the one plan that sequences testing-speed work.
 **Siblings:** [`release-cadence-and-testing-strategy/gate_efficiency_subtask.md`](./release-cadence-and-testing-strategy/gate_efficiency_subtask.md) owns the release gate: lanes, cadence, component-test moves, VTA contract fixtures, the flakiness policy and the coverage manifest. [`ios-builds-on-linux-plan.md`](./ios-builds-on-linux-plan.md) owns where iOS builds and gates run and the Mac purchase. [`openvtc-interop-harness-plan.md`](./openvtc-interop-harness-plan.md) owns interop with upstream's reference implementations. [`release-flow-plan.md`](./release-flow-plan.md) owns the branches and channels the builds feed; this plan changes how fast builds and checks run, not the flow.
 **Reasoning:** [`test-acceleration-plan/2026-10-22-bam.md`](./test-acceleration-plan/2026-10-22-bam.md) holds the sources, what was adopted and dropped, the cross-reference findings, the unverified claims and the vendor and price research. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
-**Review:** [`test-acceleration-plan/2026-10-24-al.md`](./test-acceleration-plan/2026-10-24-al.md) — a review against what is built, with gate and CI numbers measured since 2026-10-22, conflicts with decisions already made, what the plan misses, and a careful rollout order (cheapest and most valuable first, one measured step at a time, nothing that works today broken). Proposals only.
-**Baseline:** repository facts are at `main` `4c78a1cf`, which pins bifold `7d668cd04`, checked by `ls`, `grep` and `git` on 2026-10-22. CI durations are from the gate efficiency companion (`release-cadence-and-testing-strategy/2026-10-14-al.md` §2, 2026-10-14). Nothing here is a fresh timing measurement; §2 says what is and is not measured.
+**Review:** [`test-acceleration-plan/2026-10-24-al.md`](./test-acceleration-plan/2026-10-24-al.md) — a review against what is built, with gate and CI numbers measured since 2026-10-22, conflicts with decisions already made, what the plan misses, and a careful rollout order (cheapest and most valuable first, one measured step at a time, nothing that works today broken). This plan adopts its rollout rules and order (§5, Rollout) and its stale-fact corrections; [`2026-10-25-bam.md`](./test-acceleration-plan/2026-10-25-bam.md) records the disposition of each proposal.
+**Baseline:** repository facts are at `main` `4c78a1cf`, which pins bifold `7d668cd04`, checked by `ls`, `grep` and `git` on 2026-10-22. CI and gate durations are the figures measured 2026-10-22 to 2026-10-24 and recorded in the review; §2 says what is and is not measured.
 
 ---
 
@@ -29,15 +29,15 @@
 
 ## 2. What is measured today, and what is not
 
-**Measured, on `main`.** The gate legs write `steps.tsv` (`e2e/gate/steps.mjs`); `ledger.mjs` reads each row's pass and fail record over recent runs; `coverage.mjs` keeps the committed manifest `e2e/gate/coverage.tsv`; `changed.mjs` maps a diff to legs. Pull-request and build durations were recorded on 2026-10-14 (companion §2): wallet Lint, Format and Types 3–4 min; wallet Testing 6–7 min; bifold Testing 22 min; test builds on `main`, iOS simulator 42–55 min and Android APK 26–44 min.
+**Measured, on `main`.** The gate legs write `steps.tsv` (`e2e/gate/steps.mjs`); `ledger.mjs` reads each row's pass and fail record over recent runs; `coverage.mjs` keeps the committed manifest `e2e/gate/coverage.tsv`; `changed.mjs` maps a diff to legs. Durations measured 2026-10-22 to 2026-10-24 from the gate run records and the GitHub Actions API: wallet Testing 6–7 min; bifold Testing 22–27 min; `test-builds` median 47 min (range 32–58, p90 about 56), of which the iOS simulator build is 48–58 min and the Android build 37–43 min; the iOS store build is 24–33 min, so the simulator build takes about twice as long as the store build, a gap B2 explains before it is designed; `gate-smoke` median about 18 min (9–35). The release gate takes about 5 h start to end for a full run (candidates 269 and 270: 5 h 00 m and 4 h 56 m; 3 h 42 m at the 16-leg baseline), against the 75-minute target in the gate efficiency subtask. Summed leg time roughly equals wall-clock, because there is one Farm turn and the two halves run one after the other. Onboarding and linking (`run-vta-link.js`) is 36% of the summed time of candidate 270. The gate run records `summary.json`, `legs.tsv` and per-leg `steps.tsv` already exist for every gate run (T0.1 collects them; it does not create them).
 
 **Not measured.**
 
-- **The VRC runner family.** 21 of the 66 `e2e/run-*` files are `run-vrc-exchange*`. 44 of the 66 are named by no leg script (`e2e/gate/legs/*.sh`), no `e2e/gate/*.sh` and no workflow; `run-ota.mjs` is reached only by `gate-ota.yml`. So the gate's step times and ledger do not see those 44. No VRC runner reaches `runStep` (defined in `e2e/lib/keyringRoles.js`; 29 other runners call it indirectly through that file's helpers), and `docs/RELEASE_GATE.md` §5, which says every runner logs it, does not describe the VRC family.
+- **The VRC runner family.** No `run-vrc-exchange*` runner is in the release gate, and `e2e:vrc` cannot run on Release builds, so the Node tier (T2) and the VRC retirements (T4) remove no minutes from the gate as it runs; the gate's time is the Farm-backed onboarding and linking and the serial Farm turn, which the gate efficiency subtask's items 6 and 7 and its phase 3 own. 21 of the 66 `e2e/run-*` files are `run-vrc-exchange*`. 44 of the 66 are named by no leg script (`e2e/gate/legs/*.sh`), no `e2e/gate/*.sh` and no workflow; `run-ota.mjs` is reached only by `gate-ota.yml`. So the gate's step times and ledger do not see those 44. No VRC runner reaches `runStep` (defined in `e2e/lib/keyringRoles.js`; 29 other runners call it indirectly through that file's helpers), and `docs/RELEASE_GATE.md` §5, which says every runner logs it, does not describe the VRC family.
 - **Per-runner duration and flake rate across the 66 files.** No file in the repository records them. The gate Mac's `~/.keyring-fleet/gate/runs/*/summary.json` and the GitHub run artifacts hold part of the answer and are not collected where a plan can cite them.
 - **The protocol-exchange share of a VRC run.** The exchange is projected at 10–12 s of a run of about 7 minutes (the polling comment in `app/src/utils/bc-agent-modules.ts`); the run total is read from code, not timed.
 - **Jest wall time per file in CI.** Only suite totals exist.
-- **Node against React Native parity** for AnonCreds, indy-vdr and the Askar binding layer: the versions match, but no test has run the Node bindings (§4.3).
+- **Node against React Native parity** for AnonCreds, indy-vdr and the Askar binding layer: the versions match; core has run one Node test of the Askar binding since 2026-10-23, and none runs the AnonCreds or indy-vdr bindings (§4.3).
 
 Therefore **T0 opens the plan**, and a later phase is ordered by what T0 shows.
 
@@ -50,6 +50,12 @@ Therefore **T0 opens the plan**, and a later phase is ordered by what T0 shows.
 5. **No test that gates a pull request touches a live service.** The Farm and the local VTI stack belong to the gate and the nightly runs.
 6. **Measure, then change; retire only on evidence.** Step costs read from code are hypotheses until T0 times them, and a device runner is retired only under §4.7.
 7. **A cache is keyed so a hit cannot be wrong.** A cache that once served stale codegen output is fixed by correcting its key, not by deleting it on every run.
+8. **Nothing that works today breaks.** Required checks, store builds and the release gate keep behaving exactly as they do until a step is proved; a step changes one thing and reverts on its own.
+9. **Prove on the test path before the release path.** Build and caching changes land in `test-builds.yml` and run green several times before any store or release workflow takes them. A push to a branch that ships to testers is never used to try something: it ships the code to every tester.
+10. **Shared machines take one heavy job at a time.** Jest, builds and gate legs take a slot on the shared Macs, Jest runs with `--maxWorkers=2`, and each step that adds caches, snapshots or build trees states its disk use and its cleanup rule (an iOS Release simulator build is about 8.4 GB; the gate Mac has a 256 GB disk).
+11. **Tests are found by CI, not listed.** A hand-kept list left 34 harness tests running nowhere until #586; `e2e/runners.tsv` is generated or checked against the tree, and a Node harness in a new package carries its own CI job.
+12. **Build identity on every device.** Every canary, snapshot or frozen-artifact run checks each device's bundle hash against the candidate; a device left on the previous build once gave a false pass (#596).
+13. **Native changes need a compile check.** B2–B4 and A2 change native configuration and wait for the native-path test builds by name (`test-builds.yml` path filters, #572, #602); B1 never bypasses them.
 
 ## 4. Design
 
@@ -167,11 +173,27 @@ If the estimate holds, about 15 to 17 Appium runners remain, a cut in runner cou
 3. Any hardware claim the runner carried is named in the canary.
 4. Any React Native binding, Hermes or UI claim the runner carried is named in a retained emulator smoke.
 5. The change to the coverage manifest in the same diff removes no row except the ones named.
-6. The covering test has passed in CI three consecutive times.
+6. The device row leaves the per-release gate only **two releases** after its covering test lands, and then stays in the nightly run (gate efficiency subtask, decision 5 of `release-cadence-and-testing-strategy/2026-10-14-al.md`). Until then both run.
+
+**The core journeys never retire from the per-release gate**, whatever covers them elsewhere: vetting (including hidden vetting), joining, agent link, the mediator, and sign-in. A feature with two phones in it keeps a two-phone run on the Release build.
 
 ## 5. Phases
 
 Each phase ends with a measured before and after in a dated companion. Step identifiers group by family: `T` (phase steps), `U` (unit-test speed), `B` (builds), `N` (Node harness, inside T2), `P` (ports), `E` (e2e harness), `S`, `A` and `V` (biometrics and verification), `D` (dev loop).
+
+### Rollout
+
+Each step records the baseline it starts from and the number it produced (job minutes, gate minutes, flake rate) in its PR; a step that does not move its number is reverted or rethought, not stacked upon. A step starts only after the previous step's numbers are recorded. The dependencies below still bind inside this order.
+
+| Step | Items | Measure |
+|---|---|---|
+| 1. Measure only, no behaviour change | T0.1 (export the existing gate and CI records once, with the 2026-10-14 method); a corrected automatic verdict that separates harness, environment and app causes (it labelled 10 of 13 reds as app failures when 1 was); T0.4 | A published baseline; verdict accuracy against a hand classification |
+| 2. CI-only test speed | T1.1; U2; U1; then U6 | bifold `Testing` from 22–27 min; wallet `Testing` from 6–7 min |
+| 3. Test-build speed, test path only | B6; B4 (with the codegen key); the simulator-versus-store investigation, then B2; B3 after deciding what store parity it gives up | `test-builds` median from 47 min |
+| 4. Gate items already owed | gate efficiency subtask item 6 (merge relaunch into update); E3; build identity checked inside the gate; the TUI driver waiting on state; new harness code proved first (`dry --golden`, the gate's tests in CI) | Gate wall-clock from about 5 h; red legs by cause |
+| 5. Larger work, each gated by a spike | T1.2, then T2; the shared linked phone (subtask item 7) and separate runner lanes (subtask phase 3); A1 | Gate wall-clock toward 75 min; device runs per release. Each starts only when steps 1–4 show it is still the bottleneck |
+
+Not taken: B7 and E5 (§9), E6 and Tier 3 for Farm-backed suites (§8), and the retirement of any core journey (§4.7).
 
 ### T0 — measure
 
@@ -197,15 +219,16 @@ Figures in parentheses are from a developer workstation on a feature-branch tree
 
 ### B — builds
 
+Build and caching steps land on the test path (`test-builds.yml`) first (principle 9). B2–B4 wait for the native-path checks by name (principle 13). B2 starts by explaining why the iOS simulator build takes about twice as long as the iOS store build (§2). B3 starts by deciding what store parity it gives up.
+
 | # | Step | Acceptance |
 |---|---|---|
-| B1 | **JS-only fast path in CI.** Run `scripts/ci/js-only.mjs` against the last native build's commit; when it answers *js-only*, reuse that native build and swap the new bundle in with `scripts/ci/js-swap.sh`. Both scripts exist and no workflow calls them. The OTA bundle path (`gate-ota.yml`) is a separate consumer of a JS-only change (§6) | A JS-only change to `main` produces both test artifacts in under 8 min. A native change still triggers a full build. The artifact manifest records which path ran |
+| B1 | **JS-only fast path in CI.** Run `scripts/ci/js-only.mjs` against the last native build's commit; when it answers *js-only*, reuse that native build and swap the new bundle in with `scripts/ci/js-swap.sh`. Both scripts exist and no workflow calls them. B1 shares its change detection with the OTA path: `scripts/release/tier.mjs`, `ota-fingerprint.yml` and `e2e/gate/changed.mjs` already exist and #602 added native-path build triggers, so B1 adds no fourth detector; the decision is made once, with the OTA subtask (§6) | A JS-only change to `main` produces both test artifacts in under 8 min. A native change still triggers a full build. The artifact manifest records which path ran |
 | B2 | **iOS:** enable prebuilt React Native core and dependencies (`RCT_USE_PREBUILT_RNCORE=1`, `RCT_USE_RN_DEP=1`) in the Podfile and CI, add ccache, and cache DerivedData keyed on `Podfile.lock` plus the native fingerprint. Neither setting is in the Podfile today. Whether RN 0.81 supports the prebuilt path is unverified, and B2 starts by checking | The Release simulator build takes under 12 min cold and under 6 min on a cache hit (42–55 min today). The app launches and the attestation and keychain paths pass the smoke e2e |
 | B3 | **Android:** test and e2e builds compile `arm64-v8a` and `x86_64` only; store builds keep all four ABIs. `gradle.properties` already carries `reactNativeArchitectures`, but `defaultConfig` in `app/android/app/build.gradle` hard-codes all four `abiFilters`; one property must control both. Drop `bundleRelease` from test builds, since nothing uploads the AAB (`test-builds.yml` runs `bundleRelease assembleRelease`) | The test-build APK contains exactly the two ABIs; the staging and release AABs contain all four |
 | B4 | **Gradle:** enable the daemon in CI (`org.gradle.daemon=false` today), parallel builds and configuration cache; lower logging from `info` to `lifecycle`. Restore `~/.gradle/caches` with a key that includes the codegen inputs (every `package.json` under `node_modules/*/android` and the native fingerprint), and remove the unconditional `rm -rf ~/.gradle/caches` before the build in `test-builds.yml` | Configuration takes under 60 s on a cache hit; three consecutive cached builds succeed with no missing-codegen failure |
 | B5 | **Bifold builds once and incrementally.** `scripts/ensure-bifold-ready.js` skips the build when a content hash of `bifold/packages/*/src`, the configs and the bifold pin matches the last build's stamp (it keeps no stamp today). The per-package `build` scripts stop running `clean` first, and CI builds bifold in one step that the root install reuses | A second `yarn install` with no bifold change skips the build; each CI job builds bifold at most once |
 | B6 | Cache `.yarn/cache` and `bifold/.yarn/cache` in every workflow. Stop resetting Metro's cache in CI (`--reset-cache` in `test-builds.yml`), and bundle once rather than both by hand and inside Gradle | `Install dependencies` takes under 60 s on a hit in every workflow; the Android build log shows one bundling step |
-| B7 | Staging builds stop waiting on `needs: test` (`staging.yaml` lines 157 and 772); they start in parallel with the tests, and the upload step depends on the tests passing | Staging wall time is at most the slower platform build plus the upload |
 
 ### T1 — Node foundation
 
@@ -240,41 +263,46 @@ Figures in parentheses are from a developer workstation on a feature-branch tree
 | E2 | **Persona state instead of onboarding, for the hermetic VRC family only.** Golden personas per app build: an Android emulator snapshot saved explicitly (`adb emu avd snapshot save`, modification time checked) with the app installed and onboarded, and an iOS simulator cloned from an onboarded golden one (`xcrun simctl clone`). Physical phones reinstall over existing data (`E2E_KEEP_STATE`). One onboarding smoke per pipeline run keeps covering onboarding. The gate keeps its own shared-phone design (gate efficiency subtask §4). **Conditional** on T0.2 showing onboarding is a large share of a VRC run; if T2 retires the family, E2 is dropped | The VRC flow reaches Contacts on both devices within 30 s of session start; the onboarding smoke still runs on every pipeline execution |
 | E3 | **Event-driven waits.** Replace fixed sleeps and poll floors with waits on the log markers the harness already reads, or on element presence: `unlockIfLocked`, `handleBiometricConfirmIfPresent`, `dismissTourIfPresent`, `acceptRelationshipProposalIfPrompted`, the `assert*Markers` polls, the tunnel settle in `e2e/lib/witness.js` and the iOS camera-grant sleeps. Onboarding detects the current screen with one query instead of trying each screen with a 2 s timeout | No unconditional `sleep` of 1 s or more remains outside a documented exception; every step T0.2 shows dominated by waiting halves or better |
 | E4 | **Shared services for a suite.** Appium, Metro or the embedded bundle, the witness, the mediator and the tunnel start once per suite, not once per scenario | A three-scenario suite's startup cost is paid once, as shown in the T0.2 table |
-| E5 | **Embedded bundle for retained e2e builds.** E2e runs against a build with the JS bundled, so it needs neither Metro nor a cold bundle. The invitation URL moves from `__DEV__`-only hidden text (`InvitationUrl` in `QRScanner.tsx`) to a test-readable element present in e2e builds | The standard retained runners pass against the CI artifact with no Metro running |
-| E6 | **Parallel pairs.** The runner takes a device-pair pool and spreads scenarios across it; Android pairs run on Linux KVM hosts, pairs including iOS on Mac hosts | With N pairs, suite wall time is within 1.3 times (longest scenario × ceil(scenarios / N)) |
+| E5 | **Not taken.** Exposing the invitation in release test builds was rejected on 2026-10-15; see §9 | — |
+| E6 | **Parallel pairs, for hermetic suites only.** Two Farm-backed lanes on one Farm runner collide on its access list and rate limit (decided 2026-10-14), so each Farm-backed lane keeps its own runner and the gate's halves run one after the other. The runner takes a device-pair pool and spreads scenarios across it; Android pairs run on Linux KVM hosts, pairs including iOS on Mac hosts | With N pairs, suite wall time is within 1.3 times (longest scenario × ceil(scenarios / N)) |
 
-### A — unattended biometrics and verification gaps
+### A — unattended biometrics
+
+The two verification gaps found beside these steps (Android `noAuthRequired` and the iOS `authenticationMethod` label) concern security behaviour, not test speed, and are not steps of this plan; they are tracked separately (§6).
 
 | # | Step | Acceptance |
 |---|---|---|
-| S1 | **One-day spike**, answering: on a current Pixel, does a keyguard PIN unlock over adb let the prompt-free `initSign` succeed, and what method does the evidence record? Does `adb shell input text` reach the "Use PIN" screen, and does UiAutomator2 see its elements? What does `setInvalidatedByBiometricEnrollment(true)` do on a test phone with no fingerprint enrolled? Is a compile-time build configuration enough to keep the iOS bypass out of every shipped binary, TestFlight builds from `staging` included? | Each question answered in a dated companion |
+| S1 | **One-day spike**, answering: on a current Pixel, does a keyguard PIN unlock over adb let the prompt-free `initSign` succeed, and what method does the evidence record? Does `adb shell input text` reach the "Use PIN" screen, and does UiAutomator2 see its elements? What does `setInvalidatedByBiometricEnrollment(true)` do on a test phone with no fingerprint enrolled? Is a compile-time build configuration enough to keep the iOS bypass out of every shipped binary, TestFlight builds, which are dispatched on `release/*` branches, included? | Each question answered in a dated companion |
 | A1 | A harness helper `unlockKeyguardWithPin(device)` (wake, `keyevent 82`, `input text`, enter), called before each Android signing step | An Android witnessed exchange on a physical Pixel completes with no operator, 10 times in a row |
 | A2 | An iOS e2e build configuration with a compile-time `KEYRING_E2E_LA_BYPASS` flag, plus a CI check that the Release binary contains neither the symbol nor the `E2EBypass` string | The check fails if the flag leaks into Release; an iOS physical-device exchange completes with no operator |
 | A3 | Production verifiers treat `E2EBypass` evidence as a verification failure | A unit test in `core/src/hardware-signing` covers it |
 | A4 | Rewrite the device leg of `docs/RELEASE_GATE.md` as the attended gate (§4.2) | The gate lists exactly the claims only it proves |
-| V1 | Android user authentication is recorded but not enforced: `verify.ts` passes `userAuthType` through and `noAuthRequired` (key-description tag 503) is not referenced in the attestation module. Confirm in the native validator, then reject evidence whose attested auth type is none or whose `noAuthRequired` is set | A unit test for each rejection |
-| V2 | iOS `authenticationMethod` is whatever `LAContext.biometryType` reports on the signing device (`Attestation.mm`), and `CredentialOffer.tsx` displays it. Label it as reported by the device, or stop showing it as part of verification | The screen text no longer presents it as verified |
 
 ### T4, T5, T6 — retirement, canary, dev loop
 
 | # | Step | Acceptance |
 |---|---|---|
-| T4.1 | Retire runners in the order: emulator VRC family, then carriage variants of the physical runners, then VTI runners as T1.2 permits | Each retirement meets all six conditions of §4.7; `e2e/runners.tsv` and the coverage manifest change in the same diff |
+| T4.1 | Retire runners from the per-change path in the order: emulator VRC family, then carriage variants of the physical runners, then VTI runners as T1.2 permits. A gate row leaves the per-release gate only under §4.7 condition 6, and never a core journey | Each retirement meets all six conditions of §4.7; `e2e/runners.tsv` and the coverage manifest change in the same diff |
 | T5.1 | Reduce the physical runs to the three in §4.2, coordinated with PR #238 | Three physical runners remain; each hardware claim of a retired runner appears in the canary; the Android-and-Android run includes the in-app AnonCreds and Askar binding round trip; the iPhone-and-Android run includes the exchange the Node harness runs. The iPhone run waits on §6 |
 | T6.1 | Fake-ports dev mode and its store-build guard | The attested and witnessed path completes on an emulator with the fake signer, and the evidence reports the software tier; the `quality.yml` guard fails on a fixture store configuration that carries the switch |
 | D2 | Checkout preflight | Reports each missing input in under five seconds on a bare worktree |
 | T6.3 | Extend the ledger to non-gate runners and Jest; owner and expiry on `tracked:` rows | The ledger prints Jest and non-gate pass rates; no `tracked:` row lacks an owner and an expiry |
 
-**Order.** T0 first; it orders everything after it. U, B, T1 and P are independent of each other and can run side by side. T2 needs T1 and U5. E needs T0.2. T4 needs T2 and T0.3. T5 needs T4's carriage-variant retirements and A1–A2 for an unattended canary. D2 and PR #483 need nothing and can start any time.
+**Dependencies.** T0 first; it orders everything after it. U, B, T1 and P are independent of each other and can run side by side. T2 needs T1 and U5. E needs T0.2. T4 needs T2 and T0.3. T5 needs T4's carriage-variant retirements and A1–A2 for an unattended canary. D2 and PR #483 need nothing and can start any time.
 
 ## 6. Blocked, and on whom
 
 **Not decided, owned elsewhere:**
 
-- **The Mac for the iPhone canary run and for attended iOS gates.** Purchase is the ios-builds-on-linux plan's decision, waiting on whoever holds the budget (its step 1). The canary's iPhone run (T5.1) and A2's physical-device acceptance wait on it.
+- **A Mac with a paired iPhone and an iOS signing identity, for the iPhone canary run and for attended iOS gates.** The Mac mini already runs gate legs (since 2026-10-15) and has been a full gate machine since 2026-10-20; what it lacks is disk headroom (256 GB, 16.8 GB free on 2026-10-24), a paired phone and an iOS signing identity. Any purchase is the ios-builds-on-linux plan's decision, waiting on whoever holds the budget (its step 1). The canary's iPhone run (T5.1) and A2's physical-device acceptance wait on it.
 - **Whether the Node tier retires the VRC emulator runners from the release gate or only from the per-change path.** Owned by the gate efficiency subtask; T4.1 retires from the per-change path first and leaves the gate's membership to that document.
 - **A hermetic backend for the VTI, agent, approval and vetting runners.** The local VTI stack builds six Rust services from upstream; running it in CI is a separate decision, not taken here, and T4.1's VTI step stays gated on it.
 - **Hardware beyond the existing phones** (§8, Tiers 1–3) waits on a budget decision by the project leads.
+
+**Open items with no owner found:**
+
+- **V1 and V2 tracking.** The two verification gaps (Android `noAuthRequired` is not enforced; iOS `authenticationMethod` is device-reported and shown on `CredentialOffer.tsx`) were removed from this plan because they are security behaviour, not test speed. No tracking issue or plan carrying them with an owner was found in the repository. Until one is named, they are unowned: someone names the owner and links the tracking from here.
+- **P2 against the 2026-10-15 rejection (§9, E5).** P2's in-app contract screen in test builds sits close to the rejected invitation exposure. The nearest precedent in its favour is `E2EClockRows`, shown in test builds only. Whether that distinction holds is a product-owner call; P2 does not start before it is made.
 
 **Decided, waiting on someone:**
 
@@ -284,7 +312,7 @@ Figures in parentheses are from a developer workstation on a feature-branch tree
 
 - Where Node harness tests live: the `node` project of core's Jest configuration (U5), or a new package. T1.2 informs the choice.
 - Which Node version (T1.1).
-- Whether B1's JS-only test-artifact path and the OTA bundle path share their change detection or stay separate.
+- B1's JS-only test-artifact path and the OTA bundle path share their change detection (decided, §5); the remaining question is with the OTA subtask.
 
 ## 7. Risks
 
@@ -303,10 +331,10 @@ Each tier includes the ones before it. The software work above delivers most of 
 
 | Tier | Adds | What it unlocks |
 |---|---|---|
-| **0 — software only** | Everything in §5 on existing GitHub-hosted runners | Most of the build and Jest gain and most of the per-run e2e gain; fewer macOS runner minutes, since each push to `main` runs a 42–55 min iOS simulator build today |
+| **0 — software only** | Everything in §5 on existing GitHub-hosted runners | Most of the build and Jest gain and most of the per-run e2e gain; fewer macOS runner minutes, since each push to `main` runs a 48–58 min iOS simulator build today |
 | **1 — one attestation pair** | One current Pixel and one current iPhone on an existing Mac | Hardware attestation proven on current hardware nightly and at release, one pair at a time |
-| **2 — on-demand cloud emulators** | Android emulator pairs on Linux KVM runners, run nightly or on request | Emulator e2e in CI without a local host |
-| **3 — full hybrid** | A second device pair, the Mac mini as a self-hosted iOS runner, emulator e2e on every pull request | Two hardware runs at once, and e2e per pull request on both platforms |
+| **2 — emulators on hosted runners** | Android emulators on hosted runners, nightly or on request. Already running at no cost in `gate-smoke.yml` and `gate-ci.yml` | Emulator e2e in CI without a local host |
+| **3 — full hybrid** | A second device pair, a self-hosted iOS runner beyond the Mac mini's current gate role, emulator e2e on every pull request. Cost is about USD 5k against a stated budget of USD 50 now and up to USD 400 later, so it is not funded. It suits hermetic suites only: Farm-backed suites cannot run in parallel lanes on one Farm runner (E6) | Two hardware runs at once, and e2e per pull request on both platforms |
 
 Device rules: **buy devices provisioned with remote key provisioning (2023 or later)**, since the legacy Google attestation root expired on 2026-05-24 and a pre-RKP device can show only the tolerated "Hardware Verification Issue" state (`docs/HARDWARE_ATTESTATION_FLOW.md`, known limitation 5); **buy devices supported through at least 2030**; **buy devices that can stay on the charger** (a charge limit or bypass charging), and supervise iPhones with Apple Configurator.
 
@@ -326,11 +354,15 @@ The starting point is **Tier 0 plus one attestation pair**. Move up only when on
 - **Firebase Test Lab.** It runs instrumented tests in isolation with no external Appium driving and no coordination between devices, so it cannot run a two-device exchange.
 - **Self-run AWS or GCP for the whole pipeline.** EC2 Mac is a dedicated host with a 24-hour minimum allocation, so it cannot scale to zero per pull request, and GCP has no macOS offering. Spot Linux KVM instances inside Tier 2 are fine.
 - **A robotic tapper with a fingerprint replica.** It works only on Touch ID devices, Face ID cannot realistically be automated, and the passcode path in §4.2 proves the same key properties.
-- **Simulated biometrics as a substitute for the canary.** `adb emu finger touch` and `mobile: sendBiometricMatch` are reliable, but emulators and simulators cannot do hardware attestation. They stay for prompt-UX checks only.
+- **Simulated biometrics as a substitute for the canary.** `adb emu finger touch` and `mobile: sendBiometricMatch` are not enough: emulators and simulators cannot do hardware attestation, and the Android emulator cannot complete sign-in, because the user-verification prompt is biometric-only and the emulator's fingerprint token reads as expired (`e2e/gate/gate.sh`, the comment above `LEGS_ANDROID`). A1 reaches the attestation key only. They stay for prompt-UX checks only.
+- **Staging builds that stop waiting on tests (the former B7).** The `staging` branch is being retired, and a push to it ships its code to every tester, so a change there cannot be tried safely. The saving was small, about 5–6 minutes of about 51. Whatever replaces staging's build ordering belongs to the release-flow plan.
+- **Making the invitation readable in e2e builds (the former E5).** Exposing the invitation in release test builds was rejected on 2026-10-15. This is a product-owner call and is not reopened by this plan. The release-build alternative is the share-link path (`run-pair-ios.mjs`, the `pair-ios` gate leg), whose iOS clipboard read is still open (#605). The consequence is known: the gate has no Release-build exchange evidence today, and the gate lane rates that gap as the most valuable thing a reopened decision would buy. Only the product owner reopens it.
 - **Retiring protocol runners without the mutation check.** A Node test that has never failed proves nothing about the runner it replaces; §4.7 rule 2 is the constraint.
 
 ## 10. Review index
 
 | Companion | Author | What it settles |
 |---|---|---|
+| [2026-10-24-al.md](./test-acceleration-plan/2026-10-24-al.md) | Alberto | A review against what is built: gate and CI numbers measured since 2026-10-22, conflicts with earlier decisions, what the plan misses, stale facts, and a rollout order |
+| [2026-10-25-bam.md](./test-acceleration-plan/2026-10-25-bam.md) | Brendan | Disposition of each proposal in the 2026-10-24 review: what was adopted, dropped or left to the product owner, and what position each supersedes |
 | [2026-10-22-bam.md](./test-acceleration-plan/2026-10-22-bam.md) | Brendan | Sources; what was adopted, dropped and merged, including the earlier build-and-test acceleration plan this one absorbs; the cross-reference with the gate efficiency subtask, PR #238, PR #483 and the sibling plans, with conflicts and resolutions; review corrections; unverified claims; vendor and price research; open decisions |
