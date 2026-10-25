@@ -23,7 +23,7 @@ export const APPLY_ON_RETURN_IOS = false
 export interface ApplyOnReturnInput {
   /** How long the app was away, from bifold's return-locked notice. */
   awayMs: number
-  /** The bundle staged this session (hot-updater's check said UPDATE, or ROLLBACK for a withdrawn one), if any. */
+  /** The update hot-updater has staged for its next launch (stagedUpdate.ts), if any. */
   stagedBundleId?: string
   /** The bundle running now (HotUpdater.getBundleId()). */
   runningBundleId?: string

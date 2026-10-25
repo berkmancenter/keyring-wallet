@@ -23,6 +23,7 @@ import React from 'react'
 import { Platform } from 'react-native'
 
 import { decideApplyOnReturn } from './applyOnReturn'
+import { readStagedUpdateId } from './stagedUpdate'
 
 import { otaUpdateUrl } from './otaConfig'
 import { ensureRing } from './rings'
@@ -51,23 +52,29 @@ export const withOta = <P extends object>(
     return App
   }
 
-  // An update downloaded this session waits for the next cold start, or for a
-  // return to the PIN screen after a while away (applyOnReturn.ts).
-  let stagedBundleId: string | undefined
-  onReturnLocked((awayMs) => {
+  // A staged update waits for the next cold start, or for a return to the PIN
+  // screen after a while away (applyOnReturn.ts). Nothing is kept between
+  // returns: each reads what hot-updater has staged right then (stagedUpdate.ts).
+  onReturnLocked(async (awayMs) => {
+    const blockers = otaApplyBlockerReasons()
+    const stagedBundleId = await readStagedUpdateId(HotUpdater.getFingerprintHash()).catch(() => undefined)
     const decision = decideApplyOnReturn({
       awayMs,
       stagedBundleId,
       runningBundleId: HotUpdater.getBundleId(),
-      blockers: otaApplyBlockerReasons(),
+      blockers,
       platform: Platform.OS,
     })
-    if (!decision.apply) {
-      if (stagedBundleId) log('update waits', { id: stagedBundleId, reason: decision.reason })
-      return
-    }
-    log('applying on return', { id: stagedBundleId, awayMinutes: Math.round(awayMs / 60000) })
-    HotUpdater.reload().catch((error) => log('apply on return failed', { error: String(error) }))
+    // Logged every time, so a reader that stops finding the staged update (a
+    // hot-updater change to its metadata) shows here instead of failing silently.
+    log('return', {
+      staged: stagedBundleId ?? null,
+      awayMinutes: Math.round(awayMs / 60000),
+      apply: decision.apply,
+      ...(decision.apply ? {} : { reason: decision.reason }),
+    })
+    if (!decision.apply) return
+    await HotUpdater.reload().catch((error) => log('apply on return failed', { error: String(error) }))
   })
 
   return HotUpdater.wrap({
@@ -78,11 +85,8 @@ export const withOta = <P extends object>(
     // seen in the spike) checks timed out. A timeout is safe (the app runs what
     // it has) but should not be the norm.
     requestTimeout: 15000,
-    onUpdateProcessCompleted: ({ status, id, shouldForceUpdate }) => {
-      // A rollback stages too: a withdrawn update leaves sooner on a return.
-      if (status === 'UPDATE' || status === 'ROLLBACK') stagedBundleId = id
-      log('check finished', { status, id, shouldForceUpdate })
-    },
+    onUpdateProcessCompleted: ({ status, id, shouldForceUpdate }) =>
+      log('check finished', { status, id, shouldForceUpdate }),
     onError: (error) => log('update failed', { error: String(error) }),
   })(App) as React.ComponentType<P>
 }

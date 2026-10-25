@@ -1,11 +1,19 @@
+import { notifyReturnLocked } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
-import { Text } from 'react-native'
+import { Platform, Text } from 'react-native'
+import { exists, readFile } from 'react-native-fs'
 
 import { isOtaEnabled, otaUpdateUrl } from './otaConfig'
 import { otaLabel, OtaClient, readOtaStatus } from './otaStatus'
 import { DEFAULT_RING, ensureRing, isRing, setRing } from './rings'
 import { withOta } from './withOta'
+
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/docs',
+  exists: jest.fn(async () => false),
+  readFile: jest.fn(),
+}))
 
 const fakeStore = (initial: string) => {
   let cohort = initial
@@ -115,6 +123,66 @@ describe('withOta', () => {
       })
     )
     expect(log).toHaveBeenCalledWith('enabled', expect.objectContaining({ ring: DEFAULT_RING }))
+  })
+
+  describe('applying on a return', () => {
+    const FP = 'ed918b7940a829525a2edcc6036f01881d6dce3a'
+    const STAGED = '01a170f1-bf53-7586-8537-e480624f5e1a'
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+    const away = 31 * 60_000
+    let os: PropertyDescriptor | undefined
+
+    const wrapped = (log = jest.fn()) => {
+      jest.spyOn(HotUpdater, 'getCohort').mockReturnValue('ring2')
+      jest.spyOn(HotUpdater, 'getFingerprintHash').mockReturnValue(FP)
+      jest.spyOn(HotUpdater, 'getBundleId').mockReturnValue('01a16998-e09d-7e22-8440-98fab0992afd')
+      const reload = jest.spyOn(HotUpdater, 'reload').mockResolvedValue(undefined)
+      let options: { onUpdateProcessCompleted?: (r: unknown) => void } = {}
+      jest.spyOn(HotUpdater, 'wrap').mockImplementation((o: never) => {
+        options = o
+        return () => App
+      })
+      withOta(App, 'https://ota.example.org/hot-updater', log)
+      return { reload, log, completed: (r: unknown) => options.onUpdateProcessCompleted?.(r) }
+    }
+
+    beforeEach(() => {
+      os = Object.getOwnPropertyDescriptor(Platform, 'OS')
+      Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
+    })
+    afterEach(() => {
+      if (os) Object.defineProperty(Platform, 'OS', os)
+      ;(exists as jest.Mock).mockReset().mockResolvedValue(false)
+    })
+
+    it("does not reload on a bare 'UPDATE' event: an offered update is not a staged one", async () => {
+      const { reload, log, completed } = wrapped()
+      // hot-updater reports UPDATE as soon as an update is offered, before its download has done anything.
+      completed({ status: 'UPDATE', id: STAGED, shouldForceUpdate: false, message: null })
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({ staged: null, apply: false, reason: 'no update staged' })
+      )
+    })
+
+    it('reloads into the update hot-updater has staged, read from its metadata at the return', async () => {
+      ;(exists as jest.Mock).mockResolvedValue(true)
+      ;(readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify({
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+271_production`,
+          stagingBundleId: STAGED,
+          verificationPending: true,
+        })
+      )
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: STAGED, apply: true }))
+    })
   })
 
   it('runs without updates when the binary has no loader', () => {
