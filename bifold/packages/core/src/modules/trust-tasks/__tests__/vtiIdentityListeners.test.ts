@@ -320,6 +320,15 @@ describe('the listeners', () => {
   // finished held every later one. Every step now has a deadline, and a failed
   // listener schedules its own retry.
   const realSleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  /**
+   * Wait, in real time, until `done()` holds, up to a generous budget: a retry fires on the runner's clock, and a
+   * loaded runner can take far longer than the retry's few milliseconds. Asserting after a fixed sleep failed
+   * whenever the second try had not come round yet.
+   */
+  const eventually = async (done: () => boolean, budgetMs = 3_000) => {
+    const until = Date.now() + budgetMs
+    while (!done() && Date.now() < until) await realSleep(10)
+  }
 
   it('an identities read that never answers does not hold up the reconciles after it', async () => {
     const a = persona('a')
@@ -334,7 +343,7 @@ describe('the listeners', () => {
     await realSleep(60)
     // The next trigger reconciles at once, past the read that never answered.
     sharedMoves({ did: 'did:webvh:elsewhere', connected: true })
-    await realSleep(20)
+    await eventually(() => live(a.did))
     expect(calls).toBeGreaterThanOrEqual(2)
     expect(live(a.did)).toBe(true)
   })
@@ -355,7 +364,8 @@ describe('the listeners', () => {
     stops.push(stop)
     await realSleep(10)
     expect(live(a.did)).toBe(false)
-    await realSleep(80)
+    await eventually(() => live(a.did))
+    // Exactly once more: once it is open, nothing tries it again.
     expect(flaky).toHaveBeenCalledTimes(2)
     expect(live(a.did)).toBe(true)
   })
@@ -375,7 +385,8 @@ describe('the listeners', () => {
       deadlines: { openMs: 30 },
     })
     stops.push(stop)
-    await realSleep(120)
+    await eventually(() => live(a.did))
+    // Exactly once more: the hanging open was given up at its deadline, and the next one opened.
     expect(hanging).toHaveBeenCalledTimes(2)
     expect(live(a.did)).toBe(true)
   })
