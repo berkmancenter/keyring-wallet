@@ -1,6 +1,6 @@
 import { DidCommBasicMessageRepository, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { useAgent, useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useNavigation } from '@react-navigation/native'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -17,6 +17,7 @@ import InfoIcon from '../modules/vrc/components/InfoIcon'
 import { renderComposer, renderInputToolbar, renderSend } from '../components/chat'
 import ActionSlider from '../components/chat/ActionSlider'
 import MessageActions from '../components/chat/MessageActions'
+import { useChatAttended } from '../components/chat/useChatAttended'
 import { useComposerText } from '../components/chat/useComposerText'
 import { ToastType } from '../components/toast/BaseToast'
 import { deleteChatMessages } from '../modules/chat/history'
@@ -130,7 +131,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const connection = useConnectionById(connectionId) as DidCommConnectionRecord
   const basicMessages = useBasicMessagesByConnectionId(connectionId)
   const chatMessages = useChatMessagesByConnection(connection)
-  const _isFocused = useIsFocused()
+  const attended = useChatAttended()
   const { assertNetworkConnected, silentAssertConnectedNetwork } = useNetwork()
   const [showActionSlider, setShowActionSlider] = useState(false)
   const { ChatTheme: theme, Assets, ColorPalette } = useTheme()
@@ -196,24 +197,28 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const [actionTarget, setActionTarget] = useState<ExtendedChatMessage | null>(null)
   const closeActions = useCallback(() => setActionTarget(null), [])
 
-  // Received chat messages as they scroll into view, each reported once while this chat is open (plan §4.6, D4).
-  // FlatList takes onViewableItemsChanged once, so it reads the current chat through a ref.
-  const shownRef = useRef({ connectionId, agent, ids: new Set<string>() })
+  // Received chat messages as they scroll into view, each reported once while someone is looking at this chat
+  // (plan §4.6, D4). What is in view while nobody is (another screen over it, the app in the background) is
+  // reported when they come back. FlatList takes onViewableItemsChanged once, so it reads the current chat through
+  // a ref.
+  const shownRef = useRef({ connectionId, agent, attended, viewable: [] as ViewToken[], ids: new Set<string>() })
   if (shownRef.current.connectionId !== connectionId) {
-    shownRef.current = { connectionId, agent, ids: new Set<string>() }
+    shownRef.current = { connectionId, agent, attended, viewable: [], ids: new Set<string>() }
   }
   shownRef.current.agent = agent
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+  shownRef.current.attended = attended
+  const reportShown = useRef(() => {
     const current = shownRef.current
+    if (!current.attended || !current.agent) return
     const fresh: string[] = []
-    for (const token of viewableItems) {
+    for (const token of current.viewable) {
       const item = token.item as ExtendedChatMessage | undefined
       if (!item?.chatEventId || item.kind === 'system' || item.user?._id !== Role.them) continue
       if (current.ids.has(item.chatEventId)) continue
       current.ids.add(item.chatEventId)
       fresh.push(item.chatEventId)
     }
-    if (fresh.length > 0 && current.agent) {
+    if (fresh.length > 0) {
       // Marked before the call so a scroll during it does not report twice; un-marked if it fails, so the next
       // scroll retries instead of leaving a disappearing message's clock unstarted until the chat is reopened.
       void chatEventsShown(current.agent, current.connectionId, fresh).catch(() => {
@@ -221,6 +226,14 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
       })
     }
   }).current
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    shownRef.current.viewable = viewableItems
+    reportShown()
+  }).current
+  // ...and when the agent arrives, for what came into view before it did.
+  useEffect(() => {
+    if (attended) reportShown()
+  }, [attended, agent, reportShown])
 
   useEffect(() => {
     navigation.setOptions({
@@ -239,8 +252,10 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     })
   }, [navigation, theirLabel, connection, connectionId])
 
-  // when chat is open, mark messages as seen
+  // While someone is looking at the chat, mark its messages seen, and again when they come back to it: a message
+  // that arrives under another screen, or with the app in the background, stays unread until then.
   useEffect(() => {
+    if (!attended) return
     basicMessages.forEach((msg) => {
       const meta = msg.metadata.get(BasicMessageMetadata.customMetadata) as basicMessageCustomMetadata
       if (agent && !meta?.seen) {
@@ -253,7 +268,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     // keyring/chat events too, again whenever the timeline changes (one may have just arrived): only the unseen
     // are written, so this is free once they are.
     if (agent && connectionId) void markChatEventsSeen(agent, connectionId).catch(() => undefined)
-  }, [basicMessages, chatMessages, agent, connectionId])
+  }, [attended, basicMessages, chatMessages, agent, connectionId])
 
   // A chat event to a contact that speaks chat, a plain BasicMessage otherwise (sendChatText decides). gifted-chat
   // attaches the reply target it was showing, and clears it after this.
