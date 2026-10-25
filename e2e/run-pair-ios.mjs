@@ -202,13 +202,23 @@ async function shows(d, text) {
   return d.$(`-ios predicate string:label CONTAINS "${text}" AND visible == 1`).isExisting();
 }
 
+/**
+ * Whether a message with `text` is in the open chat at all, on screen or scrolled off it (not waited for). Disappearing
+ * checks use this, not shows(): with a photo bubble in the transcript an older message can sit off screen, which
+ * shows() would read as gone (a false pass) or as missing from the control (a false fail). gifted-chat virtualises old
+ * rows, but this transcript (about eight items) is well inside its first render window.
+ */
+async function inChat(d, text) {
+  return d.$(`-ios predicate string:label CONTAINS "${text}"`).isExisting();
+}
+
 /** Poll both phones until `text` has gone from both, or the budget is spent; returns when each lost it (ms), or null. */
 async function goneFromBoth(a, b, text, budgetMs = DISAPPEAR_BUDGET_MS) {
   const start = Date.now();
   const gone = { a: null, b: null };
   for (const until = start + budgetMs; Date.now() < until && (gone.a === null || gone.b === null); await sleep(5000)) {
-    if (gone.a === null && !(await shows(a, text))) gone.a = Date.now() - start;
-    if (gone.b === null && !(await shows(b, text))) gone.b = Date.now() - start;
+    if (gone.a === null && !(await inChat(a, text))) gone.a = Date.now() - start;
+    if (gone.b === null && !(await inChat(b, text))) gone.b = Date.now() - start;
   }
   return gone;
 }
@@ -414,7 +424,7 @@ try {
     });
     await rows.row("pair-timer-gone", async () => {
       const gone = await goneFromBoth(a, b, TIMED);
-      const kept = (await shows(a, "gate: react to this")) && (await shows(b, "gate: react to this")) && (await shows(a, "gate: picked")) && (await shows(b, "gate: picked"));
+      const kept = (await inChat(a, "gate: react to this")) && (await inChat(b, "gate: react to this")) && (await inChat(a, "gate: picked")) && (await inChat(b, "gate: picked"));
       await screenshot(b, "pair-timer-gone").catch(() => undefined);
       return {
         ok: gone.a !== null && gone.b !== null && kept,
