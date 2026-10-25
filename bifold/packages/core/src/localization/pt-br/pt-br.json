@@ -2516,5 +2516,22 @@
     "ContinuityBody": "{{asker}} pede que você confirme que é a mesma pessoa que o seu contato anterior {{earlier}}. Se você confirmar, o telefone dessa pessoa mostra os dois como um só contato. Nada mais é compartilhado.",
     "ContinuityConfirm": "Confirmar",
     "ContinuityNotNow": "Agora não"
+  },
+  "Emoji": {
+    "Search": "Pesquisar emoji",
+    "ClearSearch": "Limpar pesquisa",
+    "Recent": "Recentes",
+    "NoResults": "Nenhum emoji encontrado",
+    "Group": {
+      "SmileysEmotion": "Carinhas e emoções",
+      "PeopleBody": "Pessoas e corpo",
+      "AnimalsNature": "Animais e natureza",
+      "FoodDrink": "Comidas e bebidas",
+      "TravelPlaces": "Viagens e lugares",
+      "Activities": "Atividades",
+      "Objects": "Objetos",
+      "Symbols": "Símbolos",
+      "Flags": "Bandeiras"
+    }
   }
 }

@@ -2607,5 +2607,22 @@
     "ContinuityBody": "{{asker}} vous demande de confirmer que vous êtes la même personne que votre contact précédent {{earlier}}. Si vous confirmez, son téléphone affiche les deux comme un seul contact. Rien d'autre n'est partagé.",
     "ContinuityConfirm": "Confirmer",
     "ContinuityNotNow": "Pas maintenant"
+  },
+  "Emoji": {
+    "Search": "Rechercher un emoji",
+    "ClearSearch": "Effacer la recherche",
+    "Recent": "Récents",
+    "NoResults": "Aucun emoji trouvé",
+    "Group": {
+      "SmileysEmotion": "Smileys et émotions",
+      "PeopleBody": "Personnes et corps",
+      "AnimalsNature": "Animaux et nature",
+      "FoodDrink": "Nourriture et boissons",
+      "TravelPlaces": "Voyages et lieux",
+      "Activities": "Activités",
+      "Objects": "Objets",
+      "Symbols": "Symboles",
+      "Flags": "Drapeaux"
+    }
   }
 }

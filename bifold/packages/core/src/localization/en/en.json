@@ -2676,5 +2676,22 @@
     "ContinuityBody": "{{asker}} asks you to confirm that you are the same person as your earlier contact {{earlier}}. If you confirm, their phone shows the two as one contact. Nothing else is shared.",
     "ContinuityConfirm": "Confirm",
     "ContinuityNotNow": "Not now"
+  },
+  "Emoji": {
+    "Search": "Search emoji",
+    "ClearSearch": "Clear search",
+    "Recent": "Recent",
+    "NoResults": "No emoji found",
+    "Group": {
+      "SmileysEmotion": "Smileys & emotion",
+      "PeopleBody": "People & body",
+      "AnimalsNature": "Animals & nature",
+      "FoodDrink": "Food & drink",
+      "TravelPlaces": "Travel & places",
+      "Activities": "Activities",
+      "Objects": "Objects",
+      "Symbols": "Symbols",
+      "Flags": "Flags"
+    }
   }
 }
