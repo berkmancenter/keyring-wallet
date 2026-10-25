@@ -140,16 +140,14 @@ describe('withOta', () => {
       jest.spyOn(HotUpdater, 'getDefaultChannel').mockReturnValue('production')
       jest.spyOn(HotUpdater, 'getBundleId').mockReturnValue('01a16998-e09d-7e22-8440-98fab0992afd')
       const reload = jest.spyOn(HotUpdater, 'reload').mockResolvedValue(undefined)
-      let options: { onUpdateProcessCompleted?: (r: unknown) => void } = {}
-      jest.spyOn(HotUpdater, 'wrap').mockImplementation((o: never) => {
-        options = o
-        return () => App
-      })
+      const wrap = jest.spyOn(HotUpdater, 'wrap').mockReturnValue(() => App)
       withOta(App, 'https://ota.example.org/hot-updater', log)
+      // The options withOta handed hot-updater, including its update-check callback.
+      const options = wrap.mock.calls[0][0] as { onUpdateProcessCompleted?: (response: unknown) => void }
       return {
         reload,
         log,
-        completed: (r: unknown) => options.onUpdateProcessCompleted?.(r),
+        completed: (response: unknown) => options.onUpdateProcessCompleted?.(response),
       }
     }
 
