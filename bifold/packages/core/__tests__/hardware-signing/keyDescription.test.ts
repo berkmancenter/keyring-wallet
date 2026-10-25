@@ -9,7 +9,12 @@ jest.mock('@bifold/react-native-attestation', () => ({
 }))
 
 import { contentHashBase64 } from '../../src/hardware-signing/binding'
-import { isLeafNativeChecked, readLeaf, userAuthenticationRefusal } from '../../src/hardware-signing/keyDescription'
+import {
+  isLeafNativeChecked,
+  leafCheckRefusal,
+  readLeaf,
+  userAuthenticationRefusal,
+} from '../../src/hardware-signing/keyDescription'
 import type { HardwareAttestationEvidence } from '../../src/hardware-signing/types'
 import { HardwareSignatureVerifier } from '../../src/hardware-signing/verify'
 import {
@@ -69,6 +74,15 @@ describe('reading an Android key description', () => {
     expect(isLeafNativeChecked(leaf, '')).toBe(false)
     expect(isLeafNativeChecked(leaf, undefined)).toBe(false)
   })
+
+  test('a leaf that cannot be tied to native’s says which of three ways, and one that can says nothing', () => {
+    const leaf = readLeaf(AUTH_REQUIRED)!
+    expect(leafCheckRefusal(undefined, spkiOf(AUTH_REQUIRED))).toMatch(/could not be read/)
+    expect(leafCheckRefusal(leaf, undefined)).toMatch(/reported no certificate key/)
+    expect(leafCheckRefusal(leaf, '')).toMatch(/reported no certificate key/)
+    expect(leafCheckRefusal(leaf, spkiOf(NO_AUTH_REQUIRED))).toMatch(/not the certificate verified/)
+    expect(leafCheckRefusal(leaf, spkiOf(AUTH_REQUIRED))).toBeUndefined()
+  })
 })
 
 describe('what the verifier says of an Android-attested card', () => {
@@ -125,6 +139,20 @@ describe('what the verifier says of an Android-attested card', () => {
     const result = await verify(evidence(AUTH_REQUIRED))
     expect(result.valid).toBe(false)
     expect(result.error).toMatch(/not the certificate verified/)
+  })
+
+  test('native validating the chain but reporting no key is refused, and says so', async () => {
+    mockVerifyHardwareEvidence.mockResolvedValue(native(true, undefined))
+    const result = await verify(evidence(AUTH_REQUIRED))
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/reported no certificate key/)
+  })
+
+  test('a first certificate that cannot be read is refused, and says so', async () => {
+    mockVerifyHardwareEvidence.mockResolvedValue(native(true, spkiOf(AUTH_REQUIRED)))
+    const result = await verify(evidence('not a certificate'))
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/could not be read/)
   })
 
   test('a chain native refused is never read: its own failure stands', async () => {

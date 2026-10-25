@@ -34,7 +34,7 @@
 import { verifyHardwareEvidence, type NativeVerificationResult } from '@bifold/react-native-attestation'
 
 import { CONTENT_BINDING_MISMATCH, checkEmbeddedContentHash, contentHashBase64 } from './binding'
-import { isLeafNativeChecked, readLeaf, userAuthenticationRefusal } from './keyDescription'
+import { leafCheckRefusal, readLeaf, userAuthenticationRefusal } from './keyDescription'
 import { chainVerificationTime } from './signingTime'
 import type { HardwareAttestationEvidence, HardwareSigningLogger, SignedPayloadAttestation } from './types'
 
@@ -147,10 +147,7 @@ export class HardwareSignatureVerifier {
       if (nativeResult.valid && evidence.attestation.format === 'android-key-attestation-v3') {
         const certificateChain = evidence.attestation.certificateChain
         const leaf = readLeaf(certificateChain[0] ?? '')
-        const refusal =
-          leaf && isLeafNativeChecked(leaf, nativeResult.leafPublicKeyBase64)
-            ? userAuthenticationRefusal(leaf)
-            : 'the key description read is not the certificate verified'
+        const refusal = leafCheckRefusal(leaf, nativeResult.leafPublicKeyBase64) ?? userAuthenticationRefusal(leaf)
         if (refusal) return bindingFailure(refusal)
       }
 

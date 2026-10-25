@@ -174,6 +174,21 @@ export function isLeafNativeChecked(leaf: LeafFacts, leafPublicKeyBase64: string
 }
 
 /**
+ * Why the leaf read cannot be tied to the certificate native validated, or undefined when it is that one. Three cases
+ * are told apart, so a refused card says which: the leaf could not be read at all; native reported no key to compare
+ * it with; or native reported a different key.
+ */
+export function leafCheckRefusal(
+  leaf: LeafFacts | undefined,
+  leafPublicKeyBase64: string | undefined
+): string | undefined {
+  if (!leaf) return 'the attestation certificate could not be read'
+  if (!leafPublicKeyBase64) return 'the native verifier reported no certificate key to compare the key description with'
+  if (!isLeafNativeChecked(leaf, leafPublicKeyBase64)) return 'the key description read is not the certificate verified'
+  return undefined
+}
+
+/**
  * Why the key cannot earn a hardware shield, or undefined when it requires its owner's authentication, enforced in
  * secure hardware: a TEE or StrongBox attestation whose hardware-enforced list names a user authentication type and
  * that says nowhere that no authentication is needed. Anything unreadable fails closed.
