@@ -51,7 +51,7 @@ on:
         options: [publish, promote, tamper, crash, mismatch, disable, cleanup]
         default: publish
       bundle_id:
-        description: 'disable and promote only: the bundle to withdraw or widen'
+        description: 'disable and promote only: the bundle to withdraw or widen; promote with platform both: ios:<id>,android:<id>'
         type: string
         default: ''
       to_ring:
@@ -105,7 +105,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ fromJSON(inputs.platform == 'both' && '["ios","android"]' || format('["{0}"]', inputs.platform)) }}
+        # A promote of both platforms is one job, so its checks are all-or-nothing
+        # (scripts/ota/promote.mjs --bundles); it needs no macOS runner.
+        platform: ${{ fromJSON(inputs.platform == 'both' && (inputs.action == 'promote' && '["both"]' || '["ios","android"]') || format('["{0}"]', inputs.platform)) }}
     runs-on: ${{ matrix.platform == 'ios' && 'macos-26' || 'ubuntu-22.04' }}
     environment: ota
     timeout-minutes: 60
@@ -161,7 +163,14 @@ jobs:
                 disable | promote)
                   [ -n "$BUNDLE_ID" ] || err "$ACTION needs bundle_id"
                   [ -z "$BUILD" ] || err "$ACTION takes bundle_id, not build"
-                  [ "$PLATFORM" != both ] || err "$ACTION needs the bundle's own platform (ios or android), not both" ;;
+                  if [ "$PLATFORM" = both ]; then
+                    # Each platform keeps its own bundle id: ios:<id>,android:<id>.
+                    [ "$ACTION" = promote ] || err "disable takes one bundle: its own platform (ios or android), not both"
+                    [[ "$BUNDLE_ID" =~ ^(ios|android):[0-9a-f-]+,(ios|android):[0-9a-f-]+$ ]] \
+                      || err "promote with platform both takes bundle_id ios:<id>,android:<id> (got '$BUNDLE_ID')"
+                  else
+                    [[ "$BUNDLE_ID" != *:* ]] || err "a single-platform $ACTION takes a plain bundle id (got '$BUNDLE_ID')"
+                  fi ;;
                 *) err "$CHANNEL takes only the publish, disable and promote actions (got $ACTION)" ;;
               esac
               # staging.yaml writes vars.OTA_CHANNEL (default production) into store builds.
@@ -358,13 +367,19 @@ jobs:
           TO_RING: ${{ inputs.to_ring }}
           # Hours a bundle must have been published before it is promoted. A repository
           # variable, as the dispatch has no room for an eleventh input: 0 while the
-          # audience is beta testers is set there on purpose; unset, it is 24.
-          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS || '24' }}
+          # audience is beta testers is set there on purpose. Passed raw, so '0' arrives
+          # as '0'; unset arrives empty, and promote.mjs reads that as 24.
+          SOAK_HOURS: ${{ vars.OTA_PROMOTE_SOAK_HOURS }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           check=()
           [ "$DRY_RUN" = true ] && check=(--check)
-          node scripts/ota/promote.mjs --channel "$CHANNEL" --platform "$PLATFORM" --bundle-id "$BUNDLE_ID" --to "$TO_RING" --soak-hours "$SOAK_HOURS" "${check[@]}"
+          if [ "$PLATFORM" = both ]; then
+            target=(--bundles "$BUNDLE_ID")
+          else
+            target=(--platform "$PLATFORM" --bundle-id "$BUNDLE_ID")
+          fi
+          node scripts/ota/promote.mjs --channel "$CHANNEL" "${target[@]}" --to "$TO_RING" --soak-hours "$SOAK_HOURS" "${check[@]}"
 
       # production/preview: withdraw one bundle. A dry run checks it is there.
       - name: Withdraw (${{ inputs.channel }})

@@ -85,6 +85,11 @@ back the 24 h, never no soak. ring1
 targets ring 0 and 1; ring2 targets all three. **Ring 1 has no members yet** (no
 install can join it until the "Early updates" opt-in ships), so a bundle may go
 from ring 0 straight to ring 2. A dry run checks and changes nothing.
+With `platform: both`, `bundle_id` is `ios:<id>,android:<id>` (each platform
+keeps its own bundle) and the run is one job: every check on both bundles comes
+first, and if either fails neither is widened and the run names which. The two
+updates then run one after the other; if the second fails after the first went
+through, the run says which one widened, and `disable` undoes it.
 After the update it re-reads the record and fails the run unless the record
 shows the new ring with a 0 rollout. **A failed check doesn't undo the
 widening:** the bundle may already be wider, so recover with `disable`, not by
