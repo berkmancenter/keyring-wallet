@@ -1,11 +1,10 @@
 {
-  "generatedFrom": "9c9136b47c94489ec9982602a04f2748232b1dfa",
+  "generatedFrom": "a3656d1a679ed23a2883f31ef2952d52bc2c36af",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
     "Accept": ["src/screens/Terms.tsx"],
     "AcceptCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx",
       "src/modules/openid/screens/OpenIDCredentialOffer.tsx",
       "src/screens/CredentialOffer.tsx"
     ],
@@ -249,6 +248,17 @@
     "CardStatusNoticeTryAgain": ["src/modules/trust-tasks/screens/cardStatusNotice.tsx"],
     "Change Pin": ["src/screens/Settings.tsx"],
     "ChangePIN": ["src/screens/PINChange.tsx"],
+    "ChatActionCopy": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionDeleteForMe": ["src/components/chat/Chat.ids.ts"],
+    "ChatActionReply": ["src/components/chat/Chat.ids.ts"],
+    "ChatComposerEmojiButton": ["src/components/chat/Chat.ids.ts"],
+    "ChatHeaderTitle": ["src/modules/vrc/components/ChatHeaderTitle.tsx"],
+    "ChatMessageActions": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageActionsBackdrop": ["src/components/chat/Chat.ids.ts"],
+    "ChatMessageReactions": ["src/components/chat/Chat.ids.ts"],
+    "ChatReaction": ["src/components/chat/Chat.ids.ts"],
+    "ChatReactionBar": ["src/components/chat/Chat.ids.ts"],
+    "ChatReactionBarMore": ["src/components/chat/Chat.ids.ts"],
     "ClearPastedUrl": ["src/screens/PasteUrl.tsx"],
     "ClearTestContactsButton": ["src/screens/Developer.tsx"],
     "Close": [
@@ -337,6 +347,10 @@
     "ContactMergeYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactMergedByYou": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactOnTheWay": ["src/screens/CredentialOfferAccept.tsx"],
+    "ContactPhoto": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoImage": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoInitial": ["src/modules/vrc/components/ContactPhoto.tsx"],
+    "ContactPhotoLogo": ["src/modules/vrc/components/ContactPhoto.tsx"],
     "ContactRemove": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMerged": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMergedBack": ["src/modules/vrc/screens/ContactDetails.tsx"],
@@ -344,6 +358,9 @@
     "ContactRemoveMergedConfirm": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactRemoveMergedSeparate": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "ContactSeparate": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactSeparateBack": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactSeparateConfirm": ["src/modules/vrc/components/ContactMergeSection.tsx"],
+    "ContactSeparateYes": ["src/modules/vrc/components/ContactMergeSection.tsx"],
     "ContactViewMessages": ["src/modules/vrc/screens/ContactDetails.tsx"],
     "Contacts": ["src/navigators/TabStack.tsx"],
     "ContactsList": ["src/modules/vrc/screens/WhatAreContacts.tsx"],
@@ -427,7 +444,6 @@
     "DataRetention": ["src/screens/Settings.tsx"],
     "Decline": ["src/screens/ProofRequest.tsx"],
     "DeclineCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx",
       "src/modules/openid/screens/OpenIDCredentialOffer.tsx",
       "src/screens/CredentialOffer.tsx"
     ],
@@ -453,9 +469,6 @@
       "src/components/modals/AppGuideModal.tsx",
       "src/components/modals/DismissiblePopupModal.tsx",
       "src/components/modals/ImageModal.tsx"
-    ],
-    "DismissCredentialOffer": [
-      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
     ],
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
     "E2EAutoLockMinutes": ["src/components/misc/E2EClockRows.tsx"],
@@ -744,6 +757,13 @@
     "Okay": ["src/components/misc/InfoBox.tsx", "src/components/modals/DismissiblePopupModal.tsx"],
     "OpenIDNotificationPressable": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
     "OpenIDNotificationXButton": ["src/modules/openid/features/notifications/OpenIDNotificationCard.tsx"],
+    "OpenIDProofDecline": [
+      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
+    ],
+    "OpenIDProofDismiss": [
+      "src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"
+    ],
+    "OpenIDProofSend": ["src/modules/openid/features/OpenIDProofPresentation/components/OpenIDProofRequestFooter.tsx"],
     "PassOpenClose": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "PassOpenLift": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "PassStack": ["src/modules/trust-tasks/components/PassStack.tsx"],
@@ -1251,6 +1271,27 @@
   "derived": [
     {
       "src/components/chat/ActionSlider.tsx": "action.text"
+    },
+    {
+      "src/components/chat/ChatMessage.tsx": "ChatIds.reactions"
+    },
+    {
+      "src/components/chat/MessageActions.tsx": "ChatIds.actions"
+    },
+    {
+      "src/components/chat/MessageActions.tsx": "ChatIds.actionsBackdrop"
+    },
+    {
+      "src/components/chat/MessageActions.tsx": "testID"
+    },
+    {
+      "src/components/chat/ReactionBar.tsx": "ChatIds.reactionBar"
+    },
+    {
+      "src/components/chat/ReactionBar.tsx": "ChatIds.reactionMore"
+    },
+    {
+      "src/components/chat/ReactionBar.tsx": "`${ChatIds.reaction}-${index}`"
     },
     {
       "src/components/misc/CredentialCard11ActionFooter.tsx": "testID"
