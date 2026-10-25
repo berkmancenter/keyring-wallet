@@ -1,4 +1,4 @@
-import { onReturnLocked } from '@bifold/core'
+import { notifyReturnLocked, resetOtaReturnLockedListeners } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
 import { Platform, Text } from 'react-native'
@@ -9,9 +9,6 @@ import { otaLabel, OtaClient, readOtaStatus } from './otaStatus'
 import { DEFAULT_RING, ensureRing, isRing, setRing } from './rings'
 import { withOta } from './withOta'
 
-// withOta subscribes for the life of the process and never unsubscribes, so each test
-// drives the listener it registered, never ones earlier tests left behind.
-jest.mock('@bifold/core', () => ({ ...jest.requireActual('@bifold/core'), onReturnLocked: jest.fn() }))
 jest.mock('react-native-device-info', () => ({ getBuildNumber: () => '271' }))
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/docs',
@@ -144,11 +141,6 @@ describe('withOta', () => {
       jest.spyOn(HotUpdater, 'getBundleId').mockReturnValue('01a16998-e09d-7e22-8440-98fab0992afd')
       const reload = jest.spyOn(HotUpdater, 'reload').mockResolvedValue(undefined)
       let options: { onUpdateProcessCompleted?: (r: unknown) => void } = {}
-      let returned: ((awayMs: number) => unknown) | undefined
-      ;(onReturnLocked as jest.Mock).mockImplementation((listener: (awayMs: number) => unknown) => {
-        returned = listener
-        return () => undefined
-      })
       jest.spyOn(HotUpdater, 'wrap').mockImplementation((o: never) => {
         options = o
         return () => App
@@ -158,11 +150,13 @@ describe('withOta', () => {
         reload,
         log,
         completed: (r: unknown) => options.onUpdateProcessCompleted?.(r),
-        returnLocked: (awayMs: number) => returned?.(awayMs),
       }
     }
 
     beforeEach(() => {
+      // withOta subscribes for the life of the process; each test starts with no
+      // listener, so the real notifyReturnLocked reaches only the one it registers.
+      resetOtaReturnLockedListeners()
       os = Object.getOwnPropertyDescriptor(Platform, 'OS')
       Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
     })
@@ -172,10 +166,10 @@ describe('withOta', () => {
     })
 
     it("does not reload on a bare 'UPDATE' event: an offered update is not a staged one", async () => {
-      const { reload, log, completed, returnLocked } = wrapped()
+      const { reload, log, completed } = wrapped()
       // hot-updater reports UPDATE as soon as an update is offered, before its download has done anything.
       completed({ status: 'UPDATE', id: STAGED, shouldForceUpdate: false, message: null })
-      returnLocked(away)
+      notifyReturnLocked(away)
       await flush()
       expect(reload).not.toHaveBeenCalled()
       expect(log).toHaveBeenCalledWith(
@@ -193,8 +187,8 @@ describe('withOta', () => {
           verificationPending: true,
         })
       )
-      const { reload, log, returnLocked } = wrapped()
-      returnLocked(away)
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
       await flush()
       expect(reload).not.toHaveBeenCalled()
       expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: null, apply: false }))
@@ -209,8 +203,8 @@ describe('withOta', () => {
           verificationPending: true,
         })
       )
-      const { reload, log, returnLocked } = wrapped()
-      returnLocked(away)
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
       await flush()
       expect(reload).toHaveBeenCalledTimes(1)
       expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: STAGED, apply: true }))
