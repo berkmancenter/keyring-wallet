@@ -63,6 +63,9 @@ export const withOta = <P extends object>(
       fingerprint: HotUpdater.getFingerprintHash(),
       appVersion: HotUpdater.getAppVersion(),
       buildNumber: getBuildNumber(),
+      // The build's own channel, as the natives compose the key, not a channel
+      // switched at runtime: with that, no key would ever match, and
+      // apply-on-return would stop silently (the log would read staged: null).
       channel: HotUpdater.getDefaultChannel(),
     })
     const stagedBundleId = await readStagedUpdateId(isolationKey).catch(() => undefined)
