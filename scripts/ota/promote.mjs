@@ -7,6 +7,14 @@
  *
  *   node scripts/ota/promote.mjs --channel production --platform ios --bundle-id <id> --to ring2 \
  *     [--soak-hours N] [--check]
+ *   node scripts/ota/promote.mjs --channel production --bundles ios:<id>,android:<id> --to ring2 ...
+ *
+ * With --bundles, each platform's bundle is checked first, every check on each;
+ * if any fails, none is widened and the run names which one failed. Only then
+ * are they widened, one after another. That second step can't be atomic: if a
+ * later update fails after an earlier one went through, the run says which one
+ * widened, and recovery is `disable` on it (or re-running the promote, which
+ * refuses the one already wide).
  *
  * A phone takes a bundle when its ring is in the bundle's target cohorts
  * (isCohortEligibleForUpdate in @hot-updater/core). Ring names are not numeric
@@ -69,6 +77,33 @@ export const checkPromote = (bundle, { channel, platform, bundleId, to, soakHour
   return { ok: true, from, hours }
 }
 
+/** The soak from its raw form: unset or empty (an unset repository variable) is the default; '0' is 0. */
+export const soakHoursOf = (value) => (value === undefined || value === '' ? DEFAULT_SOAK_HOURS : Number(value))
+
+/** `ios:<id>,android:<id>` (either order, each platform once) → [{ platform, bundleId }]. */
+export const parseBundles = (value) => {
+  const pairs = String(value ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [platform, bundleId, extra] = part.split(':')
+      if (extra !== undefined || !['ios', 'android'].includes(platform) || !bundleId) {
+        throw new Error(`--bundles takes ios:<id>,android:<id> (got '${part}')`)
+      }
+      return { platform, bundleId }
+    })
+  if (pairs.length === 0) throw new Error('--bundles names no bundle')
+  if (new Set(pairs.map((p) => p.platform)).size !== pairs.length) throw new Error('--bundles names a platform twice')
+  return pairs
+}
+
+/** Every bundle's check, and whether all passed (nothing is widened unless they did). */
+export const checkPromoteAll = (records, targets, common) => {
+  const results = targets.map((t, i) => ({ ...t, ...checkPromote(records[i], { ...common, ...t }) }))
+  return { ok: results.every((r) => r.ok), results }
+}
+
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../app')
 
 const cli = (...args) =>
@@ -80,42 +115,74 @@ const show = (bundleId) => {
   return run.status === 0 ? JSON.parse(run.stdout) : null
 }
 
+const widen = (bundleId, to, channel) => {
+  const run = cli('bundle', 'update', bundleId, '--target-cohorts', RING_TARGETS[to].join(','), '-y')
+  if (run.status !== 0) throw new Error(`hot-updater bundle update failed for ${bundleId} (exit ${run.status})`)
+  const after = show(bundleId)
+  if (!after || ringOf(after.targetCohorts) !== to || (after.rolloutCohortCount ?? 0) !== 0) {
+    throw new Error(`${bundleId} does not read ${to} with a 0 rollout after the update`)
+  }
+  console.log(`promote: ${bundleId} now reaches ${RING_TARGETS[to].join(', ')} on ${channel}`)
+}
+
 const main = () => {
   const { values } = parseArgs({
     options: {
       channel: { type: 'string' },
       platform: { type: 'string' },
       'bundle-id': { type: 'string' },
+      bundles: { type: 'string' },
       to: { type: 'string' },
-      'soak-hours': { type: 'string', default: String(DEFAULT_SOAK_HOURS) },
+      // Empty (an unset repository variable) is the default, not 0.
+      'soak-hours': { type: 'string', default: '' },
       check: { type: 'boolean', default: false },
     },
   })
-  const target = {
+  const common = {
     channel: values.channel,
-    platform: values.platform,
-    bundleId: values['bundle-id'],
     to: values.to,
-    soakHours: Number(values['soak-hours'] === '' ? DEFAULT_SOAK_HOURS : values['soak-hours']),
+    soakHours: soakHoursOf(values['soak-hours']),
   }
-  if (!target.bundleId) throw new Error('--bundle-id is required')
-  if (!['ios', 'android'].includes(target.platform)) throw new Error(`--platform must be ios or android (got ${target.platform})`)
+  let targets
+  if (values.bundles !== undefined) {
+    if (values['bundle-id'] || values.platform) throw new Error('--bundles takes the place of --platform and --bundle-id')
+    targets = parseBundles(values.bundles)
+  } else {
+    if (!values['bundle-id']) throw new Error('--bundle-id is required')
+    if (!['ios', 'android'].includes(values.platform)) {
+      throw new Error(`--platform must be ios or android (got ${values.platform})`)
+    }
+    targets = [{ platform: values.platform, bundleId: values['bundle-id'] }]
+  }
 
-  const before = checkPromote(show(target.bundleId), target)
-  if (!before.ok) throw new Error(`${before.reason}; refusing`)
-  console.log(
-    `promote: ${target.bundleId} is an enabled ${target.channel} ${target.platform} bundle at ${before.from}, ` +
-      `published ${before.hours.toFixed(1)} h ago`,
+  const { ok, results } = checkPromoteAll(
+    targets.map((t) => show(t.bundleId)),
+    targets,
+    common,
   )
-  if (values.check) return console.log(`promote: --check, nothing changed (would widen to ${target.to})`)
-
-  const run = cli('bundle', 'update', target.bundleId, '--target-cohorts', RING_TARGETS[target.to].join(','), '-y')
-  if (run.status !== 0) throw new Error(`hot-updater bundle update failed (exit ${run.status})`)
-  const after = show(target.bundleId)
-  if (!after || ringOf(after.targetCohorts) !== target.to || (after.rolloutCohortCount ?? 0) !== 0) {
-    throw new Error(`${target.bundleId} does not read ${target.to} with a 0 rollout after the update`)
+  for (const r of results) {
+    console.log(
+      r.ok
+        ? `promote: ${r.platform} ${r.bundleId} is an enabled ${common.channel} bundle at ${r.from}, published ${r.hours.toFixed(1)} h ago`
+        : `promote: ${r.platform} ${r.bundleId}: ${r.reason}`,
+    )
   }
-  console.log(`promote: ${target.bundleId} now reaches ${RING_TARGETS[target.to].join(', ')} on ${target.channel}`)
+  if (!ok) {
+    const failed = results.filter((r) => !r.ok).map((r) => `${r.platform} (${r.reason})`)
+    throw new Error(`refusing; nothing widened: ${failed.join('; ')}`)
+  }
+  if (values.check) return console.log(`promote: --check, nothing changed (would widen to ${common.to})`)
+
+  const widened = []
+  for (const t of targets) {
+    try {
+      widen(t.bundleId, common.to, common.channel)
+      widened.push(`${t.platform} ${t.bundleId}`)
+    } catch (e) {
+      const done = widened.length ? `already widened: ${widened.join(', ')} (disable to undo)` : 'nothing widened'
+      throw new Error(`${t.platform}: ${e.message}; ${done}`)
+    }
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

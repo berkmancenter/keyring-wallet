@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { checkPromote, publishedAt, ringOf } from './promote.mjs'
+import { checkPromote, checkPromoteAll, parseBundles, publishedAt, ringOf, soakHoursOf } from './promote.mjs'
 
 // 01a16998-e09d-…: published 2026-10-23T16:37Z (its UUIDv7 time).
 const ID = '01a16998-e09d-7e22-8440-98fab0992afd'
@@ -72,4 +72,54 @@ test('wrong channel, platform, id, or destination is refused', () => {
   assert.match(checkPromote(bundle({ platform: 'android' }), target()).reason, /android bundle, not ios/)
   assert.match(checkPromote(null, target()).reason, /has no bundle/)
   assert.match(checkPromote(bundle(), target({ to: 'ring0' })).reason, /ring1 or ring2/)
+})
+
+test('the soak arrives raw: unset or empty is 24 h, "0" is 0, anything else is read as a number', () => {
+  assert.equal(soakHoursOf(undefined), 24)
+  assert.equal(soakHoursOf(''), 24)
+  assert.equal(soakHoursOf('0'), 0)
+  assert.equal(soakHoursOf('12'), 12)
+  assert.ok(Number.isNaN(soakHoursOf('abc')))
+})
+
+test('--bundles names each platform once, in either order', () => {
+  assert.deepEqual(parseBundles('ios:a,android:b'), [
+    { platform: 'ios', bundleId: 'a' },
+    { platform: 'android', bundleId: 'b' },
+  ])
+  assert.deepEqual(parseBundles(' android:b , ios:a '), [
+    { platform: 'android', bundleId: 'b' },
+    { platform: 'ios', bundleId: 'a' },
+  ])
+  assert.throws(() => parseBundles('ios:a,ios:b'), /platform twice/)
+  assert.throws(() => parseBundles('web:a'), /ios:<id>,android:<id>/)
+  assert.throws(() => parseBundles('ios'), /ios:<id>,android:<id>/)
+  assert.throws(() => parseBundles('ios:a:b'), /ios:<id>,android:<id>/)
+  assert.throws(() => parseBundles(''), /names no bundle/)
+})
+
+test('two bundles are widened only if both pass, and a failure names its platform', () => {
+  const ios = bundle()
+  const android = bundle({ id: ID, platform: 'android' })
+  const targets = [
+    { platform: 'ios', bundleId: ID },
+    { platform: 'android', bundleId: ID },
+  ]
+  const common = { channel: 'production', to: 'ring2', soakHours: 0, now: PUBLISHED + HOUR }
+  assert.equal(checkPromoteAll([ios, android], targets, common).ok, true)
+
+  const oneDisabled = checkPromoteAll([ios, { ...android, enabled: false }], targets, common)
+  assert.equal(oneDisabled.ok, false)
+  assert.deepEqual(
+    oneDisabled.results.map((r) => [r.platform, r.ok]),
+    [
+      ['ios', true],
+      ['android', false],
+    ],
+  )
+  assert.match(oneDisabled.results[1].reason, /is disabled/)
+
+  const swapped = checkPromoteAll([android, ios], targets, common)
+  assert.equal(swapped.ok, false)
+  assert.match(swapped.results[0].reason, /android bundle, not ios/)
 })
