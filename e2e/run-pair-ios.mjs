@@ -21,9 +21,10 @@
  * Photos (rich messaging Step 3; bifold #584, #588, S3-3b, S3-4b). A's library is seeded with a 2400 x 1800 JPEG that
  * carries a GPS position (fixtures/test-chat-photo-gps.jpg):
  *   pair-photo-send           A sends it from the composer's "+" > Photo library: both phones show it in a bubble
- *   pair-photo-no-location    the file each phone keeps, read from its app container: no Exif segment, no GPS, at
- *                             most 1600 px on its long edge and 256 KiB. The fixture itself reads as carrying GPS (the
- *                             positive control), so a clean result is the re-encode's doing, not a blind scanner's
+ *   pair-photo-no-location    the file each phone keeps, read from its app container: no Exif segment, no GPS, no XMP
+ *                             packet (which can carry a location too), at most 1600 px on its long edge and 256 KiB.
+ *                             The fixture itself reads as carrying GPS (the positive control), so a clean result is
+ *                             the re-encode's doing, not a blind scanner's
  *
  * Disappearing messages (rich messaging Step 4, H7; bifold #570, #572, H5's sheet). Needs a test build with E2E_CLOCKS=short,
  * where an hour's timer runs in DISAPPEAR_SECONDS (60, the Developer screen's E2EDisappearHourSeconds):
@@ -52,10 +53,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
 import { jpegMetadata } from "./lib/jpegMetadata.mjs";
+import { TEST_ID_PREFIX } from "./lib/config.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
 
@@ -108,7 +111,7 @@ async function pushAndTapWake(d, udid, tag) {
 
 /** How many elements carry `key` on screen now. */
 async function countTestId(d, key) {
-  return (await d.$$(`~com.ariesbifold:id/${key}`)).length;
+  return (await d.$$(`~${TEST_ID_PREFIX}${key}`)).length;
 }
 
 /** Whether `key` reaches `count` elements within `timeout`. */
@@ -356,7 +359,7 @@ try {
     });
 
     // Photos (Step 3): before the timer rows, so the photo is untimed and still on both phones when its file is read.
-    const PHOTO_FIXTURE = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures", "test-chat-photo-gps.jpg");
+    const PHOTO_FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "test-chat-photo-gps.jpg");
     await rows.row("pair-photo-send", async () => {
       simctl("addmedia", A.udid, PHOTO_FIXTURE);
       simctl("privacy", A.udid, "grant", "photos", APP);
@@ -392,9 +395,9 @@ try {
         }
         const bytes = readFileSync(file);
         const m = jpegMetadata(bytes);
-        const clean = m.jpeg && !m.exif && !m.gps && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
+        const clean = m.jpeg && !m.exif && !m.gps && !m.xmp && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
         ok &&= clean;
-        verdicts.push(`${who}: Exif ${m.exif} · GPS ${m.gps} · ${m.width}x${m.height} · ${bytes.length} bytes`);
+        verdicts.push(`${who}: Exif ${m.exif} · GPS ${m.gps} · XMP ${m.xmp} · ${m.width}x${m.height} · ${bytes.length} bytes`);
       }
       return { ok, detail: `the fixture carries GPS ${fixture.gps} · ${verdicts.join(" · ")}` };
     });
