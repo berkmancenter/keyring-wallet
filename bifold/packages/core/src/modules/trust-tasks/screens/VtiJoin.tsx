@@ -307,15 +307,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     return () => sub.remove()
   }, [agent, communityDid, askStanding])
 
+  const retryHolders = holding.retry
   const onCheckAgain = useCallback(async () => {
     if (!agent || !communityDid) return
     setChecking(true)
     try {
+      retryHolders()
       await askStanding()
     } finally {
       setChecking(false)
     }
-  }, [agent, communityDid, askStanding])
+  }, [agent, communityDid, askStanding, retryHolders])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -545,6 +547,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       standing.kind !== 'none' &&
       current !== 'as' &&
       !(again && mayJoinAgain) &&
+      holding.known &&
       !holding.onlyOthers
   )
 
@@ -679,10 +682,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // read: a member saw the ways in, with live Join buttons, and an asks
       // card filled with defaults, until both came back (Phase 2b). A manifest
       // that could not be read at all (nameRead) goes on to say so, as before.
-      if (communityDid && ((!manifest && nameRead !== communityDid) || standing === undefined)) {
+      // Nor before it is known whose identity holds that standing: another agent's read as this one's, then went.
+      if (communityDid && ((!manifest && nameRead !== communityDid) || standing === undefined || !holding.known)) {
         // A standing that could not be read is said, with a way to read it
         // again — not a spinner waiting on nothing.
-        const failed = standing === undefined && readFailed(journey, 'join')
+        const failed = (standing === undefined && readFailed(journey, 'join')) || holding.failed
         body = (
           <>
             {waysTitle}

@@ -55,6 +55,9 @@ export function useAgentsHoldingIdentity(communityDid: string | undefined): {
   useEffect(() => {
     if (!agent || !communityDid) return
     let live = true
+    // A read starting is not a failure yet: a failure from an earlier read of this community is not offered
+    // again while this one runs.
+    setFailedFor((failed) => (failed === communityDid ? undefined : failed))
     void new GenericRecordsIdentityStore(agent)
       .listPersonas()
       .then((all) => {

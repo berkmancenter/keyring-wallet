@@ -389,7 +389,11 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       </SafeAreaView>
     )
   }
-  if (!loaded) {
+  // Nor before it is known whose identity holds this phone's standing here (another agent's read as this one's,
+  // then went). A read that failed falls back to this agent's standing. If another agent does hold this
+  // community's identity, the invitation path is offered when it should not be: a duplicate persona, not a lost
+  // one. Erring the other way would block a real invitation on a transient read error, which is worse.
+  if (!loaded || (!holding.known && !holding.failed)) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={[styles.content, { justifyContent: 'center' }]}>

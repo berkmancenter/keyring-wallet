@@ -89,7 +89,13 @@ describe('Join, at manifest 0.3', () => {
     mockHolds.mockImplementation(async () => ({}))
     mockJoinAsks.mockReset()
     jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
-    ;(useAgent as jest.Mock).mockReturnValue({ agent: { config: { logger: { info: jest.fn(), error: jest.fn() } } } })
+    ;(useAgent as jest.Mock).mockReturnValue({
+      agent: {
+        config: { logger: { info: jest.fn(), error: jest.fn() } },
+        // A store that holds nothing: the identities on the phone are read, and there are none.
+        genericRecords: { findAllByQuery: async () => [] },
+      },
+    })
     const controller = vtaAgent as unknown as Setter
     controller.set({
       link: {

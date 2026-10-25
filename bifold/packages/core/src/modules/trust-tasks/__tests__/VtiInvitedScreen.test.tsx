@@ -73,14 +73,21 @@ const invitationRecord: Rec = {
   },
 }
 
+/** When set, the listing of every identity (the holders' read: no key) waits on it. */
+let mockHoldersRead: Promise<void> | undefined
+/** When set, that listing fails instead. */
+let mockHoldersFail = false
 function fakeAgent(records: Rec[]) {
   return {
     agent: {
       genericRecords: {
-        findAllByQuery: async (query: Record<string, string>) =>
-          records
+        findAllByQuery: async (query: Record<string, string>) => {
+          if (mockHoldersRead && query.kind === 'persona' && !query.key) await mockHoldersRead
+          if (mockHoldersFail && query.kind === 'persona' && !query.key) throw new Error('store unavailable')
+          return records
             .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
-            .map((r) => ({ ...r, id: 'r' })),
+            .map((r) => ({ ...r, id: 'r' }))
+        },
         save: async () => undefined,
         update: async () => undefined,
         delete: async () => undefined,
@@ -381,6 +388,42 @@ describe('I was invited', () => {
     }
     const { tree } = await renderInvited([theirs])
     expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+  })
+
+  // Whose identity it is is listed after the standing is read: until it was, another agent's membership showed as
+  // this agent's ("You joined"), then went (UI-smoothness plan, Phase 5).
+  test("another agent's membership is never shown as this agent's while whose it is is read", async () => {
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    const theirs: Rec = {
+      ...personaRecord,
+      content: { ...personaRecord.content, vtaDid: 'did:webvh:example:unlinked-vta' },
+    }
+    let release: () => void = () => undefined
+    mockHoldersRead = new Promise<void>((resolve) => (release = resolve))
+    try {
+      const { tree } = await renderInvited([theirs])
+      expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+      await act(async () => {
+        release()
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('InvitedStepIndicator'))).toBeTruthy()
+    } finally {
+      mockHoldersRead = undefined
+    }
+  })
+
+  // A failed listing is not a wait on nothing: the screen goes on with the standing as this agent's, as it did
+  // before it waited for the listing (it has no "read again" of its own).
+  test('a failed read of whose identity it is does not hold the screen', async () => {
+    mockHoldersFail = true
+    try {
+      const { tree } = await renderInvited([personaRecord])
+      expect(tree.getByTestId(testIdWithKey('InvitedStepIndicator'))).toBeTruthy()
+    } finally {
+      mockHoldersFail = false
+    }
   })
 
   // IN-304: leaving "I was invited" after it sent the person to scan forgets

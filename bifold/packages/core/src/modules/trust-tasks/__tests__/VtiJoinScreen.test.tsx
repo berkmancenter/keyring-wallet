@@ -82,7 +82,13 @@ describe('I want to join a community', () => {
     // No network in tests: a community that cannot be read, unless a test says otherwise.
     jest.spyOn(vtiAgent, 'fetchManifest').mockRejectedValue(new Error('offline'))
     const mockUseAgent = useAgent as jest.Mock
-    mockUseAgent.mockReturnValue({ agent: { config: { logger: { info: jest.fn(), error: jest.fn() } } } })
+    mockUseAgent.mockReturnValue({
+      agent: {
+        config: { logger: { info: jest.fn(), error: jest.fn() } },
+        // A store that holds nothing: the identities on the phone are read, and there are none.
+        genericRecords: { findAllByQuery: async () => [] },
+      },
+    })
     const controller = vtaAgent as unknown as Setter
     controller.set({
       link: {
@@ -462,6 +468,74 @@ describe('I want to join a community', () => {
       expect(tree.queryByTestId(testIdWithKey('JoinUseSuggestedAgent'))).toBeNull()
       expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
       ;(vtaAgent as unknown as Setter).set({ agents: undefined })
+    })
+
+    // Whose identity it is is read from this phone after the standing: until it was, another agent's membership
+    // showed as this agent's ("You're a member"), then went (UI-smoothness plan, Phase 5).
+    describe("another agent's membership, while whose it is is read", () => {
+      const A = 'did:webvh:join-screen:agent-a'
+      const B = 'did:webvh:join-screen:agent-b'
+      const personaOfA = {
+        tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: `${A}|${linked}` },
+        content: { did: 'did:webvh:me-at-a', communityDid: linked, vtaDid: A },
+      }
+      /** The agent, whose persona read waits on `held` and fails while `fail.next` is set. */
+      const agentWith = (held?: Promise<void>, fail = { next: false }) => ({
+        agent: {
+          config: { logger: { info: jest.fn(), error: jest.fn() } },
+          genericRecords: {
+            findAllByQuery: async (q: Record<string, string>) => {
+              if (q.kind === 'persona') {
+                if (held) await held
+                if (fail.next) {
+                  fail.next = false
+                  throw new Error('store unavailable')
+                }
+              }
+              return [personaOfA].filter((r) =>
+                Object.entries(q).every(([k, v]) => (r.tags as Record<string, string>)[k] === v)
+              )
+            },
+          },
+        },
+      })
+      beforeEach(() =>
+        (vtaAgent as unknown as Setter).set({
+          agents: [
+            { vtaDid: A, label: 'A' },
+            { vtaDid: B, label: 'B' },
+          ],
+          link: { kind: 'linked', vtaDid: B, label: 'B', linkedAt: 't', connection: { kind: 'online', since: 0 } },
+        })
+      )
+      afterEach(() => (vtaAgent as unknown as Setter).set({ agents: undefined }))
+
+      it("is never shown as this agent's while it is read", async () => {
+        let release: () => void = () => undefined
+        const held = new Promise<void>((resolve) => (release = resolve))
+        ;(useAgent as jest.Mock).mockReturnValue(agentWith(held))
+        const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        expect(tree.getByTestId(testIdWithKey('JoinReading'))).toBeTruthy()
+        await act(async () => {
+          release()
+          jest.advanceTimersByTime(10)
+        })
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      })
+
+      it('a failed read is said, and Check again reads it', async () => {
+        ;(useAgent as jest.Mock).mockReturnValue(agentWith(undefined, { next: true }))
+        const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+        expect(tree.getByTestId(testIdWithKey('JoinReadFailed'))).toBeTruthy()
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        await act(async () => {
+          fireEvent.press(tree.getByTestId(testIdWithKey('JoinReadAgain')))
+          jest.advanceTimersByTime(10)
+        })
+        expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      })
     })
 
     // The journey-state audit (F): the standing was read once, on mount.
