@@ -81,7 +81,9 @@ describe('a community card’s pass', () => {
   test('one sentence for a screen reader: name, kind, date, time left', async () => {
     const t = await words('en')
     expect(passFace(membershipCard, t, 'Guild', NOW)!.accessibilityLabel).toBe(
-      `Guild, Member, Member since ${localDate('2026-09-26T09:00:00.000Z')}, 25 days left`
+      `Guild, Member, Member since ${localDate('2026-09-26T09:00:00.000Z')}, Valid until ${localDate(
+        '2026-10-26T09:00:00.000Z'
+      )}, 25 days left`
     )
   })
 

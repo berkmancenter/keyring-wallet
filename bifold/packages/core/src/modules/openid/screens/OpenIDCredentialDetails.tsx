@@ -4,7 +4,7 @@ import { RootStackParams, Screens } from '../../../types/navigators'
 import { getCredentialForDisplay } from '../display'
 import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { ModalUsage } from '../../../types/remove'
-import { DeviceEventEmitter, StyleSheet, Text, View } from 'react-native'
+import { DeviceEventEmitter, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { testIdWithKey } from '../../../utils/testable'
 import { useTheme } from '../../../contexts/theme'
@@ -26,11 +26,8 @@ import ScreenLayout from '../../../layout/ScreenLayout'
 import OpenIDCredentialCard from '../components/OpenIDCredentialCard'
 import { OpenIDCredentialRecord } from '../credentialRecord'
 import { credentialRegistry } from '../refresh/registry'
-import {
-  CommunityCardDetails,
-  communityCardOf,
-  openCommunityFrom,
-} from '../../trust-tasks/screens/CommunityCardDetails'
+import { communityCardOf, openCommunityFrom } from '../../trust-tasks/screens/CommunityCardDetails'
+import CommunityPassDetails from '../../trust-tasks/screens/CommunityPassDetails'
 
 export enum OpenIDCredScreenMode {
   offer,
@@ -213,17 +210,25 @@ const OpenIDCredentialDetails: React.FC<OpenIDCredentialDetailsProps> = ({ navig
             </Text>
           </Text>
         </View>
-        {/* A community's card is the community's, kept in step with it: it is
-            given up by leaving the community, not removed here (226). */}
-        {communityCardOf(credentialDisplay.credential) ? (
-          <CommunityCardDetails
+        {/* A community's card never reaches here: it has its own Details (CommunityPassDetails, above). */}
+        <RecordRemove onRemove={toggleDeclineModalVisible} />
+      </View>
+    )
+  }
+
+  // A community's card has its own Details: the same pass as in the Wallet, its fields in plain view (none is
+  // personal), and the way to the community. Every other credential keeps the generic ones below.
+  if (credentialDisplay && communityCardOf(credentialDisplay.credential)) {
+    return (
+      <ScreenLayout screen={Screens.OpenIDCredentialDetails}>
+        <ScrollView testID={testIdWithKey('CommunityCardDetailsScreen')}>
+          <CommunityPassDetails
             card={credentialDisplay.credential as unknown as Record<string, unknown>}
+            record={credential}
             onOpenCommunity={(did) => openCommunityFrom(navigation, did)}
           />
-        ) : (
-          <RecordRemove onRemove={toggleDeclineModalVisible} />
-        )}
-      </View>
+        </ScrollView>
+      </ScreenLayout>
     )
   }
 

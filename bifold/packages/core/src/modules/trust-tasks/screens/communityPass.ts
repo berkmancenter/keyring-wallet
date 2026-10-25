@@ -101,7 +101,14 @@ export function passFace(
   const title = name ?? unnamedRef(communityDid)
   const unnamedNote = name ? undefined : words('Community.PassNoName')
   const agent = cardAgentNameOf((vc.credentialSubject as { id?: unknown } | undefined)?.id)
-  const accessibilityLabel = [title, kindWords, agent, field && `${field.label} ${field.value}`, lapsing]
+  const accessibilityLabel = [
+    title,
+    kindWords,
+    agent,
+    field && `${field.label} ${field.value}`,
+    secondField && `${secondField.label} ${secondField.value}`,
+    lapsing,
+  ]
     .filter(Boolean)
     .join(', ')
 

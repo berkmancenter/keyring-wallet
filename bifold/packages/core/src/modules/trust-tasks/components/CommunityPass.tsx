@@ -67,17 +67,19 @@ export interface CommunityPassProps {
   brand: Known<CommunityBrand>
   /** The pass in front: its dates show. A pass behind shows its strip only. */
   front: boolean
-  onPress: () => void
+  /** Opens the card; without it (on the card's own Details) the pass is not a button. */
+  onPress?: () => void
   /** A problem with the card the Wallet knows of ("Revoked"), as the card before the pass showed it. */
   status?: string
 }
 
 export const CommunityPass: React.FC<CommunityPassProps> = ({ face, brand, front, onPress, status }) => {
   const look = brand.known ? brand.value : undefined
+  const Shell = onPress ? Pressable : View
   return (
-    <Pressable
+    <Shell
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole={onPress ? 'button' : 'summary'}
       accessibilityLabel={status ? `${face.accessibilityLabel}, ${status}` : face.accessibilityLabel}
       testID={testIdWithKey('CommunityPass')}
       style={[styles.pass, { backgroundColor: look?.color ?? NEUTRAL }]}
@@ -139,7 +141,7 @@ export const CommunityPass: React.FC<CommunityPassProps> = ({ face, brand, front
           ) : null}
         </View>
       ) : null}
-    </Pressable>
+    </Shell>
   )
 }
 

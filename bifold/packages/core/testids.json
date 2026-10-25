@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "20a7f6249b1566a1ba2f40d5e8f8e3011a207e47",
+  "generatedFrom": "3c791069f468dd47783a19d30f88df529772e355",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -261,10 +261,20 @@
     "CloseWitnessChoiceModal": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
     "CloseWitnessErrorModal": ["src/modules/vrc/components/WitnessErrorDialog.tsx"],
     "CommunityAddHolderAgent": ["src/modules/trust-tasks/screens/HeldByAnotherAgent.tsx"],
-    "CommunityCardDetails": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
+    "CommunityCardDetails": [
+      "src/modules/trust-tasks/screens/CommunityCardDetails.tsx",
+      "src/modules/trust-tasks/screens/CommunityPassDetails.tsx"
+    ],
+    "CommunityCardDetailsScreen": ["src/modules/openid/screens/OpenIDCredentialDetails.tsx"],
     "CommunityCardFrom": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
-    "CommunityCardOpenCommunity": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
-    "CommunityCardRole": ["src/modules/trust-tasks/screens/CommunityCardDetails.tsx"],
+    "CommunityCardOpenCommunity": [
+      "src/modules/trust-tasks/screens/CommunityCardDetails.tsx",
+      "src/modules/trust-tasks/screens/CommunityPassDetails.tsx"
+    ],
+    "CommunityCardRole": [
+      "src/modules/trust-tasks/screens/CommunityCardDetails.tsx",
+      "src/modules/trust-tasks/screens/CommunityPassDetails.tsx"
+    ],
     "CommunityCriteria": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDetailsToggle": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityDid": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
@@ -281,7 +291,10 @@
     "CommunityPassLapsing": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityPassLogo": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityPassMark": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassRow": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "CommunityPassStatus": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
+    "CommunityPassTechnical": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
+    "CommunityPassTechnicalRows": ["src/modules/trust-tasks/screens/CommunityPassDetails.tsx"],
     "CommunityPassTitle": ["src/modules/trust-tasks/components/CommunityPass.tsx"],
     "CommunityReadAgain": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
     "CommunityReadFailed": ["src/modules/trust-tasks/screens/VtiCommunity.ids.ts"],
