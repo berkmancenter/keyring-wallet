@@ -694,6 +694,9 @@ try {
   } else {
     await openVetting(applicant);
   }
+  // The seat's reads first: before them neither the identity step nor the checklist is showing, and both checks
+  // below would pass on an empty screen.
+  await roles.awaitSeatStep(applicant, "applicant");
   // The reset must have taken: a fresh applicant has no persona (Create
   // identity) or at least no checklist that already meets the requirements.
   const stale = await byTestId(applicant, "VettingChecklist")

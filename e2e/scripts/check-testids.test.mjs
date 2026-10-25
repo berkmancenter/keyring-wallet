@@ -368,6 +368,14 @@ test('pinnedManifest reads bifold\'s manifest at the gitlink, not the submodule\
     assert.equal(got.sha, pin)
     assert.deepEqual(Object.keys(got.manifest.keys), ['Pinned'])
 
+    // A pin bump staged and not yet committed is the pin being made: read it, not HEAD's.
+    const later = git(bifold, 'rev-parse', 'HEAD')
+    git(wallet, 'update-index', '--cacheinfo', `160000,${later},bifold`)
+    const staged = pinnedManifest(wallet)
+    assert.equal(staged.sha, later)
+    assert.deepEqual(Object.keys(staged.manifest.keys), ['Later'])
+    git(wallet, 'update-index', '--cacheinfo', `160000,${pin},bifold`)
+
     // A pin the submodule has not fetched: skipped, with the reason, never a silent pass.
     git(wallet, 'update-index', '--cacheinfo', `160000,${'d'.repeat(40)},bifold`)
     git(wallet, 'commit', '-qm', 'unfetched pin')
@@ -416,6 +424,20 @@ test('sync-testids.sh copies the wallet submodule\'s manifest at the pin, not it
     assert.match(ok.out, /copied bifold [0-9a-f]{8} \(the pin\):packages\/core\/testids\.json/)
     assert.equal(fs.readFileSync(path.join(wallet, 'e2e', 'lib', 'testids.json'), 'utf8'), pinned, 'the pin\'s bytes, not the working tree\'s')
     assert.match(ok.out, /testids: all known/, 'and the check it runs then agrees')
+
+    // A pin bump staged with `git add bifold` and not yet committed: resynced against the new pin, not HEAD's old one.
+    const later = git(bifold, 'rev-parse', 'HEAD')
+    git(wallet, 'update-index', '--cacheinfo', `160000,${later},bifold`)
+    const staged = run()
+    assert.equal(staged.code, 0, staged.out)
+    assert.equal(
+      fs.readFileSync(path.join(wallet, 'e2e', 'lib', 'testids.json'), 'utf8'),
+      JSON.stringify(manifest({ Later: [] })),
+      'the staged pin\'s bytes'
+    )
+    assert.match(staged.out, /testids: all known/, 'and the check reads the same staged pin')
+    git(wallet, 'update-index', '--cacheinfo', `160000,${pin},bifold`)
+    assert.equal(run().code, 0)
 
     // A pin the submodule has not fetched: a clear stop, the copy left alone.
     git(wallet, 'update-index', '--cacheinfo', `160000,${'e'.repeat(40)},bifold`)

@@ -40,6 +40,7 @@ fin() {
     local p; for p in $(pid_tree "$AP"); do case "$(ps -o comm= -p "$p" 2>/dev/null)" in *emulator*|*qemu*) ;; *) kill "$p" 2>/dev/null;; esac; done
     kill "$AP" 2>/dev/null
   fi
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
   emu_stop
   # The vetter simulator back to Shutdown, by its UDID and only on the Keyring-vetter path; never deleted or erased (it
   # holds the seated, enrolled vetter).
@@ -54,6 +55,9 @@ export PLATFORM=android ANDROID_APK=$APK ANDROID_UDID=$E ANDROID_SERIAL=$E ANDRO
 emu_start 5570; adb -s $E uninstall $BID >/dev/null 2>&1
 # The rows read the app's log back with logcat -d: a buffer that wraps loses the ceremony (the iOS log did, on 261).
 adb -s $E logcat -G 16M >/dev/null 2>&1
+# The applicant's log streamed from here, the link included: 268's hv (1023-0300) broke at onboarding ("couldn't reach
+# its message service") before the driver's own log capture, leaving no app line. Not cleared: the rows read logcat -d.
+adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 curl -s -m 2 http://127.0.0.1:4761/status >/dev/null || { nohup appium --port 4761 --relaxed-security > "$LEG_DIR/appium.log" 2>&1 & AP=$!; for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:4761/status >/dev/null && break; sleep 1; done; }
 cd "$E2E"
 t=$(date +%s)

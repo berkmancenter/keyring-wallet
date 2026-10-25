@@ -45,9 +45,12 @@ mkdir -p "$e2e/lib"
 # The wallet's own submodule: its manifest at the commit the wallet pins (the gitlink), the bytes check-testids
 # compares against, never its working tree, which sits elsewhere right after a pin bump until `git submodule update`
 # (or on another branch entirely). Another path is a checkout someone chose, and is copied as it stands.
+# The gitlink is read from the index, not HEAD: a pin bump staged with `git add bifold` and not yet committed is
+# the pin being made, and resyncing against HEAD's would copy the previous pin's manifest and look fine. In CI, and
+# with nothing staged, the index and HEAD agree.
 pin=""
 if [[ "$bifold" == "$wallet/bifold" ]]; then
-  pin="$(git -C "$wallet" rev-parse HEAD:bifold 2>/dev/null)" || { echo "no bifold submodule pinned in $wallet" >&2; exit 1; }
+  pin="$(git -C "$wallet" rev-parse :bifold 2>/dev/null)" || { echo "no bifold submodule pinned in $wallet" >&2; exit 1; }
 fi
 if [[ -n "$pin" ]]; then
   tmp="$(mktemp)"

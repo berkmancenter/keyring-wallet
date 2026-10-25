@@ -18,6 +18,7 @@ for s in "$RUNNER_MAIN_SLUG" "${NO_REST_AGENT_SLUG:-}"; do
 done
 T0=$(stamp); E=emulator-5572
 fin() {
+  { [ -n "${LC:-}" ] && kill "$LC" 2>/dev/null; }
   adb -s $E uninstall $BID >/dev/null 2>&1; emu_stop; echo "== cleanup $(utc)"
   keys_since "$RUNNER_MAIN_SLUG" "$T0"
   if [ -n "${NO_REST_AGENT_SLUG:-}" ] && [ "$NO_REST_AGENT_SLUG" != "$RUNNER_MAIN_SLUG" ]; then keys_since "$NO_REST_AGENT_SLUG" "$T0"; fi
@@ -25,6 +26,9 @@ fin() {
 }
 LEG_CLEANUP=fin
 emu_start 5572
+# The app's own log for the whole leg (#591's pattern): both 270 links here stopped at onboarding on "Keyring couldn't
+# reach its message service" and the leg kept no app line to say why (10-24).
+adb -s $E logcat -c; adb -s $E logcat -v time > "$LEG_DIR/logcat.log" 2>/dev/null & LC=$!
 cd "$E2E"
 # What pnm draws, written once for the row; its output too: the "DID  <did>" line it prints, or why it drew nothing.
 if selected pnmqr-scan; then

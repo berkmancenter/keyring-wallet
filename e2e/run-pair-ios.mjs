@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
+import { appLogged } from "./lib/appLog.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
 
@@ -130,7 +131,9 @@ try {
       // The app says which link it made since the short links (#550 era): "made (long)" or "made (short)" (269's run read
       // "[VRC] invitation link: made (long), share sheet opened" and this row, matching the older words, said false).
       const made = /invitation link: made(?: \((?:long|short)\))?, share sheet opened/.test(log);
-      const leaked = isLink && log.includes(link);
+      // The share sheet logs what it was handed under the app's process; that entry is not the app logging it
+      // (lib/appLog.js). Anything else with the link, the app's own lines first, still fails the row.
+      const leaked = isLink && appLogged(log, link);
       await screenshot(a, "pair-share-link").catch(() => undefined);
       const differs = code === undefined ? "the code is not readable in a release build" : `a different invitation from the code ${link !== code}`;
       return {

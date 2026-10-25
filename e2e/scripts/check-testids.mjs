@@ -561,13 +561,15 @@ export const manifestDrift = (synced, upstream) => {
 
 /**
  * bifold's packages/core/testids.json at the submodule commit the wallet pins (the gitlink, not the submodule's working
- * tree, which can sit anywhere locally). `{ skipped }` when that commit cannot be read here.
+ * tree, which can sit anywhere locally). `{ skipped }` when that commit cannot be read here. The gitlink is the index's,
+ * as sync-testids.sh reads it: a staged, uncommitted pin bump is checked against the pin being made (in CI the index
+ * and HEAD agree).
  */
 export const pinnedManifest = (wallet = path.resolve(e2eDir, '..')) => {
   const git = (args) => execFileSync('git', args, { cwd: wallet, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
   let sha
   try {
-    sha = git(['rev-parse', 'HEAD:bifold']).trim()
+    sha = git(['rev-parse', ':bifold']).trim()
   } catch {
     return { skipped: 'no bifold submodule pinned here' }
   }
