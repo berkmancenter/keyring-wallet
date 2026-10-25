@@ -12,11 +12,13 @@ import { StyleSheet, View } from 'react-native'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { localDate } from '../../trust-tasks/screens/localTime'
 import { testIdWithKey } from '../../../utils/testable'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import type { RelationshipLayer } from '../utils/relationshipLayers'
 
-const dateOf = (at?: string) => (at ? new Date(at).toLocaleDateString() : '')
+// "24 Oct 2026", as every other date in the app reads; nothing at all when the record has no date.
+const dateOf = (at?: string) => (at ? localDate(at) : '')
 
 export const RelationshipLayers: React.FC<{ name: string; layers: RelationshipLayer[] }> = ({ name, layers }) => {
   const { t } = useTranslation()
