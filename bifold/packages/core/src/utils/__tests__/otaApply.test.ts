@@ -4,6 +4,7 @@ import {
   onReturnLocked,
   otaApplyBlockerReasons,
   registerOtaApplyBlocker,
+  resetOtaReturnLockedListenersForTests,
 } from '../otaApply'
 
 describe('otaApply', () => {
@@ -46,6 +47,14 @@ describe('otaApply', () => {
     process.off('unhandledRejection', unhandled)
     expect(unhandled).not.toHaveBeenCalled()
     off()
+  })
+
+  test('resetting forgets every return-locked listener', () => {
+    const heard: number[] = []
+    onReturnLocked((awayMs) => heard.push(awayMs))
+    resetOtaReturnLockedListenersForTests()
+    notifyReturnLocked(1_000)
+    expect(heard).toEqual([])
   })
 
   test('a failing listener neither throws nor stops the others', () => {

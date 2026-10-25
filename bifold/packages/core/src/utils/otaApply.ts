@@ -44,6 +44,17 @@ export const onReturnLocked = (listener: ReturnLockedListener): (() => void) => 
   }
 }
 
+/**
+ * Tests only: forget every return-locked listener. The wallet's withOta subscribes
+ * once per call for the life of the process, so its tests, each calling withOta,
+ * reset here to keep driving the real notifyReturnLocked with one listener at a time.
+ * Exported from the index because those tests live in the wallet: a deep import
+ * of this file there would load a second copy of the module, and the reset would
+ * clear a set nothing had registered in. The ForTests suffix marks it at the call
+ * site, because a production caller would silently stop apply-on-return.
+ */
+export const resetOtaReturnLockedListenersForTests = (): void => returnLockedListeners.clear()
+
 /** activity.tsx: the app came back after `awayMs` and has just locked the person out. */
 export const notifyReturnLocked = (awayMs: number): void => {
   for (const listener of [...returnLockedListeners]) {
