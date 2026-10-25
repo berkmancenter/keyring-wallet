@@ -1,7 +1,7 @@
 # Mediator migration: Keyring ↔ Keyring onto the Affinidi mediator, and the Credo mediator retired
 
-**Status:** draft for review. **Owner:** product owner. **Implementing lanes:** gateway-infra, push, app/UI.
-**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft. [`mediator-migration-plan/2026-10-21-bam-extension-notes.md`](mediator-migration-plan/2026-10-21-bam-extension-notes.md) holds the notes behind the extension phases (§5.1).
+**Status:** draft for review. **Blocked:** no phase starts until the managed infrastructure's wallet-host and short-link change is deployed (§6). **Owner:** product owner. **Implementing lanes:** gateway-infra, push, app/UI.
+**Companions:** [`mediator-migration-plan/2026-10-20-al.md`](mediator-migration-plan/2026-10-20-al.md) holds the findings behind this draft. [`mediator-migration-plan/2026-10-21-bam-extension-notes.md`](mediator-migration-plan/2026-10-21-bam-extension-notes.md) holds the notes behind the extension phases (§5.1). [`mediator-migration-plan/2026-10-25-al.md`](mediator-migration-plan/2026-10-25-al.md) holds the response to that review, the reasoning for the rollback section (§5.2) and the reasoning for the infrastructure blocker (§6).
 **Related plans:**
 - [`peer-message-notifications-plan.md`](peer-message-notifications-plan.md): the message-wake design this migration has to keep working.
 - [`push-notifications-plan.md`](push-notifications-plan.md): the push gateway.
@@ -114,6 +114,8 @@ W4 (INFERRED): a small wrapper binary builds the mediator with a decorated `Medi
 
 ## 5. Phases
 
+**No phase starts, M0a included, until the blocker in §6's first row is cleared.**
+
 | Phase | What | Ships as | Done when |
 |---|---|---|---|
 | **M0** | Close the loose ends of the interim patch: run the privacy control; banner collapse (gateway patch 0005) | gateway patch | The privacy control passes (§7); one message notification per exchange per phone |
@@ -143,10 +145,43 @@ Added after review of this draft. Detail, evidence and acceptance checks per row
 | **M5a** | Contact migration and sunset: dated, user-visible notice; policy for un-migrated contacts and in-flight messages; gate "no witness uses Credo"; gate "no v1 traffic" as defined in M1b for one full cycle (E2, E1) | before the Credo shutdown | Gates measured and recorded; notice live for the stated period |
 | **M5b** | Cleanup and retention: the config-sprawl checklist (E11); Credo DB and key backups kept for a stated period after shutdown (E3) | after the Credo shutdown | Checklist complete; backup retention period and deletion date recorded |
 
+### 5.2 Rollback
+
+Every phase that changes something users depend on has a written way back before it starts. This section is the per-phase rollback table that M2c requires (E3). M2c records it as decided, with owners and dates, before M3 or M4 starts.
+
+**When to roll back.** Any one of these stops the current phase and starts its rollback:
+1. **The privacy control fails:** roll back at once.
+2. **The positive wake check fails for more than 10% of test wakes** in any hour after the switch.
+3. **A message is lost:** sent between two online test phones and not received within 5 minutes.
+4. **Mediator restarts or error rates exceed the pre-switch baseline** for an hour.
+5. **Tester reports of "couldn't reach its message service" rise above the pre-switch baseline** within 24 hours of the switch.
+
+**Who decides.**
+- **Inside an infra-only phase:** the infrastructure maintainer may roll back immediately.
+- **App phases (M4, M5):** the product owner decides.
+
+Either way, the rollback and its reason are recorded in a dated companion the same day.
+
+**The rules that make rollback possible:**
+- **Nothing is deleted from the old side** until the phase has passed its rollback window. The old host, database, keys and image stay frozen, not destroyed.
+- **Cut over at a measured low point** of queue depth, after recording the queue depth on both sides.
+- **The old side is read-only and drained, never discarded.** After a cut-over, messages it still holds are delivered or exported before it is stopped.
+- **A rollback is rehearsed before the forward switch,** on the same path, in the same phase.
+
+| Phase | How to roll back | What can be lost | Rollback window | Rehearsed |
+|---|---|---|---|---|
+| **M0** | Redeploy the previous gateway image tag | Nothing | Until M1 starts | Previous tag kept |
+| **M1** | DNS back to the frozen legacy host. The TTL was lowered beforehand (M1a), so the switch takes minutes | Messages accepted by the new host after the switch: exported and replayed to the legacy host, or delivered before the flip back. Nothing is accepted on both sides at once | 7 days (the mediator's message expiry) before the legacy host is stopped | Yes, the M1a restore test plus one DNS flip and flip back on the scratch host |
+| **M2** | Nothing to roll back (spikes only) | — | — | — |
+| **M3** | Disable the phone accounts on the Affinidi mediator. No shipped app uses it yet | Nothing user-facing | Until M4 ships | Yes, as part of M3c |
+| **M4** | Turn the remote flag off (or the built-in Credo fallback, M4a), so new contacts are made on v1 again. Contacts already made on v2 during M4 keep their Affinidi mailbox; if that mailbox is down, their messages wait there until it returns or the pair is re-invited | Delivery for v2 contacts made during M4, until the mailbox returns or they are re-invited. The plan accepts no silent loss: the app shows those contacts as "waiting for the new message service" | One release cycle | Yes, M4a's test phone switched back |
+| **M5** | **None.** Once the Credo mediator is shut down, the only way back is restoring its database and keys from the M5b backups. That is why M5 starts only after its gates pass | Anything not migrated, by design gated to zero by M5a | Backups kept for the period recorded in M5b | Restore of the backup tested once before shutdown |
+
 ## 6. Blocked on
 
 | Item | Status | On whom |
 |---|---|---|
+| **The wallet-host and short-link change on the managed infrastructure** (infrastructure repository #20, merged 2026-10-24) | merged, **not deployed**; the apply, the VM sync and the DNS change are maintainer-only | the infrastructure maintainer. **Blocks every phase of this plan** |
 | D2 (who rings) | not decided | the product owner, after M2 |
 | W1: an upstream hook | not asked yet | the product owner's OK to ask Affinidi |
 | The privacy control | not run | the product owner (two phones, about 5 minutes); blocks M0 |
