@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "f91bb47fbd6c9d13b6f26d1e93db319350a7c6f3",
+  "generatedFrom": "62df744ac5b29920465eca627d347c3cd235703c",
   "prefix": "com.ariesbifold:id/",
   "keys": {
     "AbortGoToCredentialsButton": ["src/components/modals/CommonRemoveModal.tsx"],
@@ -480,6 +480,7 @@
     "Done": ["src/components/modals/ProofCancelModal.tsx", "src/screens/CredentialOfferAccept.tsx"],
     "E2EAutoLockMinutes": ["src/components/misc/E2EClockRows.tsx"],
     "E2EClocksMode": ["src/components/misc/E2EClockRows.tsx"],
+    "E2EDisappearHourSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "E2EPhoneGrantWindowSeconds": ["src/components/misc/E2EClockRows.tsx"],
     "EmojiPicker": ["src/modules/chat/emoji/EmojiPicker.ids.ts"],

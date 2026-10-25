@@ -12,6 +12,7 @@ import {
   SHORT_GRANT_POLL_WINDOW_MS,
   effectiveDefaultAutoLockMinutes,
   e2eClocksSet,
+  effectiveExpiresInMs,
   effectiveGrantPollWindowMs,
   shortClocks,
 } from '../../src/utils/e2eClocks'
@@ -87,5 +88,21 @@ describe('whether the build is a test build at all', () => {
     config.E2E_CLOCKS = 'short'
     expect(e2eClocksSet()).toBe(true)
     expect(shortClocks()).toBe(true)
+  })
+})
+
+describe("a disappearing message's clock", () => {
+  it('is the real one unless the build is exactly short: an hour is an hour, as in the store build', () => {
+    expect(effectiveExpiresInMs(3600)).toBe(3_600_000)
+    config.E2E_CLOCKS = 'real'
+    expect(effectiveExpiresInMs(3600)).toBe(3_600_000)
+    config.E2E_CLOCKS = 'Short'
+    expect(effectiveExpiresInMs(3600)).toBe(3_600_000)
+  })
+
+  it('runs sixty times faster in a short-clock test build, so an hour is 60 s and a week under three hours', () => {
+    config.E2E_CLOCKS = 'short'
+    expect(effectiveExpiresInMs(3600)).toBe(60_000)
+    expect(effectiveExpiresInMs(604800)).toBe(10_080_000)
   })
 })

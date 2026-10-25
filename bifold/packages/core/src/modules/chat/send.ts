@@ -25,6 +25,7 @@ import { ChatEventMessage } from './messages/ChatEventMessage'
 import { ChatEventRecord } from './records/ChatEventRecord'
 import { whileSending } from './sending'
 import { TIMER_CHOICES, currentTimer, nextTimerVersion } from './timer'
+import { effectiveExpiresInMs } from '../../utils/e2eClocks'
 
 /** How a send went out. `not-sent` is a reaction or redaction to a contact without chat. */
 export type ChatSendOutcome =
@@ -58,7 +59,7 @@ async function sendAndStore(agent: Agent, connectionId: string, event: ChatEvent
           inReplyTo: event.inReplyTo,
           expiresIn: event.expiresIn,
           // D4: the sender's copy starts its clock at send.
-          ...(event.expiresIn ? { expiresAt: new Date(sentAt.getTime() + event.expiresIn * 1000) } : {}),
+          ...(event.expiresIn ? { expiresAt: new Date(sentAt.getTime() + effectiveExpiresInMs(event.expiresIn)) } : {}),
         }
       : {}),
     ...(event.type === 'reaction' ? { target: event.target, emoji: event.emoji } : {}),

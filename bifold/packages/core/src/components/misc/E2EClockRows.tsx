@@ -8,6 +8,7 @@ import { GRANT_POLL_WINDOW_MS, PHONE_GRANT_POLL_WINDOW_MS } from '../../modules/
 import {
   e2eClocksSet,
   effectiveDefaultAutoLockMinutes,
+  effectiveExpiresInMs,
   effectiveGrantPollWindowMs,
   shortClocks,
 } from '../../utils/e2eClocks'
@@ -27,7 +28,7 @@ const styles = StyleSheet.create({
 
 /**
  * The clocks in force, for the gate's linkwait rows to read (gate efficiency items 3 and 4): one row each under the
- * testIDs E2EClocksMode, E2EGrantWindowSeconds, E2EPhoneGrantWindowSeconds and E2EAutoLockMinutes. Only in a test
+ * testIDs E2EClocksMode, E2EGrantWindowSeconds, E2EPhoneGrantWindowSeconds, E2EDisappearHourSeconds and E2EAutoLockMinutes. Only in a test
  * build (E2E_CLOCKS set, to `short` or `real`); a store build never sets it (the staging workflow refuses it), so
  * there it renders nothing. Every Developer screen renders it: bifold's, and an app's own that replaces it.
  */
@@ -47,6 +48,11 @@ export const E2EClockRows: React.FC = () => {
       testID: testIdWithKey('E2EPhoneGrantWindowSeconds'),
       label: 'Phone grant window (s)',
       value: String(effectiveGrantPollWindowMs(PHONE_GRANT_POLL_WINDOW_MS) / 1000),
+    },
+    {
+      testID: testIdWithKey('E2EDisappearHourSeconds'),
+      label: 'Disappearing 1 h (s)',
+      value: String(effectiveExpiresInMs(3600) / 1000),
     },
     {
       testID: testIdWithKey('E2EAutoLockMinutes'),

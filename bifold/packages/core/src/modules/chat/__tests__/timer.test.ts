@@ -1,4 +1,5 @@
 import { JsonTransformer } from '@credo-ts/core'
+import Config from 'react-native-config'
 import { DidCommMessageSender } from '@credo-ts/didcomm'
 
 import { counterpartySpeaksChat } from '../capability'
@@ -24,6 +25,7 @@ jest.mock('../ChatModule', () => ({
   }),
 }))
 jest.mock('../capability', () => ({ counterpartySpeaksChat: jest.fn(async () => true) }))
+jest.mock('react-native-config', () => ({ __esModule: true, default: {} }))
 
 const mockStore = new Map<string, unknown>()
 jest.mock('../../../services/storage', () => ({
@@ -159,6 +161,22 @@ describe("the recipient's clock starts at first display (D4)", () => {
     await chatEventsShown(agent, 'c1', [m.eventId])
     expect(m.expiresAt).toEqual(new Date(T0.getTime() + 3 * 3600 * 1000 + WEEK * 1000))
     expect(mockUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  test('in a short-clock test build the clock runs at a sixtieth, an hour becoming a minute, on both sides', async () => {
+    ;(Config as Record<string, string | undefined>).E2E_CLOCKS = 'short'
+    try {
+      mockRecords.push(timerEvent('01JB0000000000000000000001', 1, 3600))
+      const mine = ((await sendChatText(agent, 'c1', 'hi')) as { record: ChatEventRecord }).record
+      expect(mine.expiresIn).toBe(3600) // what is sent and stored stays the real value
+      expect(mine.expiresAt).toEqual(new Date(T0.getTime() + 60_000))
+      const theirs = received('01JB0000000000000000000002', 3600)
+      mockRecords.push(theirs)
+      await chatEventsShown(agent, 'c1', [theirs.eventId])
+      expect(theirs.expiresAt).toEqual(new Date(T0.getTime() + 60_000))
+    } finally {
+      delete (Config as Record<string, string | undefined>).E2E_CLOCKS
+    }
   })
 
   test('a second report changes nothing; an untimed message and an unknown id are left alone', async () => {

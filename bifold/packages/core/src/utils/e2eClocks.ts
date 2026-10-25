@@ -26,3 +26,13 @@ export const effectiveGrantPollWindowMs = (realMs: number): number =>
 /** The auto-lock default in minutes in this build. A time the person saved in Settings still wins over it. */
 export const effectiveDefaultAutoLockMinutes = (realMinutes: number): number =>
   shortClocks() ? SHORT_AUTO_LOCK_MINUTES : realMinutes
+
+/**
+ * How many times faster a disappearing message's clock runs in a short-clock test build: 1 hour (the shortest timer)
+ * becomes 60 s, so a two-phone run can watch a read message disappear. Store builds never set E2E_CLOCKS.
+ */
+export const SHORT_EXPIRY_DIVISOR = 60
+
+/** A disappearing message's `expiresIn` (seconds, as sent and stored) as the time this build waits, in ms. */
+export const effectiveExpiresInMs = (expiresInSeconds: number): number =>
+  shortClocks() ? (expiresInSeconds * 1000) / SHORT_EXPIRY_DIVISOR : expiresInSeconds * 1000

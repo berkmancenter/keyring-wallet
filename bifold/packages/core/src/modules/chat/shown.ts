@@ -16,6 +16,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { getChatEventRepository } from './ChatModule'
+import { effectiveExpiresInMs } from '../../utils/e2eClocks'
 
 /**
  * Received chat messages that became visible, each reported once per screen. Each timed message among them starts
@@ -27,7 +28,7 @@ export async function chatEventsShown(agent: Agent, connectionId: string, eventI
   for (const eventId of eventIds) {
     const record = await repository.findEvent(agent.context, connectionId, 'received', eventId)
     if (!record || record.eventType !== 'message' || !record.expiresIn || record.expiresAt) continue
-    record.expiresAt = new Date(now + record.expiresIn * 1000)
+    record.expiresAt = new Date(now + effectiveExpiresInMs(record.expiresIn))
     await repository.update(agent.context, record)
   }
 }

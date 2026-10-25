@@ -114,6 +114,7 @@ export {
   e2eClocksSet,
   effectiveDefaultAutoLockMinutes,
   effectiveGrantPollWindowMs,
+  effectiveExpiresInMs,
   shortClocks,
   SHORT_AUTO_LOCK_MINUTES,
   SHORT_GRANT_POLL_WINDOW_MS,

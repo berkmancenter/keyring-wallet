@@ -23,6 +23,7 @@ import { getChatEventRepository } from './ChatModule'
 import { recordExpired } from './expired'
 import { deleteChatMessages } from './history'
 import { seenAt } from './seen'
+import { effectiveExpiresInMs } from '../../utils/e2eClocks'
 
 /** How often the sweep runs while the app is in the foreground, so an open chat loses its messages on time. */
 export const EXPIRY_SWEEP_INTERVAL_MS = 60_000
@@ -39,9 +40,11 @@ export async function sweepExpired(agent: Agent, now = new Date()): Promise<numb
     if (record.role !== 'received' || record.eventType !== 'message' || !record.expiresIn || record.expiresAt) continue
     const seen = seenAt(record)
     if (seen === undefined) continue
-    record.expiresAt = new Date(seen + record.expiresIn * 1000)
+    record.expiresAt = new Date(seen + effectiveExpiresInMs(record.expiresIn))
     // The Keep messages sweep (retention.ts) runs at the same moments and may have deleted this record since it was
     // listed: that is what both sweeps want, so it is not a failure, and the rest of this sweep goes on.
+    // Detected by the error's name, true of @credo-ts/core 0.7.1 (RecordNotFoundError, error/RecordNotFoundError): a
+    // credo upgrade that renames or wraps it would make this sweep stop for a minute again, so re-check it on a bump.
     await repository.update(agent.context, record).catch((error: unknown) => {
       if ((error as Error | undefined)?.name !== 'RecordNotFoundError') throw error
     })
