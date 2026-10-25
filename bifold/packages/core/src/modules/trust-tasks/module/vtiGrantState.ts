@@ -20,6 +20,7 @@ import { communityRoleCard, LEGACY_DTG_SHAPE_UNTIL, legacyDtgShapeReadable } fro
 import type { Agent } from '@credo-ts/core'
 
 import type { VtiHeldCredential } from './VtiCommunityStore'
+import { cardStandingOf, recordCardRevocation } from './vtiCardStanding'
 import { checkCredentialStatus } from './vtiStatusList'
 
 export type VetterGrantState =
@@ -31,7 +32,18 @@ export type VetterGrantState =
   /** No grant held for this community. */
   | { state: 'none' }
 
-type Options = { now?: Date; allowInsecureLocal?: boolean; fetchImpl?: typeof fetch }
+type Options = {
+  now?: Date
+  allowInsecureLocal?: boolean
+  fetchImpl?: typeof fetch
+  /**
+   * Only what this phone holds: the grant's window, and its revocation as last
+   * read and recorded (vtiCardStanding), never a status-list fetch — so a
+   * vetter's desk shows at once, not after the list answers (UI-smoothness
+   * plan, Phase 3). An active grant read this way is `statusChecked: false`.
+   */
+  local?: boolean
+}
 
 const dateOf = (credential: Record<string, unknown>, ...keys: string[]): string | undefined => {
   for (const key of keys) {
@@ -67,10 +79,23 @@ export async function grantState(
   // the vetter's own seat says it ended then, not that it still stands.
   if (communityRoleCard(credential)?.shape === 'endorsement' && !legacyDtgShapeReadable(now))
     return { state: 'expired', validUntil: `${LEGACY_DTG_SHAPE_UNTIL}T00:00:00Z` }
+  if (options.local) {
+    const recorded = cardStandingOf(credential, now)
+    if (recorded.state === 'revoked') return { state: 'revoked', checkedAt: recorded.at }
+    return { state: 'active', validUntil, statusChecked: false, reason: 'not read yet' }
+  }
   const status = await checkCredentialStatus(agent, credential, issuerOf(credential, held.communityDid), {
     allowInsecureLocal: options.allowInsecureLocal,
     fetchImpl: options.fetchImpl,
   })
+  // What the list said is kept, so a later local read knows a revoke this phone has already learned.
+  if (status.state === 'ok' || status.state === 'revoked' || status.state === 'none')
+    await recordCardRevocation(
+      agent,
+      typeof credential.id === 'string' ? credential.id : '',
+      status.state === 'revoked',
+      status.checkedAt
+    ).catch(() => undefined)
   if (status.state === 'revoked') return { state: 'revoked', checkedAt: status.checkedAt }
   if (status.state === 'unknown') return { state: 'active', validUntil, statusChecked: false, reason: status.reason }
   return { state: 'active', validUntil, statusChecked: status.state === 'ok' }

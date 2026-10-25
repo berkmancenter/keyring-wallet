@@ -31,6 +31,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { agentTransition, vtaAgent } from '../module/vtaAgent'
+import { loadCardStanding } from '../module/vtiCardStanding'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityJourneysOf } from '../module/communityJourney'
 import { COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT } from '../module/communityChanged'
@@ -106,9 +107,12 @@ const CARD_PADDING = 16
 
 /**
  * What the agent holds, read from this phone's stores (and its vetter grants'
- * status lists), with the names the communities published as kept.
+ * status lists), with the names the communities published as kept. `local`:
+ * the grants' revocation as last recorded, with no status-list fetch.
  */
-async function readHoldings(agent: Agent, agentKey: string | undefined) {
+async function readHoldings(agent: Agent, agentKey: string | undefined, options: { local?: boolean } = {}) {
+  // A cold start may come here before anything loaded what was recorded.
+  if (options.local) await loadCardStanding(agent).catch(() => undefined)
   const communities = new GenericRecordsCommunityStore(agent)
   const [allPersonas, allMemberships, invitations, names] = await Promise.all([
     new GenericRecordsIdentityStore(agent).listPersonas(),
@@ -136,7 +140,7 @@ async function readHoldings(agent: Agent, agentKey: string | undefined) {
       const own = held.filter((g) => g.subjectDid === p.did)
       return {
         communityDid: p.communityDid,
-        grant: await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ }),
+        grant: await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__, local: options.local }),
       }
     })
   )
@@ -204,7 +208,18 @@ class AgentHoldingsStore {
     if (before.failed) this.set(agentKey ?? '', { ...before, failed: false })
   }
 
-  /** Read; resolves with the reading when it lands, undefined when a newer read landed first. Rejects when it fails. */
+  /**
+   * Read; resolves with the reading when it lands, undefined when a newer read
+   * landed first. Rejects when it fails.
+   *
+   * What the phone holds lands first — the vetter grants' revocation as last
+   * recorded, no status-list fetch — and then the full read, which checks the
+   * lists. A vetter's desk waited for those fetches, about a second, on every
+   * visit with nothing kept: after a launch, or a switch to an agent not read
+   * yet (UI-smoothness plan, Phase 3). A grant revoked since its last check
+   * shows the desk until the full read lands; the desk checks the grant again
+   * before it acts (vtiVetting `grantWithState`).
+   */
   async read(
     agent: Agent,
     agentKey: string | undefined
@@ -214,6 +229,14 @@ class AgentHoldingsStore {
     entry.agent = agent
     const seq = ++entry.seq
     this.entries.set(key, entry)
+    try {
+      const local = await readHoldings(agent, agentKey, { local: true })
+      // Whether the last full read failed is the full read's to say.
+      if (this.entries.get(key) === entry && seq === entry.seq)
+        this.set(key, { holdings: local.holdings, names: local.names, failed: entry.snapshot.failed })
+    } catch {
+      // The full read below says what failed.
+    }
     try {
       const read = await readHoldings(agent, agentKey)
       if (this.entries.get(key) !== entry || seq !== entry.seq) return undefined
@@ -777,8 +800,10 @@ const VtaAgentHome: React.FC = () => {
           ) : null}
           {/* The step bar teaches the first setup, so it shows only until the
               first membership; after that a status line says where this agent
-              stands (233). */}
-          {holdings && everMemberOf.size > 0 ? (
+              stands (233). Neither until what the agent holds is read: a
+              vetter's cold launch drew the step bar, "Join" next, until the
+              read came back, then jumped to the vetter's page (271). */}
+          {!holdings ? null : everMemberOf.size > 0 ? (
             isMember ? (
               // The id the vetting e2e has always read as "this phone is a member".
               <ThemedText variant="bold" testID={testIdWithKey(VtaAgentHomeIds.journeyJoined)}>

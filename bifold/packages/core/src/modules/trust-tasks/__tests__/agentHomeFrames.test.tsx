@@ -28,8 +28,10 @@ jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
   useIsFocused: jest.fn(() => true),
 }))
+/** The grant's state as the home reads it, set per test: `local` is the read with no status-list fetch. */
+let mockGrant: (options: { local?: boolean }) => Promise<unknown> = async () => ({ state: 'none' })
 jest.mock('../module/vtiGrantState', () => ({
-  ownVetterGrantState: async () => ({ state: 'none' }),
+  ownVetterGrantState: (_agent: unknown, _grants: unknown, options: { local?: boolean } = {}) => mockGrant(options),
 }))
 
 type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
@@ -390,5 +392,94 @@ describe("the agent's holdings, read more than once", () => {
     await act(async () => held.splice(0).forEach((go) => go()))
     await settle()
     expect(tree.queryByTestId(id('AgentDoors'))).toBeNull()
+  })
+})
+
+// UI-smoothness plan, Phase 3: a vetter's desk waited for the grant's status list — about a second — on every visit
+// with nothing kept (after a launch, or a switch to an agent not read yet). What the phone holds shows it at once.
+describe("a vetter's desk on the agent home", () => {
+  const active = { state: 'active', statusChecked: false }
+  const revoked = { state: 'revoked', checkedAt: '2026-10-24T00:00:00Z' }
+  const never = () => new Promise<never>(() => undefined)
+  type Frame = { holds: boolean; desk: boolean }
+  const frame = (t: ReturnType<typeof render>): Frame => ({
+    holds: Boolean(t.queryByTestId(cardOf(COMMUNITY))),
+    desk: Boolean(t.queryByTestId(id('AgentOpenDesk'))),
+  })
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    forgetAgentHoldings()
+    communityTarget.clear()
+    controller.set({ introSeen: true, activity: [], approvals: [], switchingTo: undefined, link: linkedTo(VTA_A) })
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([persona(COMMUNITY, VTA_A), membership(COMMUNITY)]))
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    mockGrant = async () => ({ state: 'none' })
+  })
+
+  /** Each frame, from a cold mount, as an object; `again()` keeps the tree. */
+  function renderFrames() {
+    const frames: Frame[] = []
+    const r = renderWithFrames((t) => (frames.push(frame(t)), false))
+    return { ...r, frames }
+  }
+
+  it('the status list still out: the desk with the holdings, in every frame that shows them', async () => {
+    mockGrant = async ({ local }) => (local ? active : never())
+    const { tree, frames } = renderFrames()
+    await settle()
+    expect(tree.getByTestId(id('AgentOpenDesk'))).toBeTruthy()
+    expect(frames.some((f) => f.holds)).toBe(true)
+    expect(frames.filter((f) => f.holds && !f.desk)).toEqual([])
+  })
+
+  it('a revoke this phone already learned: no frame shows the desk', async () => {
+    mockGrant = async ({ local }) => (local ? revoked : never())
+    const { tree, frames } = renderFrames()
+    await settle()
+    // The control: the holdings are on screen.
+    expect(tree.getByTestId(cardOf(COMMUNITY))).toBeTruthy()
+    expect(frames.filter((f) => f.desk)).toEqual([])
+  })
+
+  it('the list says revoked: the desk shown from what the phone held goes', async () => {
+    let answer: (state: unknown) => void = () => undefined
+    mockGrant = async ({ local }) => (local ? active : new Promise((resolve) => (answer = resolve)))
+    const { tree } = renderFrames()
+    await settle()
+    expect(tree.getByTestId(id('AgentOpenDesk'))).toBeTruthy()
+    await act(async () => answer(revoked))
+    await settle()
+    expect(tree.queryByTestId(id('AgentOpenDesk'))).toBeNull()
+  })
+})
+
+// 271, a vetter's cold launch: with nothing read yet the page drew the step bar ("Linked › Join › Member") and then
+// jumped to the vetter's page. Unknown is not "nothing joined".
+describe('the agent home before anything is read', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    forgetAgentHoldings()
+    communityTarget.clear()
+    controller.set({ introSeen: true, activity: [], approvals: [], switchingTo: undefined, link: linkedTo(VTA_A) })
+  })
+  afterEach(() => jest.useRealTimers())
+  const strip = (t: ReturnType<typeof render>) => Boolean(t.queryByTestId(id('AgentJourneyRow')))
+
+  it('no frame shows the step bar while nothing is read', async () => {
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([persona(COMMUNITY, VTA_A), membership(COMMUNITY)], () => true))
+    const { frames } = renderWithFrames(strip)
+    await settle()
+    expect(frames.length).toBeGreaterThan(0)
+    expect(frames).not.toContain(true)
+  })
+
+  it('…and a phone known to have joined nothing gets it (the control)', async () => {
+    ;(useAgent as jest.Mock).mockReturnValue(fakeAgent([]))
+    const { tree } = renderWithFrames(() => false)
+    await settle()
+    expect(strip(tree)).toBe(true)
   })
 })

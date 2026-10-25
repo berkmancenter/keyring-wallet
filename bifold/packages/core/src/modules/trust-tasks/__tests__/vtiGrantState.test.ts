@@ -5,6 +5,7 @@
  * 52232 is a live grant (bit clear), index 24 a revoked one (bit set).
  */
 import type { VtiHeldCredential } from '../module/VtiCommunityStore'
+import { resetCardStanding } from '../module/vtiCardStanding'
 import { ownVetterGrantState, pickOwnVetterGrant } from '../module/vtiGrantState'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -101,6 +102,42 @@ describe("the phone's own vetter standing", () => {
  * signing under the dead one produced statements the community discounted while
  * the vetter's own screens said nothing (keyring-test, 2026-09-22).
  */
+// UI-smoothness plan, Phase 3: a vetter's desk waited for the status list on every visit with nothing kept.
+describe("the phone's own vetter standing, read locally", () => {
+  const withId = (g: VtiHeldCredential, id: string) =>
+    ({ ...g, credential: { ...g.credential, id } }) as VtiHeldCredential
+  beforeEach(() => resetCardStanding())
+  afterEach(() => resetCardStanding())
+
+  it('never reads the list: active and unchecked until a read is recorded, then what that read said', async () => {
+    const fetchImpl = jest.fn(serving)
+    const revokedGrant = withId(grant(24), 'urn:uuid:grant-24')
+    expect(await ownVetterGrantState(agent, [revokedGrant], { now: NOW, fetchImpl, local: true })).toMatchObject({
+      state: 'active',
+      statusChecked: false,
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    // A full read learns the revoke, and records it.
+    expect(await ownVetterGrantState(agent, [revokedGrant], { now: NOW, fetchImpl })).toMatchObject({
+      state: 'revoked',
+    })
+    expect(fetchImpl).toHaveBeenCalled()
+    fetchImpl.mockClear()
+    // Read locally now: revoked, with no fetch.
+    expect(await ownVetterGrantState(agent, [revokedGrant], { now: NOW, fetchImpl, local: true })).toMatchObject({
+      state: 'revoked',
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('keeps the window: an expired grant is expired, read locally too', async () => {
+    const old = withId(grant(52232, { until: '2026-09-10T00:00:00Z' }), 'urn:uuid:grant-old')
+    expect(await ownVetterGrantState(agent, [old], { now: NOW, fetchImpl: serving, local: true })).toMatchObject({
+      state: 'expired',
+    })
+  })
+})
+
 describe('choosing the grant to act under', () => {
   it('prefers the live grant over a revoked one, whichever arrived first', async () => {
     const revoked = grant(24, {}, '2026-09-22T09:00:00Z')
