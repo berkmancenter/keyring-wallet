@@ -22,6 +22,11 @@ const attr = (tag, name) => {
 /**
  * The distinct cards from `issuer` on one page source: an older build's "issuer|card name" pairs, and a pass build's
  * pass descriptions ("<community>, <kind>, <date>…", one per card) that name the issuer.
+ *
+ * A pass is keyed by its description, so two cards from one community stay two only while their descriptions differ:
+ * today the kind differs, and on a phone with several agents the agent's name is in the sentence (passFace's
+ * accessibilityLabel, bifold #524). If the agent's name ever leaves the pass description, several agents' membership
+ * cards from one community count as one here.
  */
 export function walletCardKeys(src, issuer) {
   const keys = new Set();
