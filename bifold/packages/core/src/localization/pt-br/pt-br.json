@@ -1106,6 +1106,8 @@
     "Confirmed": "Eu confirmo que este app é para mim."
   },
   "Chat": {
+    "Photo": "📷 Foto",
+    "UnsupportedAttachment": "Anexo não suportado",
     "OpenPresentation": "Abrir apresentação",
     "ViewRequest": "Ver requisição",
     "ViewOffer": "Ver oferta",

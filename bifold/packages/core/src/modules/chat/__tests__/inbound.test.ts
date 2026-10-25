@@ -7,6 +7,18 @@ import { ChatEventRecord } from '../records/ChatEventRecord'
 import { receiveChatEventMessage, setupChatInbound } from '../inbound'
 import type { ChatInboundVerdict } from '../inbound'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
+import { writeChatMedia } from '../media/store'
+import { REAL, bytesOf, descriptorFor } from '../media/__tests__/fixtures/images'
+
+// The order of writes and saves across both, so a test can say which came first.
+const mockOrder: string[] = []
+jest.mock('../media/store', () => ({
+  writeChatMedia: jest.fn(async (_c: string, eventId: string) => {
+    mockOrder.push('write')
+    return `${eventId}.jpg`
+  }),
+}))
+const write = writeChatMedia as jest.Mock
 
 const EVENT_ID = '01JB3XKX6F8Q2W4E5R6T7Y8Z9V'
 const TARGET = '01JB3XKX6F8Q2W4E5R6T7Y8Z9W'
@@ -32,6 +44,7 @@ function makeFakeAgent(options: { counterpartyRceVersion?: number; relationshipF
   }
   singletons.set(InjectionSymbols.StorageService, {
     save: async (_ctx: unknown, record: ChatEventRecord) => {
+      mockOrder.push('save')
       stored.push(record)
     },
     findByQuery: async (_ctx: unknown, _cls: unknown, query: Record<string, string>) =>
@@ -123,24 +136,76 @@ describe('receiveChatEventMessage', () => {
     expect(fake.stored).toHaveLength(0)
   })
 
-  it('refuses an invalid event, and an attachment until Step 3', async () => {
+  it('refuses an invalid event', async () => {
     const fake = makeFakeAgent()
     expect(await receiveChatEventMessage(fake.agent, inbound({ profile: 'other', type: 'message' }))).toBe(
       'wrong-profile'
     )
+    expect(fake.stored).toHaveLength(0)
+  })
+})
+
+describe('receiving a photo (plan §4.3, §5)', () => {
+  const photo = (attachment: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    inbound({ profile: CHAT_PROFILE, type: 'message', eventId: EVENT_ID, attachments: [attachment], ...extra })
+  const jpeg = () => descriptorFor(bytesOf(REAL.jpeg), { mediaType: 'image/jpeg', width: 5, height: 3 })
+
+  beforeEach(() => {
+    mockOrder.length = 0
+    write.mockClear()
+  })
+
+  it('writes the file, named by the eventId and the type read from the bytes, before storing the record', async () => {
+    const fake = makeFakeAgent()
+    expect(await receiveChatEventMessage(fake.agent, photo(jpeg()))).toBe('stored')
+    expect(write).toHaveBeenCalledWith('conn-1', EVENT_ID, 'image/jpeg', REAL.jpeg)
+    expect(mockOrder).toEqual(['write', 'save'])
+    expect(fake.stored[0].attachments).toEqual([
+      {
+        id: 'a1',
+        mediaType: 'image/jpeg',
+        byteCount: bytesOf(REAL.jpeg).length,
+        width: 5,
+        height: 3,
+        file: `${EVENT_ID}.jpg`,
+      },
+    ])
+  })
+
+  it('keeps no image data, and no sender-supplied filename, in the record', async () => {
+    const fake = makeFakeAgent()
+    await receiveChatEventMessage(fake.agent, photo(jpeg()))
+    const kept = JSON.stringify(fake.stored[0])
+    expect(kept).not.toContain(REAL.jpeg.slice(0, 40))
+    expect(kept).not.toContain('IMG_0412')
+  })
+
+  it('stores the message with the attachment unsupported, writing nothing, when the photo fails a check', async () => {
+    const fake = makeFakeAgent()
     expect(
       await receiveChatEventMessage(
         fake.agent,
-        inbound({
-          profile: CHAT_PROFILE,
-          type: 'message',
-          eventId: EVENT_ID,
-          content: { format: 'text/plain', text: 'photo' },
-          attachments: [{ id: 'a1' }],
-        })
+        photo({ ...jpeg(), width: 6 }, { content: { format: 'text/plain', text: 'hi' } })
       )
-    ).toBe('attachments-unsupported')
-    expect(fake.stored).toHaveLength(0)
+    ).toBe('stored')
+    expect(write).not.toHaveBeenCalled()
+    expect(fake.stored[0].content?.text).toBe('hi')
+    expect(fake.stored[0].attachments).toEqual([{ id: 'a1', unsupported: 'dimension-mismatch' }])
+  })
+
+  it('stores the message with the attachment unsupported when the file cannot be written', async () => {
+    const fake = makeFakeAgent()
+    write.mockRejectedValueOnce(new Error('disk full'))
+    expect(await receiveChatEventMessage(fake.agent, photo(jpeg()))).toBe('stored')
+    expect(fake.stored[0].attachments).toEqual([{ id: 'a1', unsupported: 'not-saved' }])
+  })
+
+  it('writes nothing for a duplicate', async () => {
+    const fake = makeFakeAgent()
+    await receiveChatEventMessage(fake.agent, photo(jpeg()))
+    write.mockClear()
+    expect(await receiveChatEventMessage(fake.agent, photo(jpeg()))).toBe('duplicate')
+    expect(write).not.toHaveBeenCalled()
   })
 })
 

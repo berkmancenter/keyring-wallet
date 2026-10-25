@@ -5,14 +5,17 @@
  *
  * Parsing is strict about what each event type needs and lenient about
  * members it does not know, so a later minor addition does not break an
- * older reader. Attachments (§4.3) are refused until Step 3 ships them:
- * a message that carries one is rejected rather than shown without it.
+ * older reader. A message may carry one inline image (§4.3, §4.4), checked
+ * against its bytes by media/checkAttachment.ts: one that fails is kept as an
+ * unsupported attachment, so the message still arrives and says so.
  *
  * @module chat/chatEvent
  */
 
 import { normalizeEmoji } from './emoji/validate'
 import { decodeUlidTime } from './eventId'
+import { checkImageAttachment } from './media/checkAttachment'
+import type { ImageCheckFailure, ImageMediaType } from './media'
 
 /** The profile every event names (plan D3). */
 export const CHAT_PROFILE = 'keyring.chat/1'
@@ -56,8 +59,14 @@ export const MAX_TIMER_VERSION = 1_000_000
  */
 export const MAX_EVENT_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000
 
-/** Largest serialized event accepted while attachments are not supported. */
+/** Largest serialized event without an image. */
 export const MAX_EVENT_JSON_LENGTH = 65536
+
+/**
+ * Largest serialized message with an image: the base64 of the largest image
+ * (256 KiB raw, §4.4) on top of everything else an event may carry.
+ */
+export const MAX_IMAGE_EVENT_JSON_LENGTH = Math.ceil((256 * 1024) / 3) * 4 + MAX_EVENT_JSON_LENGTH
 
 export interface ChatMessageContent {
   format: 'text/plain'
@@ -71,9 +80,31 @@ interface ChatEventBase {
   clientTs?: string
 }
 
+/** An inline image that passed every check: its verified type and size, and its bytes as base64 to write once. */
+export interface ChatImageAttachment {
+  id: string
+  /** From the bytes' header, never from the sender's descriptor alone. */
+  mediaType: ImageMediaType
+  byteCount: number
+  width: number
+  height: number
+  /** Display only; never used as a file name. */
+  filename?: string
+  base64: string
+}
+
+/** An attachment that failed a check (§4.3): kept so the bubble can say "Unsupported attachment". */
+export interface ChatUnsupportedAttachment {
+  id?: string
+  unsupported: ImageCheckFailure
+}
+
 export interface ChatMessageEvent extends ChatEventBase {
   type: 'message'
-  content: ChatMessageContent
+  /** Absent only on a message that carries an attachment. */
+  content?: ChatMessageContent
+  /** At most one: several photos are sent as several messages (§4.4). */
+  attachments?: [ChatImageAttachment | ChatUnsupportedAttachment]
   inReplyTo?: string
   /** Seconds until the message disappears, 0 or absent = keep (plan §4.6). */
   expiresIn?: number
@@ -107,7 +138,7 @@ export type ChatEventRejection =
   | 'bad-content'
   | 'bad-in-reply-to'
   | 'bad-expires-in'
-  | 'attachments-unsupported'
+  | 'bad-attachments'
   | 'bad-target'
   | 'bad-emoji'
   | 'bad-timer'
@@ -127,6 +158,25 @@ function reject(reason: ChatEventRejection): ChatEventParseResult {
   return { ok: false, reason }
 }
 
+// The image's verified type and size, or why it is unsupported. The base64 is kept only to be written once.
+function toAttachment(descriptor: unknown): ChatImageAttachment | ChatUnsupportedAttachment {
+  const checked = checkImageAttachment(descriptor)
+  if (!checked.ok) {
+    const id = (descriptor as { id?: unknown } | null)?.id
+    return { ...(typeof id === 'string' && id.length <= 256 ? { id } : {}), unsupported: checked.reason }
+  }
+  const { image } = checked
+  return {
+    id: image.id,
+    mediaType: image.header.mediaType,
+    byteCount: image.bytes.length,
+    width: image.header.width,
+    height: image.header.height,
+    ...(image.filename !== undefined ? { filename: image.filename } : {}),
+    base64: (descriptor as { data: { base64: string } }).data.base64,
+  }
+}
+
 /**
  * Validate an inbound event and return only the members this reader knows.
  * Never throws; a rejection says why, for the log.
@@ -140,9 +190,16 @@ export function parseChatEvent(input: unknown, { now = Date.now() }: { now?: num
   } catch {
     return reject('not-an-object')
   }
-  if (serialized.length > MAX_EVENT_JSON_LENGTH) return reject('too-large')
-
   const raw = input as Record<string, unknown>
+  // An empty list is no attachment; anything else present is checked as one.
+  const hasAttachments =
+    raw.type === 'message' &&
+    raw.attachments !== undefined &&
+    !(Array.isArray(raw.attachments) && raw.attachments.length === 0)
+  if (serialized.length > (hasAttachments ? MAX_IMAGE_EVENT_JSON_LENGTH : MAX_EVENT_JSON_LENGTH)) {
+    return reject('too-large')
+  }
+
   if (raw.profile !== CHAT_PROFILE) return reject('wrong-profile')
   if (typeof raw.type !== 'string' || !EVENT_TYPES.has(raw.type)) return reject('unknown-type')
   if (!isUlid(raw.eventId)) return reject('bad-event-id')
@@ -158,17 +215,23 @@ export function parseChatEvent(input: unknown, { now = Date.now() }: { now?: num
 
   switch (raw.type as ChatEventType) {
     case 'message': {
-      if (Array.isArray(raw.attachments) && raw.attachments.length > 0) return reject('attachments-unsupported')
+      let attachments: ChatMessageEvent['attachments']
+      if (hasAttachments) {
+        if (!Array.isArray(raw.attachments) || raw.attachments.length !== 1) return reject('bad-attachments')
+        attachments = [toAttachment(raw.attachments[0])]
+      }
       const content = raw.content as Record<string, unknown> | undefined
-      if (
-        typeof content !== 'object' ||
-        content === null ||
-        content.format !== 'text/plain' ||
-        typeof content.text !== 'string' ||
-        content.text.length === 0 ||
-        content.text.length > MAX_TEXT_LENGTH
-      ) {
-        return reject('bad-content')
+      if (content !== undefined || !attachments) {
+        if (
+          typeof content !== 'object' ||
+          content === null ||
+          content.format !== 'text/plain' ||
+          typeof content.text !== 'string' ||
+          content.text.length === 0 ||
+          content.text.length > MAX_TEXT_LENGTH
+        ) {
+          return reject('bad-content')
+        }
       }
       if (raw.inReplyTo !== undefined && !isUlid(raw.inReplyTo)) return reject('bad-in-reply-to')
       if (raw.expiresIn !== undefined && !isExpiresIn(raw.expiresIn)) return reject('bad-expires-in')
@@ -177,7 +240,8 @@ export function parseChatEvent(input: unknown, { now = Date.now() }: { now?: num
         event: {
           ...base,
           type: 'message',
-          content: { format: 'text/plain', text: content.text },
+          ...(content ? { content: { format: 'text/plain' as const, text: content.text as string } } : {}),
+          ...(attachments ? { attachments } : {}),
           ...(raw.inReplyTo !== undefined ? { inReplyTo: raw.inReplyTo as string } : {}),
           ...(raw.expiresIn ? { expiresIn: Math.max(raw.expiresIn as number, MIN_EXPIRES_IN) } : {}),
         },

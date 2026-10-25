@@ -1,7 +1,10 @@
 /**
  * Receiving `keyring/chat/1.0` events (rich-messaging-plan.md §4).
  *
- * The handler only validates and stores. Folding reactions into their
+ * The handler only validates and stores. A message's photo is written to the
+ * chat's media folder before its record is stored, so a record never names a
+ * file that is not there; a crash in between leaves only an orphan file, which
+ * Clear chat or removing the contact clears. Folding reactions into their
  * targets, the authorship check and ordering belong to the chat service
  * built on top. The sender of a stored event is always the connection it
  * arrived on, never a member of the event.
@@ -14,10 +17,12 @@ import type { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
 
 import { parseChatEvent } from './chatEvent'
-import type { ChatEventRejection } from './chatEvent'
+import type { ChatEventRejection, ChatMessageEvent } from './chatEvent'
 import { getChatEventRepository } from './ChatModule'
 import { ChatEventMessage } from './messages/ChatEventMessage'
+import { writeChatMedia } from './media/store'
 import { ChatEventRecord } from './records/ChatEventRecord'
+import type { ChatEventRecordAttachment } from './records/ChatEventRecord'
 import { noteChatFromContact, setupChatCapability } from './notice'
 import { isBeingSent } from './sending'
 
@@ -73,6 +78,7 @@ export async function receiveChatEventMessage(
     return 'reused-event-id'
   }
 
+  const attachments = event.type === 'message' ? await storeAttachments(agent, connectionId, event) : undefined
   await repository.save(
     agent.context,
     new ChatEventRecord({
@@ -82,7 +88,7 @@ export async function receiveChatEventMessage(
       eventType: event.type,
       clientTs: event.clientTs,
       ...(event.type === 'message'
-        ? { content: event.content, inReplyTo: event.inReplyTo, expiresIn: event.expiresIn }
+        ? { content: event.content, attachments, inReplyTo: event.inReplyTo, expiresIn: event.expiresIn }
         : {}),
       ...(event.type === 'reaction' ? { target: event.target, emoji: event.emoji } : {}),
       ...(event.type === 'redaction' ? { target: event.target } : {}),
@@ -96,6 +102,29 @@ export async function receiveChatEventMessage(
     agent.config.logger.warn(`${LOG_PREFIX} could not record that ${connectionId} speaks chat`, { error })
   }
   return 'stored'
+}
+
+/**
+ * Write a message's checked photo and describe it for the record, which never holds the image itself. The file is
+ * named by the eventId and the type read from the bytes (media/store.ts), never by anything else the sender wrote. A
+ * photo that cannot be written is kept as unsupported, so its message still arrives.
+ */
+async function storeAttachments(
+  agent: Agent,
+  connectionId: string,
+  event: ChatMessageEvent
+): Promise<ChatEventRecordAttachment[] | undefined> {
+  const attachment = event.attachments?.[0]
+  if (!attachment) return undefined
+  if ('unsupported' in attachment) return [attachment]
+  try {
+    const file = await writeChatMedia(connectionId, event.eventId, attachment.mediaType, attachment.base64)
+    const { id, mediaType, byteCount, width, height } = attachment
+    return [{ id, mediaType, byteCount, width, height, file }]
+  } catch (error) {
+    agent.config.logger.warn(`${LOG_PREFIX} a photo on connection ${connectionId} could not be written`, { error })
+    return [{ id: attachment.id, unsupported: 'not-saved' }]
+  }
 }
 
 /**

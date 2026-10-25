@@ -2,12 +2,15 @@ import {
   CHAT_PROFILE,
   MAX_EVENT_JSON_LENGTH,
   MAX_EXPIRES_IN,
+  MAX_IMAGE_EVENT_JSON_LENGTH,
   MAX_TEXT_LENGTH,
   isUlid,
   parseChatEvent,
   MAX_TIMER_VERSION,
   MIN_EXPIRES_IN,
 } from '../chatEvent'
+import { MAX_IMAGE_BYTES } from '../media'
+import { REAL, bytesOf, descriptorFor } from '../media/__tests__/fixtures/images'
 
 const ID = '01JB3XKX6F8Q2W4E5R6T7Y8Z9V'
 const TARGET = '01JB3XKX6F8Q2W4E5R6T7Y8Z9W'
@@ -84,13 +87,73 @@ describe('parseChatEvent', () => {
     ['a bad inReplyTo', message({ inReplyTo: 'nope' }), 'bad-in-reply-to'],
     ['a negative expiresIn', message({ expiresIn: -1 }), 'bad-expires-in'],
     ['too long an expiresIn', message({ expiresIn: MAX_EXPIRES_IN + 1 }), 'bad-expires-in'],
-    ['an attachment', message({ attachments: [{ id: 'a1' }] }), 'attachments-unsupported'],
+    ['attachments that are not a list', message({ attachments: { id: 'a1' } }), 'bad-attachments'],
+    ['two attachments', message({ attachments: [{ id: 'a1' }, { id: 'a2' }] }), 'bad-attachments'],
+    ['no content and no attachment', message({ content: undefined, attachments: [] }), 'bad-content'],
   ])('rejects %s', (_label, input, reason) => {
     expect(parseChatEvent(input)).toEqual({ ok: false, reason })
   })
 
   it('accepts an empty attachments array, which carries nothing', () => {
     expect(parseChatEvent(message({ attachments: [] })).ok).toBe(true)
+  })
+
+  describe('an inline image (plan §4.3)', () => {
+    const jpeg = () => descriptorFor(bytesOf(REAL.jpeg), { mediaType: 'image/jpeg', width: 5, height: 3 })
+
+    it('keeps a checked photo with its caption, its type and size read from the bytes, and its base64 to write', () => {
+      const result = parseChatEvent(message({ attachments: [jpeg()] }))
+      expect(result).toEqual({
+        ok: true,
+        event: {
+          profile: CHAT_PROFILE,
+          type: 'message',
+          eventId: ID,
+          content: { format: 'text/plain', text: 'look at this 🐱' },
+          attachments: [
+            {
+              id: 'a1',
+              mediaType: 'image/jpeg',
+              byteCount: bytesOf(REAL.jpeg).length,
+              width: 5,
+              height: 3,
+              filename: 'IMG_0412.jpg',
+              base64: REAL.jpeg,
+            },
+          ],
+        },
+      })
+    })
+
+    it('accepts a photo with no text', () => {
+      const result = parseChatEvent(message({ content: undefined, attachments: [jpeg()] }))
+      expect(result.ok && result.event.type === 'message' && result.event.content).toBeUndefined()
+      expect(result.ok && result.event.type === 'message' && result.event.attachments?.[0]).toHaveProperty('base64')
+    })
+
+    // The message still arrives and says so; only the attachment is refused (§4.3, §5).
+    it.each([
+      ['dimensions other than the bytes’', { width: 6 }, 'dimension-mismatch'],
+      ['an unsupported type', { mediaType: 'image/heic' }, 'unsupported-type'],
+      ['a byteCount over the limit', { byteCount: MAX_IMAGE_BYTES + 1 }, 'too-large'],
+    ])('keeps the message, with the attachment unsupported, for %s', (_label, change, unsupported) => {
+      const result = parseChatEvent(message({ attachments: [{ ...jpeg(), ...change }] }))
+      expect(result.ok && result.event.type === 'message' && result.event.attachments).toEqual([
+        { id: 'a1', unsupported },
+      ])
+    })
+
+    it('allows the largest image’s event, and refuses one beyond it; text alone keeps the smaller limit', () => {
+      const padding = (n: number) => ({ pad: 'x'.repeat(n) })
+      const base = message({ attachments: [jpeg()] })
+      const room = MAX_IMAGE_EVENT_JSON_LENGTH - JSON.stringify(base).length - JSON.stringify(padding(0)).length + 1
+      expect(parseChatEvent({ ...base, ...padding(room) }).ok).toBe(true)
+      expect(parseChatEvent({ ...base, ...padding(room + 1) })).toEqual({ ok: false, reason: 'too-large' })
+      expect(parseChatEvent(message({ pad: 'x'.repeat(MAX_EVENT_JSON_LENGTH) }))).toEqual({
+        ok: false,
+        reason: 'too-large',
+      })
+    })
   })
 
   it('rejects reactions without a valid target or emoji', () => {

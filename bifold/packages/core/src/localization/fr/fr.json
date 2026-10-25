@@ -1187,6 +1187,8 @@
     "Confirmed": "Je confirme que cette application est faite pour moi."
   },
   "Chat": {
+    "Photo": "📷 Photo",
+    "UnsupportedAttachment": "Pièce jointe non prise en charge",
     "OpenPresentation": "Ouvrir la présentation",
     "ViewRequest": "Voir la demande",
     "ViewOffer": "Voir l'offre",

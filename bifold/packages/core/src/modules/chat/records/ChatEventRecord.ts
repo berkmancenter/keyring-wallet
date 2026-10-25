@@ -10,8 +10,30 @@
 import { BaseRecord, DateTransformer, TagsBase, utils } from '@credo-ts/core'
 
 import type { ChatEventType, ChatMessageContent } from '../chatEvent'
+import type { ImageCheckFailure, ImageMediaType } from '../media'
 
 export type ChatEventRole = 'sent' | 'received'
+
+/**
+ * A message's photo as this phone keeps it: the verified type and size, and the file's name in the chat's media folder
+ * (media/store.ts), never a path, since an iOS data container can move. No image data is ever kept in a record.
+ */
+export interface ChatStoredAttachment {
+  id: string
+  mediaType: ImageMediaType
+  byteCount: number
+  width: number
+  height: number
+  file: string
+}
+
+/** An attachment that failed a check, or could not be written: the bubble says "Unsupported attachment". */
+export interface ChatUnsupportedStoredAttachment {
+  id?: string
+  unsupported: ImageCheckFailure | 'not-saved'
+}
+
+export type ChatEventRecordAttachment = ChatStoredAttachment | ChatUnsupportedStoredAttachment
 
 export interface ChatEventRecordProps {
   id?: string
@@ -20,6 +42,7 @@ export interface ChatEventRecordProps {
   eventId: string
   eventType: ChatEventType
   content?: ChatMessageContent
+  attachments?: ChatEventRecordAttachment[]
   inReplyTo?: string
   target?: string
   emoji?: string
@@ -51,6 +74,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
   public eventId!: string
   public eventType!: ChatEventType
   public content?: ChatMessageContent
+  public attachments?: ChatEventRecordAttachment[]
   public inReplyTo?: string
   public target?: string
   public emoji?: string
@@ -73,6 +97,7 @@ export class ChatEventRecord extends BaseRecord<ChatEventRecordTags, TagsBase> {
       this.eventId = props.eventId
       this.eventType = props.eventType
       this.content = props.content
+      this.attachments = props.attachments
       this.inReplyTo = props.inReplyTo
       this.target = props.target
       this.emoji = props.emoji
