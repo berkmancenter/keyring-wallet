@@ -5,6 +5,7 @@
 **Companions:**
 - [`public-roadmap-plan/2026-10-21-al.md`](./public-roadmap-plan/2026-10-21-al.md) — research findings (what the internal board and the tester-report ledger held on 2026-10-21, what GitHub offers as of October 2026, how other open-source projects run public roadmaps), the options weighed, and the first decisions.
 - [`public-roadmap-plan/2026-10-22-bam.md`](./public-roadmap-plan/2026-10-22-bam.md) — review of the plan: publication and privacy gaps, status and closure semantics, verifiable acceptance criteria. Lists the items awaiting owner confirmation and carries the point-in-time data removed from §3.
+- [`public-roadmap-plan/2026-10-25-al.md`](./public-roadmap-plan/2026-10-25-al.md) — the product owner's answers to the review's decisions (D3, D6, D10 confirmed) and what is still open.
 
 **Related plans:** [`release-flow-plan.md`](./release-flow-plan.md) (how a change reaches testers). The versioning-and-releases plan is **not in this repository yet** (not on `main`): it makes each tester release a version, with a GitHub Release as the changelog of record. This plan's *Shipped in* field and the Testing and Shipped automation are **conditional on it** (§8).
 
@@ -226,7 +227,7 @@ Plan / spec link, affected areas, PRs, acceptance criteria, agent notes.
 
 Everything here that can create or edit public text passes through the scan (§7.1).
 
-- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation uses a **GitHub App** installed on the org with Projects (read/write) and Issues (write) on both repositories (D10). It is held by the triage owner role (§8.1), who also owns rotation. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
+- **Credential.** The `GITHUB_TOKEN` cannot write to projects ([automating projects using Actions](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions): "`GITHUB_TOKEN` is scoped to the repository level and cannot access projects"). Automation runs as a **GitHub App**, a bot identity, with Projects (read/write) and Issues (write) on both repositories (D10). Its key is managed outside this document. Its bot identity is documented in the project README and each repository's contributing file, so readers know bot comments are ours.
 - **Signal → issue (idempotent upsert):**
   1. When a report is accepted **and the reporter has said yes to a public issue**, find the issue the ledger maps the `IN-` number to. Opt-in is per report and is recorded in the ledger. A report without opt-in stays in Signal.
   2. If there is none, create one in `keyring-wallet` from the card template; otherwise update it.
@@ -241,7 +242,7 @@ Everything here that can create or edit public text passes through the scan (§7
   - A workflow sets **In progress** when a linked PR opens.
   - **Conditional on the versioning-and-releases plan** (not in this repository): the release flow sets **Testing** when a tester build contains the item, and **Shipped** plus `Shipped in` plus the closing comment when the GitHub Release is published. For a bifold item, the release job finds bifold PRs between the old and new submodule pointer. Until that plan lands, the triage owner sets Testing and Shipped by hand at each release, and `Shipped in` stays blank.
 - **Plans → epics.** A small script creates the Epic for a plan from its header, and the plan header gets the issue number in the same PR. Only plans merged to `main` become epics.
-- **Staleness check.** A weekly scheduled workflow in `keyring-wallet`, using the App credential, **reports** to the triage owner and never closes anything ("stale bots are widely resented, and they would close real tester reports"):
+- **Staleness check.** A weekly scheduled workflow in `keyring-wallet`, as the App, **reports** to the triage owner and never closes anything ("stale bots are widely resented, and they would close real tester reports"):
   - In progress or Testing with no activity for 14 days;
   - Requested with no maintainer comment within the acknowledgement target (§8.1), and Under review with no activity for 30 days;
   - any card whose public layer is missing or stale (§6).
@@ -252,10 +253,10 @@ Everything here that can create or edit public text passes through the scan (§7
 
 ### 8.1 Ownership and cadence
 
-- **Triage owner** (a named role; **who is not yet named, and Step 1 and launch wait on it**): moves cards out of Requested, holds the App credential and its rotation, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. "The coordinator" elsewhere in Keyring's processes means this role.
+- **Triage owner** (a named role; **who is not yet named, and Step 1 and launch wait on it**): moves cards out of Requested, approves held scan results, receives the weekly report, and sets Testing and Shipped by hand while the release automation is not in place. "The coordinator" elsewhere in Keyring's processes means this role.
 - **Acknowledgement.** The public statement, in the project README and the issue forms, is "we aim to respond within about a week". Internally the triage owner tracks a tighter target of 3 working days, which the weekly check reports against and which is never published (*provisional*, D15). The response may only say the item is seen.
 - **Moderation owner** (**not yet named; Step 1 and launch wait on it**): handles community issues and comments under the Code of Conduct, reviews community-filed attachments, takes down leaks (§7.3), and may lock an issue that has stopped being useful. Locking is for conduct and for finished threads, never for disagreement.
-- **Where jobs run:** the weekly check runs as a scheduled workflow in `keyring-wallet`; the Signal sync runs where the Signal bot runs. Both use the App credential.
+- **Where jobs run:** the weekly check runs as a scheduled workflow in `keyring-wallet`; the Signal sync runs where the Signal bot runs. Both run as the App.
 
 ---
 
@@ -330,7 +331,7 @@ Everything here that can create or edit public text passes through the scan (§7
 | D7 | Internal view | No second board. Internal coordination stays in Signal and the Command Center. Withheld items sit in one private holding project of draft items (§4.1) | A second board would be a second source of truth. But keep-private and embargoed items must live somewhere that is not the public board, and draft items have no issue history to leak. |
 | D8 | Filing on GitHub | Anyone can file bugs **and** feature requests as issues, through forms. No Discussions; 👍 shows interest | One place to look, and one status for each request. Feature requests in Discussions would need a second status system |
 | D9 | Dates | None on the board. Releases only, plus an *Up next* marker | A small team's dates slip and become broken promises in public |
-| D10 | Credentials | A GitHub App with org Projects write and Issues write on both repositories, held by the triage owner role, bot identity documented publicly | The workflow token cannot write to projects (§8), and an App is not tied to one person's account |
+| D10 | Credentials | A GitHub App (a bot identity) with Projects write and Issues write on both repositories; its key is managed outside this document; the bot identity is documented publicly | The workflow token cannot write to projects (§8), and an App is not tied to one person's account |
 | D11 | Project | A new public project. The existing private org project #9 "Keyring" is left to its owner | #9 holds older items, mostly from private repositories, which outsiders would see as redacted rows |
 | D12 | Declined items | Not planned and Duplicate are Status options, shown in *Closed without shipping*, each with a one-line reason comment, and a link to the original for Duplicate | A close reason alone is not a project field, so a view would have to filter on issue state, which also contains shipped items |
 | D13 | Publication cadence | For the first few public weeks, reports are published in daily batches. Cadence may loosen afterwards; provisional, reviewed after about a month | Real-time publication ties an issue's creation time to a message's arrival. Once opt-in and summary scrubbing exist, batching adds little privacy and slows G2 (the reporter sees the item change state), so it is a launch precaution, not a permanent rule |
