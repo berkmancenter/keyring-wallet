@@ -344,22 +344,3 @@ export function signInReasonOf(error: unknown): SignInEndReason | undefined {
   }
   return undefined
 }
-
-/**
- * A sign-in code the scanner accepted, held until the sign-in screen reads it
- * (as `pendingVettingTicket` holds a vetter's ticket): the scanner's
- * navigation carries a destination, not params. Read during render, so a
- * double render reads it twice; the screen clears it once it has it.
- */
-let pendingLink: string | undefined
-export const pendingSignInLink = {
-  set(link: string): void {
-    pendingLink = link
-  },
-  peek(): string | undefined {
-    return pendingLink
-  },
-  clear(): void {
-    pendingLink = undefined
-  },
-}

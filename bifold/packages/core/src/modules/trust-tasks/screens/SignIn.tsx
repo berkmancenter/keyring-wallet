@@ -43,7 +43,6 @@ import type { ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
 import {
   agentSignInSteps,
-  pendingSignInLink,
   signInCommunityOf,
   signInReasonOf,
   type ProvedSignIn,
@@ -569,15 +568,19 @@ export const SignInFlow: React.FC<SignInFlowProps> = ({ link, steps, now = nowSe
   )
 }
 
-/** The screen in the My Agent stack: the code the scanner held, the agent's steps. */
-const SignIn: React.FC<{ steps?: SignInSteps; link?: string }> = ({ steps, link }) => {
+/**
+ * The screen in the My Agent stack: the code its route carries, the agent's
+ * steps. Each scan is its own route (MyAgentStack's `getId`), so the code is
+ * this screen's for its whole life: kept from the first render.
+ */
+const SignIn: React.FC<{ steps?: SignInSteps; link?: string; route?: { params?: { link?: string } } }> = ({
+  steps,
+  link,
+  route,
+}) => {
   const { agent } = useAgent()
   const navigation = useNavigation()
-  // Read during render, so both renders of a double render see it; cleared once kept.
-  const [code] = useState(() => link ?? pendingSignInLink.peek())
-  useEffect(() => {
-    pendingSignInLink.clear()
-  }, [])
+  const [code] = useState(() => link ?? route?.params?.link)
   const agentSteps = useMemo(() => steps ?? (agent ? agentSignInSteps(agent) : undefined), [steps, agent])
   if (!agentSteps) return null
   return <SignInFlow link={code} steps={agentSteps} onClose={() => navigation.goBack()} />

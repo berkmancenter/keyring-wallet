@@ -157,6 +157,8 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
       <Stack.Screen
         name={Screens.SignIn}
         component={SignIn as React.FC}
+        // Each scan is its own screen: a second code never lands on the first one's.
+        getId={({ params }) => params?.scanId}
         options={{ title: t('Screens.SignIn'), ...ScreenOptionsDictionary[Screens.SignIn] }}
       />
       <Stack.Screen

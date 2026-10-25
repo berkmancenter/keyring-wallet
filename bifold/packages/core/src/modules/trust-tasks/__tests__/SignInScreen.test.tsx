@@ -16,7 +16,7 @@ import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { SIGN_IN_FAILURE_MESSAGES, SignInError, type ClaimedSignIn } from '../module/oobSignIn'
 import { GRANT_LIFETIME_SECONDS } from '../module/oobSignInAgent'
-import { pendingSignInLink, type ProvedSignIn, type SignInIdentity, type SignInSteps } from '../module/signInSteps'
+import { type ProvedSignIn, type SignInIdentity, type SignInSteps } from '../module/signInSteps'
 import SignIn, { SignInFlow } from '../screens/SignIn'
 import { SignInIds } from '../screens/SignIn.ids'
 
@@ -505,20 +505,18 @@ describe('leaving the screen', () => {
 })
 
 describe('the screen in the stack', () => {
-  test('takes the code the scanner held, and lets it go', async () => {
-    pendingSignInLink.set(LINK)
+  test('takes the code its route carries', async () => {
     clock = NOW
     jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000)
     const steps = fakeSteps()
     const tree = render(
       <BasicAppContext>
-        <SignIn steps={steps} />
+        <SignIn steps={steps} route={{ params: { link: LINK } }} />
       </BasicAppContext>
     )
     await act(async () => undefined)
     expect(steps.community).toHaveBeenCalledWith(VTC)
     expect(tree.getByTestId(id(SignInIds.confirm))).toBeTruthy()
-    expect(pendingSignInLink.peek()).toBeUndefined()
     ;(Date.now as jest.Mock).mockRestore()
   })
 })

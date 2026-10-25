@@ -170,7 +170,8 @@ export type MyAgentStackParams = {
   [Screens.VtaDevices]: undefined
   [Screens.VtaNewPhoneOffer]: undefined
   [Screens.VtiJoin]: undefined
-  [Screens.SignIn]: undefined
+  // The code, and the scan it came from (the route's id: each scan is its own screen).
+  [Screens.SignIn]: { link: string; scanId: string } | undefined
   [Screens.VtaClaim]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }

@@ -1,7 +1,6 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
-import { pendingSignInLink } from '../module/signInSteps'
 import { pendingVtaClaimLink } from '../module/vtaClaimSteps'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -621,29 +620,37 @@ describe('a one-scan trigger link (sign-in, agent claim)', () => {
       pendingVtaClaimLink.clear()
     })
 
-    it('opens the sign-in screen for a sign-in it accepts, holding the code, and sends nothing', async () => {
-      pendingSignInLink.clear()
+    it('opens the sign-in screen for a sign-in it accepts, carrying the code, and sends nothing', async () => {
       const navigate = jest.fn()
       const resolve = jest.fn()
       await routeKeyringAgentLink(`  ${live}\n`, { dids: { resolve } } as never, navigate)
-      expect(navigate).toHaveBeenCalledWith('SignIn')
+      expect(navigate).toHaveBeenCalledWith({ screen: 'SignIn', link: live, scanId: expect.any(String) })
       expect(MY_AGENT_SCREEN.SignIn).toBe(Screens.SignIn)
-      expect(myAgentLinkParams('SignIn')).toEqual({ screen: Screens.SignIn, initial: false })
-      expect(pendingSignInLink.peek()).toBe(live)
+      const [destination] = navigate.mock.calls[0]
+      expect(myAgentLinkParams(destination)).toEqual({
+        screen: Screens.SignIn,
+        initial: false,
+        params: { link: live, scanId: destination.scanId },
+      })
       expect(resolve).not.toHaveBeenCalled()
-      pendingSignInLink.clear()
+    })
+
+    it('gives each scan of a code its own screen, even the same code twice', async () => {
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(live, {} as never, navigate)
+      await routeKeyringAgentLink(live, {} as never, navigate)
+      const [first, second] = navigate.mock.calls.map(([destination]) => destination.scanId)
+      expect(first).not.toBe(second)
     })
   })
 
   it('never opens the sign-in screen while sign-in is off, even for a live sign-in code', async () => {
-    pendingSignInLink.clear()
     const live = signIn.replace('_exp=1791675395', `_exp=${Math.floor(Date.now() / 1000) + 300}`)
     const navigate = jest.fn()
     await expect(routeKeyringAgentLink(live, {} as never, navigate)).rejects.toMatchObject({
       messageKey: 'Scan.TriggerLinkUpdate',
     })
     expect(navigate).not.toHaveBeenCalled()
-    expect(pendingSignInLink.peek()).toBeUndefined()
   })
 })
 

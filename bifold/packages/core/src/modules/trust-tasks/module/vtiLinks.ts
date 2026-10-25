@@ -26,7 +26,6 @@ import { agentHomeScreen } from '../screens/agentHome'
 
 import { AgentHostConnectionError, looksLikeAgentHostQr, parseAgentHostQr } from './agentHostConnection'
 import { bareDid, classifyDid } from './classifyDid'
-import { pendingSignInLink } from './signInSteps'
 import { pendingVtaClaimLink } from './vtaClaimSteps'
 import {
   readTrigger,
@@ -335,8 +334,8 @@ async function routeBareDid(
   }
 }
 
-/** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination =
+/** A screen a link lands on, inside the My Agent stack. */
+export type MyAgentScreenName =
   | 'VtaLink'
   | 'MyAgent'
   | 'VtaAgent'
@@ -347,7 +346,17 @@ export type MyAgentDestination =
   | 'SignIn'
   | 'VtaClaim'
 
-export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
+/**
+ * A sign-in code, carried to its screen as the route's params. Each scan is its
+ * own screen (`scanId`, the route's id): a second code scanned while a sign-in
+ * is on screen opens a new one, and never shows the first one's code or result.
+ */
+export type SignInDestination = { screen: 'SignIn'; link: string; scanId: string }
+
+/** Where a link lands, inside the My Agent stack. */
+export type MyAgentDestination = MyAgentScreenName | SignInDestination
+
+export const MY_AGENT_SCREEN: Record<MyAgentScreenName, Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
   VtaAgent: Screens.VtaAgent,
@@ -370,9 +379,24 @@ export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
  * and a press on the My Agent tab stayed on it (233). The first screen itself
  * goes without it, or it would sit on top of itself.
  */
-export function myAgentLinkParams(destination: MyAgentDestination): { screen: Screens; initial?: false } {
+export function myAgentLinkParams(destination: MyAgentDestination): {
+  screen: Screens
+  initial?: false
+  params?: { link: string; scanId: string }
+} {
+  if (typeof destination !== 'string') {
+    const { link, scanId } = destination
+    return { screen: MY_AGENT_SCREEN[destination.screen], initial: false, params: { link, scanId } }
+  }
   const screen = MY_AGENT_SCREEN[destination]
   return screen === agentHomeScreen() ? { screen } : { screen, initial: false }
+}
+
+/** A new id for each scan of a sign-in code: unique within this run of the app. */
+let scans = 0
+export function newSignInScanId(): string {
+  scans += 1
+  return `${Date.now()}-${scans}`
 }
 
 /**
@@ -551,8 +575,7 @@ export async function routeKeyringAgentLink(
       throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
     case 'triggerLink':
       if (signInToOpen(trimmed)) {
-        pendingSignInLink.set(trimmed)
-        navigate('SignIn')
+        navigate({ screen: 'SignIn', link: trimmed, scanId: newSignInScanId() })
         return
       }
       if (vtaClaimToOpen(trimmed)) {
