@@ -1,10 +1,10 @@
 import { JsonTransformer } from '@credo-ts/core'
 
 import { CHAT_PROFILE } from '../chatEvent'
-import type { ChatEvent } from '../chatEvent'
+import type { ChatOutgoingMessageEvent } from '../chatEvent'
 import { CHAT_EVENT_MESSAGE_TYPE, ChatEventMessage } from '../messages/ChatEventMessage'
 
-const event: ChatEvent = {
+const event: ChatOutgoingMessageEvent = {
   profile: CHAT_PROFILE,
   type: 'message',
   eventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9V',
