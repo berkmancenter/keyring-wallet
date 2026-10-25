@@ -1,4 +1,9 @@
-import { DidCommMessageHandlerRegistry, DidCommMessageSender, DidCommProblemReportMessage } from '@credo-ts/didcomm'
+import {
+  DidCommBasicMessageRepository,
+  DidCommMessageHandlerRegistry,
+  DidCommMessageSender,
+  DidCommProblemReportMessage,
+} from '@credo-ts/didcomm'
 import { EventEmitter, InjectionSymbols, JsonTransformer } from '@credo-ts/core'
 import type { BaseRecord } from '@credo-ts/core'
 
@@ -16,6 +21,15 @@ import {
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 
 jest.mock('../../vrc/vrc-manager', () => ({ RCE_PROTOCOL_VERSION: 6 }))
+// The refusal path deletes through history.ts, which reads the chat's media folder. This chat has no media.
+// Explicit, rather than jest's automock, whose shape follows whichever react-native-fs build is installed.
+jest.mock('react-native-fs', () => ({
+  LibraryDirectoryPath: '/lib',
+  DocumentDirectoryPath: '/files',
+  exists: jest.fn(async () => false),
+  readDir: jest.fn(async () => []),
+  unlink: jest.fn(async () => undefined),
+}))
 
 const NOW = new Date('2026-10-25T10:00:00Z').getTime()
 const EVENT_ID = '01JB3XKX6F8Q2W4E5R6T7Y8Z9V'
@@ -75,6 +89,8 @@ function makeAgent(
       ),
   })
   singletons.set(EventEmitter, { emit: jest.fn() })
+  // Delete for me's cascade (history.ts) also looks at plain BasicMessages; this chat has none.
+  singletons.set(DidCommBasicMessageRepository, { findByQuery: async () => [], delete: async () => undefined })
   singletons.set(DidCommMessageSender, {
     sendMessage: async (outbound: { message: unknown; connection: Connection }) => {
       sent.push({ message: outbound.message, connectionId: outbound.connection.id })
@@ -278,6 +294,23 @@ describe('receiveChatProblemReport', () => {
     expect(await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)).toBe('chat-refused')
     expect(fake.events()).toHaveLength(1)
     expect(fake.basic).toHaveLength(0)
+  })
+
+  it('removes a refused message together with the reactions on it', async () => {
+    const fake = makeAgent({ rceVersion: 6 })
+    fake.addEvent(sentEvent('conn-1', 'message'))
+    fake.addEvent(
+      new ChatEventRecord({
+        connectionId: 'conn-1',
+        role: 'received',
+        eventId: '01JB3XKX6F8Q2W4E5R6T7Y8Z9X',
+        eventType: 'reaction',
+        target: EVENT_ID,
+        emoji: '👍',
+      })
+    )
+    expect(await receiveChatProblemReport(fake.agent, ctx(fake, problemReport(EVENT_ID)), NOW)).toBe('chat-refused')
+    expect(fake.events()).toHaveLength(0)
   })
 
   it('drops a refused reaction without sending anything in its place', async () => {

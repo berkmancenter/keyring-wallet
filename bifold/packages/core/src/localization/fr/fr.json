@@ -1222,7 +1222,22 @@
     "ClearChatTitle": "Effacer cette discussion ?",
     "ClearChatBody": "Tous les messages et photos de cette discussion seront supprimés définitivement de ce téléphone. {{name}} garde sa copie. Cette action est irréversible.",
     "ClearChatDone": "Discussion effacée",
-    "ClearChatFailed": "La discussion n'a pas pu être entièrement effacée, et certains messages ont peut-être déjà disparu. Réessayez."
+    "ClearChatFailed": "La discussion n'a pas pu être entièrement effacée, et certains messages ont peut-être déjà disparu. Réessayez.",
+    "Reply": "Répondre",
+    "Copy": "Copier",
+    "Copied": "Copié",
+    "DeleteForMe": "Supprimer pour moi",
+    "Delete": "Supprimer",
+    "DeleteForMeTitle": "Supprimer pour moi ?",
+    "DeleteForMeBody": "Ce message sera supprimé de ce téléphone. Votre contact le conservera.",
+    "DeleteFailed": "Impossible de supprimer le message. Réessayez.",
+    "ReactWith": "Réagir avec {{emoji}}",
+    "MoreReactions": "Plus de réactions",
+    "ReactionYou": "{{emoji}} {{count}}, dont vous",
+    "ReactionThem": "{{emoji}} {{count}}",
+    "ReactionNeedsUpdate": "Pour les réactions, {{name}} doit mettre à jour Keyring.",
+    "ReactionNotSent": "Impossible d'envoyer la réaction. Réessayez.",
+    "ReplyUnavailable": "Le message d'origine n'est pas sur ce téléphone"
   },
   "Verifier": {
     "UseVerifierCapability": "Utiliser la fonctionnalité Verifier?",

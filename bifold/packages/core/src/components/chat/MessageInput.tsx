@@ -29,57 +29,60 @@ export const renderInputToolbar = (props: any, _theme: any) => (
   />
 )
 
-export const renderComposer = (props: any, theme: any, placeholder: string, disabled?: boolean) => (
+/** `accessory` is drawn after the text field, inside the composer row (the emoji button). */
+export const renderComposer = (
+  props: any,
+  theme: any,
+  placeholder: string,
+  disabled?: boolean,
+  accessory?: React.ReactNode
+) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-    <Icon
-      name="message-text-outline"
-      size={22}
-      color="#888888"
-      style={{ marginLeft: 12, marginRight: 4 }}
+    <Icon name="message-text-outline" size={22} color="#888888" style={{ marginLeft: 12, marginRight: 4 }} />
+    {/*
+     * Everything the TextInput needs goes through textInputProps, MERGED into
+     * what gifted-chat passed down — never replacing it.
+     *
+     * gifted-chat v3's Composer destructures only ({ text, textInputProps }).
+     * Top-level textInputStyle / placeholder / placeholderTextColor props are
+     * v2 API and are silently ignored, and textInputProps carries two separate
+     * things we must not drop:
+     *
+     *  - onChangeText and the input ref, the only path back to the controlled
+     *    value={text}. Replacing the object left a controlled input with no
+     *    change handler, so every keystroke reverted to '' and the keyboard
+     *    re-asserted sentence capitalisation on the emptied field.
+     *  - style, which Composer applies LAST and so is the only way to beat its
+     *    own scheme-dependent default. That default is
+     *    textInput_dark: { color: '#fff' }, and the toolbar above hardcodes a
+     *    white background, so in dark mode the text was white on white —
+     *    invisible but present (device 2026-08-26).
+     */}
+    <Composer
+      {...props}
+      textInputProps={{
+        ...props.textInputProps,
+        accessibilityLabel: '',
+        maxFontSizeMultiplier: 1.2,
+        editable: !disabled,
+        placeholder,
+        placeholderTextColor: '#888888',
+        style: [
+          {
+            ...theme.inputText,
+            marginLeft: 4,
+            marginRight: 8,
+            paddingTop: 8,
+            paddingBottom: 8,
+            lineHeight: 20,
+            marginTop: 2,
+            marginBottom: 2,
+          },
+          props.textInputProps?.style,
+        ],
+      }}
     />
-  {/*
-    * Everything the TextInput needs goes through textInputProps, MERGED into
-    * what gifted-chat passed down — never replacing it.
-    *
-    * gifted-chat v3's Composer destructures only ({ text, textInputProps }).
-    * Top-level textInputStyle / placeholder / placeholderTextColor props are
-    * v2 API and are silently ignored, and textInputProps carries two separate
-    * things we must not drop:
-    *
-    *  - onChangeText and the input ref, the only path back to the controlled
-    *    value={text}. Replacing the object left a controlled input with no
-    *    change handler, so every keystroke reverted to '' and the keyboard
-    *    re-asserted sentence capitalisation on the emptied field.
-    *  - style, which Composer applies LAST and so is the only way to beat its
-    *    own scheme-dependent default. That default is
-    *    textInput_dark: { color: '#fff' }, and the toolbar above hardcodes a
-    *    white background, so in dark mode the text was white on white —
-    *    invisible but present (device 2026-08-26).
-    */}
-  <Composer
-    {...props}
-    textInputProps={{
-      ...props.textInputProps,
-      accessibilityLabel: '',
-      maxFontSizeMultiplier: 1.2,
-      editable: !disabled,
-      placeholder,
-      placeholderTextColor: '#888888',
-      style: [
-        {
-          ...theme.inputText,
-          marginLeft: 4,
-          marginRight: 8,
-          paddingTop: 8,
-          paddingBottom: 8,
-          lineHeight: 20,
-          marginTop: 2,
-          marginBottom: 2,
-        },
-        props.textInputProps?.style,
-      ],
-    }}
-  />
+    {accessory}
   </View>
 )
 

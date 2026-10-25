@@ -57,6 +57,8 @@ jest.mock('react-native-device-info', () => mockRNDeviceInfo)
 jest.mock('@react-native-community/netinfo', () => mockRNCNetInfo)
 // jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter')
 jest.mock('react-native-localize', () => mockRNLocalize)
+// Empty on purpose: no suite gets a filesystem by accident. A suite whose code reaches react-native-fs (chat
+// history, wallet backups, community logos) mocks the calls it needs itself, as chat's history.test.ts does.
 jest.mock('react-native-fs', () => ({}))
 jest.mock('@hyperledger/anoncreds-react-native', () => ({}))
 jest.mock('@openwallet-foundation/askar-react-native', () => ({

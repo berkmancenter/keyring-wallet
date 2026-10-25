@@ -1141,7 +1141,22 @@
     "ClearChatTitle": "Limpar esta conversa?",
     "ClearChatBody": "Todas as mensagens e fotos desta conversa serão apagadas deste telefone para sempre. {{name}} continua com a própria cópia. Isso não pode ser desfeito.",
     "ClearChatDone": "Conversa limpa",
-    "ClearChatFailed": "Não foi possível limpar a conversa por completo, e algumas mensagens podem já ter sido apagadas. Tente de novo."
+    "ClearChatFailed": "Não foi possível limpar a conversa por completo, e algumas mensagens podem já ter sido apagadas. Tente de novo.",
+    "Reply": "Responder",
+    "Copy": "Copiar",
+    "Copied": "Copiado",
+    "DeleteForMe": "Apagar para mim",
+    "Delete": "Apagar",
+    "DeleteForMeTitle": "Apagar para mim?",
+    "DeleteForMeBody": "Esta mensagem será removida deste telefone. Seu contato ainda a terá.",
+    "DeleteFailed": "Não foi possível apagar a mensagem. Tente novamente.",
+    "ReactWith": "Reagir com {{emoji}}",
+    "MoreReactions": "Mais reações",
+    "ReactionYou": "{{emoji}} {{count}}, incluindo você",
+    "ReactionThem": "{{emoji}} {{count}}",
+    "ReactionNeedsUpdate": "Para reações, {{name}} precisa atualizar o Keyring.",
+    "ReactionNotSent": "Não foi possível enviar a reação. Tente novamente.",
+    "ReplyUnavailable": "A mensagem original não está neste telefone"
   },
   "Verifier": {
     "UseVerifierCapability": "Usar o recurso Verificador?",

@@ -1296,7 +1296,22 @@
     "ClearChatTitle": "Clear this chat?",
     "ClearChatBody": "Every message and photo in this chat will be deleted from this phone for good. {{name}} keeps their copy. This can't be undone.",
     "ClearChatDone": "Chat cleared",
-    "ClearChatFailed": "The chat couldn't be fully cleared, and some messages may already be gone. Try again."
+    "ClearChatFailed": "The chat couldn't be fully cleared, and some messages may already be gone. Try again.",
+    "Reply": "Reply",
+    "Copy": "Copy",
+    "Copied": "Copied",
+    "DeleteForMe": "Delete for me",
+    "Delete": "Delete",
+    "DeleteForMeTitle": "Delete for me?",
+    "DeleteForMeBody": "This message will be removed from this phone. Your contact will still have it.",
+    "DeleteFailed": "Couldn't delete the message. Try again.",
+    "ReactWith": "React with {{emoji}}",
+    "MoreReactions": "More reactions",
+    "ReactionYou": "{{emoji}} {{count}}, including you",
+    "ReactionThem": "{{emoji}} {{count}}",
+    "ReactionNeedsUpdate": "Reactions need {{name}} to update Keyring.",
+    "ReactionNotSent": "Couldn't send the reaction. Try again.",
+    "ReplyUnavailable": "Original message isn't on this phone"
   },
   "Verifier": {
     "UseVerifierCapability": "Use Verifier capability?",

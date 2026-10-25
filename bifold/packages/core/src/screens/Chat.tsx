@@ -5,7 +5,9 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GiftedChat, IMessage, MessageProps } from 'react-native-gifted-chat'
+import { GiftedChat, IMessage, MessageProps, ReplyMessage } from 'react-native-gifted-chat'
+import Clipboard from '@react-native-clipboard/clipboard'
+import Toast from 'react-native-toast-message'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import InfoIcon from '../modules/vrc/components/InfoIcon'
@@ -13,6 +15,13 @@ import InfoIcon from '../modules/vrc/components/InfoIcon'
 // import { WitnessChatBanner } from '../modules/vrc/components/WitnessChatBanner'
 import { renderComposer, renderInputToolbar, renderSend } from '../components/chat'
 import ActionSlider from '../components/chat/ActionSlider'
+import MessageActions from '../components/chat/MessageActions'
+import { useComposerText } from '../components/chat/useComposerText'
+import { ToastType } from '../components/toast/BaseToast'
+import { deleteChatMessages } from '../modules/chat/history'
+import { removeReaction, sendChatText, sendReaction } from '../modules/chat/send'
+import type { ChatSendOutcome } from '../modules/chat/send'
+import { chatEventsShown } from '../modules/chat/shown'
 import { renderActions } from '../components/chat/ChatActions'
 import { ChatMessage, ExtendedChatMessage } from '../components/chat/ChatMessage'
 import { useNetwork } from '../contexts/network'
@@ -29,7 +38,7 @@ import { setActiveChatConnectionId } from '../utils/activeChatTracker'
 import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
-import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
+import { Alert, Animated, Easing, View, StyleSheet, Text, TouchableOpacity, ViewToken } from 'react-native'
 
 const PROGRESS_BAR_WIDTH = 200
 
@@ -167,12 +176,50 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   // over-the-air update (a reload) would lose it. Watch the text, without
   // controlling it (a controlled composer is what broke typing on 2026-08-26),
   // and block applying while there is any. gifted-chat reports '' after a send.
-  const [hasDraft, setHasDraft] = useState(false)
-  const textInputProps = useMemo(() => ({ onChangeText: (text: string) => setHasDraft(text.trim().length > 0) }), [])
+  // `composer.insert` puts text at the caret (the emoji button).
+  const composer = useComposerText()
+  const { hasDraft } = composer
   useEffect(() => {
     if (!hasDraft) return
     return registerOtaApplyBlocker('chat-draft')
   }, [hasDraft])
+
+  // The message being replied to, shown above the composer until sent or dismissed. A reload would lose it too.
+  const [replyTarget, setReplyTarget] = useState<ReplyMessage | null>(null)
+  useEffect(() => {
+    if (!replyTarget) return
+    return registerOtaApplyBlocker('chat-reply')
+  }, [replyTarget])
+
+  // The message a long press opened the actions for.
+  const [actionTarget, setActionTarget] = useState<ExtendedChatMessage | null>(null)
+  const closeActions = useCallback(() => setActionTarget(null), [])
+
+  // Received chat messages as they scroll into view, each reported once while this chat is open (plan §4.6, D4).
+  // FlatList takes onViewableItemsChanged once, so it reads the current chat through a ref.
+  const shownRef = useRef({ connectionId, agent, ids: new Set<string>() })
+  if (shownRef.current.connectionId !== connectionId) {
+    shownRef.current = { connectionId, agent, ids: new Set<string>() }
+  }
+  shownRef.current.agent = agent
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const current = shownRef.current
+    const fresh: string[] = []
+    for (const token of viewableItems) {
+      const item = token.item as ExtendedChatMessage | undefined
+      if (!item?.chatEventId || item.kind === 'system' || item.user?._id !== Role.them) continue
+      if (current.ids.has(item.chatEventId)) continue
+      current.ids.add(item.chatEventId)
+      fresh.push(item.chatEventId)
+    }
+    if (fresh.length > 0 && current.agent) {
+      // Marked before the call so a scroll during it does not report twice; un-marked if it fails, so the next
+      // scroll retries instead of leaving a disappearing message's clock unstarted until the chat is reopened.
+      void chatEventsShown(current.agent, current.connectionId, fresh).catch(() => {
+        for (const eventId of fresh) current.ids.delete(eventId)
+      })
+    }
+  }).current
 
   useEffect(() => {
     navigation.setOptions({
@@ -197,12 +244,94 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     if (agent && connectionId) void markChatEventsSeen(agent, connectionId).catch(() => undefined)
   }, [basicMessages, chatMessages, agent, connectionId])
 
+  // A chat event to a contact that speaks chat, a plain BasicMessage otherwise (sendChatText decides). gifted-chat
+  // attaches the reply target it was showing, and clears it after this.
   const onSend = useCallback(
     async (messages: IMessage[]) => {
-      await agent?.modules.didcomm.basicMessages.sendMessage(connectionId, messages[0].text)
+      if (!agent) return
+      const inReplyTo = messages[0].replyMessage?._id
+      await sendChatText(
+        agent,
+        connectionId,
+        messages[0].text,
+        typeof inReplyTo === 'string' && inReplyTo ? { inReplyTo } : {}
+      )
     },
     [agent, connectionId]
   )
+
+  const onLongPressMessage = useCallback((_context: unknown, message: ExtendedChatMessage) => {
+    // Only text: chat messages and plain BasicMessages. Cards and system lines have no actions.
+    if (message.kind === 'system' || (!message.chatEventId && !message.basicMessageId)) return
+    setActionTarget(message)
+  }, [])
+
+  const notSentNotice = useCallback(
+    (outcome: ChatSendOutcome) => {
+      if (outcome.carriedAs !== 'not-sent') return
+      // A contact's name is shown as typed: i18next would otherwise turn "A/B" into "A&#x2F;B".
+      Toast.show({
+        type: ToastType.Info,
+        text1: t('Chat.ReactionNeedsUpdate', { name: theirLabel, interpolation: { escapeValue: false } }),
+      })
+    },
+    [t, theirLabel]
+  )
+
+  const onReact = useCallback(
+    async (emoji: string) => {
+      const target = actionTarget
+      closeActions()
+      if (!agent || !target?.chatEventId) return
+      // Choosing the reaction this phone already gave removes it; anything else replaces it.
+      const mine = target.reactions?.find((reaction) => reaction.author === 'sent')
+      try {
+        const outcome =
+          mine?.emoji === emoji
+            ? await removeReaction(agent, connectionId, mine.eventId)
+            : await sendReaction(agent, connectionId, target.chatEventId, emoji)
+        notSentNotice(outcome)
+      } catch {
+        Toast.show({ type: ToastType.Error, text1: t('Chat.ReactionNotSent') })
+      }
+    },
+    [actionTarget, agent, closeActions, connectionId, notSentNotice, t]
+  )
+
+  const onReply = useCallback(() => {
+    const target = actionTarget
+    closeActions()
+    if (!target?.chatEventId) return
+    setReplyTarget({ _id: target.chatEventId, text: target.text, user: target.user })
+  }, [actionTarget, closeActions])
+
+  const onCopy = useCallback(() => {
+    const target = actionTarget
+    closeActions()
+    if (!target) return
+    Clipboard.setString(target.text)
+    Toast.show({ type: ToastType.Success, text1: t('Chat.Copied') })
+  }, [actionTarget, closeActions, t])
+
+  const onDeleteForMe = useCallback(() => {
+    const target = actionTarget
+    closeActions()
+    if (!agent || !target) return
+    const ids = target.chatEventId ? { eventIds: [target.chatEventId] } : { basicMessageIds: [target.basicMessageId!] }
+    Alert.alert(t('Chat.DeleteForMeTitle'), t('Chat.DeleteForMeBody'), [
+      { text: t('Global.Cancel'), style: 'cancel' },
+      {
+        text: t('Chat.Delete'),
+        style: 'destructive',
+        onPress: () => {
+          if (replyTarget && replyTarget._id === target.chatEventId) setReplyTarget(null)
+          deleteChatMessages(agent, connectionId, ids).catch(() => {
+            Toast.show({ type: ToastType.Error, text1: t('Chat.DeleteFailed') })
+          })
+        },
+      },
+    ])
+  }, [actionTarget, agent, closeActions, connectionId, replyTarget, t])
 
   const onSendRequest = useCallback(async () => {
     navigation.navigate(Stacks.ProofRequestsStack as any, {
@@ -270,7 +399,10 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
             renderComposer(props, theme, t('Contacts.TypeHere'), !silentAssertConnectedNetwork() || vrcFlowInProgress)
           }
           onSend={onSend}
-          textInputProps={textInputProps}
+          text={composer.text}
+          textInputProps={composer.textInputProps}
+          onLongPressMessage={onLongPressMessage}
+          reply={{ message: replyTarget, onClear: () => setReplyTarget(null) }}
           user={{
             _id: Role.me,
           }}
@@ -279,9 +411,20 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           listProps={{
             keyboardShouldPersistTaps: 'handled',
             style: { backgroundColor: '#F5F5F5' },
+            onViewableItemsChanged,
+            viewabilityConfig: { itemVisiblePercentThreshold: 50 },
           }}
         />
         {showActionSlider && <ActionSlider onDismiss={onDismiss} actions={actions} />}
+        <MessageActions
+          visible={actionTarget !== null}
+          onClose={closeActions}
+          onReact={actionTarget?.chatEventId ? onReact : undefined}
+          selectedReaction={actionTarget?.reactions?.find((reaction) => reaction.author === 'sent')?.emoji}
+          onReply={actionTarget?.chatEventId ? onReply : undefined}
+          onCopy={actionTarget ? onCopy : undefined}
+          onDeleteForMe={actionTarget ? onDeleteForMe : undefined}
+        />
 
         {/* VRC exchange flow loading overlay */}
         {vrcFlowInProgress && (

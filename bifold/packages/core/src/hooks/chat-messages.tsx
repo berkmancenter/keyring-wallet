@@ -994,6 +994,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
           createdAt: record.createdAt,
           type: record.type,
           user: { _id: role },
+          basicMessageId: record.id,
         }
       }) as Array<ExtendedChatMessage | null>
     ).filter((msg): msg is ExtendedChatMessage => msg !== null)

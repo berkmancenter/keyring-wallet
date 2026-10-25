@@ -35,6 +35,7 @@ import { RCE_PROTOCOL_VERSION } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { counterpartySpeaksChat } from './capability'
 import { getChatEventRepository, getChatPeerRepository } from './ChatModule'
+import { deleteChatMessages } from './history'
 import { ChatCapabilityMessage } from './messages/ChatCapabilityMessage'
 import { ChatPeerRecord } from './records/ChatPeerRecord'
 
@@ -185,8 +186,9 @@ export async function receiveChatProblemReport(
     if (!text) return 'chat-refused'
     await agent.modules.didcomm.basicMessages.sendMessage(connection.id, text)
   }
-  // The other phone never showed it, so it leaves this phone's timeline too.
-  await events.delete(agent.context, refused)
+  // The other phone never showed it, so it leaves this phone's timeline too, with whatever hangs off it (its
+  // reactions and their redactions, its media file), the same way Delete for me removes a message.
+  await deleteChatMessages(agent, connection.id, { eventIds: [refused.eventId] })
   return 'chat-refused'
 }
 

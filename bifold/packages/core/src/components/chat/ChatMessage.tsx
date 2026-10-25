@@ -14,6 +14,8 @@ import { ThemedText } from '../texts/ThemedText'
 import CommonRemoveModal from '../modals/CommonRemoveModal'
 import type { ChatReaction } from '../../modules/chat/fold'
 import type { ChatEventRecord } from '../../modules/chat/records/ChatEventRecord'
+import { testIdWithKey } from '../../utils/testable'
+import { ChatIds } from './Chat.ids'
 
 // Date separator color as per design
 const DATE_SEPARATOR_COLOR = '#888888'
@@ -60,6 +62,53 @@ export interface ExtendedChatMessage extends IMessage {
   kind?: 'system'
   /** A system line's event, for whoever words it. */
   chatEvent?: ChatEventRecord
+  /** A plain BasicMessage's record id, so Delete for me can remove it. Cards never carry one. */
+  basicMessageId?: string
+}
+
+/**
+ * The reactions under a message: each emoji once, with a count when both people chose it. The phone's own is
+ * marked. Only reactions that are stored show here; nothing is drawn before it is sent.
+ */
+export const MessageReactions: React.FC<{ reactions: ChatReaction[]; isMe: boolean }> = ({ reactions, isMe }) => {
+  const { t } = useTranslation()
+  const counts = new Map<string, { count: number; mine: boolean }>()
+  for (const reaction of reactions) {
+    const entry = counts.get(reaction.emoji) ?? { count: 0, mine: false }
+    counts.set(reaction.emoji, { count: entry.count + 1, mine: entry.mine || reaction.author === 'sent' })
+  }
+  const label = [...counts.entries()]
+    .map(([emoji, { count, mine }]) =>
+      mine ? t('Chat.ReactionYou', { emoji, count }) : t('Chat.ReactionThem', { emoji, count })
+    )
+    .join(', ')
+  return (
+    <View
+      style={{ flexDirection: 'row', justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: -6, gap: 4 }}
+      accessible
+      accessibilityLabel={label}
+      testID={testIdWithKey(ChatIds.reactions)}
+    >
+      {[...counts.entries()].map(([emoji, { count, mine }]) => (
+        <View
+          key={emoji}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: mine ? '#E8E0EC' : '#FFFFFF',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: 'rgba(170, 170, 170, 0.4)',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+          }}
+        >
+          <Text style={{ fontSize: 14 }}>{emoji}</Text>
+          {count > 1 && <Text style={{ fontSize: 12, color: '#555555', marginLeft: 2 }}>{count}</Text>}
+        </View>
+      ))}
+    </View>
+  )
 }
 
 const MessageTime: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
@@ -265,6 +314,7 @@ const CredentialOfferActions: React.FC<{
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
+  const { t } = useTranslation()
   const message = useMemo(() => messageProps.currentMessage as ExtendedChatMessage, [messageProps])
   const previousMessage = messageProps.previousMessage as ExtendedChatMessage | undefined
 
@@ -308,6 +358,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
         <View style={{ ...theme.containerStyle }}>
           <Bubble
             {...messageProps}
+            // A reply shows what it answers, through gifted-chat's own MessageReply: the original's text, or that it
+            // is not on this phone.
+            currentMessage={
+              message.replyTo
+                ? {
+                    ...message,
+                    replyMessage: {
+                      _id: message.inReplyTo ?? '',
+                      text: 'text' in message.replyTo ? message.replyTo.text : t('Chat.ReplyUnavailable'),
+                      user: { _id: '' },
+                    },
+                  }
+                : message
+            }
             isUsernameVisible={false}
             renderMessageText={() => message.renderEvent()}
             containerStyle={{
@@ -329,6 +393,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
             renderTime={() => <MessageTime message={message} />}
             renderCustomView={() => null}
           />
+          {message.reactions && message.reactions.length > 0 && (
+            <MessageReactions reactions={message.reactions} isMe={isMe} />
+          )}
         </View>
       </View>
     </View>
