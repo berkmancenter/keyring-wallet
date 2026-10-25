@@ -64,6 +64,7 @@ enum PreferencesDispatchAction {
   USE_SHAREABLE_LINK = 'preferences/useShareableLink',
   UPDATE_ALTERNATE_CONTACT_NAMES = 'preferences/updateAlternateContactNames',
   AUTO_LOCK_TIME = 'preferences/autoLockTime',
+  KEEP_MESSAGES = 'preferences/keepMessages',
   SET_THEME = 'preferences/setTheme',
   SET_SELECTED_MEDIATOR = 'preferences/setSelectedMediator',
   ADD_AVAILABLE_MEDIATOR = 'preferences/addAvailableMediator',
@@ -760,6 +761,17 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences: Preferences = {
         ...state.preferences,
         autoLockTime,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.KEEP_MESSAGES: {
+      const preferences: Preferences = {
+        ...state.preferences,
+        keepMessages: (action?.payload ?? []).pop() ?? state.preferences.keepMessages,
       }
       PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
       return {

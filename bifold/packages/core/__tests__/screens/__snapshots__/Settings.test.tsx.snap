@@ -90,6 +90,13 @@ exports[`Settings Screen Renders correctly 1`] = `
               "value": "5 min",
             },
             Object {
+              "accessibilityLabel": "Settings.KeepMessages",
+              "onPress": [Function],
+              "testID": "com.ariesbifold:id/KeepMessages",
+              "title": "Settings.KeepMessages",
+              "value": "KeepMessagesOptions.forever",
+            },
+            Object {
               "accessibilityLabel": "Settings.Developer",
               "onPress": [Function],
               "testID": "com.ariesbifold:id/DeveloperOptions",
@@ -1557,6 +1564,178 @@ exports[`Settings Screen Renders correctly 1`] = `
             }
           >
             <View
+              accessibilityLabel="Settings.KeepMessages"
+              accessibilityRole="button"
+              accessibilityState={
+                Object {
+                  "busy": undefined,
+                  "checked": undefined,
+                  "disabled": undefined,
+                  "expanded": undefined,
+                  "selected": undefined,
+                }
+              }
+              accessibilityValue={
+                Object {
+                  "max": undefined,
+                  "min": undefined,
+                  "now": undefined,
+                  "text": undefined,
+                }
+              }
+              accessible={true}
+              collapsable={false}
+              focusable={true}
+              onClick={[Function]}
+              onResponderGrant={[Function]}
+              onResponderMove={[Function]}
+              onResponderRelease={[Function]}
+              onResponderTerminate={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              style={
+                Object {
+                  "alignItems": "flex-start",
+                  "flexDirection": "column",
+                  "flexGrow": 1,
+                  "justifyContent": "space-between",
+                  "opacity": 1,
+                  "paddingHorizontal": 25,
+                }
+              }
+              testID="com.ariesbifold:id/KeepMessages"
+            >
+              <View
+                style={
+                  Object {
+                    "flex": 1,
+                    "flexShrink": 1,
+                    "marginRight": 14,
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "maxWidth": "95%",
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  Settings.KeepMessages
+                </Text>
+              </View>
+              <View
+                style={
+                  Object {
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "flexShrink": 1,
+                  }
+                }
+              >
+                <Text
+                  ellipsizeMode="middle"
+                  maxFontSizeMultiplier={2}
+                  numberOfLines={1}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "color": "#42803E",
+                          "flexShrink": 1,
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  KeepMessagesOptions.forever
+                </Text>
+                <Text
+                  allowFontScaling={false}
+                  selectable={false}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#606060",
+                        "fontSize": 24,
+                      },
+                      Object {
+                        "marginLeft": 4,
+                      },
+                      Object {
+                        "fontFamily": "Material Icons",
+                        "fontStyle": "normal",
+                        "fontWeight": "normal",
+                      },
+                      Object {},
+                    ]
+                  }
+                >
+                  
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "backgroundColor": "#313132",
+            }
+          }
+        >
+          <View
+            style={
+              Object {
+                "borderBottomColor": "#000000",
+                "borderBottomWidth": 1,
+                "marginHorizontal": 25,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View>
+          <View
+            style={
+              Object {
+                "backgroundColor": "#313132",
+                "flexGrow": 1,
+                "paddingVertical": 24,
+              }
+            }
+          >
+            <View
               accessibilityLabel="Settings.Developer"
               accessibilityRole="button"
               accessibilityState={
@@ -1685,141 +1864,6 @@ exports[`Settings Screen Renders correctly 1`] = `
             }
           />
         </View>
-      </View>
-      <View
-        onFocusCapture={[Function]}
-        onLayout={[Function]}
-        style={null}
-      >
-        <View>
-          <View
-            style={
-              Object {
-                "backgroundColor": "#313132",
-                "flexGrow": 1,
-                "paddingVertical": 24,
-              }
-            }
-          >
-            <View
-              accessibilityLabel="Settings.Logout"
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              style={
-                Object {
-                  "alignItems": "flex-start",
-                  "flexDirection": "column",
-                  "flexGrow": 1,
-                  "justifyContent": "space-between",
-                  "opacity": 1,
-                  "paddingHorizontal": 25,
-                }
-              }
-              testID="com.ariesbifold:id/Logout"
-            >
-              <View
-                style={
-                  Object {
-                    "flex": 1,
-                    "flexShrink": 1,
-                    "marginRight": 14,
-                  }
-                }
-              >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "maxWidth": "95%",
-                        },
-                      ],
-                    ]
-                  }
-                >
-                  Settings.Logout
-                </Text>
-              </View>
-              <View
-                style={
-                  Object {
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "flexShrink": 1,
-                  }
-                }
-              >
-                <Text
-                  allowFontScaling={false}
-                  selectable={false}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#606060",
-                        "fontSize": 24,
-                      },
-                      Object {
-                        "marginLeft": 4,
-                      },
-                      Object {
-                        "fontFamily": "Material Icons",
-                        "fontStyle": "normal",
-                        "fontWeight": "normal",
-                      },
-                      Object {},
-                    ]
-                  }
-                >
-                  
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 10,
-            }
-          }
-        />
       </View>
       <View
         style={
@@ -1980,6 +2024,13 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               "testID": "com.ariesbifold:id/Lockout",
               "title": "Settings.AutoLockTime",
               "value": "5 min",
+            },
+            Object {
+              "accessibilityLabel": "Settings.KeepMessages",
+              "onPress": [Function],
+              "testID": "com.ariesbifold:id/KeepMessages",
+              "title": "Settings.KeepMessages",
+              "value": "KeepMessagesOptions.forever",
             },
             Object {
               "accessibilityLabel": "Settings.Developer",
@@ -3466,6 +3517,178 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
             }
           >
             <View
+              accessibilityLabel="Settings.KeepMessages"
+              accessibilityRole="button"
+              accessibilityState={
+                Object {
+                  "busy": undefined,
+                  "checked": undefined,
+                  "disabled": undefined,
+                  "expanded": undefined,
+                  "selected": undefined,
+                }
+              }
+              accessibilityValue={
+                Object {
+                  "max": undefined,
+                  "min": undefined,
+                  "now": undefined,
+                  "text": undefined,
+                }
+              }
+              accessible={true}
+              collapsable={false}
+              focusable={true}
+              onClick={[Function]}
+              onResponderGrant={[Function]}
+              onResponderMove={[Function]}
+              onResponderRelease={[Function]}
+              onResponderTerminate={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              style={
+                Object {
+                  "alignItems": "flex-start",
+                  "flexDirection": "column",
+                  "flexGrow": 1,
+                  "justifyContent": "space-between",
+                  "opacity": 1,
+                  "paddingHorizontal": 25,
+                }
+              }
+              testID="com.ariesbifold:id/KeepMessages"
+            >
+              <View
+                style={
+                  Object {
+                    "flex": 1,
+                    "flexShrink": 1,
+                    "marginRight": 14,
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "maxWidth": "95%",
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  Settings.KeepMessages
+                </Text>
+              </View>
+              <View
+                style={
+                  Object {
+                    "alignItems": "center",
+                    "flexDirection": "row",
+                    "flexShrink": 1,
+                  }
+                }
+              >
+                <Text
+                  ellipsizeMode="middle"
+                  maxFontSizeMultiplier={2}
+                  numberOfLines={1}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "color": "#42803E",
+                          "flexShrink": 1,
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  KeepMessagesOptions.forever
+                </Text>
+                <Text
+                  allowFontScaling={false}
+                  selectable={false}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#606060",
+                        "fontSize": 24,
+                      },
+                      Object {
+                        "marginLeft": 4,
+                      },
+                      Object {
+                        "fontFamily": "Material Icons",
+                        "fontStyle": "normal",
+                        "fontWeight": "normal",
+                      },
+                      Object {},
+                    ]
+                  }
+                >
+                  
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "backgroundColor": "#313132",
+            }
+          }
+        >
+          <View
+            style={
+              Object {
+                "borderBottomColor": "#000000",
+                "borderBottomWidth": 1,
+                "marginHorizontal": 25,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View>
+          <View
+            style={
+              Object {
+                "backgroundColor": "#313132",
+                "flexGrow": 1,
+                "paddingVertical": 24,
+              }
+            }
+          >
+            <View
               accessibilityLabel="Settings.Developer"
               accessibilityRole="button"
               accessibilityState={
@@ -3594,141 +3817,6 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
             }
           />
         </View>
-      </View>
-      <View
-        onFocusCapture={[Function]}
-        onLayout={[Function]}
-        style={null}
-      >
-        <View>
-          <View
-            style={
-              Object {
-                "backgroundColor": "#313132",
-                "flexGrow": 1,
-                "paddingVertical": 24,
-              }
-            }
-          >
-            <View
-              accessibilityLabel="Settings.Logout"
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              style={
-                Object {
-                  "alignItems": "flex-start",
-                  "flexDirection": "column",
-                  "flexGrow": 1,
-                  "justifyContent": "space-between",
-                  "opacity": 1,
-                  "paddingHorizontal": 25,
-                }
-              }
-              testID="com.ariesbifold:id/Logout"
-            >
-              <View
-                style={
-                  Object {
-                    "flex": 1,
-                    "flexShrink": 1,
-                    "marginRight": 14,
-                  }
-                }
-              >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "maxWidth": "95%",
-                        },
-                      ],
-                    ]
-                  }
-                >
-                  Settings.Logout
-                </Text>
-              </View>
-              <View
-                style={
-                  Object {
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                    "flexShrink": 1,
-                  }
-                }
-              >
-                <Text
-                  allowFontScaling={false}
-                  selectable={false}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#606060",
-                        "fontSize": 24,
-                      },
-                      Object {
-                        "marginLeft": 4,
-                      },
-                      Object {
-                        "fontFamily": "Material Icons",
-                        "fontStyle": "normal",
-                        "fontWeight": "normal",
-                      },
-                      Object {},
-                    ]
-                  }
-                >
-                  
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 10,
-            }
-          }
-        />
       </View>
       <View
         style={

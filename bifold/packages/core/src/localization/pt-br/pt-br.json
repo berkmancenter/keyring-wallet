@@ -819,7 +819,17 @@
     "ExportWalletShareTitle": "Backup da carteira Keyring",
     "ExportWalletShared": "Seu backup foi entregue. Guarde-o com a senha: você vai precisar dos dois para restaurar sua carteira.",
     "ExportWalletNotSavedTitle": "Backup não salvo",
-    "ExportWalletNotSaved": "O backup não foi salvo e nenhuma cópia ficou neste telefone. Exporte de novo quando estiver pronto."
+    "ExportWalletNotSaved": "O backup não foi salvo e nenhuma cópia ficou neste telefone. Exporte de novo quando estiver pronto.",
+    "KeepMessages": "Manter mensagens",
+    "KeepMessagesConfirmTitle": "Apagar mensagens antigas?",
+    "KeepMessagesConfirm": "Mensagens com mais de {{period}} serão apagadas deste telefone para sempre, agora e daqui em diante. Isso não pode ser desfeito.",
+    "KeepMessagesConfirmDelete": "Apagar"
+  },
+  "KeepMessagesOptions": {
+    "forever": "Para sempre",
+    "1y": "1 ano",
+    "6m": "6 meses",
+    "30d": "30 dias"
   },
   "AutoLockTimes": {
     "OneHour": "One Hour (PT-BR)",

@@ -960,7 +960,17 @@
     "ExportWalletShareTitle": "Keyring wallet backup",
     "ExportWalletShared": "Your backup was handed over. Keep it with its password: you'll need both to restore your wallet.",
     "ExportWalletNotSavedTitle": "Backup not saved",
-    "ExportWalletNotSaved": "The backup wasn't saved, and no copy was kept on this phone. Export again when you're ready."
+    "ExportWalletNotSaved": "The backup wasn't saved, and no copy was kept on this phone. Export again when you're ready.",
+    "KeepMessages": "Keep messages",
+    "KeepMessagesConfirmTitle": "Delete older messages?",
+    "KeepMessagesConfirm": "Messages older than {{period}} will be deleted from this phone for good, now and from now on. This can't be undone.",
+    "KeepMessagesConfirmDelete": "Delete"
+  },
+  "KeepMessagesOptions": {
+    "forever": "Forever",
+    "1y": "1 year",
+    "6m": "6 months",
+    "30d": "30 days"
   },
   "AutoLockTimes": {
     "OneHour": "One Hour",

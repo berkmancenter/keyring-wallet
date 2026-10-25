@@ -42,6 +42,14 @@ export { useClearChat } from './useClearChat'
 export { TIMER_CHOICES, currentTimer, nextTimerVersion, timerOf } from './timer'
 export type { ChatTimer } from './timer'
 export { MAX_EXPIRED_KEPT, expiredIds } from './expired'
+export {
+  KEEP_MESSAGES_DEFAULT,
+  KEEP_MESSAGES_OPTIONS,
+  keepCutoff,
+  sweepOldMessages,
+  useChatRetentionSweep,
+} from './retention'
+export type { KeepMessages } from './retention'
 export type { ChatMessageIds } from './history'
 export type { ChatSendOutcome } from './send'
 export {

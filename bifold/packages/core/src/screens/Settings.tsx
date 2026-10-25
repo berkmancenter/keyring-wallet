@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LockoutReason, useAuth } from '../contexts/auth'
 import {
+  Alert,
   Animated,
   Image,
   SectionList,
@@ -23,6 +24,7 @@ import { TOKENS, useServices } from '../container-api'
 import { defaultAutoLockTime } from '../constants'
 import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { AutoLockTime } from '../contexts/activity'
+import { KEEP_MESSAGES_DEFAULT, KEEP_MESSAGES_OPTIONS, KeepMessages } from '../modules/chat/retention'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -59,7 +61,8 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     },
     historyEnabled,
   ] = useServices([TOKENS.CONFIG, TOKENS.HISTORY_ENABLED])
-  const [expandedDropdown, setExpandedDropdown] = useState<'language' | 'autolock' | null>(null)
+  const [expandedDropdown, setExpandedDropdown] = useState<'language' | 'autolock' | 'keepmessages' | null>(null)
+  const keepMessages: KeepMessages = store.preferences.keepMessages ?? KEEP_MESSAGES_DEFAULT
   // The lock time in force: the person's choice, else the build's default — the
   // same fallback the lock itself uses (contexts/activity). A wallet that never
   // chose has none stored, and this row read "undefined min" (219, iOS).
@@ -250,6 +253,13 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
           accessibilityLabel: t('Settings.AutoLockTime'),
           testID: testIdWithKey('Lockout'),
           onPress: () => setExpandedDropdown(expandedDropdown === 'autolock' ? null : 'autolock'),
+        },
+        {
+          title: t('Settings.KeepMessages'),
+          value: t(`KeepMessagesOptions.${keepMessages}`),
+          accessibilityLabel: t('Settings.KeepMessages'),
+          testID: testIdWithKey('KeepMessages'),
+          onPress: () => setExpandedDropdown(expandedDropdown === 'keepmessages' ? null : 'keepmessages'),
         },
       ],
     },
@@ -664,9 +674,12 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
         renderItem={({ item: { title, subtitle, value, accessibilityLabel, testID, onPress, badge, toggle } }) => {
           const isLanguageRow = testID === testIdWithKey('Language')
           const isAutoLockRow = testID === testIdWithKey('Lockout')
-          const isDropdownRow = isLanguageRow || isAutoLockRow
+          const isKeepMessagesRow = testID === testIdWithKey('KeepMessages')
+          const isDropdownRow = isLanguageRow || isAutoLockRow || isKeepMessagesRow
           const isExpanded =
-            (isLanguageRow && expandedDropdown === 'language') || (isAutoLockRow && expandedDropdown === 'autolock')
+            (isLanguageRow && expandedDropdown === 'language') ||
+            (isAutoLockRow && expandedDropdown === 'autolock') ||
+            (isKeepMessagesRow && expandedDropdown === 'keepmessages')
 
           return (
             <View>
@@ -746,6 +759,50 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
                       >
                         <ThemedText style={[TextTheme.settingsText, isSelected && { fontWeight: '700' }]}>
                           {option.label}
+                        </ThemedText>
+                        {isSelected && <Icon name="check" size={20} color={ColorPalette.brand.primary} />}
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              )}
+              {isKeepMessagesRow && expandedDropdown === 'keepmessages' && (
+                <View style={{ backgroundColor: SettingsTheme.groupBackground, paddingHorizontal: 25 }}>
+                  {KEEP_MESSAGES_OPTIONS.map((option) => {
+                    const isSelected = keepMessages === option
+                    const label = t(`KeepMessagesOptions.${option}`)
+                    const choose = () => {
+                      dispatch({ type: DispatchAction.KEEP_MESSAGES, payload: [option] })
+                      setExpandedDropdown(null)
+                    }
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        testID={testIdWithKey(`KeepMessages_${option}`)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                          paddingHorizontal: 8,
+                          borderTopWidth: 1,
+                          borderTopColor: ColorPalette.brand.primaryBackground,
+                        }}
+                        onPress={() => {
+                          // A shorter period deletes messages for good, so it is confirmed first; Forever deletes nothing.
+                          if (option === 'forever' || isSelected) return choose()
+                          Alert.alert(
+                            t('Settings.KeepMessagesConfirmTitle'),
+                            t('Settings.KeepMessagesConfirm', { period: label }),
+                            [
+                              { text: t('Global.Cancel'), style: 'cancel' },
+                              { text: t('Settings.KeepMessagesConfirmDelete'), style: 'destructive', onPress: choose },
+                            ]
+                          )
+                        }}
+                      >
+                        <ThemedText style={[TextTheme.settingsText, isSelected && { fontWeight: '700' }]}>
+                          {label}
                         </ThemedText>
                         {isSelected && <Icon name="check" size={20} color={ColorPalette.brand.primary} />}
                       </TouchableOpacity>

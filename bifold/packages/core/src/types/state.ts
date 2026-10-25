@@ -1,4 +1,5 @@
 import { BannerMessage } from '../components/views/Banner'
+import type { KeepMessages } from '../modules/chat/retention'
 import { RCardTemplate } from '../modules/vrc/types/rcard'
 
 export interface Onboarding {
@@ -36,6 +37,8 @@ export interface Preferences {
   enableShareableLink: boolean
   alternateContactNames: Record<string, string>
   autoLockTime?: number
+  /** How long chat messages stay on this phone (chat/retention.ts); unset means Forever. */
+  keepMessages?: KeepMessages
   theme?: string
   selectedMediator: string
   availableMediators: string[]

@@ -58,6 +58,7 @@ export const defaultState: State = {
     enableShareableLink: false,
     alternateContactNames: {},
     autoLockTime: undefined, // default wallets lockout time to 5 minutes
+    keepMessages: 'forever', // nothing is deleted until the person chooses a shorter period
     availableMediators: [Config.MEDIATOR_URL ?? ''],
     selectedMediator: Config.MEDIATOR_URL ?? '',
     bannerMessages: [],
@@ -89,7 +90,7 @@ export const defaultState: State = {
     reportingDids: {},
   },
   attestation: {
-    isAttestationComplete: false
+    isAttestationComplete: false,
   },
 }
 

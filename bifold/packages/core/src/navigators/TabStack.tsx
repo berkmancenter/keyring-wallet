@@ -23,6 +23,7 @@ import { deepLinkCarriesInvitation, invitationLinkError } from '../utils/invitat
 import { appMessageWakeDeps, openMessageWake, type WakeNavigation } from '../utils/messageWake'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
+import { useChatRetentionSweep } from '../modules/chat/retention'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { isLinkOnline, useAgentPresence } from '../modules/trust-tasks/module/vtaPresence'
 import { myAgentTabBadge, useWaitingRequestsCount } from '../modules/trust-tasks/module/waitingRequests'
@@ -73,6 +74,8 @@ const TabStack: React.FC = () => {
   const { TabTheme, TextTheme, Assets, NavigationTheme, GradientTheme } = useTheme()
   const [store, dispatch] = useStore()
   const { agent } = useAgent()
+  // Keep messages: older chat messages are deleted here, once unlocked and on each return to the foreground.
+  useChatRetentionSweep(agent, store.preferences.keepMessages)
   // What a community sends this phone's persona — a vetter grant, a membership —
   // is collected from unlock, not only while Vetting is open. A persona whose
   // agent refused this phone, did not answer, or is no longer linked is said

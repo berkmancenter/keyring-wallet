@@ -886,7 +886,17 @@
     "ExportWalletShareTitle": "Sauvegarde du portefeuille Keyring",
     "ExportWalletShared": "Votre sauvegarde a été transmise. Gardez-la avec son mot de passe : il vous faudra les deux pour restaurer votre portefeuille.",
     "ExportWalletNotSavedTitle": "Sauvegarde non enregistrée",
-    "ExportWalletNotSaved": "La sauvegarde n'a pas été enregistrée, et aucune copie n'est restée sur ce téléphone. Exportez de nouveau quand vous serez prêt."
+    "ExportWalletNotSaved": "La sauvegarde n'a pas été enregistrée, et aucune copie n'est restée sur ce téléphone. Exportez de nouveau quand vous serez prêt.",
+    "KeepMessages": "Conserver les messages",
+    "KeepMessagesConfirmTitle": "Supprimer les anciens messages ?",
+    "KeepMessagesConfirm": "Les messages de plus de {{period}} seront supprimés définitivement de ce téléphone, dès maintenant et par la suite. Cette action est irréversible.",
+    "KeepMessagesConfirmDelete": "Supprimer"
+  },
+  "KeepMessagesOptions": {
+    "forever": "Pour toujours",
+    "1y": "1 an",
+    "6m": "6 mois",
+    "30d": "30 jours"
   },
   "AutoLockTimes": {
     "OneHour": "One Hour (FR)",
