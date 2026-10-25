@@ -68,6 +68,8 @@ export function readImageHeader(b: Uint8Array): ImageHeader | undefined {
 // The first chunk is IHDR (13 bytes): width and height as big-endian 32-bit. An animated PNG has the same signature,
 // and its frames are compressed, so hundreds fit in the byte limit: one with an acTL chunk before its first IDAT is
 // refused rather than counted. Senders produce still PNGs, so nothing a Keyring phone sends is lost.
+// This assumes decoders honour acTL only before the first IDAT, as the APNG specification requires: a lenient decoder
+// that animated a later acTL would animate an image read here as one frame.
 function readPng(b: Uint8Array): ImageHeader | undefined {
   if (b.length < 24 || u32be(b, 8) !== 13 || ascii(b, 12, 4) !== 'IHDR') return undefined
   let i = 8
