@@ -160,6 +160,13 @@ describe('an eventId this phone sent', () => {
     expect(fake.stored).toHaveLength(1)
   })
 
+  // This repo's jest pins Date.now() to 2024-01-01, before these ids (2024-10). A timer dated more than a day ahead of
+  // now is refused as future-event (#579) before the reuse check is reached, so the clock is set to after them here.
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 25, 12, 0, 0))
+  })
+  afterEach(() => jest.restoreAllMocks())
+
   it.each([
     ['a reaction', { type: 'reaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W', emoji: '👍' }],
     ['a redaction', { type: 'redaction', target: '01JB3XKX6F8Q2W4E5R6T7Y8Z9W' }],
