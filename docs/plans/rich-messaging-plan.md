@@ -191,7 +191,8 @@ The sender is the authenticated DIDComm sender of the connection, never a field 
 - **Bytes held.** This is what grows.
   - **On Affinidi:** at the enforced 200, about 50 MiB for one recipient (about 256 MiB at a raised 1,000), against a few hundred KiB for text. It sits in Redis memory until pickup or the 7-day expiry.
   - **On the current Credo mediator:** there is no queue cap and no expiry. Queued messages wait on disk, in Postgres, until pickup, however long that is.
-- **Pickup batches.** A batch of 10 such messages is about 2.5 MiB raw (roughly 4.5 MiB on the wire), inside the 10 MiB `ws_size`/`http_size` frame limits.
+- **Pickup batches.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
+- **The forward on the way in** is a JSON attachment, in both Credo's own v2 routing and the wallet's VTI mediator transport. So about 430 KiB of raw media fits under `message_size`, and 256 KiB leaves room.
 - **The contentless push wake** is unaffected by size.
 
 Step 0 measures the storage each queued photo takes on both mediators (disk on Credo, memory on Affinidi), and the mediator operator signs off on the worst case before Step 3 ships (D2).
