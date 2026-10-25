@@ -9,6 +9,7 @@ import { otaLabel, OtaClient, readOtaStatus } from './otaStatus'
 import { DEFAULT_RING, ensureRing, isRing, setRing } from './rings'
 import { withOta } from './withOta'
 
+jest.mock('react-native-device-info', () => ({ getBuildNumber: () => '271' }))
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/docs',
   exists: jest.fn(async () => false),
@@ -135,6 +136,8 @@ describe('withOta', () => {
     const wrapped = (log = jest.fn()) => {
       jest.spyOn(HotUpdater, 'getCohort').mockReturnValue('ring2')
       jest.spyOn(HotUpdater, 'getFingerprintHash').mockReturnValue(FP)
+      jest.spyOn(HotUpdater, 'getAppVersion').mockReturnValue('0.2.0')
+      jest.spyOn(HotUpdater, 'getDefaultChannel').mockReturnValue('production')
       jest.spyOn(HotUpdater, 'getBundleId').mockReturnValue('01a16998-e09d-7e22-8440-98fab0992afd')
       const reload = jest.spyOn(HotUpdater, 'reload').mockResolvedValue(undefined)
       let options: { onUpdateProcessCompleted?: (r: unknown) => void } = {}
@@ -166,6 +169,22 @@ describe('withOta', () => {
         'return',
         expect.objectContaining({ staged: null, apply: false, reason: 'no update staged' })
       )
+    })
+
+    it("does not reload for the previous build's staged update (same fingerprint, another build number)", async () => {
+      ;(exists as jest.Mock).mockResolvedValue(true)
+      ;(readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify({
+          isolationKey: `HotUpdaterPrefs_${FP}_0.2.0+270_production`,
+          stagingBundleId: STAGED,
+          verificationPending: true,
+        })
+      )
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(reload).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ staged: null, apply: false }))
     })
 
     it('reloads into the update hot-updater has staged, read from its metadata at the return', async () => {

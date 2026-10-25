@@ -21,9 +21,10 @@ import { onReturnLocked, otaApplyBlockerReasons } from '@bifold/core'
 import { HotUpdater } from '@hot-updater/react-native'
 import React from 'react'
 import { Platform } from 'react-native'
+import { getBuildNumber } from 'react-native-device-info'
 
 import { decideApplyOnReturn } from './applyOnReturn'
-import { readStagedUpdateId } from './stagedUpdate'
+import { isolationKeyFor, readStagedUpdateId } from './stagedUpdate'
 
 import { otaUpdateUrl } from './otaConfig'
 import { ensureRing } from './rings'
@@ -57,7 +58,14 @@ export const withOta = <P extends object>(
   // returns: each reads what hot-updater has staged right then (stagedUpdate.ts).
   onReturnLocked(async (awayMs) => {
     const blockers = otaApplyBlockerReasons()
-    const stagedBundleId = await readStagedUpdateId(HotUpdater.getFingerprintHash()).catch(() => undefined)
+    const isolationKey = isolationKeyFor({
+      platform: Platform.OS,
+      fingerprint: HotUpdater.getFingerprintHash(),
+      appVersion: HotUpdater.getAppVersion(),
+      buildNumber: getBuildNumber(),
+      channel: HotUpdater.getDefaultChannel(),
+    })
+    const stagedBundleId = await readStagedUpdateId(isolationKey).catch(() => undefined)
     const decision = decideApplyOnReturn({
       awayMs,
       stagedBundleId,

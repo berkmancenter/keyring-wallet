@@ -17,12 +17,37 @@ import { DocumentDirectoryPath, exists, readFile } from 'react-native-fs'
 export const OTA_METADATA_PATH = `${DocumentDirectoryPath}/bundle-store/metadata.json`
 
 /**
+ * This build's isolation key, composed exactly as AppDelegate.mm
+ * (KeyringOtaIsolationKey) and MainApplication.kt (otaIsolationKey) set it:
+ * hot-updater's default with the version read as {version}+{build}. hot-updater
+ * keeps a staged update only under an equal key, and so must this reader: a store
+ * build with only JavaScript changes keeps the fingerprint and changes the build
+ * number, so the previous build's metadata has the same fingerprint, another key.
+ */
+export const isolationKeyFor = ({
+  platform,
+  fingerprint,
+  appVersion,
+  buildNumber,
+  channel,
+}: {
+  platform: string
+  fingerprint: string | null
+  appVersion: string | null
+  buildNumber: string
+  channel: string
+}): string => {
+  const version = `${appVersion ?? 'unknown'}+${buildNumber}`
+  const base = fingerprint ? `${fingerprint}_${version}` : version
+  return platform === 'android' ? `HotUpdaterPrefs_${base}_${channel}` : `hotupdater_${base}_${channel}_`
+}
+
+/**
  * The staged update's id, or undefined: a staged bundle awaits its first launch
- * (verification pending) under this build's isolation key. The key embeds the
- * native fingerprint, so metadata another build wrote never counts. A rollback
+ * (verification pending) under exactly this build's isolation key. A rollback
  * stages nothing: it clears staging, and applies at the next cold start.
  */
-export const stagedUpdateIdOf = (metadataJson: string | undefined, fingerprint: string | null): string | undefined => {
+export const stagedUpdateIdOf = (metadataJson: string | undefined, isolationKey: string): string | undefined => {
   if (!metadataJson) return undefined
   let metadata: Record<string, unknown>
   try {
@@ -34,11 +59,11 @@ export const stagedUpdateIdOf = (metadataJson: string | undefined, fingerprint: 
   const staged = metadata.staging_bundle_id ?? metadata.stagingBundleId
   const key = metadata.isolation_key ?? metadata.isolationKey
   if (pending !== true || typeof staged !== 'string' || staged === '') return undefined
-  if (typeof key !== 'string' || !fingerprint || !key.includes(fingerprint)) return undefined
+  if (key !== isolationKey) return undefined
   return staged
 }
 
-export const readStagedUpdateId = async (fingerprint: string | null): Promise<string | undefined> => {
+export const readStagedUpdateId = async (isolationKey: string): Promise<string | undefined> => {
   if (!(await exists(OTA_METADATA_PATH))) return undefined
-  return stagedUpdateIdOf(await readFile(OTA_METADATA_PATH, 'utf8'), fingerprint)
+  return stagedUpdateIdOf(await readFile(OTA_METADATA_PATH, 'utf8'), isolationKey)
 }
