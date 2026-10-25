@@ -264,6 +264,16 @@ describe('withOta', () => {
       )
     })
 
+    it("logs a blocker by its kind only, not a VTA task's Trust Task type", async () => {
+      const release = registerOtaApplyBlocker('vta-task:vta/join/0.1')
+      const { log } = wrapped()
+      notifyReturnLocked(6 * 60_000)
+      await flush()
+      release()
+      expect(log).toHaveBeenCalledWith('return', expect.objectContaining({ blockers: ['vta-task'] }))
+      expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
+    })
+
     it('logs a metadata read that fails, and does not reload', async () => {
       jest.mocked(exists).mockResolvedValue(true)
       jest.mocked(readFile).mockRejectedValue(new Error('EACCES'))
