@@ -1,4 +1,4 @@
-import { useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
+import { useAgent, useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
 import {
   DidCommBasicMessageRecord,
   DidCommBasicMessageRole,
@@ -14,6 +14,7 @@ import { FLOW_TIMEOUT_MS_NON_WITNESSED } from '../../src/hooks/chat-messages'
 import { vrcFlowStore } from '../../src/modules/vrc/witnessStatusStore'
 import Chat from '../../src/screens/Chat'
 import { BasicMessageMetadata } from '../../src/types/metadata'
+import { hasOtaApplyBlockers, otaApplyBlockerReasons } from '../../src/utils/otaApply'
 import navigationContext from '../contexts/navigation'
 import { BasicAppContext } from '../helpers/app'
 
@@ -180,5 +181,77 @@ describe('Chat screen while an exchange waits on the other phone', () => {
     fireEvent.press(tree.getByText('Global.Dismiss'))
     expect(tree.queryByText('Relationship.WaitingForAnswer')).toBeNull()
     expect(vrcFlowStore.getStatus('1')).toBe('proposed')
+  })
+})
+
+describe('Chat screen draft and over-the-air updates', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    // @ts-expect-error useConnectionById will be replaced with a mock which will have this method
+    useConnectionById.mockReturnValue(connection)
+    // @ts-expect-error useBasicMessagesByConnectionId will be replaced with a mock which will have this method
+    useBasicMessagesByConnectionId.mockReturnValue(testBasicMessages)
+    jest.spyOn(network, 'useNetwork').mockImplementation(() => ({
+      silentAssertConnectedNetwork: () => true,
+      assertNetworkConnected: () => true,
+      assertInternetReachable: jest.fn(),
+      assertMediatorReachable: jest.fn(),
+      displayNetInfoModal: jest.fn(),
+      hideNetInfoModal: jest.fn(),
+    }))
+  })
+
+  // gifted-chat renders its composer only after its first layout with a height.
+  const renderWithComposer = () => {
+    const tree = render(
+      <BasicAppContext>
+        <Chat navigation={navigationContext} route={props as any} />
+      </BasicAppContext>
+    )
+    fireEvent(tree.getByTestId('GC_WRAPPER'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 800 } },
+    })
+    return tree
+  }
+
+  test('blocks applying an update while a draft is unsent, and not otherwise', () => {
+    const tree = renderWithComposer()
+    const input = tree.getByPlaceholderText('Contacts.TypeHere')
+    expect(hasOtaApplyBlockers()).toBe(false)
+
+    fireEvent.changeText(input, '   ')
+    expect(hasOtaApplyBlockers()).toBe(false)
+
+    fireEvent.changeText(input, 'See you at')
+    expect(otaApplyBlockerReasons()).toEqual(['chat-draft'])
+
+    fireEvent.changeText(input, '')
+    expect(hasOtaApplyBlockers()).toBe(false)
+  })
+
+  test('releases the block when the draft is sent', () => {
+    const basicMessages = (useAgent as jest.Mock)().agent.modules.didcomm.basicMessages
+    const original = basicMessages.sendMessage
+    basicMessages.sendMessage = jest.fn(async () => undefined)
+    try {
+      const tree = renderWithComposer()
+      fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'See you at noon')
+      expect(otaApplyBlockerReasons()).toEqual(['chat-draft'])
+
+      fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE'))
+      expect(basicMessages.sendMessage).toHaveBeenCalledWith('1', 'See you at noon')
+      expect(hasOtaApplyBlockers()).toBe(false)
+    } finally {
+      basicMessages.sendMessage = original
+    }
+  })
+
+  test('releases the block when the screen closes', () => {
+    const tree = renderWithComposer()
+    fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'See you at noon')
+    expect(hasOtaApplyBlockers()).toBe(true)
+
+    tree.unmount()
+    expect(hasOtaApplyBlockers()).toBe(false)
   })
 })

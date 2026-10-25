@@ -25,6 +25,7 @@ import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionPr
 import { Role } from '../types/chat'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
+import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
 import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
 
@@ -151,6 +152,17 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     return () => setActiveChatConnectionId(undefined)
   }, [connectionId])
 
+  // An unsent draft lives only in gifted-chat's own state, so applying an
+  // over-the-air update (a reload) would lose it. Watch the text, without
+  // controlling it (a controlled composer is what broke typing on 2026-08-26),
+  // and block applying while there is any. gifted-chat reports '' after a send.
+  const [hasDraft, setHasDraft] = useState(false)
+  const textInputProps = useMemo(() => ({ onChangeText: (text: string) => setHasDraft(text.trim().length > 0) }), [])
+  useEffect(() => {
+    if (!hasDraft) return
+    return registerOtaApplyBlocker('chat-draft')
+  }, [hasDraft])
+
   useEffect(() => {
     navigation.setOptions({
       title: theirLabel,
@@ -244,6 +256,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
             renderComposer(props, theme, t('Contacts.TypeHere'), !silentAssertConnectedNetwork() || vrcFlowInProgress)
           }
           onSend={onSend}
+          textInputProps={textInputProps}
           user={{
             _id: Role.me,
           }}
