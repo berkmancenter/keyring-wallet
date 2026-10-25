@@ -76,3 +76,21 @@ export function createEventIdFactory(options: { now?: () => number; random?: Ran
 
 /** The app-wide generator. */
 export const newEventId = createEventIdFactory()
+
+/**
+ * The time a ULID claims, in epoch ms: its first 10 characters, Crockford base32. The sender chooses it, so it is a
+ * claim, not a fact; parseChatEvent bounds it where it decides an outcome shared by both phones (a chat's timer).
+ * The layout read here is the ULID spec's (github.com/ulid/spec, which carries no version number; its text as of
+ * October 2026: a 48-bit millisecond time, most significant first, in the first 10 characters), and it is the one
+ * createEventIdFactory above writes. Ids that stopped following it would decode to a wrong time with no error, so
+ * re-check this if the event id format (plan D3) ever changes.
+ */
+export function decodeUlidTime(id: string): number {
+  let ms = 0
+  for (const ch of id.slice(0, TIME_LENGTH).toUpperCase()) {
+    const digit = CROCKFORD.indexOf(ch)
+    if (digit < 0) return NaN
+    ms = ms * 32 + digit
+  }
+  return ms
+}

@@ -20,6 +20,13 @@ const message = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
+// This repo's jest pins Date.now() to 2024-01-01, which is before these fixture ids (2024-10); parseChatEvent refuses
+// a timer event dated more than a day ahead of now, so the clock is set to after them here.
+beforeEach(() => {
+  jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 25, 12, 0, 0))
+})
+afterEach(() => jest.restoreAllMocks())
+
 describe('isUlid', () => {
   it('accepts 26 Crockford base32 characters and nothing else', () => {
     expect(isUlid(ID)).toBe(true)

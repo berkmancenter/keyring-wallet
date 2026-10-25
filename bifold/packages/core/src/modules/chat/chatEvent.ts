@@ -11,6 +11,8 @@
  * @module chat/chatEvent
  */
 
+import { decodeUlidTime } from './eventId'
+
 /** The profile every event names (plan D3). */
 export const CHAT_PROFILE = 'keyring.chat/1'
 
@@ -43,6 +45,15 @@ export const MIN_EXPIRES_IN = 60 * 60
  * is 2^53), and every later change would tie on version and fall to the eventId tie-break, retiring the versioning.
  */
 export const MAX_TIMER_VERSION = 1_000_000
+
+/**
+ * How far ahead of this phone's clock a timer event's eventId may claim to be. A chat's timer is the one outcome both
+ * people's events compete for, and ties on version go to the larger eventId; an id from the far future would win
+ * every later change on both phones, locking the setting. Other events are not refused for this: a reaction or
+ * redaction orders only against its own author's events, and messages are ordered by local receipt, so a fast clock
+ * harms only its own sender, while refusing would drop the text of anyone whose phone clock is wrong.
+ */
+export const MAX_EVENT_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000
 
 /** Largest serialized event accepted while attachments are not supported. */
 export const MAX_EVENT_JSON_LENGTH = 65536
@@ -99,6 +110,7 @@ export type ChatEventRejection =
   | 'bad-target'
   | 'bad-emoji'
   | 'bad-timer'
+  | 'future-event'
 
 export type ChatEventParseResult = { ok: true; event: ChatEvent } | { ok: false; reason: ChatEventRejection }
 
@@ -118,7 +130,7 @@ function reject(reason: ChatEventRejection): ChatEventParseResult {
  * Validate an inbound event and return only the members this reader knows.
  * Never throws; a rejection says why, for the log.
  */
-export function parseChatEvent(input: unknown): ChatEventParseResult {
+export function parseChatEvent(input: unknown, { now = Date.now() }: { now?: number } = {}): ChatEventParseResult {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return reject('not-an-object')
 
   let serialized: string
@@ -195,6 +207,7 @@ export function parseChatEvent(input: unknown): ChatEventParseResult {
       ) {
         return reject('bad-timer')
       }
+      if (decodeUlidTime(base.eventId) > now + MAX_EVENT_CLOCK_SKEW_MS) return reject('future-event')
       return {
         ok: true,
         event: { ...base, type: 'timer', timer: { expiresIn: timer.expiresIn, version: timer.version } },
