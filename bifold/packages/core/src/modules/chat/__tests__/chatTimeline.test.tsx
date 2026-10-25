@@ -16,8 +16,17 @@ import { ChatEventRecord, type ChatEventRecordProps } from '../records/ChatEvent
 import { chatEventsStore, useChatEvents } from '../chatEventsStore'
 import { isUnreadChatEvent, markChatEventsSeen } from '../seen'
 import { ORPHAN_MAX_AGE_MS } from '../fold'
+import { deleteChatMessages } from '../history'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// No chat media folder: deleting a chat's history has no files to remove here.
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/docs',
+  LibraryDirectoryPath: '/library',
+  exists: async () => false,
+  unlink: async () => undefined,
+  readDir: async () => [],
+}))
 
 let mockRecords: ChatEventRecord[] = []
 const bus: Record<string, Subject<{ payload: { record: unknown } }>> = {}
@@ -43,6 +52,8 @@ jest.mock('../ChatModule', () => ({ getChatEventRepository: () => mockRepository
 const agent = {
   context: {},
   events: { observable: (type: string) => (bus[type] ??= new Subject()) },
+  // The chat's BasicMessages, for deleting a chat's history: none here.
+  dependencyManager: { resolve: () => ({ findByQuery: async () => [], delete: jest.fn() }) },
 }
 
 let n = 0
@@ -224,6 +235,38 @@ describe('the timeline is redrawn when what a chat item shows changes', () => {
     expect(
       areChatMessagesEqual(chatTimelineItems([reply], style), chatTimelineItems([original, reply], style).slice(1))
     ).toBe(false)
+  })
+})
+
+// Deleting a chat's history (history.ts, a removed contact or "delete chat") goes through the repository, so the
+// chat's preview and unread count go with it at once, not at the next restart.
+describe("a chat's history deleted", () => {
+  test("the whole chat: its events leave the store, and its unread count with them; another chat's stay", async () => {
+    mockRecords = [message('A', 'one'), message('A', 'two'), message('B', 'other')]
+    const { result } = renderHook(() => ({ unread: useUnreadMessages(), a: useChatEvents('A') }))
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(result.current.unread.unreadByConnection.A).toBe(2)
+    await act(async () => {
+      await deleteChatMessages(agent as never, 'A')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(result.current.a).toEqual([])
+    expect(result.current.unread.unreadByConnection.A ?? 0).toBe(0)
+    expect(chatEventsStore.chat('B')).toHaveLength(1)
+  })
+
+  test('one message: it leaves the timeline with its reaction, and the rest stay', async () => {
+    const gone = message('A', 'gone')
+    const kept = message('A', 'kept')
+    const onGone = event({ connectionId: 'A', eventType: 'reaction', target: gone.eventId, emoji: '👍' })
+    mockRecords = [gone, kept, onGone]
+    await attach()
+    await act(async () => {
+      await deleteChatMessages(agent as never, 'A', { eventIds: [gone.eventId] })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(chatTimelineItems(chatEventsStore.chat('A') ?? [], () => ({})).map((i) => i.text)).toEqual(['kept'])
+    expect(chatEventsStore.chat('A')?.some((r) => r.eventType === 'reaction')).toBe(false)
   })
 })
 
