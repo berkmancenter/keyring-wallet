@@ -1,3 +1,15 @@
+// 271 OTA watchdog proof (ring 0 only, never merged). Blocks the JS thread for
+// 60 s before anything registers, with no error, so no first screen appears and
+// the native update watchdog (AppDelegate.mm) must close the app at 20 s. Past
+// the deadline it does nothing, and after the 60 s the app carries on normally.
+const OTA_WATCHDOG_PROOF_DEADLINE = '2026-10-25T03:58:59Z'
+if (Date.now() < Date.parse(OTA_WATCHDOG_PROOF_DEADLINE)) {
+  const otaWatchdogProofEnd = Date.now() + 60000
+  while (Date.now() < otaWatchdogProofEnd) {
+    // busy-wait: the JS thread stays blocked
+  }
+}
+
 // =============================================================================
 // React Native Entry Point
 // Polyfills are loaded before the app to ensure compatibility
