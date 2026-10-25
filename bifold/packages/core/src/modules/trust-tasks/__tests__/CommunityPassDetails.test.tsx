@@ -5,6 +5,7 @@
  */
 import { fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { AccessibilityInfo, Animated, StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { COMMUNITY, membershipCard, roleCard, seedCardVaultState } from '../../../../__tests__/helpers/cardVault'
@@ -77,5 +78,69 @@ describe('a community card’s Details', () => {
   test('any other credential: nothing', () => {
     const tree = show({ type: ['VerifiableCredential'], issuer: 'did:example:x' })
     expect(tree.queryByTestId(id('CommunityCardDetails'))).toBeNull()
+  })
+})
+
+describe('a community card opened in place, in the Wallet', () => {
+  beforeEach(() => resetCardVaultCache())
+
+  const opened = (lift: number, onClose = jest.fn()) =>
+    render(
+      <BasicAppContext>
+        <CommunityPassDetails card={membershipCard} onOpenCommunity={jest.fn()} onClose={onClose} liftFrom={lift} />
+      </BasicAppContext>
+    )
+  const translateOf = (node: { props: { style?: unknown } }) => {
+    const style = StyleSheet.flatten(node.props.style as never) as { transform?: { translateY?: number }[] }
+    return style.transform?.find((t) => 'translateY' in t)?.translateY
+  }
+
+  test('the pass starts where it sat in the stack, and lifts to its place on the native driver', () => {
+    const timing = jest.spyOn(Animated, 'timing')
+    try {
+      const tree = opened(180)
+      expect(translateOf(tree.getByTestId(id('PassOpenLift')))).toBe(180)
+      // The lift runs natively (jest does not play native-driven frames), so what is asserted is the animation:
+      // to its place (0), on the native driver; and the rest of the card coming in (to 1) after it.
+      const targets = timing.mock.calls.map(([, config]) => config as { toValue: number; useNativeDriver: boolean })
+      expect(targets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ toValue: 0, useNativeDriver: true }),
+          expect.objectContaining({ toValue: 1, useNativeDriver: true, delay: expect.any(Number) }),
+        ])
+      )
+    } finally {
+      timing.mockRestore()
+    }
+  })
+
+  test('"All cards" above it returns to the stack', () => {
+    const onClose = jest.fn()
+    const tree = opened(0, onClose)
+    fireEvent.press(tree.getByTestId(id('PassOpenClose')))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(tree.getByText('Community.PassAllCards')).toBeTruthy()
+  })
+
+  test('a screen reader is told which card opened (the stack it came from is gone)', () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility')
+    try {
+      opened(40)
+      expect(announce).toHaveBeenCalledWith(expect.stringMatching(/keyring-test-vtc|Community\./))
+    } finally {
+      announce.mockRestore()
+    }
+  })
+
+  test('opened any other way (the Details screen): no lift, no "All cards", nothing announced', () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility')
+    try {
+      const tree = show(membershipCard)
+      expect(tree.queryByTestId(id('PassOpenClose'))).toBeNull()
+      expect(translateOf(tree.getByTestId(id('PassOpenLift')))).toBe(0)
+      expect(announce).not.toHaveBeenCalled()
+    } finally {
+      announce.mockRestore()
+    }
   })
 })

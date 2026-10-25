@@ -1214,6 +1214,7 @@
     "PassTechnical": "Detalhes técnicos",
     "PassCommunityId": "ID da comunidade",
     "PassYourId": "Seu ID nesta comunidade",
+    "PassAllCards": "Todos os cartões",
     "CardFromCommunity": "Este cartão vem de {{community}}. Para abrir mão dele, saia da comunidade.",
     "CardRoleMember": "Função: membro",
     "CardOpenCommunity": "Abrir {{community}}",

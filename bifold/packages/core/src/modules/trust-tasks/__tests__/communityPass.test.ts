@@ -37,6 +37,8 @@ const adminCard = {
 }
 
 describe('a community card’s pass', () => {
+  // "Member" is also what an end-to-end flow reads on the card's Details (CommunityCardRole, matched by \bmember\b in
+  // run-join-waiting): a change to Community.PassMember's English fails here first, not hours later on the gate.
   test('a membership: the community’s name once, "Member", and since when', async () => {
     const t = await words('en')
     const face = passFace(membershipCard, t, 'Harbor Tenants Union', NOW - 60 * DAY)!

@@ -5,9 +5,9 @@ import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
 import { isVrcModuleCredential } from '../modules/vrc/credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, View } from 'react-native'
+import { ActivityIndicator, BackHandler, FlatList, View } from 'react-native'
 import { DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState } from '@credo-ts/didcomm'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
@@ -23,7 +23,10 @@ import { BaseTourID } from '../types/tour'
 import { OpenIDCredentialType } from '../modules/openid/types'
 import CredentialCardGen from '../components/misc/CredentialCardGen'
 import PassStack from '../modules/trust-tasks/components/PassStack'
-import { isCommunityCard } from '../modules/trust-tasks/module/vtiWalletCards'
+import { liftFrom } from '../modules/trust-tasks/components/passGeometry'
+import { isCommunityCard, walletCardKey } from '../modules/trust-tasks/module/vtiWalletCards'
+import { openCommunityFrom } from '../modules/trust-tasks/screens/CommunityCardDetails'
+import CommunityPassDetails from '../modules/trust-tasks/screens/CommunityPassDetails'
 import { toRawCredential } from '../modules/vrc/utils/rcardDisplayUtils'
 
 const ListCredentials: React.FC = () => {
@@ -225,6 +228,30 @@ const ListCredentials: React.FC = () => {
   )
   const otherCards = sorted.filter((r) => !communityCards.includes(r as W3cCredentialRecord))
 
+  // A community card opens in place: its pass lifts to the top of the Wallet and the card's Details come in under it.
+  // Kept by the card's own id, not its record's: a card the community changes is stored again under a new record id
+  // and stays open. While the card is not there (between that re-store's delete and store, or once it is left) the
+  // stack shows. Back, or "All cards", returns to the stack; leaving the tab does too (tabs unmount on blur).
+  const list = useRef<FlatList>(null)
+  const scrolled = useRef(0)
+  const [open, setOpen] = useState<{ key: string; liftFrom: number }>()
+  const [returning, setReturning] = useState(false)
+  const openRecord = open ? communityCards.find((r) => cardKeyOf(r) === open.key) : undefined
+  const openCard = openRecord ? (toRawCredential(openRecord) as Record<string, unknown>) : undefined
+  const close = useCallback(() => {
+    setOpen(undefined)
+    setReturning(true)
+  }, [])
+  const isOpen = Boolean(openCard)
+  useEffect(() => {
+    if (!isOpen) return
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      close()
+      return true
+    })
+    return () => back.remove()
+  }, [isOpen, close])
+
   useEffect(() => {
     const shouldShowTour = enableToursConfig && store.tours.enableTours && !store.tours.seenCredentialsTour
 
@@ -277,6 +304,11 @@ const ListCredentials: React.FC = () => {
     // in the middle of the screen, unlike the other tabs (device, 10-05).
     <View style={{ flex: 1 }} testID="ListCredentialsRoot">
       <FlatList
+        ref={list}
+        onScroll={(event) => {
+          scrolled.current = event.nativeEvent.contentOffset.y
+        }}
+        scrollEventThrottle={16}
         style={{ backgroundColor: ColorPalette.brand.primaryBackground }}
         // flexGrow lets ListEmptyComponent fill the viewport. The empty state
         // asks to be centred (flex: 1 + justifyContent: 'center'), but flex: 1
@@ -285,18 +317,29 @@ const ListCredentials: React.FC = () => {
         // centred, unlike Contacts, which has always passed flexGrow here.
         // Latent until the wallet list legitimately became empty (2026-09-01).
         contentContainerStyle={{ flexGrow: 1 }}
-        data={otherCards}
+        data={openCard ? [] : otherCards}
         keyExtractor={(credential) => credential.id}
         ListHeaderComponent={
-          communityCards.length > 0 ? (
+          openCard && open ? (
+            <CommunityPassDetails
+              key={open.key}
+              card={openCard}
+              record={openRecord}
+              onOpenCommunity={(did) => openCommunityFrom(navigation, did)}
+              onClose={close}
+              liftFrom={open.liftFrom}
+            />
+          ) : communityCards.length > 0 ? (
             <PassStack
               records={communityCards}
-              onOpen={(record) =>
-                navigation.navigate(Screens.OpenIDCredentialDetails, {
-                  credentialId: record.id,
-                  type: OpenIDCredentialType.W3cCredential,
-                })
-              }
+              returning={returning}
+              onOpen={(record, index) => {
+                const key = cardKeyOf(record)
+                if (!key) return
+                // Measured before the list goes back to its top, so the pass lifts from where it was on screen.
+                setOpen({ key, liftFrom: liftFrom(index, scrolled.current) })
+                list.current?.scrollToOffset({ offset: 0, animated: false })
+              }}
             />
           ) : null
         }
@@ -315,7 +358,7 @@ const ListCredentials: React.FC = () => {
           )
         }}
         ListEmptyComponent={() =>
-          loading ? (
+          openCard ? null : loading ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} testID="ListCredentialsLoading">
               <ActivityIndicator color={ColorPalette.brand.primary} />
             </View>
@@ -344,6 +387,12 @@ const ListCredentials: React.FC = () => {
       <CredentialListOptions />
     </View>
   )
+}
+
+/** A community card's own id (walletCardKey), which outlives its record's. */
+function cardKeyOf(record: W3cCredentialRecord): string | undefined {
+  const vc = toRawCredential(record) as Record<string, unknown> | undefined
+  return vc ? walletCardKey(vc) : undefined
 }
 
 export default ListCredentials

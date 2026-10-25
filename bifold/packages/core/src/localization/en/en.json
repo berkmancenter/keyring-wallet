@@ -1369,6 +1369,7 @@
     "PassTechnical": "Technical details",
     "PassCommunityId": "Community ID",
     "PassYourId": "Your ID in this community",
+    "PassAllCards": "All cards",
     "CardFromCommunity": "This card comes from {{community}}. To give it up, leave the community.",
     "CardRoleMember": "Role: member",
     "CardOpenCommunity": "Open {{community}}",

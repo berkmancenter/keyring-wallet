@@ -1,14 +1,15 @@
 /**
  * The Wallet's community cards as a stack of passes: each tucked behind the next so its top strip (monogram, name,
- * what it is) shows, the newest in front with its dates. Tapping any pass opens that card. A long stack (ten cards or
- * more) is not folded: it scrolls with the Wallet, a strip per card, so every card stays one tap away.
+ * what it is) shows, the newest in front with its dates. Tapping any pass opens that card (in place, in the Wallet:
+ * onOpen says which pass, counted from the back, so it can lift from where it sat). A long stack (ten cards or more)
+ * is not folded: it scrolls with the Wallet, a strip per card, so every card stays one tap away.
  *
  * @module trust-tasks/components/PassStack
  */
 import type { W3cCredentialRecord } from '@credo-ts/core'
-import React, { useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useWindowDimensions, View } from 'react-native'
+import { Animated, useWindowDimensions, View } from 'react-native'
 
 import { CredentialErrors } from '../../../types/credentials'
 import { testIdWithKey } from '../../../utils/testable'
@@ -20,9 +21,12 @@ import { classifyCredential } from '../module/vtiInbox'
 import { passFace } from '../screens/communityPass'
 
 import CommunityPass, { PASS_ASPECT, PASS_STRIP } from './CommunityPass'
+import { PASS_MARGIN, STACK_TOP } from './passGeometry'
 
-/** The Wallet list's side margin, so a pass is as wide as the cards around it. */
-export const PASS_MARGIN = 15
+export { PASS_MARGIN }
+
+/** How long the stack takes to come back when an open card closes. */
+const RETURN_MS = 200
 
 function usePublishedName(communityDid: string | undefined): string | undefined {
   return useSyncExternalStore(communityTarget.subscribe, () =>
@@ -36,7 +40,7 @@ const StackedPass: React.FC<{
   communityDid: string
   front: boolean
   overlap: number
-  onOpen: (record: W3cCredentialRecord) => void
+  onOpen: () => void
 }> = ({ record, vc, communityDid, front, overlap, onOpen }) => {
   const { t } = useTranslation()
   const published = usePublishedName(communityDid)
@@ -51,7 +55,7 @@ const StackedPass: React.FC<{
         face={face}
         brand={brand}
         front={front}
-        onPress={() => onOpen(record)}
+        onPress={onOpen}
         status={revoked ? t('CredentialDetails.Revoked') : undefined}
       />
     </View>
@@ -61,11 +65,20 @@ const StackedPass: React.FC<{
 export interface PassStackProps {
   /** Community cards, newest first (the Wallet's order). */
   records: W3cCredentialRecord[]
-  onOpen: (record: W3cCredentialRecord) => void
+  /** A pass was tapped: its record, and where it sits in the stack (0 at the back, as drawn). */
+  onOpen: (record: W3cCredentialRecord, index: number) => void
+  /** Coming back from an open card: the stack fades in rather than appearing at once. */
+  returning?: boolean
 }
 
-export const PassStack: React.FC<PassStackProps> = ({ records, onOpen }) => {
+export const PassStack: React.FC<PassStackProps> = ({ records, onOpen, returning = false }) => {
   const { width } = useWindowDimensions()
+  const shown = useRef(new Animated.Value(returning ? 0 : 1)).current
+  useEffect(() => {
+    if (returning) Animated.timing(shown, { toValue: 1, duration: RETURN_MS, useNativeDriver: true }).start()
+    // Once, when the stack comes back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const passHeight = (width - 2 * PASS_MARGIN) / PASS_ASPECT
   // Oldest first, so the newest is drawn last: in front, with its dates.
   const ordered = [...records].reverse()
@@ -76,7 +89,10 @@ export const PassStack: React.FC<PassStackProps> = ({ records, onOpen }) => {
   })
   if (cards.length === 0) return null
   return (
-    <View style={{ marginHorizontal: PASS_MARGIN, marginTop: 15 }} testID={testIdWithKey('PassStack')}>
+    <Animated.View
+      style={{ marginHorizontal: PASS_MARGIN, marginTop: STACK_TOP, opacity: shown }}
+      testID={testIdWithKey('PassStack')}
+    >
       {cards.map(({ record, vc, communityDid }, index) => (
         <StackedPass
           key={record.id}
@@ -85,10 +101,10 @@ export const PassStack: React.FC<PassStackProps> = ({ records, onOpen }) => {
           communityDid={communityDid}
           front={index === cards.length - 1}
           overlap={index === 0 ? 0 : passHeight - PASS_STRIP}
-          onOpen={onOpen}
+          onOpen={() => onOpen(record, index)}
         />
       ))}
-    </View>
+    </Animated.View>
   )
 }
 
