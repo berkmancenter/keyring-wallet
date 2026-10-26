@@ -38,6 +38,8 @@ import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
 import * as BifoldCore from '@bifold/core'
 
+import { PICKUP_IDLE_INTERVAL_MS } from './pickupBoost'
+
 export type BCAgent = Agent<ReturnType<typeof getBCAgentModules>>
 
 interface GetBCAgentModulesOptions {
@@ -177,10 +179,14 @@ export function getBCAgentModules({
         // this.) Hardware attestation adds ~2s on top, nearly all of it the
         // passcode/biometric prompt, which is user time anyway.
         //
-        // This is a FLAT interval for the life of the agent, not adaptive —
-        // at 1s that is ~86k mediator requests/day per idle wallet, which is
-        // fine for demo/testing but wants an idle/active split before it
-        // ships (see the parked adaptive-polling work).
+        // That 1s is now the ACTIVE rate only (utils/pickupBoost.ts): for 30 s
+        // after the agent starts, the app returns to the foreground, or it
+        // sends a message, a second timer asks every second. Both phones in an
+        // exchange are sending, so both stay inside that window and the hops
+        // above keep their ~1 s. This steady loop is the idle rate: 5 s, one
+        // fifth of the 3,600 asks an hour a 1 s loop sent from every open app
+        // (measured 1.00/s, 2026-10-25), which were nearly all of the shared
+        // mediator's inbound traffic.
         //
         // The witness-server carried this same bug on Implicit until 2026-08-31 and
         // received nothing at all through the mediator — the wallet's runtime
@@ -194,7 +200,7 @@ export function getBCAgentModules({
         // queue failures. Note mediatorPickupStrategy above is overridden at
         // runtime by configureMessagePickup (useBCAgentSetup), which starts
         // PickUpV2 explicitly — this interval is what governs.
-        mediatorPollingInterval: 1_000,
+        mediatorPollingInterval: PICKUP_IDLE_INTERVAL_MS,
         // Live pickup (utils/livePickup.ts, behind its switch) reconnects its
         // WebSocket through credo's monitor, whose backoff doubles from 100 ms
         // with NO ceiling by default: a mediator down for a few minutes would

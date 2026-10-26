@@ -38,7 +38,7 @@ import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
-import PushLinkListener from '@/push/PushLinkListener'
+import AppGlobalListeners from '@/components/AppGlobalListeners'
 import { appPushNotificationsConfig } from '@/push/pushDefaults'
 import { offerFeedbackReport } from '@/utils/problemReport'
 import { expirationOverrideInMinutes } from '@utils/expiration'
@@ -258,8 +258,10 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.COMPONENT_HOME_HEADER, HomeHeaderView)
     this._container.registerInstance(TOKENS.COMPONENT_HOME_FOOTER, HomeFooterView)
     // Rendered with the main tabs: makes the phone wakeable after a new agent
-    // link when notifications were turned on before it (push/pushAfterLink.ts).
-    this._container.registerInstance(TOKENS.COMPONENT_APP_GLOBAL_LISTENER, PushLinkListener)
+    // link when notifications were turned on before it (push/pushAfterLink.ts),
+    // and opens the 1 s message-pickup window while the app is in use
+    // (utils/pickupBoost.ts).
+    this._container.registerInstance(TOKENS.COMPONENT_APP_GLOBAL_LISTENER, AppGlobalListeners)
     this._container.registerInstance(TOKENS.COMPONENT_CRED_EMPTY_LIST, EmptyList)
     this._container.registerInstance(TOKENS.COMPONENT_RECORD, Record)
     this._container.registerInstance(TOKENS.CACHE_CRED_DEFS, [
