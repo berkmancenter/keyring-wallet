@@ -3,7 +3,7 @@
 #   farm-health.sh                 # every resource below
 # Per runner VTA: pnm health (resolve, auth, mediator, DIDComm + TSP ping), and
 # whether a DID host is registered. Per VTC: /health version, REST manifest
-# (criteria, name), and — vti #1698 — whether GET /v1/community/did-qr.svg is a
+# 0.4 (criteria with their admission, name), and — vti #1698 — whether GET /v1/community/did-qr.svg is a
 # QR that decodes to exactly the VTC's DID.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -48,8 +48,10 @@ vtc() { # name base did
   local ver; ver=$(python3 -c 'import sys,json; print(json.loads(sys.argv[1]).get("version","?"))' "$health" 2>/dev/null)
   [ -n "$ver" ] && [ "$ver" != "?" ] && ok "/health version $ver" || bad "/health unreadable: ${health:0:80}"
   local m; m=$(curl -s -m 20 -X POST "$base/v1/trust-tasks" -H 'content-type: application/json' \
-    -d "{\"id\":\"urn:uuid:$(uuidgen)\",\"type\":\"https://trusttasks.org/spec/vtc/join-requests/manifest/0.2\",\"threadId\":\"urn:uuid:$(uuidgen)\",\"payload\":{},\"issuer\":\"$did\",\"recipient\":\"$did\",\"issuedAt\":\"$(date -u +%FT%TZ)\"}")
-  python3 -c 'import sys,json; d=json.loads(sys.argv[1]); p=d.get("payload",{}); print("  ✓ manifest: criteria", [c["id"] for c in p.get("criteria",[])], "name", (p.get("branding") or {}).get("displayName"))' "$m" 2>/dev/null || bad "manifest unreadable: ${m:0:80}"
+    -d "{\"id\":\"urn:uuid:$(uuidgen)\",\"type\":\"https://trusttasks.org/spec/vtc/join-requests/manifest/0.4\",\"threadId\":\"urn:uuid:$(uuidgen)\",\"payload\":{},\"issuer\":\"$did\",\"recipient\":\"$did\",\"issuedAt\":\"$(date -u +%FT%TZ)\"}")
+  # An error reply (e.g. unsupportedVersion) has no criteria key; reading it as [] once reported "criteria []" for
+  # communities whose criteria were invited / member-credential / review. So a reply without criteria fails.
+  python3 -c 'import sys,json; d=json.loads(sys.argv[1]); p=d.get("payload",{}); c=p["criteria"]; print("  ✓ manifest: criteria", [x["id"]+"("+x.get("admission","?")+")" for x in c], "name", (p.get("branding") or {}).get("displayName"))' "$m" 2>/dev/null || bad "manifest unreadable: ${m:0:120}"
   local code; code=$(curl -s -m 15 -o "$TMP/qr.svg" -w "%{http_code} %{content_type}" "$base/v1/community/did-qr.svg")
   if [[ "$code" == 200*svg* ]]; then
     rsvg-convert -w 600 -b white "$TMP/qr.svg" -o "$TMP/qr.png" 2>/dev/null
