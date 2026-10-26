@@ -2,9 +2,9 @@
  * One pass: a neutral face until the community's look is known (no monogram, no pattern, never the default look
  * first), then its colour and monogram or logo; its dates in front only; the time left when it is soon.
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Animated, StyleSheet } from 'react-native'
 
 import { testIdWithKey } from '../../../utils/testable'
 import CommunityPass from '../components/CommunityPass'
@@ -21,6 +21,8 @@ const face: PassFace = {
   accessibilityLabel: 'Harbor Tenants Union, Member, Member since 14 Mar 2026',
 }
 const brand: CommunityBrand = { color: '#265373', pattern: 'waves', monogram: 'HU', fromAccent: false }
+let mockReduceMotion: boolean | undefined = false
+jest.mock('../../../hooks/reduce-motion', () => ({ useReduceMotion: () => mockReduceMotion }))
 const passOf = (tree: ReturnType<typeof render>) => tree.getByTestId(testIdWithKey('CommunityPass'))
 const backgroundOf = (tree: ReturnType<typeof render>) => StyleSheet.flatten(passOf(tree).props.style).backgroundColor
 
@@ -108,5 +110,43 @@ describe('a community pass', () => {
     const tree = render(<CommunityPass face={face} brand={{ known: true, value: brand }} front onPress={onPress} />)
     fireEvent.press(passOf(tree))
     expect(onPress).toHaveBeenCalledTimes(1)
+  })
+})
+
+// 272: a pass's colour changed under the person's eyes. It changes only when its look does, and then fades over once.
+describe("a pass's colour changing", () => {
+  // The fade is the pass's only animated layer (no testID: nothing drives it).
+  const fadeOf = (tree: ReturnType<typeof render>) => tree.UNSAFE_queryAllByType(Animated.View)[0] ?? null
+  const accent: CommunityBrand = { ...brand, color: '#1a4d80', fromAccent: true }
+  beforeEach(() => {
+    mockReduceMotion = false
+    jest.useFakeTimers()
+  })
+  afterEach(() => jest.useRealTimers())
+
+  test('a new colour fades over from the old one, once, then the layer goes', () => {
+    const tree = render(<CommunityPass face={face} brand={{ known: true, value: brand }} front />)
+    expect(fadeOf(tree)).toBeNull()
+    tree.rerender(<CommunityPass face={face} brand={{ known: true, value: accent }} front />)
+    expect(backgroundOf(tree)).toBe('#1a4d80')
+    expect(StyleSheet.flatten(fadeOf(tree)!.props.style).backgroundColor).toBe('#265373')
+    act(() => {
+      jest.advanceTimersByTime(1000)
+    })
+    expect(fadeOf(tree)).toBeNull()
+  })
+
+  test('the same colour drawn again never animates (the control above shows a fade)', () => {
+    const tree = render(<CommunityPass face={face} brand={{ known: true, value: accent }} front />)
+    tree.rerender(<CommunityPass face={face} brand={{ known: true, value: { ...accent } }} front />)
+    expect(fadeOf(tree)).toBeNull()
+  })
+
+  test('under Reduce Motion the colour changes at once', () => {
+    mockReduceMotion = true
+    const tree = render(<CommunityPass face={face} brand={{ known: false }} front />)
+    tree.rerender(<CommunityPass face={face} brand={{ known: true, value: accent }} front />)
+    expect(backgroundOf(tree)).toBe('#1a4d80')
+    expect(fadeOf(tree)).toBeNull()
   })
 })

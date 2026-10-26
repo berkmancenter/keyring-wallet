@@ -153,18 +153,23 @@ describe("a community's card look, kept from its manifest and profile", () => {
   const { memoryGenericRecords } = jest.requireActual('../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords')
   const { GenericRecordsCommunityStore } = jest.requireActual('../module/VtiCommunityStore')
 
-  function serve(branding: unknown, profile: unknown) {
+  /** `answeredFor`: the community the answer names (another's at a shared host); null names none. */
+  function serve(branding: unknown, profile: unknown, answeredFor: string | null = communityDid) {
     global.fetch = jest.fn(async (url: string) =>
       url.endsWith('/community/public-profile')
         ? answer(200, profile)
         : answer(200, {
             type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2#response',
-            payload: { communityDid, criteria: [{ type: 'invited-member' }], ...(branding ? { branding } : {}) },
+            payload: {
+              ...(answeredFor ? { communityDid: answeredFor } : {}),
+              criteria: [{ type: 'invited-member' }],
+              ...(branding ? { branding } : {}),
+            },
           })
     ) as unknown as typeof fetch
   }
-  async function keptAfterRead() {
-    const agent = { ...fakeAgent(), genericRecords: memoryGenericRecords() }
+  const newAgent = () => ({ ...fakeAgent(), genericRecords: memoryGenericRecords() })
+  async function keptAfterRead(agent = newAgent()) {
     await vtiAgent.fetchManifest(communityDid, agent as never)
     await vtiAgent.profileNameRead
     // The brand is kept in the background; let it land.
@@ -208,5 +213,67 @@ describe("a community's card look, kept from its manifest and profile", () => {
     )
     const kept = await keptAfterRead()
     expect(kept[0]).toMatchObject({ communityDid, accentColor: undefined, logoUrl: undefined })
+  })
+
+  // 272: a pass took another community's colour. Communities can share a host, and an answer naming another
+  // community was kept as this one's look.
+  it('keeps nothing from an answer that names another community, and asks this one over DIDComm instead', async () => {
+    serve({ displayName: 'Other', accentColor: '#0033FF' }, {}, 'did:webvh:QmOther:vtc.example.org')
+    const ask = jest.spyOn(vtiAgent as unknown as { ask: () => Promise<undefined> }, 'ask').mockResolvedValue(undefined)
+    const agent = newAgent()
+    try {
+      await expect(vtiAgent.fetchManifest(communityDid, agent as never)).rejects.toBeDefined()
+      expect(ask).toHaveBeenCalled()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(await new GenericRecordsCommunityStore(agent).listCommunityBrands()).toEqual([])
+      expect(communityTarget.publishedNameOf(communityDid)).toBeUndefined()
+    } finally {
+      ask.mockRestore()
+    }
+  })
+
+  it('an answer that names no community adds a look but never clears a kept one', async () => {
+    const agent = newAgent()
+    serve({ accentColor: '#1A4D80' }, {})
+    expect((await keptAfterRead(agent))[0]).toMatchObject({ accentColor: '#1a4d80' })
+    serve(undefined, { communityDid, name: '' }, null)
+    expect((await keptAfterRead(agent))[0]).toMatchObject({ accentColor: '#1a4d80' })
+    // The control: the same answer naming this community does clear it (the test above, "keeps none").
+    serve(undefined, { communityDid, name: '' })
+    expect((await keptAfterRead(agent))[0]).toMatchObject({ accentColor: undefined })
+  })
+
+  it('over DIDComm too: an answer naming another community teaches this one nothing', async () => {
+    // No REST answer, so the read goes over DIDComm, where the answer names another community.
+    global.fetch = jest.fn(async () => answer(503, {})) as unknown as typeof fetch
+    const ask = jest.spyOn(vtiAgent as unknown as { ask: () => Promise<unknown> }, 'ask').mockResolvedValue({
+      type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.4#response',
+      body: {
+        payload: {
+          communityDid: 'did:webvh:QmOther:vtc.example.org',
+          criteria: [],
+          branding: { displayName: 'Other', accentColor: '#0033FF' },
+        },
+      },
+    })
+    const agent = newAgent()
+    try {
+      await vtiAgent.fetchManifest(communityDid, agent as never)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(await new GenericRecordsCommunityStore(agent).listCommunityBrands()).toEqual([])
+      expect(communityTarget.publishedNameOf(communityDid)).toBeUndefined()
+    } finally {
+      ask.mockRestore()
+    }
+  })
+})
+
+describe('sameCommunity', () => {
+  const { sameCommunity } = jest.requireActual('../module/vtiAgent')
+  it('one did:webvh wherever it is hosted; another SCID or another method is another community', () => {
+    expect(sameCommunity('did:webvh:QmA:old.example.org', 'did:webvh:QmA:new.example.org:vtc')).toBe(true)
+    expect(sameCommunity('did:webvh:QmA:vtc.example.org', 'did:webvh:QmB:vtc.example.org')).toBe(false)
+    expect(sameCommunity('did:web:vtc.example.org', 'did:web:other.example.org')).toBe(false)
+    expect(sameCommunity('did:web:vtc.example.org', 'did:web:vtc.example.org')).toBe(true)
   })
 })

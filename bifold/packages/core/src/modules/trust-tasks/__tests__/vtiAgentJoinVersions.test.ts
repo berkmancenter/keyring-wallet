@@ -47,8 +47,17 @@ const answer = (type: string, payload: unknown) => ({ type: `${type}#response`, 
 const verdict = (effect: string) => ({ requestId: 'r-1', verdict: { effect, with: {} } })
 
 let community = 0
-/** A community no other test has spoken to: the agent remembers the version each one answered in. */
-const nextCommunity = () => `did:webvh:QmCommunity${++community}:vtc.example.org`
+/**
+ * A community no other test has spoken to. Each carries the SCID that `payload03` and the vtc-service 0.49.0 recording
+ * (`vtc-0.49.0-answers.json`) name, `QmVtcScid`, so their answers are about the community asked: an answer naming
+ * another community is not learned from (vtiAgent `sameCommunity`, one did:webvh per SCID wherever it is hosted).
+ * The 789ab4c2 recording names a different community; the test that uses it substitutes the asked DID (below).
+ *
+ * Each test's host differs on purpose: the agent remembers the version a community answered in by full DID, so a new
+ * host is a community no other test has spoken to. Version memory being per DID while `sameCommunity` is per SCID is
+ * deliberate here, and harmless: the same community at a new host only asks its version again.
+ */
+const nextCommunity = () => `did:webvh:QmVtcScid:vtc${++community}.example.org`
 
 function fakeAgent(communityDid: string) {
   return {
@@ -160,9 +169,15 @@ describe('reading the manifest over REST', () => {
     restServing({ [`${MANIFEST}/0.3`]: restRefuses(['0.1', '0.2']), [`${MANIFEST}/0.2`]: rest02 })
     await vtiAgent.fetchManifest(communityDid, fakeAgent(communityDid))
 
+    // The upgraded service's recorded answers come from another community (a throwaway one at localhost:8209). Its
+    // communityDid is replaced by the asked DID: this test is about version negotiation, not whose manifest it is.
+    // Answers naming another community have tests of their own (vtiManifestRest.test.ts).
     const asked = restServing({
       [`${MANIFEST}/0.2`]: { status: vtc1907.manifest02Refused.status, body: vtc1907.manifest02Refused },
-      [`${MANIFEST}/0.3`]: { status: 200, body: vtc1907.manifest03 },
+      [`${MANIFEST}/0.3`]: {
+        status: 200,
+        body: { ...vtc1907.manifest03, payload: { ...vtc1907.manifest03.payload, communityDid } },
+      },
     })
     const manifest = await vtiAgent.fetchManifest(communityDid, fakeAgent(communityDid))
     expect(manifest.wire).toBe('0.3')

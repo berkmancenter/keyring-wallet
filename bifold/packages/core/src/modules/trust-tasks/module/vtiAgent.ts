@@ -304,6 +304,17 @@ const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined
   )
 }
 
+/**
+ * Whether an answer naming `named` is about the community `asked`. A did:webvh is the same community wherever it is
+ * hosted: its SCID (the segment after the method) is fixed for its life while the host can move, so two webvh DIDs
+ * with one SCID are one community. Anything else must match exactly.
+ */
+export function sameCommunity(asked: string, named: string): boolean {
+  if (asked === named) return true
+  const scid = (did: string) => (did.startsWith('did:webvh:') ? did.split(':')[2] : undefined)
+  return !!scid(asked) && scid(asked) === scid(named)
+}
+
 /** A DIDComm problem-report, presented as the trust-task-error `refusalOf` reads. */
 const problemReportAsRefusal = (plaintext: DidCommV2PlaintextMessage): DidCommV2PlaintextMessage => {
   const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
@@ -1536,13 +1547,27 @@ class VtiAgentController {
   }
 
   private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
+    // An answer that names another community is that community's: nothing in it (name, look) is learned for this
+    // one. Communities can share a host, and a pass took another community's colour that way (272).
+    const answeredFor = manifest.communityDid
+    if (answeredFor && !sameCommunity(communityDid, answeredFor)) {
+      ;(agent ?? this.agent)?.config.logger.warn(
+        `vtiAgent: a manifest asked of ${communityDid} named ${answeredFor}; nothing learned from it`
+      )
+      return manifest
+    }
     this.manifests.set(this.manifestKey(communityDid), manifest)
     const branded = manifest.branding?.displayName?.trim()
-    // How its cards look: kept even when it gives nothing, so the Wallet knows it has none (communityBrand.ts).
-    rememberCommunityBrand(agent, communityDid, {
-      accentColor: manifest.branding?.accentColor,
-      logoUrl: manifest.branding?.logoUrl,
-    })
+    // How its cards look. An answer that names this community is kept even when it gives nothing, so the Wallet
+    // knows it has none (communityBrand.ts). One that names no community only adds a look: it never clears a kept
+    // one, since nothing shows it is this community's.
+    const gives = !!(manifest.branding?.accentColor || manifest.branding?.logoUrl)
+    if (answeredFor || gives) {
+      rememberCommunityBrand(agent, communityDid, {
+        accentColor: manifest.branding?.accentColor,
+        logoUrl: manifest.branding?.logoUrl,
+      })
+    }
     if (branded) {
       communityTarget.publishedName(communityDid, branded)
       rememberCommunityName(agent, communityDid, branded)
@@ -1646,7 +1671,16 @@ class VtiAgentController {
       }
       if (!response.ok) return undefined
       if (!body?.payload?.criteria) return undefined
-      return { manifest: readManifest(body.payload, wire) }
+      const manifest = readManifest(body.payload, wire)
+      // Another community answered at this host (communities can share one): its criteria are not this one's.
+      // Asked over DIDComm instead, which is addressed to this community.
+      if (manifest.communityDid && !sameCommunity(communityDid, manifest.communityDid)) {
+        agent.config.logger.warn(
+          `vtiAgent: the manifest read over REST for ${communityDid} named ${manifest.communityDid}; asking over DIDComm`
+        )
+        return undefined
+      }
+      return { manifest }
     } catch (e) {
       // A directory statement that cannot be shown stops the join here: read
       // again over DIDComm it would say the same.

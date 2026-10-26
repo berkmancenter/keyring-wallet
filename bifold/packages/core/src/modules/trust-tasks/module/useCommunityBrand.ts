@@ -4,7 +4,10 @@
  * default look first and the community's own a moment later; known without a colour or logo is the DID's colour and
  * the monogram, and that is final too.
  *
- * Every card reads the same kept looks, read once and again whenever one is kept (a manifest read).
+ * Every card reads the same kept looks, read once and again whenever one is kept (a manifest read). Whether a
+ * community's logo is on the phone is settled once per logo and remembered for the run, so a card the Wallet has
+ * shown before draws its look on the first frame of every visit, never the neutral face first (272: a pass flashed
+ * grey each time the tab came back).
  *
  * @module trust-tasks/module/useCommunityBrand
  */
@@ -25,6 +28,8 @@ let reading: Promise<void> | undefined
 /** A look was kept while a read was under way: that read may have missed it, so read once more after it. */
 let again = false
 const listeners = new Set<() => void>()
+/** Each logo's settled answer, by community and address: the local file, or undefined when there is none. */
+const settledLogos = new Map<string, string | undefined>()
 
 function read(agent: Agent): Promise<void> {
   if (reading) {
@@ -55,6 +60,7 @@ export function resetCommunityBrands(): void {
   kept = undefined
   reading = undefined
   again = false
+  settledLogos.clear()
 }
 
 function subscribe(listener: () => void) {
@@ -68,7 +74,8 @@ function subscribe(listener: () => void) {
 export function useCommunityBrand(communityDid: string | undefined, name?: string): Known<CommunityBrand> {
   const { agent } = useAgent()
   const records = useSyncExternalStore(subscribe, () => kept)
-  const [logo, setLogo] = useState<{ url?: string; file?: string; settled: boolean }>({ settled: false })
+  // Bumped when a logo's answer lands, so the card reads it from settledLogos.
+  const [, setLogoSettled] = useState(0)
 
   useEffect(() => {
     if (!agent) return
@@ -79,26 +86,32 @@ export function useCommunityBrand(communityDid: string | undefined, name?: strin
 
   const record = communityDid ? records?.get(communityDid) : undefined
   const logoUrl = record?.logoUrl
+  const logoKey = communityDid && logoUrl ? `${communityDid}|${logoUrl}` : undefined
+  const settled = !!records && (!logoKey || settledLogos.has(logoKey))
 
   useEffect(() => {
-    if (!records) return
-    if (!communityDid || !logoUrl) {
-      setLogo({ url: undefined, settled: true })
-      return
-    }
+    if (!communityDid || !logoUrl || !logoKey || settled) return
     let live = true
-    setLogo({ url: logoUrl, settled: false })
-    void cachedCommunityLogo(communityDid, logoUrl).then((file) => {
-      if (live) setLogo({ url: logoUrl, file, settled: true })
-    })
+    void cachedCommunityLogo(communityDid, logoUrl)
+      // A logo that cannot be had is no logo: the card shows its monogram rather than staying neutral.
+      .catch(() => undefined)
+      .then((file) => {
+        settledLogos.set(logoKey, file)
+        if (live) setLogoSettled((n) => n + 1)
+      })
     return () => {
       live = false
     }
-  }, [records, communityDid, logoUrl])
+  }, [communityDid, logoUrl, logoKey, settled])
 
-  if (!communityDid || !records || !logo.settled || logo.url !== logoUrl) return { known: false }
+  if (!communityDid || !records || !settled) return { known: false }
   return {
     known: true,
-    value: communityBrand({ communityDid, name, accentColor: record?.accentColor, logo: logo.file }),
+    value: communityBrand({
+      communityDid,
+      name,
+      accentColor: record?.accentColor,
+      logo: logoKey ? settledLogos.get(logoKey) : undefined,
+    }),
   }
 }

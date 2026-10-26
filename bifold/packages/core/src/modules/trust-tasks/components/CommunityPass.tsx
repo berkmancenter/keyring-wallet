@@ -4,14 +4,17 @@
  * them reads like a wallet: the top strip (monogram, name, kind) is what shows when the pass is tucked behind another.
  *
  * Until the community's look is known (useCommunityBrand), the pass is a neutral dark face with the same white text,
- * so nothing but the colour changes when it arrives.
+ * so nothing but the colour changes when it arrives. When the colour does change (the look arriving on the very
+ * first visit, or a community's own colour replacing the one drawn from its DID), it fades over once, in
+ * {@link COLOUR_FADE_MS}; at once under Reduce Motion. A colour that has not changed never animates.
  *
  * @module trust-tasks/components/CommunityPass
  */
-import React from 'react'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import Svg, { Circle, G, Path } from 'react-native-svg'
 
+import { useReduceMotion } from '../../../hooks/reduce-motion'
 import { testIdWithKey } from '../../../utils/testable'
 import type { CommunityBrand, PassPattern } from '../module/communityBrand'
 import type { Known } from '../module/useCommunityBrand'
@@ -22,6 +25,31 @@ export const PASS_ASPECT = 1.586
 /** The strip that shows when a pass is tucked behind the next one. */
 export const PASS_STRIP = 62
 const NEUTRAL = '#4A4F57'
+/** How long a pass's colour takes to fade to a new one. */
+export const COLOUR_FADE_MS = 300
+
+/**
+ * The colour a pass was last drawn in, faded to `color` when that changes: a layer in the old colour over the new one,
+ * fading out. Undefined while there is nothing to fade.
+ */
+function useColourFade(color: string): { from: string; opacity: Animated.Value } | undefined {
+  const reduceMotion = useReduceMotion()
+  const drawn = useRef(color)
+  const opacity = useRef(new Animated.Value(0)).current
+  const [from, setFrom] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (drawn.current === color) return
+    const previous = drawn.current
+    drawn.current = color
+    if (reduceMotion) return
+    setFrom(previous)
+    opacity.setValue(1)
+    Animated.timing(opacity, { toValue: 0, duration: COLOUR_FADE_MS, useNativeDriver: true }).start(() =>
+      setFrom(undefined)
+    )
+  }, [color, reduceMotion, opacity])
+  return from ? { from, opacity } : undefined
+}
 
 function Pattern({ pattern }: { pattern: PassPattern }) {
   const stroke = { stroke: '#FFFFFF', strokeOpacity: 0.13, fill: 'none' }
@@ -75,6 +103,8 @@ export interface CommunityPassProps {
 
 export const CommunityPass: React.FC<CommunityPassProps> = ({ face, brand, front, onPress, status }) => {
   const look = brand.known ? brand.value : undefined
+  const color = look?.color ?? NEUTRAL
+  const fade = useColourFade(color)
   const Shell = onPress ? Pressable : View
   return (
     <Shell
@@ -82,8 +112,14 @@ export const CommunityPass: React.FC<CommunityPassProps> = ({ face, brand, front
       accessibilityRole={onPress ? 'button' : 'summary'}
       accessibilityLabel={status ? `${face.accessibilityLabel}, ${status}` : face.accessibilityLabel}
       testID={testIdWithKey('CommunityPass')}
-      style={[styles.pass, { backgroundColor: look?.color ?? NEUTRAL }]}
+      style={[styles.pass, { backgroundColor: color }]}
     >
+      {fade ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: fade.from, opacity: fade.opacity }]}
+        />
+      ) : null}
       {look ? <Pattern pattern={look.pattern} /> : null}
       <View style={styles.strip}>
         <View style={styles.mark} testID={testIdWithKey('CommunityPassMark')}>

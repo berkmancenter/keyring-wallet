@@ -103,4 +103,33 @@ describe('a community’s card look', () => {
     await flush()
     expect(seen[seen.length - 1]).toMatchObject({ known: true, value: { color: didColour(DID) } })
   })
+
+  // 272: a pass flashed the neutral face each time the tab came back, its logo's answer being per-visit.
+  test('a card shown before draws its look on the first frame of the next visit, logo and all', async () => {
+    await keep({ accentColor: '#1a4d80', logoUrl: 'https://vtc.example.org/logo.png' })
+    mockLogo.mockResolvedValue('file:///caches/community-logos/abc')
+    const first = render(<Probe did={DID} />)
+    await flush()
+    // Control: the first visit is unknown before the logo's answer.
+    expect(seen[0]).toEqual({ known: false })
+    first.unmount()
+    seen = []
+    render(<Probe did={DID} />)
+    expect(seen[0]).toEqual({
+      known: true,
+      value: expect.objectContaining({ color: '#1a4d80', logo: 'file:///caches/community-logos/abc' }),
+    })
+    expect(mockLogo).toHaveBeenCalledTimes(1)
+  })
+
+  test('a logo whose fetch fails settles as the monogram rather than staying neutral', async () => {
+    await keep({ logoUrl: 'https://vtc.example.org/logo.png' })
+    mockLogo.mockRejectedValue(new Error('offline'))
+    render(<Probe did={DID} />)
+    await flush()
+    expect(seen[seen.length - 1]).toEqual({
+      known: true,
+      value: expect.objectContaining({ logo: undefined, monogram: 'HU' }),
+    })
+  })
 })
