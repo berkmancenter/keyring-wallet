@@ -1,45 +1,62 @@
 /**
- * "How you know <name>" through real i18next, set up as the app sets it up (default escaping on), not the test mock
- * that returns keys. Two separate things hold: a date reads as the rest of the app writes it ("24 Oct 2026"), and
- * whatever the date or a name holds reads as given, never HTML-escaped ("10&#x2F;24&#x2F;26" for 10/24/26). A
- * month-named date carries nothing the escaping rewrites, so the second is proven with a date that does: localDate is
- * replaced by one that returns it. If the layers ever stop writing dates through localDate, that date never appears
- * and the test fails, rather than passing on a date with nothing to escape.
+ * "How you know <name>", one entry per day, read through the real locale files and the app's default escaping: three
+ * exchanges on one day are one entry; a day partly signed with secure hardware says "2 of 3"; a witness on the same
+ * day joins it; a day opens a sheet with the witness's record and each exchange; and a name reads as given, never
+ * HTML-escaped. Before, each set of cards was its own line, the same words and
+ * date two or three times, and the witness record sat in another block in another date format.
  */
-import { act, render } from '@testing-library/react-native'
-import i18next from 'i18next'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import RelationshipLayers from '../../../../src/modules/vrc/components/RelationshipLayers'
-import { translationResources } from '../../../../src/localization'
-import { localDate } from '../../../../src/modules/trust-tasks/screens/localTime'
+import { verifyVrcHardwareEvidence } from '../../../../src/modules/vrc/services/BiometricSignatureVerifier'
 import type { RelationshipLayer } from '../../../../src/modules/vrc/utils/relationshipLayers'
+import type { WitnessRecord } from '../../../../src/modules/vrc/utils/witnessCredentialUtils'
 import { testIdWithKey } from '../../../../src/utils/testable'
+import { speak } from '../../../helpers/appLanguage'
 import { BasicAppContext } from '../../../helpers/app'
 
-let mockT: (key: string, options?: Record<string, unknown>) => string
-jest.mock('react-i18next', () => ({
-  ...jest.requireActual('react-i18next'),
-  useTranslation: () => ({ t: (key: string, options?: Record<string, unknown>) => mockT(key, options) }),
-}))
+// The screen's words from the real locale files, so a test reads what a person reads (the shared mock gives keys).
+jest.mock('react-i18next', () => {
+  const shared = jest.requireActual('../../../../__mocks__/react-i18next')
+  const actual = jest.requireActual('i18next')
+  const real = actual.default ?? actual
+  return {
+    ...shared,
+    useTranslation: () => ({ t: real.t.bind(real), i18n: real }),
+  }
+})
 jest.mock('../../../../src/modules/vrc/services/BiometricSignatureVerifier', () => ({
-  verifyVrcHardwareEvidence: () => Promise.resolve({ valid: true }),
+  verifyVrcHardwareEvidence: jest.fn(),
 }))
-let mockDateShown: string | undefined
-jest.mock('../../../../src/modules/trust-tasks/screens/localTime', () => {
-  const actual = jest.requireActual('../../../../src/modules/trust-tasks/screens/localTime')
-  return { ...actual, localDate: (iso: string) => mockDateShown ?? actual.localDate(iso) }
+const verify = verifyVrcHardwareEvidence as jest.Mock
+
+// Local wall-clock times, so the day is the same whatever zone the test runs in.
+const at = (day: number, hour: number, minute = 0) => new Date(2026, 9, day, hour, minute).toISOString()
+const card = (when: string, id: string, hardwareEvidence = true): RelationshipLayer => ({
+  kind: 'card',
+  at: when,
+  hardwareEvidence,
+  raw: { id },
+})
+// A record as extractWitnessInfo makes one: credentialId is always set (the sheet does not read it).
+const record = (over: Partial<WitnessRecord> = {}): WitnessRecord => ({
+  credentialId: 'urn:uuid:witness-1',
+  witnessDid: 'did:example:witness',
+  witnessName: 'keyring-witness',
+  issuanceDate: at(15, 10),
+  locality: { outcome: 'confirmed', venue: 'Room 101' },
+  ...over,
+})
+const witnessed = (when: string, w: WitnessRecord = record()): RelationshipLayer => ({
+  kind: 'witnessed',
+  at: when,
+  witnessName: w.witnessName,
+  inPerson: w.locality?.outcome === 'confirmed',
+  record: w,
 })
 
-const at = '2026-10-24T12:00:00Z'
-const everyKind: RelationshipLayer[] = [
-  { kind: 'card', at, hardwareEvidence: false, raw: {} },
-  { kind: 'card', at, hardwareEvidence: true, raw: {} },
-  { kind: 'witnessed', at, witnessName: 'Wit <Ness>', inPerson: false },
-  { kind: 'witnessed', at, inPerson: false },
-]
-
-const show = async (name: string, layers: RelationshipLayer[]) => {
+const show = async (layers: RelationshipLayer[], name = 'Bob') => {
   const tree = render(
     <BasicAppContext>
       <RelationshipLayers name={name} layers={layers} />
@@ -48,43 +65,119 @@ const show = async (name: string, layers: RelationshipLayer[]) => {
   await act(async () => undefined)
   return tree
 }
+beforeEach(async () => {
+  await speak('en')
+  verify.mockReset()
+  verify.mockImplementation(async () => ({ valid: true }))
+})
 
-const linesOf = (tree: Awaited<ReturnType<typeof show>>, date: string) => {
-  expect(tree.getByText(`Cards exchanged · ${date}`)).toBeTruthy()
-  expect(tree.getByText(`Cards exchanged, signed with secure hardware · ${date}`)).toBeTruthy()
-  expect(tree.getByText(`Witnessed by Wit <Ness> · ${date}`)).toBeTruthy()
-  expect(tree.getByText(`Witnessed · ${date}`)).toBeTruthy()
-}
-
-describe('relationship layers, as the person reads them', () => {
-  beforeAll(async () => {
-    const i18n = i18next.createInstance()
-    await i18n.init({ lng: 'en', fallbackLng: 'en', resources: translationResources })
-    mockT = (key, options) => i18n.t(key, options) as string
-  })
-  afterEach(() => {
-    mockDateShown = undefined
+describe('one entry per day', () => {
+  test('three exchanges on one day, each signed with secure hardware: one entry, said once', async () => {
+    const tree = await show([card(at(15, 9), 'a'), card(at(15, 11), 'b'), card(at(15, 16), 'c')])
+    expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(1)
+    expect(tree.getByText('15 Oct 2026')).toBeTruthy()
+    expect(tree.getByText('Cards exchanged 3 times, each signed with secure hardware.')).toBeTruthy()
   })
 
-  test('dates read with the month named, as everywhere else in the app', async () => {
-    const date = localDate(at)
-    // A month named in whatever the runner's locale is ("Oct", "okt.", "10月"), not the numeric short form.
-    expect(date).toMatch(/\p{L}/u)
-    linesOf(await show('Bob Baker', everyKind), date)
+  test('a day partly signed with secure hardware says how many: 2 of 3', async () => {
+    verify.mockImplementation(async (raw: { id: string }) => ({ valid: raw.id !== 'b' }))
+    const tree = await show([card(at(15, 9), 'a'), card(at(15, 11), 'b'), card(at(15, 16), 'c')])
+    expect(tree.getByText('Cards exchanged 3 times; 2 of 3 signed with secure hardware.')).toBeTruthy()
   })
 
-  test('a date or a name with characters the default escaping rewrites reads as given', async () => {
-    // Whatever format the date takes later, every line must pass it through untouched; this one would be escaped.
-    mockDateShown = "10/24/2026 & 'later'"
-    const tree = await show("Bob O'Brien & Co", everyKind)
+  test('while a check is still running, nothing is said about hardware; then it is', async () => {
+    let answer: (v: { valid: boolean }) => void = () => undefined
+    verify.mockImplementation(async (raw: { id: string }) =>
+      raw.id === 'b' ? new Promise((r) => (answer = r)) : { valid: true }
+    )
+    const tree = await show([card(at(15, 9), 'a'), card(at(15, 11), 'b')])
+    expect(tree.getByText('Cards exchanged 2 times.')).toBeTruthy()
+    await act(async () => answer({ valid: true }))
+    expect(tree.getByText('Cards exchanged 2 times, each signed with secure hardware.')).toBeTruthy()
+  })
+
+  test("a witness on the same day joins that day's entry, in person", async () => {
+    const tree = await show([card(at(15, 9), 'a'), witnessed(at(15, 10)), card(at(3, 9), 'old', false)])
+    expect(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))).toHaveLength(2)
+    expect(tree.getByText('15 Oct 2026 · in person')).toBeTruthy()
+    expect(tree.getByText('Witnessed by keyring-witness. Cards exchanged, signed with secure hardware.')).toBeTruthy()
+    // The older day, with no hardware evidence, is said plainly.
+    expect(tree.getByText('3 Oct 2026')).toBeTruthy()
+    expect(tree.getByText('Cards exchanged.')).toBeTruthy()
+  })
+})
+
+describe("a day's sheet", () => {
+  test("opens on a tap: the witness's record and each exchange with its time; Close closes it", async () => {
+    const tree = await show([
+      card(at(15, 9, 5), 'a'),
+      card(at(15, 16, 40), 'b', false),
+      witnessed(at(15, 10), record({ event: 'Spring meetup' })),
+    ])
+    expect(tree.queryByTestId(testIdWithKey('RelationshipDaySheet'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipLayer')))
+    const sheet = tree.getByTestId(testIdWithKey('RelationshipDaySheet'))
+    expect(sheet).toBeTruthy()
+    expect(tree.getByText('15 Oct 2026 with Bob')).toBeTruthy()
+    expect(tree.getByText('In person: the witness confirmed you were near.')).toBeTruthy()
+    // The witness's record, every line in the app's words.
+    expect(tree.getByTestId('WitnessRecord')).toBeTruthy()
+    expect(tree.getByText('keyring-witness')).toBeTruthy()
+    expect(tree.getByText('Spring meetup')).toBeTruthy()
+    expect(tree.getByText('Confirmed: you were near · Room 101')).toBeTruthy()
+    // Each exchange with its time: hardware said only for the one whose evidence verified.
+    const exchanges = tree.getAllByTestId(testIdWithKey('RelationshipDayExchange'))
+    expect(exchanges).toHaveLength(2)
+    expect(tree.getByText('Signed with secure hardware')).toBeTruthy()
+    expect(tree.getByText('Exchanged')).toBeTruthy()
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipDaySheetClose')))
+    expect(tree.queryByTestId(testIdWithKey('RelationshipDaySheet'))).toBeNull()
+  })
+
+  test('a location check that was interrupted, or declined, says so', async () => {
+    const tree = await show([
+      witnessed(at(15, 10), record({ locality: { outcome: 'declined', reason: 'windowLost' } })),
+      witnessed(at(14, 10), record({ witnessName: undefined, locality: { outcome: 'declined' } })),
+    ])
+    fireEvent.press(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))[0])
+    expect(tree.getByText('Interrupted')).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipDaySheetClose')))
+    fireEvent.press(tree.getAllByTestId(testIdWithKey('RelationshipLayer'))[1])
+    expect(tree.getByText('Declined')).toBeTruthy()
+    // A witness with no name is said in the app's words, never as an English placeholder.
+    expect(tree.getByText('A witness')).toBeTruthy()
+  })
+
+  // The real instance escapes by default, as the app's does: names must read as given, never as "&amp;" or "&#x2F;".
+  test('a name or a witness with characters the default escaping rewrites reads as given', async () => {
+    const tree = await show([witnessed(at(15, 10), record({ witnessName: 'Wit <Ness> & Co' }))], "Bob O'Brien & Co")
     const section = tree.getByTestId(testIdWithKey('RelationshipLayers'))
     expect(section).toHaveTextContent("How you know Bob O'Brien & Co", { exact: false })
-    linesOf(tree, mockDateShown)
+    expect(tree.getByText('Witnessed by Wit <Ness> & Co.')).toBeTruthy()
+    fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipLayer')))
+    expect(tree.getByText("15 Oct 2026 with Bob O'Brien & Co")).toBeTruthy()
+    expect(tree.getByText('Wit <Ness> & Co')).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('RelationshipDaySheet'))).not.toHaveTextContent(/&#|&amp;|&lt;|&gt;|&quot;/)
     expect(section).not.toHaveTextContent(/&#|&amp;|&lt;|&gt;|&quot;/)
   })
 
-  test('a layer without a date shows no date', async () => {
-    const tree = await show('Bob Baker', [{ kind: 'card', hardwareEvidence: false, raw: {} }])
-    expect(tree.getByText(/^Cards exchanged ·\s*$/)).toBeTruthy()
+  test('records with no date are a day of their own, last, said as having no date', async () => {
+    const tree = await show([card(at(15, 9), 'a'), { kind: 'card', hardwareEvidence: false, raw: {} }])
+    const rows = tree.getAllByTestId(testIdWithKey('RelationshipLayer'))
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toHaveTextContent('No date', { exact: false })
+    fireEvent.press(rows[1])
+    expect(tree.getByText('No date with Bob')).toBeTruthy()
+  })
+
+  test('in French, the day, the sheet and the record read in French', async () => {
+    await speak('fr')
+    const tree = await show([card(at(15, 9), 'a'), witnessed(at(15, 10))])
+    expect(tree.queryByText(/Oct 2026|Cards|Witness/)).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipLayer')))
+    expect(tree.getByText('Le relevé du témoin')).toBeTruthy()
+    expect(tree.getByText('Confirmée : vous étiez à proximité · Room 101')).toBeTruthy()
+    expect(tree.queryByText(/Signed|Exchanged|Location|Event/)).toBeNull()
   })
 })

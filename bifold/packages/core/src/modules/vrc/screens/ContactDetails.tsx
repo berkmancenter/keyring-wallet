@@ -30,7 +30,7 @@ import ContactMergeSection from '../components/ContactMergeSection'
 import { relationshipLayers } from '../utils/relationshipLayers'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { useRCardCredential } from '../hooks/useRCardCredential'
-import { formInputFromTemplate } from '../types/rcard'
+import { formInputFromTemplate, profileLabel } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../contacts/contactLinks'
@@ -237,10 +237,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       overflow: 'hidden',
     },
     linkedProfileAvatarImage: { width: 22, height: 22 },
-    witnessRecord: { paddingVertical: 6 },
-    witnessLabel: { fontSize: 13, color: ColorPalette.grayscale.mediumGrey },
-    witnessValue: { fontSize: 15, color: NAME_COLOR },
-    localityVerified: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     // 5. What is hard to undo: last, apart.
     danger: { marginTop: 28, paddingTop: 20, borderTopWidth: 1, borderTopColor: HAIRLINE },
     removeButton: {
@@ -407,19 +403,26 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           <ThemedText style={styles.sectionLabel} accessibilityRole="header">
             {t('ContactDetails.TrustTitle')}
           </ThemedText>
+          {/* WitnessSection: the wallet's e2e (e2e/lib/flows.js assertContactShields and assertWitnessCredential) proves
+              a witnessed exchange landed by finding this raw testID. On iOS it is the only working path: the text
+              fallback misses the uppercased header. Keep it here, on exactly this condition (a verified witness record;
+              newestWitness exists exactly when witnessRecords is non-empty). The record's own detail is in its day's
+              sheet, under How you know them. */}
           {newestWitness ? (
-            <View style={styles.row} testID={testIdWithKey('ContactTrustWitnessed')}>
-              <Icon name="check-decagram-outline" size={22} color={ROW_ICON} />
-              <View style={styles.rowText}>
-                <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustWitnessed')}</ThemedText>
-                <ThemedText style={styles.rowCaption}>
-                  {[
-                    newestWitness.witnessName ?? t('ContactDetails.TrustWitnessUnnamed'),
-                    newestWitness.issuanceDate ? localDate(newestWitness.issuanceDate) : undefined,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </ThemedText>
+            <View testID="WitnessSection">
+              <View style={styles.row} testID={testIdWithKey('ContactTrustWitnessed')}>
+                <Icon name="check-decagram-outline" size={22} color={ROW_ICON} />
+                <View style={styles.rowText}>
+                  <ThemedText style={styles.rowTitle}>{t('ContactDetails.TrustWitnessed')}</ThemedText>
+                  <ThemedText style={styles.rowCaption}>
+                    {[
+                      newestWitness.witnessName ?? t('ContactDetails.TrustWitnessUnnamed'),
+                      newestWitness.issuanceDate ? localDate(newestWitness.issuanceDate) : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </ThemedText>
+                </View>
               </View>
             </View>
           ) : null}
@@ -459,42 +462,6 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
               <DidDetails did={contact.issuer.id} testIdStem="ContactRelationship" />
             </View>
           </View>
-          {/* Each witness record's own detail. WitnessSection is what the e2e looks for: a witness record shows. */}
-          {witnessRecords.length > 0 ? (
-            <View testID="WitnessSection">
-              {witnessRecords.map((record, index) => (
-                <View key={index} style={styles.witnessRecord} testID="WitnessRecord">
-                  {record.event ? (
-                    <>
-                      <ThemedText style={styles.witnessValue}>{record.event}</ThemedText>
-                      <ThemedText style={styles.witnessLabel}>Event</ThemedText>
-                    </>
-                  ) : null}
-                  {record.locality && record.locality.outcome !== 'not-offered' ? (
-                    <View style={styles.localityVerified}>
-                      <Icon
-                        name={record.locality.outcome === 'confirmed' ? 'check-circle' : 'information'}
-                        size={16}
-                        color={
-                          record.locality.outcome === 'confirmed'
-                            ? ColorPalette.semantic.success
-                            : ColorPalette.grayscale.mediumGrey
-                        }
-                      />
-                      <ThemedText style={styles.witnessValue}>
-                        {record.locality.outcome === 'confirmed'
-                          ? 'Confirmed'
-                          : record.locality.reason === 'windowLost'
-                            ? 'Interrupted'
-                            : 'Declined'}
-                        {record.locality.venue ? ` — ${record.locality.venue}` : ''}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          ) : null}
         </View>
 
         {/* 4. Contact: whether it is one person's merged exchanges (with Separate beside it), what you share with
@@ -529,8 +496,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
               <View style={styles.rowText}>
                 <ThemedText style={styles.rowTitle} selectable={true}>
                   {liveSharedProfile
-                    ? liveSharedProfile.label
-                    : t('ContactDetails.LinkedProfileDeleted', { label: sharedProfileLabelSnapshot ?? '' })}
+                    ? profileLabel(liveSharedProfile.label, t)
+                    : t('ContactDetails.LinkedProfileDeleted', {
+                        label: sharedProfileLabelSnapshot ? profileLabel(sharedProfileLabelSnapshot, t) : '',
+                        interpolation: { escapeValue: false },
+                      })}
                 </ThemedText>
                 <ThemedText style={styles.rowCaption}>{t('ContactDetails.LinkedProfile')}</ThemedText>
               </View>

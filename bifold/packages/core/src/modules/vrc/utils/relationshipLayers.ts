@@ -16,7 +16,7 @@ import { hasHardwareAttestationEvidence, type WitnessRecord } from './witnessCre
 
 export type RelationshipLayer =
   | { kind: 'card'; at?: string; hardwareEvidence: boolean; raw: Record<string, unknown> }
-  | { kind: 'witnessed'; at?: string; witnessName?: string; inPerson: boolean }
+  | { kind: 'witnessed'; at?: string; witnessName?: string; inPerson: boolean; record?: WitnessRecord }
 
 const issuerOf = (raw: { issuer?: unknown }): string | undefined =>
   typeof raw.issuer === 'string' ? raw.issuer : (raw.issuer as { id?: string } | undefined)?.id
@@ -45,6 +45,8 @@ export function relationshipLayers(
     at: w.issuanceDate,
     witnessName: w.witnessName,
     inPerson: w.locality?.outcome === 'confirmed',
+    // The whole record, for the day's detail: its event and how the location check went.
+    record: w,
   }))
   return [...cards, ...witnessed].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
 }

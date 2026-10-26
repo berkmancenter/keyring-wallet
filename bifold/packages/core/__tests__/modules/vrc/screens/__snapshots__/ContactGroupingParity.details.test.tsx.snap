@@ -463,6 +463,44 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
           Relationship.LayersTitle
         </Text>
         <View
+          accessibilityHint="Relationship.DayOpenHint"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "gap": 2,
+              "minHeight": 44,
+              "paddingVertical": 8,
+            }
+          }
           testID="com.ariesbifold:id/RelationshipLayer"
         >
           <Text
@@ -474,11 +512,13 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                   "fontSize": 18,
                   "fontWeight": "normal",
                 },
-                undefined,
+                Object {
+                  "fontWeight": "bold",
+                },
               ]
             }
           >
-            Relationship.LayerWitnessedUnnamed
+            Chat.Dates.OtherYear · Relationship.DayInPerson
           </Text>
           <Text
             maxFontSizeMultiplier={2}
@@ -495,10 +535,48 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
               ]
             }
           >
-            Relationship.LayerInPerson
+            Relationship.DayWitnessed
           </Text>
         </View>
         <View
+          accessibilityHint="Relationship.DayOpenHint"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "gap": 2,
+              "minHeight": 44,
+              "paddingVertical": 8,
+            }
+          }
           testID="com.ariesbifold:id/RelationshipLayer"
         >
           <Text
@@ -510,11 +588,30 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                   "fontSize": 18,
                   "fontWeight": "normal",
                 },
-                undefined,
+                Object {
+                  "fontWeight": "bold",
+                },
               ]
             }
           >
-            Relationship.LayerCards
+            Chat.Dates.OtherYear
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            Relationship.DayCards
           </Text>
         </View>
       </View>
@@ -550,68 +647,72 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
           ContactDetails.TrustTitle
         </Text>
         <View
-          style={
-            Object {
-              "alignItems": "center",
-              "flexDirection": "row",
-              "gap": 12,
-              "minHeight": 60,
-              "paddingVertical": 8,
-            }
-          }
-          testID="com.ariesbifold:id/ContactTrustWitnessed"
+          testID="WitnessSection"
         >
-          <Icon
-            color="#4A4A4A"
-            name="check-decagram-outline"
-            size={22}
-          />
           <View
             style={
               Object {
-                "flex": 1,
-                "gap": 1,
+                "alignItems": "center",
+                "flexDirection": "row",
+                "gap": 12,
+                "minHeight": 60,
+                "paddingVertical": 8,
               }
             }
+            testID="com.ariesbifold:id/ContactTrustWitnessed"
           >
-            <Text
-              maxFontSizeMultiplier={2}
+            <Icon
+              color="#4A4A4A"
+              name="check-decagram-outline"
+              size={22}
+            />
+            <View
               style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#010B13",
-                    "fontSize": 16,
-                    "fontWeight": "600",
-                  },
-                ]
+                Object {
+                  "flex": 1,
+                  "gap": 1,
+                }
               }
             >
-              ContactDetails.TrustWitnessed
-            </Text>
-            <Text
-              maxFontSizeMultiplier={2}
-              style={
-                Array [
-                  Object {
-                    "color": "#FFFFFF",
-                    "fontSize": 18,
-                    "fontWeight": "normal",
-                  },
-                  Object {
-                    "color": "#606060",
-                    "fontSize": 13,
-                    "lineHeight": 18,
-                  },
-                ]
-              }
-            >
-              ContactDetails.TrustWitnessUnnamed · 21 Jan 2026
-            </Text>
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "color": "#010B13",
+                      "fontSize": 16,
+                      "fontWeight": "600",
+                    },
+                  ]
+                }
+              >
+                ContactDetails.TrustWitnessed
+              </Text>
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "color": "#606060",
+                      "fontSize": 13,
+                      "lineHeight": 18,
+                    },
+                  ]
+                }
+              >
+                ContactDetails.TrustWitnessUnnamed · 21 Jan 2026
+              </Text>
+            </View>
           </View>
         </View>
         <View
@@ -787,52 +888,6 @@ exports[`contact details, nothing linked: Bob, witnessed 1`] = `
                   VtaLink.Details
                 </Text>
               </View>
-            </View>
-          </View>
-        </View>
-        <View
-          testID="WitnessSection"
-        >
-          <View
-            style={
-              Object {
-                "paddingVertical": 6,
-              }
-            }
-            testID="WitnessRecord"
-          >
-            <View
-              style={
-                Object {
-                  "alignItems": "center",
-                  "flexDirection": "row",
-                  "gap": 4,
-                }
-              }
-            >
-              <Icon
-                color="#2E8540"
-                name="check-circle"
-                size={16}
-              />
-              <Text
-                maxFontSizeMultiplier={2}
-                style={
-                  Array [
-                    Object {
-                      "color": "#FFFFFF",
-                      "fontSize": 18,
-                      "fontWeight": "normal",
-                    },
-                    Object {
-                      "color": "#010B13",
-                      "fontSize": 15,
-                    },
-                  ]
-                }
-              >
-                Confirmed
-              </Text>
             </View>
           </View>
         </View>
@@ -1319,6 +1374,44 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
           Relationship.LayersTitle
         </Text>
         <View
+          accessibilityHint="Relationship.DayOpenHint"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "gap": 2,
+              "minHeight": 44,
+              "paddingVertical": 8,
+            }
+          }
           testID="com.ariesbifold:id/RelationshipLayer"
         >
           <Text
@@ -1330,14 +1423,71 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
                   "fontSize": 18,
                   "fontWeight": "normal",
                 },
-                undefined,
+                Object {
+                  "fontWeight": "bold",
+                },
               ]
             }
           >
-            Relationship.LayerCards
+            Chat.Dates.OtherYear
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            Relationship.DayCards
           </Text>
         </View>
         <View
+          accessibilityHint="Relationship.DayOpenHint"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "gap": 2,
+              "minHeight": 44,
+              "paddingVertical": 8,
+            }
+          }
           testID="com.ariesbifold:id/RelationshipLayer"
         >
           <Text
@@ -1349,11 +1499,30 @@ exports[`contact details, nothing linked: the first Alice relationship 1`] = `
                   "fontSize": 18,
                   "fontWeight": "normal",
                 },
-                undefined,
+                Object {
+                  "fontWeight": "bold",
+                },
               ]
             }
           >
-            Relationship.LayerCards
+            Chat.Dates.OtherYear
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            Relationship.DayCards
           </Text>
         </View>
       </View>
@@ -2166,6 +2335,44 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
           Relationship.LayersTitle
         </Text>
         <View
+          accessibilityHint="Relationship.DayOpenHint"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "gap": 2,
+              "minHeight": 44,
+              "paddingVertical": 8,
+            }
+          }
           testID="com.ariesbifold:id/RelationshipLayer"
         >
           <Text
@@ -2177,11 +2384,30 @@ exports[`contact details, nothing linked: the second Alice relationship 1`] = `
                   "fontSize": 18,
                   "fontWeight": "normal",
                 },
-                undefined,
+                Object {
+                  "fontWeight": "bold",
+                },
               ]
             }
           >
-            Relationship.LayerCards
+            Chat.Dates.OtherYear
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#606060",
+                },
+              ]
+            }
+          >
+            Relationship.DayCards
           </Text>
         </View>
       </View>
