@@ -17,7 +17,7 @@
  * - The store gets an explicit sqlite file in a temporary directory, removed afterwards, rather than the default under
  *   the agent's data path; and not an in-memory database, which is per connection ("no such table: config").
  */
-import '@openwallet-foundation/askar-nodejs'
+import '../../helpers/realAskar'
 
 import { AskarModule } from '@credo-ts/askar'
 import { Agent, PeerDidNumAlgo } from '@credo-ts/core'

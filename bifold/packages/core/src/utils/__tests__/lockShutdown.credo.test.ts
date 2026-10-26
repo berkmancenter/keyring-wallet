@@ -12,7 +12,7 @@
  * A real agent on a real Askar store, set up as __tests__/modules/vrc/continuityCrypto.test.ts is (see its header for
  * why: one askar-shared copy, an explicit sqlite file, the real clock).
  */
-import '@openwallet-foundation/askar-nodejs'
+import '../../../__tests__/helpers/realAskar'
 
 import { AskarModule, AskarStoreManager } from '@credo-ts/askar'
 import { Agent, Module } from '@credo-ts/core'
