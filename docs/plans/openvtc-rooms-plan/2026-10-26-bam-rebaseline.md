@@ -1,6 +1,6 @@
 # 2026-10-26 — bam: re-baselining the rooms plan at VTI fc157f76
 
-**Status:** Findings, applied to the plan and its subtasks on the day they were written. Part 2 records the review round of PR #661.
+**Status:** Findings, applied to the plan and its subtasks on the day they were written. Part 2 records the review round of PR #661; Part 3 records the chunk-size decision from it.
 **Author:** bam. **Date:** 2026-10-26.
 **Plan:** [`../openvtc-rooms-plan.md`](../openvtc-rooms-plan.md), with subtasks
 [`rooms_member_sprint_subtask.md`](./rooms_member_sprint_subtask.md),
@@ -176,3 +176,31 @@ Each is marked applied in the files named.
   measurement, read-only, invitations, and write and curate. The sprint uses the parent's names.
 - `2026-10-25-al.md` is on wallet PR #645, not on this branch, so the parent plan names it by
   path with no link.
+
+# Part 3 — bam, 2026-10-26: chunk size over DIDComm (Alberto, review of #661)
+
+## What was concluded
+
+1. **A chunk document above 64 KiB over DIDComm is throttled.** `size.rs` puts a chunk document
+   over `DEFAULT_MAX_DOCUMENT_BYTES` (64 KiB) under the large-document budget: 5 per minute per
+   sender, because only the HTTPS door precharges the room budget. A 256 KiB chunk over DIDComm is
+   about 1.25 MiB/min. Part 1 item 3 had this as unknown.
+2. **Decision: cap each chunk document at 64 KiB or less (for example 32 KiB raw).** That avoids
+   the budget. The mediator's 1 MiB default message size is not a constraint, which settles S0.9.
+3. **S0.8 and S0.9 are resolved by this; the text-only fallback is no longer the expected path.**
+   It stays only if the cap proves wrong in S0.8's end-to-end DIDComm write. Throughput is still
+   modest at small chunks. The chunk cap is a sprint parameter in the sprint's "Limits" table.
+4. **Upstream request:** OpenVTC/verifiable-trust-infrastructure#2294 (comment 6425549326) asks
+   for the same precharge on the DIDComm path and for `rooms/info` to advertise the safe chunk
+   size.
+5. **S0.3 stays open.** Alberto will confirm the Farm community's `[rooms.community]` and
+   `[rooms.files]` with a first `memberships/list` call and update it.
+
+## Positions this superseded
+
+Applied in the sprint's "Limits", S0.8, S0.9, S3, S4, "Sequencing" and "Risks".
+
+- Part 1 item 3: "whether DIDComm chunks hit [the budget] is unknown" and "a 256 KiB chunk fits
+  the mediator's 1 MiB default `message_size` is inferred"; the cut line "files slip if S0.8
+  fails". The throttle is now known, the chunk is capped, and files slip only if the cap proves
+  wrong.

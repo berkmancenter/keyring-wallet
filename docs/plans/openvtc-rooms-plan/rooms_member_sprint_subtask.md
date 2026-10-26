@@ -123,13 +123,13 @@ Target tiers: `open` and `attributed`. `private` is refused by hosts today.
 | Sealed record keys | must be opaque: 16 random bytes, base64url (22 chars) | `SealedRoom::opaque_key` |
 | File size | default **100 MiB per file** (room and member), host ceiling 1 GiB | room-host `--max-file-bytes`; VTC `[rooms.files]`, `vtc/rooms/limits/set` |
 | File count / bytes | room 10,000 files / 5 GiB; member 2,000 files / 1 GiB | same flags |
-| Transfer chunk | 16–256 KiB (default 256 KiB), max 4096 chunks; chunk document ≈ 350 KiB | `vti-rooms/src/files.rs` |
+| Transfer chunk | Host range 16–256 KiB (default 256 KiB), max 4096 chunks; a 256 KiB chunk document is ≈ 350 KiB. **Sprint parameter: each chunk document is capped at 64 KiB or less (for example 32 KiB raw)**, so it stays under the large-document threshold in the next two rows | `vti-rooms/src/files.rs` |
 | File types | **No allow or deny list.** `mediaType` is an unverified claim inside the sealed body; filenames are untrusted | client must sniff and sanitize |
 | List page | max 500, ascending by version, no newest-first | `MAX_PAGE` in `vti-rooms/src/storage.rs` |
 | Rate limits (VTC) | per (room, presenter) burst 120, 1 per 100 ms; chunks burst 200, 1 per 20 ms; 429 with `Retry-After` | `[rooms.rate_limits]` |
 | Document freshness | `issuedAt` within 600 s (+60 s skew); document ids are single-use | `vti-common/.../acceptance.rs` |
-| Chunk throttle | "a chunk on a transport that charged no room budget" falls under `LargeDocumentBudget`: 5 raised-limit documents per minute per address. Whether DIDComm chunks hit it is **unproven** (S0.8) | `vtc-service/src/trust_tasks/size.rs` about lines 357-360 |
-| DIDComm message size | mediator default `message_size` 1 MiB; a 256 KiB chunk (about 350 KiB encoded) fits (**inferred, untested**, S0.9) | mediator configuration |
+| Chunk throttle | Over DIDComm a chunk document above 64 KiB (`DEFAULT_MAX_DOCUMENT_BYTES`) falls under `LargeDocumentBudget`: 5 per minute per sender, because only the HTTPS door precharges the room budget. A 256 KiB chunk over DIDComm is about 1.25 MiB/min. Chunks of 64 KiB or less avoid the budget; throughput is still modest at small chunks. Upstream request: OpenVTC/verifiable-trust-infrastructure#2294 (comment 6425549326) asks for the same precharge on the DIDComm path and for `rooms/info` to advertise the safe chunk size | `vtc-service/src/trust_tasks/size.rs` (Alberto, review of #661) |
+| DIDComm message size | mediator default `message_size` 1 MiB; not a constraint at a 64 KiB chunk cap | mediator configuration (Alberto, review of #661) |
 
 Caveat: the spec-level `maxDocumentBytes` for `rooms/records/put` lives in `trust-tasks-rs`
 0.34.1, which was not available locally. Treat the 64 KiB figure as the VTC default, not the
@@ -387,8 +387,8 @@ is a visible push, and the app has no background execution while locked.
 | S0.6 | Rate limiter class: does `vtc/rooms/offers/*` fall under the room limiter or the anonymous governor (burst 10, 1 per 5 s)? | The class is recorded and the offers poll interval in "Notifications" is set from it |
 
 | S0.7 | Delivery leg, text: one end-to-end `rooms/records/put` completed by `rooms/keys/act` and delivered by the phone over DIDComm to a VTC. Upstream design says the client sends the act-completed document "to the host unchanged" (`docs/02-vta/data-rooms.md` about lines 1364-1380), and the VTC dispatches every transport through one `dispatch_trust_task_core` (`vtc-service/src/trust_tasks/messaging.rs`, about line 1012 for TSP and 1694 for DIDComm). **Unproven live** | The record is accepted and appears in `rooms/records/list`; or the refusal and its reason are recorded and S4 stops (see "Sequencing") |
-| S0.8 | File-chunk throttle: determine whether DIDComm chunks fall under `LargeDocumentBudget` (`size.rs` about lines 357-360; 5 raised-limit documents per minute per address) | A measured chunks-per-minute figure over DIDComm. If throttled, file transfer over DIDComm is throttled; the options are an HTTPS leg for blobs or smaller chunks, and **files slip to the next sprint** (text-only post) |
-| S0.9 | A 256 KiB chunk (about 350 KiB encoded) fits one DIDComm message under the mediator's 1 MiB default `message_size` (**inferred, untested**) | One chunk round-trips through the mediator on the S0.3 host, and the mediator's configured limit is recorded |
+| S0.8 | File-chunk throttle, **resolved** by Alberto's review: chunks above 64 KiB over DIDComm fall under `LargeDocumentBudget` (`size.rs`), so each chunk document is capped at 64 KiB or less (see "Limits"). The cap is confirmed by the end-to-end DIDComm write in this spike: chunks of the capped size upload and download over DIDComm at the measured rate | A measured chunks-per-minute figure over DIDComm at the capped size. **Only if the cap proves wrong** here, files slip to the next sprint (text-only post); the other fallback is an HTTPS leg for blobs |
+| S0.9 | Chunk size against the mediator limit, **resolved**: the mediator's 1 MiB default `message_size` is not a constraint at a 64 KiB chunk cap | One capped chunk round-trips through the mediator on the S0.3 host, and the mediator's configured limit is recorded |
 
 Not blocked: the product decision (Q1) and module location (B3) are settled; see "Decisions".
 
@@ -481,9 +481,9 @@ write the file only after verification passes → share sheet (`expo-sharing`), 
 - Strip path separators from the filename; never trust `mediaType`; sniff before previewing.
 - Honour 429 `Retry-After`; resume partial downloads by chunk index.
 - Chunk requests (`rooms/blobs/chunk`) travel over the same DIDComm leg as other community tasks,
-  completed by `rooms/keys/act`. Whether DIDComm chunks are throttled (S0.8) and whether a chunk
-  fits one message (S0.9) decide whether downloads work in this sprint. **Cut line:** if S0.8
-  fails, S3 and the file half of S4 move to the next sprint.
+  completed by `rooms/keys/act`. Chunks are capped at 64 KiB or less so they avoid the
+  DIDComm large-document budget (S0.8, S0.9). **Cut line:** if the cap proves wrong in S0.8's
+  end-to-end write, S3 and the file half of S4 move to the next sprint.
 - Done when: the 5 MiB seeded file downloads, verifies and opens from the share sheet; a
   corrupted chunk (lab tamper) is refused with no file left behind; a 25 MiB file completes
   on a mid-range device without exceeding memory (stream, not buffer).
@@ -520,7 +520,7 @@ unavailable.
   id unless the host refused before executing.
 - Enforce the wallet caps (16384 UTF-16 code units of text, 25 MiB file) before any network call; surface the host's
   refusal reason when a host limit is lower.
-- Files are gated on S0.8 and S0.9 (cut line in "Sequencing").
+- Files use the chunk cap from "Limits" (cut line in "Sequencing").
 - Done when: a message and a message-plus-file post to both tiers and show on a second lab
   member's list; a version collision recovers automatically; a cancelled upload leaves no
   orphan after the host's 168 h grace (check `abort` path); over-cap input is refused with a clear
@@ -543,9 +543,9 @@ Cut lines, all deliberate:
 - If S0.1 shows the TypeScript port does not run under Hermes, or S0.2 says the wallet cannot
   hold room credentials, S3 and the file half of S4 slip to the next sprint and the sprint ships
   join + list + text post.
-- **If S0.8 fails** (DIDComm chunks are throttled), files slip to the next sprint: the sprint
-  ships join + list + text post. The fallbacks for that sprint are an HTTPS leg for blobs, or
-  smaller chunks.
+- **If the 64 KiB chunk cap proves wrong in S0.8's end-to-end DIDComm write**, files slip to the
+  next sprint: the sprint ships join + list + text post. The fallback for that sprint is an HTTPS
+  leg for blobs.
 - If S0.7 fails, S4 has no delivery leg and is blocked until the leg is decided with Alberto and
   upstream; the sprint then ships join + list.
 - Build 272's final pin gates the shared-leaf work in `RoomView` and #602, not the service
@@ -565,7 +565,7 @@ Cut lines, all deliberate:
 | Risk | Mitigation / owner |
 |---|---|
 | The sprint is built on unmerged work: #595-#602 are drafts, #595 is "not for merge until 272's final pin", #600 is not live-proven | Owner: Alberto, for #595-#602. Gate: build 272's final pin. Service stories land as extensions of those PRs |
-| Delivery of act-completed documents over DIDComm is unproven (S0.7), and DIDComm chunks may be throttled (S0.8) or too large (S0.9, inferred) | Spikes first; cut lines in "Sequencing" |
+| Delivery of act-completed documents over DIDComm is unproven (S0.7); chunks are capped at 64 KiB to avoid the DIDComm large-document budget, to be confirmed in S0.8 | Spikes first; cut lines in "Sequencing" |
 | The lent persona key puts a persona signing key in phone memory | Used only for community-scoped reads and offers; room writes stay behind `rooms/keys/act` (see "Architecture decision") |
 | Hermes, credential-acceptance and ACL spikes (S0) come back negative | Cut line in "Sequencing" |
 | TS client doesn't run under Hermes | S0.1; fallback is a thin rewrite of the 4 flows |
