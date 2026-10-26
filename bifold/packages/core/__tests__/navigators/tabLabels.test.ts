@@ -30,7 +30,7 @@ describe('the tab bar', () => {
     const labels = source.split('...TabTheme.tabBarTextStyle,').length - 1
     const oneLine =
       source.match(
-        /numberOfLines=\{1\}\s*adjustsFontSizeToFit\s*minimumFontScale=\{0\.8\}\s*style=\{\{\s*\.\.\.TabTheme\.tabBarTextStyle,/g
+        /numberOfLines=\{1\}\s*adjustsFontSizeToFit\s*minimumFontScale=\{0\.7\}\s*style=\{\{\s*\.\.\.TabTheme\.tabBarTextStyle,/g
       ) ?? []
     expect(labels).toBeGreaterThanOrEqual(6)
     expect(oneLine).toHaveLength(labels)

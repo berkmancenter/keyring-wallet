@@ -346,12 +346,15 @@ const TabStack: React.FC = () => {
                 )}
                 {showLabels && (
                   <Text
-                    // One line in every language (all six labels): a long word ("Portefeuille") shrinks a little rather than breaking.
+                    // One line in every language (all six labels): a long word ("Portefeuille") shrinks rather
+                    // than breaking. 0.7 keeps it whole up to the largest text size that still shows labels
+                    // (fontScale about 1.28); 2 points each side keep two shrunk neighbours apart.
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.8}
+                    minimumFontScale={0.7}
                     style={{
                       ...TabTheme.tabBarTextStyle,
+                      paddingHorizontal: 2,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                       fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                     }}
@@ -385,9 +388,10 @@ const TabStack: React.FC = () => {
                     <Text
                       numberOfLines={1}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.8}
+                      minimumFontScale={0.7}
                       style={{
                         ...TabTheme.tabBarTextStyle,
+                        paddingHorizontal: 2,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                         fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                       }}
@@ -416,9 +420,10 @@ const TabStack: React.FC = () => {
                     <Text
                       numberOfLines={1}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.8}
+                      minimumFontScale={0.7}
                       style={{
                         ...TabTheme.tabBarTextStyle,
+                        paddingHorizontal: 2,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                         fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                       }}
@@ -462,9 +467,10 @@ const TabStack: React.FC = () => {
                     <Text
                       numberOfLines={1}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.8}
+                      minimumFontScale={0.7}
                       style={{
                         ...TabTheme.tabBarTextStyle,
+                        paddingHorizontal: 2,
                         color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                         fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                       }}
@@ -494,9 +500,10 @@ const TabStack: React.FC = () => {
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.8}
+                    minimumFontScale={0.7}
                     style={{
                       ...TabTheme.tabBarTextStyle,
+                      paddingHorizontal: 2,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                       fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                     }}
@@ -526,9 +533,10 @@ const TabStack: React.FC = () => {
                   <Text
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.8}
+                    minimumFontScale={0.7}
                     style={{
                       ...TabTheme.tabBarTextStyle,
+                      paddingHorizontal: 2,
                       color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
                       fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                     }}
