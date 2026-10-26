@@ -912,6 +912,12 @@ run is for. The design, and the local measurements behind it, are in
 [`docs/plans/mediator-migration-plan/2026-10-25-al.md`](../docs/plans/mediator-migration-plan/2026-10-25-al.md)
 part 7.
 
+**Why live pickup at all.** Polling has a lost-message hole: a delivery
+whose response never reaches the phone stays in `sending` for good. The
+mediator's reset job now catches those. Its first real reset was on
+2026-10-26 08:50:02Z: one row stranded across two sweeps went back to
+`pending`. Live pickup doesn't strand rows that way.
+
 **Mediator.** Scenarios 1–5 use the build's own mediator, as a tester's phone
 does. Scenario 6 restarts the mediator, so it runs only against a **local**
 WebSocket-capable mediator with the Postgres pickup queue. It never restarts
