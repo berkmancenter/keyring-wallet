@@ -455,6 +455,11 @@ export class AppContainer implements Container {
     // Background pauses live pickup or stops polling; the foreground restart is
     // the app's own (useBCAgentSetup), so bifold's ActivityProvider never
     // restarts pickup with a strategy of its own.
+    // This shadows bifold's default because it is registered in THIS child container
+    // and the app resolves from it (container-compose.ts, App.tsx). Registered on the
+    // parent, or resolved from bifold's container, ActivityProvider would silently get
+    // bifold's polling restart and undo live pickup on every return
+    // (__tests__/containerComposition.test.ts).
     this._container.registerInstance(TOKENS.UTIL_MESSAGE_PICKUP, appMessagePickupLifecycle(logger))
 
     // Initialize VRC module (credential display handlers, localization, container registration)
