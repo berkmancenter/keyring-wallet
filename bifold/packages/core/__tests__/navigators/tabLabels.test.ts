@@ -28,11 +28,22 @@ describe('the tab bar', () => {
 
   test('holds every label to one line, shrinking a long word a little rather than breaking it', () => {
     const labels = source.split('...TabTheme.tabBarTextStyle,').length - 1
+    // The spread may sit anywhere in the label's style object, as long as nothing nested precedes it.
     const oneLine =
       source.match(
-        /numberOfLines=\{1\}\s*adjustsFontSizeToFit\s*minimumFontScale=\{0\.7\}\s*style=\{\{\s*\.\.\.TabTheme\.tabBarTextStyle,/g
+        /numberOfLines=\{1\}\s*adjustsFontSizeToFit\s*minimumFontScale=\{0\.7\}\s*style=\{\{[^}]*?\.\.\.TabTheme\.tabBarTextStyle,/g
       ) ?? []
     expect(labels).toBeGreaterThanOrEqual(6)
     expect(oneLine).toHaveLength(labels)
+  })
+
+  // Android sizes a one-line label to fit without its own padding, so padding on the label clipped its last letter
+  // with no ellipsis ("Contact" for "Contacts", font scale 1.15). The gap between labels is the tab container's.
+  test('keeps the gap between labels on the container, never as padding inside a label', () => {
+    const labelStyles = source.match(/style=\{\{[^}]*?\.\.\.TabTheme\.tabBarTextStyle,[^}]*\}\}/g) ?? []
+    expect(labelStyles.length).toBeGreaterThanOrEqual(6)
+    for (const style of labelStyles) expect(style).not.toMatch(/padding/)
+    const containers = source.match(/\.\.\.TabTheme\.tabBarContainerStyle,\s*\.\.\.labelGap,/g) ?? []
+    expect(containers).toHaveLength(labelStyles.length)
   })
 })
