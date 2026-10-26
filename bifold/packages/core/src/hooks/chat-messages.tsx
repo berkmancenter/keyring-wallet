@@ -45,6 +45,7 @@ import { ThemedText } from '../components/texts/ThemedText'
 import { BIOMETRIC_STATUS_MESSAGE_PREFIX } from '../modules/vrc/vrc-biometric'
 import { derivePseudonym } from '../utils/pseudonym'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { withConnectedCard } from './connectedCard'
 import { expiredIds } from '../modules/chat/expired'
 import { timerLine } from '../components/chat/disappearing'
 import { messageTextOf } from '../components/chat/messageText'
@@ -1367,7 +1368,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
         )
       : finalMessages
 
-    const result = connectedMessage ? [...displayMessages, connectedMessage] : displayMessages
+    const result = connectedMessage ? withConnectedCard(displayMessages, connectedMessage) : displayMessages
     if (!areChatMessagesEqual(latestMessagesRef.current, result)) {
       latestMessagesRef.current = result
       setMessages(result)
