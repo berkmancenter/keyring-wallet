@@ -72,7 +72,10 @@ registerHiddenVettingModules()
 const App = () => {
   const { t } = useTranslation()
   const navigationRef = useNavigationContainerRef()
-  const bifoldContainer = new MainContainer(container.createChildContainer()).init()
+  // With the app's logger, so the container's own start-up lines (for example
+  // the Askar scan shim's result) reach the log and problem reports; without
+  // one, MainContainer's this.log?.info calls are silently skipped.
+  const bifoldContainer = new MainContainer(container.createChildContainer(), BCLogger).init()
   const [surveyVisible, setSurveyVisible] = useState(false)
   const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
   // Demo profiles (demo-profiles/README.md) are opt-in per build: with
