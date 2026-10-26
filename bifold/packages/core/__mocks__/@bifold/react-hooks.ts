@@ -287,7 +287,7 @@ const mockConnectionRecords = [
     outOfBandId: '6e739679-db69-4228-9fdf-d1b8cc2431aa',
     did: 'did:peer:1zQmZYcmJeMX5Lc2HvQjf4VXSC3raHfBci6A4MnjDNCZTVp9',
     theirLabel: 'BestBC Tea',
-    role:DidCommDidExchangeRole.Requester,
+    role: DidCommDidExchangeRole.Requester,
     theirDid: 'did:peer:1zQmaiE6oyFzYYdBtKD3fJW6yfXE1r5hXMLfa7Ve8nundki6',
     threadId: 'fc7405e5-039c-4b7a-bc3d-f9626fc96d25',
     state: DidCommDidExchangeState.Completed,
@@ -497,6 +497,14 @@ const agent = {
     oob: mockOobModule,
     context: mockAgentContext,
     receiveMessage: jest.fn(),
+    // No generic records kept (a chat's draft, chat/draft.ts): reads find none, writes do nothing.
+    genericRecords: {
+      findById: jest.fn(async () => null),
+      findAllByQuery: jest.fn(async () => []),
+      save: jest.fn(async () => undefined),
+      update: jest.fn(async () => undefined),
+      delete: jest.fn(async () => undefined),
+    },
     config: { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
   },
 }

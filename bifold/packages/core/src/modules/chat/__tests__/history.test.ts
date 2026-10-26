@@ -31,8 +31,15 @@ type Basic = { id: string; connectionId: string }
 
 const notFound = () => Object.assign(new Error('gone'), { name: 'RecordNotFoundError' })
 
-function makeAgent(events: Ev[], basic: Basic[], { failOn }: { failOn?: string } = {}) {
+function makeAgent(events: Ev[], basic: Basic[], { failOn, drafts = [] }: { failOn?: string; drafts?: string[] } = {}) {
   const store = { events: [...events], basic: [...basic] }
+  // Unsent drafts (chat/draft.ts), by the generic record id the store gives each chat's draft.
+  const draftRecords = new Map(
+    drafts.map((connectionId) => [
+      `chat-draft:${connectionId}`,
+      { id: `chat-draft:${connectionId}`, content: { text: 'unsent' } },
+    ])
+  )
   const deletedEvents: { connectionId: string }[] = []
   const remove = <T extends { id: string }>(list: T[], id: string) => {
     if (id === failOn) throw new Error('the store could not be written')
@@ -65,8 +72,12 @@ function makeAgent(events: Ev[], basic: Basic[], { failOn }: { failOn?: string }
     ],
   ])
   const container = { isRegistered: (t: unknown) => singletons.has(t), resolve: (t: unknown) => singletons.get(t) }
-  const agent = { context: {}, dependencyManager: { container, resolve: container.resolve } }
-  return { agent: agent as never, store, deletedEvents }
+  const genericRecords = {
+    findById: async (id: string) => draftRecords.get(id) ?? null,
+    delete: async (record: { id: string }) => void draftRecords.delete(record.id),
+  }
+  const agent = { context: {}, dependencyManager: { container, resolve: container.resolve }, genericRecords }
+  return { agent: agent as never, store, deletedEvents, draftRecords }
 }
 
 const ev = (
@@ -183,6 +194,46 @@ describe('chat history on this phone', () => {
     expect(store.events).toHaveLength(chat.length)
     expect(store.basic).toHaveLength(3)
     expect(mockFiles.size).toBe(3)
+  })
+
+  test('Clear chat forgets the chat’s unsent draft too, and not another chat’s', async () => {
+    const { agent, draftRecords } = makeAgent([], [], { drafts: ['c1', 'c2'] })
+
+    await deleteChatMessages(agent, 'c1')
+
+    expect([...draftRecords.keys()]).toEqual(['chat-draft:c2'])
+  })
+
+  // A draft has not been sent, so no timer runs on it: the expiry sweep deletes through this same path (expiry.ts),
+  // and a draft in a disappearing-messages chat stays until it is sent, emptied or the whole chat is cleared.
+  test('a draft that cannot be removed fails Clear chat before any message is gone', async () => {
+    const { agent, store } = makeAgent([ev('c1', 'E1', 'message')], [{ id: 'b1', connectionId: 'c1' }], {
+      drafts: ['c1'],
+    })
+    const warn = jest.fn()
+    const faked = agent as unknown as { genericRecords: { delete: () => Promise<void> }; config: unknown }
+    faked.genericRecords.delete = async () => {
+      throw new Error('the store could not be written')
+    }
+    faked.config = { logger: { warn } }
+
+    await expect(deleteChatMessages(agent, 'c1')).rejects.toThrow('the store could not be written')
+    // The person sees only that the clear failed; the log says why.
+    expect(warn).toHaveBeenCalledWith(
+      '[Chat:draft] the draft for c1 could not be removed, so nothing was cleared',
+      expect.anything()
+    )
+
+    expect(store.events).toHaveLength(1)
+    expect(store.basic).toHaveLength(1)
+  })
+
+  test('Delete for me, and so the timer’s expiry sweep, leaves the draft alone', async () => {
+    const { agent, draftRecords } = makeAgent([ev('c1', 'E1', 'message')], [], { drafts: ['c1'] })
+
+    await deleteChatMessages(agent, 'c1', { events: [{ role: 'received', eventId: 'E1' }] })
+
+    expect([...draftRecords.keys()]).toEqual(['chat-draft:c1'])
   })
 
   test('a record already gone is not a failure, and a chat with no media folder clears cleanly', async () => {

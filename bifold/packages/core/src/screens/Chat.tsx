@@ -46,6 +46,7 @@ import { getActiveChatConnectionId, setActiveChatConnectionId } from '../utils/a
 import { sendCapabilityNoticeIfNeeded } from '../modules/chat/notice'
 import { counterpartySpeaksChat } from '../modules/chat/capability'
 import { useChatEvents } from '../modules/chat/chatEventsStore'
+import { useChatDraft } from '../modules/chat/useChatDraft'
 import { timerOf } from '../modules/chat/timer'
 import { registerOtaApplyBlocker } from '../utils/otaApply'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
@@ -201,13 +202,17 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     })
   }, [agent, connectionId])
 
-  // An unsent draft lives only in gifted-chat's own state, so applying an
-  // over-the-air update (a reload) would lose it. Watch the text, without
-  // controlling it (a controlled composer is what broke typing on 2026-08-26),
-  // and block applying while there is any. gifted-chat reports '' after a send.
-  // `composer.insert` puts text at the caret (the emoji button).
-  const composer = useComposerText()
-  const { hasDraft, focusAtCaret } = composer
+  // An unsent draft is kept per chat (chat/draft.ts), so it outlives this screen: unlocking after the app locked
+  // resets navigation (271, 272). It is saved a moment after it changes, so applying an over-the-air update (a
+  // reload) could still lose the last keystrokes: watch the text, without controlling it (a controlled composer is
+  // what broke typing on 2026-08-26), and block applying while there is any. gifted-chat reports '' after a send,
+  // which clears the kept draft too. `composer.insert` puts text at the caret (the emoji button).
+  const draft = useChatDraft(agent, connectionId)
+  const composer = useComposerText({ onTextChange: draft.onTextChange })
+  const { hasDraft, focusAtCaret, restore } = composer
+  useEffect(() => {
+    if (draft.saved) restore(draft.saved)
+  }, [draft.saved, restore])
   useEffect(() => {
     if (!hasDraft) return
     return registerOtaApplyBlocker('chat-draft')

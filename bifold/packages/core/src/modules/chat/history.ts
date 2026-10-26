@@ -15,6 +15,7 @@ import { Platform } from 'react-native'
 import RNFS from 'react-native-fs'
 
 import { getChatEventRepository } from './ChatModule'
+import { clearChatDraft } from './draft'
 import { forgetExpired } from './expired'
 import type { ChatEventRecord, ChatEventRole } from './records/ChatEventRecord'
 
@@ -63,6 +64,21 @@ export interface ChatMessageIds {
  * `deleteById` would announce only the id and type.
  */
 export async function deleteChatMessages(agent: Agent, connectionId: string, ids?: ChatMessageIds): Promise<void> {
+  // Unsent text is the chat's too: Clear chat and removing the contact leave none of it behind. First, so a draft that
+  // cannot be removed fails the clear before anything else is gone, as any record that cannot be deleted does.
+  if (!ids) {
+    await clearChatDraft(agent, connectionId).catch((error: unknown) => {
+      // Named, since the person sees only that the clear (or the contact's removal) failed.
+      agent.config?.logger?.warn(
+        `[Chat:draft] the draft for ${connectionId} could not be removed, so nothing was cleared`,
+        {
+          error,
+        }
+      )
+      throw error
+    })
+  }
+
   const basicMessages = agent.dependencyManager.resolve(DidCommBasicMessageRepository)
   const chatEvents = getChatEventRepository(agent)
 

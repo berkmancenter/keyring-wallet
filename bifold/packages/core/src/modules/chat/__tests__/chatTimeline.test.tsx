@@ -62,6 +62,8 @@ const agent = {
   events: { observable: (type: string) => (bus[type] ??= new Subject()) },
   // The chat's BasicMessages, for deleting a chat's history: none here.
   dependencyManager: { resolve: () => ({ findByQuery: async () => [], delete: jest.fn() }) },
+  // The chat's unsent draft (chat/draft.ts), cleared with the whole chat: none here.
+  genericRecords: { findById: async () => null, delete: jest.fn() },
 }
 
 let n = 0

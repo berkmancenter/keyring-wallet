@@ -15,6 +15,7 @@ import ContinuityCheckModal from '../modules/vrc/components/ContinuityCheckModal
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
 import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
+import { afterChatDrafts } from '../modules/chat/draft'
 import { BifoldError } from '../types/error'
 import MainStack from './MainStack'
 
@@ -35,9 +36,10 @@ const RootStack: React.FC = () => {
   )
 
   useEffect(() => {
-    // if user gets locked out, erase agent
+    // if user gets locked out, erase agent: once a chat's last draft save is written, since locking unmounts the chat
+    // in this same moment (chat/draft.ts)
     if (!store.authentication.didAuthenticate) {
-      shutdownAndClearAgentIfExists()
+      void afterChatDrafts(shutdownAndClearAgentIfExists)
     }
   }, [store.authentication.didAuthenticate, shutdownAndClearAgentIfExists])
 
