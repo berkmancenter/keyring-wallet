@@ -1107,6 +1107,29 @@
   },
   "Chat": {
     "Photo": "📷 Foto",
+    "Today": "Hoje",
+    "Yesterday": "Ontem",
+    "Dates": {
+      "WeekdaysLong": [
+        "domingo",
+        "segunda-feira",
+        "terça-feira",
+        "quarta-feira",
+        "quinta-feira",
+        "sexta-feira",
+        "sábado"
+      ],
+      "WeekdaysShort": ["dom.", "seg.", "ter.", "qua.", "qui.", "sex.", "sáb."],
+      "MonthsShort": ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."],
+      "DayMonth": "{{day}} de {{month}}",
+      "ThisYear": "{{weekday}}, {{day}} de {{month}}",
+      "OtherYear": "{{day}} de {{month}} de {{year}}",
+      "DateTime": "{{date}} às {{time}}",
+      "Time12": "{{hour}}:{{minute}} {{period}}",
+      "Time24": "{{hour}}:{{minute}}",
+      "Am": "AM",
+      "Pm": "PM"
+    },
     "AttachCamera": "Câmera",
     "AttachLibrary": "Biblioteca de fotos",
     "PhotoFallback": "📷 Foto — atualize o Keyring para vê-la",

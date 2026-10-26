@@ -11,6 +11,8 @@ import {
   bubbleImageSize,
 } from '../../src/components/chat/ChatMessage'
 import { Role } from '../../src/types/chat'
+import { ChatIds } from '../../src/components/chat/Chat.ids'
+import { testIdWithKey } from '../../src/utils/testable'
 
 const onDetailsMock = jest.fn()
 const user = {
@@ -296,5 +298,29 @@ describe('chat lines and replies', () => {
     const reading = quote({ unread: true })
     expect(reading.queryByText('Chat.ReplyExpired')).toBeNull()
     expect(reading.queryByText('Chat.ReplyUnavailable')).toBeNull()
+  })
+})
+
+// The day's marker is gifted-chat's to draw (Chat.tsx renderDay, above each day's first message); a message draws
+// none of its own, or the day shows twice (272's second date line, and the doubled pill a simulator run caught).
+describe('a message names no day of its own', () => {
+  const at = (iso: string, overrides: Partial<ExtendedChatMessage> = {}): ExtendedChatMessage => ({
+    _id: iso,
+    user: { _id: Role.them },
+    renderEvent: () => <></>,
+    text: 'hello',
+    createdAt: new Date(iso),
+    ...overrides,
+  })
+  const show = (message: ExtendedChatMessage, previousMessage?: ExtendedChatMessage) =>
+    render(<ChatMessage messageProps={{ user, position: 'left', currentMessage: message, previousMessage }} />)
+
+  test.each([
+    ['a bubble', {}],
+    ['a line about the chat itself', { kind: 'system' as const, text: 'Timer set' }],
+  ])('%s on a new day: no pill and no date line', (_what, overrides) => {
+    const tree = show(at('2026-10-16T09:00:00.000Z', overrides), at('2026-10-15T16:01:00.000Z'))
+    expect(tree.queryByTestId(testIdWithKey(ChatIds.dayPill))).toBeNull()
+    expect(tree.queryByText(/October 1[56], 2026|\d{4} \d{1,2}:\d{2} [AP]M/)).toBeNull()
   })
 })

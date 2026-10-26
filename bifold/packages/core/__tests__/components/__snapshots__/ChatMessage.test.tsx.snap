@@ -5,26 +5,6 @@ exports[`ChatMessage Credential offer renders correctly 1`] = `
   <View
     style={
       Object {
-        "alignItems": "center",
-        "marginVertical": 16,
-      }
-    }
-  >
-    <Text
-      style={
-        Object {
-          "color": "#888888",
-          "fontSize": 14,
-          "fontWeight": "500",
-        }
-      }
-    >
-      January 1, 2024 12:00 AM
-    </Text>
-  </View>
-  <View
-    style={
-      Object {
         "flexDirection": "row",
         "justifyContent": "flex-end",
       }
@@ -159,26 +139,6 @@ exports[`ChatMessage Credential offer renders correctly 1`] = `
 
 exports[`ChatMessage Proof request renders correctly 1`] = `
 <View>
-  <View
-    style={
-      Object {
-        "alignItems": "center",
-        "marginVertical": 16,
-      }
-    }
-  >
-    <Text
-      style={
-        Object {
-          "color": "#888888",
-          "fontSize": 14,
-          "fontWeight": "500",
-        }
-      }
-    >
-      January 1, 2024 12:00 AM
-    </Text>
-  </View>
   <View
     style={
       Object {
@@ -319,26 +279,6 @@ exports[`ChatMessage Reporting DID renders correctly 1`] = `
   <View
     style={
       Object {
-        "alignItems": "center",
-        "marginVertical": 16,
-      }
-    }
-  >
-    <Text
-      style={
-        Object {
-          "color": "#888888",
-          "fontSize": 14,
-          "fontWeight": "500",
-        }
-      }
-    >
-      January 1, 2024 12:00 AM
-    </Text>
-  </View>
-  <View
-    style={
-      Object {
         "backgroundColor": "#FFFFFF",
         "borderColor": "rgba(170, 170, 170, 0.4)",
         "borderRadius": 12,
@@ -402,26 +342,6 @@ exports[`ChatMessage Reporting DID renders correctly 1`] = `
 
 exports[`ChatMessage Sent presentation renders correctly 1`] = `
 <View>
-  <View
-    style={
-      Object {
-        "alignItems": "center",
-        "marginVertical": 16,
-      }
-    }
-  >
-    <Text
-      style={
-        Object {
-          "color": "#888888",
-          "fontSize": 14,
-          "fontWeight": "500",
-        }
-      }
-    >
-      January 1, 2024 12:00 AM
-    </Text>
-  </View>
   <View
     style={
       Object {

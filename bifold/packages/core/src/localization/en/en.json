@@ -1263,6 +1263,21 @@
   },
   "Chat": {
     "Photo": "📷 Photo",
+    "Today": "Today",
+    "Yesterday": "Yesterday",
+    "Dates": {
+      "WeekdaysLong": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      "WeekdaysShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      "MonthsShort": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+      "DayMonth": "{{day}} {{month}}",
+      "ThisYear": "{{weekday}} {{day}} {{month}}",
+      "OtherYear": "{{day}} {{month}} {{year}}",
+      "DateTime": "{{date}}, {{time}}",
+      "Time12": "{{hour}}:{{minute}} {{period}}",
+      "Time24": "{{hour}}:{{minute}}",
+      "Am": "AM",
+      "Pm": "PM"
+    },
     "AttachCamera": "Camera",
     "AttachLibrary": "Photo library",
     "PhotoFallback": "📷 Photo — update Keyring to see it",

@@ -32,6 +32,7 @@ import type { ChatSendOutcome } from '../modules/chat/send'
 import { chatEventsShown } from '../modules/chat/shown'
 import { renderActions } from '../components/chat/ChatActions'
 import { ChatMessage, ExtendedChatMessage } from '../components/chat/ChatMessage'
+import { renderDayPill } from '../components/chat/DayPill'
 import { useNetwork } from '../contexts/network'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -558,6 +559,10 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
           renderAvatar={() => null}
           messageIdGenerator={(msg) => msg?._id.toString() || '0'}
           renderMessage={renderMessage}
+          // The day marker: gifted-chat draws it above each day's first message (every kind of message, its own
+          // DayWrapper) and as the copy floating while the list scrolls. ChatMessage draws none of its own: 272's
+          // second date line, and the doubled pill C1 first had, were a marker of ours beside gifted-chat's.
+          renderDay={renderDayPill}
           renderInputToolbar={(props) => renderInputToolbar(props, theme)}
           renderSend={(props) => renderSend(props, theme)}
           renderComposer={(props) => {

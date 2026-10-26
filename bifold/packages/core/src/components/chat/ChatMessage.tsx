@@ -176,24 +176,6 @@ const MessageIcon: React.FC<{ iconType: MessageIconType; isMe: boolean }> = ({ i
   )
 }
 
-// Check if we should show day separator (different day from previous message)
-const shouldShowDaySeparator = (currentMessage: ExtendedChatMessage, previousMessage?: IMessage): boolean => {
-  if (!previousMessage) {
-    // Always show day separator for the first message (oldest message at bottom with inverted list)
-    return true
-  }
-
-  const currentDate = moment(currentMessage.createdAt).startOf('day')
-  const previousDate = moment(previousMessage.createdAt).startOf('day')
-
-  return !currentDate.isSame(previousDate)
-}
-
-// Format date for day separator
-const formatDaySeparator = (date: Date): string => {
-  return moment(date).format('MMMM D, YYYY h:mm A')
-}
-
 const EventCard: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
   return (
     <View
@@ -366,12 +348,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
   const { t } = useTranslation()
   const message = useMemo(() => messageProps.currentMessage as ExtendedChatMessage, [messageProps])
-  const previousMessage = messageProps.previousMessage as ExtendedChatMessage | undefined
-
-  const showDaySeparator = useMemo(
-    () => (message ? shouldShowDaySeparator(message, previousMessage) : false),
-    [message, previousMessage]
-  )
 
   if (!message) {
     return null
@@ -379,19 +355,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
 
   const isMe = message.user?._id === Role.me
 
-  const daySeparator = showDaySeparator ? (
-    <View style={{ alignItems: 'center', marginVertical: 16 }}>
-      <Text style={{ color: DATE_SEPARATOR_COLOR, fontSize: 14, fontWeight: '500' }}>
-        {formatDaySeparator(message.createdAt)}
-      </Text>
-    </View>
-  ) : null
-
   // A line about the chat itself (a timer change): centered words, no bubble.
   if (message.kind === 'system') {
     return (
       <View>
-        {daySeparator}
         <View style={{ alignItems: 'center', marginVertical: 8, paddingHorizontal: 32 }}>
           <Text style={{ color: DATE_SEPARATOR_COLOR, fontSize: 14, textAlign: 'center' }}>{message.text}</Text>
         </View>
@@ -403,7 +370,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   if (message.iconType) {
     return (
       <View>
-        {daySeparator}
         <EventCard message={message} />
         {(message.iconType === MessageIconType.Credential || message.iconType === MessageIconType.Proof) && (
           <CredentialOfferActions message={message} />
@@ -415,7 +381,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   // Regular chat messages render as left/right bubbles
   return (
     <View>
-      {daySeparator}
       <View style={{ flexDirection: 'row', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
         <View style={{ ...theme.containerStyle }}>
           <Bubble
