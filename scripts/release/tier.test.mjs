@@ -14,6 +14,8 @@ const tierOf = (...files) => classify(files).tier;
 test('screens, copy and app code travel over the air', () => {
   assert.equal(tierOf('bifold/packages/core/src/screens/PINEnter.tsx', 'bifold/packages/core/src/localization/en/en.json'), 'ota');
   assert.equal(tierOf('app/src/screens/Home.tsx', 'app/App.tsx', 'app/container-imp.ts'), 'ota');
+  // App.tsx composes its containers here (#658): the same bundled app JavaScript as container-imp.ts.
+  assert.equal(tierOf('app/container-compose.ts'), 'ota');
 });
 
 test('native projects, build files, native modules and build-time config need a store build', () => {

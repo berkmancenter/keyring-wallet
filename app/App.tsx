@@ -43,7 +43,7 @@ import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
 import tours from '@keyring-theme/features/tours'
 import WebDisplay from '@screens/WebDisplay'
-import { composeAppContainer } from './container-compose'
+import { useAppContainer } from './container-compose'
 import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
@@ -71,8 +71,9 @@ const App = () => {
   const { t } = useTranslation()
   const navigationRef = useNavigationContainerRef()
   const [surveyVisible, setSurveyVisible] = useState(false)
-  // Bifold's container with the app's as its child; the app resolves from the child (container-compose.ts).
-  const bcwContainer = composeAppContainer(t, navigationRef.navigate, setSurveyVisible)
+  // Bifold's container with the app's as its child; the app resolves from the child. Once per mount, not per render
+  // (container-compose.ts).
+  const bcwContainer = useAppContainer(t, navigationRef.navigate, setSurveyVisible)
   // Demo profiles (demo-profiles/README.md) are opt-in per build: with
   // ACTIVE_DEMO_PROFILE unset this registers none, so a shipped build shows the
   // plain contact list and home header. A demo build sets a profile id, or
