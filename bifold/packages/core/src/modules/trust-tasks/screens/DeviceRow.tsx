@@ -19,6 +19,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { type DeviceStatus, lastSeenOf, platformKeyOf } from './deviceWords'
 import { localDateTime } from './localTime'
 import { didHashKey } from './testIdKey'
+import { absoluteDate, appDateWords } from '../../../utils/localDay'
 
 /** A device as the row shows it: its name already worded, its state already read. */
 export interface DeviceView {
@@ -62,7 +63,7 @@ export const DeviceRow: React.FC<{
     ? undefined
     : seen.key === 'Devices.SeenOn'
       ? t(seen.key, {
-          date: seen.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
+          date: absoluteDate(seen.date, appDateWords()),
         })
       : t(seen.key, 'count' in seen ? { count: seen.count } : undefined)
   const platformKey = platformKeyOf(device.platform)

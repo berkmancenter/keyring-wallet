@@ -75,7 +75,7 @@ describe('requestRef', () => {
     const today = whenShown(new Date('2026-09-25T16:21:00').toISOString(), now)
     const earlier = whenShown(new Date('2026-09-24T16:21:00').toISOString(), now)
     expect(today).not.toMatch(/Sep/)
-    expect(earlier).toMatch(/Sep 24/)
+    expect(earlier).toMatch(/24 Sep/)
     expect(earlier.endsWith(today)).toBe(true)
   })
 

@@ -6,6 +6,7 @@ import { useTheme } from '../../../../contexts/theme'
 import { testIdWithKey } from '../../../../utils/testable'
 import { CustomRecord, HistoryCardType } from '../../types'
 import { ThemedText } from '../../../../components/texts/ThemedText'
+import { absoluteDate, appDateWords } from '../../../../utils/localDay'
 
 const cardTitleKeys: Record<HistoryCardType, string> = {
   [HistoryCardType.CardAccepted]: 'History.CardTitle.CardAccepted',
@@ -225,11 +226,10 @@ const HistoryListItem: React.FC<Props> = ({ item }) => {
   const renderCardDate = (date?: Date) => {
     if (!date) return null
 
-    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
     const isDateToday = isToday(date)
     return (
       <ThemedText style={styles.cardDate}>
-        {isDateToday ? t('History.Today') : date.toLocaleDateString('en-US', options)}
+        {isDateToday ? t('History.Today') : absoluteDate(date, appDateWords())}
       </ThemedText>
     )
   }

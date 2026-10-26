@@ -14,7 +14,7 @@ import { testIdWithKey } from '../../src/utils/testable'
 import { COMMUNITY, membershipCard } from '../helpers/cardVault'
 import { BasicAppContext } from '../helpers/app'
 
-jest.mock('react-native-localize', () => {})
+jest.mock('react-native-localize', () => require('react-native-localize/mock'))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 const mockGetW3c = jest.fn()
 jest.mock('../../src/modules/openid/context/OpenIDCredentialRecordProvider', () => ({

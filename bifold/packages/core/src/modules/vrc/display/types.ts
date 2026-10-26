@@ -7,6 +7,7 @@
 
 import { Attribute, Field } from '@bifold/oca/build/legacy'
 import { W3cCredentialRecord } from '@credo-ts/core'
+import { appDateWords, dateTime, phoneUses24HourClock } from '../../../utils/localDay'
 
 export { Attribute, Field }
 
@@ -258,23 +259,13 @@ export function formatDidForDisplay(did: string, maxLength: number = 30): string
 }
 
 /**
- * Helper function to format a date string for display
+ * A date and time for display, "15 Oct 2026, 16:01", in the app's language and the phone's clock (utils/localDay.ts).
+ * What cannot be read comes back as it was.
  */
 export function formatDateForDisplay(dateString: string | undefined): string {
   if (!dateString) {
     return ''
   }
-
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return dateString
-  }
+  const date = new Date(dateString)
+  return Number.isFinite(date.getTime()) ? dateTime(date, appDateWords(), phoneUses24HourClock()) : dateString
 }

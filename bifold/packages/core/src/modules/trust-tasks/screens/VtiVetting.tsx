@@ -97,6 +97,7 @@ import { applicantPrimary, deskPrimary, type ApplicantStep, type VetterStep } fr
 import { useRoomAboveTabBar } from './aboveTabBar'
 import { localDate } from './localTime'
 import { VtiVettingIds, type VtiVettingId } from './VtiVetting.ids'
+import { appDateWords, dateTime, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
 
 /**
  * A short, stable name for one vetting request: the tail of its request
@@ -135,12 +136,14 @@ export function confirmedNameOf(request: { card?: { claims?: unknown } }): strin
   return typeof name === 'string' && name.trim() ? name.trim() : undefined
 }
 
+/** Today's time, "16:01"; another day's date and time, "15 Oct, 16:01", with the year once it is not this year. */
 export const whenShown = (iso: string, now: Date = new Date()): string => {
   const at = new Date(iso)
-  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const words = appDateWords()
+  const use24h = phoneUses24HourClock()
   return at.toDateString() === now.toDateString()
-    ? time
-    : `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+    ? timeLabel(at, words, use24h)
+    : dateTime(at, words, use24h, 'auto', now)
 }
 
 /**
@@ -1115,7 +1118,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   </Pressable>
                   {profile ? (
                     <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.profilePublished)}>
-                      {tp('Vetting.ProfilePublished', { when: new Date(profile.publishedAt).toLocaleString() })}
+                      {tp('Vetting.ProfilePublished', {
+                        when: dateTime(new Date(profile.publishedAt), appDateWords(), phoneUses24HourClock()),
+                      })}
                     </Text>
                   ) : null}
                 </View>

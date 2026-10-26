@@ -1,6 +1,7 @@
 import { getDomainFromUrl } from '@credo-ts/core'
 import { Attribute, Field } from '@bifold/oca/build/legacy'
 import { OpenId4VciResolvedCredentialOffer } from '@credo-ts/openid4vc'
+import { appDateWords, dateTime, phoneUses24HourClock } from '../../../utils/localDay'
 
 /**
  * Converts a camelCase string to a sentence format (first letter capitalized, rest in lower case).
@@ -41,16 +42,10 @@ export const buildFieldsFromOpenIDTemplate = (data: { [key: string]: unknown }):
   return fields
 }
 
+/** A date and time, "15 Oct 2026, 16:01", in the app's language and the phone's clock (utils/localDay.ts). */
 export function formatDate(input: string | Date): string {
   const date = input instanceof Date ? input : new Date(input)
-  return date.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
+  return dateTime(date, appDateWords(), phoneUses24HourClock())
 }
 
 /**
@@ -120,7 +115,9 @@ export function isSdJwtProofRequest(type: string): boolean {
 }
 
 export function getCredentialConfigurationIds(resolved: OpenId4VciResolvedCredentialOffer): string[] {
-  const fromOffered = (resolved.credentialOfferPayload.credential_configuration_ids ?? []).filter((x): x is string => !!x)
+  const fromOffered = (resolved.credentialOfferPayload.credential_configuration_ids ?? []).filter(
+    (x): x is string => !!x
+  )
 
   if (fromOffered.length > 0) return fromOffered
 

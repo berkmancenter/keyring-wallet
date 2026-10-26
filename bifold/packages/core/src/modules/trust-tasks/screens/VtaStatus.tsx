@@ -17,6 +17,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { connectionShown, resolveVtaDid, showsOfflineBanner, type VtaConnection } from '../module/vtaLinkMachine'
+import { appDateWords, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
 
 /** The link state, plus a clock that ticks each second while the agent is away. */
 export function useVtaLinkWithClock() {
@@ -40,7 +41,7 @@ export function useVtaDid(configured?: string): string | undefined {
   return resolveVtaDid(state.link, configured)
 }
 
-const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const clock = (at: number) => timeLabel(new Date(at), appDateWords(), phoneUses24HourClock())
 
 /** "Online" · "Connecting to your agent…" · "Reconnecting…" · "Offline since 14:02" · "Can't be found" */
 export function connectionText(connection: VtaConnection, t: TFunction): string {

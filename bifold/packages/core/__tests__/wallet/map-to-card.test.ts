@@ -2,6 +2,7 @@ import { W3cCredentialRecord } from '@credo-ts/core'
 import { BrandingOverlayType } from '@bifold/oca/build/legacy'
 import { getCredentialForDisplay } from '../../src/modules/openid/display'
 import { mapCredentialTypeToCard, mapW3CToCard } from '../../src/wallet/map-to-card'
+import { speak } from '../helpers/appLanguage'
 
 jest.mock('../../src/modules/openid/display', () => ({
   getCredentialForDisplay: jest.fn(),
@@ -59,6 +60,30 @@ describe('mapW3CToCard', () => {
 
     expect(result.proofContext).toBe(true)
     expect(result.items.map((item) => item.key)).toEqual(['givenName', 'familyName', 'birthDate'])
+  })
+})
+
+// Hermes in a release build answered toLocaleDateString in English whatever the language; these words are ours.
+describe('a card’s date field, in the app’s language', () => {
+  const card = {
+    vc: {
+      issuer: { name: 'Issuer Inc.' },
+      type: ['VerifiableCredential'],
+      credentialSubject: { birthDate: '1815-12-10' },
+    },
+    branding: { type: 'Branding10' as const, primaryBg: '#ffffff' },
+    labels: {},
+    formats: { birthDate: 'date' as const },
+  }
+  const birthDate = () => mapW3CToCard(card as never, 'credential-id').items.find((item) => item.key === 'birthDate')
+
+  test('French and Portuguese, and English by default', async () => {
+    await speak('fr')
+    expect(birthDate()?.value).toBe('10 déc. 1815')
+    await speak('pt-BR')
+    expect(birthDate()?.value).toBe('10 de dez. de 1815')
+    await speak('en')
+    expect(birthDate()?.value).toBe('10 Dec 1815')
   })
 })
 

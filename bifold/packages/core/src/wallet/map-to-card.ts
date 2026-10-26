@@ -25,6 +25,7 @@ import { buildFieldsFromW3cCredsCredential, getAttributeField } from '../utils/o
 import { i18n } from '../localization'
 import { getCredentialIdentifiers } from '../utils/credential'
 import { IColorPalette } from '../theme'
+import { absoluteDate, appDateWords } from '../utils/localDay'
 
 const isDataUrl = (v: unknown) => typeof v === 'string' && /^data:image\/[a-zA-Z]+;base64,/.test(v)
 
@@ -32,7 +33,7 @@ const fmt = (format: AttrFormat | undefined, value: any) => {
   if (!format) return value
   if ((format === 'date' || format === 'datetime') && value) {
     const d = new Date(value)
-    if (Number.isFinite(d.getTime())) return d.toLocaleDateString()
+    if (Number.isFinite(d.getTime())) return absoluteDate(d, appDateWords())
   }
   return value
 }

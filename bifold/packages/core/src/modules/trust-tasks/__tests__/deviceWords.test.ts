@@ -2,6 +2,7 @@
  * The words on a device row (new-phone-new-device-plan.md §B): when it was
  * last seen, what it is, and where a removal stands.
  */
+import { speak } from '../../../../__tests__/helpers/appLanguage'
 import { defaultNameOf, deviceStatusOf, deviceViewOf, lastSeenOf, platformKeyOf } from '../screens/deviceWords'
 
 const NOW = new Date('2026-09-28T12:00:00Z')
@@ -143,6 +144,17 @@ describe('the default name', () => {
     expect(name).toMatch(/^Devices\.DefaultName /)
     expect(name).toContain('"platform":"Devices.ShortIos"')
     expect(name).toMatch(/"date":"[^"]*28[^"]*"/)
+  })
+
+  // Hermes in a release build answered toLocaleDateString in English whatever the language; these words are ours.
+  test('the day it was added is in the app’s language: French and Portuguese', async () => {
+    const dateOf = (name: string) => /"date":"([^"]*)"/.exec(name)?.[1]
+    await speak('fr')
+    expect(dateOf(defaultNameOf('ios', new Date(2026, 8, 28, 12), t))).toBe('28 sept.')
+    await speak('pt-BR')
+    expect(dateOf(defaultNameOf('ios', new Date(2026, 8, 28, 12), t))).toBe('28 de set.')
+    await speak('en')
+    expect(dateOf(defaultNameOf('ios', new Date(2026, 8, 28, 12), t))).toBe('28 Sep')
   })
 
   test('an unknown platform is just a phone', () => {

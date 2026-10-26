@@ -7,6 +7,7 @@
  */
 
 import type { DeviceView } from './DeviceRow'
+import { appDateWords, shortDate } from '../../../utils/localDay'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -141,7 +142,7 @@ export const defaultNameOf = (platform: string | undefined, addedAt: Date, t: Tr
     platform: t(
       kind === 'ios' ? 'Devices.ShortIos' : kind === 'android' ? 'Devices.ShortAndroid' : 'Devices.ShortPhone'
     ),
-    date: addedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    date: shortDate(addedAt, appDateWords(), 'never'),
     interpolation: { escapeValue: false },
   })
 }

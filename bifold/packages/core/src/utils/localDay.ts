@@ -7,6 +7,7 @@
  * - An absolute date (`absoluteDate`): "15 Oct 2026"; a short one with the year as asked (`shortDate`): "15 Oct".
  * - A time of day (`timeLabel`): "16:01" or "4:01 PM", by the phone's 12/24-hour setting, never by the language
  *   (`useUses24HourClock`); and a date with its time (`dateTime`).
+ * - The words and the clock where no hook can be used (`appDateWords`, `phoneUses24HourClock`).
  *
  * The words come from our own locale files (`Chat.Dates`), never from the JS engine's Intl. Hermes in a release build
  * honours toLocaleDateString's OPTIONS but IGNORES its LOCALE, the one passed and the device's alike, so French and
@@ -18,10 +19,14 @@
  *
  * @module utils/localDay
  */
+import i18n from 'i18next'
 import type { TFunction } from 'i18next'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import * as RNLocalize from 'react-native-localize'
+
+import en from '../localization/en'
+import { bifoldLoggerInstance } from '../services/bifoldLogger'
 
 /** The words and patterns a language names days with (locale files, `Chat.Dates`). */
 export interface DateWords {
@@ -79,6 +84,37 @@ export function useDateWords(): DateWords {
   return useMemo(() => dateWords(t), [t, i18n.language])
 }
 
+let englishWords: DateWords | undefined
+let warnedEnglish = false
+
+/**
+ * The app language's date words where no hook can be used: a formatter, a helper, a module-level function. They
+ * come from the app's own i18n instance (localization/index.ts), the one every screen speaks, read at each call.
+ * A component calling this in its render shows a new language only when something else re-renders it (its own
+ * useTranslation does); a component with no such thing uses `useDateWords()` instead. Before that instance is set
+ * up (the app sets it up before any screen; a test may not), English from our own locale file.
+ */
+export function appDateWords(): DateWords {
+  if (i18n.isInitialized) return dateWords(i18n.t.bind(i18n) as TFunction)
+  if (!englishWords) {
+    // Read straight from the file, not through i18next, which a test may have mocked.
+    const lookup = (key: string): unknown =>
+      key.split('.').reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], en)
+    englishWords = dateWords(((key: string) => lookup(key) ?? key) as unknown as TFunction)
+  }
+  // On a phone this would print English quietly, which is how the Hermes bug looked: say so, once.
+  if (!warnedEnglish && !process.env.JEST_WORKER_ID) {
+    warnedEnglish = true
+    bifoldLoggerInstance.warn("[dates] date words read before the app's i18n was set up; English used")
+  }
+  return englishWords
+}
+
+/** Whether the phone is set to the 24-hour clock, where no hook can be used. */
+export function phoneUses24HourClock(): boolean {
+  return RNLocalize.uses24HourClock()
+}
+
 /** `pattern` with each {{name}} replaced by its value. */
 const fill = (pattern: string, values: Record<string, string>): string =>
   pattern.replace(/\{\{(\w+)\}\}/g, (whole, name: string) => values[name] ?? whole)
@@ -92,11 +128,17 @@ export const localDayKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 /**
- * Whole local days from `date` to `now` (0 today, 1 yesterday). Counted on calendar days, not 24-hour spans: the
- * difference of two local midnights, rounded, so a day of 23 or 25 hours (a clock change) still counts as one.
+ * Whole days between two local midnights, in ms: rounded, not floored, so a day of 23 or 25 hours (a clock change)
+ * still counts as one. Kept apart from the time zone so a test can hold it to that at any zone.
  */
-export const daysAgo = (date: Date, now: Date): number =>
-  Math.round((startOfLocalDay(now) - startOfLocalDay(date)) / 86_400_000)
+export const wholeDaysBetween = (fromMidnightMs: number, toMidnightMs: number): number =>
+  Math.round((toMidnightMs - fromMidnightMs) / 86_400_000)
+
+/**
+ * Whole local days from `date` to `now` (0 today, 1 yesterday). Counted on calendar days, not 24-hour spans: the
+ * difference of two local midnights (`wholeDaysBetween`).
+ */
+export const daysAgo = (date: Date, now: Date): number => wholeDaysBetween(startOfLocalDay(date), startOfLocalDay(now))
 
 /** An absolute date with its year: "15 Oct 2026", "15 oct. 2026", "15 de out. de 2026". */
 export function absoluteDate(date: Date, words: DateWords): string {

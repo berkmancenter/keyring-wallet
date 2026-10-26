@@ -20,20 +20,12 @@ import { testIdWithKey } from '../../../utils/testable'
 import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 import type { ConnectedWitness } from '../context/WitnessConnectionProvider'
-
-/**
- * Format a date for display
- */
-const formatDate = (date: Date): string => {
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+import { absoluteDate, useDateWords } from '../../../utils/localDay'
 
 const WitnessConnections: React.FC = () => {
   const { ColorPalette, TextTheme } = useTheme()
+  // The hook, not appDateWords(): nothing else here re-renders this screen when the language changes.
+  const dateWords = useDateWords()
   const {
     allWitnessConnections,
     connectedWitness,
@@ -308,7 +300,7 @@ const WitnessConnections: React.FC = () => {
           {item.eventName && <ThemedText style={styles.eventName}>📅 {item.eventName}</ThemedText>}
           <DidDetails did={item.issuerDid} testIdStem="WitnessDid" />
           <ThemedText style={styles.connectedDate}>
-            Connected {formatDate(item.connectedAt)}
+            Connected {absoluteDate(item.connectedAt, dateWords)}
             {isActive ? ' • Tap to deselect' : ''}
           </ThemedText>
         </View>

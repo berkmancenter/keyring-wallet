@@ -37,6 +37,7 @@ import { ContactLinks, loadContactLinks, relationshipsOfContact } from '../conta
 import { separateContact } from '../contacts/mergeContacts'
 import { useContactFacts } from '../contacts/useContactFacts'
 import { useContactLinks } from '../contacts/useContactLinks'
+import { absoluteDate, appDateWords } from '../../../utils/localDay'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -548,7 +549,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
                   <View style={styles.witnessSubSection}>
                     <ThemedText style={styles.witnessLabel}>Date</ThemedText>
                     <ThemedText style={styles.witnessValue}>
-                      {new Date(record.issuanceDate).toLocaleDateString()}
+                      {absoluteDate(new Date(record.issuanceDate), appDateWords())}
                     </ThemedText>
                   </View>
                 )}

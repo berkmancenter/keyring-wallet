@@ -40,6 +40,7 @@ import { VtaAgentSettingsIds } from './VtaAgentSettings.ids'
 import { useVtaLinkWithClock } from './VtaStatus'
 import { useRoomAboveTabBar } from './aboveTabBar'
 import { SectionRule } from './SectionRule'
+import { appDateWords, dateTime, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
 
 const VtaAgentSettings: React.FC = () => {
   // The tab bar draws over the page: the last line scrolls clear of it.
@@ -311,7 +312,7 @@ const VtaAgentSettings: React.FC = () => {
           ) : (
             state.activity.slice(0, 6).map((a) => (
               <ThemedText key={`${a.at}-${a.kind}`}>
-                {new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {activityText(a)}
+                {timeLabel(new Date(a.at), appDateWords(), phoneUses24HourClock())} · {activityText(a)}
               </ThemedText>
             ))
           )}
@@ -340,7 +341,7 @@ const VtaAgentSettings: React.FC = () => {
                 {state.managerDid ?? '—'}
               </ThemedText>
               <ThemedText style={styles.muted}>{t('VtaLink.DetailsLinkedAt')}</ThemedText>
-              <ThemedText>{new Date(link.linkedAt).toLocaleString()}</ThemedText>
+              <ThemedText>{dateTime(new Date(link.linkedAt), appDateWords(), phoneUses24HourClock())}</ThemedText>
             </View>
           ) : null}
         </View>
