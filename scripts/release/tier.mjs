@@ -76,7 +76,7 @@ export const RULES = [
   ['store', 'stored-data migration (policy: never OTA)', (f) => MIGRATION_PATHS.includes(f)],
   ['store', 'bifold pin moved but its range was not read', /^bifold@/],
   // OTA: the one JS bundle. At the app's root only the bundle's own entry files (an allowlist).
-  ['ota', 'app JavaScript bundle (screens, flows, copy, theme, localisation)', /^(app\/src|bifold\/packages\/[^/]+\/src)\/|^app\/(App\.tsx|index\.js|container-imp\.ts)$/],
+  ['ota', 'app JavaScript bundle (screens, flows, copy, theme, localisation)', /^(app\/src|bifold\/packages\/[^/]+\/src)\/|^app\/(App\.tsx|index\.js|container-imp\.ts|container-compose\.ts)$/],
 ];
 
 /**
