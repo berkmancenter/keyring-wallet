@@ -57,8 +57,8 @@ import { fileURLToPath } from "node:url";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
 import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
+import { exifConcerns } from "./lib/exifTags.mjs";
 import { jpegMetadata } from "./lib/jpegMetadata.mjs";
-import { TEST_ID_PREFIX } from "./lib/config.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
 
@@ -109,14 +109,17 @@ async function pushAndTapWake(d, udid, tag) {
   await sleep(2000);
 }
 
-/** How many elements carry `key` on screen now. */
-async function countTestId(d, key) {
-  return (await d.$$(`~${TEST_ID_PREFIX}${key}`)).length;
+/**
+ * The photo bubbles in the open chat, by their label ("📷 Photo, <time>", ChatMessage.tsx). Not by the ChatMessageImage
+ * id: once a transcript is long the driver's snapshot stops short of it (0 on B and 8 on A with 11 photos on screen, 10-25).
+ */
+async function countPhotos(d) {
+  return (await d.$$('-ios predicate string:label BEGINSWITH "📷 Photo,"')).length;
 }
 
-/** Whether `key` reaches `count` elements within `timeout`. */
-async function waitForCount(d, key, count, timeout) {
-  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) if ((await countTestId(d, key)) >= count) return true;
+/** Whether the open chat shows at least `count` photo bubbles within `timeout`. */
+async function waitForPhotos(d, count, timeout) {
+  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) if ((await countPhotos(d)) >= count) return true;
   return false;
 }
 
@@ -152,7 +155,6 @@ async function sendChat(d, text) {
   await sleep(2000);
 }
 
-/** From the Contacts list, open `peer`'s chat. */
 /**
  * Back out of stacked screens (a chat, its Contact Details) toward the tabs: up to four presses of whichever back the
  * screen has, its testID Back or BackButton, or a header button labelled "Back". returnToContacts knows BackButton only,
@@ -304,6 +306,7 @@ try {
         await copy.click().catch(() => undefined);
         await sleep(1200);
       }
+      if (await copy.isExisting()) return { ok: false, detail: "the share sheet stayed open after three taps on Copy: nothing was copied" };
       // The message is the words, then the link on its own line (QRScanner.tsx). Read through WebDriverAgent first, as
       // lib/pages/link.js does: simctl pbpaste came back empty for 10 s on the MacBook while WDA had the link (10-23).
       const clip = Buffer.from((await a.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
@@ -388,31 +391,41 @@ try {
     // Photos (Step 3): before the timer rows, so the photo is untimed and still on both phones when its file is read.
     const PHOTO_FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "test-chat-photo-gps.jpg");
     await rows.row("pair-photo-send", async () => {
+      // No `simctl privacy grant photos`: on iOS 26 it kills the running app and still does not give full access, so
+      // the app asks anyway (10-25). The app's own prompt is answered below instead.
       simctl("addmedia", A.udid, PHOTO_FIXTURE);
-      // Changing a privacy grant terminates the running app (iOS 26.3 simulator: SIGKILL, no crash report, 10-25), so
-      // bring Keyring back and unlock it before driving it.
-      simctl("privacy", A.udid, "grant", "photos", APP);
-      await sleep(1500);
-      await a.execute("mobile: activateApp", { bundleId: APP });
-      await sleep(3000);
-      await unlockIfLocked(a);
       await openChatWith(a, B);
-      const imagesBefore = { a: await countTestId(a, "ChatMessageImage"), b: await countTestId(b, "ChatMessageImage") };
-      await tapTestId(a, "ChatActionsButton", 10000);
-      await tapTestId(a, "ChatAttachLibrary", 10000);
-      await acceptSystemAlertIfPresent(a);
-      // The system photo picker: the photo just added is the newest, the last cell of its grid.
-      const cells = await a.$$("-ios class chain:**/XCUIElementTypeCell");
-      if (cells.length === 0) return { ok: false, detail: "the system photo picker showed no photos" };
-      await cells[cells.length - 1].click();
+      const before = { a: await countPhotos(a), b: await countPhotos(b) };
+      // iOS 26 asks for the photo library with three buttons (Limit Access…, Allow Full Access, Don't Allow). The
+      // session auto-accepts alerts the moment they appear, and its default button left access denied (10-25), so the
+      // button it accepts is named before the tap that raises the prompt, and reset after.
+      await a.updateSettings({ acceptAlertButtonSelector: '**/XCUIElementTypeButton[`label == "Allow Full Access"`]' }).catch(() => undefined);
+      try {
+        await tapTestId(a, "ChatActionsButton", 10000);
+        await tapTestId(a, "ChatAttachLibrary", 10000);
+        await sleep(2000);
+        const full = await a.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Allow Full Access"');
+        if (await full.isExisting()) await full.click();
+      } finally {
+        await a.updateSettings({ acceptAlertButtonSelector: "" }).catch(() => undefined);
+      }
+      await sleep(2000);
+      // A denied permission shows only a passing toast (Chat.PhotoNoPermission), which once read as "no picker".
+      if (await a.$('-ios predicate string:label CONTAINS "needs permission to use the camera or your photos"').isExisting()) {
+        return { ok: false, detail: "the app reports no permission for the photo library (Chat.PhotoNoPermission)" };
+      }
+      // The system picker runs out of process: its grid is not in the app's tree and cannot be queried, so the newest
+      // photo is tapped where it is drawn. The picker lists newest first by capture date; the fixture has none, so
+      // the photo just added is first, top left (checked on screen, iPhone 17, 10-25).
+      await a.execute("mobile: tap", { x: 66, y: 216 });
       for (const label of ["Add", "Choose", "Done"]) {
         const button = await a.$(`-ios predicate string:type == "XCUIElementTypeButton" AND label == "${label}" AND visible == 1`);
         if (await button.isExisting()) await button.click();
       }
-      const onA = await waitForCount(a, "ChatMessageImage", imagesBefore.a + 1, 60000);
-      const onB = await waitForCount(b, "ChatMessageImage", imagesBefore.b + 1, 90000);
+      const onA = await waitForPhotos(a, before.a + 1, 60000);
+      const onB = await waitForPhotos(b, before.b + 1, 90000);
       await screenshot(b, "pair-photo-send").catch(() => undefined);
-      return { ok: onA && onB, detail: `A shows the photo it sent ${onA} · B shows the photo ${onB} (images before: A ${imagesBefore.a}, B ${imagesBefore.b})` };
+      return { ok: onA && onB, detail: `A shows the photo it sent ${onA} · B shows the photo ${onB} (photo bubbles before: A ${before.a}, B ${before.b})` };
     });
     await rows.row("pair-photo-no-location", async () => {
       const fixture = jpegMetadata(readFileSync(PHOTO_FIXTURE));
@@ -428,9 +441,12 @@ try {
         }
         const bytes = readFileSync(file);
         const m = jpegMetadata(bytes);
-        const clean = m.jpeg && !m.exif && !m.gps && !m.xmp && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
+        // The re-encode keeps a small Exif block of layout tags, so the check is that nothing in it is about a person,
+        // a device, a place or a time, and that no thumbnail (IFD1) rides along: lib/exifTags.mjs's allowlist.
+        const concerns = exifConcerns(bytes);
+        const clean = m.jpeg && !m.gps && !m.xmp && concerns.length === 0 && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
         ok &&= clean;
-        verdicts.push(`${who}: Exif ${m.exif} · GPS ${m.gps} · XMP ${m.xmp} · ${m.width}x${m.height} · ${bytes.length} bytes`);
+        verdicts.push(`${who}: GPS ${m.gps} · XMP ${m.xmp} · Exif beyond layout tags: ${concerns.join(", ") || "none"} · ${m.width}x${m.height} · ${bytes.length} bytes`);
       }
       return { ok, detail: `the fixture carries GPS ${fixture.gps} · ${verdicts.join(" · ")}` };
     });
