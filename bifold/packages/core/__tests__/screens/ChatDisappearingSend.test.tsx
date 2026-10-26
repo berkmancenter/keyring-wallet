@@ -68,7 +68,7 @@ const renderChat = () => {
   return tree
 }
 const typeAndSend = async (tree: ReturnType<typeof render>, text: string) => {
-  fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), text)
+  fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), text)
   await act(async () => fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE')))
 }
 
@@ -118,7 +118,7 @@ describe('disappearing messages on, and a contact whose Keyring cannot honour th
     await act(async () => buttons.find((b) => b.style === 'cancel')!.onPress!())
     expect(sendChatText).not.toHaveBeenCalled()
     await waitFor(() =>
-      expect(tree.getByPlaceholderText('Contacts.TypeHere').props.value).toBe('the door code is 4512')
+      expect(tree.getByPlaceholderText('Chat.MessagePlaceholder').props.value).toBe('the door code is 4512')
     )
   })
 })

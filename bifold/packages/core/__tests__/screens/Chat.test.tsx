@@ -243,7 +243,7 @@ describe('Chat screen draft and over-the-air updates', () => {
 
   test('blocks applying an update while a draft is unsent, and not otherwise', () => {
     const tree = renderWithComposer()
-    const input = tree.getByPlaceholderText('Contacts.TypeHere')
+    const input = tree.getByPlaceholderText('Chat.MessagePlaceholder')
     expect(hasOtaApplyBlockers()).toBe(false)
 
     fireEvent.changeText(input, '   ')
@@ -262,7 +262,7 @@ describe('Chat screen draft and over-the-air updates', () => {
     basicMessages.sendMessage = jest.fn(async () => undefined)
     try {
       const tree = renderWithComposer()
-      fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'See you at noon')
+      fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), 'See you at noon')
       expect(otaApplyBlockerReasons()).toEqual(['chat-draft'])
 
       fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE'))
@@ -276,7 +276,7 @@ describe('Chat screen draft and over-the-air updates', () => {
 
   test('releases the block when the screen closes', () => {
     const tree = renderWithComposer()
-    fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'See you at noon')
+    fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), 'See you at noon')
     expect(hasOtaApplyBlockers()).toBe(true)
 
     tree.unmount()

@@ -1189,6 +1189,7 @@
   },
   "Chat": {
     "Photo": "📷 Photo",
+    "MessagePlaceholder": "Message",
     "Today": "Aujourd'hui",
     "Yesterday": "Hier",
     "Dates": {

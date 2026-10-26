@@ -5,9 +5,11 @@ import React from 'react'
 import { AppState } from 'react-native'
 
 import * as network from '../../src/contexts/network'
+import { ChatIds } from '../../src/components/chat/Chat.ids'
 import { useChatMessagesByConnection } from '../../src/hooks/chat-messages'
 import Chat from '../../src/screens/Chat'
 import { otaApplyBlockerReasons } from '../../src/utils/otaApply'
+import { testIdWithKey } from '../../src/utils/testable'
 import navigationContext from '../contexts/navigation'
 import { BasicAppContext } from '../helpers/app'
 
@@ -50,7 +52,11 @@ const renderChat = () => {
   })
   return tree
 }
-const field = (tree: ReturnType<typeof render>) => tree.getByPlaceholderText('Contacts.TypeHere')
+const field = (tree: ReturnType<typeof render>) => tree.getByPlaceholderText('Chat.MessagePlaceholder')
+// The composer's right button: Camera while the field is empty, Send once it holds text. Send's own view renders no
+// children under jest's touchable mock, so it is found by gifted-chat's touchable.
+const camera = (tree: ReturnType<typeof render>) => tree.queryByTestId(testIdWithKey(ChatIds.composerCamera))
+const send = (tree: ReturnType<typeof render>) => tree.queryByTestId('GC_SEND_TOUCHABLE')
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -88,6 +94,30 @@ describe('an unsent draft outlives the chat screen', () => {
 
     await waitFor(() => expect(field(tree).props.value).toBe('half a thought'))
     expect(otaApplyBlockerReasons()).toContain('chat-draft')
+  })
+
+  // The draft comes back through the same hand-over as typed text, so the composer's button follows it.
+  it('shows Send, not Camera, when a kept draft comes back; Camera again once it is sent', async () => {
+    kept.set('chat-draft:1', { id: 'chat-draft:1', content: { text: 'half a thought' } })
+    const tree = renderChat()
+    await waitFor(() => expect(field(tree).props.value).toBe('half a thought'))
+    expect(send(tree)).not.toBeNull()
+    expect(camera(tree)).toBeNull()
+
+    await act(async () => fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE')))
+
+    await waitFor(() => expect(camera(tree)).not.toBeNull())
+    expect(send(tree)).toBeNull()
+  })
+
+  it('shows Camera, not Send, in a chat with no draft (the control)', async () => {
+    const tree = renderChat()
+    await waitFor(() => expect(records.findById).toHaveBeenCalled())
+    // Camera also shows before the read has answered: let it (and any restore) settle, and state the premise.
+    await act(async () => {})
+    expect(field(tree).props.value).toBe('')
+    expect(camera(tree)).not.toBeNull()
+    expect(send(tree)).toBeNull()
   })
 
   it('is kept shortly after typing pauses', async () => {

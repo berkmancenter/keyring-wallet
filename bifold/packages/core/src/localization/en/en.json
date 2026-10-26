@@ -1264,6 +1264,7 @@
   },
   "Chat": {
     "Photo": "📷 Photo",
+    "MessagePlaceholder": "Message",
     "Today": "Today",
     "Yesterday": "Yesterday",
     "Dates": {

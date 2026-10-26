@@ -265,7 +265,7 @@ describe('reply', () => {
     fireEvent.press(tree.getByTestId(id('ChatActionReply')))
     expect(otaApplyBlockerReasons()).toContain('chat-reply')
 
-    fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'great')
+    fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), 'great')
     await act(async () => {
       fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE'))
     })
@@ -275,7 +275,7 @@ describe('reply', () => {
 
   it('sends a message with no reply target as a plain chat text', async () => {
     const tree = renderChat()
-    fireEvent.changeText(tree.getByPlaceholderText('Contacts.TypeHere'), 'hello')
+    fireEvent.changeText(tree.getByPlaceholderText('Chat.MessagePlaceholder'), 'hello')
     await act(async () => {
       fireEvent.press(tree.getByTestId('GC_SEND_TOUCHABLE'))
     })

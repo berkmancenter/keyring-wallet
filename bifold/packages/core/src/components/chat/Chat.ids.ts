@@ -31,6 +31,10 @@ export const ChatIds = {
   disappearingCurrent: 'ChatDisappearingCurrent',
   disappearingSave: 'ChatDisappearingSave',
   disappearingCancel: 'ChatDisappearingCancel',
+  // The composer's field (the pill), and the button on its right: Camera while it is empty, Send once it holds text.
+  // Send has no id of ours: its handle is gifted-chat's GC_SEND_TOUCHABLE on the touchable (MessageInput renderSend).
+  composerField: 'ChatComposerField',
+  composerCamera: 'ChatComposerCamera',
   // A day's marker ("Today", "Wed 15 Oct"): above its first message, and floating at the top while scrolling.
   dayPill: 'ChatDayPill',
 } as const
