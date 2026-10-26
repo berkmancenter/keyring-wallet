@@ -60,12 +60,15 @@ vtc() { # name base did
   fi
 }
 
-# The Farm was wiped and rebuilt on 2026-09-29/30: these are the farm2-* runners.
+# The Farm was wiped and rebuilt on 2026-09-29/30: the farm3-* runners. keyring-test-vtc and farm-runner-nohost did not
+# survive it, and keyring-test-vtc's host no longer resolves (2026-10-26). The test communities since 2026-10-26 are
+# keyring-community-a and keyring-community-b, each with its own runner VTA (pnm slugs farm3-runner-a and -b).
 vta farm3-runner-prague yes
 vta farm3-runner-uiux yes
 vta farm3-runner-openvtc yes
-# keyring-test-vtc and farm-runner-nohost did not survive the reset. Added back when recreated:
-#   vtc keyring-test-vtc <base> <did>
-#   vta <nohost slug> no
+vta farm3-runner-b yes
+vtc keyring-community-b https://vtc-keyring-community-b.ic3.dev did:webvh:QmRES31bePU3yAsCgs7HKY81i6ihNvxpFCVRNXkFGqvYee:dids-keyring-runner-b.ic3.dev:keyring-community-b-vtc
+# Community A (keyring-community-a, pnm slug farm3-runner-a) is being created; its vta and vtc lines go here once it is up.
+# A runner without a DID host, for the no-host case, is still to be recreated: vta <nohost slug> no
 echo; [ "$fails" -eq 0 ] && echo "farm-health: all good" || echo "farm-health: $fails problem(s)"
 exit "$fails"
