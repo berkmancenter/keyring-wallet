@@ -36,7 +36,11 @@ const show = async (props: Partial<React.ComponentProps<typeof RelationshipUpgra
       <RelationshipUpgradeSection connectionId="conn-1" name="Oli" hardwareSigned={false} {...props} />
     </BasicAppContext>
   )
-  await act(async () => undefined)
+  // The section's read of a pending request: everything below is asserted once it has answered, so "nothing
+  // pending" means the read said so, not that it had not answered yet (a hanging read fails these tests).
+  await act(async () => {
+    await Promise.allSettled(mockPending.mock.results.map((result) => result.value))
+  })
   return tree
 }
 

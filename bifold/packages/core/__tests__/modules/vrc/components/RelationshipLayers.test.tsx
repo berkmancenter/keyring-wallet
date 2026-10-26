@@ -163,7 +163,8 @@ describe("a day's sheet", () => {
   })
 
   test('records with no date are a day of their own, last, said as having no date', async () => {
-    const tree = await show([card(at(15, 9), 'a'), { kind: 'card', hardwareEvidence: false, raw: {} }])
+    // No hardware evidence on either: this case is about the days, so it reads nothing asynchronously.
+    const tree = await show([card(at(15, 9), 'a', false), { kind: 'card', hardwareEvidence: false, raw: {} }])
     const rows = tree.getAllByTestId(testIdWithKey('RelationshipLayer'))
     expect(rows).toHaveLength(2)
     expect(rows[1]).toHaveTextContent('No date', { exact: false })
@@ -175,6 +176,10 @@ describe("a day's sheet", () => {
     await speak('fr')
     const tree = await show([card(at(15, 9), 'a'), witnessed(at(15, 10))])
     expect(tree.queryByText(/Oct 2026|Cards|Witness/)).toBeNull()
+    // The hardware words too, once the evidence has verified.
+    expect(
+      tree.getByText('Avec pour témoin keyring-witness. Cartes échangées, signées avec du matériel sécurisé.')
+    ).toBeTruthy()
     fireEvent.press(tree.getByTestId(testIdWithKey('RelationshipLayer')))
     expect(tree.getByText('Le relevé du témoin')).toBeTruthy()
     expect(tree.getByText('Confirmée : vous étiez à proximité · Room 101')).toBeTruthy()

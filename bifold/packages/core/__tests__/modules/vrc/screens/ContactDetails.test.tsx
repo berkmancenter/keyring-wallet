@@ -1,5 +1,5 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
-import { render, waitFor, fireEvent } from '@testing-library/react-native'
+import { act, render, waitFor, fireEvent } from '@testing-library/react-native'
 import React from 'react'
 import { container } from 'tsyringe'
 import { useAgent } from '@bifold/react-hooks'
@@ -107,6 +107,20 @@ describe('ContactDetails Screen', () => {
     navigation: { navigate: mockNavigate, goBack: mockGoBack, getParent: mockGetParent } as any,
   })
 
+  /**
+   * The screen's one asynchronous read: the relationship record, which gives the connection (Message and the
+   * relationship actions) and the profile shared with this contact. A test about what that read supplies waits for it
+   * to answer, so it cannot pass on the screen as it is before the answer (hanging the read fails such a test).
+   */
+  const relationshipRead = async () => {
+    await waitFor(() => expect(mockRepository.findByCounterpartyRelationshipDid).toHaveBeenCalled())
+    await act(async () => {
+      await Promise.allSettled(mockRepository.findByCounterpartyRelationshipDid.mock.results.map((r) => r.value))
+    })
+  }
+  const enabled = (node: { props: { accessibilityState?: { disabled?: boolean } } }) =>
+    node.props.accessibilityState?.disabled !== true
+
   // Wraps ContactDetails with a StoreProvider seeded with the given live
   // profiles, so useRCardCredential()'s live lookup has something to resolve
   // against — plain TestContainerWrapper falls back to an empty profile list.
@@ -195,11 +209,13 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
-
-    await waitFor(async () => {
-      expect(await findByText('ContactDetails.QuickMessage')).toBeTruthy()
+    const { getByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
     })
+
+    // The tile is always shown; the connection is what makes it usable.
+    await relationshipRead()
+    expect(enabled(getByTestId(testIdWithKey('ContactViewMessages')))).toBe(true)
   })
 
   // Upgrading a relationship in place: offered on a contact with a connection,
@@ -230,7 +246,9 @@ describe('ContactDetails Screen', () => {
       wrapper: TestContainerWrapper,
     })
     expect(await findByTestId(testIdWithKey('RelationshipUpgrade'))).toBeTruthy()
-    expect(getByTestId(testIdWithKey('RelationshipUpgradeResign'))).toBeTruthy()
+    // Always shown; usable once the read has given the connection.
+    await relationshipRead()
+    expect(enabled(getByTestId(testIdWithKey('RelationshipUpgradeResign')))).toBe(true)
     expect(getByTestId(testIdWithKey('RelationshipLayers'))).toHaveTextContent(/Relationship\.DayCards/)
   })
 
@@ -242,6 +260,8 @@ describe('ContactDetails Screen', () => {
       wrapper: TestContainerWrapper,
     })
     expect(await findByText('Alice Smith')).toBeTruthy()
+    // Disabled because the read answered "none", not merely because it has not answered yet.
+    await relationshipRead()
     expect(getByTestId(testIdWithKey('RelationshipUpgradeResign')).props.accessibilityState?.disabled).toBe(true)
     expect(getByTestId(testIdWithKey('RelationshipUpgradeWitness')).props.accessibilityState?.disabled).toBe(true)
     expect(await findByText('Relationship.NoRelationship')).toBeTruthy()
@@ -258,11 +278,9 @@ describe('ContactDetails Screen', () => {
       wrapper: TestContainerWrapper,
     })
 
-    await waitFor(() => {
-      const button = getByLabelText('ContactDetails.QuickMessage')
-      expect(button).toBeTruthy()
-      expect(button.props.accessibilityState?.disabled).toBe(true)
-    })
+    // Disabled once the read has answered without a connection, not merely before it answers.
+    await relationshipRead()
+    expect(getByLabelText('ContactDetails.QuickMessage').props.accessibilityState?.disabled).toBe(true)
   })
 
   test('Disables View Messages button when connection has no connectionId', async () => {
@@ -280,11 +298,9 @@ describe('ContactDetails Screen', () => {
       wrapper: TestContainerWrapper,
     })
 
-    await waitFor(() => {
-      const button = getByLabelText('ContactDetails.QuickMessage')
-      expect(button).toBeTruthy()
-      expect(button.props.accessibilityState?.disabled).toBe(true)
-    })
+    // Disabled once the read has answered without a connection, not merely before it answers.
+    await relationshipRead()
+    expect(getByLabelText('ContactDetails.QuickMessage').props.accessibilityState?.disabled).toBe(true)
   })
 
   test('View Messages button navigates to Chat screen', async () => {
@@ -299,14 +315,12 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
 
-    await waitFor(async () => {
-      const viewMessagesButton = await findByText('ContactDetails.QuickMessage')
-      fireEvent.press(viewMessagesButton)
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { connectionId })
-    })
+    // One press, once the read has given the connection: not pressed again and again until a time budget runs out.
+    await relationshipRead()
+    fireEvent.press(getByText('ContactDetails.QuickMessage'))
+    expect(mockNavigate).toHaveBeenCalledWith('Chat', { connectionId })
   })
 
   test('Throws error when route params are missing', () => {
@@ -529,10 +543,10 @@ describe('ContactDetails Screen', () => {
       wrapper: TestContainerWrapper,
     })
 
-    await waitFor(() => {
-      const button = getByLabelText('ContactDetails.QuickMessage')
-      expect(button.props.accessibilityRole).toBe('button')
-    })
+    await relationshipRead()
+    const button = getByLabelText('ContactDetails.QuickMessage')
+    expect(button.props.accessibilityRole).toBe('button')
+    expect(enabled(button)).toBe(true)
   })
 
   describe('locality confirmation', () => {
@@ -685,16 +699,14 @@ describe('ContactDetails Screen', () => {
       })
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { findByText, findByTestId } = renderWithProfiles(contact, [workProfile])
+      const { getByText, getByTestId } = renderWithProfiles(contact, [workProfile])
 
-      await waitFor(async () => {
-        expect(await findByText('ContactDetails.LinkedProfile')).toBeTruthy()
-        // Live label wins over the share-time snapshot.
-        expect(await findByText('Work')).toBeTruthy()
-        const avatar = await findByTestId(testIdWithKey('LinkedProfileAvatarImage'))
-        expect(avatar.props.source).toEqual({ uri: photo })
-        expect(await findByTestId('LinkedProfileCard')).toBeTruthy()
-      })
+      await relationshipRead()
+      expect(getByText('ContactDetails.LinkedProfile')).toBeTruthy()
+      // Live label wins over the share-time snapshot.
+      expect(getByText('Work')).toBeTruthy()
+      expect(getByTestId(testIdWithKey('LinkedProfileAvatarImage')).props.source).toEqual({ uri: photo })
+      expect(getByTestId('LinkedProfileCard')).toBeTruthy()
     })
 
     // The default profile's name is stored as data ("My Profile"): shown in the app's language, never as stored.
@@ -704,9 +716,10 @@ describe('ContactDetails Screen', () => {
       mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({ sharedProfileId: profile.id })
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { findByText, queryByText } = renderWithProfiles(contact, [profile])
+      const { getByText, queryByText } = renderWithProfiles(contact, [profile])
 
-      expect(await findByText('MyProfiles.DefaultLabel')).toBeTruthy()
+      await relationshipRead()
+      expect(getByText('MyProfiles.DefaultLabel')).toBeTruthy()
       expect(queryByText('My Profile')).toBeNull()
     })
 
@@ -717,13 +730,12 @@ describe('ContactDetails Screen', () => {
       })
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { findByText, queryByTestId } = renderWithProfiles(contact, [])
+      const { getByText, queryByTestId } = renderWithProfiles(contact, [])
 
-      await waitFor(async () => {
-        expect(await findByText('ContactDetails.LinkedProfile')).toBeTruthy()
-        expect(await findByText('ContactDetails.LinkedProfileDeleted')).toBeTruthy()
-        expect(queryByTestId(testIdWithKey('LinkedProfileAvatarImage'))).toBeNull()
-      })
+      await relationshipRead()
+      expect(getByText('ContactDetails.LinkedProfile')).toBeTruthy()
+      expect(getByText('ContactDetails.LinkedProfileDeleted')).toBeTruthy()
+      expect(queryByTestId(testIdWithKey('LinkedProfileAvatarImage'))).toBeNull()
     })
 
     test('does not show the Linked Profile card when no profile was ever recorded as shared', async () => {
@@ -732,11 +744,11 @@ describe('ContactDetails Screen', () => {
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
       const { findByText, queryByText, queryByTestId } = renderWithProfiles(contact, [])
 
-      await waitFor(async () => {
-        expect(await findByText('Alice Smith')).toBeTruthy()
-        expect(queryByText('ContactDetails.LinkedProfile')).toBeNull()
-        expect(queryByTestId('LinkedProfileCard')).toBeNull()
-      })
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      // Absent because the read answered with no shared profile (the live-profile test above is the positive control).
+      await relationshipRead()
+      expect(queryByText('ContactDetails.LinkedProfile')).toBeNull()
+      expect(queryByTestId('LinkedProfileCard')).toBeNull()
     })
   })
 })

@@ -5,6 +5,10 @@
  *
  * Nobody looking is set the way it happens, through navigation's focus and the app's state, not through the hook
  * that reads them, so these fail on a chat that marks whatever arrives while it is mounted.
+ *
+ * markChatEventsSeen and chatEventsShown are writes the screen fires and does not wait for: these tests assert
+ * whether, and with what, each is requested, never a state after it completes. They pass with those writes never
+ * settling, by design (the hang detector lists them for that reason).
  */
 import { useAgent, useBasicMessages, useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
 import {

@@ -43,6 +43,17 @@ const checked = (tree: ReturnType<typeof render>, testID: string) =>
   tree.getByTestId(id(testID)).props.accessibilityState?.checked
 const sheet = (onClose = jest.fn()) =>
   render(<DisappearingMessagesSheet visible connectionId="1" name={NAME} onClose={onClose} />)
+/**
+ * The sheet's one read: whether their Keyring speaks chat. What it offers is asserted once that read has answered,
+ * awaited rather than timed, so a loaded CI worker can't run a 1 s wait out first (the slow detector found five
+ * that could).
+ */
+const answered = async () => {
+  await waitFor(() => expect(counterpartySpeaksChat).toHaveBeenCalled())
+  await act(async () => {
+    await Promise.allSettled((counterpartySpeaksChat as jest.Mock).mock.results.map((result) => result.value))
+  })
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -53,7 +64,8 @@ beforeEach(() => {
 describe('a contact whose Keyring speaks chat', () => {
   test('off: Off is checked, and choosing a length shows what it means, word for word, before it is saved', async () => {
     const tree = sheet()
-    await waitFor(() => expect(tree.getByTestId(id('ChatDisappearingOption-0'))).toBeTruthy())
+    await answered()
+    expect(tree.getByTestId(id('ChatDisappearingOption-0'))).toBeTruthy()
     expect(checked(tree, 'ChatDisappearingOption-0')).toBe(true)
     expect(tree.getByText('Messages already sent keep the setting they were sent with.')).toBeTruthy()
     expect(tree.queryByText(KEPT)).toBeNull()
@@ -69,7 +81,8 @@ describe('a contact whose Keyring speaks chat', () => {
   test('Save sets the chosen length, and closes', async () => {
     const onClose = jest.fn()
     const tree = sheet(onClose)
-    await waitFor(() => expect(tree.getByTestId(id('ChatDisappearingOption-3600'))).toBeTruthy())
+    await answered()
+    expect(tree.getByTestId(id('ChatDisappearingOption-3600'))).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('ChatDisappearingOption-3600')))
     await act(async () => fireEvent.press(tree.getByTestId(id('ChatDisappearingSave'))))
     expect(setChatTimer).toHaveBeenCalledWith((useAgent as jest.Mock)().agent, '1', 3600)
@@ -79,7 +92,8 @@ describe('a contact whose Keyring speaks chat', () => {
   test('Save does nothing while the choice is the current setting', async () => {
     ;(useChatEvents as jest.Mock).mockReturnValue([timerSetBy('sent', 86400)])
     const tree = sheet()
-    await waitFor(() => expect(tree.getByTestId(id('ChatDisappearingSave'))).toBeTruthy())
+    await answered()
+    expect(tree.getByTestId(id('ChatDisappearingSave'))).toBeTruthy()
     expect(checked(tree, 'ChatDisappearingOption-86400')).toBe(true)
     await act(async () => fireEvent.press(tree.getByTestId(id('ChatDisappearingSave'))))
     expect(setChatTimer).not.toHaveBeenCalled()
@@ -88,7 +102,8 @@ describe('a contact whose Keyring speaks chat', () => {
   test('a length the other phone set that no choice offers: shown as it is, checked, with every choice unchecked', async () => {
     ;(useChatEvents as jest.Mock).mockReturnValue([timerSetBy('received', 12345)])
     const tree = sheet()
-    await waitFor(() => expect(tree.getByTestId(id('ChatDisappearingCurrent'))).toBeTruthy())
+    await answered()
+    expect(tree.getByTestId(id('ChatDisappearingCurrent'))).toBeTruthy()
     expect(tree.getByText('Messages disappear after 3 hours 26 minutes, set by Ana/Bea')).toBeTruthy()
     expect(checked(tree, 'ChatDisappearingCurrent')).toBe(true)
     for (const choice of [0, 3600, 86400, 604800, 2419200]) {
@@ -99,7 +114,8 @@ describe('a contact whose Keyring speaks chat', () => {
   test('a length every choice offers is not shown twice', async () => {
     ;(useChatEvents as jest.Mock).mockReturnValue([timerSetBy('received', 3600)])
     const tree = sheet()
-    await waitFor(() => expect(tree.getByTestId(id('ChatDisappearingOption-3600'))).toBeTruthy())
+    await answered()
+    expect(tree.getByTestId(id('ChatDisappearingOption-3600'))).toBeTruthy()
     expect(tree.queryByTestId(id('ChatDisappearingCurrent'))).toBeNull()
   })
 })
@@ -108,9 +124,8 @@ describe('a contact whose Keyring does not speak chat', () => {
   test('nothing to choose: only what to ask of them', async () => {
     ;(counterpartySpeaksChat as jest.Mock).mockResolvedValue(false)
     const tree = sheet()
-    await waitFor(() =>
-      expect(tree.getByText('Ask Ana/Bea to update Keyring to use disappearing messages')).toBeTruthy()
-    )
+    await answered()
+    expect(tree.getByText('Ask Ana/Bea to update Keyring to use disappearing messages')).toBeTruthy()
     expect(tree.queryByTestId(id('ChatDisappearingOption-0'))).toBeNull()
     expect(tree.queryByTestId(id('ChatDisappearingSave'))).toBeNull()
   })

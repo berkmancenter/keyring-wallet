@@ -133,9 +133,11 @@ describe('nothing to ask', () => {
     expect(sendChatText).toHaveBeenCalledWith(expect.anything(), '1', 'see you at noon', {})
   })
 
+  // With the timer off there is nothing to ask, so sending never waits on whether their Keyring speaks chat: that
+  // answer never comes here, and the message still goes.
   test('disappearing messages off', async () => {
     ;(useChatEvents as jest.Mock).mockReturnValue([timer(0)])
-    ;(counterpartySpeaksChat as jest.Mock).mockResolvedValue(false)
+    ;(counterpartySpeaksChat as jest.Mock).mockReturnValue(new Promise(() => undefined))
     await typeAndSend(renderChat(), 'see you at noon')
     expect(alert).not.toHaveBeenCalled()
     expect(sendChatText).toHaveBeenCalledWith(expect.anything(), '1', 'see you at noon', {})
