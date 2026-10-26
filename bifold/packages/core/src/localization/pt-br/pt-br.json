@@ -919,7 +919,8 @@
   },
   "RootStack": {
     "Contacts": "Contatos",
-    "Settings": "Configurações"
+    "Settings": "Configurações",
+    "LastSessionNotClosed": "A carteira da última sessão não foi fechada a tempo. Feche o Keyring e abra-o novamente."
   },
   "QRCodeExchange": {
     "Title": "Troca de Código QR",

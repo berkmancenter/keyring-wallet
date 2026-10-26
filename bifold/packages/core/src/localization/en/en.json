@@ -1061,7 +1061,8 @@
   },
   "RootStack": {
     "Contacts": "Contacts",
-    "Settings": "Settings"
+    "Settings": "Settings",
+    "LastSessionNotClosed": "The last session's wallet did not close in time. Close Keyring and open it again."
   },
   "QRCodeExchange": {
     "Title": "Connect",

@@ -1,5 +1,5 @@
 import AgentProvider from '@bifold/react-hooks'
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DeviceEventEmitter } from 'react-native'
 
@@ -17,6 +17,7 @@ import CredentialExchangeQueryModal from '../modules/trust-tasks/components/Cred
 import { useStore } from '../contexts/store'
 import { afterChatDrafts } from '../modules/chat/draft'
 import { BifoldError } from '../types/error'
+import { LockShutdown, oldStoreClosed } from '../utils/lockShutdown'
 import MainStack from './MainStack'
 
 const RootStack: React.FC = () => {
@@ -28,6 +29,10 @@ const RootStack: React.FC = () => {
     TOKENS.LOAD_STATE,
   ])
   const { agent, initializeAgent, shutdownAndClearAgentIfExists } = useAgentSetup()
+  // The agent a lock-out shuts down, and that shutdown; a new start waits for it (initializeAgentAfterLockShutdown).
+  const agentRef = useRef(agent)
+  agentRef.current = agent
+  const lockShutdownRef = useRef<LockShutdown | null>(null)
   const [onboardingComplete, setOnboardingComplete] = useState(false)
 
   const shouldRenderMainStack = useMemo(
@@ -39,9 +44,26 @@ const RootStack: React.FC = () => {
     // if user gets locked out, erase agent: once a chat's last draft save is written, since locking unmounts the chat
     // in this same moment (chat/draft.ts)
     if (!store.authentication.didAuthenticate) {
-      void afterChatDrafts(shutdownAndClearAgentIfExists)
+      lockShutdownRef.current = { agent: agentRef.current, done: afterChatDrafts(shutdownAndClearAgentIfExists) }
     }
   }, [store.authentication.didAuthenticate, shutdownAndClearAgentIfExists])
+
+  // A fast re-unlock (biometrics in under a second) could otherwise start a new agent while the lock-out's shutdown
+  // of the old one is still running: two agents on one Askar store. The start waits for that shutdown, and proceeds
+  // only once the old store is known closed (utils/lockShutdown.ts); otherwise it fails into the start's error, and a
+  // relaunch, or a retry once the shutdown has finished, gets past it.
+  const initializeAgentAfterLockShutdown = useCallback(
+    async (walletSecret: Parameters<typeof initializeAgent>[0]) => {
+      const lockShutdown = lockShutdownRef.current
+      if (lockShutdown) {
+        // The start's error card shows this text, and it is what the person can act on.
+        if (!(await oldStoreClosed(lockShutdown))) throw new Error(t('RootStack.LastSessionNotClosed'))
+        lockShutdownRef.current = null
+      }
+      return initializeAgent(walletSecret)
+    },
+    [initializeAgent, t]
+  )
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(EventTypes.DID_COMPLETE_ONBOARDING, () => {
@@ -84,7 +106,7 @@ const RootStack: React.FC = () => {
     )
   }
 
-  return <OnboardingStack agent={agent} initializeAgent={initializeAgent} />
+  return <OnboardingStack agent={agent} initializeAgent={initializeAgentAfterLockShutdown} />
 }
 
 export default RootStack

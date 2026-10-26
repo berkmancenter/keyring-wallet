@@ -992,7 +992,8 @@
   },
   "RootStack": {
     "Contacts": "Contacts",
-    "Settings": "Paramètres"
+    "Settings": "Paramètres",
+    "LastSessionNotClosed": "Le portefeuille de la dernière session ne s'est pas fermé à temps. Fermez Keyring, puis rouvrez-le."
   },
   "QRCodeExchange": {
     "Title": "Échange de code QR",
