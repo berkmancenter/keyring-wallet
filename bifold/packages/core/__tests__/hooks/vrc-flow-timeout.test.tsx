@@ -1,3 +1,4 @@
+import i18next from 'i18next'
 import { renderHook, act } from '@testing-library/react-native'
 
 import {
@@ -6,7 +7,16 @@ import {
   FLOW_TIMEOUT_MS_NON_WITNESSED,
   FLOW_TIMEOUT_MS_WITNESSED,
 } from '../../src/hooks/chat-messages'
+import en from '../../src/localization/en/en.json'
 import { vrcFlowStore } from '../../src/modules/vrc/witnessStatusStore'
+
+// The overlay's words in English, from the locale file through a real i18next: these assertions read what a person
+// reads, not a key (react-i18next is mocked to return keys elsewhere).
+const mockI18n = i18next.createInstance()
+mockI18n.init({ lng: 'en', resources: { en: { translation: en } }, initImmediate: false })
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: mockI18n.t.bind(mockI18n), i18n: mockI18n }),
+}))
 
 describe('useVrcFlowInProgress - timeout behavior', () => {
   beforeEach(() => {

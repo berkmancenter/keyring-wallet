@@ -196,14 +196,14 @@ describe('Chat screen while an exchange waits on the other phone', () => {
     act(() => {
       vrcFlowStore.setStatus('1', 'proposed', false)
     })
-    expect(tree.getByText('Waiting for your contact to accept...')).toBeTruthy()
+    expect(tree.getByText('Chat.Flow.Proposed')).toBeTruthy()
 
     act(() => {
       jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
     })
     // Translations render as their keys here.
     expect(tree.getByText('Relationship.WaitingForAnswer')).toBeTruthy()
-    expect(tree.queryByText(/didn't complete/)).toBeNull()
+    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
 
     fireEvent.press(tree.getByText('Global.Dismiss'))
     expect(tree.queryByText('Relationship.WaitingForAnswer')).toBeNull()

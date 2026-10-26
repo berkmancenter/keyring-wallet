@@ -1319,7 +1319,40 @@
     "PlainSendTitle": "Envoyer sans minuteur ?",
     "PlainSendBody": "{{name}} doit mettre à jour Keyring pour utiliser les messages éphémères : ce message sera donc envoyé sans minuteur, comme un message normal.",
     "PlainSendConfirm": "Envoyer quand même",
-    "NewMessage": "Nouveau message"
+    "NewMessage": "Nouveau message",
+    "Flow": {
+      "Connecting": "Connexion en cours...",
+      "VerifyingWithWitness": "Vérification avec le témoin...",
+      "WitnessVerifying": "Vérification par le témoin en cours...",
+      "Reporting": "Signalement en cours...",
+      "WitnessFallback": "Témoin indisponible. Émission de l'attestation...",
+      "BiometricFallback": "Émission de l'attestation sans attestation matérielle...",
+      "Discovering": "Vérification de ce que votre contact prend en charge...",
+      "Proposed": "En attente de l'acceptation de votre contact...",
+      "WitnessedSendingCredential": "Témoin vérifié. Envoi de votre attestation de relation...",
+      "PreparingCredential": "Préparation de votre attestation de relation...",
+      "WitnessedPreparingOffer": "Témoin vérifié. Préparation de l'offre...",
+      "PreparingOffer": "Préparation de l'offre d'attestation...",
+      "SharingWitnessRecord": "Partage du registre du témoin...",
+      "WaitingForCredential": "En attente de l'attestation de votre contact...",
+      "WaitingForCounterparty": "En attente de l'autre partie...",
+      "InProgress": "Échange en cours...",
+      "ExchangingCards": "Échange des cartes de contact...",
+      "TookTooLong": "L'échange a pris trop de temps. Vous devrez peut-être vous reconnecter et réessayer.",
+      "DidNotComplete": "L'échange n'a pas abouti. Vous devrez peut-être réessayer de vous connecter."
+    },
+    "Connected": {
+      "Text": "Vous êtes connecté à {{name}} et pouvez maintenant échanger des messages en toute sécurité",
+      "Before": "Vous êtes connecté à ",
+      "After": " et pouvez maintenant échanger des messages en toute sécurité"
+    },
+    "UnknownIssuer": "Inconnu ...{{suffix}}",
+    "RelationshipConfirmedWith": "Relation confirmée — {{name}} ajouté aux Contacts",
+    "RelationshipConfirmed": "Relation confirmée — contact ajouté",
+    "ViewContacts": "Voir les contacts",
+    "AcceptOfferQuestion": "Voulez-vous l'accepter ?",
+    "ReportingPseudonymTitle": "Votre pseudonyme de signalement",
+    "ReportingPseudonymRegisteredSuffix": "enregistré auprès de {{name}}"
   },
   "Verifier": {
     "UseVerifierCapability": "Utiliser la fonctionnalité Verifier?",

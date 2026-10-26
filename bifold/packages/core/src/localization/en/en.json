@@ -1380,7 +1380,38 @@
     "PlainSendTitle": "Send without a timer?",
     "PlainSendBody": "{{name}} needs to update Keyring to use disappearing messages, so this message will be sent without a timer, like a normal message.",
     "PlainSendConfirm": "Send anyway",
-    "NewMessage": "New message"
+    "NewMessage": "New message",
+    "Flow": {
+      "Connecting": "Establishing connection...",
+      "VerifyingWithWitness": "Verifying with witness...",
+      "WitnessVerifying": "Witness verification in progress...",
+      "Reporting": "Reporting in progress...",
+      "WitnessFallback": "Witness unavailable. Issuing credential...",
+      "BiometricFallback": "Issuing credential without hardware attestation...",
+      "Discovering": "Checking what your contact supports...",
+      "Proposed": "Waiting for your contact to accept...",
+      "WitnessedSendingCredential": "Witness verified. Sending your relationship credential...",
+      "PreparingCredential": "Preparing your relationship credential...",
+      "WitnessedPreparingOffer": "Witness verified. Preparing offer...",
+      "PreparingOffer": "Preparing credential offer...",
+      "SharingWitnessRecord": "Sharing witness record...",
+      "WaitingForCredential": "Waiting for your contact's credential...",
+      "WaitingForCounterparty": "Waiting for counterparty...",
+      "InProgress": "Exchange in progress...",
+      "ExchangingCards": "Exchanging contact cards...",
+      "TookTooLong": "The exchange took too long. You may need to reconnect and try again.",
+      "DidNotComplete": "The exchange didn't complete. You may need to try connecting again."
+    },
+    "Connected": {
+      "Text": "You connected with {{name}} and can now message securely",
+      "Before": "You connected with ",
+      "After": " and can now message securely"
+    },
+    "UnknownIssuer": "Unknown ...{{suffix}}",
+    "RelationshipConfirmedWith": "Relationship confirmed — {{name}} added to Contacts",
+    "RelationshipConfirmed": "Relationship confirmed — contact added",
+    "ViewContacts": "View contacts",
+    "AcceptOfferQuestion": "Would you like to accept it?"
   },
   "Verifier": {
     "UseVerifierCapability": "Use Verifier capability?",

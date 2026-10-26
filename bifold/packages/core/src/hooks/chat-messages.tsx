@@ -263,42 +263,45 @@ const PEER_WAIT_STATUSES: ReadonlySet<VrcFlowStatus> = new Set<VrcFlowStatus>([
 ])
 export const isPeerWaitStatus = (status: VrcFlowStatus): boolean => PEER_WAIT_STATUSES.has(status)
 
-/** The overlay's words for a flow status; the dialect and witnessing pick the wording. */
-export function flowStatusText(flowStatus: VrcFlowStatus, trustTasks: boolean, isWitnessed: boolean): string {
+/**
+ * The overlay's words for a flow status, as a locale key (`Chat.Flow`); the dialect and witnessing pick the wording.
+ * A key, not text: the hook translates it at render, so the overlay follows the app's language.
+ */
+export function flowStatusKey(flowStatus: VrcFlowStatus, trustTasks: boolean, isWitnessed: boolean): string {
   switch (flowStatus) {
     case 'connecting':
-      return 'Establishing connection...'
+      return 'Chat.Flow.Connecting'
     case 'witness-active':
       return trustTasks
-        ? 'Verifying with witness...'
+        ? 'Chat.Flow.VerifyingWithWitness'
         : isWitnessed
-          ? 'Witness verification in progress...'
-          : 'Reporting in progress...'
+          ? 'Chat.Flow.WitnessVerifying'
+          : 'Chat.Flow.Reporting'
     case 'witness-fallback':
-      return 'Witness unavailable. Issuing credential...'
+      return 'Chat.Flow.WitnessFallback'
     case 'biometric-fallback':
-      return 'Issuing credential without hardware attestation...'
+      return 'Chat.Flow.BiometricFallback'
     case 'discovering':
-      return 'Checking what your contact supports...'
+      return 'Chat.Flow.Discovering'
     case 'proposed':
-      return 'Waiting for your contact to accept...'
+      return 'Chat.Flow.Proposed'
     case 'preparing-offer':
       // Trust-task dialect: there is no "offer" — the first pass prepares
       // and signs our relationship credential (the biometric prompt lands
       // here); after the witness ceremony it is sent on the exchange.
       return trustTasks
         ? isWitnessed
-          ? 'Witness verified. Sending your relationship credential...'
-          : 'Preparing your relationship credential...'
+          ? 'Chat.Flow.WitnessedSendingCredential'
+          : 'Chat.Flow.PreparingCredential'
         : isWitnessed
-          ? 'Witness verified. Preparing offer...'
-          : 'Preparing credential offer...'
+          ? 'Chat.Flow.WitnessedPreparingOffer'
+          : 'Chat.Flow.PreparingOffer'
     case 'sharing-witness-record':
-      return 'Sharing witness record...'
+      return 'Chat.Flow.SharingWitnessRecord'
     case 'offer-sent':
-      return trustTasks ? "Waiting for your contact's credential..." : 'Waiting for counterparty...'
+      return trustTasks ? 'Chat.Flow.WaitingForCredential' : 'Chat.Flow.WaitingForCounterparty'
     default:
-      return 'Exchange in progress...'
+      return 'Chat.Flow.InProgress'
   }
 }
 
@@ -329,12 +332,12 @@ export function flowOverlayShown(connectionId: string): boolean {
  * effect used to set it after the screen had painted without it (UI-smoothness
  * plan, Phase 4).
  */
-function overlayAtOpen(connectionId: string): { shown: boolean; statusText: string; fraction: number } {
-  if (!connectionId || !flowOverlayShown(connectionId)) return { shown: false, statusText: '', fraction: 0 }
+function overlayAtOpen(connectionId: string): { shown: boolean; statusKey: string; fraction: number } {
+  if (!connectionId || !flowOverlayShown(connectionId)) return { shown: false, statusKey: '', fraction: 0 }
   const flowStatus = vrcFlowStore.getStatus(connectionId)
   return {
     shown: true,
-    statusText: flowStatusText(
+    statusKey: flowStatusKey(
       flowStatus,
       vrcFlowStore.getDialect(connectionId) === 'trust-tasks',
       vrcFlowStore.isWitnessedFlow(connectionId)
@@ -348,7 +351,9 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   // effect below keeps it from there.
   const [atOpen, setAtOpen] = useState(() => ({ connectionId, ...overlayAtOpen(connectionId) }))
   const [inProgress, setInProgress] = useState(atOpen.shown)
-  const [statusText, setStatusText] = useState(atOpen.statusText)
+  const { t } = useTranslation()
+  // A locale key (Chat.Flow), translated when returned, so the overlay follows the app's language.
+  const [statusKey, setStatusKey] = useState(atOpen.statusKey)
   const [timedOut, setTimedOut] = useState(false)
   const [waitingOnPeer, setWaitingOnPeer] = useState(false)
   // The status the user dismissed the waiting dialog at; the dialog stays
@@ -365,7 +370,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     const next = { connectionId, ...overlayAtOpen(connectionId) }
     setAtOpen(next)
     setInProgress(next.shown)
-    setStatusText(next.statusText)
+    setStatusKey(next.statusKey)
     setProgressFraction(next.fraction)
     setProgressComplete(false)
     setConfirmed(false)
@@ -400,7 +405,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     setWaitingOnPeer(false)
     waitDismissedAtRef.current = null
     setInProgress(false)
-    setStatusText('')
+    setStatusKey('')
     setProgressFraction(0)
     setProgressComplete(false)
     progressStartedRef.current = false
@@ -412,7 +417,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   useEffect(() => {
     if (!connectionId) {
       setInProgress(false)
-      setStatusText('')
+      setStatusKey('')
       setTimedOut(false)
       flowStartedAtRef.current = null
       return
@@ -470,7 +475,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           if (elapsedMs >= FLOW_HARD_TIMEOUT_MS) {
             setInProgress(true)
             setTimedOut(true)
-            setStatusText('The exchange took too long. You may need to reconnect and try again.')
+            setStatusKey('Chat.Flow.TookTooLong')
             return
           }
         }
@@ -483,7 +488,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         setProgressComplete(false)
         setInProgress(true)
 
-        setStatusText(flowStatusText(flowStatus, vrcFlowStore.getDialect(connectionId) === 'trust-tasks', isWitnessed))
+        setStatusKey(flowStatusKey(flowStatus, vrcFlowStore.getDialect(connectionId) === 'trust-tasks', isWitnessed))
 
         // Advance the milestone bar — monotonically, since some statuses
         // recur across passes and the bar must never move backwards.
@@ -501,7 +506,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         setProgressComplete(false)
         setInProgress(true)
         setTimedOut(false) // the VRC part finished — a stale stall-timeout no longer applies
-        setStatusText('Exchanging contact cards...')
+        setStatusKey('Chat.Flow.ExchangingCards')
         maxFractionRef.current = Math.max(maxFractionRef.current, RCARD_TRAILING_PROGRESS)
         setProgressFraction(maxFractionRef.current)
         if (!rcardGraceTimerRef.current) {
@@ -528,7 +533,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           // Contacts) so the dialog does not simply vanish.
           setProgressComplete(true)
           setTimedOut(false)
-          setStatusText('')
+          setStatusKey('')
           setConfirmed(true)
           // A waiting dialog the user dismissed hid the overlay; the success
           // beat shows it again.
@@ -543,7 +548,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           setWaitingOnPeer(false)
           waitDismissedAtRef.current = null
           setInProgress(false)
-          setStatusText('')
+          setStatusKey('')
           setProgressFraction(0)
           setProgressComplete(false)
           setTimedOut(false)
@@ -580,7 +585,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
               `[VRC Flow] Timeout after ${timeoutMs / 1000}s | Status: ${currentStatus} — showing timeout UI`
             )
             setTimedOut(true)
-            setStatusText("The exchange didn't complete. You may need to try connecting again.")
+            setStatusKey('Chat.Flow.DidNotComplete')
           }
         }, timeoutMs)
       }
@@ -626,7 +631,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     }
     setConfirmed(false)
     setInProgress(false)
-    setStatusText('')
+    setStatusKey('')
     setProgressFraction(0)
     setProgressComplete(false)
     progressStartedRef.current = false
@@ -646,7 +651,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
 
   return {
     inProgress,
-    statusText,
+    statusText: statusKey ? t(statusKey) : '',
     timedOut,
     waitingOnPeer,
     progressFraction,
@@ -1176,7 +1181,7 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
                   contact: {
                     issuer: {
                       id: issuerId,
-                      name: displayInfo?.name || `Unknown ...${issuerId.slice(-8)}`,
+                      name: displayInfo?.name || t('Chat.UnknownIssuer', { suffix: issuerId.slice(-8) }),
                       email: displayInfo?.email,
                       organization: displayInfo?.organization,
                     },
@@ -1330,13 +1335,13 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
     const connectedMessage = connection
       ? {
           _id: 'connected',
-          text: `You connected with ${theirLabel} and can now message securely`,
+          text: t('Chat.Connected.Text', { name: theirLabel }),
           renderEvent: () => (
             <ChatEvent
               role={Role.them}
-              prefix="You connected with "
+              prefix={t('Chat.Connected.Before')}
               title={theirLabel}
-              subtitle=" and can now message securely"
+              subtitle={t('Chat.Connected.After')}
             />
           ),
           createdAt: connection.createdAt,

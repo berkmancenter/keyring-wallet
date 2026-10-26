@@ -1233,7 +1233,38 @@
     "PlainSendTitle": "Enviar sem temporizador?",
     "PlainSendBody": "{{name}} precisa atualizar o Keyring para usar mensagens temporárias, então esta mensagem será enviada sem temporizador, como uma mensagem normal.",
     "PlainSendConfirm": "Enviar mesmo assim",
-    "NewMessage": "Nova mensagem"
+    "NewMessage": "Nova mensagem",
+    "Flow": {
+      "Connecting": "Estabelecendo conexão...",
+      "VerifyingWithWitness": "Verificando com a testemunha...",
+      "WitnessVerifying": "Verificação da testemunha em andamento...",
+      "Reporting": "Relatório em andamento...",
+      "WitnessFallback": "Testemunha indisponível. Emitindo a credencial...",
+      "BiometricFallback": "Emitindo a credencial sem atestação de hardware...",
+      "Discovering": "Verificando o que seu contato suporta...",
+      "Proposed": "Aguardando seu contato aceitar...",
+      "WitnessedSendingCredential": "Testemunha verificada. Enviando sua credencial de relacionamento...",
+      "PreparingCredential": "Preparando sua credencial de relacionamento...",
+      "WitnessedPreparingOffer": "Testemunha verificada. Preparando a oferta...",
+      "PreparingOffer": "Preparando a oferta de credencial...",
+      "SharingWitnessRecord": "Compartilhando o registro da testemunha...",
+      "WaitingForCredential": "Aguardando a credencial do seu contato...",
+      "WaitingForCounterparty": "Aguardando a outra parte...",
+      "InProgress": "Troca em andamento...",
+      "ExchangingCards": "Trocando cartões de contato...",
+      "TookTooLong": "A troca demorou demais. Talvez você precise se reconectar e tentar de novo.",
+      "DidNotComplete": "A troca não foi concluída. Talvez você precise tentar se conectar de novo."
+    },
+    "Connected": {
+      "Text": "Você se conectou com {{name}} e agora pode trocar mensagens com segurança",
+      "Before": "Você se conectou com ",
+      "After": " e agora pode trocar mensagens com segurança"
+    },
+    "UnknownIssuer": "Desconhecido ...{{suffix}}",
+    "RelationshipConfirmedWith": "Relação confirmada — {{name}} adicionado aos Contatos",
+    "RelationshipConfirmed": "Relação confirmada — contato adicionado",
+    "ViewContacts": "Ver contatos",
+    "AcceptOfferQuestion": "Deseja aceitá-la?"
   },
   "Verifier": {
     "UseVerifierCapability": "Usar o recurso Verificador?",

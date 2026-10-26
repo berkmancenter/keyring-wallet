@@ -627,8 +627,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
                 <>
                   <Text style={styles.flowOverlayText}>
                     {theirLabel
-                      ? `Relationship confirmed — ${theirLabel} added to Contacts`
-                      : 'Relationship confirmed — contact added'}
+                      ? t('Chat.RelationshipConfirmedWith', { name: theirLabel })
+                      : t('Chat.RelationshipConfirmed')}
                   </Text>
                   <TouchableOpacity
                     style={[styles.flowOverlayDismissButton, { backgroundColor: ColorPalette.brand.primary }]}
@@ -638,9 +638,9 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
                       ;(nav as any).navigate(TabStacks.ContactStack, { screen: Screens.Contacts })
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={'View contacts'}
+                    accessibilityLabel={t('Chat.ViewContacts')}
                   >
-                    <Text style={styles.flowOverlayDismissText}>View contacts</Text>
+                    <Text style={styles.flowOverlayDismissText}>{t('Chat.ViewContacts')}</Text>
                   </TouchableOpacity>
                 </>
               ) : vrcTimedOut ? (

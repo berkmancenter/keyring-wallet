@@ -234,7 +234,7 @@ const CredentialOfferActions: React.FC<{
           paddingVertical: 4,
         }}
       >
-        <Text style={{ color: '#333', fontSize: 14, marginBottom: 14 }}>Would you like to accept it?</Text>
+        <Text style={{ color: '#333', fontSize: 14, marginBottom: 14 }}>{t('Chat.AcceptOfferQuestion')}</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity
             onPress={message.onDetails}
