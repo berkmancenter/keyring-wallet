@@ -68,3 +68,42 @@ describe('wallet placeholders never hide bifold translations', () => {
     expect(hiddenTranslations(wallet, walletEn, bifoldPt, bifoldEn2, 'PT-BR')).toEqual(['A.Same'])
   })
 })
+
+/** Every source file the app is built from: the wallet's app and bifold's packages, without dependencies, native
+ * projects, caches, tests or the locale files themselves. */
+const SKIP = ['node_modules', 'localization', '__tests__', '__mocks__', 'lib', 'build', 'ios', 'android', 'coverage']
+
+function sources(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name.startsWith('.') || SKIP.includes(entry.name) ? [] : sources(full)
+    return /\.(tsx?|jsx?)$/.test(entry.name) ? [full] : []
+  })
+}
+
+describe('a string the app shows is never a placeholder', () => {
+  const ROOTS = [path.join(__dirname, '../..'), path.join(__dirname, '../../../bifold/packages')]
+  const corpus = ROOTS.flatMap(sources)
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n')
+  // Named literally ('Settings.Help'), or by its section in a template (`Developer.${name}`).
+  const shown = (key: string) =>
+    corpus.includes(`'${key}'`) ||
+    corpus.includes(`"${key}"`) ||
+    corpus.includes(`\`${key}`) ||
+    corpus.includes(`${key.split('.').slice(0, -1).join('.')}.\${`)
+
+  test.each([
+    ['fr', fr, 'FR'],
+    ['pt-br', ptBr, 'PT-BR'],
+  ])('%s', (_code, wallet, tag) => {
+    const placeholders = leaves(wallet as Tree).filter(([, value]) => value.endsWith(` (${tag})`))
+    expect(placeholders.filter(([key]) => shown(key)).map(([key]) => key)).toEqual([])
+  })
+
+  // The scan is only as good as what it finds: keys the app is known to name are found.
+  test('finds the keys the app names', () => {
+    expect(['Screens.Settings', 'Settings.Help', 'RemoteLogging.Banner'].every(shown)).toBe(true)
+    expect(shown('Unified.NoSuchKey')).toBe(false)
+  })
+})
