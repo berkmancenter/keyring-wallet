@@ -152,8 +152,7 @@ class ContactFactsStore {
   /** Whether a relationship's hardware evidence verifies: not read yet until it has been checked. */
   hardware(relationshipDid: string): Known<boolean> {
     if (!this.loaded) return UNKNOWN
-    const credential = getVrcCredentialJsonForSubject(this.records, relationshipDid)
-    const credentialId = String(credential?.id ?? '')
+    const credentialId = credentialKey(getVrcCredentialJsonForSubject(this.records, relationshipDid))
     const entry = this.hw.get(relationshipDid)
     return entry && entry.credentialId === credentialId ? entry.verified : UNKNOWN
   }
@@ -169,7 +168,7 @@ class ContactFactsStore {
     for (const did of relationshipDids) {
       if (this.hardware(did).known || this.verifying.has(did)) continue
       const credential = getVrcCredentialJsonForSubject(this.records, did)
-      const credentialId = String(credential?.id ?? '')
+      const credentialId = credentialKey(credential)
       if (!credential || !hasVrcHardwareAttestation(this.records, did)) {
         this.hw.set(did, { credentialId, verified: known(false) })
         this.changed()
@@ -201,6 +200,18 @@ class ContactFactsStore {
     this.seq++
     this.changed()
   }
+}
+
+/**
+ * What a relationship's cached check is for: its credential, or none read yet. A peer card carries no top-level `id`
+ * (vrc-manager builds only `credentialSubject.id`), so a card is named by its id, else by the date it was signed with.
+ * "None read yet" has a key of its own: the store's records can lag a screen's, and a check made before the card was
+ * read must not stand for the card once it is.
+ */
+function credentialKey(credential: Record<string, unknown> | null): string {
+  if (!credential) return 'none'
+  const name = credential.id ?? credential.validFrom ?? credential.issuanceDate
+  return `card:${typeof name === 'string' ? name : ''}`
 }
 
 export const contactFacts = new ContactFactsStore()
