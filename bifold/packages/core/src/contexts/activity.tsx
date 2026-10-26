@@ -28,6 +28,25 @@ export const AutoLockTime = {
   Never: 0,
 } as const
 
+/**
+ * How long one app-state change's work holds back the changes after it. Its work is a message pickup stop or
+ * restart, local or one mediator round trip, well under a second on a healthy connection; 10 s leaves a slow network
+ * room. Past it the change is let go and the next one is handled, so a stalled stop can never keep a later return
+ * from being handled; the stalled one may then overlap the next, as every change could before they were ordered.
+ */
+export const APP_STATE_STEP_WAIT_MS = 10_000
+
+/** Whether `work` settled within `ms`. `work` must not reject. */
+const settledWithin = async (work: Promise<void>, ms: number): Promise<boolean> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const settled = await Promise.race([
+    work.then(() => true),
+    new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), ms))),
+  ])
+  clearTimeout(timer)
+  return settled
+}
+
 export interface ActivityContext {
   appStateStatus: AppStateStatus
   /**
@@ -120,9 +139,9 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
   useEffect(() => {
     // listener for backgrounding / foregrounding
-    const eventSubscription = AppState.addEventListener('change', async (nextAppState) => {
+    const onAppStateChange = async (prevAppState: AppStateStatus, nextAppState: AppStateStatus) => {
       // if going into the background
-      if (['active', 'inactive'].includes(prevAppStateStatusRef.current) && nextAppState === 'background') {
+      if (['active', 'inactive'].includes(prevAppState) && nextAppState === 'background') {
         // remove timeout when backgrounded as timeout refs can be lost when app is backgrounded
         clearInactivityTimeoutIfExists()
         try {
@@ -134,7 +153,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
       }
 
       // if coming to the foreground
-      if (prevAppStateStatusRef.current === 'background' && ['active', 'inactive'].includes(nextAppState)) {
+      if (prevAppState === 'background' && ['active', 'inactive'].includes(nextAppState)) {
         // if app was in background for longer than allowed time, lock out user
         if (
           lastActiveTimeRef.current &&
@@ -160,8 +179,26 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
         resetInactivityTimeout(timeoutInMilliseconds.current)
       }
 
-      prevAppStateStatusRef.current = nextAppState
       setAppStateStatus(nextAppState)
+    }
+
+    // One event at a time, in the order they arrive, each against the state it found. Background and active can
+    // arrive in one tick: with the previous state read after the background handler's await, the active one still
+    // saw 'active' and skipped the foreground branch; run side by side, a pickup restart could finish before the
+    // stop it follows. Each event holds the next for APP_STATE_STEP_WAIT_MS at most.
+    let handled: Promise<void> = Promise.resolve()
+    const eventSubscription = AppState.addEventListener('change', (nextAppState) => {
+      const prevAppState = prevAppStateStatusRef.current
+      prevAppStateStatusRef.current = nextAppState
+      handled = handled.then(async () => {
+        const work = onAppStateChange(prevAppState, nextAppState).catch((err) =>
+          logger.error(`Error handling app state ${prevAppState} -> ${nextAppState}, ${err}`)
+        )
+        if (!(await settledWithin(work, APP_STATE_STEP_WAIT_MS))) {
+          logger.warn(`App state ${prevAppState} -> ${nextAppState} still running after ${APP_STATE_STEP_WAIT_MS} ms`)
+        }
+      })
+      return handled
     })
 
     // initial timeout setup
