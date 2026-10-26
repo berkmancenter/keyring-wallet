@@ -203,14 +203,24 @@ describe('mediator pickup strategy (app guard)', () => {
   it('only the live-pickup owner names PickUpV2LiveMode', () => {
     const offenders = files
       .filter(([rel, source]) => rel !== LIVE_PICKUP_OWNER && /\bPickUpV2LiveMode\b/.test(source))
-      .map(([rel]) => rel)
+      // The reason travels with the refusal: whoever trips this is reading CI output, not this file.
+      .map(
+        ([rel]) =>
+          `${rel}: names PickUpV2LiveMode outside ${LIVE_PICKUP_OWNER} ` +
+          '(only the controller may start live mode: it closes a dead socket before restarting)'
+      )
     expect(offenders).toEqual([])
   })
 
   it('every live-mode start is preceded by a stop', () => {
     const offenders: string[] = []
     for (const [rel, source] of files) {
-      for (const call of liveStartsWithoutStop(source)) offenders.push(`${rel}: initiateMessagePickup(${call})`)
+      for (const call of liveStartsWithoutStop(source)) {
+        offenders.push(
+          `${rel}: initiateMessagePickup(${call}) — live start without a stop ` +
+            '(stacks a second reconnect monitor; only stopMessagePickup ends one)'
+        )
+      }
     }
     expect(offenders).toEqual([])
   })
