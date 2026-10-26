@@ -66,9 +66,10 @@ vtc() { # name base did
 vta farm3-runner-prague yes
 vta farm3-runner-uiux yes
 vta farm3-runner-openvtc yes
+vta farm3-runner-a yes
+vtc keyring-community-a https://vtc-keyring-community-a.ic3.dev did:webvh:QmSfS3RxJbDn6WVDL6JYpTtXmkqRexTVugHqUfhaddpiNF:dids-keyring-runner-a.ic3.dev:keyring-community-a-vtc
 vta farm3-runner-b yes
 vtc keyring-community-b https://vtc-keyring-community-b.ic3.dev did:webvh:QmRES31bePU3yAsCgs7HKY81i6ihNvxpFCVRNXkFGqvYee:dids-keyring-runner-b.ic3.dev:keyring-community-b-vtc
-# Community A (keyring-community-a, pnm slug farm3-runner-a) is being created; its vta and vtc lines go here once it is up.
 # A runner without a DID host, for the no-host case, is still to be recreated: vta <nohost slug> no
 echo; [ "$fails" -eq 0 ] && echo "farm-health: all good" || echo "farm-health: $fails problem(s)"
 exit "$fails"
