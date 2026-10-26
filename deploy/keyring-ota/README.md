@@ -132,6 +132,10 @@ Past ten, the workflow stops accepting dispatches.
    carry the running bundle in their header (`· update <id>`). Reports naming
    the new id are read first.
 
+## Before a store build
+
+Everything published since the last store build must reach the next one: `scripts/ota/ota-carried-check.sh` must exit 0 before the cut ([docs/RELEASE_GATE.md](../../docs/RELEASE_GATE.md) §1). Its tests: `node --test scripts/ota/`.
+
 ## Tests
 
 `npm test` (Node's test runner; the storage module only).
