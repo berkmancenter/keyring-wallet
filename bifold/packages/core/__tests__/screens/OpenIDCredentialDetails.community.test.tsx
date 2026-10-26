@@ -38,6 +38,12 @@ const proof = {
 const recordOf = (credential: Record<string, unknown>) =>
   new W3cCredentialRecord({ credentialInstances: [{ credential: { ...credential, proof } as never }] })
 
+// The screen draws the generic Details first and swaps in the community Details once the card's overlay resolves.
+// On a loaded CI worker that can take longer than waitFor's 1 s default (the generic tree, with only HideAll, was
+// seen there), so every wait for the swap gets the same longer timeout. Keep it explicit: a bare waitFor or findBy
+// here passes locally and fails under parallel CI load.
+const SWAP = { timeout: 5000 }
+
 const open = (record: W3cCredentialRecord) => {
   mockGetW3c.mockResolvedValue(record)
   return render(
@@ -53,7 +59,7 @@ const open = (record: W3cCredentialRecord) => {
 describe('the credential Details screen', () => {
   test('a community card opens its own Details: the pass and the way to the community, nothing masked', async () => {
     const tree = open(recordOf(membershipCard))
-    expect(await tree.findByTestId(testIdWithKey('CommunityCardDetailsScreen'))).toBeTruthy()
+    expect(await tree.findByTestId(testIdWithKey('CommunityCardDetailsScreen'), {}, SWAP)).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('CommunityPass'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('CommunityCardOpenCommunity'))).toBeTruthy()
     // The generic Details' "Issued by" box and its Remove are not shown for a community card.
@@ -68,7 +74,10 @@ describe('the credential Details screen', () => {
     try {
       const tree = open(flagged)
       // The screen renders again once its overlay resolves, so read the status from the tree as it settles.
-      await waitFor(() => expect(tree.getByTestId(testIdWithKey('CommunityPassStatus'))).toHaveTextContent(/Revoked/))
+      await waitFor(
+        () => expect(tree.getByTestId(testIdWithKey('CommunityPassStatus'))).toHaveTextContent(/Revoked/),
+        SWAP
+      )
     } finally {
       credentialRegistry.setState({ expired: [] })
     }
@@ -84,7 +93,7 @@ describe('the credential Details screen', () => {
       credentialSubject: { id: 'did:example:me' },
     })
     const tree = open(other)
-    expect(await tree.findByTestId(testIdWithKey('IssuerName'))).toBeTruthy()
+    expect(await tree.findByTestId(testIdWithKey('IssuerName'), {}, SWAP)).toBeTruthy()
     expect(tree.queryByTestId(testIdWithKey('CommunityCardDetailsScreen'))).toBeNull()
   })
 })
