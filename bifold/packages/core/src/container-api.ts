@@ -37,6 +37,7 @@ import { State } from './types/state'
 import { IVersionCheckService } from './types/version-check'
 import { ICredentialDisplayRegistry } from './types/credential-display'
 import { ITrustTaskDisplayRegistry } from './types/trust-task-display'
+import type { RoomsService } from './modules/rooms/types'
 import { MessagePickupLifecycle } from './utils/messagePickupLifecycle'
 
 export type FN_ONBOARDING_DONE = (
@@ -166,6 +167,7 @@ export const UTILITY_TOKENS = {
   UTIL_REFRESH_ORCHESTRATOR: 'utility.refresh-orchestrator',
   UTIL_CREDENTIAL_DISPLAY_REGISTRY: 'utility.credential-display-registry',
   UTIL_TRUST_TASK_DISPLAY_REGISTRY: 'utility.trust-task-display-registry',
+  UTIL_ROOMS_SERVICE: 'utility.rooms-service',
   UTIL_MESSAGE_PICKUP: 'utility.message-pickup',
 } as const
 
@@ -284,6 +286,7 @@ export type TokenMapping = {
   [TOKENS.FN_ATTESTATION_GET_JWT]: FN_ATTESTATION_GET_JWT
   [TOKENS.UTIL_CREDENTIAL_DISPLAY_REGISTRY]: ICredentialDisplayRegistry | undefined
   [TOKENS.UTIL_TRUST_TASK_DISPLAY_REGISTRY]: ITrustTaskDisplayRegistry | undefined
+  [TOKENS.UTIL_ROOMS_SERVICE]: RoomsService | undefined
   [TOKENS.UTIL_MESSAGE_PICKUP]: MessagePickupLifecycle
 }
 
